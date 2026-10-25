@@ -47,12 +47,12 @@ function providerReply(id: string, model: string | null, payload: unknown) {
 }
 
 const CAUSE_TEXT = "Blunt force trauma from a road traffic accident";
-const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
+const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Jia Ming Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
 function extractionPayload(documentType: string) {
   return {
-    deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [],
+    deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [],
     dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE_TEXT, mannerOfDeath: "accident",
-    patientName: "Tan Yi Chuen Raymond",
+    patientName: "Tan Jia Ming Raymond",
     billLineItems: [{ category: "Surgical fees", description: null, amountText: "1,250.00", currency: "SGD" }],
     issuingAuthority: "SPF", documentReference: "REF-1", documentType,
     pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE_TEXT }],
@@ -106,7 +106,7 @@ async function main() {
     const coverageA = "50000000-0000-4000-8000-0000000000a1";
     const coverageB = "50000000-0000-4000-8000-0000000000b1";
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test'),($2,'Other')`, [account, otherAccount]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, raymond, claimB]);
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
     for (const policyId of [policyA, policyB]) {

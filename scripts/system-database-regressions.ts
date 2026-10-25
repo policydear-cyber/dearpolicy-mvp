@@ -85,7 +85,7 @@ async function main(){
   process.env.DEV_ACCOUNT_ID=account;
   const uuid=(n:number)=>"10000000-0000-4000-8000-"+String(n).padStart(12,"0");
   const people=Array.from({length:9},(_,i)=>({
-    id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Raymond":i===1?"Ong Pei Lin Josephine":"Family Member "+i,
+    id:uuid(i+1),display_name:i===0?"Tan Jia Ming Raymond":i===1?"Ong Pei Lin Josephine":"Family Member "+i,
     preferred_name:i===0?"Raymond":i===1?"Josephine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
   }));
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Test Family'),($2,'Other Account')",[account,foreign]);
@@ -1155,12 +1155,12 @@ async function main(){
       const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
       assert.equal(pack.status,200);
       assert.equal(pack.headers.get("content-type"),"application/pdf");
-      assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Raymond\.pdf"/);
+      assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Jia Ming Raymond\.pdf"/);
       const bytes=new Uint8Array(await pack.arrayBuffer());
       assert.equal(Buffer.from(bytes.slice(0,5)).toString("latin1"),"%PDF-");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(bytes)).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/Tan Yi Chuen Raymond/);
+      assert.match(printed,/Tan Jia Ming Raymond/);
       assert.doesNotMatch(printed,/S\$1,250/,"Preliminary claim pack must not print a proposed payout");
       assert.match(printed,/page 14/,"The insurer can check the policy wording");
       assert.doesNotMatch(printed,/the an amount/,"Redaction must leave readable prose");

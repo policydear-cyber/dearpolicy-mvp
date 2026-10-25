@@ -40,9 +40,9 @@ function asUser(userId: string) { process.env.DEV_AUTH_ENABLED = "1"; process.en
 
 const uuid = (prefix: string, n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const CAUSE_TEXT = "Blunt force trauma from a road traffic accident";
-const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
+const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Jia Ming Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
 const EXTRACTION = {
-  deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [],
+  deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [],
   dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE_TEXT, mannerOfDeath: "accident",
   issuingAuthority: "SPF", documentReference: "REF-1", documentType: "police_report",
   pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE_TEXT }],
@@ -143,7 +143,7 @@ async function main() {
     const coverageA = uuid("f2000000", 1), coverageSpouse = uuid("f2000000", 2), coverageB = uuid("f2000000", 3);
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Household A'),($2,'Household B')`, [householdA, householdB]);
     await pool.query(`INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner'),($1,$3,'member'),($4,$5,'owner')`, [householdA, ownerA, memberUserA, householdB, ownerB]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Raymond','Raymond','self'),($3,$2,'Casey Tan','Casey','spouse'),($4,$5,'Blake Lim','Blake','self')`,
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self'),($3,$2,'Casey Tan','Casey','spouse'),($4,$5,'Blake Lim','Blake','self')`,
       [raymond, householdA, spouse, memberB, householdB]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death'),($5,$6,$7,'fact_finding','death')`,
       [claimA1, householdA, raymond, claimA2, claimB1, householdB, memberB]);

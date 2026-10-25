@@ -129,9 +129,9 @@ function runPureTests() {
     assert.equal(isValidEvidenceTransition("failed" as never, "processing" as never), true);
   });
 
-  const familyMember = { displayName: "Tan Yi Chuen Raymond", preferredName: "Raymond" };
+  const familyMember = { displayName: "Tan Jia Ming Raymond", preferredName: "Raymond" };
   const baseFields: ClaimEvidenceExtractedFields = {
-    deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }],
+    deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }],
     dateOfDeath: "2026-09-01", statedCauseOfDeath: "Blunt force trauma from a road traffic accident", mannerOfDeath: "accident",
     issuingAuthority: "Singapore Police Force", documentReference: "SPF/2026/00123", documentType: "police_report",
     pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Blunt force trauma from a road traffic accident" }],
@@ -153,7 +153,7 @@ function runPureTests() {
     assert.ok(r.conflicts.some((c) => c.code === "NAME_MISMATCH"));
   });
   test("identity: similar but not identical family-member names still confirm on strong overlap", () => {
-    const r = evaluateClaimEvidenceIdentity({ familyMember, fields: { ...baseFields, deceasedName: "Raymond Tan Yi Chuen" }, existingDeathDate: null, reusedDocuments: [], claimSessionId: "c1", familyMemberId: "m1" });
+    const r = evaluateClaimEvidenceIdentity({ familyMember, fields: { ...baseFields, deceasedName: "Raymond Tan Jia Ming" }, existingDeathDate: null, reusedDocuments: [], claimSessionId: "c1", familyMemberId: "m1" });
     assert.equal(r.status, "confirmed");
   });
   test("identity: missing identifiers alone forces needs_review even with a name match", () => {
@@ -421,7 +421,7 @@ async function runDatabaseTests() {
     const coverageB = "50000000-0000-4000-8000-0000000000b1";
 
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test'),($2,'Other')`, [account, otherAccount]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, raymond, claimB]);
 
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
@@ -503,7 +503,7 @@ async function runDatabaseTests() {
 
     await testAsync("extraction recording is idempotent per document version; retries never fork the row", async () => {
       const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e.pdf", storageKey: "k6", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-6" });
-      const fields: ClaimEvidenceExtractedFields = { deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-01", statedCauseOfDeath: "Road traffic accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref-1", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Road traffic accident" }], confidence: {} };
+      const fields: ClaimEvidenceExtractedFields = { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-01", statedCauseOfDeath: "Road traffic accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref-1", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Road traffic accident" }], confidence: {} };
       const first = await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-6", extractedFields: fields, extractionModel: "test-model", extractionProvider: "test", extractionVersion: "v1", identityConflicts: [] });
       const retried = await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-6", extractedFields: fields, extractionModel: "test-model", extractionProvider: "test", extractionVersion: "v1", identityConflicts: [] });
       assert.equal(first.id, retried.id);
@@ -577,7 +577,7 @@ async function runDatabaseTests() {
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "quarantined", to: "processing" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "processing", to: "extracted", identityStatus: "needs_review" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "extracted", to: "needs_review" });
-      await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-13", extractedFields: { deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: "Accident", mannerOfDeath: "accident", issuingAuthority: null, documentReference: null, documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "test" }], confidence: {} }, extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [] });
+      await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-13", extractedFields: { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: "Accident", mannerOfDeath: "accident", issuingAuthority: null, documentReference: null, documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "test" }], confidence: {} }, extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [] });
       await assert.rejects(
         confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
         ClaimEvidenceMatchError,
@@ -596,7 +596,7 @@ async function runDatabaseTests() {
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "extracted", to: "needs_review" });
       await recordExtraction({
         accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-14",
-        extractedFields: { deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-14", statedCauseOfDeath: "Motorbike accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: pages[0].page_number, pageEnd: pages[0].page_number, excerpt: pages[0].text.slice(0, 40) }], confidence: {} },
+        extractedFields: { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-14", statedCauseOfDeath: "Motorbike accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: pages[0].page_number, pageEnd: pages[0].page_number, excerpt: pages[0].text.slice(0, 40) }], confidence: {} },
         extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [],
       });
 

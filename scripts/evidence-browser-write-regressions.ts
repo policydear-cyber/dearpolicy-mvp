@@ -84,7 +84,7 @@ async function main() {
     await h.admin.provisionClaimReviewer({ userId: reviewer, displayLabel: "Reviewer", operator: "ops.lead" });
     await h.createHousehold(householdA, ownerA);
     await h.createHousehold(householdB, ownerB, "Other household");
-    const member = await h.createMember(householdA, fixedUuid("d9300000", 1), "Tan Yi Chuen Raymond");
+    const member = await h.createMember(householdA, fixedUuid("d9300000", 1), "Tan Jia Ming Raymond");
     const claim = await h.createClaim(householdA, member, fixedUuid("e9300000", 1), f.claimEventType);
     const { policyId, coverageId } = await h.createPolicy({ accountId: householdA, memberId: member, policyId: fixedUuid("f9300000", 1), coverageId: fixedUuid("f9400000", 1), ...f.policy });
     // Real upload route -> service scan -> processing -> real extraction with provenance.

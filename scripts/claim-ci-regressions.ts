@@ -490,7 +490,7 @@ async function runDatabaseTests() {
     const policyA = "40000000-0000-4000-8000-0000000000a1";
 
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test')`, [account]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Raymond','Raymond','self')`, [raymond, account]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self')`, [raymond, account]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','diagnosis'),($4,$2,$3,'fact_finding','diagnosis')`, [claimA, account, raymond, claimB]);
     await pool.query(
       `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)

@@ -46,7 +46,7 @@ async function main() {
   async function world(f: BenefitCategoryFixture, n: number, pages = f.policy.pages, cover: { coverageEvidenceText?: string | null; sourcePage?: number | null } = {}): Promise<World> {
     const owner = fixedUuid("b6000000", n);
     const household = await h.createHousehold(fixedUuid("a6000000", n), owner);
-    const member = await h.createMember(household, fixedUuid("d6000000", n), "Tan Yi Chuen Raymond");
+    const member = await h.createMember(household, fixedUuid("d6000000", n), "Tan Jia Ming Raymond");
     const otherMember = await h.createMember(household, fixedUuid("d6000000", n + 1), "Casey Tan", "spouse");
     const claim = await h.createClaim(household, member, fixedUuid("e6000000", n), f.claimEventType);
     const otherClaim = await h.createClaim(household, member, fixedUuid("e6000000", n + 1), f.claimEventType);
@@ -202,7 +202,7 @@ async function main() {
     // certificate line, or the cited certificate page -- verifies it.
     await testAsync(`${f.category}: a stored currency the certificate never writes (no currency, or a bare "$") yields no amount; a written currency on the cited page restores it`, async () => {
       const figure = f.policy.amount == null ? "as scheduled" : f.policy.amount.toLocaleString("en-US");
-      const certificatePage = (text: string) => [...f.policy.pages, { pageNumber: 50, text: `Certificate of insurance. Insured person: Tan Yi Chuen Raymond. ${text}` }];
+      const certificatePage = (text: string) => [...f.policy.pages, { pageNumber: 50, text: `Certificate of insurance. Insured person: Tan Jia Ming Raymond. ${text}` }];
       const cases = [
         { label: "no currency written anywhere", evidence: `${f.policy.productName} sum insured: ${figure}`, page: `Sum insured: ${figure}.`, amount: false },
         { label: "bare dollar sign only", evidence: `${f.policy.productName} sum insured: $${figure}`, page: `Sum insured: $${figure}.`, amount: false },

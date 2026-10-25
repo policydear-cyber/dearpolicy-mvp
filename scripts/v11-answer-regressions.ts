@@ -81,7 +81,7 @@ async function main() {
   const A = "00000000-0000-0000-0000-0000000000a1", B = "00000000-0000-0000-0000-0000000000b1";
   const id = (n: number) => "30000000-0000-4000-8000-" + String(n).padStart(12, "0");
   const ch = { id: id(1), display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" };
-  const de = { id: id(2), display_name: "Tan Yi Chuen Raymond", preferred_name: "Raymond", relationship: "self" };
+  const de = { id: id(2), display_name: "Tan Jia Ming Raymond", preferred_name: "Raymond", relationship: "self" };
   const chB = { id: id(3), display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "self" };
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Household A'),($2,'Household B')", [A, B]);
   for (const h of [A, B]) await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [h]);
@@ -102,9 +102,9 @@ async function main() {
     CH_PA_OLD: { id: id(105), acct: A, member: ch.id, number: "PA-7", product: "Accident Guard", hash: "sha256:pa", effective: "2019-01-01", expiry: "2020-01-01", docDate: "2019-01-01",
       pages: { 1: "Accident Guard certificate dated 1 January 2019.", 2: "Personal Accident Sum Insured SGD 50,000." } },
     DE_HOSP: { id: id(106), acct: A, member: de.id, number: "H-5", product: "Hospital Cash Plan", hash: "sha256:hosp", effective: recent,
-      pages: { 1: "Hospital Cash Plan for Tan Yi Chuen Raymond.", 4: "Daily Hospital Cash: We pay S$100 per day of hospital stay, up to 30 days." } },
+      pages: { 1: "Hospital Cash Plan for Tan Jia Ming Raymond.", 4: "Daily Hospital Cash: We pay S$100 per day of hospital stay, up to 30 days." } },
     DE_ENDOW: { id: id(107), acct: A, member: de.id, number: "E-8", product: "Wealth Endowment 20", hash: "sha256:endow", effective: recent,
-      pages: { 1: "Wealth Endowment 20 policy schedule for Tan Yi Chuen Raymond.", 3: "The guaranteed maturity value is SGD 42,000 payable at the end of the policy term." } },
+      pages: { 1: "Wealth Endowment 20 policy schedule for Tan Jia Ming Raymond.", 3: "The guaranteed maturity value is SGD 42,000 payable at the end of the policy term." } },
     B_LIFE: { id: id(201), acct: B, member: chB.id, number: "L-100", product: "Term Protector", hash: "sha256:blife", effective: recent,
       pages: { 1: "Term Protector for Ong Pei Lin Josephine.", 2: "Life Assured: Ong Pei Lin Josephine. Death Sum Insured SGD 999,000." } },
   };

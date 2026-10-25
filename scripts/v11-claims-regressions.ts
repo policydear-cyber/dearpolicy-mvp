@@ -132,13 +132,13 @@ async function main() {
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Claims household')", [ACCOUNT]);
   await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]);
   for (const [id, name, preferred, rel] of [[JOSEPHINE, "Ong Pei Lin Josephine", "Josephine", "spouse"], [MARCUS, "Marcus Lim Wei Jie", "Marcus", "self"],
-    [RAYMOND, "Tan Yi Chuen Raymond", "Raymond", "parent"], [IVY, "Ivy Tan Mei Ling", "Ivy", "child"]] as const)
+    [RAYMOND, "Tan Jia Ming Raymond", "Raymond", "parent"], [IVY, "Ivy Tan Mei Ling", "Ivy", "child"]] as const)
     await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)", [id, ACCOUNT, name, preferred, rel]);
   const docOf: Record<string, string> = {};
   let n = 100;
   for (const plan of PLANS) {
     const id = uuid(n++); docOf[plan.key] = id;
-    const person = plan.member === JOSEPHINE ? "Ong Pei Lin Josephine" : plan.member === RAYMOND ? "Tan Yi Chuen Raymond" : "Marcus Lim Wei Jie";
+    const person = plan.member === JOSEPHINE ? "Ong Pei Lin Josephine" : plan.member === RAYMOND ? "Tan Jia Ming Raymond" : "Marcus Lim Wei Jie";
     const pages = [
       plan.product + " Policy Schedule Insured: " + person + " Policy number " + plan.key.toUpperCase() + "-1 Effective date 2024-01-01" + (plan.sum ? " Sum Insured S$" + plan.sum.amount.toLocaleString("en-US") : ""),
       plan.heading + " " + plan.rows.map((x) => x.name + " " + x.printed).join(" ") + " Page 2 of 2",

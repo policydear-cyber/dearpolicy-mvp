@@ -36,7 +36,7 @@ async function main() {
     await h.createHousehold(householdA, ownerA);
     await h.createHousehold(householdB, ownerB, "Other household");
     await pool.query(`INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'member')`, [householdA, memberUser]);
-    const member = await h.createMember(householdA, fixedUuid("d9500000", 1), "Tan Yi Chuen Raymond");
+    const member = await h.createMember(householdA, fixedUuid("d9500000", 1), "Tan Jia Ming Raymond");
     const claim = await h.createClaim(householdA, member, fixedUuid("e9500000", 1), f.claimEventType);
     const processed = () => h.uploadEvidence({ accountId: householdA, ownerUserId: ownerA, memberId: member, claimId: claim, ...f.evidence });
 

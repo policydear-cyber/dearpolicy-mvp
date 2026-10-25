@@ -15,7 +15,7 @@ export async function runClaimRegressions() {
   const test = (name: string, fn: () => void) => { try { fn(); cases++; } catch (error) { throw new Error(name, { cause: error }); } };
   const context = { now: new Date("2026-09-14T12:00:00Z"), timeZone: "Asia/Singapore", allowAi: false };
   const family: ClaimPerson[] = [
-    { id: "raymond", display_name: "Tan Yi Chuen, Raymond", preferred_name: "Raymond", relationship: "self" },
+    { id: "raymond", display_name: "Tan Jia Ming, Raymond", preferred_name: "Raymond", relationship: "self" },
     { id: "josephine", display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" },
   ];
   const coverage = (overrides: Partial<OwnedCoverage>): OwnedCoverage => ({ id: "gtl", policyId: "certificate", familyMemberId: "josephine", category: "Death", amount: 1_000_000, currency: "SGD", productName: "Group Term Life", sourcePage: 1, evidenceText: "personal certificate", insurer: "Singlife", policyName: "MINDEF & MHA", policyNumber: "personal", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2022-10-06", renewalOrExpiryDate: null, currencyVerified: true, ...overrides });
@@ -52,7 +52,7 @@ export async function runClaimRegressions() {
   test("A relationship resolves without a profile selector", () => { const result = resolveClaimPerson("My wife caught dengue", family, ""); assert.equal(result.status, "resolved"); if(result.status === "resolved") assert.equal(result.person.id, "josephine"); });
   test("Unknown subjects in motorbike and question phrases require identity", () => { assert.equal(resolveClaimPerson("Alice got into a motorbike accident yesterday", family, "raymond").status, "unknown"); assert.equal(resolveClaimPerson("What can Alice claim after an accident yesterday?", family, "raymond").status, "unknown"); });
   test("Unknown named person never uses selected person's policies", () => { assert.equal(resolveClaimPerson("Alice died yesterday", family, "raymond").status, "unknown"); });
-  test("A named claimant's full name does not override the deceased subject", () => { const result = resolveClaimPerson("Josephine died yesterday. Tan Yi Chuen Raymond wants to claim.", family, "raymond"); assert.equal(result.status, "resolved"); if(result.status === "resolved") assert.equal(result.person.id, "josephine"); });
+  test("A named claimant's full name does not override the deceased subject", () => { const result = resolveClaimPerson("Josephine died yesterday. Tan Jia Ming Raymond wants to claim.", family, "raymond"); assert.equal(result.status, "resolved"); if(result.status === "resolved") assert.equal(result.person.id, "josephine"); });
   test("Duplicate preferred names require clarification", () => { assert.equal(resolveClaimPerson("Josephine died yesterday", [...family, { ...family[1], id: "other" }], "raymond").status, "ambiguous"); });
   test("Unique partial full name resolves", () => { const result = resolveClaimPerson("Pei Lin died yesterday", family, "raymond"); assert.equal(result.status, "resolved"); if (result.status === "resolved") assert.equal(result.person.id, "josephine"); });
   test("Relationship resolution is conservative for multiple parents", () => { assert.equal(resolveClaimPerson("My mother died yesterday", [...family, { ...family[0], id: "mum", relationship: "parent" }, { ...family[0], id: "dad", relationship: "parent" }], "raymond").status, "ambiguous"); });

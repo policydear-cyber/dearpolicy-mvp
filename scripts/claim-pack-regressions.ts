@@ -36,7 +36,7 @@ const packet:ClaimDecisionPacket={
 };
 
 export async function runClaimPackRegressions(){
-  const content=claimPackContent({packet,claimantName:"Tan Yi Chuen Raymond",relationship:"self",
+  const content=claimPackContent({packet,claimantName:"Tan Jia Ming Raymond",relationship:"self",
     generatedOn:new Date("2026-09-16T00:00:00+08:00")});
   const flat=content.sections.flatMap(section=>[section.heading,...section.lines,section.note??""]).join("\n");
 
@@ -75,13 +75,13 @@ export async function runClaimPackRegressions(){
     {id:"gtl-tpd",title:"Raymond · Total and Permanent Disability",status:"likely_applicable",
      amountText:"S$1,000,000",calculatedAmount:1_000_000,currency:"SGD",coverLabel:"Group Term Life",
      reason:"100% of the sum insured of S$1,000,000.",conditions:[],evidenceTerms:[],productName:"Group Term Life"},
-  ]},claimantName:"Tan Yi Chuen Raymond"});
+  ]},claimantName:"Tan Jia Ming Raymond"});
   const twiceBenefits=twice.sections.find(section=>section.heading==="Benefits that may be relevant")!.lines.join(" | ");
   assert.match(twiceBenefits,/pays this instead of/,"the row that is not counted says which benefit is paid instead of it");
   assert.equal(/S\$|1,000,000|1,250/.test(twiceBenefits),false,"no amount survives, including one written inside a reason");
 
   // An unassessed claim states that plainly instead of printing an empty sheet.
-  const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Yi Chuen Raymond"});
+  const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Jia Ming Raymond"});
   const claimed=empty.sections.find(section=>section.heading==="Benefits that may be relevant")!;
   assert.match(claimed.lines.join(" "),/No relevant benefit has been identified yet/);
   assert.equal(/S\$/.test(claimed.lines.join(" ")),false,"With nothing assessed, no figure may appear");
@@ -97,7 +97,7 @@ export async function runClaimPackRegressions(){
   assert.ok(pages.length>=1);
   const printed=pages.map(page=>page.text).join(" ").replace(/\s+/g," ");
   assert.match(printed,/Claim summary/);
-  assert.match(printed,/Tan Yi Chuen Raymond/);
+  assert.match(printed,/Tan Jia Ming Raymond/);
   assert.equal(/S\$1,250/.test(printed),false,"No calculated amount reaches the printed page");
   assert.match(printed,/Preliminary claim assessment/);
   assert.match(printed,/Hospital discharge summary/);
@@ -106,7 +106,7 @@ export async function runClaimPackRegressions(){
   // A long condition must wrap rather than run off the page or be dropped.
   const long="A ".repeat(400)+"final clause";
   const wrapped=await renderClaimPack(claimPackContent({packet:{...packet,
-    assessments:[{...packet.assessments[0],conditions:[long]}]},claimantName:"Tan Yi Chuen Raymond"}));
+    assessments:[{...packet.assessments[0],conditions:[long]}]},claimantName:"Tan Jia Ming Raymond"}));
   const wrappedPages=await extractPdfPages(new Uint8Array(wrapped));
   assert.ok(wrappedPages.length>=2,"Long content continues onto another page instead of being cut off");
   assert.match(wrappedPages.map(page=>page.text).join(" ").replace(/\s+/g," "),/final clause/,"Nothing is silently dropped off the end");

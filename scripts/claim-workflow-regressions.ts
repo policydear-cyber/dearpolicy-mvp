@@ -12,7 +12,7 @@ export async function runClaimWorkflowRegressions() {
   const josephine = "00000000-0000-4000-8000-000000000003";
   const other = "00000000-0000-4000-8000-000000000004";
   const anchor = "2026-09-14T12:00:00Z";
-  let family = [{ id: raymond, display_name: "Tan Yi Chuen Raymond", preferred_name: "Raymond", relationship: "self" }, { id: josephine, display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" }];
+  let family = [{ id: raymond, display_name: "Tan Jia Ming Raymond", preferred_name: "Raymond", relationship: "self" }, { id: josephine, display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" }];
   let wordingInsurer = "Singlife";
   let wordingGroup: string | null = "G007500";
   let wordingMember = josephine;

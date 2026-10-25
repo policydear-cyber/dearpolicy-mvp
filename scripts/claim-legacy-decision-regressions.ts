@@ -36,7 +36,7 @@ async function main() {
       console.log(`legacy: ${f.category}`);
       const owner = fixedUuid("b9100000", n);
       const household = await h.createHousehold(fixedUuid("a9100000", n), owner);
-      const member = await h.createMember(household, fixedUuid("d9100000", n), "Tan Yi Chuen Raymond");
+      const member = await h.createMember(household, fixedUuid("d9100000", n), "Tan Jia Ming Raymond");
       const claim = await h.createClaim(household, member, fixedUuid("e9100000", n), f.claimEventType);
       const { policyId, coverageId } = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f9100000", n), coverageId: fixedUuid("f9200000", n), ...f.policy });
       const document = await h.uploadEvidence({ accountId: household, ownerUserId: owner, memberId: member, claimId: claim, ...f.evidence });
