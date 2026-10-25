@@ -97,14 +97,14 @@ t("the same benefit printed with and without its row letter in two documents los
   assert.deepEqual(rows.map(benefitNames(rows)), ["Accidental Hospital Recuperation Benefit", "Accidental Hospital Recuperation Benefit", "A. Death", "B. Death", "A. Death"]);
 });
 t("a source is named by its document, never by a file name a machine gave it", () => {
-  for (const n of ["817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf", "Scan_20261003.pdf", "IMG-4412.jpg", "0012345.pdf", "WhatsApp Image 2026-09-01 at 10.15.32.pdf",
+  for (const n of ["0a1b2c3d-0000-4000-8000-00000000abcd.pdf", "output_202601010900001.pdf", "Scan_20261003.pdf", "IMG-4412.jpg", "0012345.pdf", "WhatsApp Image 2026-09-01 at 10.15.32.pdf",
     "Screenshot 2026-09-01 at 10.15.32 AM.pdf", "document (3).pdf", "Download (1).pdf", "PXL_20260901_101532.pdf", "CamScanner 09-01-2026 10.15.pdf"]) assert.equal(personalFileName(n), null, n);
-  for (const [n, want] of [["Product Summary.pdf", "Product Summary"], ["Desmond travel policy.pdf", "Desmond travel policy"]]) assert.equal(personalFileName(n), want);
-  const house = { ...HOUSE, documents: [{ ...HOUSE.documents[0], name: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", productName: null, insurer: "Singlife", documentRole: "policy_wording" }] } as Household;
+  for (const [n, want] of [["Product Summary.pdf", "Product Summary"], ["Alex travel policy.pdf", "Alex travel policy"]]) assert.equal(personalFileName(n), want);
+  const house = { ...HOUSE, documents: [{ ...HOUSE.documents[0], name: "0a1b2c3d-0000-4000-8000-00000000abcd.pdf", productName: null, insurer: "Example Insurance", documentRole: "policy_wording" }] } as Household;
   const { answer } = verifyAnswer(house, { bottomLine: "x", nextSteps: [], question: null, statements: [st({ text: "Recuperation.", person: "Lim Ah Kow", document: "D1", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250" })] });
   const json = JSON.stringify(answer);
-  assert.doesNotMatch(json, /817d6e8b/);
-  assert.equal(answer.statements!.find((s) => s.amount)?.source?.policyName, "Singlife policy wording");
+  assert.doesNotMatch(json, /0a1b2c3d/);
+  assert.equal(answer.statements!.find((s) => s.amount)?.source?.policyName, "Example Insurance policy wording");
 });
 t("a point that could not be checked is left out without a line saying so; a left-out amount is still said", () => {
   const { answer, report } = verifyAnswer(HOUSE, { bottomLine: "x", nextSteps: [], question: null, statements: [st({ kind: "fact", text: "Something unprintable.", document: "D1", quote: "words that are not on any page" })] });
