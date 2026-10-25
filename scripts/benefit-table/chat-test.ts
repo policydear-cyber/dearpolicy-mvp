@@ -1689,6 +1689,12 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.ok(spouseMeant(insured("Example General", "Business Partner"), ["my husband's Business Partner claim"]));
   for (const said of ["my wife's family health history includes cancer", "my husband's family medical history"])
     assert.equal(spouseMeant(insured("Family Life Insurance Company", "Term Plan"), [said]), null, said);
+  // An insurer counts by its own name in full, without the words that only say what it is or where (TE P117-7).
+  for (const said of ["my husband's friends medical bills are high", "my husband's friends hospital stay"])
+    assert.equal(spouseMeant(insured("Friends Provident International", "Term Plan"), [said]), null, said);
+  for (const [insurer, said] of [["Friends Provident International", "my husband's Friends Provident policy"], ["Family Life Insurance Company", "my husband's Family Life policy"],
+    ["AIA Singapore Private Limited", "my husband's AIA plan"], ["Zurich Life Insurance Company Ltd", "hubby's Zurich"]])
+    assert.ok(spouseMeant(insured(insurer, "Term Plan"), [said]), `${insurer}: ${said}`);
   assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich, does it pay?"]), "an insurer's first word, then a clause");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");

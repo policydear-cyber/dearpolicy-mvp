@@ -146,24 +146,32 @@ const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wi
 // list (Critic R190-2). No insurer or product is named here: the household's own documents add theirs ("my husband's
 // Manulife", "my wife's PRUShield"), so any household, with any insurer anywhere, is read the same way.
 const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|own|bill|bills)$/i;
-/** The household's own insurers and products, each as its words ("zurich life", "carefirst health"). */
+/** The household's own insurers and products, each as its words: a product by its whole name ("carefirst health"), an
+ * insurer by its own name, without the words that only say what it is or where ("Zurich Life Insurance Company Ltd" is
+ * "zurich", "Friends Provident International" is "friends provident", "AIA Singapore Private Limited" is "aia"). An own
+ * name that would be one ordinary word for a person keeps its next word ("Family Life Insurance" is "family life"). */
 const ownCover = (household: Household) => ({
-  insurers: household.documents.map((d) => words(d.insurer ?? "")).filter((p) => p.length),
+  insurers: household.documents.map((d) => insurerCore(d.insurer ?? "")).filter((p) => p.length),
   products: household.documents.map((d) => words(d.productName ?? "")).filter((p) => p.length),
 });
 const words = (n: string) => n.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
-/** After a possessive, the household's own cover: a whole insurer or product name ("my wife's Family Care Plan"), or an
- * insurer's first word alone or before a cover word ("hubby's Zurich", "my husband's AXA policy"). A product's words are
- * ordinary English ("Domestic Helper Insurance", "Family Protect"), so none is read on its own: "my wife's domestic
- * helper" is about the helper, "my husband's family claim" about his family (Critic R207-1, TE P117-4, P117-5). */
+const NOT_OWN_NAME = /^(?:ltd|limited|pte|pvt|private|sdn|bhd|berhad|pty|gmbh|plc|inc|incorporated|llc|co|company|corp|corporation|sa|ag|nv|se|the|insurance|insurer|assurance|reinsurance|general|life|international|group|holdings|financial|services|singapore|malaysia|hong|kong|asia|pacific|uk|usa|us|india|indonesia|philippines|thailand|vietnam|china|australia|canada|europe)$/;
+const personWord = (w: string) => NOT_THEM_AFTER.test(w) || NOT_THEM_AFTER.test(w.replace(/s$/, ""));
+function insurerCore(name: string): string[] {
+  const all = words(name), own = all.filter((w) => !NOT_OWN_NAME.test(w));
+  if (own.length !== 1 || !personWord(own[0])) return own.length ? own : all;
+  const at = all.indexOf(own[0]);
+  return all.slice(at, at + 2);
+}
+/** After a possessive, the household's own cover: a whole product name or an insurer's own name, then the clause's end or
+ * a cover word ("my wife's Family Care Plan claim", "hubby's Zurich", "my husband's AXA policy"). No single word of a
+ * name counts on its own: names are ordinary English ("Domestic Helper Insurance", "Friends Provident"), so "my wife's
+ * domestic helper" is about the helper, "my husband's friends medical bills" about his friends (Critic R207-1, TE P117-4
+ * to P117-7). */
 function coverAfter(rest: string, cover: { insurers: string[][]; products: string[][] }): boolean {
   const said = words(rest.match(/^[^.,;:!?()]*/)?.[0] ?? "");
-  // A name, then the clause ends or a cover word follows: "my husband's Business Partner policy", not "... business partner died".
   const then = (n: number) => said.length === n || HIS_OR_HERS.test(said[n]);
-  // An insurer's first word alone never when it is a relative's word: "my wife's family medical history" is about her
-  // family, even with a Family Life Insurance in the library (TE P117-6).
-  return [...cover.insurers, ...cover.products].some((p) => p.every((w, i) => said[i] === w) && then(p.length))
-    || cover.insurers.some((p) => said[0] === p[0] && !NOT_THEM_AFTER.test(p[0]) && then(1));
+  return [...cover.insurers, ...cover.products].some((p) => p.every((w, i) => said[i] === w) && then(p.length));
 }
 // Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
 // before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a
