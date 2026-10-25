@@ -6706,3 +6706,24 @@ Free review: code read and git grep only.
 - High, private record: only the English first name was swapped. The real surname and given name remain: "Tan Yi Chuen Raymond" (was "Tan Yi Chuen Desmond") in 20 files under scripts/ (claim-*-regressions, evidence-*, v11-*, fixtures/reviewer-benefit-wording.ts, system-database-regressions.ts and others). Replace the whole name with a made-up one, e.g. "Lim Wei Jie Raymond" / "Raymond Lim Wei Jie", and keep the swapped-order variant in claim-evidence-regressions.ts:156 consistent.
 - Checked clean: no Desmond or Charmaine left (case-insensitive); the change is a pure rename (5,870 lines each way); no PDF or extracted-text fixture changed, so no fixture text disagrees with its test; NRIC-shaped strings left (S1234567A/D, T1234567J, S7712345J, S9100227Z) are synthetic test values.
 - Note: the docs/rag-migration/live run records now show names the live model never printed. Fine for privacy; the old names stay in git history (DC's open item).
+
+## R226 — #145 999f8d3 (one money sign for every market): NOT READY (one high)
+
+Free review: code read plus tsx probes of MONEY_SIGN, statedCurrencyCode, moneyFiguresIn, parseAmount and otherLife (pg stubbed). No next build here (no node_modules; heavy builds are out of my scope), so the builder's own next build stands.
+
+- High, hides a cap (Q1): MONEY_SIGN itself is safe ("FORM 2", "TERM 5", "Room 2" give no sign). But check.ts now counts money with `moneyIn`, which calls `moneyFiguresIn`, and its FIGURE in lib/chat/answer-verification.ts reads `(RM)\s?` with no guard before it. Probe output:
+  - "Up to S$50,000 (submit claim FORM 2)" gives S$50,000 and RM 2.
+  - "Up to S$50,000 within TERM 1 of cover" gives S$50,000 and RM 1.
+  - "PLATFORM 3: up to S$500" gives RM 3.
+  So capInRow sees two values and returns null, and otherMoneyThan / otherMoney turn true, so a real printed cap is refused. Before this PR, MONEY_IN only knew s$/us$/sgd/$, so these rows kept their cap. Fix at the shared boundary (it also stops the chat verifier reading "CLAIM FORM 2" as RM 2):
+  ```ts
+  // lib/chat/answer-verification.ts FIGURE
+  ...|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱])\s?)...
+  ```
+  Add "Up to S$50,000 (claim FORM 2)" and "TERM 5" rows to parity-test.ts.
+- Medium, wrong currency (Q2): MONEY_SIGN accepts "NZ$", but `statedCurrencyCode("NZ$")` returns null, so an NZ$ plan cell falls back to the template's currency (SGD on a mixed table). Add `"NZ$": "NZD"` to the aliases in normalizeCurrencyCode. Otherwise Q2 is right: RM, £, €, A$, AU$, HK$, SG$, S$, US$ and the codes map correctly; a bare "$" gives null, so block cells stay without a currency and table cells take the template's, as before.
+- Low (Q3): inferProductName takes any of the first 15 lines that ends in "group insurance (scheme)", so "Certificate of Group Insurance", "Important notice about your Group Insurance" or an insurer's line ("<Insurer> Group Insurance") becomes the product name. It runs only on the code-only fallback and generic reference documents, and a wrong name mostly fails safe (wording and spouse-word matches need the exact name). Refuse lines that start with a generic word: `/^(?:certificate|summary|notice|important|about|your|welcome|claims?|guide|the|of)\b/i`, or that contain "of group insurance" / "your group insurance".
+- Q4 lives.ts is fine: the cut only removes a sign followed by digits, and names have no digits. "Life Assured: Jane Doe RM 250,000" still finds another life, "Insured\tJANE DOE\tS$250,000" too, and "Sum Insured\tRM 250,000" no longer reads "rm" as a name.
+- Low: compiled with "i", MONEY_SIGN reads "Rm 2" / "rm 12" (a room) as ringgit, and "Plan RM2" or "GBP3" as money. Only facts.ts (targetedMoney, moneyNear) could take one as a bill amount, and only when the person types it. Node 22 has no `(?-i:)`, so if it matters, build those two regexes without "i".
+- Low: parseAmount now drops "RM" / "£" / "EUR" from a typed sum insured and keeps the number, so a typed currency that differs from the policy's is lost. It is used only by scripts/benefit-table/service-test.ts today; refuse a non-matching sign before it gets a caller.
+- Racing texts: they no longer name the scheme and now quote the wording's own exception. Good.
