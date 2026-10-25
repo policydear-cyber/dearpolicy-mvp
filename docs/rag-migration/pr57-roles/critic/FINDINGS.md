@@ -6773,3 +6773,18 @@ Free review: delta read plus tsx probes of categoryOfBenefit, anyMoneyFigures an
 
 - FIGURE now has `(?<![A-Za-z])(RM)`. Probe: "claim FORM 2", "TERM 1" and "PLATFORM 3" give no money in either moneyFiguresIn or anyMoneyFigures. The NZ$ alias is in. The title filter refuses heading lines. ₹, USD-after-figure and RM caps are seen.
 - Low, fails safe (hides): ANY_SIGN's bare `R` reads "Rider R1: up to S$50,000" as [1, 50000] and "Class R 2 up to S$500" as [2, 500], so a cap is refused. Require a thousands group for a bare R (rand), e.g. `R\s?\d{1,3}(?:[ ,]\d{3})+`, or drop it.
+
+## R230 — #142 d71b7b9, #144 2eebb62, #145 f9d040e
+
+Free review: delta read only.
+
+- #145: READY. A bare R now counts only before a figure with a thousands group, and the third capture group is read in anyMoneyFigures. FIGURE_IN_CELL and LABEL_FIGURE never index groups, so the extra group is safe.
+- #144: READY. A merged in; no change to table-benefits.ts.
+- #142: one medium, the same kind as R229. The new "including … accident/injury" clause has no plain-death guard. "Accidental Death Benefit (including injury on public transport)" or "Accidental Death (including accidents abroad)" counts as any cause and lands on the Death tile, though it is an accident-only rider. Give it the uplift's guard:
+  ```ts
+  const plainDeath = /^\s*death(?:\s+benefit)?\b/i.test(paid);
+  const uplift = plainDeath && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const including = plainDeath && /\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid);
+  const anyCause = (uplift || including || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid)) && !/\bpersonal\s+accident\b/i.test(benefit);
+  ```
+  "Death (including death due to injury)" still goes to Death. Testing the PA regex on `paid` is right: "Death from causes other than accident" goes to Death. Otherwise READY.
