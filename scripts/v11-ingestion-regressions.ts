@@ -222,6 +222,60 @@ async function partA() {
     assert.deepEqual(numbersIn("13,500.00100,000.00"), []);
     assert.deepEqual(numbersIn("Premium 181.44181.44 and 50,000"), [50000]);
   });
+  await t("E1: a page is checked line by line: a line the image reading confirms is kept word for word, any other loses its figures, and the history says what kind of difference it was without a figure or a word (Critic plan, 25 Oct)", async () => {
+    const { checkLines, crossCheckPages, readingsAgree, uncheckedPagesNote, NOT_CHECKED, UNCHECKED_PAGE } = await import("@/lib/documents/layout-check");
+    const text = "Example Life Schedule\nDeath Benefit\t100,000.00\nCritical Illness\t50,000.00\nHospital Cash per day\t150.00\nPremium\t181.44";
+    const image = "Example Life Schedule\nDeath Benefit 100,000.00\nCritical Illness 50,000.00\nHospital Cash per day 150.00\nPremium 181.44";
+    const page = async (t: string, i: string) => (await crossCheckPages<{ pageNumber: number; text: string; unchecked?: boolean; partChecked?: boolean; uncheckedWhy?: string }>([{ pageNumber: 3, text: t }], [3], async () => [{ pageNumber: 3, text: i, extractionMethod: "ocr" }]))[0];
+    // A form code in the margin that only the text layer has costs that one line, not the page.
+    const footer = await page(text + "\nForm EX-0425 v3", image);
+    assert.equal(footer.unchecked, undefined);
+    assert.equal(footer.partChecked, true);
+    assert.equal(footer.text.split("\n").slice(0, 5).join("\n"), text, "every confirmed line word for word");
+    assert.match(footer.text, new RegExp(`Form EX-${NOT_CHECKED.replace(/[[\]]/g, "\\$&")}`));
+    // A misread digit: that line loses its figures, the rest is kept.
+    const misread = await page(text, image.replace("181.44", "181.41"));
+    assert.equal(misread.partChecked, true);
+    assert.equal(misread.text.split("\n").at(-1), `Premium\t${NOT_CHECKED}`);
+    assert.match(misread.text, /Death Benefit\t100,000\.00/);
+    assert.equal(misread.uncheckedWhy, "figures differ");
+    // A row the image reading dropped is not confirmed; a line printed twice is confirmed only as often as the image prints it.
+    assert.match((await page(text, image.replace("Critical Illness 50,000.00\n", ""))).text, /Critical Illness\t\[amount not checked\]/);
+    const twice = await page(text + "\nPremium\t181.44", image);
+    assert.equal(twice.text.split("\n").filter((l) => l === "Premium\t181.44").length, 1);
+    assert.equal(twice.text.split("\n").filter((l) => l === `Premium\t${NOT_CHECKED}`).length, 1);
+    // A date is one token: two readings that write it differently agree on its line.
+    for (const [a, b] of [["Commencement date\t01.10.2026", "Commencement date 01/10/2026"], ["Expiry date\t30/09/2027", "Expiry date 30 Sep 2027"], ["Issued\t2026-10-01", "Issued 1 October 2026"]])
+      assert.deepEqual(readingsAgree(`Death Benefit\t100,000.00\n${a}`, `Death Benefit 100,000.00\n${b}`), { agree: true }, a);
+    assert.equal(readingsAgree("Death Benefit\t100,000.00\nExpiry date\t30/09/2027", "Death Benefit 100,000.00\nExpiry date 30/09/2028").agree, false, "a different date is not the same date");
+    // An age glued to an amount in the text layer is not confirmed: it fails safe, only that line.
+    const glued = await page("Age\tSum Assured\n3615,000.00\nDeath Benefit\t100,000.00", "Age Sum Assured\n36 15,000.00\nDeath Benefit 100,000.00");
+    assert.equal(glued.partChecked, true);
+    assert.doesNotMatch(glued.text, /3615|15,000/);
+    assert.match(glued.text, /Death Benefit\t100,000\.00/);
+    // The pairing swap is still refused (Critic R175-1): neither line is confirmed, so no figure on the page is used.
+    const swap = await page("Ambulance\tS$300\nHospital cash\tS$500 per day", "Ambulance S$500\nHospital cash S$300 per day");
+    assert.equal(swap.unchecked, true);
+    assert.equal(swap.text.startsWith(UNCHECKED_PAGE), true);
+    assert.equal(swap.uncheckedWhy, "pairing differs");
+    // Labels first, values after: nothing to confirm, the page is unchecked as before.
+    assert.equal((await page("Death Benefit\nPremium\n100,000.00\n181.44", image)).unchecked, true);
+    // A confirmed page is kept as it is.
+    assert.equal(await page(text, image).then((p) => p.text), text);
+    // The history: counts, shapes and positions only. No figure, no label, no word from the page.
+    const log = checkLines(text + "\nForm EX-0425 v3", image.replace("181.44", "181.41"), 3).log;
+    assert.equal(log, "figure lines 5 in text, 4 in image, 3 confirmed; figures 6 in text, 4 in image; only in text 3 (1-2 digit number 1, 3+ digit whole number 1, decimal amount 1; last lines 3); only in image 1 (decimal amount 1; last lines 1)");
+    for (const leak of ["181", "0425", "Premium", "Form", "Example"]) assert.equal(log.includes(leak), false, leak);
+    // The document says which pages were read in part, and how.
+    assert.equal(uncheckedPagesNote([], [3]), "Read in part. Some amounts on page 3 could not be checked against the page image, so they are shown as not checked and not used; the rest of that page agreed and is used.");
+    assert.equal(uncheckedPagesNote([2], [3, 4]), "Read in part. Page 2 could not be checked: a second reading from the page image did not agree with its text, so no amount on it is used. Some amounts on pages 3 and 4 could not be checked against the page image, so they are shown as not checked and not used; the rest of those pages agreed and is used.");
+    const { readInPart } = await import("@/lib/simple-chat/library");
+    assert.match(String(readInPart({ partCheckedPages: [3], uncheckedPages: [], processingStatus: "ready" } as never)), /some amounts on page 3 could not be checked/);
+    assert.equal(readInPart({ partCheckedPages: [], uncheckedPages: [], processingStatus: "ready" } as never), null);
+    // What the table check reads from a partly checked line: no figure.
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.deepEqual(numbersIn(misread.text.split("\n").at(-1)!), []);
+  });
   await t("E1: the page image reader's reply is read even with a raw TAB or line break in a page, or a sentence before it (Prudential readings, 24 Oct)", async () => {
     const { parseTranscription, acceptTranscribedPages } = await import("@/lib/documents/ocr-hosted");
     const pagesOf = (reply: string) => acceptTranscribedPages([3, 4], (parseTranscription(reply) as { pages?: unknown } | null)?.pages).map((p) => [p.pageNumber, p.text]);

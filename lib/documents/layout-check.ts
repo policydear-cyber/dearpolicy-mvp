@@ -48,53 +48,15 @@ export const looksScrambled = (text: string) => scrambleSigns(text).length > 0;
 const unglue = (text: string) => text.replace(UNGLUE, "$1 ");
 const figuresIn = (text: string) => (unglue(text).match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
 
-type Token = string | number;
-/** Each line that prints a figure, as its words and figures in printed order. Every word counts, "A" and "B" too, and
- * order counts, so two pairs swapped within one line, or "Plan A" and "Plan B" swapped, do not agree (TE U-F1).
- * Currency marks and "%" are left out: the two readings may print them differently. */
-function figureLines(text: string): Token[][] {
-  return unglue(text).split("\n")
-    .map((line) => (line.replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(/\d[\d,]*(?:\.\d+)?|[a-z]+/g) ?? [])
-      .map((t): Token => (/\d/.test(t) ? Number(t.replace(/,/g, "")) : t)))
-    .filter((l) => l.some((t) => typeof t === "number" && t > 0));
-}
-const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
-const sameLine = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
-const figuresOf = (l: Token[]) => l.filter((t): t is number => typeof t === "number");
-const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string").join(" ");
-/** Whether the page's image reading agrees with its text reading: the same figures (as many times each, reading glued ones
- * apart), and every line of each that prints figures has a line in the other with the same words and figures in the same
- * order. A figure line with no label in the text reading has nothing to agree on. */
+/** Whether the page's image reading agrees with its text reading: every line of each that prints figures has a line in
+ * the other with the same words and figures in the same order (a line printed twice must be printed twice), and the image
+ * reading prints figures at all. A figure line with no label in the text reading has nothing to agree on. */
 /** Why two readings did not agree, in words that quote nothing from the page: what is kept in the processing history
  * (TE P115-1: a label or an amount there would outlive the deleted document). */
 export type DisagreeKind = "image prints no figures" | "figures differ" | "figure line with no label" | "pairing differs";
 export function readingsAgree(textReading: string, imageReading: string, pageNumber?: number): { agree: true } | { agree: false; why: string; kind: DisagreeKind } {
-  const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
-  if (!b.length) return { agree: false, why: "the image reading prints no figures", kind: "image prints no figures" };
-  if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures", kind: "figures differ" };
-  // A page number or a date on a line of its own pairs nothing; its figures are still counted above (TE UC-3). Any other
-  // label-less line is refused below.
-  // One lone number is the page number; several are values whose labels are elsewhere, and stay to be refused.
-  // The page number is "Page 3" or "3 of 12" anywhere, the page's own number anywhere (a footer the text layer puts
-  // before its footer line, Critic R189-1), or a one- or two-digit number as the first or last line, unless the line
-  // beside it is a label alone: a value under its label ("Hospital Cash per day" over "150", first or last or mid-page)
-  // stays to be refused (TE N8, P122-1, Critic R189-2).
-  const alone = (t: string) => {
-    const lines = t.split("\n"), numbers = lines.filter((l) => LONE_NUMBER.test(l)).length;
-    const filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
-    const first = filled[0], last = filled[filled.length - 1];
-    const beside = (i: number) => lines[i === first ? filled[1] : filled[filled.length - 2]]?.trim() ?? "";
-    const edge = (i: number) => /page|of/i.test(lines[i]) || Number(lines[i].trim()) === pageNumber
-      || ((i === first || i === last) && /^\s*\d{1,2}\s*$/.test(lines[i]) && !LABEL_ONLY(beside(i)));
-    return lines.filter((l, i) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l) && edge(i))).join("\n");
-  };
-  const text = figureLines(alone(textReading)), image = figureLines(alone(imageReading));
-  for (const l of text) {
-    if (!labelOf(l)) return { agree: false, why: `the text reading prints ${figuresOf(l).join(", ")} with no label beside it`, kind: "figure line with no label" };
-    if (!image.some((o) => sameLine(l, o))) return { agree: false, why: `the image reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order`, kind: "pairing differs" };
-  }
-  for (const l of image) if (!text.some((o) => sameLine(l, o))) return { agree: false, why: `the text reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order`, kind: "pairing differs" };
-  return { agree: true };
+  const check = checkLines(textReading, imageReading, pageNumber);
+  return check.agree ? { agree: true } : { agree: false, why: check.why, kind: check.kind! };
 }
 
 /** What is stored, searched and read in place of a page the two readings did not agree on: a notice, and the page's lines
@@ -112,12 +74,125 @@ const LABELLED = new RegExp(String.raw`\b(?:policy|certificate|contract|member|a
   + String.raw`|\b(?:date(?:\s+of\s+[a-z]+)?|dated|(?:commencement|expiry|issue|start|end)(?:\s+date)?|issued(?:\s+on)?)\s*[:-]?\s*` + DATE, "gi");
 const LONE_NUMBER = /^\s*(?:page\s+)?\d{1,3}(?:\s+of\s+\d{1,3})?\s*$/i;
 const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`, "i");
+
+type Token = string | number;
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const WHOLE_DATE = new RegExp(String.raw`^` + DATE + String.raw`$`, "i");
+/** A date is one token, whatever its separators: "01.10.2026", "1/10/2026" and "1 Oct 2026" are one date, so two readings
+ * that print it differently still agree on its line, and its parts are never read as figures (Critic plan step 3). */
+function dateToken(printed: string): string {
+  const t = printed.toLowerCase(), month = (m: string) => MONTHS.findIndex((x) => m.startsWith(x)) + 1;
+  let d = 0, m = 0, y = 0, p: RegExpMatchArray | null;
+  if ((p = t.match(/^(\d{4})-(\d{2})-(\d{2})$/))) [y, m, d] = [+p[1], +p[2], +p[3]];
+  else if ((p = t.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/))) [d, m, y] = [+p[1], +p[2], +p[3]];
+  else if ((p = t.match(/^(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})$/))) [d, m, y] = [+p[1], month(p[2]), +p[3]];
+  else if ((p = t.match(/^([a-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/))) [m, d, y] = [month(p[1]), +p[2], +p[3]];
+  else return `date ${t}`;
+  return `date ${d}-${m}-${y}`;
+}
+const isDate = (t: Token) => typeof t === "string" && t.startsWith("date ");
+/** A line's words and figures in printed order. Every word counts, "A" and "B" too, and order counts, so two pairs swapped
+ * within one line, or "Plan A" and "Plan B" swapped, do not agree (TE U-F1). Currency marks and "%" are left out: the two
+ * readings may print them differently. */
+function lineTokens(line: string): Token[] {
+  const tokens = unglue(line).replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?|[a-z]+`, "gi")) ?? [];
+  return tokens.map((t): Token => (WHOLE_DATE.test(t) ? dateToken(t) : /^\d/.test(t) ? Number(t.replace(/,/g, "")) : t));
+}
+const figureLine = (l: Token[]) => l.some((t) => (typeof t === "number" ? t > 0 : isDate(t)));
+const sameLine = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
+const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
+const figuresOf = (l: Token[]) => l.filter((t): t is number => typeof t === "number");
+const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string" && !isDate(t)).join(" ");
+
+/** The lines that pair nothing: a page number or a date on a line of its own (TE UC-3). One lone number is the page
+ * number; several are values whose labels are elsewhere, and stay to be refused. The page number is "Page 3" or "3 of 12"
+ * anywhere, the page's own number anywhere (a footer the text layer puts before its footer line, Critic R189-1), or a one-
+ * or two-digit number as the first or last line, unless the line beside it is a label alone: a value under its label
+ * ("Hospital Cash per day" over "150", first or last or mid-page) stays to be refused (TE N8, P122-1, Critic R189-2). */
+function pairingNothing(t: string, pageNumber?: number): Set<number> {
+  const lines = t.split("\n"), numbers = lines.filter((l) => LONE_NUMBER.test(l)).length;
+  const filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+  const first = filled[0], last = filled[filled.length - 1];
+  const beside = (i: number) => lines[i === first ? filled[1] : filled[filled.length - 2]]?.trim() ?? "";
+  const edge = (i: number) => /page|of/i.test(lines[i]) || Number(lines[i].trim()) === pageNumber
+    || ((i === first || i === last) && /^\s*\d{1,2}\s*$/.test(lines[i]) && !LABEL_ONLY(beside(i)));
+  return new Set(lines.map((l, i) => (LONE_DATE.test(l) || (numbers === 1 && LONE_NUMBER.test(l) && edge(i)) ? i : -1)).filter((i) => i >= 0));
+}
+
+/** What an unconfirmed figure is shown as: the line keeps its words, and the reader is told the amount was not checked. */
+export const NOT_CHECKED = "[amount not checked]";
+const ANY_FIGURE = new RegExp(String.raw`(?:US\$|S\$|\$)?(?:` + DATE + String.raw`|\d[\d,]*(?:\.\d+)?%?)`, "gi");
+const notChecked = (line: string) => unglue(line).replace(ANY_FIGURE, NOT_CHECKED);
+
+/** One figure as the history keeps it: its kind and where it sits on the page, never its digits or the words beside it. */
+type Seen = { key: string; shape: string; where: string };
+function shapeOf(printed: string): string {
+  if (WHOLE_DATE.test(printed)) return "date";
+  if (printed.endsWith("%")) return "percent";
+  if (/\.\d{2}$/.test(printed)) return printed.includes(",") ? "comma decimal amount" : "decimal amount";
+  if (printed.includes(".")) return "other decimal";
+  if (printed.includes(",")) return "comma amount";
+  return printed.length <= 2 ? "1-2 digit number" : "3+ digit whole number";
+}
+function seenFigures(text: string): Seen[] {
+  const lines = text.split("\n"), filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+  return lines.flatMap((line, i) => {
+    const at = filled.indexOf(i);
+    const where = at >= 0 && at < 3 ? "first lines" : at >= filled.length - 3 ? "last lines" : labelOf(lineTokens(line)) ? "labelled line" : "line with no label";
+    return (unglue(line).match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?%?`, "gi")) ?? [])
+      .map((printed) => ({ printed, key: WHOLE_DATE.test(printed) ? dateToken(printed) : Number(printed.replace(/[,%]/g, "")).toFixed(2) }))
+      .filter((f) => f.key.startsWith("date ") || Number(f.key) > 0)
+      .map((f) => ({ key: f.key, shape: shapeOf(f.printed), where }));
+  });
+}
+function only(a: Seen[], b: Seen[]): Seen[] {
+  const left = [...b];
+  return a.filter((f) => { const i = left.findIndex((o) => o.key === f.key); if (i < 0) return true; left.splice(i, 1); return false; });
+}
+const tally = (xs: string[]) => [...new Set(xs)].sort().map((x) => `${x} ${xs.filter((y) => y === x).length}`).join(", ");
+const described = (xs: Seen[]) => (xs.length ? `${xs.length} (${tally(xs.map((x) => x.shape))}; ${tally(xs.map((x) => x.where))})` : "0");
+
+/** The page's text reading checked line by line against its image reading. Each figure line of the text is kept word for
+ * word only when the image reading prints a line with the same words and the same figures in the same order (each image
+ * line confirms one text line). A figure line with no label confirms nothing. `text` is the page as it may be stored: null
+ * when no figure line was confirmed (the whole page is unchecked), otherwise every unconfirmed line with its figures shown
+ * as NOT_CHECKED. `log` says what kind of difference it was, in counts and fixed words only (Critic plan step 1). */
+export function checkLines(textReading: string, imageReading: string, pageNumber?: number):
+  { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string } {
+  const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
+  const pool = imageReading.split("\n").map((l, i) => (skipImage.has(i) ? [] : lineTokens(l))).filter(figureLine);
+  const imageLines = pool.length;
+  const unconfirmed: number[] = [];
+  let figureLines = 0, noLabel = -1, why = "";
+  lines.forEach((line, i) => {
+    if (skipText.has(i)) return;
+    const tokens = lineTokens(line);
+    if (!figureLine(tokens)) return;
+    figureLines++;
+    const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o)) : -1;
+    if (at >= 0) { pool.splice(at, 1); return; }
+    unconfirmed.push(i);
+    if (!labelOf(tokens) && noLabel < 0) noLabel = i;
+    why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
+  });
+  if (!why && pool.length) why = `the text reading does not print ${figuresOf(pool[0]).join(", ")} beside "${labelOf(pool[0])}" in that order`;
+  const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
+  const kind: DisagreeKind | null = !b.length ? "image prints no figures" : !unconfirmed.length && !pool.length ? null
+    : !sameFigures(a, b) ? "figures differ" : noLabel >= 0 ? "figure line with no label" : "pairing differs";
+  const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
+  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${figureLines - unconfirmed.length} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
+    + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
+  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log };
+  const confirmed = figureLines - unconfirmed.length;
+  const text = !unconfirmed.length ? textReading : confirmed ? lines.map((l, i) => (unconfirmed.includes(i) ? notChecked(l) : l)).join("\n") : null;
+  return { agree: kind === null, kind, why, text, log };
+}
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 
-type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string };
+type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string };
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
-export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && looksScrambled(p.text)).map((p) => p.pageNumber);
+export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && !p.partChecked && looksScrambled(p.text)).map((p) => p.pageNumber);
 /** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
  * image reading confirms it; otherwise, and when the image could not be read, it becomes unchecked, its text replaced by
  * uncheckedText, and uncheckedWhy says why in fixed words, for the processing history. `readImage` returns null when the reading failed. */
@@ -128,18 +203,25 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     if (!numbers.includes(p.pageNumber)) return p;
     const image = second?.find((s) => s.pageNumber === p.pageNumber);
     // The reason is a fixed phrase: nothing from the page (TE P115-1).
-    const check = !second ? { agree: false as const, kind: "image reading failed" }
-      : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page" }
-      : image.unreadable ? { agree: false as const, kind: "image unreadable" }
-      : readingsAgree(p.text, image.text, p.pageNumber);
-    return check.agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind };
+    const check = !second ? { agree: false as const, kind: "image reading failed", text: null, log: undefined }
+      : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
+      : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
+      : checkLines(p.text, image.text, p.pageNumber);
+    if (check.agree) return p;
+    // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
+    if (check.text === p.text) return { ...p, checkLog: check.log };
+    // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
+    if (check.text) return { ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
+    return { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
   });
 }
 
-/** The note a document gets when some pages could not be checked. */
-export function uncheckedPagesNote(pageNumbers: number[]): string | null {
-  if (!pageNumbers.length) return null;
-  const list = pageNumbers.length === 1 ? `Page ${pageNumbers[0]}` : `Pages ${pageNumbers.slice(0, -1).join(", ")} and ${pageNumbers[pageNumbers.length - 1]}`;
-  return `Read in part. ${list} could not be checked: a second reading from the page image did not agree with ${pageNumbers.length === 1 ? "its" : "their"} text, so no amount on ${pageNumbers.length === 1 ? "it" : "them"} is used.`;
+/** The note a document gets when some pages could not be checked, or some lines on them. */
+const pageList = (n: number[]) => n.length === 1 ? `page ${n[0]}` : `pages ${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+export function uncheckedPagesNote(pageNumbers: number[], partChecked: number[] = []): string | null {
+  if (!pageNumbers.length && !partChecked.length) return null;
+  const whole = pageNumbers.length ? `${pageList(pageNumbers).replace(/^p/, "P")} could not be checked: a second reading from the page image did not agree with ${pageNumbers.length === 1 ? "its" : "their"} text, so no amount on ${pageNumbers.length === 1 ? "it" : "them"} is used.` : null;
+  const part = partChecked.length ? `Some amounts on ${pageList(partChecked)} could not be checked against the page image, so they are shown as not checked and not used; the rest of ${partChecked.length === 1 ? "that page" : "those pages"} agreed and is used.` : null;
+  return ["Read in part.", whole, part].filter(Boolean).join(" ");
 }
 export const READ_IN_PART = /^Read in part\b/;

@@ -495,8 +495,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           return null;
         }));
       // Why each page failed goes to the server-only processing history, never into the page text (Critic plan step 3).
-      for (const p of pages.filter((x) => numbers.includes(x.pageNumber) && x.unchecked && x.uncheckedWhy)) {
-        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_DISAGREED", error: `page ${p.pageNumber}: ${p.uncheckedWhy}` }).catch(() => undefined);
+      // With it, what kind of difference it was, in counts and fixed words only, so one run shows the cause (Critic plan
+      // step 1); a page whose every figure line was confirmed is recorded too when the image printed a line the text did not.
+      for (const p of pages.filter((x) => numbers.includes(x.pageNumber) && (x.uncheckedWhy || x.checkLog))) {
+        const outcome = p.unchecked ? "unchecked" : p.partChecked ? "some lines unchecked" : "every figure line confirmed";
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_DISAGREED",
+          error: [`page ${p.pageNumber}: ${outcome}`, p.uncheckedWhy, p.checkLog].filter(Boolean).join("; ") }).catch(() => undefined);
       }
     };
     await crossCheck(ocrSourceBytes && sniffed.format === "pdf" ? suspectPages(pages) : []);
@@ -560,7 +564,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           : `INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)
              ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text`,
         withMethod
-          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.unchecked ? "unchecked" : page.extractionMethod ?? "native"]
+          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.unchecked ? "unchecked" : page.partChecked ? "part_checked" : page.extractionMethod ?? "native"]
           : [args.accountId, args.policyId, page.pageNumber, page.text],
       );
     }
@@ -605,16 +609,17 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // left out and the reading checked again (Critic R175-2).
     if (ocrSourceBytes && sniffed.format === "pdf") {
       const failed = [...new Set(extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified && c.sourcePage).map((c) => Number(c.sourcePage)))]
-        .filter((n) => pages.some((p) => p.pageNumber === n && p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && /\d/.test(p.text))).slice(0, 6);
+        .filter((n) => pages.some((p) => p.pageNumber === n && p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && !p.partChecked && /\d/.test(p.text))).slice(0, 6);
       if (failed.length) {
         await crossCheck(failed);
-        const now = pages.filter((p) => p.unchecked && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
+        const now = pages.filter((p) => (p.unchecked || p.partChecked) && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
         if (now.length) {
           extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
           // What the catalogue and the evidence notes read is rebuilt too, so the newly unchecked pages give them no amount (Critic R176-1).
           evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
           for (const p of pages.filter((x) => now.includes(x.pageNumber))) {
-            await query(`UPDATE policy_pages SET text=$4${withMethod ? ",extraction_method='unchecked'" : ""} WHERE policy_id=$1 AND account_id=$2 AND page_number=$3`, [args.policyId, args.accountId, p.pageNumber, p.text]);
+            await query(`UPDATE policy_pages SET text=$4${withMethod ? ",extraction_method=$5" : ""} WHERE policy_id=$1 AND account_id=$2 AND page_number=$3`,
+              [args.policyId, args.accountId, p.pageNumber, p.text, ...(withMethod ? [p.unchecked ? "unchecked" : "part_checked"] : [])]);
           }
         }
       }
@@ -801,13 +806,14 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
     const unmatched = detected.filter((d) => !d.matchedMemberId && !dismissed.has(nameKey(d.name))).length;
-    const unchecked = pages.filter((p) => p.unchecked).map((p) => p.pageNumber);
-    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted || unchecked.length);
+    const unchecked = pages.filter((p) => p.unchecked).map((p) => p.pageNumber), partChecked = pages.filter((p) => p.partChecked).map((p) => p.pageNumber);
+    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted || unchecked.length || partChecked.length);
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
       uploadProfileLinks.length ? `The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: ${uploadProfileLinks.join("; ")}. Check this is the right person` : null,
       unverified ? `${unverified} extracted coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
       unchecked.length ? `${unchecked.length === 1 ? "Page" : "Pages"} ${unchecked.join(", ")} could not be checked against the page image` : null,
+      partChecked.length ? `Some amounts on ${partChecked.length === 1 ? "page" : "pages"} ${partChecked.join(", ")} could not be checked against the page image` : null,
       namedNobodyPrinted ? (linkedByPrintedName ? "The people this document was read as covering are not named in it; it was linked to the one family member whose name it prints. Check this is the right person"
         : "The people this document was read as covering are not named in it, so it was kept with the profile it was uploaded to. Check this is the right person") : null,
     ].filter(Boolean).join("; ");
@@ -960,7 +966,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
         ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {

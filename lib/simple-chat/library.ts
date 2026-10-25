@@ -26,6 +26,8 @@ export type HouseholdDocument = {
   processingStatus?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
+  /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
+  partCheckedPages?: number[];
   pages: HouseholdPage[];
 };
 export type Household = {
@@ -78,6 +80,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
+      partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
       // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote.
       pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
     })),
@@ -111,8 +114,12 @@ export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && 
 export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
 /** Said for a document with unchecked pages whichever of its pages are sent, so the answer never calls it fully read
  * (live 32fa444 E2: PruLink's unchecked pages were not sent, so the chat never saw the notice). */
-export const readInPart = (doc: HouseholdDocument) => doc.uncheckedPages?.length && !unreadable(doc)
-  ? `read in part: ${pageList(doc.uncheckedPages)} could not be checked against the page image; no amount from ${doc.uncheckedPages.length === 1 ? "it" : "them"} is used` : null;
+export const readInPart = (doc: HouseholdDocument) => {
+  const whole = doc.uncheckedPages ?? [], part = doc.partCheckedPages ?? [];
+  if ((!whole.length && !part.length) || unreadable(doc)) return null;
+  return "read in part: " + [whole.length ? `${pageList(whole)} could not be checked against the page image; no amount from ${whole.length === 1 ? "it" : "them"} is used` : null,
+    part.length ? `some amounts on ${pageList(part)} could not be checked against the page image and show as "[amount not checked]"; they are not used` : null].filter(Boolean).join("; ");
+};
 
 export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>): string {
   const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
