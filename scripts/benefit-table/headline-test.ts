@@ -2,6 +2,7 @@
  * amount is worded, and the grouping of the full list. Synthetic rows only.
  *   npm run benefit-table:headline-test */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { bySection, keyBenefits, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { kindsOfTable } from "@/components/cover-kinds";
 
@@ -125,6 +126,13 @@ test("the cover's own name decides the kind, and a home-care benefit is not home
   // A plan with only a value and its premium is still a plan (Critic R204-1).
   assert.deepEqual(kindsOfTable([r("Fund value", "PRUlink Assurance", "value"), r("Annual premium", "PRUlink Assurance")], [{ product: "PRUlink Assurance", cover: "PRUlink Assurance" }]), ["Other"]);
   assert.deepEqual(kindsOfTable([r("Annual premium", "Critical Illness II", "amount")], [{ product: "Critical Illness II", cover: "Critical Illness II" }]), ["Critical illness"]);
+});
+
+// headline.ts runs in the browser: a value import from assemble.ts pulls the database driver into the page and the build
+// fails (main 999048d, #120). Only types may come from there.
+test("headline.ts takes only types from assemble.ts", () => {
+  const src = readFileSync(new URL("../../lib/benefit-table/headline.ts", import.meta.url), "utf8");
+  for (const m of src.matchAll(/^import\s+(.*?)\s+from\s+["']([^"']+)["']/gm)) if (!/^type\s/.test(m[1])) assert.doesNotMatch(m[2], /assemble|db|policies|linking/, m[0]);
 });
 
 console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
