@@ -237,9 +237,21 @@ test("only a fact about a row's own cover leaves it out: a clause or waiver of t
     "Hospital cash in Singapore and overseas", "Hospital cash when you travel", "Hospital cash whilst on holiday abroad"])
     assert.equal(tile("Hospital Cash", [on("a", b, 80), on("b", "Hospital Cash Benefit", 40)]), null, b);
   // A whole travel cover is left out beside a standing one; alone, its own rows are the tile's rows.
-  const travel = on("t", "Hospital Cash Benefit", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
+  const travel = on("t", "Daily hospital cash while overseas", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
   assert.equal(tile("Hospital Cash", [travel, on("b", "Hospital Cash Benefit", 40)]), "S$40 a day");
   assert.equal(tile("Hospital Cash", [travel]), "S$80 a day");
+  // Two signals are needed: a travel name and a row that pays only abroad. An employer's or product's travel-like word,
+  // or a travel name whose rows here pay at home too, keeps the cover in (TE P147-6, Critic R243).
+  for (const [market, cur] of [["SG", "SGD"], ["MY", "MYR"], ["UK", "GBP"]] as const)
+    for (const [product, cover] of [["Holiday Inn Group Insurance", "Group Term Life"], ["Sunrise Travel & Tours Staff Insurance", "Group Hospital Income"],
+      ["Trip.com Group Employee Benefits", "Group Hospital Cash"], ["Life Journey Protector", "Life Journey Protector"], ["Premium Holiday Saver", "Premium Holiday Saver"],
+      ["Journey Critical Illness Plan", "Journey Critical Illness Plan"], ["Holiday Inn Group Insurance", "Group Travel Insurance cover for staff"]]) {
+      const standing = { ...on("e", "Hospital cash in hospital or overseas", 80, { product, cover }), figure: { kind: "printed" as const, amount: 80, currency: cur, unit: "per_day" as const } };
+      const other = { ...on("b", "Hospital Cash Benefit", 40), figure: { kind: "printed" as const, amount: 40, currency: cur, unit: "per_day" as const } };
+      const travelNamed = /Travel Insurance/.test(cover);
+      assert.equal(tile("Hospital Cash", [standing, other]) == null, !travelNamed, `${market} ${product} / ${cover}`);
+      assert.equal(tile("Hospital Cash", [{ ...standing, benefit: "Hospital Cash Benefit" }, other]), null, `${market} ${product} / ${cover}: no abroad row`);
+    }
   // A cover whose rows here are all waivers pays nothing for the category.
   const waiver = on("w", "Waiver of premium on disability", 0, { pays: "words", figure: { kind: "none", why: "no figure" } });
   assert.equal(tileRows([waiver, on("b", "Hospital Cash Benefit", 40)]).length, 1);

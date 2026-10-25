@@ -40,7 +40,7 @@ for (const [m, cur, rate, sum] of [["SG", "SGD", 40, 300000], ["MY", "MYR", 100,
 
   // T: standing cover worded like a trip, beside another cover with a different rate: no single figure.
   for (const [id, b] of [["T1", "Daily hospital cash while overseas or at home"], ["T2", "Daily hospital cash, whether in your home country or while overseas"],
-    ["T3", "Hospital income worldwide, also when travelling"], ["T4", "Daily hospital cash at home and while abroad"]] as const) {
+    ["T3", "Hospital income worldwide, also when travelling"], ["T4", "Daily hospital cash at home and while abroad"], ["T6", "Daily hospital cash in Malaysia and while overseas"]] as const) {
     const r = tile("Hospital Cash", [daily("a", b, rate * 2), daily("b", "Hospital Cash Benefit", rate)]);
     t(`${m} ${id} '${b}' is standing cover: no single figure beside another cover's rate`, r == null, cash(r));
   }

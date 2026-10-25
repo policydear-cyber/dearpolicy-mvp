@@ -91,10 +91,16 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
     && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
 }
 
-/** Travel cover, known from the cover itself (its product, cover or plan name: "Travel insurance", "Single Trip"), never
- * from one benefit's wording: a benefit worded like a trip ("while overseas or at home") is compared like any other
- * (TE round 5: wording rules that drop rows turn a missed phrasing into a wrong figure). */
-const TRAVEL_COVER = /\b(?:travel\w*|trips?|journeys?|holidays?)\b/i;
+/** Travel cover needs two signals together (TE P147-6): the cover's own product, cover or plan name says travel insurance
+ * ("Travel insurance", "Single Trip", "Annual Multi-Trip"), and one of its rows here pays only abroad ("while overseas").
+ * A product name with a travel-like word alone ("Life Journey Saver", "Sunny Holidays Group Insurance") is standing cover,
+ * and one benefit's wording alone never makes a cover travel. When unsure the cover stays in, and the tile gives no figure. */
+const TRAVEL_NAME = /\b(?:travel\w*|holiday|journey|trip)\s+(?:insurance|cover|protection|plan|policy|guard|assurance)\b|\b(?:single|annual|multi)[\s-]*trips?\b/i;
+/** A group scheme's product name is often the employer's ("Holiday Inn Group Insurance", Critic R243): only the cover and
+ * plan names are read for it, never the product name. */
+const SCHEME_NAME = /\b(?:group|scheme|staff|employees?)\b/i;
+const travelName = (r: CoverRow) => TRAVEL_NAME.test([r.cover, r.plan, r.product && !SCHEME_NAME.test(r.product) ? r.product : null].filter(Boolean).join(" · "));
+const ABROAD_ROW = /\b(?:overseas|abroad|while\s+(?:you\s+are\s+)?travel\w*|during\s+(?:the|your|a)\s+(?:trip|journey))\b/i;
 /** A part of a benefit's payment terms, not its amount: a name that states a threshold with its own money figure ("paid
  * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A guaranteed minimum ("at least",
  * "not less than") is the benefit, not a clause (TE P147-2, round 5 C1-C4). */
@@ -116,7 +122,7 @@ export function tileRows<T extends CoverRow>(rows: T[]): T[] {
   for (const r of rows) { const k = r.coverKey ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
   const kept = [...covers.values()].map((list) => {
     const own = list.filter((r) => !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
-    return { list: own.length ? own : list, travel: list.some((r) => TRAVEL_COVER.test([r.product, r.cover, r.plan].filter(Boolean).join(" "))),
+    return { list: own.length ? own : list, travel: list.some(travelName) && list.some((r) => ABROAD_ROW.test(r.benefit)),
       waiverOnly: list.every((r) => WAIVER.test(r.benefit)) };
   });
   const paying = kept.filter((c) => !c.waiverOnly);
@@ -164,7 +170,9 @@ function isEligibility(c: string): boolean {
   return words.length > 0 && words.every((w) => STANDING_WORDS.has(w));
 }
 const isLimit = (c: string) => !isEligibility(c);
-const limits = (r: SummaryRow) => r.conditions.filter(isLimit).sort().join(" · ");
+/** Conditions compare without case, spacing or a closing full stop ("Max 6 claims per year" and "max 6 claims per year."). */
+const plainCondition = (c: string) => c.toLowerCase().replace(/\s+/g, " ").replace(/[\s.;,]+$/, "").trim();
+const limits = (r: SummaryRow) => r.conditions.filter(isLimit).map(plainCondition).sort().join(" · ");
 
 type Money = { amount: number; currency: string | null; unit?: string; period?: unknown };
 const moneyOf = (r: SummaryRow): Money | null => "amount" in r.figure ? r.figure as Money : null;
@@ -198,7 +206,7 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
   if (texts.size !== 1 || [...texts][0] == null || new Set(rows.map(limits)).size > 1) return null;
   const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
   // Differing wording still shows the limits, which every row prints alike (Critic R239).
-  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : limits(rows[0])].filter(Boolean).join(" · ");
+  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : rows[0].conditions.filter(isLimit).join(" · ")].filter(Boolean).join(" · ");
 }
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);
