@@ -11,6 +11,16 @@ export const UNCLAIMED_STALL_MINUTES = 10;
 export const livePolicyJob = (j: string, minutes: string) =>
   `((${j}.status IN ('queued','failed_retryable') AND ${j}.available_at > now() - make_interval(mins => ${minutes}))
      OR (${j}.status='processing' AND ${j}.lease_expires_at > now()))`;
+/** Try again on a stalled document: its job, waiting out a retry delay (a lapsed lease is recovered into one), is made due
+ * now, so the start that follows claims it instead of finding nothing claimable (Critic R213-1). Never a job a worker
+ * holds, or one being cancelled. */
+export async function makePolicyJobDueNow(policyId: string, jobType = POLICY_PROCESSING_JOB_TYPE): Promise<void> {
+  await pool.query(
+    `UPDATE background_jobs SET available_at=now(), updated_at=now()
+      WHERE job_type=$1 AND idempotency_key=$2 AND status='failed_retryable' AND NOT cancel_requested`,
+    [jobType, policyId],
+  );
+}
 
 /**
  * Checkpoint 14f (claude/v1-launch-hardening): enqueue-only, no inline

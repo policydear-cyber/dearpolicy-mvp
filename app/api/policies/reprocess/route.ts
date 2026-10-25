@@ -3,9 +3,10 @@ import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain, startJobNow } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
-import { query } from "@/lib/db/client";
+import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { enqueuePolicyProcessing,livePolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
+import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
+import { recoverExpiredLeases } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -106,6 +107,9 @@ export async function POST(request: NextRequest) {
     // own pdfPassword field.
     // The job then starts at once, after it is enqueued: not when a drain in flight elsewhere or the daily run gets to it.
     runAfterResponse(async () => {
+      // A stalled document's job may hold a lapsed lease, or wait out a retry delay: neither would start now. The lease is
+      // recovered first (a job out of attempts goes to dead letter, which the enqueue revives), then the job is made due.
+      if (stalled) await recoverExpiredLeases(pool);
       await enqueuePolicyProcessing({
         accountId: ctx.householdId,
         familyMemberId: policy.family_member_id,
@@ -114,6 +118,7 @@ export async function POST(request: NextRequest) {
         pdfPassword: body.pdfPassword || undefined,
         linkUploadMember: true,
       });
+      if (stalled) await makePolicyJobDueNow(body.policyId);
       await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId });
     });
 
