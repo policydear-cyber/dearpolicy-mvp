@@ -225,17 +225,19 @@ test("stored rule: a share of the sum insured needs the cover's verified currenc
 });
 
 test("explanatory text never shows a cover figure whose currency is unverified (no bare number, no SGD); a verified one is shown with its currency", () => {
-  const ci = (verified: boolean) => coverage({ id: "cov-lc", policyId: "policy-lc", category: "Critical Illness", productName: "Living Care", policyName: "Living Care",
-    amount: 50_000, currencyVerified: verified, evidenceText: verified ? "Living Care sum insured: S$50,000" : "Living Care sum insured: 50,000" });
-  const diag = { ...EMPTY_CLAIM_FACTS, eventType: "diagnosis", diagnosis: "stage 2 breast cancer", diagnosisDate: "2024-03-01", eventDate: "2024-03-01" } as ClaimFacts;
+  // The cover amount said in a reason (rules.ts coverAmountText). Was shown through the hard-coded Living Care item, which
+  // is gone with the G007500 removal (PR B); a life cover with no matching wording says the same sentence.
+  const life = (verified: boolean) => coverage({ id: "cov-life", policyId: "policy-life", category: "Death", productName: "Group Term Life", policyName: "Group Term Life",
+    amount: 50_000, currencyVerified: verified, evidenceText: verified ? "Group Term Life sum insured: S$50,000" : "Group Term Life sum insured: 50,000" });
+  const died = { ...EMPTY_CLAIM_FACTS, eventType: "death", death: true, deathDate: "2024-03-01", eventDate: "2024-03-01" } as ClaimFacts;
   for (let i = 0; i < RUNS; i++) {
     const text = (items: ClaimAssessmentItem[]) => items.flatMap((x) => [x.reason, ...x.conditions, x.amountText ?? ""]).join(" ");
-    const unverified = assessClaim(diag, [ci(false)]);
-    assert.ok(unverified.some((x) => x.id === "living-care"), "control: the Living Care benefit is assessed");
+    const unverified = assessClaim(died, [life(false)]);
+    assert.ok(unverified.some((x) => x.id === "gtl-death"), "control: the death benefit is assessed");
     assert.doesNotMatch(text(unverified).replace(/S\$|SGD/g, "") , /50[,.]?000/, "no bare figure for an unverified currency");
     assert.ok(text(unverified).includes(UNSTATED_CURRENCY_AMOUNT_TEXT), "says an amount exists without showing it");
-    const verified = assessClaim(diag, [ci(true)]);
-    assert.match(verified.find((x) => x.id === "living-care")!.reason, /S\$50,000/, "control: a verified currency is shown with its figure");
+    const verified = assessClaim(died, [life(true)]);
+    assert.match(verified.find((x) => x.id === "gtl-death")!.reason, /S\$50,000/, "control: a verified currency is shown with its figure");
   }
 });
 

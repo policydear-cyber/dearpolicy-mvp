@@ -1,6 +1,7 @@
 import { assessClaim,nextClaimQuestion } from "@/lib/claims/rules";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import { EMPTY_CLAIM_FACTS, type ClaimFacts } from "@/lib/claims/types";
+import { claimTable, personCover, printed, tableRow } from "./fixtures/claim-table";
 import { runClaimRegressions } from "./claim-regressions";
 import { runClaimWorkflowRegressions } from "./claim-workflow-regressions";
 import { runDeathEvidenceRegressions } from "./death-evidence-regressions";
@@ -27,9 +28,25 @@ const coverages:OwnedCoverage[]=[
 ];
 const accident:ClaimFacts={...EMPTY_CLAIM_FACTS,eventType:"accident",eventDate:"2026-09-14",accidentType:"motorcycle accident",injured:true,injuries:["fracture"],fractureBodyPart:"wrist",diagnosis:null,diagnosisDate:null,hospitalised:true,hospitalNights:2,ambulanceUsed:true,ambulanceBill:220,hospitalBill:null,outOfPocket:null,surgery:null,permanentImpairment:false,competitiveRacing:false,medicalReportAvailable:null,uncertainFacts:[]};
 if(nextClaimQuestion(accident,coverages)!==null)throw new Error("Accident fixture should be ready for assessment");
-const a=assessClaim(accident,coverages);if(a.find(x=>x.id==="gpa-fracture")?.amountText!=="S$1,250")throw new Error("Wrist fracture calculation failed");if(a.find(x=>x.id==="gpa-ambulance")?.amountText!=="S$220.00")throw new Error("Ambulance reimbursement calculation failed");if(a.find(x=>x.id==="gtl-hospital-cash")?.status!=="not_applicable")throw new Error("2-night hospital cash should be not applicable");
+// Amounts come from the person's own benefit table, never from figures in code (G007500 removal, PR B): the same wrist,
+// ambulance and hospital-cash cases, now with the rows a document prints.
+const table=claimTable([
+  tableRow("gpa","Group Personal Accident","Wrist",printed(1250,"lump_sum"),{section:"Simple Fracture"}),
+  tableRow("gpa","Group Personal Accident","Ambulance Cost",printed(500,"up_to")),
+  tableRow("gtl","Group Term Life","Daily Hospital Cash Benefit",printed(30,"per_day"),{fromDay:11,maxDays:30}),
+],[personCover("gpa","Group Personal Accident"),personCover("gtl","Group Term Life")]);
+if(assessClaim(accident,coverages).some(x=>x.amountText!=null||x.calculatedAmount!=null))throw new Error("Without a benefit table no accident amount may come from code");
+const a=assessClaim(accident,coverages,[],[],null,[],[],undefined,undefined,undefined,table);
+if(a.find(x=>x.id.startsWith("table-fracture"))?.amountText!=="S$1,250")throw new Error("Wrist fracture row failed");
+const amb=a.find(x=>x.id.startsWith("table-ambulance"));if(!amb||amb.amountText!=null||!/up to S\$500/i.test(amb.reason))throw new Error("Ambulance row should print its limit without estimating the bill");
+if(a.find(x=>x.id.startsWith("table-hospital-cash"))?.status!=="not_applicable")throw new Error("2-night hospital cash should be not applicable");
 const cancer:ClaimFacts={...accident,eventType:"diagnosis",eventDate:null,accidentType:null,injured:null,injuries:[],fractureBodyPart:null,diagnosis:"stage 3 colon cancer",diagnosisDate:"2026-09-01",hospitalised:false,hospitalNights:null,ambulanceUsed:null,ambulanceBill:null,permanentImpairment:null,competitiveRacing:null};
-const c=assessClaim(cancer,coverages);if(c.find(x=>x.id==="living-care")?.amountText!=="S$350,000")throw new Error("Living Care amount failed");
+// A critical illness pays only once the diagnosis is checked against the policy's own definition (ci-rules); the table
+// row shows what the document prints, with no amount.
+const ciTable=claimTable([tableRow("lc","Living Care","Critical Illness Benefit",printed(350000,"lump_sum"))],[personCover("lc","Living Care")]);
+const c=assessClaim(cancer,coverages,[],[],null,[],[],undefined,undefined,undefined,ciTable);const ci=c.find(x=>x.id.startsWith("table-critical-illness"));
+if(!ci||ci.amountText!=null||!/S\$350,000/.test(ci.reason))throw new Error("Critical illness row should show its printed figure without an amount");
+if(assessClaim(cancer,coverages).some(x=>x.amountText!=null))throw new Error("Without a benefit table no critical-illness amount may come from code");
 console.log("DearPolicy claim-rule smoke tests passed.");
 runMonetaryGateRegressions();
 runHospitalCashCalculatorRegressions();

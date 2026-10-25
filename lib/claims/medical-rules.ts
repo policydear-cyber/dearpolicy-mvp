@@ -2,9 +2,9 @@
  * Assembles the medical-claim (hospital cash, ICU cash, surgical,
  * inpatient, pre-/post-hospitalisation reimbursement) benefits for a
  * "hospitalisation" claim event -- the medical-claims analogue of
- * lib/claims/ci-rules.ts. Every branch below is additive alongside the
- * existing hardcoded "gtl-hospital-cash" item in lib/claims/rules.ts (see
- * that module's own doc comment); this never replaces it.
+ * lib/claims/ci-rules.ts. A hospital cash the person's benefit table prints
+ * is added by lib/claims/table-benefits.ts only where these items did not
+ * already assess one.
  *
  * Like ci-rules.ts, this module is deliberately synchronous: the caller
  * (lib/claims/orchestrator.ts) loads the async evidence

@@ -12,6 +12,7 @@ import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
 import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
 import { assessDisabilityClaim, nextDisabilityQuestion, type DisabilityRuleSet } from "./disability-rules";
 import { assessTravelClaim, nextTravelQuestion, type TravelRuleSet } from "./travel-rules";
+import { withTableBenefits, NO_TABLE, type ClaimTable } from "./table-benefits";
 
 function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
   return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
@@ -52,18 +53,12 @@ function bestCoverage(coverages: OwnedCoverage[], product: string, category?: st
   return (category ? rows.find((r) => r.category === category) : rows[0]) ?? rows[0] ?? null;
 }
 
-function hasReimbursementMedicalCover(coverages: OwnedCoverage[]) {
-  return coverages.some((c) => ["Hospitalisation", "Outpatient"].includes(c.category));
+function hasAccidentCover(coverages: OwnedCoverage[]) {
+  return coverages.some((c) => c.category === "Personal Accident") || hasProduct(coverages, "group personal accident");
 }
 
-function fracturePct(body: string | null) {
-  const v = (body ?? "").toLowerCase();
-  if (/neck|skull|spine/.test(v)) return 1;
-  if (/hip/.test(v)) return 0.75;
-  if (/jaw|pelvis|leg|ankle|knee/.test(v)) return 0.5;
-  if (/cheek|shoulder|hairline/.test(v)) return 0.3;
-  if (/arm|elbow|wrist|rib/.test(v)) return 0.25;
-  return null;
+function hasReimbursementMedicalCover(coverages: OwnedCoverage[]) {
+  return coverages.some((c) => ["Hospitalisation", "Outpatient"].includes(c.category));
 }
 
 function dateBefore(eventDate: string | null, effectiveDate: string | null) {
@@ -88,17 +83,26 @@ function eventDateQuestion(facts: ClaimFacts): ClaimQuestion | null {
   return null;
 }
 
+/** Which categories of cover can respond to each kind of event, for any household. A life cover is kept for accidents,
+ * stays and diagnoses because many life covers carry hospital cash or disability benefits; the benefit table and the
+ * wording decide what actually pays. */
+const EVENT_CATEGORIES: Record<string, string[]> = {
+  accident: ["Personal Accident", "Death", "Total Permanent Disability", "Hospitalisation", "Outpatient", "Hospital Cash"],
+  diagnosis: ["Critical Illness", "Early Critical Illness", "Death", "Hospitalisation", "Outpatient", "Disability Income", "Hospital Cash"],
+  hospitalisation: ["Hospitalisation", "Outpatient", "Hospital Cash", "Personal Accident", "Death"],
+  death: ["Death", "Personal Accident"],
+  disability: ["Total Permanent Disability", "Death", "Personal Accident", "Disability Income"],
+};
+/** The key a cover is listed under: its product, or its category when it prints no product name. */
+export const coverKeyOf = (c: OwnedCoverage) => canonicalProduct(c.productName) || c.category;
+
 export function relevantOwnedProducts(facts: ClaimFacts, coverages: OwnedCoverage[]) {
   const result = new Set<string>();
-  const event = facts.eventType;
+  const wanted = EVENT_CATEGORIES[facts.eventType ?? ""] ?? [];
   for (const c of coverages) {
-    const p = canonicalProduct(c.productName) || productFromCategory(c.category);
-    if (!p) continue;
-    if (event === "accident" && ["group personal accident","group term life","hospitalisation","outpatient"].includes(p)) result.add(p);
-    else if (event === "diagnosis" && ["living care","living care plus","group term life","hospitalisation","outpatient","disability income"].includes(p)) result.add(p);
-    else if (event === "hospitalisation" && ["group term life","hospitalisation","outpatient","group personal accident"].includes(p)) result.add(p);
-    else if (event === "death" && (p === "group term life" || (p === "group personal accident" && facts.accidentalDeath !== false))) result.add(p);
-    else if (event === "disability" && ["group term life","group personal accident","disability income"].includes(p)) result.add(p);
+    if (!wanted.includes(c.category)) continue;
+    if (facts.eventType === "death" && c.category === "Personal Accident" && facts.accidentalDeath === false) continue;
+    result.add(coverKeyOf(c));
   }
   return [...result];
 }
@@ -112,21 +116,21 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
   if (facts.eventType === "accident") {
     if (facts.injured == null && !facts.injuries.length && !facts.fractureBodyPart && !facts.uncertainFacts.includes("injured")) return { id:"injured", text:"What injuries were diagnosed from the accident? If there were no injuries, say “none”. Mention any fracture, surgery, or permanent loss of function.", type:"text", why:"Different accident benefits respond to different injuries." };
     if ((facts.injuries.some((x)=>/fractur/i.test(x)) || facts.fractureBodyPart) && !facts.fractureBodyPart && !facts.uncertainFacts.includes("fracture_body_part")) return { id:"fracture_body_part", text:"Which bone or body part was fractured?", type:"text", why:"The Personal Accident fracture benefit pays different percentages depending on the body part." };
-    if (hasProduct(coverages,"group personal accident") && facts.ambulanceUsed == null && !facts.uncertainFacts.includes("ambulance_used")) return { id:"ambulance_used", text:"Did you use an ambulance because of the accident? If yes, include the ambulance charge if you know it.", type:"yes_no", options:["Yes","No"], why:"Your Personal Accident policy includes an ambulance reimbursement benefit." };
-    if (hasProduct(coverages,"group personal accident") && facts.ambulanceUsed === true && facts.ambulanceBill == null && !facts.uncertainFacts.includes("ambulance_bill")) return { id:"ambulance_bill", text:"How much was the ambulance bill?", type:"money", why:"The ambulance benefit is reimbursement-based, so the bill amount affects the potential payout." };
-    if ((hasProduct(coverages,"group term life") || hasProduct(coverages,"group personal accident") || hasReimbursementMedicalCover(coverages)) && facts.hospitalised == null && !facts.uncertainFacts.includes("hospitalised")) return { id:"hospitalised", text:"Were you admitted to hospital? If yes, tell me how many nights you stayed.", type:"yes_no", options:["Yes","No"], why:"Hospital-related benefits depend on whether you were admitted and, for some benefits, the length of stay." };
-    if (facts.hospitalised === true && facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Your hospital cash benefit only starts after a specified length of stay." };
+    if (hasAccidentCover(coverages) && facts.ambulanceUsed == null && !facts.uncertainFacts.includes("ambulance_used")) return { id:"ambulance_used", text:"Did you use an ambulance because of the accident? If yes, include the ambulance charge if you know it.", type:"yes_no", options:["Yes","No"], why:"Some accident covers repay an ambulance bill." };
+    if (hasAccidentCover(coverages) && facts.ambulanceUsed === true && facts.ambulanceBill == null && !facts.uncertainFacts.includes("ambulance_bill")) return { id:"ambulance_bill", text:"How much was the ambulance bill?", type:"money", why:"An ambulance benefit usually repays the bill, so the bill amount matters." };
+    if (coverages.length > 0 && facts.hospitalised == null && !facts.uncertainFacts.includes("hospitalised")) return { id:"hospitalised", text:"Were you admitted to hospital? If yes, tell me how many nights you stayed.", type:"yes_no", options:["Yes","No"], why:"Hospital-related benefits depend on whether you were admitted and, for some benefits, the length of stay." };
+    if (facts.hospitalised === true && facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Hospital cash and other stay benefits depend on how many nights you were admitted." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalised === true && facts.hospitalBill == null && !facts.uncertainFacts.includes("hospital_bill")) return { id:"hospital_bill", text:"What was the total hospital or medical bill? You can upload the bill later if that is easier.", type:"money", why:"Reimbursement-type medical cover depends on the actual eligible expense." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null && facts.outOfPocket == null && !facts.uncertainFacts.includes("out_of_pocket")) return { id:"out_of_pocket", text:"How much did you personally have to pay after subsidies, MediSave, employer benefits, or other insurance?", type:"money", why:"This helps avoid treating a policy limit as money you actually spent or can be reimbursed twice." };
-    if (hasProduct(coverages,"group personal accident") && facts.injured !== false && facts.permanentImpairment == null && !facts.uncertainFacts.includes("permanent_impairment")) return { id:"permanent_impairment", text:"Has a doctor said any injury may cause permanent loss of function, amputation, or permanent disability?", type:"yes_no", options:["Yes","No","Not sure"], why:"A permanent injury may trigger much larger Personal Accident or TPD benefits." };
-    if (/motorcycle|motorbike/i.test(facts.accidentType ?? "") && hasProduct(coverages,"group personal accident") && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing or a timed competition?", type:"yes_no", options:["Yes","No"], why:"Your Personal Accident wording contains a racing exclusion, so this fact can change eligibility." };
+    if (hasAccidentCover(coverages) && facts.injured !== false && facts.permanentImpairment == null && !facts.uncertainFacts.includes("permanent_impairment")) return { id:"permanent_impairment", text:"Has a doctor said any injury may cause permanent loss of function, amputation, or permanent disability?", type:"yes_no", options:["Yes","No","Not sure"], why:"A permanent injury may trigger much larger Personal Accident or TPD benefits." };
+    if (/motorcycle|motorbike/i.test(facts.accidentType ?? "") && hasAccidentCover(coverages) && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing or a timed competition?", type:"yes_no", options:["Yes","No"], why:"Many accident wordings exclude competitive racing, so this can change what pays." };
   }
 
   if (facts.eventType === "diagnosis") {
     if (!facts.diagnosis && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What was the exact diagnosis? Include the cancer type/stage or medical condition if you know it.", type:"text", why:"Critical illness benefits depend on the specific diagnosis and policy definition." };
     const ciQuestion = nextCIQuestion(facts, ciRules);
     if (ciQuestion) return ciQuestion;
-    if ((hasProduct(coverages,"group term life") || hasReimbursementMedicalCover(coverages)) && facts.hospitalised == null && !facts.uncertainFacts.includes("hospitalised")) return { id:"hospitalised", text:"Were you admitted to hospital because of this diagnosis? If yes, how many nights?", type:"yes_no", options:["Yes","No"], why:"Your other owned policies may contain hospital cash or medical reimbursement benefits in addition to a diagnosis benefit." };
+    if (coverages.length > 0 && facts.hospitalised == null && !facts.uncertainFacts.includes("hospitalised")) return { id:"hospitalised", text:"Were you admitted to hospital because of this diagnosis? If yes, how many nights?", type:"yes_no", options:["Yes","No"], why:"Your other owned policies may contain hospital cash or medical reimbursement benefits in addition to a diagnosis benefit." };
     if (facts.hospitalised === true && facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Hospital cash depends on the length of stay." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalised === true && facts.hospitalBill == null && !facts.uncertainFacts.includes("hospital_bill")) return { id:"hospital_bill", text:"What was the total hospital or treatment bill?", type:"money", why:"Medical reimbursement benefits depend on actual eligible expenses." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null && facts.outOfPocket == null && !facts.uncertainFacts.includes("out_of_pocket")) return { id:"out_of_pocket", text:"How much did you personally pay after subsidies, MediSave and any other insurance?", type:"money", why:"This helps DearPolicy assess reimbursement-type benefits accurately." };
@@ -177,11 +181,7 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 
 function amountText(amount: number | null, currency?: string | null) {
   // Missing stays missing: without a stated currency no figure is shown --
-  // never a bare number and never one relabelled as SGD. The hard-coded
-  // G007500 schedule benefits below pass "SGD" explicitly because their
-  // amounts are quoted in S$ by the same embedded scheme wording (S$5,000
-  // simple-fracture limit, S$500 ambulance, S$30/day hospital cash); that
-  // restates the rule's own wording rather than defaulting extracted data.
+  // never a bare number and never one relabelled as a default currency.
   return amount == null || !currency ? null : formatMoney(amount, currency);
 }
 /** A cover amount named in explanatory text. It is printed only when its
@@ -194,23 +194,8 @@ function coverAmountText(coverage: { amount: number | null; currency: string | n
   return coverage.currencyVerified === true && coverage.currency ? formatMoney(coverage.amount, coverage.currency) : UNSTATED_CURRENCY_AMOUNT_TEXT;
 }
 
-function g007500(coverages: OwnedCoverage[]) {
-  return coverages.some((c) => c.groupPolicyNumber === "G007500");
-}
-
-export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet, travelRules?: TravelRuleSet): ClaimAssessmentItem[] {
+export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet, travelRules?: TravelRuleSet, table: ClaimTable = NO_TABLE): ClaimAssessmentItem[] {
   const items: ClaimAssessmentItem[] = [];
-  const isG007500 = g007500(coverages);
-  // Additive: new evidence-gated disability items from
-  // lib/claims/disability-rules.ts alongside the legacy hardcoded
-  // "gpa-tpd" item below -- when disability-rules.ts has produced a real,
-  // wording-evidenced TPD assessment for the SAME Group Personal Accident
-  // coverage, the legacy hardcoded item is suppressed so the family is
-  // never shown two competing TPD estimates for one coverage. See
-  // lib/claims/medical-rules.ts's identical suppression pattern for
-  // "gtl-hospital-cash".
-  const disabilityTPDCoverageIds = new Set((disabilityRules?.rules ?? []).filter((r) => r.benefitCode === "tpd-lump-sum").map((r) => r.coverageId));
-
   if (facts.eventType === "death") {
     const deathDate = facts.deathDate ?? facts.eventDate;
     for (const [product, category, benefit, title] of [
@@ -225,7 +210,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         continue;
       }
       const rule = deathRules.find(r => r.coverageId === coverage.id && r.benefit === benefit);
-      if (coverage.groupPolicyNumber?.replace(/\s+/g,"").toUpperCase() !== "G007500" || !rule) {
+      if (!rule) {
         const gap = deathGaps.find(g => g.coverageId === coverage.id);
         const confirmed = coverage.amount != null ? `The personal certificate confirms ${coverAmountText(coverage)} of this cover. ` : "Personal ownership is confirmed. ";
         items.push({ ...base, status: "needs_document", amountText: null, reason: confirmed + (gap?.reason ?? "I could not verify the matching death-benefit wording."), conditions: [gap?.nextStep ?? "Check that the matching policy wording or benefit summary is available."] });
@@ -322,67 +307,16 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
   }
 
   if (facts.eventType === "accident" || (facts.eventType === "disability" && facts.accidentType != null)) {
-    const gpa = bestCoverage(coverages,"group personal accident","Personal Accident");
+    const gpa = bestCoverage(coverages,"group personal accident","Personal Accident") ?? coverages.find((c) => c.category === "Personal Accident") ?? null;
     if (gpa && dateBefore(facts.eventDate,gpa.effectiveDate) === true) {
-      items.push({id:"gpa-before-cover",title:"Group Personal Accident",status:"not_applicable",amountText:null,reason:"The reported accident date is before the effective date shown in the uploaded personal policy evidence.",conditions:[],evidenceTerms:[],productName:"Group Personal Accident"});
-    } else if (gpa && isG007500 && facts.competitiveRacing === true) {
-      items.push({id:"gpa-racing",title:"Group Personal Accident",status:"not_applicable",amountText:null,reason:"The accident was reported as competitive racing, which is excluded by the uploaded Personal Accident wording.",conditions:[],evidenceTerms:["Participation in competitive racing on wheels"],productName:"Group Personal Accident"});
-    } else if (gpa && isG007500) {
-      const pct = fracturePct(facts.fractureBodyPart);
-      if (pct != null) {
-        const amount = 5000 * pct;
-        items.push({id:"gpa-fracture",title:`${facts.fractureBodyPart?.replace(/^./,c=>c.toUpperCase())} fracture benefit`,status:"likely_applicable",amountText:amountText(amount,"SGD"),reason:`The policy's simple-fracture limit is S$5,000 and the schedule pays ${Math.round(pct*100)}% for this body part.`,conditions:["The fracture must meet the policy's simple-fracture definition and be caused by the accident."],evidenceTerms:["Simple Fracture Benefit Limit","Schedule Compensation"],productName:"Group Personal Accident"});
-      }
-      if (facts.ambulanceUsed === true && facts.ambulanceBill != null) {
-        const amount = Math.min(facts.ambulanceBill,500);
-        items.push({id:"gpa-ambulance",title:"Ambulance reimbursement",status:"likely_applicable",amountText:amountText(amount,"SGD"),reason:`Your reported ambulance bill is ${amountText(facts.ambulanceBill,"SGD")} and the policy limit is S$500 per incident.`,conditions:["Keep the ambulance invoice/receipt and accident medical records."],evidenceTerms:["Ambulance Cost","Up to S$500 per incident"],productName:"Group Personal Accident"});
-      }
-      if (facts.hospitalised === true) {
-        items.push({id:"gpa-hospital-recovery",title:"Accidental hospital recuperation",status:"likely_applicable",amountText:"S$250",reason:"The uploaded Personal Accident summary lists a S$250 accidental hospital recuperation benefit.",conditions:["The hospital admission must satisfy the policy's accident-related admission conditions."],evidenceTerms:["Accidental Hospital Recuperation Benefit","S$250"],productName:"Group Personal Accident"});
-      }
-      if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null && !disabilityTPDCoverageIds.has(gpa.id)) {
-        const amount = gpa.amount * 1.5;
-        items.push({id:"gpa-tpd",title:"Accidental Total & Permanent Disability",status:"needs_document",amountText:gpa.currency?`Up to ${amountText(amount,gpa.currency)}`:null,reason:facts.permanentImpairment===true?"Your Personal Accident cover is confirmed and the wording pays 150% of Sum Insured for qualifying accidental TPD.":"Permanent impairment is still uncertain, but this high-value benefit should be checked if doctors suspect lasting loss of function.",conditions:["A medical assessment must satisfy the policy's Total & Permanent Disability definition.","The disability must result from the accident."],evidenceTerms:["Total and Permanent Disablement","150% of Sum Insured"],productName:"Group Personal Accident"});
-      }
+      items.push({id:"gpa-before-cover",title:gpa.productName ?? "Personal Accident",status:"not_applicable",amountText:null,reason:"The reported accident date is before the effective date shown in the uploaded personal policy evidence.",conditions:[],evidenceTerms:[],productName:gpa.productName ?? "Personal Accident"});
     }
-
-    const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
-    if (gtl && isG007500 && facts.hospitalised === true && facts.hospitalNights != null && dateBefore(facts.eventDate,gtl.effectiveDate) !== true) {
-      const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`Your ${facts.hospitalNights}-night stay gives ${payableDays} payable day${payableDays===1?"":"s"} after the first 10 days, at S$30 per day.`,conditions:["The hospitalisation must not fall under an exclusion for this benefit."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
-      else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`This benefit starts only after the 10th day of a continuous hospital stay. The reported stay was ${facts.hospitalNights} night${facts.hospitalNights===1?"":"s"}.`,conditions:[],evidenceTerms:["Daily Hospital Cash Benefit","after the 10th day"],productName:"Group Term Life"});
-    }
+    // Fracture, ambulance, recuperation and hospital cash amounts come from the person's own benefit table
+    // (assessTableBenefits, below), never from figures written here.
   }
 
-  if (facts.eventType === "diagnosis") {
-    const diagnosis = (facts.diagnosis ?? "").toLowerCase();
-    const livingCare = bestCoverage(coverages,"living care","Critical Illness");
-    if (livingCare && /cancer|malignan|carcinoma|heart attack|stroke|kidney|critical illness/i.test(diagnosis)) {
-      const beforeCover=dateBefore(facts.diagnosisDate,livingCare.effectiveDate);
-      const waiting = dateIsWithinDays(facts.diagnosisDate,livingCare.effectiveDate,90);
-      if (beforeCover === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The reported diagnosis date is before the effective date shown for this Living Care cover.",conditions:[],evidenceTerms:[],productName:"Living Care"});
-      else if (waiting === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The diagnosis date appears to fall within the 90-day waiting period from the effective date shown in the uploaded personal evidence.",conditions:[],evidenceTerms:["Waiting Period","90 days"],productName:"Living Care"});
-      else items.push({id:"living-care",title:"Living Care critical illness",status:"potentially_applicable",amountText:(livingCare.currencyVerified===true?amountText(livingCare.amount,livingCare.currency):null),reason:`Your personal certificate confirms ${coverAmountText(livingCare) ?? "Critical Illness"} of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.`,conditions:["The diagnosis must satisfy the policy's defined critical illness.","A 30-day survival period applies.",waiting===null?"DearPolicy could not automatically verify the waiting period from the available dates.":"The diagnosis date appears to be outside the 90-day waiting period."],evidenceTerms:["Major Cancer","Survival Period","Waiting Period"],productName:"Living Care"});
-    }
-
-    const livingCarePlus = bestCoverage(coverages,"living care plus","Early Critical Illness");
-    if (livingCarePlus && /early|stage\s*0|stage\s*1|stage\s*i\b/i.test(diagnosis)) {
-      const waiting = dateIsWithinDays(facts.diagnosisDate,livingCarePlus.effectiveDate,60);
-      if (waiting === true) items.push({id:"living-care-plus",title:"Living Care Plus early critical illness",status:"not_applicable",amountText:null,reason:"The diagnosis appears to fall within the 60-day waiting period for Living Care Plus.",conditions:[],evidenceTerms:["Living Care Plus benefit is not payable","sixty (60) days"],productName:"Living Care Plus"});
-      else items.push({id:"living-care-plus",title:"Living Care Plus early critical illness",status:"potentially_applicable",amountText:(livingCarePlus.currencyVerified===true?amountText(livingCarePlus.amount,livingCarePlus.currency):null),reason:"Your personal certificate confirms Living Care Plus cover and the uploaded wording covers specified early critical illnesses.",conditions:["The diagnosis must meet one of the policy's defined early critical illnesses.","A 30-day survival period applies."],evidenceTerms:["Living Care Plus","survive for 30 days"],productName:"Living Care Plus"});
-    }
-
-    const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
-    if (gtl && isG007500 && facts.hospitalised === true && facts.hospitalNights != null) {
-      const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`The reported hospital stay produces ${payableDays} payable day${payableDays===1?"":"s"} at S$30 per day after day 10.`,conditions:["The admission must satisfy the policy conditions and exclusions."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
-    }
-  }
-
-  // Additive: new evidence-gated ci-* items alongside the legacy
-  // "living-care"/"living-care-plus" informational items above. See
-  // lib/claims/ci-rules.ts's own module doc comment for why these are
-  // additive rather than a replacement.
+  // Critical-illness items come only from the evidence-gated ci-* rules (lib/claims/ci-rules.ts): waiting and survival
+  // periods are the wording's, never figures written here.
   if (facts.eventType === "diagnosis") {
     items.push(...assessCriticalIllness(facts, coverages, ciRules, ciGaps, sessionId));
   }
@@ -397,20 +331,9 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
   }
 
   if (facts.eventType === "hospitalisation") {
-    const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
-    // Additive: new evidence-gated med-* items from lib/claims/medical-rules.ts
-    // alongside the legacy hardcoded "gtl-hospital-cash"/"medical-reimbursement-review"
-    // items in this function. When medical-rules.ts has produced a real
-    // assessment for the SAME coverage (an evidenced cash or reimbursement rule
-    // matched to it), the corresponding legacy hardcoded item is suppressed so
-    // the family is never shown two competing estimates for one coverage.
+    // Evidence-gated med-* items from lib/claims/medical-rules.ts. A hospital cash the benefit table prints is added
+    // below only where these did not already assess one.
     const medicalAssessments = assessMedicalClaim(facts, coverages, medicalRules);
-    const medicalAssessedCoverageIds = new Set(medicalAssessments.map((i) => i.coverageId));
-    if (gtl && isG007500 && facts.hospitalNights != null && !medicalAssessedCoverageIds.has(gtl.id)) {
-      const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`The policy pays S$30 per day from day 11, for up to 30 payable days.`,conditions:["The reason for admission must not be excluded."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
-      else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`The reported ${facts.hospitalNights}-night stay does not pass the 10-day waiting period for this hospital cash benefit.`,conditions:[],evidenceTerms:["after the 10th day"],productName:"Group Term Life"});
-    }
     items.push(...medicalAssessments);
     // Additive: a Travel cover's own Overseas Medical Expenses benefit
     // alongside the medical-rules.ts items above -- never a parallel claim
@@ -421,11 +344,16 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
     if (travelRules) items.push(...assessTravelClaim(facts, coverages, travelRules, sessionId).filter((i) => i.id === "travel-medical-expenses"));
   }
 
+  // The person's own benefit-table rows for the event (fracture, ambulance, recuperation, hospital cash, death,
+  // critical illness).
+  const withTable = withTableBenefits(facts, coverages, table, items);
+  items.splice(0, items.length, ...withTable);
+
   // Safe fallback for owned reimbursement-style medical cover that DearPolicy has
   // not yet converted into an insurer-specific deterministic rule catalogue.
   if (facts.eventType !== "death" && hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null) {
     const med = coverages.find((c)=>["Hospitalisation","Outpatient"].includes(c.category));
-    if (med && !items.some((i)=>i.productName===med.productName)) items.push({id:"medical-reimbursement-review",title:med.productName ?? med.category,status:"needs_document",amountText:null,reason:`You reported a medical bill of ${amountText(facts.hospitalBill,"SGD")}. DearPolicy has confirmed you own this medical cover, but this plan's reimbursement rules have not yet been converted into a deterministic calculator.`,conditions:["DearPolicy should check the plan's deductible, co-insurance, panel/network and eligible-expense wording before estimating reimbursement."],evidenceTerms:[],productName:med.productName});
+    if (med && !items.some((i)=>i.productName===med.productName)) items.push({id:"medical-reimbursement-review",title:med.productName ?? med.category,status:"needs_document",amountText:null,reason:`You reported a medical bill of ${amountText(facts.hospitalBill,med.currencyVerified===true?med.currency:null) ?? `${facts.hospitalBill.toLocaleString("en-US")} (currency not stated)`}. DearPolicy has confirmed you own this medical cover, but this plan's reimbursement rules have not yet been converted into a deterministic calculator.`,conditions:["DearPolicy should check the plan's deductible, co-insurance, panel/network and eligible-expense wording before estimating reimbursement."],evidenceTerms:[],productName:med.productName});
   }
 
   return items;

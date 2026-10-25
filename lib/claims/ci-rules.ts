@@ -2,12 +2,10 @@
  * Deterministic critical-illness benefit assessment and fact-finding --
  * the CI analogue of the death/accident logic in lib/claims/rules.ts, kept
  * in its own module and wired in ADDITIVELY (see rules.ts's own imports of
- * assessCriticalIllness/nextCIQuestion) so nothing here can change the
- * behaviour of an existing "living-care"/"living-care-plus" item that
- * scripts/claim-smoke.ts and scripts/claim-answer-eval.ts already assert
- * on by exact id and amount. Every ci-* item this module produces is a new,
- * additional row alongside those legacy informational ones -- a documented
- * V1 limitation, not an oversight (see the stacked PR description).
+ * assessCriticalIllness/nextCIQuestion). These ci-* items are the only
+ * critical-illness items with an amount: the person's benefit table adds a
+ * row's printed figure without one (lib/claims/table-benefits.ts) only
+ * where no ci-* item assessed that cover.
  *
  * This module never diagnoses, never decides a medical match, and never
  * computes money itself -- it only turns already-resolved policy wording

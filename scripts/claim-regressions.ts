@@ -5,6 +5,7 @@ import { resolveClaimDate } from "@/lib/claims/dates";
 import { resolveClaimPerson, type ClaimPerson } from "@/lib/claims/person";
 import { findDeathRule, type DeathRuleEvidence } from "@/lib/claims/death-evidence";
 import { assessClaim, nextClaimQuestion, relevantOwnedProducts } from "@/lib/claims/rules";
+import { claimTable, personCover, tableRow } from "./fixtures/claim-table";
 import { EMPTY_CLAIM_FACTS, type ClaimQuestion } from "@/lib/claims/types";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -92,7 +93,15 @@ export async function runClaimRegressions() {
   const hospitalBillOnly = await extractClaimFacts({ text: "My hospital bill was S$4800", ...context });
   test("A hospital bill alone does not prove inpatient admission", () => { assert.equal(hospitalBillOnly.hospitalised, null); });
   const accidentalDisability = await extractClaimFacts({ text: "The motorcycle accident caused permanent disability yesterday", ...context });
-  test("Permanent accident disability retains the established 150% rule", () => { assert.equal(accidentalDisability.eventType, "disability"); assert.equal(assessClaim(accidentalDisability, coverages).find(i => i.id === "gpa-tpd")?.amountText, "Up to S$900,000"); });
+  // The 150% figure is the wording's, read into the benefit table; it is never written in code (G007500 removal, PR B).
+  // Permanence is still for a medical assessment, so the figure is shown as printed, with no amount.
+  test("Permanent accident disability shows the printed TPD figure from the benefit table", () => {
+    assert.equal(accidentalDisability.eventType, "disability");
+    assert.equal(assessClaim(accidentalDisability, coverages).some(i => i.id === "gpa-tpd"), false);
+    const table = claimTable([tableRow("gpa", "Group Personal Accident", "Total and Permanent Disablement", { kind: "worked_out", amount: 900_000, currency: "SGD", how: "150% of S$600,000" }, { percent: 150, base: 600_000 })], [personCover("gpa", "Group Personal Accident")]);
+    const item = assessClaim(accidentalDisability, coverages, [], [], null, [], [], undefined, undefined, undefined, table).find(i => i.id.startsWith("table-disability"));
+    assert.equal(item?.amountText, null); assert.match(item?.reason ?? "", /S\$900,000/);
+  });
   const documentedDeath = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [confirmedGpaMatch()] };
   test("Death benefits are deterministic and limited to confirmed products", () => {
     const result = assessClaim(documentedDeath, coverages, deathRules, [], SESSION_ID); assert.equal(result.length, 2); assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000); assert.equal(result.find(i => i.id === "gpa-accidental-death")?.calculatedAmount, 600_000);
@@ -127,7 +136,9 @@ export async function runClaimRegressions() {
   });
   test("Wording missing, wrong policy group or missing personal amount cannot produce a payout", () => {
     assert.equal(assessClaim(death, coverages).some(i => i.amountText != null), false);
-    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, groupPolicyNumber: "OTHER" })), deathRules, [], SESSION_ID).some(i => i.amountText != null), false);
+    // A wording for another group never becomes a rule: resolveDeathEvidence matches wording to the cover's own group
+    // and insurer (scripts/death-evidence-regressions.ts, "OTHER-GROUP"), so rules.ts no longer checks one scheme number.
+    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, groupPolicyNumber: "OTHER" })), [], [], SESSION_ID).some(i => i.amountText != null), false);
     assert.equal(assessClaim(death, coverages.map(c => ({ ...c, amount: null })), deathRules, [], SESSION_ID).some(i => i.amountText != null), false);
   });
   test("Death before cover began is not payable under that cover", () => { assert.equal(assessClaim({ ...death, deathDate: "2021-01-01" }, coverages, deathRules, [], SESSION_ID).every(i => i.status === "not_applicable"), true); });

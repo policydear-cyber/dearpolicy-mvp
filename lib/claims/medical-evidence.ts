@@ -236,7 +236,7 @@ export function resolveMedicalEvidence(coverages: OwnedCoverage[], rows: Medical
     if (product !== "hospitalisation") continue;
     const insurer = canonicalMedicalInsurer(coverage.insurer);
     const wantedGroup = groupNumber(coverage.groupPolicyNumber);
-    const sameGroupAndInsurer = (pages: MedicalWordingPage[]) => insurer != null && insurer === documentInsurer(pages) && documentGroup(pages) === wantedGroup;
+    const sameGroupAndInsurer = (pages: MedicalWordingPage[]) => insurer != null && insurer === documentInsurer(pages) && wantedGroup != null && documentGroup(pages) === wantedGroup;
 
     const ownDocument = allDocuments.filter((pages) => pages[0].policy_id === coverage.policyId);
     const linkedDocuments = allDocuments.filter((pages) => pages[0].policy_id !== coverage.policyId && pages[0].linked_to_member === true && sameGroupAndInsurer(pages));
