@@ -20,24 +20,30 @@ const NAMES: [string, RegExp][] = [
   ["Hospitalisation", /\bward\b|\broom\s+(?:and|&)\s+board\b|\bin-?\s?patient\b|\bhospital\s+(?:charges|expenses|stay)\b/i],
 ];
 
+const ACC = String.raw`(?:accident\w*|injur(?:y|ies|ed))`;
+const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?)`;
+const ACCIDENT_ONLY = new RegExp(String.raw`\b(?:unless|only|solely|exclusively)\b[^\n]*\b${ACC}|\b${ACC}[^\n]*\b(?:only|solely|exclusively)\b|\bnot\s+(?:\w+\s+){1,2}except\s+(?:for\s+|by\s+)?(?:an?\s+)?${ACC}`, "i");
+const ILLNESS_ONLY = new RegExp(String.raw`\b(?:other\s+than|except(?:\s+for)?|excluding)\s+(?:by\s+|for\s+|through\s+)?(?:an?\s+)?${ACC}`, "i");
+const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ACC}|\b${ACC}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ILL}`, "i");
+const PLAIN_DEATH = /^\s*death(?:\s+benefit)?\b/i;
+const UPLIFT_FOR_ACCIDENT = new RegExp(String.raw`\b(?:doubl\w*|twice|uplift\w*)\s+(?:for|on|if|upon|in\s+case\s+of)\s+(?:an?\s+)?accident\w*\s+death\b`, "i");
+const INCLUDING_ACCIDENT = new RegExp(String.raw`\bincluding\s+(?:death\s+)?(?:due\s+to\s+|from\s+|by\s+|caused\s+by\s+)?(?:an?\s+)?${ACC}`, "i");
+
+/** What a death or disability name with an accident or injury word pays for. The default is accident only: any cause needs
+ * a phrase that says so ("any cause", "illness or accident", a plain death benefit "doubled for accidental death" or
+ * "including death due to injury"), and "other than accident" pays illness only. A name the rules cannot place stays
+ * accident only, so it never pays a death from illness (TE P144-6, round 3: an allow-list, not a list of exclusions). */
+function causeOf(benefit: string): "accident" | "any" | "illness" {
+  if (/\bpersonal\s+accident\b/i.test(benefit) || ACCIDENT_ONLY.test(benefit)) return "accident";
+  if (ILLNESS_ONLY.test(benefit)) return "illness";
+  if (ANY_CAUSE.test(benefit)) return "any";
+  if (PLAIN_DEATH.test(benefit) && (UPLIFT_FOR_ACCIDENT.test(benefit) || INCLUDING_ACCIDENT.test(benefit))) return "any";
+  return "accident";
+}
+
 /** The one category a benefit name belongs to, or null. A name matching several takes the first in NAMES. */
 export function categoryOfBenefit(benefit: string): string | null {
-  // "Death from any cause, including accident", "Death due to illness or accident" or "Death benefit; doubled for
-  // accidental death" is not accident-only, nor is "Death from causes other than accident". An illness word the name excludes ("Accidental Death (death from illness is
-  // not covered)", "- not payable for sickness", "(sickness excluded)") is not a cause it pays for (TE P144-6, Critic R227).
-  const paid = benefit
-    .replace(/\([^)]*\b(?:not|excluded?|excluding|except)\b[^)]*\)/gi, " ")
-    .replace(/\b(?:not\s+(?:payable|covered|paid)|excluding|except(?:\s+for)?|other\s+than)\b[^,;)]*/gi, " ")
-    .replace(/\b(?:illness|sickness|disease)\w*\s+(?:is\s+|are\s+)?(?:excluded|not\s+covered)\b/gi, " ");
-  // An accident uplift or an "including accident" clause counts only on a plain death benefit: "Double Indemnity Accidental
-  // Death Benefit" and "Accidental Death Benefit (including injury on public transport)" stay accident-only (Critic R229,
-  // R230). "Death (including death due to injury)" covers every cause.
-  const plainDeath = /^\s*death(?:\s+benefit)?\b/i.test(paid);
-  const uplift = plainDeath && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
-  const including = plainDeath && /\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid);
-  const anyCause = (uplift || including || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid))
-    && !/\bpersonal\s+accident\b/i.test(benefit);
-  return NAMES.find(([name, re]) => re.test(name === "Personal Accident" ? paid : benefit) && !(name === "Personal Accident" && anyCause))?.[0] ?? null;
+  return NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
 }
 
 /** A premium the person pays, never a benefit (chat.ts's PREMIUM_ROW). */
