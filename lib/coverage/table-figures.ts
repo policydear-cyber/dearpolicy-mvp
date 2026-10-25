@@ -21,12 +21,14 @@ const NAMES: [string, RegExp][] = [
 ];
 
 const ACC = String.raw`(?:accident\w*|injur(?:y|ies|ed))`;
-const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?)`;
-const ACCIDENT_ONLY = new RegExp(String.raw`\b(?:unless|only|solely|exclusively)\b[^\n]*\b${ACC}|\b${ACC}[^\n]*\b(?:only|solely|exclusively)\b|\bnot\s+(?:\w+\s+){1,2}except\s+(?:for\s+|by\s+)?(?:an?\s+)?${ACC}`, "i");
+const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+causes?)`;
+// "only" binds to the accident words beside it ("accidental death only", "only on accident"), never to the rest of the line
+// ("Death due to illness or accident, payable only once"; Critic R232).
+const ACCIDENT_ONLY = new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:(?:by|from|due\s+to|for|on|if|in\s+case\s+of|caused\s+by)\s+)?(?:an?\s+)?${ACC}|\b${ACC}(?:\s+[a-z]+){0,2}\s+(?:only|solely|exclusively)\b|\bunless\s+(?:\w+\s+){0,3}(?:an?\s+)?${ACC}|\bnot\s+(?:\w+\s+){1,2}except\s+(?:for\s+|by\s+)?(?:an?\s+)?${ACC}`, "i");
 const ILLNESS_ONLY = new RegExp(String.raw`\bnon-?\s?accident\w*|\b(?:other\s+than|except(?:\s+for)?|excluding)\s+(?:by\s+|for\s+|through\s+)?(?:an?\s+)?${ACC}`, "i");
-const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ACC}|\b${ACC}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ILL}`, "i");
+const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ACC}|\b${ACC}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ILL}|\b${ACC}\s+or\s+otherwise\b`, "i");
 const PLAIN_DEATH = /^\s*death(?:\s+benefit)?\b/i;
-const UPLIFT_FOR_ACCIDENT = new RegExp(String.raw`\b(?:doubl\w*|twice|uplift\w*)\s+(?:for|on|if|upon|in\s+case\s+of)\s+(?:an?\s+)?accident\w*\s+death\b`, "i");
+const UPLIFT_FOR_ACCIDENT = new RegExp(String.raw`(?:\b(?:doubl\w*|twice|uplift\w*)|\b\d+(?:\.\d+)?\s?(?:x|times)|\b\d{3}\s?%)\s+(?:for|on|if|upon|in\s+case\s+of)\s+(?:an?\s+)?accident\w*(?:\s+death)?\b`, "i");
 const INCLUDING_ACCIDENT = new RegExp(String.raw`\bincluding\s+(?:death\s+)?(?:due\s+to\s+|from\s+|by\s+|caused\s+by\s+)?(?:an?\s+)?${ACC}`, "i");
 
 /** What a death or disability name with an accident or injury word pays for. The default is accident only: any cause needs
