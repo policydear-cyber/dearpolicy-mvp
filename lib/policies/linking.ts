@@ -29,7 +29,7 @@ function memberNames(member: FamilyCandidate) {
  *
  * An exact (order-insensitive) match on the display or preferred name wins.
  * Otherwise a profile whose every name word appears in the printed name
- * matches -- "Charmaine" is the profile for "Charmaine Tan" -- but ONLY when
+ * matches -- "Mei Ling" is the profile for "Mei Ling Tan" -- but ONLY when
  * exactly one profile fits that way: two profiles that could both be the
  * printed person (two "Tan"s) is never guessed between. */
 export function findFamilyMatchWithKind<T extends FamilyCandidate>(name: string, family: T[]): { member: T; kind: "exact" | "partial" } | null {

@@ -14,7 +14,7 @@ function includesName(message: string, name: string) {
 }
 
 // Cheap edit distance, used only to forgive a short typo in a name someone
-// clearly already told us (Charmine/Charmaine) — never to invent a match
+// clearly already told us (Mei Lin/Mei Ling) — never to invent a match
 // that wasn't reasonably close.
 function editDistance(a: string, b: string) {
   if (Math.abs(a.length - b.length) > 2) return 99;
@@ -189,7 +189,7 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
   const subjectNormalized = subject ? normalized(subject) : "";
   // A known name elsewhere in the sentence cannot make an unknown subject
   // safe. A close typo of a real family member's name is not "unknown"
-  // though — "Charmine" for "Charmaine" is not a stranger, it's a typo.
+  // though — "Mei Lin" for "Mei Ling" is not a stranger, it's a typo.
   if (subject && !family.some(p => includesName(subjectNormalized, normalized(p.display_name)) ||
     includesName(normalized(p.display_name), subjectNormalized) ||
     includesName(subjectNormalized, normalized(p.preferred_name ?? "")) ||

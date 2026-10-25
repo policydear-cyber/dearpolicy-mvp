@@ -18,6 +18,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimEvidence } from "./types";
 import type { DayCountEdgeInclusion, DayCountRule } from "./day-count";
+import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 export type MedicalBenefitCode = "med-hospital-cash" | "med-icu-cash" | "med-surgical" | "med-inpatient" | "med-pre-hospitalisation" | "med-post-hospitalisation";
 
@@ -72,12 +73,8 @@ type Page = { page_number: number; text: string };
 
 const SECTION_HEADING = /\b(?:Group\s+)?Hospitalisation(?:\s+(?:and|&)\s+Surgical)?(?:\s+Benefits?|\s+Plan|\s+Rider)?\b/gi;
 const REFERENCE_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "rider"]);
-const SINGLIFE_ALIASES = new Set(["singlife", "singlifewithaviva", "singaporelifeltd", "singaporelifelimited", "singaporelifeltdsinglife", "singaporelifelimitedsinglife"]);
 
-export function canonicalMedicalInsurer(value: string | null | undefined) {
-  const name = (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-  return name ? (SINGLIFE_ALIASES.has(name) ? "singlife" : name) : null;
-}
+export const canonicalMedicalInsurer = canonicalInsurer;
 function groupNumber(value: string | null | undefined) { return value?.replace(/\s+/g, "").toUpperCase() || null; }
 function documentGroup(pages: MedicalWordingPage[]) {
   if (pages[0].group_policy_number) return groupNumber(pages[0].group_policy_number);

@@ -2,6 +2,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimEvidence } from "./types";
+import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 export type RacingExclusion = { quote: string; page: number; authorityException?: boolean };
 /** A death-benefit payout formula read directly from the quoted wording.
@@ -29,14 +30,10 @@ export type DeathWordingPage = {
 type Page = { page_number: number; text: string };
 const HEADINGS = /\b(?:Group\s+Term\s+Life|Group\s+Personal\s+Accident|(?:Group\s+)?Living\s+Care(?:\s+Plus)?|(?:Group\s+)?Disability\s+Income|(?:Group\s+)?Outpatient\s+Medicare)\b/gi;
 const REFERENCE_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "rider"]);
-const SINGLIFE_ALIASES = new Set(["singlife", "singlifewithaviva", "singaporelifeltd", "singaporelifelimited", "singaporelifeltdsinglife", "singaporelifelimitedsinglife"]);
 
 /** Explicit legal/brand names shown on the supplied PDFs. Aviva by itself
  * and unrelated insurers are not aliases. */
-export function canonicalDeathInsurer(value: string | null | undefined) {
-  const name = (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-  return name ? (SINGLIFE_ALIASES.has(name) ? "singlife" : name) : null;
-}
+export const canonicalDeathInsurer = canonicalInsurer;
 
 function groupNumber(value: string | null | undefined) { return value?.replace(/\s+/g, "").toUpperCase() || null; }
 function documentGroup(pages: DeathWordingPage[]) {

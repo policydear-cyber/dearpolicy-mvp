@@ -141,9 +141,9 @@ export const PAGES_NOTE = "Only the pages the benefit table's rows come from, an
 
 const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
 /** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
- * the documents print with that kind of title ("Mr Tan Yi Chuen, Desmond") while the other is never printed with it. A
+ * the documents print with that kind of title ("Mr Lim Wei Ming, Alex") while the other is never printed with it. A
  * title counts only before all of that member's own name words. Never read from a name itself. Null otherwise
- * (stress run 23 Oct, S048: "my husband" was asked about as "Desmond's or Charmaine's?"). */
+ * (stress run 23 Oct, S048: "my husband" was asked about as "Wei Ming's or Mei Ling's?"). */
 export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
   const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
   if (!asked) return null;
@@ -167,7 +167,7 @@ export function spouseMeant(household: Household, said: string[]): { word: strin
   };
   const want = asked === "husband" ? MALE_TITLE : FEMALE_TITLE;
   const other = asked === "husband" ? FEMALE_TITLE : MALE_TITLE;
-  // A member also printed with the other kind of title ("Mrs Tan Yi Chuen", a wife under her husband's name) settles nothing.
+  // A member also printed with the other kind of title ("Mrs Lim Wei Ming", a wife under her husband's name) settles nothing.
   const fits = couple.map((m) => ({ m, all: titles(m) })).map(({ m, all }) => ({ m, hits: all.some((t) => other.test(t.title)) ? [] : all.filter((t) => want.test(t.title)) }));
   const yes = fits.filter((f) => f.hits.length);
   return yes.length === 1 ? { word: `my ${asked}`, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;

@@ -18,6 +18,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimEvidence } from "./types";
+import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 export type CIFormula =
   | { kind: "fixed"; amount: number; currency: string }
@@ -56,12 +57,8 @@ type Page = { page_number: number; text: string };
 
 const HEADINGS = /\b((?:Group\s+)?Living\s+Care\s+Plus|(?:Group\s+)?Living\s+Care)\b/gi;
 const REFERENCE_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "rider"]);
-const SINGLIFE_ALIASES = new Set(["singlife", "singlifewithaviva", "singaporelifeltd", "singaporelifelimited", "singaporelifeltdsinglife", "singaporelifelimitedsinglife"]);
 
-export function canonicalCIInsurer(value: string | null | undefined) {
-  const name = (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-  return name ? (SINGLIFE_ALIASES.has(name) ? "singlife" : name) : null;
-}
+export const canonicalCIInsurer = canonicalInsurer;
 function groupNumber(value: string | null | undefined) { return value?.replace(/\s+/g, "").toUpperCase() || null; }
 function documentGroup(pages: CIWordingPage[]) {
   if (pages[0].group_policy_number) return groupNumber(pages[0].group_policy_number);

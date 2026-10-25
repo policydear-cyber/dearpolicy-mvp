@@ -106,7 +106,7 @@ export async function applyFactFinding(
 /* ------------------------------------------------------------------------
  * Injury fact-finding turn (deterministic; no model, no amounts).
  *
- * A reported injury to a living person ("Charmaine broke her arm") is met
+ * A reported injury to a living person ("Mei Ling broke her arm") is met
  * with ONE question at a time, in a fixed order, until the facts that decide
  * which benefits respond are in. The household sees plain categories of
  * cover ("accident medical reimbursement", "hospitalisation") -- never raw
@@ -149,7 +149,7 @@ export function joinOr(items: string[], word = "or") {
 }
 
 type Person = { id: string; display_name: string; preferred_name?: string | null; relationship?: string | null };
-/** The name the family uses ("Charmaine"), not the full legal name on the policy. */
+/** The name the family uses ("Mei Ling"), not the full legal name on the policy. */
 const calledName = (person: Person) => person.preferred_name?.trim() || person.display_name;
 const known = (facts: SubjectFacts, key: string) => facts[key]?.state === "known" ? facts[key].value : null;
 /** A known value that says something ("not sure" is recorded, but says nothing). */

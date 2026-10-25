@@ -32,6 +32,7 @@ import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib
 import type { ClaimEvidence } from "./types";
 import { TOTAL_PERMANENT_DISABILITY_MATCH_KEY } from "./calculators/disability-benefit";
 import { DISABILITY_INCOME_MATCH_KEY } from "./calculators/disability-income";
+import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 export type DisabilityFormula =
   | { kind: "fixed"; amount: number; currency: string }
@@ -86,7 +87,7 @@ function documentGroup(pages: DisabilityWordingPage[]) {
   const numbers = new Set(pages.flatMap(p => [...p.text.matchAll(/\bgroup\s+policy\s+(?:no\.?|number)\s*[:#.-]?\s*([A-Z0-9-]{4,})/gi)].map(m => groupNumber(m[1]))));
   return numbers.size === 1 ? [...numbers][0] : null;
 }
-function documentInsurer(pages: DisabilityWordingPage[]) { return pages[0].insurer ? pages[0].insurer.toLowerCase().replace(/[^a-z0-9]+/g, "") : null; }
+function documentInsurer(pages: DisabilityWordingPage[]) { return canonicalInsurer(pages[0].insurer); }
 
 const DISCRETIONARY_LANGUAGE = /\b(?:may\s+pay|up\s+to|at\s+(?:our|the\s+company'?s|the\s+insurer'?s)\s+discretion|discretionary|subject\s+to\s+underwriting)\b/i;
 const MONEY_PATTERN = /(?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*([\d,]+(?:\.\d+)?)/i;
@@ -277,7 +278,7 @@ export function resolveDisabilityEvidence(coverages: OwnedCoverage[], rows: Disa
     const product = canonicalProduct(coverage.productName) || productFromCategory(coverage.category);
     if (!["group personal accident", "disability income"].includes(product)) continue;
     const wantedGroup = groupNumber(coverage.groupPolicyNumber);
-    const insurer = coverage.insurer ? coverage.insurer.toLowerCase().replace(/[^a-z0-9]+/g, "") : null;
+    const insurer = canonicalInsurer(coverage.insurer);
     const sameGroupAndInsurer = (pages: DisabilityWordingPage[]) => {
       const sameInsurer = insurer != null && insurer === documentInsurer(pages);
       const sameGroup = wantedGroup != null && documentGroup(pages) === wantedGroup;

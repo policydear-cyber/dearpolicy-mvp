@@ -16,8 +16,8 @@ function normalize(value: string) { return value.toLowerCase().replace(/[^a-z0-9
 
 /** Token-overlap similarity in [0,1] -- the same technique lib/rag/ingest.ts
  * uses to verify extracted evidence against source text, applied here to
- * two names instead. Order-independent, so "Tan Yi Chuen" and "Yi Chuen
- * Tan" score the same, and tolerant of a dropped middle name, but a name
+ * two names instead. Order-independent, so "Lim Wei Ming" and "Wei Ming
+ * Lim" score the same, and tolerant of a dropped middle name, but a name
  * that shares almost no tokens scores low regardless of length. */
 function nameSimilarity(a: string, b: string): number {
   const tokensA = new Set(normalize(a).split(" ").filter((t) => t.length > 1));

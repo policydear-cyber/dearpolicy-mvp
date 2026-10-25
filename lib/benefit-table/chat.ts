@@ -244,7 +244,7 @@ const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row
 const lesserOf = (excerpt: string) => /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less)\b|\b(?:the\s+)?(?:lesser|lower)\s+of\b/i.test(excerpt);
 
 /** The words a cover is named by on an answer card: the full product, cover and plan, as printed ("MINDEF & MHA GROUP
- * INSURANCE SCHEME (GROUP POLICY NO. G007500), GROUP TERM LIFE(POLICY NO.3037850)"). */
+ * INSURANCE SCHEME (GROUP POLICY NO. G000123), GROUP TERM LIFE(POLICY NO.1234567)"). */
 const fullCover = (r: Pick<TableRow, "product" | "cover" | "plan">) => [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(", ");
 const COVER_KIND = /\b(?:life|death|accident\w*|illness\w*|critical|disab\w*|tpd|hospital\w*|medical|medicare|health|surg\w*|ward|cancer|travel|income|care|term|endowment|annuity|savings|retirement|motor|car|home|property|shield|rider|benefit)\b/i;
 const noNumbers = (s: string) => s.replace(/\s*\(\s*(?:group\s+)?(?:policy|certificate|cert)\.?\s*(?:no|number)\b[^)]*\)/gi, "").replace(/\s+/g, " ").trim();
@@ -260,7 +260,7 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
     return (c: C) => count.get(name(c)) === 1;
   };
   // A plan or product printed with the cover's own name ("PRO LIFETIME PROTECTOR - MAX", plan "AIA PRO LIFETIME PROTECTOR -
-  // MAX") says nothing more: it is not repeated (Charmaine's new documents, 24 Oct, AIA).
+  // MAX") says nothing more: it is not repeated (a household's new documents, 24 Oct, AIA).
   // Only when every word of it is shown already, but for the insurer's name the product opens with: "Travel Insurance Premier"
   // or "Hospital & Surgical (Plan 2)" still names the plan (Critic R173-1).
   const words = (t: string) => t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -389,7 +389,7 @@ const LONGEST_WAIT_DAYS = 365;
  * waiting period is never shown as payable (stress run 23 Oct, S023). A list cover (critical illnesses, listed injuries)
  * whose cover started within a year, for an event, with no waiting period said, is hidden too: it was not checked. */
 function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number, household: Household): string | null {
-  // Only for an event: a cover listed with no event asked about ("what is Desmond covered for") is not a payment.
+  // Only for an event: a cover listed with no event asked about ("what is Wei Ming covered for") is not a payment.
   if (raw.eventFit !== "on_list" && raw.eventFit !== "any_event") return null;
   const w = raw.waiting as { applies?: unknown; days?: unknown; from?: unknown } | null | undefined;
   if (w && typeof w === "object") {
@@ -981,7 +981,7 @@ function perUnit(excerpt: string, amount: number): string | null {
   return null;
 }
 
-/** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 3037850", "Certificate 000123". */
+/** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 1234567", "Certificate 000123". */
 const ID_BEFORE = /(?:\b(?:no|nos|number|plan|option|policy|certificate|cert|scheme|section|ward|class|part|clause|schedule|version|ref|reference|code|id|tier|level)\.?|#)\s*:?\s*$/i;
 const NUMBER_WORD = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|hundred|thousand|million|billion)\b/i;
 
@@ -991,8 +991,8 @@ const NUMBER_WORD = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twent
  * five or more digits ("Accidental death 200000"). A benefit's own name also states money with any other bare number of
  * 100 or more ("Room & Board 300"), unless it counts days, visits or claims (Critic R94, TE #96). Products and covers are
  * often named with a number ("Shield 360", "Smart Life 100", "MER 1500"), so for them, and for plans, a bare number needs
- * one of those money cues. A number is a name's own when it is glued to letters or signs ("G007500", "SG-2026-001234"),
- * starts with 0, is a year, or follows a word that numbers things ("Plan 300", "Policy No. 3037850"). */
+ * one of those money cues. A number is a name's own when it is glued to letters or signs ("G000123", "SG-2026-001234"),
+ * starts with 0, is a year, or follows a word that numbers things ("Plan 300", "Policy No. 1234567"). */
 export function nameStatesMoney(name: string, role: "benefit" | "product" | "plan" = "benefit"): boolean {
   const t = (name ?? "").normalize("NFKC");
   if (moneyFiguresIn(t).length || /\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/.test(t) || /\b\d{1,3}(?:\.\d{3}){2,}\b/.test(t) || /(?<![\w.,/-])\d{1,3}(?: \d{3})+(?![\w.,/-])/.test(t)) return true;
@@ -1055,10 +1055,10 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };
 }
 
-/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Desmond, not
- * Charmaine", "only Desmond has it", "Desmond's alone") while the answer's cards, or that person's own table rows for the
+/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Wei Ming, not
+ * Mei Ling", "only Wei Ming has it", "Wei Ming's alone") while the answer's cards, or that person's own table rows for the
  * same benefit, show they have it (live run 22 Oct, C5). Such a sentence is a wrong-person statement even without an
- * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Charmaine is not covered by
+ * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Mei Ling is not covered by
  * the travel policy") is kept. */
 export const PERSON_OVERRULED = "a sentence said a person does not have a cover their own rows show";
 const NOT_COVER_WORD = new Set(["benefit"]);
@@ -1066,7 +1066,7 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
   answer: { summary: string; bottomLine?: string | null; statements?: T[] }, rows: ChatRow[], household: Household, labels: readonly string[]): string[] {
   const people = household.members.map((m) => baseName(m.name));
   const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
-  // The words that name each person and no one else ("desmond", "chuen", "charmaine").
+  // The words that name each person and no one else ("wei", "ming", "ling").
   const own = new Map(people.map((p) => [p, words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w)))]));
   const alt = (p: string) => own.get(p)!.length ? `(?:${own.get(p)!.join("|")})` : null;
   const statements = answer.statements ?? [];
@@ -1089,7 +1089,7 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
     if (!kinds.length && cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
     return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && named(o) && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
   };
-  // Only ownership or exclusivity is read ("belongs to Desmond, not Charmaine", "Desmond's alone", "only Desmond has it"). A
+  // Only ownership or exclusivity is read ("belongs to Wei Ming, not Mei Ling", "Wei Ming's alone", "only Wei Ming has it"). A
   // sentence that gives a reason or a condition ("Tan does not get the ambulance benefit, because no ambulance was used") is
   // never left out (Critic R131-1).
   const REASON = /\b(?:because|unless|if|until|since|without|provided|as\s+long\s+as|only\s+when|so\s+long\s+as|due\s+to)\b/i;

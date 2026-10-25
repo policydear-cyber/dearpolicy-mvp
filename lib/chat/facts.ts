@@ -86,7 +86,7 @@ export function reportedConditionStatement(text:string){
   return null;
 }
 /**
- * Grammar fallback for a directly reported fracture ("Charmaine broke her arm",
+ * Grammar fallback for a directly reported fracture ("Mei Ling broke her arm",
  * "fractured left wrist", "fracture of the elbow"). Body-part vocabulary follows
  * lib/claims/facts.ts (fractureBodyPart, "ribs" normalised to "rib"). It never
  * infers the cause (accident), severity, permanence or hospitalisation.

@@ -75,7 +75,7 @@ export function relevantEvidence(question: string, factKey: string, evidenceText
 
 
 /**
- * Production fracture conversation (19 Oct 2026): "Was Charmaine's fracture confirmed by X-ray and certified by a
+ * Production fracture conversation (19 Oct 2026): "Was Mei Ling's fracture confirmed by X-ray and certified by a
  * registered medical practitioner?" passed relevantEvidence because ONE word ("fracture") was shared with the cited
  * clause, although neither cited page prints an X-ray or a practitioner's certificate for that benefit. A question that
  * asks for a requirement is justified only by wording that prints it. Returns the asked words the cited wording does not

@@ -1,4 +1,4 @@
-/** Checking a page's text before anything reads it (Charmaine's new documents, 24 Oct: two Prudential schedules whose
+/** Checking a page's text before anything reads it (a household's new documents, 24 Oct: two Prudential schedules whose
  * text came out with every label first and every value after, and neighbouring figures glued together, so no row could
  * be tied to its amount).
  *
