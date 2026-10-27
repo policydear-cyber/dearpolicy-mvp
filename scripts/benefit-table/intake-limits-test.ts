@@ -110,26 +110,42 @@ for (const { m, sign } of MARKETS) {
   // cover; any other figure, or any figure with no sum insured held, is a limit (coordinator decision, 27 Oct).
   test(`${m}: under a limits-of-compensation heading, a figure that is not the cover's sum insured is a limit`, () => {
     const LIM = "aaaaaaaa-0000-0000-0000-00000000c002";
-    const lpages = [{ page: 1, text: `POLICY SCHEDULE\nLife Assured\t${person}\nSum Assured\t${sign}100,000\nBENEFITS AND LIMITS OF COMPENSATION\nDeath Benefit\t${sign}100,000\nLIMITS OF COMPENSATION\nCritical Illness\tup to ${sign}2,000,000` }];
+    const lpages = [{ page: 1, text: `POLICY SCHEDULE\nLife Assured\t${person}\nSum Assured\t${sign}100,000\nBENEFITS AND LIMITS OF COMPENSATION\nDeath Benefit\t${sign}100,000\nEarly Critical Illness\t25% of the sum assured\nDaily Hospital Cash\t${sign}100 a day\nFuneral Benefit\t${sign}5,000\nLIMITS OF COMPENSATION\nCritical Illness\tup to ${sign}2,000,000` }];
     const covers = (sumInsured: number | null) => [{ person, product: "Evergreen Whole Life", cover: "Evergreen Whole Life", plan: null, sumInsured, asOf: null, page: 1, quote: sumInsured ? `Sum Assured\t${sign}100,000` : `Life Assured\t${person}` }];
     const rowsOf = (sumInsured: number | null) => {
       const rd = checkReading({ id: LIM, name: "Evergreen.pdf", readable: true, pages: lpages }, reading("personal_proof", "Evergreen Whole Life", covers(sumInsured), [
         b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Death Benefit", pays: "amount", value: 100000, quote: `Death Benefit\t${sign}100,000` }),
         b({ section: "LIMITS OF COMPENSATION", benefit: "Critical Illness", pays: "up_to", value: 2000000, quote: `Critical Illness\tup to ${sign}2,000,000` }),
-        b({ section: "LIMITS OF COMPENSATION", benefit: "Critical Illness (lump sum)", pays: "amount", value: 2000000, quote: `Critical Illness\tup to ${sign}2,000,000` })]));
+        b({ section: "LIMITS OF COMPENSATION", benefit: "Critical Illness (lump sum)", pays: "amount", value: 2000000, quote: `Critical Illness\tup to ${sign}2,000,000` }),
+        b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Funeral Benefit", pays: "amount", value: 5000, quote: `Funeral Benefit\t${sign}5,000` }),
+        // TE P150-3: a share of the sum insured and a daily payment under the heading stay cover.
+        b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Early Critical Illness", pays: "percent", value: 25, percentOf: "sum_insured", quote: "Early Critical Illness\t25% of the sum assured" }),
+        b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Daily Hospital Cash", pays: "per_day", value: 100, quote: `Daily Hospital Cash\t${sign}100 a day` })]));
       const ls = ["BENEFITS AND LIMITS OF COMPENSATION", "LIMITS OF COMPENSATION"].map((section) => ({ section: sectionKeyOf(LIM, { section, column: null }), cover: key, why: "the plan" }));
       return assembleTable([rd], family, ls).people[0].rows;
     };
     const held = rowsOf(100000);
     assert.equal(held.find((r) => r.benefit === "Death Benefit")!.combinedLimit, false, "the cover's own sum insured stays cover");
+    assert.equal(held.find((r) => r.benefit === "Early Critical Illness")!.combinedLimit, false, "a share of the sum insured stays cover");
+    assert.equal(held.find((r) => r.benefit === "Daily Hospital Cash")!.combinedLimit, false, "a daily payment stays cover");
+    assert.equal(held.find((r) => r.benefit === "Early Critical Illness")!.figure.kind, "worked_out");
+    // A lump sum below the sum insured stays cover, with its own line as a condition (so no tile gives it as the sum).
+    const funeral = held.find((r) => r.benefit === "Funeral Benefit")!;
+    assert.equal(funeral.combinedLimit, false);
+    assert.ok(funeral.conditions.includes(funeral.source.excerpt));
+    assert.ok(!held.find((r) => r.benefit === "Death Benefit")!.conditions.length);
     assert.ok(held.filter((r) => /^Critical Illness/.test(r.benefit)).every((r) => r.combinedLimit));
     assert.deepEqual(categoryRows("Critical Illness", held), []);
     assert.deepEqual(categoryRows("Death", held).map((r) => r.benefit), ["Death Benefit"]);
     // No sum insured held: no figure under the heading is cover, a claim amount or a tile amount.
     const none = rowsOf(null);
-    assert.ok(none.length === 3 && none.every((r) => r.combinedLimit));
+    assert.equal(none.length, 6);
+    assert.ok(none.filter((r) => r.figure.kind === "printed" && r.pays !== "per_day").every((r) => r.combinedLimit));
+    assert.equal(none.find((r) => r.benefit === "Daily Hospital Cash")!.combinedLimit, false);
     const facts = { ...EMPTY_CLAIM_FACTS, eventType: "diagnosis", eventDate: "2026-09-01", uncertainFacts: [] } as ClaimFacts;
-    assert.equal(withTableBenefits(facts, [], claimTable(held, table.people[0].covers), []).length, 0, "a CI claim never answers with the limit");
+    const items = withTableBenefits(facts, [], claimTable(held, table.people[0].covers), []);
+    assert.ok(!JSON.stringify(items).includes("2,000,000") && !JSON.stringify(items).includes("2000000"), "a CI claim never answers with the limit");
+    assert.equal(withTableBenefits(facts, [], claimTable(held.filter((r) => /^Critical Illness/.test(r.benefit)), table.people[0].covers), []).length, 0);
   });
 
   test(`${m}: limit wording that names one benefit is that benefit, with its cap kept as a condition (Critic R253 L1)`, () => {

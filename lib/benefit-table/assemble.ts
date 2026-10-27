@@ -117,13 +117,20 @@ export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate" | "cove
   return to < today ? toText : null;
 }
 
-/** Whether a row's figure is its cover's own stated sum insured, in the same currency. Under a heading that names the
- * limits of compensation, only such a row is cover ("Death Benefit S$100,000" under "Benefits and limits of
- * compensation"); any other figure there, or any figure when no sum insured is held, is a limit on what several benefits
- * pay together, never what a claim or a tile pays (TE P150-2: "Critical Illness up to S$2,000,000"). */
-function printsSumInsured(f: Figure, c: PersonCover): boolean {
-  if ((f.kind !== "printed" && f.kind !== "worked_out") || c.sumInsured == null || f.amount !== c.sumInsured) return false;
-  return !f.currency || !c.currency || f.currency === c.currency;
+/** Whether a row under a heading that names the limits of compensation is one of those limits: a printed lump sum or
+ * "up to" figure above its cover's stated sum insured (or in another currency), or any such figure when no sum insured
+ * is held ("Critical Illness up to S$2,000,000", TE P150-2). Such a figure is never what a claim or a tile pays. A figure
+ * within the sum insured ("Death Benefit S$100,000"), one worked out from it ("25% of the sum assured"), a daily or
+ * periodic payment ("S$100 a day") or a row with no figure stays cover (TE P150-3). */
+/** A lump sum or "up to" figure under that heading below the cover's sum insured stays cover, but its own line is kept
+ * as a condition, so no tile shows it as the person's sum. */
+function belowSumInsured(f: Figure, c: PersonCover): boolean {
+  return f.kind === "printed" && (f.unit === "lump_sum" || f.unit === "up_to") && c.sumInsured != null && f.amount < c.sumInsured;
+}
+function limitUnderHeading(f: Figure, c: PersonCover): boolean {
+  if (f.kind !== "printed" || (f.unit !== "lump_sum" && f.unit !== "up_to")) return false;
+  if (c.sumInsured == null) return true;
+  return f.amount > c.sumInsured || (!!f.currency && !!c.currency && f.currency !== c.currency);
 }
 
 /** One entry per (document, heading, column) that prints a benefit row. */
@@ -259,11 +266,11 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
-        conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
+        conditions: b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
-        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && !printsSumInsured(figure, c)), coverEnded: c.ended ?? null });
+        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), coverEnded: c.ended ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
