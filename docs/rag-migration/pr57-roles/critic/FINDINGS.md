@@ -7094,3 +7094,28 @@ Fixed and confirmed: the R246 cases. Equal amounts no longer join covers: a conf
 - Low: the hand-applied before/after lacks cover keys. After the fixes, the builder should re-derive Charmaine's Death, TPD and PA and Desmond's Death and CI from the stored covers, not by hand, before DC sees numbers.
 
 Verdict: NOT READY on Q1 and Q2. Q3 is recommended.
+
+## R248: #148 at 450969f (c446c2b + match by the cover's sum insured): READY, with two Mediums
+
+Checked for free:
+- regressions 82/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known notes), te-pr148b 87/0 (3 notes, see Q4);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`.
+
+Fixed and confirmed:
+- R247 Q2: one certificate with GTL S$1,000,000 and a top-up S$500,000 now gives S$1,500,000 in either cover order.
+- R247 Q3: "Group Term Life" and "GTL" with the same sum give no total, both named, with or without a line.
+- R246 A (term S$500,000 + group S$500,000 only in the table): no total, both named. That is the safe side.
+- 450969f: a group PA certificate line of S$600,000 matches its cover by sum insured even though the cover prints several sums, so the total is S$600,000. If the sum insured differs from the line: no total, both named.
+
+- **Q1 (R247), settled: I withdraw the High for the live tile.** I could not read the stored page text: the auto-mode safety check refused my narrow search of the private live files, and I did not work around it.
+  - The builder's reading is specific: "TOTAL DISABILITY ACC - MAX" = AIA's "Total Disability Accelerator – Max", page 27, Ref 2213S, matching the schedule code on page 1.
+  - An accelerator is any-cause TPD that pays the base sum early, so Charmaine's TPD S$1,100,000 = S$100,000 + S$1,000,000 is right. An accelerator means the AIA S$100,000 is paid once, for TPD or death, not both. Each tile on its own is still right.
+  - My R247 suggestion to treat "acc" as an accident word was wrong and must not be applied: it would class this accelerator as accident-only and hide the S$100,000.
+  - A free check by the Evidence Reviewer of the page 27 wording would close it.
+- Medium (Q1b, generic, not live): a confirmed line whose own name says accident still adds into Death/TPD. Probe: line "Accidental Total Disability" S$100,000 + GTL S$1,000,000 gives a TPD total of S$1,100,000. Fix: pass each line's name through `categoryOfBenefit`. A line it places in another category ("Accidental Total Disability", "Accidental Death" → Personal Accident) is not added here. Names it cannot place keep their stored category. This uses the existing classifier and adds no new abbreviation list.
+- Medium (Q4, TE note P3, pre-existing): two separate policies of the same product and the same sum collapse into one. `coverKeyOf` is product|cover|plan with no policy number, and `assemble` skips a second cover with the same key and sum. So the tile shows S$100,000 as the total of two S$100,000 policies, a part sum shown as the whole. The fix belongs in `coverKeyOf`/`assemble` (add the policy number when printed), not in the tile rule. Track it as a separate PR.
+- Low: when the sum insured matches the line but the cover's single printed sum differs, the line wins. Probe: SI S$200,000, death row S$300,000 → S$200,000. Optional: `sums.size === 1 && !fits` after an SI match gives no total. That keeps the multi-sum PA case working.
+- Low: a line and its matched cover are not compared on currency. The line's stored currency defaults to SGD when none is stored.
+
+Verdict: READY at 450969f. Q1b and Q4 are recommended follow-ups, and a live check after the merge stays required (the builder's before/after is a prediction).
