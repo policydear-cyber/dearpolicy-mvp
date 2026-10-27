@@ -340,15 +340,13 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
-  // Where the person holds several policies of a cover type here (printed policy numbers differ), each held policy is a
-  // part, even one whose own document gives this tile no row: it is named with no amount, never left out (Critic R258 H2).
-  const split = new Set(covers.filter((c) => c.holding).map((c) => c.coverKey));
-  for (const h of held) {
-    const key = policyOf(h)!;
-    if (!split.has(h.coverKey) || covers.some((c) => c.key === key)) continue;
-    covers.push({ key, coverKey: h.coverKey, docs: new Set(h.documentId ? [h.documentId] : []), holding: h.holding, sum: h.sumInsured, accelerates: false,
-      conditional: false, part: { name: partName(h.name), amount: null, currency: null } });
-  }
+  // Where the person holds several policies of a cover type here (printed policy numbers differ), through a row or a
+  // confirmed line's document, the tile gives no total: a different number does not prove a second policy (a renewal, a
+  // scheme's group number beside a certificate number), and a policy whose own document gives the tile no row may or may
+  // not hold the benefit (Critic R258 H1, H2, R259 M1). Such a policy is not listed: nothing shows it holds the benefit
+  // (TE P152 N1).
+  const split = new Set([...covers.filter((c) => c.holding).map((c) => c.coverKey),
+    ...held.filter((h) => h.holding && !!h.documentId && lines.some((l) => l.documentIds.includes(h.documentId!))).map((h) => h.coverKey)]);
   // A different printed number does not prove a second policy: a renewal, a scheme's group number beside a certificate
   // number, or an endorsement can re-number one policy (Critic R258 H1). Such parts are listed, never added up.
   let unsure = split.size > 0;

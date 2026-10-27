@@ -74,11 +74,22 @@ for (const { m, cur } of MARKETS) {
   t(`${m} R2 summary (group number) and certificate (own number) of one policy: never 200,000`, r2.total !== 200000, show(r2));
   const r3 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], [benefit("polA", "Death Benefit", 100000)]),
     reading("polB", [cover("polB", { policyNumber: "AT-2002", sumInsured: 250000 })], [])], "Death");
-  t(`${m} R3 policy B's document prints no row: B is still a part (no amount), and no total`, r3.total === null && r3.parts.length === 2
-    && r3.parts.some((x) => x.amount === 100000) && r3.parts.some((x) => x.amount === null), show(r3));
+  t(`${m} R3 policy B's document prints no row: A listed, B not claimed, and no total`, r3.total === null && r3.parts.length === 1 && r3.parts[0].amount === 100000, show(r3));
   const r3b = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], [benefit("polA", "Death Benefit", 100000)]),
     reading("polB", [cover("polB", { policyNumber: "AT-2002", sumInsured: 250000 })], [])], "Death", [line("Alder Term", ["polB"], 250000)]);
   t(`${m} R3b B's confirmed line joins B's own part, still no total`, r3b.total === null && r3b.parts.length === 2 && r3b.parts.some((x) => x.amount === 250000), show(r3b));
+
+  // R4 (Critic R259 M1): a tile of confirmed lines only, whose documents are two holdings, never adds them.
+  const r4 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], []), reading("polB", [cover("polB", { policyNumber: "AT-2002", sumInsured: 250000 })], [])], "Death",
+    [line("Alder Term", ["polA"], 100000), line("Alder Term", ["polB"], 250000)]);
+  t(`${m} R4 confirmed lines only, on two holdings' documents: both listed, no total`, r4.total === null && r4.parts.length === 2, show(r4));
+  const r4b = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], []), reading("polB", [cover("polB", { policyNumber: "AT-2002", sumInsured: 250000 })], [])], "Death",
+    [line("Alder Term", ["polA"], 100000)]);
+  t(`${m} R4b a line on one holding's document only: its own figure, no total (the other policy may hold it too)`, r4b.total === null && r4b.parts.length === 1, show(r4b));
+  // N1 (TE P152): a policy with no row for the tile is not listed on it.
+  const n1 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], [benefit("polA", "Critical Illness Benefit", 100000)]),
+    reading("polB", [cover("polB", { policyNumber: "AT-2002" })], [benefit("polB", "Death Benefit", 100000)])], "Critical Illness");
+  t(`${m} N1 B prints no CI: the CI tile lists A only, with no total`, n1.parts.length === 1 && n1.parts[0].amount === 100000 && n1.total === null, show(n1));
 
   // F: TE P152. One policy's number written two ways is one policy (F1); an un-numbered copy never absorbs two numbered
   // policies, in either order (F2).
