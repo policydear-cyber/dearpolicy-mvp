@@ -153,7 +153,7 @@ for (const { m, cur } of MARKETS) {
     t(`${m} Q9 "${n}" stored as Death: no amount`, q(n).amount === null, q(n));
     t(`${m} Q9b "${n}" stored as Personal Accident keeps its amount`, q(n, "Personal Accident").amount === 50000, q(n, "Personal Accident"));
   }
-  t(`${m} Q11 "ADD-ON TERM COVER" and "TERM LIFE ADD ON" keep their amount`, q("ADD-ON TERM COVER").amount === 50000 && q("TERM LIFE ADD ON").amount === 50000, [q("ADD-ON TERM COVER"), q("TERM LIFE ADD ON")]);
+  t(`${m} Q11 "ADD-ON TERM COVER", "TERM LIFE ADD ON" and "DEATH ADD-ONS" keep their amount`, q("ADD-ON TERM COVER").amount === 50000 && q("TERM LIFE ADD ON").amount === 50000 && q("DEATH ADD-ONS").amount === 50000, [q("ADD-ON TERM COVER"), q("TERM LIFE ADD ON"), q("DEATH ADD-ONS")]);
   t(`${m} Q10 "Additional Death Benefit" (not the capital ADD) keeps its amount`, q("Additional Death Benefit").amount === 50000, q("Additional Death Benefit"));
   t(`${m} Q8 "Death Benefit (illness or accident)" stored as Death keeps its amount`, q("Death Benefit (illness or accident)").amount === 50000, q("Death Benefit (illness or accident)"));
 
