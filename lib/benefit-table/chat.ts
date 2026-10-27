@@ -13,6 +13,7 @@ import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
+import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
 
@@ -362,26 +363,7 @@ ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
 
-const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-/** A printed date as a day count (UTC midnight): "20/10/2026" (day first, as Singapore prints it), "2026-10-20",
- * "20 October 2026". Null for anything else. */
-export function printedDay(text: unknown): number | null {
-  if (typeof text !== "string") return null;
-  const t = text.trim();
-  let m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
-  const at = (y: number, mo: number, d: number) => {
-    const ms = Date.UTC(y, mo - 1, d), x = new Date(ms);
-    return x.getUTCFullYear() === y && x.getUTCMonth() === mo - 1 && x.getUTCDate() === d ? ms / 86_400_000 : null;
-  };
-  if (m) return at(Number(m[3]), Number(m[2]), Number(m[1]));
-  m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
-  if (m) return at(Number(m[1]), Number(m[2]), Number(m[3]));
-  m = /^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*\.?,?\s+(\d{4})$/i.exec(t);
-  if (m && MONTHS.includes(m[2].toLowerCase())) return at(Number(m[3]), MONTHS.indexOf(m[2].toLowerCase()) + 1, Number(m[1]));
-  return null;
-}
-/** Today in Singapore (UTC+8), as a day count. */
-const singaporeDay = (now: Date) => Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
+export { printedDay };
 /** A waiting period runs this long at most: a cover that started earlier is past every one. */
 const LONGEST_WAIT_DAYS = 365;
 /** Why a card is not shown because of a waiting period, or null. The model says for each card whether a waiting period
@@ -475,6 +457,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the mobility aid benefit" lost its S$10,000).
     const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list`
       : x.eventFit === "not_described" ? (asksFor(question, r) ? null : `${names(r)} pays only on something not described`)
+      // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1).
+      : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);

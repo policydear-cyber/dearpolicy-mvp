@@ -12,7 +12,7 @@ export function periodWords(period: string | null | undefined): string {
 }
 
 export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> &
-  Partial<Pick<TableRow, "percent" | "base">>;
+  Partial<Pick<TableRow, "percent" | "base" | "combinedLimit" | "coverEnded">>;
 
 export const MAX_KEY = 8;
 /** A cover most of whose rows pay "as charged" (a hospital plan) shows fewer: they all look alike. */

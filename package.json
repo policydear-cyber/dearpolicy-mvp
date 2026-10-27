@@ -15,6 +15,7 @@
     "benefit-table:chat-test": "node --import tsx scripts/benefit-table/chat-test.ts",
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
     "benefit-table:parity-test": "node --import tsx scripts/benefit-table/parity-test.ts",
+    "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
     "coverage:table-test": "node --import tsx scripts/coverage-table-figures-regressions.ts",
     "coverage:te147-test": "node --import tsx scripts/coverage/te-pr147-test.ts",
     "coverage:te147b-test": "node --import tsx scripts/coverage/te-pr147b-test.ts",

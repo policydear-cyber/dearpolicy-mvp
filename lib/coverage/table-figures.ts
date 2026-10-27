@@ -85,10 +85,12 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
 /** A premium the person pays, never a benefit (chat.ts's PREMIUM_ROW). */
 const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
 /** The person's rows for the category: rows that pay something the person holds, never a projection, a fund or
- * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). */
+ * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). Nor a
+ * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
+ * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
 }
 
 /** Travel cover needs two signals together (TE P147-6): the cover's own product, cover or plan name says travel insurance

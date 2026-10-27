@@ -14,6 +14,7 @@
  * Rows from different documents are never added together; each row stands alone. A cover read from an illustration
  * (a quotation) is not proof that the person holds it. */
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
+import { printedDay, singaporeDay } from "./dates";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
@@ -39,12 +40,19 @@ export type TableRow = {
   percentOf: CheckedBenefit["percentOf"] | null;
   /** Where a percentage row's printed cap is, when it has one. */
   capSource: Source | null;
+  /** The row is a limit on what several benefits or policies pay together, never a benefit of its own (check.ts). */
+  combinedLimit?: boolean;
+  /** The last day of the row's cover, as printed, when that cover was for one short term that is over (a single trip):
+   * the row is no longer current cover, but it still answers for an event inside that term. */
+  coverEnded?: string | null;
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
 export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
-  confirmation: (Confirmation & { printed: number | null }) | null };
+  confirmation: (Confirmation & { printed: number | null }) | null;
+  /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
+  ended?: string | null };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
@@ -68,7 +76,7 @@ const money = (amount: number, currency: string | null) =>
   `${currency === "SGD" ? "S$" : currency ? currency + " " : "$"}${amount.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
-export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
+export function coversOf(readings: CheckedReading[], family: FamilyMember[], today: number = singaporeDay(new Date())) {
   const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [];
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
@@ -77,7 +85,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
     const coverKey = coverKeyOf(c);
     // The same cover printed twice for one person (a pack that repeats its schedule) is one cover.
     if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured)) continue;
-    covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null });
+    covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null, ended: coverEnded(c, r, today) });
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
@@ -87,6 +95,22 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
     types.set(c.coverKey, t);
   }
   return { covers, unmatched, illustration, types: [...types.values()] };
+}
+
+/** A cover's term is short when its printed period runs at most this many days: a trip, never a yearly or longer policy. */
+export const SHORT_TERM_DAYS = 183;
+/** The last day of a cover's term, as printed, when the cover was for one short term (a single trip) that ended before
+ * `today` (a day count); otherwise null. The term is the cover line's own start and end dates, or else the period its
+ * document prints for the whole document. Both ends must be printed and dated, and the term at most SHORT_TERM_DAYS long:
+ * a yearly or longer policy whose printed end has passed may have been renewed, so its old date never ends it (a dated
+ * certificate shows what it printed then; missing renewal papers are not an ended cover). An undated or unreadable end
+ * keeps the cover current. */
+export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate">, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
+  const own = c.endDate != null;
+  const fromText = own ? c.startDate ?? r.periodFrom ?? null : r.periodFrom ?? null, toText = own ? c.endDate : r.periodTo ?? null;
+  const from = printedDay(fromText), to = printedDay(toText);
+  if (from == null || to == null || to < from || to - from > SHORT_TERM_DAYS) return null;
+  return to < today ? toText : null;
 }
 
 /** One entry per (document, heading, column) that prints a benefit row. */
@@ -175,8 +199,9 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
   return `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
-export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = []): BenefitTable {
-  const { covers, unmatched, illustration, types } = coversOf(readings, family);
+/** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
+export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
+  const { covers, unmatched, illustration, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
   // it; the printed figure stays on the cover, so the page can show both.
   const staleConfirmations: Confirmation[] = [];
@@ -223,7 +248,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
-        baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null });
+        baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
+        combinedLimit: b.combinedLimit ?? false, coverEnded: c.ended ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
