@@ -7249,3 +7249,36 @@ R251 Q2 fixed. These are current: the mid-year group certificate 01/10/2025–31
 - The live "Limits of compensation" row needs a scope ("the same life", "all policies") in its name or quote. A bare "Limits of compensation | TI and CI S$2,000,000" stays a benefit, the old behaviour, which is safe for the tile because CI then has no total. The builder's stored-row run should confirm the live row qualifies.
 
 Verdict: READY at bd94663. L1 and L2 are optional.
+
+## R254 — #150 at d186935 (limits heading middle way, L1, L2): one High, then READY
+
+**H1 (High, hides documented cover): `lib/benefit-table/assemble.ts` `printsSumInsured`.** Under any heading containing "limits of compensation", every row whose figure is not exactly the cover's sum insured becomes `combinedLimit`, so it drops out of tiles, chat and claims. Many accident and travel schedules print the whole benefit list under "Schedule of benefits and limits of compensation". Made-up probe (Shield PA, sum insured S$200,000, all rows under that heading):
+
+| Row | Figure | d186935 |
+|---|---|---|
+| Accidental Death 100% of Sum Insured | 200,000 | benefit |
+| Fracture of hip 15% of Sum Insured | 30,000 | **limit (hidden)** |
+| Medical Expenses up to S$2,000 | 2,000 | **limit (hidden)** |
+| Hospital Cash S$100 per day | 100 | **limit (hidden)** |
+
+The same happens to capped-percent and as-charged rows (figure kind `none`), and to every row when no sum insured is held. Patch: a row under the heading is a limit only when it is a printed lump sum or "up to" figure that is **more** than the cover's sum insured in the same currency, or any such figure when no sum insured is held. Per-day, per-period, percentage and figure-less rows are never limits.
+
+```ts
+function headingLimit(f: Figure, c: PersonCover): boolean {
+  if (f.kind !== "printed" || (f.unit !== "lump_sum" && f.unit !== "up_to")) return false;
+  if (c.sumInsured == null) return true;
+  return f.amount > c.sumInsured && (!f.currency || !c.currency || f.currency === c.currency);
+}
+// …combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && headingLimit(figure, c))
+```
+
+With that patch the probe keeps all four rows, and intake stays 36/0 (TE P150-2 "Critical Illness up to S$2,000,000" with or without a sum insured is still a limit). Residual Low: with no sum insured held, "Medical Expenses up to S$2,000" under such a heading is still hidden. That is the cautious side, so I'm accepting it.
+
+**L1 (fixed):** "Total amount payable for death … for all plans" is now a Death benefit, with the line kept as a condition; "Limits of compensation: …" stays combined. **L2 (fixed):** `riderOf` returns null before the travel test, and the caller passes the CheckedCover, which carries riderOf.
+
+Checks on d186935:
+- intake 36/0, benefit-table 107/0, chat 96/0, parity 10/0, te-pr147d 78/0;
+- te-pr148b 87/3: S5 ×3 fails the same way on main b1fa3d1 (the #149 grader correction), so it is not this PR's;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: READY once H1 is patched as above. Everything else is in order.
