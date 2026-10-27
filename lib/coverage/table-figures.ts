@@ -245,6 +245,50 @@ export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[]):
   return true;
 }
 
+/** Lump-sum categories, whose covers each pay their own sum: a tile adds them up. Hospital and indemnity figures are never
+ * added (Critic R246). */
+export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
+/** A cover the person's benefit table holds: its own document (the page that names the person with it) and sum insured. */
+export type HeldCover = { coverKey: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
+export type TilePart = { name: string; amount: number | null; currency: string | null };
+const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
+/** What each of a person's covers gives in a lump-sum category, and their total. Each confirmed schedule line is one part.
+ * A table cover is that line's when its own document, or a row's, is the line's document (one cover per line); any other
+ * paying cover is a part of its own, with the one plain lump sum its rows print in a stated currency, which must also be
+ * its sum insured where it has one; a cover whose rows print no amount at all gives its sum insured, where its document
+ * states one with its currency. A cover with no such single figure is a part with no amount. The total is given only
+ * when every part has an amount, in one currency; otherwise null, and the parts still say what each policy gives
+ * (DC 27 Oct: show what each person is covered for). Equal amounts never join two covers (Critic R246). */
+export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = []): { parts: TilePart[]; total: number | null } {
+  const covers = new Map<string, TileRow[]>();
+  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
+  const parts: TilePart[] = lines.map((l) => ({ name: l.name, amount: l.amount, currency: l.currency }));
+  const used = new Set<ConfirmedLine>();
+  for (const [key, list] of covers) {
+    if (list.every((r) => r.pays === "not_covered")) continue;
+    const own = held.filter((h) => h.coverKey === key);
+    const docs = new Set([...list.map((r) => r.source?.documentId), ...own.map((h) => h.documentId)].filter(Boolean) as string[]);
+    const line = lines.find((l) => !used.has(l) && l.documentIds.some((d) => docs.has(d)));
+    if (line) { used.add(line); continue; }
+    const sums = new Map<string, { amount: number; currency: string }>();
+    for (const r of list) {
+      const m = moneyOf(r); const currency = m?.currency ? normalizeCurrencyCode(m.currency, "") : "";
+      if (PLAIN_SUM(r) && m && currency) sums.set(`${currency} ${m.amount}`, { amount: m.amount, currency });
+    }
+    const insured = new Set(own.map((h) => h.sumInsured).filter((n): n is number => n != null));
+    // No row prints any amount ("See the page"): the cover's own sum insured, where its document states one with its currency.
+    const heldCurrency = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
+    const one = sums.size === 1 ? [...sums.values()][0]
+      : list.every((r) => !moneyOf(r)) && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
+    const fits = one && insured.size <= 1 && (!insured.size || insured.has(one.amount));
+    const r0 = list[0];
+    parts.push({ name: own[0]?.name || r0.cover || r0.product || "Policy", amount: fits ? one!.amount : null, currency: fits ? one!.currency : null });
+  }
+  const currencies = new Set(parts.map((p) => p.currency));
+  const total = parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
+  return { parts, total };
+}
+
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);
 function productWords(name: string | null | undefined): string[] {
   const v = (name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
