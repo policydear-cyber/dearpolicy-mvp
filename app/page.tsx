@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect,useMemo,useState } from "react";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
 import { customerError } from "@/components/customer-text";
 import { HomeAttention } from "@/components/home-attention";
@@ -11,7 +11,7 @@ type TilePart={name:string;amount:number|null;currency:string|null;accelerates?:
 type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;frequency:string|null;annual:number;monthly:number;shared:boolean};
 type Reminder={kind:string;title:string;detail:string;href:string};
 type Unclaimed={id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null};
-type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];premiums:{monthly:number;annual:number;items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};error?:string};
+type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number;annual:number;items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};error?:string};
 const icons:Record<string,string>={Hospitalisation:"✚","Hospital Cash":"▤",Death:"♥","Critical Illness":"✚","Early Critical Illness":"✦","Total Permanent Disability":"♥","Personal Accident":"✜","Disability Income":"◆",Outpatient:"+","Long-term Care":"◒",Travel:"✈",Home:"⌂",Motor:"◇",Savings:"▣",Investment:"↗"};
 function money(v:number,c="SGD"){return formatMoney(v,c);}
 // Each policy's sum on a lump-sum tile, so the person sees what every policy gives; one with no sum read says where to look.
@@ -19,13 +19,20 @@ function partsText(parts:TilePart[]){const name=(n:string)=>n.replace(/\s*\((?:g
 
 export default function DashboardPage(){
  const [activeId,setActiveId]=useState(""),[data,setData]=useState<Dashboard|null>(null),[loading,setLoading]=useState(true);
- async function load(memberId?:string){setLoading(true);const q=memberId?`?familyMemberId=${encodeURIComponent(memberId)}`:"";let payload:Dashboard;
+ async function load(memberId?:string,quiet=false){if(!quiet)setLoading(true);const q=memberId?`?familyMemberId=${encodeURIComponent(memberId)}`:"";let payload:Dashboard;
   try{
    const response=await fetch(`/api/dashboard${q}`);
    payload=await response.json().catch(()=>({error:"The dashboard service returned an unreadable response ("+response.status+")."}) as Dashboard);
    if(!response.ok&&!payload.error)payload={...payload,error:"The dashboard could not be loaded ("+response.status+")."};
   }catch{payload={error:"unavailable"} as Dashboard;}
   setData(payload);if(!activeId&&payload.activeMember?.id)setActiveId(payload.activeMember.id);setLoading(false);} useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+ // The tiles follow the documents: while one is still being read, fetch again quietly until its cover shows (for at most
+ // ten minutes), and fetch again whenever the page comes back into view, so a policy uploaded elsewhere shows here.
+ const readingSince=useRef<number|null>(null);
+ useEffect(()=>{if(!data?.reading){readingSince.current=null;return;}readingSince.current??=Date.now();if(Date.now()-readingSince.current>600000)return;
+  const timer=setTimeout(()=>{void load(activeId||undefined,true);},8000);return()=>clearTimeout(timer);},[data]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{const onVisible=()=>{if(document.visibilityState==="visible")void load(activeId||undefined,true);};document.addEventListener("visibilitychange",onVisible);
+  return()=>document.removeEventListener("visibilitychange",onVisible);},[activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
  // An uploaded document nobody has claimed is proof the household holds it; the
  // only thing missing is whose it is, and that is one click. Until it is
@@ -70,6 +77,7 @@ export default function DashboardPage(){
    </div>)}</div></section>}
   {emptyPortfolio?<EmptyPortfolio hasFamily={!!data?.family?.length}/>:<>
   <section className="section"><div className="section-heading"><div><div className="eyebrow">PORTFOLIO</div><h2>{active?.display_name?`${active.display_name}\u2019s protection`:"Your family\u2019s protection"}</h2></div><Link href="/policies" className="text-link">Documents →</Link></div>
+   {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. These tiles update on their own when it is done.</p>}
    {loading?<div className="empty-card">Updating portfolio…</div>:<div className="coverage-grid">{data?.coverages?.map(c=><Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className={`coverage-card ${c.status}`} key={c.category}><div className="coverage-top"><span className="coverage-icon">{icons[c.category]??"•"}</span><span className={`evidence-dot ${c.status}`}></span></div><div className="coverage-name">{c.category}</div>{c.status==="covered"?<><strong className="coverage-status">Covered</strong>{c.amount!=null&&<span className="coverage-amount">{money(c.amount,c.currency)}</span>}{c.amount!=null&&((c.parts?.length??0)>1||c.parts?.some(p=>p.conditional))&&<small>{(c.parts?.length??0)>1?"Each policy’s sum insured, added up. ":"Sum insured. "}What is paid depends on each policy’s own terms.</small>}{c.displayAmount&&<span className="coverage-amount">{c.displayAmount}</span>}<small>{c.parts?.length?partsText(c.parts):c.policyNames.length?c.policyNames.slice(0,2).join(" · "):"From your uploaded documents"}{c.derived?" · benefit shown in the plan’s policy wording":""}</small></>:<><strong className="coverage-status muted-status">Not found</strong><small>Not found in the personal policies you uploaded. A policy you have not uploaded may still include it.</small></>}</Link>)}</div>}
   </section>
   <section className="section premium-breakdown-panel"><div className="section-heading"><div><div className="eyebrow">WHAT YOU ARE PAYING</div><h2>Current premium breakdown</h2></div><Link href="/records" className="text-link">Upload latest receipt →</Link></div><div className="premium-breakdown-list">{data?.premiums?.items.length?data.premiums.items.map(i=><div className="premium-breakdown-row" key={i.id}><div className="payment-brand">{(i.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{i.product_name??i.insurer??"Insurance policy"}</strong><span>{i.insurer??"Insurer"}{i.shared?" · shared/family payment":""}</span></div><div className="premium-breakdown-value"><strong>{money(i.monthly)}<small>/mo</small></strong><span>{money(i.annual)} / year</span></div></div>):<div className="empty-row">No current premium evidence yet. Upload a renewal notice or receipt.</div>}</div></section>

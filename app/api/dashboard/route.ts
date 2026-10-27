@@ -94,6 +94,15 @@ export async function GET(request:NextRequest){
     }
   }catch(error){console.warn("Benefit table unavailable for the dashboard:",error instanceof Error?error.message:error);}
 
+  // Documents of this household still being read, so Home can fetch again until their cover shows (DC 27 Oct: a new
+  // policy changes the tiles). A document is marked ready before its benefit-table reading is stored, so a recent ready
+  // document with no reading yet still counts; bounded in time, so a document that never gets one stops counting.
+  const benefitLive=await import("@/lib/benefit-table/app").then(m=>m.benefitTableLive(accountId)).catch(()=>false);
+  const readingRows=await query<{count:number}>(`SELECT count(*)::int AS count FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND (
+    (p.processing_status IN ('uploaded','queued','extracting','indexing') AND p.updated_at>now()-interval '30 minutes')
+    ${benefitLive?"OR (p.processing_status='ready' AND p.processing_completed_at>now()-interval '10 minutes' AND NOT EXISTS(SELECT 1 FROM benefit_readings br WHERE br.policy_id=p.id AND br.account_id=p.account_id))":""})`,[accountId]);
+  const reading=Number(readingRows.rows[0]?.count??0);
+
   // Reference wording can expand an OWNED product into its included benefits. It never creates ownership on its own,
   // and it never supplies an amount: the wording's figure is shown only where the person's benefit table prints it.
   const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
@@ -135,7 +144,7 @@ export async function GET(request:NextRequest){
   if(premiumSummary.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumSummary.note,href:"/records"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
-  return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
+  return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});
