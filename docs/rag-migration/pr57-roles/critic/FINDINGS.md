@@ -7066,3 +7066,31 @@ On "at least S$X, more cover on Coverage": I recommend against it as the tile he
 The useful next step is a **sum rule** for lump-sum categories only (Death, TPD, CI, early CI, PA), which pay out independently. Show the total only when every paying cover gives exactly one plain lump-sum figure: its confirmed line, or one SUM row on its own document with no limits, all in one currency. Otherwise show "Covered". That gives Charmaine TPD S$1,100,000 and Desmond Death S$1,005,000, and never sums hospital or indemnity figures. That is DC's call on the decision card; it is not a blocker for #148.
 
 Verdict: NOT READY on Q1.
+
+## R247: #148 sum rule for lump-sum tiles (2d9d127): NOT READY, two High
+
+Checked for free (no paid calls):
+- regressions 73/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known safe-side notes);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`/`categoryOfBenefit` with made-up households;
+- the builder's before/after note. I did not open the private live rows.
+
+Fixed and confirmed: the R246 cases. Equal amounts no longer join covers: a confirmed term S$500,000 plus a group S$500,000 now totals S$1,000,000, and two S$200,000 lines plus a group S$200,000 total S$600,000. Hospital and per-day categories are never added. A cover with no single plain sum is named with no amount, and then there is no total.
+
+- **High (Q1, live): an accident-only confirmed line is added to any-cause cover.** Confirmed schedule lines are added by their stored category, without the benefit-name classifier the table rows go through. The before/after gives Charmaine's TPD as **S$1,100,000** = "Total Disability Acc - Max S$100,000" + Group Term Life S$1,000,000. "Acc" is accident, so a TPD from illness pays S$1,000,000, not S$1,100,000. That overstates the claimable amount, the worst bug class.
+  - `categoryOfBenefit` returns null for "Total Disability Acc - Max S$100,000", "Total Disability Acc" and "AD&D": `ACC` knows only `accident\w*|injur…`.
+  - Probe: `lumpSumParts` with that line plus a GTL S$1,000,000 cover gives total 1,100,000.
+  - The same risk sits in Charmaine's Death S$1,149,000: the AIA S$100,000 part is on the same AIA policy as the "Acc" line. The builder should list the stored line names for both tiles.
+  - Fix:
+    - (a) Add the abbreviations to `ACC`: `\bacc\b\.?|\bad&d\b|\baccidental\b`.
+    - (b) Classify each confirmed line's own name in the dashboard: `const placed = categoryOfBenefit(x.productName ?? "")`. A line placed in another category (PA) is not added to Death/TPD/CI; it is added in the category it is placed in, when that is a lump sum. A line whose name carries an accident word but cannot be placed is a part with no amount, so there is no total.
+    - A line whose name is a plain product name (no benefit words) keeps its stored category. Refusing those would hide almost every confirmed sum.
+    - Gate: "Total Disability Acc - Max S$100,000", "Accidental Death", "Death (Accident)", "AD&D", "Accidental TPD" as lines beside a GTL cover must never raise the Death/TPD total, in SG/MY/UK.
+- **High (Q2): two covers on one policy document get one line, and the result depends on cover order.** `selected` keeps one line per policy and category, and `lumpSumParts` gives that line to the first cover whose document matches, whatever its amount. Probe: one certificate with GTL S$1,000,000 and a top-up S$500,000; the selected line is GTL 1,000,000.
+  - With the top-up first: total **S$2,000,000** (the line is counted, then GTL is added again as its own part).
+  - With GTL first: S$1,500,000, which is correct.
+  - Fix: when several covers share the line's document, give the line only to the cover whose sum insured (`held.sumInsured`) or single plain figure equals the line's amount. If none or more than one match, those covers and the line become parts with no amount, so there is no total.
+- Medium (Q3): one cover read under two names is added twice. The certificate's "Group Term Life" and another person-naming page's "GTL" (two cover keys, same S$1,000,000) give **S$2,000,000**, with or without a confirmed line. I have not seen this live; covers are only read from pages that name the person. Guard: two parts with the same amount and currency whose product words agree (`productWords`, which already expands GTL/GPA/GHS) give no total, with both still named. This never joins different products, so it does not bring back the R246 equal-amount problem.
+- Low: the hand-applied before/after lacks cover keys. After the fixes, the builder should re-derive Charmaine's Death, TPD and PA and Desmond's Death and CI from the stored covers, not by hand, before DC sees numbers.
+
+Verdict: NOT READY on Q1 and Q2. Q3 is recommended.
