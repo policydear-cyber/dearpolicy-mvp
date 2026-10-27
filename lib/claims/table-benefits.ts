@@ -37,7 +37,8 @@ const otherSide = (part: string, benefit: string) => part.toLowerCase().split(/[
 /** Which purpose a row serves for this event, or null. */
 function purposeOf(row: TableRow, facts: ClaimFacts): Purpose | null {
   const name = `${row.benefit} ${row.section ?? ""}`;
-  if (row.figure.kind === "projected" || row.pays === "not_covered") return null;
+  // A limit on what several benefits pay together is never what a claim pays (lib/benefit-table/check.ts combinedLimit).
+  if (row.figure.kind === "projected" || row.pays === "not_covered" || row.combinedLimit) return null;
   if (facts.eventType === "accident" && facts.fractureBodyPart && /fractur/i.test(name)) {
     const words = partWords(facts.fractureBodyPart);
     if (words.length && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit)) && !otherSide(facts.fractureBodyPart, row.benefit)) return "fracture";

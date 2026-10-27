@@ -7,6 +7,7 @@
  * bare "$" stays unresolved. A condition is kept only when its words are printed in this document. Everything dropped
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
+import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
@@ -42,10 +43,15 @@ const premiumLineLabel = (line: string, value: number) => {
 };
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
-export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[] };
+export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[];
+  /** The row is the most paid for several benefits' or policies' claims in total (combinedLimit below), not a benefit. */
+  combinedLimit?: boolean;
+  /** The row is printed under a heading that names the limits of compensation (LIMITS_HEADING). */
+  limitsHeading?: boolean };
 export type Dropped = { what: string; why: string };
+/** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
-  covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[] };
+  periodFrom?: string | null; periodTo?: string | null; covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[] };
 
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000). */
 export function numbersIn(text: string): number[] {
@@ -111,6 +117,36 @@ export function dateOnPage(date: string | null, pageText: string): string | null
   return digits.every((d) => page.includes(String(Number(d)))) ? date : null;
 }
 const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** A row that is a limit on what other benefits pay together, not a benefit of its own: the most an insurer pays for
+ * several benefits' claims, or across policies, on one life ("Limits of compensation: most paid for TI and critical
+ * illness (CI) claims in total on the same life"). It never pays on an event, so it is never a person's cover in a
+ * category, and never what a claim pays (live 27f35c1: a whole-life plan's S$2,000,000 limit row was read as critical
+ * illness cover). Decided on the head of the row's own name (before the first ":", dash, bracket or comma), like the
+ * accident names of #142: the head must be limit wording ("Limits of compensation", "Overall limit", "Maximum amount
+ * payable", "Most paid"), and the name or quote must give a scope wider than one benefit ("the same life", "all policies", "all
+ * benefits combined"). A row whose head names a benefit ("TPD benefit: 100% of sum assured, up to S$5,000,000 for all
+ * policies on the same life") is that benefit, whatever cap its line adds, and its heading alone never makes it a limit
+ * (Critic R251 Q1): a wrong mark here hides real cover. */
+const COMPENSATION_LIMIT = /^\s*(?:the\s+)?limits?\s+of\s+compensation\b/i;
+/** A heading that names the limits of compensation ("LIMITS OF COMPENSATION", "Benefits and limits of compensation"):
+ * its rows are decided when the table is put together, against the cover's sum insured (assemble.ts, TE P150-2). */
+export const LIMITS_HEADING = /\blimits?\s+of\s+compensation\b/i;
+const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
+const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
+export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null }): boolean {
+  return limitKind(b) === "combined";
+}
+/** "combined": a limit on several benefits together (above). "benefit_cap": limit wording whose head also names one
+ * benefit ("Total amount payable for death: S$500,000 for all plans"): the row is that benefit, and its cap is said with
+ * it as a condition (Critic R253 L1). null: neither. */
+export function limitKind(b: { benefit: string; section?: string | null; quote?: string | null }): "combined" | "benefit_cap" | null {
+  const head = b.benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
+  if (!LIMIT_HEAD.test(head) || !COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"))) return null;
+  // "Limits of compensation" names only the limit, whatever benefit follows it; other limit wording that names a benefit
+  // ("Total amount payable for death") is that benefit.
+  return COMPENSATION_LIMIT.test(head) || !categoryOfBenefit(head) ? "combined" : "benefit_cap";
+}
 
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
@@ -224,6 +260,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   const kind = (DOCUMENT_KINDS as readonly string[]).includes(d.kind as string) ? d.kind! : "other";
   const out: CheckedReading = { documentId: doc.id, document: doc.name, kind, product: str(d.product), plan: str(d.plan),
     namedPeople: Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => !!str(n)) : [], covers: [], benefits: [], dropped: [] };
+  // The document's period of cover counts only where a page prints it.
+  const printedPeriod = (v: unknown) => doc.pages.map((p) => dateOnPage(str(v), p.text)).find(Boolean) ?? null;
+  out.periodFrom = printedPeriod(d.periodFrom); out.periodTo = printedPeriod(d.periodTo);
   const household = asHousehold(doc);
   const pageText = (n: number) => doc.pages.find((p) => p.page === n)?.text ?? "";
   // Where on its page each located quote is printed, for reading the row around it.
@@ -408,9 +447,12 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // that states none keeps the reading's day when it is printed.
     const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
+    const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
-      fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions });
+      fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
+      page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
+      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? "") });
   }
   return out;
 }
