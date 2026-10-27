@@ -270,8 +270,9 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const one = sums.size === 1 ? [...sums.values()][0]
       : list.every((r) => !moneyOf(r)) && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
     const fits = !!one && insured.size <= 1 && (!insured.size || insured.has(one.amount));
-    // The sum a schedule line is compared with: the printed sum, else the sum insured (the line carries the currency).
-    const sum = fits ? one!.amount : sums.size === 0 && insured.size === 1 ? [...insured][0] : null;
+    // The sum a schedule line is compared with: the cover's own sum insured (a personal accident cover prints several
+    // sums, for death and for each injury), else its one printed sum. The line carries the currency.
+    const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
     return { docs: coverDocs(key, list, held), sum, part: { name: own[0]?.name || list[0].cover || list[0].product || "Policy",
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null } as TilePart };
   });

@@ -412,6 +412,13 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
     assert.equal(lumpSumParts([base, cover("life2", "summary", "Death", lump(sum))], [line("Life", sum, "certificate")],
       [held("life", "certificate", sum), held("life2", "certificate", sum)]).total, null);
   });
+  test(`${m}: a personal accident cover printing several sums is its certificate line's by its sum insured`, () => {
+    const pa = [cover("pa", "summary", "Death due to Accident", lump(sum)), cover("pa", "summary", "Permanent Disablement due to Accident", lump(sum * 1.5)),
+      cover("pa", "summary", "Compassionate allowance", { figure: { kind: "printed", amount: own / 10, currency: cur, unit: "up_to" } })];
+    const r = lumpSumParts(pa, [line("Group Personal Accident", sum, "certificate")], [held("pa", "certificate", sum)]);
+    assert.equal(r.total, sum);
+    assert.equal(r.parts.length, 1);
+  });
   test(`${m}: one cover read under two names with the same sum is not added twice (R247 Q3)`, () => {
     const r = lumpSumParts([cover("gtl", "summary-1", "Death", lump(sum)), cover("group term life", "summary-2", "Death", lump(sum))], [],
       [{ ...held("gtl", "s1", sum), name: "GTL" }, { ...held("group term life", "s2", sum), name: "Group Term Life (Policy No. 12)" }]);
