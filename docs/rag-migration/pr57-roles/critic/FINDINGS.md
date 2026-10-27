@@ -7203,3 +7203,31 @@ Both rules *hide* rows: from tiles, the Coverage page (ended rows), chat amounts
 - Fine: the ended rows stay in the chat for an event inside the trip. `printedDay` moved unchanged into `dates.ts`. Claims and chat both skip combined limits.
 
 Verdict: NOT READY on Q1 and Q2. Both fixes narrow the rules to their stated targets (the live limits-of-compensation row and the single-trip plan).
+
+## R252: #149 at f3f8ff1 (marker reads every row; trigger allow-list): READY
+
+Checked for free:
+- regressions 103/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0, te-pr148b 90/0, te-pr148c 81/0, te-pr149 84/0, te-pr149b 105/0;
+- `tsc` clean, `next build` passes.
+
+R250 marker gaps closed: the marker now reads every row of the cover, and a schedule line matched to a cover with "reduced by half after age sixty-five" shows "(conditions apply)".
+
+Probe of the new trigger and timing allow-lists (Death SI S$200,000):
+- Unmarked (plain trigger or timing):
+  - "If the Life Assured dies while the Policy is in force and We receive satisfactory proof of claim"
+  - "… while this rider is in force"
+  - "the life assured survives 30 days after the date of diagnosis"
+  - "waiting period of 90 days"
+  - "subject to the policy survival of 2 months"
+- Marked (a reducer never passes as a trigger):
+  - "…, less any TPD benefit paid"
+  - "If the life assured dies before age 65"
+  - "If death is in the first policy year"
+  - "… and the death benefit is the total premiums"
+  - "waiting period of 12 months; 50 percent in the first year"
+  - "survival period 30 days or 0.5 of the benefit"
+  - "reduced by half after age sixty-five"
+  - "no benefit for suicide in the first year"
+- `TRIGGER_WORDS` holds no amount, age, time or premium word. A number in a timing clause counts only before days/months or after section/clause.
+
+Verdict: READY at f3f8ff1.
