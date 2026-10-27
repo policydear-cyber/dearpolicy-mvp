@@ -7119,3 +7119,30 @@ Fixed and confirmed:
 - Low: a line and its matched cover are not compared on currency. The line's stored currency defaults to SGD when none is stored.
 
 Verdict: READY at 450969f. Q1b and Q4 are recommended follow-ups, and a live check after the merge stays required (the builder's before/after is a prediction).
+
+## R249: #149 sums insured on lump-sum tiles (c252ed5): NOT READY, one High and one gate failure
+
+Checked for free:
+- regressions 94/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0;
+- **te-pr148b 84 passed / 3 failed** (S5 in SG/MY/UK);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`/`categoryOfBenefit`.
+
+- **Gate (blocking): the registered TE gate `coverage:te148b-test` fails 3/87 on this head.** S5 ("no row prints an amount: the sum insured with its currency", expects 90,000) now gives no amount, because (2) requires a row that pays a share of the sum insured. The change is deliberate, so the test engineer must re-state S5 in their own gate. The builder must not edit the assertion, and the PR must not merge red.
+- **High (Q1, the loosening asked about): any condition now shows the full sum, with nothing on the tile saying so.** A lump-sum row equal to the cover's sum insured counts whatever its conditions. Probes on a CI cover with sum insured S$300,000 and one printed row of S$300,000 all give **S$300,000**:
+  - "reduced by half after age sixty-five"
+  - "less any amounts already paid under the early critical illness benefit"
+  - "subject to a co-payment of 10%"
+  - "payable only if death occurs after age 65; otherwise return of premiums"
+  - "7-day survival period" (the intended case)
+  - The figure never exceeds the sum insured, and the parts line now begins "Sum insured:", so the number is true *as a sum insured*. But the explanatory "What is paid depends on each policy's own terms" shows only when there are 2+ parts. A one-policy tile shows a bare S$300,000 for a death that, before 65, pays back premiums only. That reads as a claimable amount.
+  - TE N7 ("a sum with a limit: no amount") still passes only because its fixture has no held sum insured. With one it would show the full figure. This reverses the lesson the R238–R242 rounds settled, so it must at least be visible.
+  - Fix (free, small): carry `conditional: true` on a part counted through `asInsured` when the row has limits (`limits(r)` non-empty, i.e. not a cause/stay allow-listed condition). Show "(conditions apply)" after that part's amount. Show the "What is paid depends on each policy's own terms" line whenever any part is conditional, even with one part.
+  - The 7-day survival period is a condition on *when*, not *how much*. Optionally add "survival period"/"waiting period" wording to `STANDING_WORDS` or the cause allow-list so the live Singlife CI gets no marker. Do not widen it further.
+  - Gate it: the five phrasings above with a held sum insured must show the amount **with** the marker. A condition-free row shows no marker.
+- Fine as built (2): a cover with no printed amount gives its sum insured only when a row pays a share of it. ReadyBuilder's notional S$49,000 drops out, and Charmaine's Death has no total. That is the safe side.
+- Low (3, R247 Q1b as folded in): `categoryOfBenefit` on line names only hides amounts, never adds them. "Accidental Death" stored as Death → no amount here. Plain product names ("Group Term Life", "Group Living Care", "Total Disability Accelerator") place nowhere and keep their category. Over-hides seen: "Group Critical Illness" stored as Early CI and "Early Critical Illness Benefit" stored as CI each lose their amount on the stored tile. That is the safe side; the classifier decides by the benefit word.
+- Low: `accelerates` keys off any "accelerat…" word in the cover's benefit, section or cover names. The label is cosmetic and adds nothing to the total. Fine.
+- Pre-existing (R248 Q4, TE note P3): two policies of one product and sum still collapse into one. That needs a separate `coverKeyOf` fix.
+
+Verdict: NOT READY. Get the te148b gate green through the TE, and add the conditional marker.
