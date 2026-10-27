@@ -23,9 +23,9 @@ if (process.env.DEARPOLICY_DISPOSABLE_DB !== "1" || !/@(localhost|127\.0\.0\.1)[
   process.exit(0);
 }
 
-const SG = randomUUID(), MY = randomUUID(), PLAIN = randomUUID(), EMPTY = randomUUID();
-const USERS: Record<string, string> = { [SG]: randomUUID(), [MY]: randomUUID(), [PLAIN]: randomUUID(), [EMPTY]: randomUUID() };
-Object.assign(process.env, { DEV_AUTH_ENABLED: "1", DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_ALPHA_ACCOUNTS: [SG, MY, EMPTY].join(",") });
+const SG = randomUUID(), MY = randomUUID(), PLAIN = randomUUID(), EMPTY = randomUUID(), EMPTY2 = randomUUID();
+const USERS: Record<string, string> = { [SG]: randomUUID(), [MY]: randomUUID(), [PLAIN]: randomUUID(), [EMPTY]: randomUUID(), [EMPTY2]: randomUUID() };
+Object.assign(process.env, { DEV_AUTH_ENABLED: "1", DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_ALPHA_ACCOUNTS: [SG, MY, EMPTY, EMPTY2].join(",") });
 // Never a paid call: no model key, and every request off this machine is refused and counted.
 for (const k of Object.keys(process.env)) if (/API_KEY|ANTHROPIC_KEY|OPENAI_KEY/i.test(k)) delete process.env[k];
 const outbound: string[] = [];
@@ -68,7 +68,7 @@ async function main() {
   }
 
   type Upload = { account: string; person: string; product: string; currency: string; symbol: string; sum: number; category: string;
-    benefit: string; travel?: { from: string; to: string }; line?: boolean; read?: boolean };
+    benefit: string; travel?: { from: string; to: string }; line?: boolean; read?: boolean; relink?: boolean; benefits?: boolean };
   /** An uploaded schedule, as intake leaves it: the document and its page, whose it is, its confirmed schedule line, and
    * (where the account has the benefit table) its reading and links. */
   async function upload(u: Upload, personId: string): Promise<string> {
@@ -85,13 +85,13 @@ async function main() {
       const cover = { person: u.person, product: u.product, cover: u.product, plan: null, sumInsured: u.sum, premium: null, premiumFrequency: null, asOf: null,
         startDate: u.travel?.from ?? null, endDate: u.travel?.to ?? null, page: 1, quote: `${u.product} Sum Assured ${amount}` };
       const reading = { document: { kind: "personal_proof", product: u.product, insurer: null, namedPeople: [u.person], plan: null, periodFrom: u.travel?.from ?? null, periodTo: u.travel?.to ?? null },
-        covers: [cover], benefits: [{ section: null, column: null, benefit: u.benefit, pays: "amount", value: u.sum, percentOf: null, baseAmount: null, baseQuote: null,
+        covers: [cover], benefits: u.benefits === false ? [] : [{ section: null, column: null, benefit: u.benefit, pays: "amount", value: u.sum, percentOf: null, baseAmount: null, baseQuote: null,
           fromDay: null, maxDays: null, conditions: [], page: 1, quote: `${u.benefit} ${amount}` }] };
       const read = await readDocument(appDb, model(reading), u.account, id);
       assert.ok(read.read, `the reading of ${u.product} was not stored: ${JSON.stringify(read)}`);
       const section = sectionKeyOf(id, { section: null, column: null });
       links.set(section, { section, cover: coverKeyOf({ product: u.product, cover: u.product, plan: null }), why: "the plan's schedule" });
-      await relink(appDb, model(null), u.account);
+      if (u.relink !== false) await relink(appDb, model(null), u.account);
     }
     return id;
   }
@@ -166,6 +166,20 @@ async function main() {
         await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [pending]);
         assert.equal((await tiles(m.account, self)).reading, 0, "a removed document is not waited for");
       });
+      await test(`${m.cur}: Home keeps waiting until the new document is linked, not only read (TE F1)`, async () => {
+        // No schedule line: the tile can only get it from the benefit table, once the document's section is linked.
+        const doc = await upload(plan("Anchor Life Plan", 70000, { relink: false, line: false }), self);
+        await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [doc]);
+        try {
+        const read = await tiles(m.account, self);
+        assert.equal(read.reading, 1, "read but not linked yet: still waited for");
+        assert.equal(tile(read, "Death").amount, m.a, "not on the tile before it is linked");
+        await relink(appDb, model(null), m.account);
+        const linked = await tiles(m.account, self);
+        assert.equal(linked.reading, 0, "linked: no longer waited for");
+        assert.equal(tile(linked, "Death").amount, m.a + 70000, "on the tile once linked");
+        } finally { await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [doc]); }
+      });
       await test(`${m.cur}: a person with no policies has no covered tile`, async () => {
         const b = await tiles(m.account, child);
         assert.equal(b.activeMember?.id, child);
@@ -226,6 +240,15 @@ async function main() {
       await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [receipt]);
     });
 
+    await test("a household with no benefit sections to link stops waiting once the reading is stored (TE F1)", async () => {
+      const acct = EMPTY2;
+      const ids = await household(acct, "Test household covers only", [["Lena Fischer", "self"]]);
+      const doc = await upload({ account: acct, person: "Lena Fischer", product: "Harbour Life Plan", currency: "SGD", symbol: "S$", sum: 90000, category: "Death",
+        benefit: "Death Benefit", benefits: false, relink: false }, ids["Lena Fischer"]);
+      await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [doc]);
+      assert.equal((await tiles(acct)).reading, 0);
+    });
+
     await test("a household with nobody yet gets the empty portfolio", async () => {
       await household(EMPTY, "Test household empty", []);
       const b = await tiles(EMPTY);
@@ -233,7 +256,7 @@ async function main() {
       assert.equal(b.activeMember, null);
     });
   } finally {
-    for (const a of [SG, MY, PLAIN, EMPTY]) {
+    for (const a of [SG, MY, PLAIN, EMPTY, EMPTY2]) {
       await query("DELETE FROM household_members WHERE household_id=$1", [a]).catch(() => undefined);
       await query("DELETE FROM accounts WHERE id=$1", [a]).catch(() => undefined);
     }
