@@ -7168,3 +7168,38 @@ Recommended follow-up (Medium, marker gaps; no new wrong figure, since each amou
 - Fix: `conditional = list.some((r) => r.conditions.some((c) => isLimit(c) && !timingOnly(c)))` for every part that shows an amount, including the line part through `lineCover`. Gate cases 3, 5 and 6.
 
 Verdict: READY at 618ca6a once the TE confirms the S5 correction. The marker follow-up is recommended next.
+
+## R251: #150 intake, combined limits and ended short-term covers (c593995): NOT READY, two High
+
+Checked for free:
+- `intake-limits-test.ts` 29/0, regressions 25/0, te-pr147d 78/0;
+- `tsc` clean, `next build` passes;
+- `git merge-tree` with main (b1fa3d1, after #148) is clean;
+- tsx probes of `combinedLimit` and `coverEnded`.
+
+Both rules *hide* rows: from tiles, the Coverage page (ended rows), chat amounts and claim purposes. A false positive therefore hides a documented benefit. That direction needs the allow-list mindset as much as amounts do.
+
+- **High (Q1): `combinedLimit` hides real benefits that carry an aggregate clause, and anything under a "limits of compensation" heading.** It tests the row's quote and section, not just its name, so a benefit row whose printed line adds a per-life or all-policies cap counts as no cover at all. Each of these is LIMIT at c593995:
+  - "Total Permanent Disability" | "TPD benefit: 100% of sum assured, up to a maximum of S$5,000,000 for all policies on the same life"
+  - "Critical Illness" | "…; the maximum we pay across all policies on the same life is S$3,000,000"
+  - "Daily Hospital Cash" | "S$100 a day, up to 30 days a year in total for all plans"
+  - "Accidental Death" | "S$200,000; in aggregate across all your policies with us the most we pay is S$1,000,000"
+  - "Death Benefit" | "Sum assured S$500,000", section "Benefits and limits of compensation"
+  - "Death Benefit" | "Sum assured S$500,000 (see limits of compensation)"
+  - Per-life aggregate caps like these are common on TPD and CI, so the rule would remove those categories from the tiles and from claims.
+  - Fix (structural, like the #142 name head): a row is a combined limit only when the **head of its own name** (text before the first ":", "–", "-", "(" or ",") is limit wording: `^\s*(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable)\b`, and the scope (same life / all policies / all benefits) is in the name or quote.
+  - A row whose head is a benefit ("TPD benefit", "Critical Illness", "Daily Hospital Cash") stays a benefit. Its aggregate clause becomes a limit condition, so `limits()` blocks a tile figure unless every row prints it.
+  - The section alone never makes a row a limit.
+  - The live ReadyBuilder row ("Limits of compensation: most paid for TI and CI claims…") still qualifies by its head.
+  - Gate the six phrasings above as BENEFIT and the live row plus "Overall limit: the most we pay for all benefits combined…" as LIMIT.
+- **High (Q2): `coverEnded` can hide a renewed or recurring policy.** "≤ 183 days with both ends printed and passed" is not the same as "single trip". Probes (today 27/10/2026), each ENDED:
+  - a group-scheme certificate for an employee who joined mid-year, 01/10/2025–31/12/2025 (renewed each 1 January; the new certificate simply not uploaded yet);
+  - a monthly renewable PA policy whose schedule prints the current month, 01/09/2026–30/09/2026;
+  - a rider attached mid-term, co-terminous with the annual base, 01/06/2026–31/08/2026;
+  - a document whose only period is short (a group certificate printing 01/07/2026–30/09/2026), which ends **every** cover on it through the `periodFrom/periodTo` fallback.
+  - The docstring itself says "missing renewal papers are not an ended cover". The first case contradicts it.
+  - Fix: end a cover only when it is **travel** by #147's own two-signal rule (a travel name on its cover/plan or non-scheme product, `TRAVEL_NAME`/`SCHEME_NAME`) **and** its term is short and over. Use the document period only when the document is that travel cover's own. Never end a cover whose product or cover name is a group scheme's.
+  - Gate the four cases above as current and "Single Trip 01/08/2026–15/08/2026" as ended.
+- Fine: the ended rows stay in the chat for an event inside the trip. `printedDay` moved unchanged into `dates.ts`. Claims and chat both skip combined limits.
+
+Verdict: NOT READY on Q1 and Q2. Both fixes narrow the rules to their stated targets (the live limits-of-compensation row and the single-trip plan).
