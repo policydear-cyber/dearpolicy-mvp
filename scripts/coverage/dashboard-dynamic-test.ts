@@ -249,6 +249,27 @@ async function main() {
       assert.equal((await tiles(acct)).reading, 0);
     });
 
+    await test("a reading of any shape never fails Home; sections found only by a page read again still wait for linking (Critic R257)", async () => {
+      const acct = EMPTY2;
+      const me = (await query<{ id: string }>("SELECT id FROM family_members WHERE account_id=$1", [acct])).rows[0].id;
+      const doc = await upload({ account: acct, person: "Lena Fischer", product: "Lighthouse Term Plan", currency: "SGD", symbol: "S$", sum: 40000, category: "Death",
+        benefit: "Death Benefit", read: false, line: false }, me);
+      // The household's earlier document is past its wait, so the count here is this document's alone.
+      await query("UPDATE policies SET processing_completed_at=now()-interval '20 minutes' WHERE account_id=$1", [acct]);
+      await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [doc]);
+      const store = (reading: unknown) => query(`INSERT INTO benefit_readings(policy_id,account_id,reading,model,prompt_version,read_at) VALUES($1,$2,$3::jsonb,'test','test',now())
+        ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading,read_at=now()`, [doc, acct, JSON.stringify(reading)]);
+      try {
+        for (const odd of [{ document: { benefits: "none" } }, { document: "unreadable" }, { document: { benefits: { a: 1 } }, pages: "x" }, [], "text", { document: null, pages: [{ json: null }] }]) {
+          await store(odd);
+          const b = await tiles(acct);
+          assert.equal(b.reading, 0, `a household with no section to link stops waiting (${JSON.stringify(odd)})`);
+        }
+        await store({ document: { covers: [], benefits: [] }, pages: [{ page: 2, json: { benefits: [{ benefit: "Death Benefit" }] } }] });
+        assert.equal((await tiles(acct)).reading, 1, "a section found only by a page read again is still waited for until it is linked");
+      } finally { await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [doc]); }
+    });
+
     await test("a household with nobody yet gets the empty portfolio", async () => {
       await household(EMPTY, "Test household empty", []);
       const b = await tiles(EMPTY);

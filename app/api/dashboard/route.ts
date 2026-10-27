@@ -101,13 +101,14 @@ export async function GET(request:NextRequest){
   // policy changes the tiles). A document is marked ready before its benefit-table reading is stored, and its cover shows
   // only once the household's sections are linked again after that (relink rewrites every link it chooses), so a recent
   // ready document counts until it has a reading AND a link written since, or the household has no section to link (TE
-  // F1). Never a receipt or a letter, which intake never reads; bounded in time, so a document that never gets one stops.
+  // F1): a benefit in the whole reading or in a page read again. Strict JSON paths with errors silenced, so a reading of
+  // another shape counts as no section and never fails the page (Critic R257). Never a receipt or a letter, which intake never reads; bounded in time, so a document that never gets one stops.
   const benefitLive=await import("@/lib/benefit-table/app").then(m=>m.benefitTableLive(accountId)).catch(()=>false);
   const readingRows=await query<{count:number}>(`SELECT count(*)::int AS count FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND (
     (p.processing_status IN ('uploaded','queued','extracting','indexing') AND p.updated_at>now()-interval '30 minutes')
     ${benefitLive?`OR (p.processing_status='ready' AND p.processing_completed_at>now()-interval '10 minutes' AND NOT (coalesce(p.document_role,'')=ANY($2::text[]))
       AND NOT EXISTS(SELECT 1 FROM benefit_readings br WHERE br.policy_id=p.id AND br.account_id=p.account_id AND (
-        NOT EXISTS(SELECT 1 FROM benefit_readings b2 WHERE b2.account_id=p.account_id AND jsonb_array_length(coalesce(b2.reading->'document'->'benefits','[]'::jsonb))>0)
+        NOT EXISTS(SELECT 1 FROM benefit_readings b2 WHERE b2.account_id=p.account_id AND (jsonb_path_exists(b2.reading,'strict $.document.benefits[0]','{}',true) OR jsonb_path_exists(b2.reading,'strict $.pages[*].json.benefits[0]','{}',true)))
         OR EXISTS(SELECT 1 FROM benefit_links bl WHERE bl.account_id=p.account_id AND bl.updated_at>=br.read_at))))`:""})`,benefitLive?[accountId,[...NO_COVER_READING_ROLES]]:[accountId]);
   const reading=Number(readingRows.rows[0]?.count??0);
 
