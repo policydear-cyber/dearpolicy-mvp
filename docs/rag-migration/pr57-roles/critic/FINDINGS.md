@@ -7146,3 +7146,25 @@ Checked for free:
 - Pre-existing (R248 Q4, TE note P3): two policies of one product and sum still collapse into one. That needs a separate `coverKeyOf` fix.
 
 Verdict: NOT READY. Get the te148b gate green through the TE, and add the conditional marker.
+
+## R250: #149 at 618ca6a (conditional marker, timing allow-list, negation, currency): READY, with one recommended follow-up
+
+Checked for free:
+- regressions 97/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0, te-pr148b 90/0, te-pr148c 81/0, te-pr149 84/0;
+- `tsc` clean, `next build` passes;
+- tsx probes.
+
+Confirmed:
+- The R249 gate: te-pr148b S5 is now graded "no amount", with an S5b positive case, under a "Grader correction (TE …)" comment that keeps the original grade on record. It arrived inside the builder's commit 618ca6a. **The coordinator should confirm the test engineer wrote this correction**, since registered graders are never edited by the builder.
+- The R249 High: a single row carrying "reduced by half after age sixty-five" now shows "S$300,000 (conditions apply)". The terms line now shows even with one part.
+- "The life assured survives at least 7 days after the date of diagnosis" carries no marker. `TIMING_WORDS` is a word allow-list; "%" and number words are not in it, so a payout fraction cannot pass as timing.
+- Negated "accelerat…" ("Non-accelerated", "does not accelerate") gives no mark.
+- The same number in another currency is not the sum insured.
+
+Recommended follow-up (Medium, marker gaps; no new wrong figure, since each amount is the stated sum insured): the marker reads only the first row equal to the sum insured, and only on the `asInsured` path. These show the sum insured with no marker:
+- (3) two rows equal to the sum insured, the first with only eligibility/timing conditions and the second "reduced by half after age sixty-five";
+- (5) a confirmed schedule line matched to a cover whose row says "reduced by half after age sixty-five" (`lineCover` copies `accelerates` but not `conditional`). This is the usual path for a personal policy with a confirmed schedule;
+- (6) a plain S$200,000 death row plus a "return of premiums only before age 65" row on the same cover (the `sums.size === 1` path; pre-existing since #148).
+- Fix: `conditional = list.some((r) => r.conditions.some((c) => isLimit(c) && !timingOnly(c)))` for every part that shows an amount, including the line part through `lineCover`. Gate cases 3, 5 and 6.
+
+Verdict: READY at 618ca6a once the TE confirms the S5 correction. The marker follow-up is recommended next.
