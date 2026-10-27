@@ -7330,3 +7330,21 @@ Checks, all run network-blocked (no key in env, proxy pointed at a dead port):
 - dashboard-dynamic 22/0 on a throwaway Postgres 16 + pgvector;
 - intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
 - tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+## R257 — #151 at 01323b3 (Home waits for links after the reading, TE F1): READY, two Lows
+
+The new clause counts a recent ready document until it has a reading, and then either a `benefit_links` row with `updated_at >= read_at` exists or no reading in the household has benefits. It is right on the main path. `readDocument` stores `{document: <model json>, pages}`, so `reading->'document'->'benefits'` is the correct path. `relink` deletes and re-inserts every model link with `now()`, so any re-link after the reading ends the wait, a covers-only document included, as long as some other section is model-linked. Everything is scoped by account.
+
+Known edge (accepted): when relink writes no row, Home polls for the full 10 minutes. That happens when every section is household-linked, when there are no cover types, or when the link call fails or returns nothing. It is bounded, and the banner stays truthful enough.
+
+**L1 (Low, the dashboard can 500):** `jsonb_array_length(coalesce(…,'[]'))` raises "cannot get array length of a non-array" if a stored reading's `benefits` is an object or scalar (checked on Postgres 16). The JS side guards this with `Array.isArray` (`check.ts:373`), and the SQL should match. **L2 (Low, Home stops early):** a document whose whole-document reading has no benefits, but whose page re-reads do (`stored.pages[].json.benefits`), counts as covers-only, so Home can stop before relink writes its links. One expression fixes both. I checked it on Postgres 16: object → no, `[]` → no, `[1]` → yes, page benefits → yes, scalars → no, with no error.
+
+```sql
+coalesce(jsonb_path_exists(b2.reading,'strict $.document.benefits[0]','{}',true)
+      OR jsonb_path_exists(b2.reading,'strict $.pages[*].json.benefits[0]','{}',true), false)
+```
+
+Checks, all network-blocked:
+- dashboard-dynamic 25/0, including both TE F1 cases;
+- intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
