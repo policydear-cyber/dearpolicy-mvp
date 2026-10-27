@@ -43,6 +43,8 @@ export type TableRow = {
   capSource: Source | null;
   /** The row is a limit on what several benefits or policies pay together, never a benefit of its own (check.ts). */
   combinedLimit?: boolean;
+  /** The held policy the row was built for, when the person holds several of its cover type (PersonCover.holding). */
+  holding?: string;
   /** The last day of the row's cover, as printed, when that cover was for one short term that is over (a single trip):
    * the row is no longer current cover, but it still answers for an event inside that term. */
   coverEnded?: string | null;
@@ -50,6 +52,9 @@ export type TableRow = {
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
 export type PersonCover = CheckedCover & { personId: string; coverKey: string;
+  /** Set when the person holds two or more policies of this cover type with different printed policy numbers: this one's
+   * own key, so a tile counts each policy (coversOf). Unset otherwise. */
+  holding?: string;
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
@@ -84,9 +89,18 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
     const coverKey = coverKeyOf(c);
-    // The same cover printed twice for one person (a pack that repeats its schedule) is one cover.
-    if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured)) continue;
+    // The same cover printed twice for one person (a pack that repeats its schedule) is one cover. Two policies of one
+    // product whose pages print different policy numbers are two covers, whatever their sums (TE P148-3, Critic Q4).
+    if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured
+      && !(x.policyNumber && c.policyNumber && norm(x.policyNumber) !== norm(c.policyNumber)))) continue;
     covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null, ended: coverEnded(c, r, today) });
+  }
+  // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own
+  // policy on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording
+  // still links once for everyone who holds it. A cover with no printed number, or the only number, has no holding.
+  for (const c of covers) {
+    const numbers = new Set(covers.filter((x) => x.personId === c.personId && x.coverKey === c.coverKey && x.policyNumber).map((x) => norm(x.policyNumber)));
+    if (numbers.size > 1 && c.policyNumber) c.holding = `${c.coverKey}#${norm(c.policyNumber)}`;
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
@@ -219,6 +233,15 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
   return `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
+/** The covers a linked section's rows are built for. Where the person holds several policies of the cover type
+ * (holdings), a section printed on one policy's own document belongs to that policy only, never to the other; a section
+ * on a document that holds none of them (a wording, a product summary) belongs to each. */
+function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
+  if (!list.some((c) => c.holding)) return list;
+  const own = list.filter((c) => c.source.documentId === documentId);
+  return own.length ? own : list;
+}
+
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, types } = coversOf(readings, family, singaporeDay(now));
@@ -262,7 +285,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const r of readings) for (const b of r.benefits) {
     const l = linkOf.get(sectionKeyOf(r.documentId, b));
     if (!l?.cover) continue;
-    for (const p of people) for (const c of p.covers.filter((x) => x.coverKey === l.cover)) {
+    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover), r.documentId)) {
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
@@ -270,7 +293,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
-        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), coverEnded: c.ended ?? null });
+        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
