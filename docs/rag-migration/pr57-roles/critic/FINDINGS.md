@@ -7282,3 +7282,38 @@ Checks on d186935:
 - tsc clean, next build passes, merge-tree with main clean.
 
 Verdict: READY once H1 is patched as above. Everything else is in order.
+
+## R255 — #151 at 90ee276 (Home re-fetches while documents are read): two Mediums, one Low
+
+Checks:
+- new `coverage:dashboard-dynamic-test` 19/0 on a throwaway local Postgres 16 + pgvector (setup-db list, then benefit-table, policy-member-exclusions and detected-name-dismissals);
+- intake 39/0, benefit-table 107/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+Isolation holds: the count is scoped by `account_id`, and the suite's other-household case passes. Nothing is hard-coded to a household, insurer or market. Polling stops: the client caps it at 10 minutes, the server stops counting a ready document after 10 minutes and an in-progress one after 30, and an error payload has no `reading`, so polling ends there too.
+
+**M1 (Medium, a picked person can be overwritten by a late poll): `app/page.tsx` load/timer.** The 8 s timer and the visibility handler capture `activeId` from the render that set them. The timer's effect depends only on `[data]`, so choosing another person (`choose(B)`) does not clear a pending poll for A. If that poll fires while B's request is in flight and its reply lands after B's, `setData` shows A again, with the pill, heading and tiles all on A. The user's choice is silently undone. Every label stays consistent with the shown person, so this is not a mislabelled person. Fix: only the newest request may set the page, and polls ask for the person last chosen.
+
+```tsx
+const latest=useRef(0),want=useRef("");
+async function load(memberId?:string,quiet=false){const mine=++latest.current; …fetch…
+  if(mine!==latest.current)return;               // a newer request owns the page
+  if(!want.current&&payload.activeMember?.id)want.current=payload.activeMember.id;
+  setData(payload); … }
+async function choose(id:string){want.current=id;setActiveId(id);await load(id);}
+// timer and visibility: void load(want.current||undefined,true)
+```
+
+**M2 (Medium, a 10-minute false "still being read" banner plus about 75 polls): `app/api/dashboard/route.ts` reading count.** A ready document with no benefit reading counts as being read. Ingest never reads payment documents (premium_receipt, renewal_statement, annual_statement) or `NON_COVER_ROLES` documents into the benefit table (`lib/rag/ingest.ts:1000`). So every uploaded receipt or letter shows "A document is still being read" and polls for 10 minutes. I confirmed it with a probe added to the suite: setting the pending row's `document_role='premium_receipt'` still counts 1 on 90ee276. With the patch below the probe gives 0 and the suite stays 19/0.
+
+```ts
+const NO_READING_ROLES=[...NON_COVER_ROLES,"premium_receipt","renewal_statement","annual_statement"];
+// ready branch: … AND NOT (coalesce(p.document_role,'')=ANY($2::text[])) AND NOT EXISTS(…)
+// params: benefitLive?[accountId,NO_READING_ROLES]:[accountId]
+```
+
+Better still: share one list with ingest, so the two can't drift apart.
+
+**L1 (Low, cost for accounts without the benefit table, which is every sign-up except the alpha): `route.ts:28` runAfterResponse.** Every dashboard GET kicks `readPendingDocuments`, which makes paid ledger reads. Its dedupe lives in memory per instance, and `ledger_read_at` is set only after a read finishes (`lib/ledger/extract.ts:310`). Ingest runs its own ledger read straight after marking a document ready (`ingest.ts:1000`), so a poll landing on another instance in that window can start a second paid read of the same document. This already happens on a manual reload, but polling every 8 s makes it routine. This is inferred from the code; it was not run, because it needs a model. Fix: send `&poll=1` on quiet loads and skip the background ledger kick when it is set.
+
+Verdict: READY once M1 and M2 are fixed. L1 is optional, but cheap.
