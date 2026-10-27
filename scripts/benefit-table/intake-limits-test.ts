@@ -157,6 +157,21 @@ for (const { m, sign } of MARKETS) {
     assert.ok(rd.benefits[0].conditions.some((c) => c.includes("for all plans")), JSON.stringify(rd.benefits[0].conditions));
   });
 
+  test(`${m}: an accident plan's scale under "Benefits and limits of compensation" stays cover (Critic R254 probe)`, () => {
+    const PA = "aaaaaaaa-0000-0000-0000-00000000c004";
+    const text = `PERSONAL ACCIDENT SCHEDULE\nInsured\t${person}\tSum Insured\t${sign}200,000\nBENEFITS AND LIMITS OF COMPENSATION\nFracture\t15% of Sum Insured\nMedical expenses\tup to ${sign}2,000\nHospital cash\t${sign}100 per day`;
+    const rd = checkReading({ id: PA, name: "PA.pdf", readable: true, pages: [{ page: 1, text }] }, reading("personal_proof", "Accident Plan",
+      [{ person, product: "Accident Plan", cover: "Accident Plan", plan: null, sumInsured: 200000, asOf: null, page: 1, quote: `Insured\t${person}\tSum Insured\t${sign}200,000` }],
+      [b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Fracture", pays: "percent", value: 15, percentOf: "sum_insured", quote: "Fracture\t15% of Sum Insured" }),
+        b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Medical expenses", pays: "up_to", value: 2000, quote: `Medical expenses\tup to ${sign}2,000` }),
+        b({ section: "BENEFITS AND LIMITS OF COMPENSATION", benefit: "Hospital cash", pays: "per_day", value: 100, quote: `Hospital cash\t${sign}100 per day` })]));
+    const k = coverKeyOf({ product: "Accident Plan", cover: "Accident Plan", plan: null });
+    const rows = assembleTable([rd], family, [{ section: sectionKeyOf(PA, { section: "BENEFITS AND LIMITS OF COMPENSATION", column: null }), cover: k, why: "the plan" }]).people[0].rows;
+    assert.equal(rows.length, 3, JSON.stringify(rd.dropped));
+    assert.ok(rows.every((r) => !r.combinedLimit), JSON.stringify(rows.map((r) => [r.benefit, r.combinedLimit])));
+    assert.equal(rows.find((r) => r.benefit === "Fracture")!.figure.kind, "worked_out");
+  });
+
   const HOUSE: Household = { accountId: "11111111-1111-1111-1111-111111111111", members: [{ name: person, relationship: "self" }],
     documents: [{ policyId: PLAN, name: "Evergreen schedule.pdf", insurer: "Testlife", productName: "Evergreen Whole Life", policyNumber: null, documentType: null, documentRole: null,
       effectiveDate: null, expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: [person], supersededAt: null, processingStatus: "ready", pages }] } as Household;
