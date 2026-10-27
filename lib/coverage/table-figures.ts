@@ -216,34 +216,30 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
 /** One confirmed schedule line (a sum insured) of a tile's category: the documents of its policy, and its amount. */
 export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string };
 type TileRow = CoverRow & { source?: { documentId: string } | null };
-const SUM = (r: SummaryRow) => r.figure.kind === "worked_out" || (r.figure.kind === "printed" && (r.figure.unit === "lump_sum" || r.figure.unit === "up_to"));
-/** Whether the confirmed lines' total is the whole of a tile's cover: every paying cover the person's benefit table gives
- * for the category is one of them. A cover counts when a row comes from a confirmed line's own document, or when it prints
- * a confirmed line's amount and currency and that line has no cover of its own here (a scheme's summary printing the sum
- * its certificate confirms). Each line counts for one cover only, so a second cover on the same document (a rider with
- * its own sum) is not taken as counted. Any other cover (one only the table knows, a figure no line has, a bare
- * sign), or a confirmed line with no amount, makes the total part of the cover, and the tile then says Covered, never a
- * part sum (live 27f35c1). */
-export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[]): boolean {
+/** Whether the confirmed lines' total is the whole of a tile's cover, for a category whose figures are not added up: every
+ * paying cover the person's benefit table gives for the category is one of them, joined through its own document (a
+ * row's, or the held cover's: the page that names the person with it), one cover per line. An equal amount never joins
+ * a cover to a line (Critic R246, TE P148-1). Any other cover, or a confirmed line with no amount, makes the total part
+ * of the cover, and the tile then says Covered, never a part sum (live 27f35c1). */
+export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[], held: HeldCover[] = []): boolean {
   if (lines.some((l) => l.amount == null)) return false;
-  const covers = new Map<string, TileRow[]>();
-  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
-  const doc = (r: TileRow) => r.source?.documentId ?? null;
-  const inTable = new Set(rows.map(doc).filter(Boolean));
-  const free = lines.filter((l) => l.amount != null && !l.documentIds.some((d) => inTable.has(d)));
   const used = new Set<ConfirmedLine>();
-  for (const list of covers.values()) {
+  for (const [key, list] of coversOf(rows)) {
     if (list.every((r) => r.pays === "not_covered")) continue;
-    const own = lines.filter((l) => list.some((r) => l.documentIds.includes(doc(r) ?? "")));
-    const match = own.length ? own.find((l) => !used.has(l)) : free.find((l) => !used.has(l) && list.some((r) => {
-      const m = moneyOf(r);
-      return SUM(r) && !!m && m.amount === l.amount && !!m.currency && normalizeCurrencyCode(m.currency, "") === l.currency;
-    }));
+    const docs = coverDocs(key, list, held);
+    const match = lines.find((l) => !used.has(l) && l.documentIds.some((d) => docs.has(d)));
     if (!match) return false;
     used.add(match);
   }
   return true;
 }
+const coversOf = (rows: TileRow[]) => {
+  const covers = new Map<string, TileRow[]>();
+  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
+  return covers;
+};
+const coverDocs = (key: string, list: TileRow[], held: HeldCover[]) =>
+  new Set([...list.map((r) => r.source?.documentId), ...held.filter((h) => h.coverKey === key).map((h) => h.documentId)].filter(Boolean) as string[]);
 
 /** Lump-sum categories, whose covers each pay their own sum: a tile adds them up. Hospital and indemnity figures are never
  * added (Critic R246). */
@@ -252,24 +248,17 @@ export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability
 export type HeldCover = { coverKey: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
 export type TilePart = { name: string; amount: number | null; currency: string | null };
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
-/** What each of a person's covers gives in a lump-sum category, and their total. Each confirmed schedule line is one part.
- * A table cover is that line's when its own document, or a row's, is the line's document (one cover per line); any other
- * paying cover is a part of its own, with the one plain lump sum its rows print in a stated currency, which must also be
- * its sum insured where it has one; a cover whose rows print no amount at all gives its sum insured, where its document
- * states one with its currency. A cover with no such single figure is a part with no amount. The total is given only
- * when every part has an amount, in one currency; otherwise null, and the parts still say what each policy gives
- * (DC 27 Oct: show what each person is covered for). Equal amounts never join two covers (Critic R246). */
+/** What each of a person's covers gives in a lump-sum category, and their total (DC 27 Oct: show what each person is
+ * covered for). Each confirmed schedule line is one part. A table cover is that line's when it shares the line's document
+ * (a row's, or the held cover's own page) AND its sum is the line's amount; a document that holds several covers gives the
+ * line to the one whose sum equals it, so the order covers come in never matters (Critic R247 Q2). Every other paying
+ * cover is a part of its own: the one plain lump sum its rows print in a stated currency, which must also be its sum
+ * insured where it has one, or, when its rows print no amount at all, its sum insured with its stated currency; else no
+ * amount. The total is given only when every part has an amount in one currency and nothing may be one policy counted
+ * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
 export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = []): { parts: TilePart[]; total: number | null } {
-  const covers = new Map<string, TileRow[]>();
-  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
-  const parts: TilePart[] = lines.map((l) => ({ name: l.name, amount: l.amount, currency: l.currency }));
-  const used = new Set<ConfirmedLine>();
-  for (const [key, list] of covers) {
-    if (list.every((r) => r.pays === "not_covered")) continue;
+  const covers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
     const own = held.filter((h) => h.coverKey === key);
-    const docs = new Set([...list.map((r) => r.source?.documentId), ...own.map((h) => h.documentId)].filter(Boolean) as string[]);
-    const line = lines.find((l) => !used.has(l) && l.documentIds.some((d) => docs.has(d)));
-    if (line) { used.add(line); continue; }
     const sums = new Map<string, { amount: number; currency: string }>();
     for (const r of list) {
       const m = moneyOf(r); const currency = m?.currency ? normalizeCurrencyCode(m.currency, "") : "";
@@ -280,12 +269,32 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const heldCurrency = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
     const one = sums.size === 1 ? [...sums.values()][0]
       : list.every((r) => !moneyOf(r)) && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
-    const fits = one && insured.size <= 1 && (!insured.size || insured.has(one.amount));
-    const r0 = list[0];
-    parts.push({ name: own[0]?.name || r0.cover || r0.product || "Policy", amount: fits ? one!.amount : null, currency: fits ? one!.currency : null });
+    const fits = !!one && insured.size <= 1 && (!insured.size || insured.has(one.amount));
+    // The sum a schedule line is compared with: the printed sum, else the sum insured (the line carries the currency).
+    const sum = fits ? one!.amount : sums.size === 0 && insured.size === 1 ? [...insured][0] : null;
+    return { docs: coverDocs(key, list, held), sum, part: { name: own[0]?.name || list[0].cover || list[0].product || "Policy",
+      amount: fits ? one!.amount : null, currency: fits ? one!.currency : null } as TilePart };
+  });
+  let unsure = false;
+  const taken = new Set<(typeof covers)[number]>();
+  for (const l of lines) {
+    const same = covers.filter((c) => !taken.has(c) && l.documentIds.some((d) => c.docs.has(d)));
+    const match = same.filter((c) => c.sum != null && c.sum === l.amount);
+    if (match.length === 1) taken.add(match[0]);
+    // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
+    else if (same.length) unsure = true;
+    // A line with no cover here beside a cover only the table knows with the same sum may be one policy read twice (a
+    // scheme's certificate and its summary under another name) or two policies: nothing tells them apart (TE P148-2).
+    else if (covers.some((c) => !taken.has(c) && c.part.amount === l.amount && c.part.currency === l.currency)) unsure = true;
   }
+  const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: l.amount, currency: l.currency })),
+    ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
+  // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
+  const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");
+  if (parts.some((a, i) => parts.some((b, j) => j > i && a.amount != null && a.amount === b.amount && a.currency === b.currency
+    && !!words(a.name) && words(a.name) === words(b.name)))) unsure = true;
   const currencies = new Set(parts.map((p) => p.currency));
-  const total = parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
+  const total = !unsure && parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
   return { parts, total };
 }
 

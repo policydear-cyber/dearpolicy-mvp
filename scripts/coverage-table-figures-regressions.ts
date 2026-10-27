@@ -337,22 +337,21 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
     assert.equal(confirmedTotalComplete([cover("scheme", "summary", "Total and Permanent Disability Benefit", lump(sum)),
       cover("own", "personal", "Total and Permanent Disability Benefit", seePage)], [line(own, "personal")]), false);
   });
-  test(`${m}: a scheme summary printing the sum its certificate confirms is counted once`, () => {
+  test(`${m}: a scheme summary's cover counts as the certificate's line only through the cover's own document`, () => {
     const rows = [cover("scheme", "summary", "Death Benefit", lump(sum)), cover("own", "personal", "Death Benefit", seePage)];
-    assert.equal(confirmedTotalComplete(rows, [line(sum, "cert-a", "cert-b"), line(own, "personal")]), true);
-    // The certificate's own cover is in the table too: the summary's cover can no longer be matched by amount (safe side).
-    assert.equal(confirmedTotalComplete([...rows, cover("cert", "cert-a", "Death Benefit", lump(sum))], [line(sum, "cert-a", "cert-b"), line(own, "personal")]), false);
+    const lines = [line(sum, "cert-a", "cert-b"), line(own, "personal")];
+    assert.equal(confirmedTotalComplete(rows, lines, [{ coverKey: "scheme", name: "Scheme", documentId: "cert-a", sumInsured: sum }]), true);
+    // An equal amount alone never joins them (TE P148-1): no total.
+    assert.equal(confirmedTotalComplete(rows, lines), false);
   });
   test(`${m}: an amount that happens to equal another policy's confirmed line is not that line`, () => {
     assert.equal(confirmedTotalComplete([cover("own", "personal", "TPD Benefit", lump(own)), cover("other", "second", "TPD Benefit", lump(own))],
       [line(own, "personal")]), false);
   });
-  test(`${m}: a bare sign, a daily rate or another currency never matches a confirmed sum`, () => {
+  test(`${m}: no printed figure, of any kind, joins a cover to a confirmed line`, () => {
     const lines = [line(sum, "cert-a")];
-    assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", lump(sum, null))], lines), false);
-    assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", { figure: { kind: "printed", amount: sum, currency: cur, unit: "per_day" } })], lines), false);
-    assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", lump(sum, cur === "GBP" ? "SGD" : "GBP"))], lines), false);
-    assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", lump(sum))], lines), true);
+    for (const figure of [lump(sum, null), { figure: { kind: "printed" as const, amount: sum, currency: cur, unit: "per_day" as const } }, lump(sum)])
+      assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", figure)], lines), false);
   });
   test(`${m}: a rider with its own sum on a confirmed policy's document is not counted by that line`, () => {
     assert.equal(confirmedTotalComplete([cover("base", "personal", "TPD Benefit", lump(own)), cover("rider", "personal", "Rider TPD Benefit", lump(own / 2))],
@@ -366,11 +365,11 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
       [line(own, "personal")]), true);
     assert.equal(confirmedTotalComplete([], [line(own, "personal")]), true);
   });
-  test(`${m}: two free lines of one amount count two covers, never three`, () => {
+  test(`${m}: each line counts for one cover through its own document, never three covers for two lines`, () => {
     const lines = [line(sum, "cert-a"), line(sum, "cert-c")];
-    const two = [cover("s1", "summary-1", "Death Benefit", lump(sum)), cover("s2", "summary-2", "Death Benefit", lump(sum))];
+    const two = [cover("s1", "cert-a", "Death Benefit", lump(sum)), cover("s2", "cert-c", "Death Benefit", lump(sum))];
     assert.equal(confirmedTotalComplete(two, lines), true);
-    assert.equal(confirmedTotalComplete([...two, cover("s3", "summary-3", "Death Benefit", lump(sum))], lines), false);
+    assert.equal(confirmedTotalComplete([...two, cover("s3", "cert-a", "Death Benefit", lump(sum))], lines), false);
   });
 }
 
@@ -393,11 +392,30 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
     assert.equal(r.total, sum);
     assert.equal(r.parts.length, 1);
   });
-  test(`${m}: an equal amount on another policy is a second cover, not the same one (R246 A and E)`, () => {
+  test(`${m}: an equal amount is never taken as the same cover or as another; with nothing to tell them apart, no total (R246 A, E; TE P148-2)`, () => {
     const a = lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(sum))], [line("Term", sum, "term")], [held("scheme", "scheme-cert", sum)]);
-    assert.equal(a.total, sum * 2);
+    assert.equal(a.total, null);
+    assert.deepEqual(a.parts.map((p) => p.amount), [sum, sum]);
     const e = lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(own))], [line("A", own, "a"), line("B", own, "b")], [held("scheme", "scheme-cert", own)]);
-    assert.equal(e.total, own * 3);
+    assert.equal(e.total, null);
+    assert.equal(e.parts.length, 3);
+    // A different sum beside a line with no cover here is plainly another policy: added.
+    assert.equal(lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(sum))], [line("Term", own, "term")], [held("scheme", "scheme-cert", sum)]).total, sum + own);
+  });
+  test(`${m}: a certificate holding two covers gives its line to the one with its sum, in any order (R247 Q2)`, () => {
+    const base = cover("life", "summary", "Death Benefit", lump(sum)), topUp = cover("topup", "summary", "Death Benefit (top-up)", lump(own));
+    const h = [held("life", "certificate", sum), held("topup", "certificate", own)];
+    assert.equal(lumpSumParts([base, topUp], [line("Life", sum, "certificate")], h).total, sum + own);
+    assert.equal(lumpSumParts([topUp, base], [line("Life", sum, "certificate")], h).total, sum + own);
+    // Neither cover has the line's sum, or both do: which is the line's cannot be told, so no total.
+    assert.equal(lumpSumParts([base, topUp], [line("Life", sum + own, "certificate")], h).total, null);
+    assert.equal(lumpSumParts([base, cover("life2", "summary", "Death", lump(sum))], [line("Life", sum, "certificate")],
+      [held("life", "certificate", sum), held("life2", "certificate", sum)]).total, null);
+  });
+  test(`${m}: one cover read under two names with the same sum is not added twice (R247 Q3)`, () => {
+    const r = lumpSumParts([cover("gtl", "summary-1", "Death", lump(sum)), cover("group term life", "summary-2", "Death", lump(sum))], [],
+      [{ ...held("gtl", "s1", sum), name: "GTL" }, { ...held("group term life", "s2", sum), name: "Group Term Life (Policy No. 12)" }]);
+    assert.equal(r.total, null);
   });
   test(`${m}: a "100% of sum assured" row with no figure is its own schedule line's cover (R246 D)`, () => {
     const r = lumpSumParts([cover("plan", "wording", "TPD: 100% of sum assured", seePage)], [line("Plan", own, "schedule")], [held("plan", "schedule", own)]);

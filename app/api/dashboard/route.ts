@@ -87,7 +87,7 @@ export async function GET(request:NextRequest){
         const cur=coverageMap.get(category); const display=tableDisplay(rows);
         // A confirmed total that leaves out a cover the table gives (a scheme's sum only its summary prints) is part of the
         // cover: the tile says Covered, never a part sum, and the table's own figure is not shown in its place either.
-        if(cur&&cur.total!=null){if(!confirmedTotalComplete(rows,lines))cur.total=null;continue;}
+        if(cur&&cur.total!=null){if(!confirmedTotalComplete(rows,lines,held))cur.total=null;continue;}
         if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
         else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
       }
