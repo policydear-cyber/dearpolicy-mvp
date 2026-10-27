@@ -7317,3 +7317,16 @@ Better still: share one list with ingest, so the two can't drift apart.
 **L1 (Low, cost for accounts without the benefit table, which is every sign-up except the alpha): `route.ts:28` runAfterResponse.** Every dashboard GET kicks `readPendingDocuments`, which makes paid ledger reads. Its dedupe lives in memory per instance, and `ledger_read_at` is set only after a read finishes (`lib/ledger/extract.ts:310`). Ingest runs its own ledger read straight after marking a document ready (`ingest.ts:1000`), so a poll landing on another instance in that window can start a second paid read of the same document. This already happens on a manual reload, but polling every 8 s makes it routine. This is inferred from the code; it was not run, because it needs a model. Fix: send `&poll=1` on quiet loads and skip the background ledger kick when it is set.
 
 Verdict: READY once M1 and M2 are fixed. L1 is optional, but cheap.
+
+## R256 — #151 at 6af3b7b (R255 fixes): READY
+
+**M1 (fixed), read line by line.** `load` takes `n=++seq.current`, and only `n===seq.current` may setData or clear loading. `choose` sets `want` before it calls `load`, so any later poll or visibility re-fetch asks for the newly chosen person. If a poll supersedes a full load, it asks for the same person and clears the spinner itself. Before the first reply, `want` is undefined and a re-fetch asks for the default person, same as the first load. The visibility handler's closure keeps the first render's `activeId=""`, so it re-sets `activeId` to the returned person, which is the person `want` asked for; harmless. Claim-a-document re-fetches with `want` too. I found no path where the page shows a person other than the newest choice.
+
+**M2 (fixed):** one shared list, `NO_COVER_READING_ROLES` (payment roles plus NON_COVER_ROLES) in `lib/documents/messy.ts`, used by both ingest and the dashboard count. The suite now covers a receipt, a letter and a schedule.
+
+**L1 (fixed):** `poll=1` skips the background ledger kick. Only quiet loads send it, so a full Home load still kicks, as before. The suite has a poll case and asserts that nothing tried to leave the machine.
+
+Checks, all run network-blocked (no key in env, proxy pointed at a dead port):
+- dashboard-dynamic 22/0 on a throwaway Postgres 16 + pgvector;
+- intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
