@@ -246,7 +246,46 @@ const coverDocs = (key: string, list: TileRow[], held: HeldCover[]) =>
 export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
 /** A cover the person's benefit table holds: its own document (the page that names the person with it) and sum insured. */
 export type HeldCover = { coverKey: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
-export type TilePart = { name: string; amount: number | null; currency: string | null };
+/** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
+ * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
+export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean };
+/** A survival or waiting period only decides when a sum is paid, not how much: an allow-list of its words, every word known. */
+const TIMING_WORDS = new Set(["the", "a", "an", "life", "assured", "insured", "person", "survives", "survive", "surviving", "survival", "at", "least",
+  "day", "days", "after", "from", "date", "of", "diagnosis", "or", "and", "surgical", "procedure", "performed", "for", "critical", "illness", "covered",
+  "under", "this", "benefit", "waiting", "period", "periods", "month", "months", "in", "section", "clause", "as", "stated", "is", "subject", "to", "policy"]);
+// A number is timing only as a count of days or months ("7 days", "(90) days") or as a clause number ("Section 3.2");
+// any other number ("0.5 of the benefit") may be an amount (TE P149b).
+const timingOnly = (c: string) => {
+  if (!/\bsurviv|\bwaiting\s+period/i.test(c)) return false;
+  const w = c.toLowerCase().split(/[\s,;:()]+/).map((t) => t.replace(/\.$/, "")).filter(Boolean);
+  return w.every((t, i) => TIMING_WORDS.has(t) || (/^\d+(?:\.\d+)*$/.test(t)
+    && (/^(?:days?|months?)$/.test(w[i + 1] ?? "") || /^(?:section|clause)$/.test(w[i - 1] ?? ""))));
+};
+/** The event a benefit is paid on, and nothing more ("If the Life Assured dies while the Policy is in force and We receive
+ * satisfactory proof of claim"): an allow-list of its words, every word known. Anything else ("before the maturity date",
+ * "has not been converted") is a condition. */
+const TRIGGER_WORDS = new Set(["if", "the", "a", "life", "assured", "insured", "person", "dies", "die", "death", "of", "sustains", "suffers", "tpd",
+  "total", "and", "permanent", "disability", "while", "this", "your", "policy", "supplementary", "agreement", "rider", "benefit", "cover", "is", "in",
+  "force", "we", "receive", "satisfactory", "proof", "claim"]);
+const triggerOnly = (c: string) => /^\s*if\b/i.test(c) && c.toLowerCase().split(/[\s,.;:()]+/).filter(Boolean).every((w) => TRIGGER_WORDS.has(w));
+/** Only an affirmative "accelerat-" marks a cover: none of its own words says "non-", "not", "no", "never", "without" or
+ * "-n't" before it in the same phrase ("Non-accelerated Critical Illness", "does not accelerate the death benefit": no
+ * mark). Any negated mention anywhere in the cover's wording leaves the cover unmarked (TE P149-1). */
+const ACCEL = /\baccelerat\w*/gi;
+const NEGATED = /(?:\b(?:non|not|no|never|without)\b|n['’]t\b|\bnon-?)[^.;:,()]*$/i;
+function acceleratesText(texts: (string | null | undefined)[]): boolean {
+  let affirmative = false;
+  for (const t of texts) {
+    if (!t) continue;
+    for (const m of t.matchAll(ACCEL)) {
+      if (NEGATED.test(t.slice(0, m.index))) return false;
+      affirmative = true;
+    }
+  }
+  return affirmative;
+}
+/** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
+const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
 /** What each of a person's covers gives in a lump-sum category, and their total (DC 27 Oct: show what each person is
  * covered for). Each confirmed schedule line is one part. A table cover is that line's when it shares the line's document
@@ -256,7 +295,7 @@ const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figur
  * insured where it has one, or, when its rows print no amount at all, its sum insured with its stated currency; else no
  * amount. The total is given only when every part has an amount in one currency and nothing may be one policy counted
  * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
-export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = []): { parts: TilePart[]; total: number | null } {
+export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null } {
   const covers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
     const own = held.filter((h) => h.coverKey === key);
     const sums = new Map<string, { amount: number; currency: string }>();
@@ -265,30 +304,52 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
       if (PLAIN_SUM(r) && m && currency) sums.set(`${currency} ${m.amount}`, { amount: m.amount, currency });
     }
     const insured = new Set(own.map((h) => h.sumInsured).filter((n): n is number => n != null));
-    // No row prints any amount ("See the page"): the cover's own sum insured, where its document states one with its currency.
     const heldCurrency = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
+    // A lump sum equal to the cover's own sum insured IS that sum insured, whatever conditions decide when it is paid
+    // (a survival or waiting period): the tile shows sums insured (live b1fa3d1).
+    const asInsured = insured.size === 1 ? list.map((r) => ({ r, m: moneyOf(r) })).find(({ r, m }) => m && m.amount === [...insured][0]
+      && (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !!m.currency && !!normalizeCurrencyCode(m.currency, "")
+      // The same currency as the cover states, where it states one: the same number in another currency is not its sum (TE P149-2).
+      && [...heldCurrency].every((c) => !c || c === normalizeCurrencyCode(m.currency!, ""))) : undefined;
+    // No row prints any amount ("See the page"): the cover's own sum insured, only where a row pays a share of the sum
+    // insured and its document states the currency. A sum insured the benefit is not worked out from (a plan whose
+    // schedule says its sum insured is notional and the death benefit is the higher of premiums or cash value) gives none.
+    const ofSumInsured = list.some((r) => (r as { percentOf?: string | null }).percentOf === "sum_insured");
+    // A cover any of whose rows has wording that may change what is paid ("half after sixty-five", "less amounts already
+    // paid", "a return of premiums before 65") is marked wherever its amount shows, through its own rows or through the
+    // schedule line matched to it: the sum insured, with conditions. Survival and waiting periods are timing, and the event
+    // the benefit is paid on is its trigger; neither marks it (R249, R250).
+    const conditional = list.some((r) => r.conditions.some((c) => isLimit(c) && !timingOnly(c) && !triggerOnly(c)));
     const one = sums.size === 1 ? [...sums.values()][0]
-      : list.every((r) => !moneyOf(r)) && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
+      : asInsured ? { amount: asInsured.m!.amount, currency: normalizeCurrencyCode(asInsured.m!.currency!, "") }
+      : list.every((r) => !moneyOf(r)) && ofSumInsured && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
     const fits = !!one && insured.size <= 1 && (!insured.size || insured.has(one.amount));
     // The sum a schedule line is compared with: the cover's own sum insured (a personal accident cover prints several
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
-    return { docs: coverDocs(key, list, held), sum, part: { name: own[0]?.name || list[0].cover || list[0].product || "Policy",
-      amount: fits ? one!.amount : null, currency: fits ? one!.currency : null } as TilePart };
+    const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
+    return { docs: coverDocs(key, list, held), sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+      amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   let unsure = false;
   const taken = new Set<(typeof covers)[number]>();
+  const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
   for (const l of lines) {
     const same = covers.filter((c) => !taken.has(c) && l.documentIds.some((d) => c.docs.has(d)));
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
-    if (match.length === 1) taken.add(match[0]);
+    if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
     // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
     else if (same.length) unsure = true;
     // A line with no cover here beside a cover only the table knows with the same sum may be one policy read twice (a
     // scheme's certificate and its summary under another name) or two policies: nothing tells them apart (TE P148-2).
     else if (covers.some((c) => !taken.has(c) && c.part.amount === l.amount && c.part.currency === l.currency)) unsure = true;
   }
-  const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: l.amount, currency: l.currency })),
+  // A schedule line is stored under a category, but its own name decides where it pays: a line whose name places it in
+  // another category ("Accidental Death" stored as Death) is named with no amount here (Critic R247 Q1b).
+  const elsewhere = (l: { name: string }) => { const c = category ? categoryOfBenefit(l.name) : null; return !!c && c !== category; };
+  const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
+    ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
+    ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
     ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
   // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
   const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");

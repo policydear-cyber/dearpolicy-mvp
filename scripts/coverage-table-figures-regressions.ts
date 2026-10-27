@@ -445,11 +445,89 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
     assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own, { SGD: "S$", MYR: "RM", GBP: "£" }[cur]))], [held("x", "x-doc", own)]).total, sum + own);
   });
   test(`${m}: a cover whose rows print no amount gives its own sum insured only when its currency is stated`, () => {
-    const rows = [cover("term", "term-doc", "Death Benefit", seePage)];
+    const rows = [{ ...cover("term", "term-doc", "Death Benefit: 100% of the sum insured", seePage), percentOf: "sum_insured" }];
     assert.equal(lumpSumParts(rows, [line("Scheme", sum, "certificate")], [{ ...held("term", "term-doc", own), currency: cur }]).total, sum + own);
     assert.equal(lumpSumParts(rows, [line("Scheme", sum, "certificate")], [held("term", "term-doc", own)]).total, null);
     assert.equal(lumpSumParts([...rows, cover("term", "term-doc", "Death Benefit cap", { figure: { kind: "printed", amount: sum, currency: cur, unit: "up_to" } })],
       [line("Scheme", sum, "certificate")], [{ ...held("term", "term-doc", own), currency: cur }]).total, null);
+  });
+  test(`${m}: a sum insured the benefit is not worked out from (a notional sum, a death benefit of the higher of premiums or cash value) gives no amount`, () => {
+    const rows = [{ ...cover("ilp", "ilp-doc", "Death benefit: higher of 101% of the cash-in value", seePage), percentOf: "other" }];
+    const r = lumpSumParts(rows, [line("Scheme", sum, "certificate")], [{ ...held("ilp", "ilp-doc", own), currency: cur }]);
+    assert.equal(r.total, null);
+    assert.equal(r.parts[1].amount, null);
+  });
+  test(`${m}: a sum equal to the cover's sum insured counts even with a survival or waiting period`, () => {
+    const ci = { ...cover("ci", "ci-doc", "Critical Illness Benefit", { figure: { kind: "worked_out", amount: own, currency: cur, how: "100% of sum insured" },
+      conditions: ["The Life Assured survives at least 7 days after the date of diagnosis", "The waiting period in Section 3.2."] }), percentOf: "sum_insured" };
+    assert.equal(lumpSumParts([ci], [line("Scheme CI", sum, "certificate")], [held("ci", "ci-doc", own)]).total, sum + own);
+    // Not the sum insured: a limit-bound figure stays unknown.
+    const half = { ...ci, figure: { kind: "worked_out" as const, amount: own / 2, currency: cur, how: "50%" }, conditions: ["reduced by half after age sixty-five"] };
+    assert.equal(lumpSumParts([half], [line("Scheme CI", sum, "certificate")], [held("ci", "ci-doc", own)]).total, null);
+  });
+  test(`${m}: a cover name drops a policy number printed into it; a cover paid out of a death benefit says so`, () => {
+    const r = lumpSumParts([{ ...cover("gtl", "summary", "TPD", lump(sum)), cover: "GROUP TERM LIFE(POLICY NO.12345)" },
+      { ...cover("acc", "plan-doc", "Total and Permanent Disability Benefit", seePage), section: "Total Disability Accelerator" }],
+      [line("Total Disability Rider", own, "plan-doc")], [held("acc", "plan-doc", own)], "Total Permanent Disability");
+    assert.deepEqual(r.parts.map((p) => [p.name, !!p.accelerates]), [["Total Disability Rider", true], ["GROUP TERM LIFE", false]]);
+    assert.equal(r.total, sum + own);
+  });
+  test(`${m}: a schedule line whose own name places it in another category gives no amount there (R247 Q1b)`, () => {
+    const r = lumpSumParts([], [line("Group Term Life", sum, "c"), line("Accidental Death Benefit", own, "c2")], [], "Death");
+    assert.equal(r.total, null);
+    assert.equal(r.parts[1].amount, null);
+    assert.equal(lumpSumParts([], [line("Group Term Life", sum, "c"), line("Whole Life Plan", own, "c2")], [], "Death").total, sum + own);
+  });
+  test(`${m}: a sum insured counted through a row with a payout condition is marked; a survival or waiting period is not (Critic R249)`, () => {
+    const withConds = (conditions: string[]) => lumpSumParts([{ ...cover("p", "p-doc", "Death Benefit", { figure: { kind: "worked_out", amount: own, currency: cur, how: "100%" },
+      conditions }), percentOf: "sum_insured" } as Parameters<typeof lumpSumParts>[0][number]], [], [{ ...held("p", "p-doc", own), currency: cur }], "Death").parts[0];
+    for (const c of ["reduced by half after age sixty-five", "less any amount already paid under this policy", "subject to a co-payment of 10%",
+      "only if death occurs after age 65, otherwise a return of premiums", "payable in five yearly instalments"]) {
+      const p = withConds([c]);
+      assert.equal(p.amount, own, c);
+      assert.equal(p.conditional, true, c);
+    }
+    for (const c of ["The Life Assured survives at least 7 days after the date of diagnosis or the date of surgical procedure performed for a Critical Illness covered under this benefit; and",
+      "The waiting period in Section 3.2.", "This benefit is subject to the waiting period as stated in Clause 8."]) {
+      assert.equal(withConds([c]).conditional, undefined, c);
+    }
+  });
+  test(`${m}: the condition marker reads every row of a cover, on the table and the schedule-line path (Critic R250)`, () => {
+    const half = "reduced by half after age sixty-five";
+    // A confirmed schedule line matched to a cover with a limit row.
+    const viaLine = lumpSumParts([cover("p", "p-doc", "Death Benefit", { ...lump(own), conditions: [half] })], [line("Life Plan", own, "p-doc")],
+      [{ ...held("p", "p-doc", own), currency: cur }], "Death");
+    assert.equal(viaLine.parts.length, 1);
+    assert.equal(viaLine.parts[0].amount, own);
+    assert.equal(viaLine.parts[0].conditional, true);
+    // A second row equal to the sum insured carries the limit.
+    const second = lumpSumParts([cover("p", "p-doc", "Death Benefit", lump(own)), cover("p", "p-doc", "Death Benefit (Terminal Illness)", { ...lump(own), conditions: [half] })],
+      [], [{ ...held("p", "p-doc", own), currency: cur }], "Death").parts[0];
+    assert.equal(second.amount, own);
+    assert.equal(second.conditional, true);
+    // A plain death row beside a "return of premiums before 65" row.
+    const beside = lumpSumParts([cover("p", "p-doc", "Death Benefit", lump(own)),
+      cover("p", "p-doc", "Death Benefit before age 65", { ...seePage, conditions: ["only a return of premiums paid if death occurs before age 65"] })],
+      [], [{ ...held("p", "p-doc", own), currency: cur }], "Death").parts[0];
+    assert.equal(beside.amount, own);
+    assert.equal(beside.conditional, true);
+    // The event the benefit is paid on is not a condition; anything past it is.
+    const trig = (c: string) => lumpSumParts([cover("p", "p-doc", "Death Benefit", { ...lump(own), conditions: [c] })], [], [held("p", "p-doc", own)], "Death").parts[0].conditional;
+    assert.equal(trig("If the Life Assured dies while the Policy is in force and We receive satisfactory proof of claim"), undefined);
+    assert.equal(trig("If the Insured sustains TPD while this Supplementary Agreement is in force"), undefined);
+    assert.equal(trig("If the life insured dies before the maturity date and this policy is in force and has not been converted into RPUI"), true);
+    assert.equal(trig("If the Life Assured dies while the Policy is in force, half of the sum insured"), true);
+    // No limit anywhere, or timing only: no mark.
+    assert.equal(lumpSumParts([cover("p", "p-doc", "Death Benefit", lump(own))], [line("Life Plan", own, "p-doc")], [held("p", "p-doc", own)], "Death").parts[0].conditional, undefined);
+    assert.equal(lumpSumParts([cover("p", "p-doc", "Critical Illness Benefit", { ...lump(own), conditions: ["The Life Assured survives at least 7 days after the date of diagnosis"] })],
+      [line("CI Plan", own, "p-doc")], [held("p", "p-doc", own)], "Critical Illness").parts[0].conditional, undefined);
+  });
+  test(`${m}: a number in survival wording is timing only as days, months or a clause number (TE P149b)`, () => {
+    const mark = (c: string) => lumpSumParts([cover("p", "p-doc", "Critical Illness Benefit", { ...lump(own), conditions: [c] })], [], [held("p", "p-doc", own)], "Critical Illness").parts[0].conditional;
+    assert.equal(mark("Survival period: the life assured survives 0.5 of the benefit"), true);
+    assert.equal(mark("The waiting period of 90 days from the date of the policy."), undefined);
+    assert.equal(mark("This benefit is subject to the waiting period as stated in Clause 8."), undefined);
+    assert.equal(mark("The waiting period of 3 months."), undefined);
   });
   test(`${m}: a schedule line with no amount leaves no total`, () => {
     assert.equal(lumpSumParts([], [line("A", own, "a"), line("B", null, "b")]).total, null);

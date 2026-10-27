@@ -1,4 +1,4 @@
-/** Test engineer, PR #148 at 2d9d127: the sum-rule tiles (lumpSumParts in lib/coverage/table-figures.ts) for Death, TPD, CI,
+/** Test engineer, PR #148 at 2d9d127 (S5 corrected for #149 c252ed5): the sum-rule tiles (lumpSumParts in lib/coverage/table-figures.ts) for Death, TPD, CI,
  * Early CI and PA, on the path the dashboard route takes: lumpSumParts(tileRows(categoryRows(category, rows)), lines, held).
  * Made-up multi-document SG, MY and UK households with negative controls. Synthetic only; no model, no database.
  *   node --import tsx scripts/coverage/te-pr148b-test.ts */
@@ -41,8 +41,14 @@ for (const { m, cur, sign } of MARKETS) {
   t(`${m} S3 a policy with no stated sum insured still gives its one printed sum`, s3.total === 800000, show(s3));
   const s4 = tile("Death", [...hh, row("pol4", "Cedar Plan", "Death Benefit", null)], [line("Group Term Life", ["cert1"], 400000)]);
   t(`${m} S4 a policy whose sum is not read: no total, the policy named with no amount`, s4.total === null && s4.parts.some((p) => p.name === "Cedar Plan" && p.amount === null), show(s4));
+  // Grader correction (TE, #149 c252ed5): S5 expected a cover printing no amount to give its stated sum insured. Original grade
+  // kept: S5 passed (total 90,000) on #148 2d9d127 to 450969f, and failed on #149 c252ed5. Reason: a sum insured can be
+  // notional (a plan whose death benefit is the higher of premiums or cash value), so the fallback now needs a row that pays a
+  // share of the sum insured; with none, the unsure case shows no figure. S5 now expects no amount; S5b is the positive case.
   const s5 = tile("Death", [row("pol4", "Cedar Plan", "Death Benefit", null)], [], [held("Cedar Plan", "pol4", 90000)]);
-  t(`${m} S5 no row prints an amount: the sum insured with its currency`, s5.total === 90000, show(s5));
+  t(`${m} S5 no row prints an amount and none pays a share of the sum insured: no amount`, s5.total === null, show(s5));
+  const s5b = tile("Death", [{ ...row("pol4", "Cedar Plan", "Death Benefit", null), pays: "percent", percentOf: "sum_insured" } as R], [], [held("Cedar Plan", "pol4", 90000)]);
+  t(`${m} S5b no row prints an amount, a row pays a share of the sum insured: the sum insured with its currency`, s5b.total === 90000, show(s5b));
   const s6 = tile("Death", [row("pol4", "Cedar Plan", "Death Benefit", null)], [], [held("Cedar Plan", "pol4", 90000, null)]);
   t(`${m} S6 a sum insured with no currency: no amount`, s6.total === null, show(s6));
   const s7 = tile("Death", [row("pol4", "Cedar Plan", "Death Benefit", null)], [], [held("Cedar Plan", "pol4", 90000, "$")]);

@@ -78,7 +78,7 @@ export async function GET(request:NextRequest){
         // (a scheme's sum only its summary prints). A policy whose sum is not read is named with no amount, and there is
         // then no total, never a part sum (DC 27 Oct).
         if(LUMP_SUM_CATEGORIES.has(category)&&(rows.length||lines.length)){
-          const {parts,total}=lumpSumParts(rows,lines,held); const cur=coverageMap.get(category);
+          const {parts,total}=lumpSumParts(rows,lines,held,category); const cur=coverageMap.get(category);
           const entry=cur??{total:null,currency:"SGD",count:0,policyNames:[],displayAmount:null,derived:false,fromTable:true};
           entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.count=parts.length; entry.currency=normalizeCurrencyCode(parts.find(p=>p.currency)?.currency??entry.currency,"SGD");
           entry.policyNames=[...new Set(parts.map(p=>p.name))]; coverageMap.set(category,entry); continue;
