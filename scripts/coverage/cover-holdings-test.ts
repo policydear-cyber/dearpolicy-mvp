@@ -80,6 +80,23 @@ for (const { m, cur } of MARKETS) {
     reading("polB", [cover("polB", { policyNumber: "AT-2002", sumInsured: 250000 })], [])], "Death", [line("Alder Term", ["polB"], 250000)]);
   t(`${m} R3b B's confirmed line joins B's own part, still no total`, r3b.total === null && r3b.parts.length === 2 && r3b.parts.some((x) => x.amount === 250000), show(r3b));
 
+  // F: TE P152. One policy's number written two ways is one policy (F1); an un-numbered copy never absorbs two numbered
+  // policies, in either order (F2).
+  for (const [x, y] of [["MT-104455", "MT104455"], ["00104455", "104455"], ["MT/104455", "mt 104455"], ["104455-01", "104455"]]) {
+    const f1 = tile([reading("cert", [cover("cert", { policyNumber: x })], [benefit("cert", "Death Benefit", 100000)]),
+      reading("summary", [cover("summary", { policyNumber: y })], [benefit("summary", "Death Benefit", 100000)])], "Death");
+    t(`${m} F1 "${x}" and "${y}" are one policy: one part, 100,000`, f1.covers === 1 && f1.total === 100000 && f1.parts.length === 1, show(f1));
+  }
+  const un = reading("summary", [cover("summary", { policyNumber: null })], [benefit("summary", "Death Benefit", 100000)]);
+  for (const [order, rs] of [["summary first", [un, a, b]], ["summary last", [a, b, un]]] as const) {
+    const f2 = tile([...rs], "Death");
+    t(`${m} F2 two numbered policies and an un-numbered summary (${order}): both policies listed, no total`, f2.covers === 2 && f2.total === null && f2.parts.length === 2, show(f2));
+  }
+  // X7: rows are grouped by held policy, not cover type: A's only row is a threshold clause, which is left out only when
+  // another row of the SAME policy gives the figure (TE P152 mutant X7).
+  const x7 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], [benefit("polA", "Death Benefit, paid in instalments where the sum payable is above S$200,000", 100000)]), b], "Death");
+  t(`${m} X7 a policy whose only row is a clause keeps its own figure beside another policy`, x7.parts.filter((x) => x.amount === 100000).length === 2, show(x7));
+
   // M: the chat keeps each held policy's own start date (Critic R258 M1: the last one used to win for both).
   const aS = reading("polA", [cover("polA", { policyNumber: "AT-1001", startDate: "2020-01-01" })], [benefit("polA", "Death Benefit", 100000)]);
   const bS = reading("polB", [cover("polB", { policyNumber: "AT-2002", startDate: "2026-06-01" })], [benefit("polB", "Death Benefit", 100000)]);
@@ -112,6 +129,11 @@ for (const { m, cur } of MARKETS) {
   t(`${m} Q5 "Total Disability Accelerator" stored as TPD keeps its amount (no accident word)`, q("Total Disability Accelerator", "Total Permanent Disability").amount === 50000, q("Total Disability Accelerator", "Total Permanent Disability"));
   t(`${m} Q6 "Accident Benefit" stored as Personal Accident keeps its amount`, q("Accident Benefit", "Personal Accident").amount === 50000, q("Accident Benefit", "Personal Accident"));
   t(`${m} Q7 "AD&D Benefit" stored as Personal Accident keeps its amount`, q("AD&D Benefit", "Personal Accident").amount === 50000, q("AD&D Benefit", "Personal Accident"));
+  for (const n of ["Death by Misadventure", "Unintentional death benefit", "Manfaat Kematian Akibat Kemalangan", "ADD Benefit"]) {
+    t(`${m} Q9 "${n}" stored as Death: no amount`, q(n).amount === null, q(n));
+    t(`${m} Q9b "${n}" stored as Personal Accident keeps its amount`, q(n, "Personal Accident").amount === 50000, q(n, "Personal Accident"));
+  }
+  t(`${m} Q10 "Additional Death Benefit" (not the capital ADD) keeps its amount`, q("Additional Death Benefit").amount === 50000, q("Additional Death Benefit"));
   t(`${m} Q8 "Death Benefit (illness or accident)" stored as Death keeps its amount`, q("Death Benefit (illness or accident)").amount === 50000, q("Death Benefit (illness or accident)"));
 
 }

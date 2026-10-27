@@ -22,8 +22,10 @@ const NAMES: [string, RegExp][] = [
 ];
 
 const ACC = String.raw`(?:accident\w*|injur(?:y|ies|ed))`;
-/** An accident or injury word in a name, "AD&D" included. */
-const ACCIDENT_WORD = new RegExp(String.raw`\b${ACC}|\bad\s?&\s?d\b`, "i");
+/** Accident words the benefit names above do not know: "AD&D" or "ADD" (capitals), "misadventure", "unintentional", and
+ * the Malay "kemalangan" (TE P152). A name with one pays on an accident, whatever else it says. */
+const ACCIDENT_ONLY_NAME = (name: string) => /\bad\s?&\s?d\b|\bmisadventure\b|\bunintentional\w*|\bkemalangan\b/i.test(name) || /\bADD\b/.test(name);
+const ACCIDENT_WORD = new RegExp(String.raw`\b${ACC}`, "i");
 const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+causes?)`;
 // "only" binds to the accident words beside it ("accidental death only", "only on accident"), never to the rest of the line
 // ("Death due to illness or accident, payable only once"; Critic R232).
@@ -368,6 +370,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   // stored as Death): it may pay on an accident only. A name with no such word ("Group Term Life") keeps its category.
   const elsewhere = (l: { name: string }) => {
     if (!category) return false;
+    if (ACCIDENT_ONLY_NAME(l.name)) return category !== "Personal Accident";
     const c = categoryOfBenefit(l.name);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };

@@ -76,6 +76,11 @@ export type BenefitTable = {
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 export const coverKeyOf = (c: { product: string; cover: string; plan: string | null; riderOf?: string | null }) =>
   [norm(c.product), norm(c.cover), norm(c.plan), ...(c.riderOf ? [norm(c.riderOf)] : [])].join("|");
+/** A printed policy number compared by its letters and digits alone, without leading zeros. */
+const policyNumberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/^0+(?=.)/, "");
+/** Two printed policy numbers that may be one policy's: the same letters and digits, or one starting with the other
+ * ("104455-01" and "104455"). Unrelated-looking numbers stay apart, and the tiles never add them up. */
+const samePolicyNumber = (a: string, b: string) => { const x = policyNumberKey(a), y = policyNumberKey(b); return x === y || x.startsWith(y) || y.startsWith(x); };
 export const sectionKeyOf = (documentId: string, b: { section: string | null; column: string | null }) => [documentId, norm(b.section), norm(b.column)].join("|");
 const cents = (n: number) => Math.round(n * 100) / 100;
 const money = (amount: number, currency: string | null) =>
@@ -84,23 +89,38 @@ const money = (amount: number, currency: string | null) =>
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
 export function coversOf(readings: CheckedReading[], family: FamilyMember[], today: number = singaporeDay(new Date())) {
   const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [];
+  const found: PersonCover[] = [];
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    const coverKey = coverKeyOf(c);
-    // The same cover printed twice for one person (a pack that repeats its schedule) is one cover. Two policies of one
-    // product whose pages print different policy numbers are two covers, whatever their sums (TE P148-3, Critic Q4).
-    if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured
-      && !(x.policyNumber && c.policyNumber && norm(x.policyNumber) !== norm(c.policyNumber)))) continue;
-    covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null, ended: coverEnded(c, r, today) });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today) });
   }
-  // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own
-  // policy on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording
-  // still links once for everyone who holds it. A cover with no printed number, or the only number, has no holding.
+  // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
+  // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).
+  const numberOf = new Map<PersonCover, string>();
+  for (const c of found) {
+    if (!c.policyNumber || !policyNumberKey(c.policyNumber)) continue;
+    const same = [...numberOf].find(([x, n]) => x.personId === c.personId && x.coverKey === c.coverKey && samePolicyNumber(x.policyNumber!, c.policyNumber!));
+    numberOf.set(c, same ? same[1] : policyNumberKey(c.policyNumber));
+  }
+  // The same cover printed twice for one person (a pack that repeats its schedule, a summary and its certificate) is one
+  // cover, the first read. Where its copies print two or more different policy numbers, the first of each number is kept
+  // and a copy with no number is dropped, in whatever order they were read (TE P152 F2): two policies of one product
+  // (TE P148-3, Critic Q4), or one policy re-numbered, which the tiles list but never add up (Critic R258).
+  const groups = new Map<string, PersonCover[]>();
+  for (const c of found) { const k = `${c.personId}\u0000${c.coverKey}\u0000${c.sumInsured}`; groups.set(k, [...(groups.get(k) ?? []), c]); }
+  for (const c of found) {
+    const group = groups.get(`${c.personId}\u0000${c.coverKey}\u0000${c.sumInsured}`)!;
+    const numbers = new Set(group.map((x) => numberOf.get(x)).filter(Boolean));
+    if (numbers.size <= 1 ? group[0] === c : numberOf.has(c) && group.find((x) => numberOf.get(x) === numberOf.get(c)) === c) covers.push(c);
+  }
+  // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own part
+  // on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording still links
+  // once for everyone who holds it. A cover with no printed number, or the only number, has no holding.
   for (const c of covers) {
-    const numbers = new Set(covers.filter((x) => x.personId === c.personId && x.coverKey === c.coverKey && x.policyNumber).map((x) => norm(x.policyNumber)));
-    if (numbers.size > 1 && c.policyNumber) c.holding = `${c.coverKey}#${norm(c.policyNumber)}`;
+    const numbers = new Set(covers.filter((x) => x.personId === c.personId && x.coverKey === c.coverKey && numberOf.has(x)).map((x) => numberOf.get(x)));
+    if (numbers.size > 1 && numberOf.has(c)) c.holding = `${c.coverKey}#${numberOf.get(c)}`;
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
