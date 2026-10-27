@@ -248,8 +248,29 @@ export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability
 export type HeldCover = { coverKey: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
-export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean };
-const ACCELERATES = /\baccelerat\w*/i;
+export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean };
+/** A survival or waiting period only decides when a sum is paid, not how much: an allow-list of its words, every word known. */
+const TIMING_WORDS = new Set(["the", "a", "an", "life", "assured", "insured", "person", "survives", "survive", "surviving", "survival", "at", "least",
+  "day", "days", "after", "from", "date", "of", "diagnosis", "or", "and", "surgical", "procedure", "performed", "for", "critical", "illness", "covered",
+  "under", "this", "benefit", "waiting", "period", "periods", "in", "section", "clause", "as", "stated", "is", "subject", "to", "policy"]);
+const timingOnly = (c: string) => /\bsurviv|\bwaiting\s+period/i.test(c)
+  && c.toLowerCase().split(/[\s,.;:()]+/).filter(Boolean).every((w) => TIMING_WORDS.has(w) || /^\d+(?:\.\d+)*$/.test(w));
+/** Only an affirmative "accelerat-" marks a cover: none of its own words says "non-", "not", "no", "never", "without" or
+ * "-n't" before it in the same phrase ("Non-accelerated Critical Illness", "does not accelerate the death benefit": no
+ * mark). Any negated mention anywhere in the cover's wording leaves the cover unmarked (TE P149-1). */
+const ACCEL = /\baccelerat\w*/gi;
+const NEGATED = /(?:\b(?:non|not|no|never|without)\b|n['’]t\b|\bnon-?)[^.;:,()]*$/i;
+function acceleratesText(texts: (string | null | undefined)[]): boolean {
+  let affirmative = false;
+  for (const t of texts) {
+    if (!t) continue;
+    for (const m of t.matchAll(ACCEL)) {
+      if (NEGATED.test(t.slice(0, m.index))) return false;
+      affirmative = true;
+    }
+  }
+  return affirmative;
+}
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
 const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
@@ -274,11 +295,16 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // A lump sum equal to the cover's own sum insured IS that sum insured, whatever conditions decide when it is paid
     // (a survival or waiting period): the tile shows sums insured (live b1fa3d1).
     const asInsured = insured.size === 1 ? list.map((r) => ({ r, m: moneyOf(r) })).find(({ r, m }) => m && m.amount === [...insured][0]
-      && (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !!m.currency && normalizeCurrencyCode(m.currency, "")) : undefined;
+      && (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !!m.currency && !!normalizeCurrencyCode(m.currency, "")
+      // The same currency as the cover states, where it states one: the same number in another currency is not its sum (TE P149-2).
+      && [...heldCurrency].every((c) => !c || c === normalizeCurrencyCode(m.currency!, ""))) : undefined;
     // No row prints any amount ("See the page"): the cover's own sum insured, only where a row pays a share of the sum
     // insured and its document states the currency. A sum insured the benefit is not worked out from (a plan whose
     // schedule says its sum insured is notional and the death benefit is the higher of premiums or cash value) gives none.
     const ofSumInsured = list.some((r) => (r as { percentOf?: string | null }).percentOf === "sum_insured");
+    // A sum insured counted through a row whose wording may change what is paid ("half after sixty-five", "less amounts
+    // already paid") is marked: the sum insured, with conditions (Critic R249).
+    const conditional = !!asInsured && sums.size !== 1 && asInsured.r.conditions.some((c) => isLimit(c) && !timingOnly(c));
     const one = sums.size === 1 ? [...sums.values()][0]
       : asInsured ? { amount: asInsured.m!.amount, currency: normalizeCurrencyCode(asInsured.m!.currency!, "") }
       : list.every((r) => !moneyOf(r)) && ofSumInsured && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
@@ -286,9 +312,9 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // The sum a schedule line is compared with: the cover's own sum insured (a personal accident cover prints several
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
-    const accelerates = category !== "Death" && [...list.flatMap((r) => [r.benefit, r.section, r.cover]), ...own.map((h) => h.name)].some((t) => !!t && ACCELERATES.test(t));
+    const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
     return { docs: coverDocs(key, list, held), sum, accelerates, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
-      amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}) } as TilePart };
+      amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   let unsure = false;
   const taken = new Set<(typeof covers)[number]>();

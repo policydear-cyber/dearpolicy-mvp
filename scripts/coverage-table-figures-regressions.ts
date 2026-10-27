@@ -478,6 +478,20 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
     assert.equal(r.parts[1].amount, null);
     assert.equal(lumpSumParts([], [line("Group Term Life", sum, "c"), line("Whole Life Plan", own, "c2")], [], "Death").total, sum + own);
   });
+  test(`${m}: a sum insured counted through a row with a payout condition is marked; a survival or waiting period is not (Critic R249)`, () => {
+    const withConds = (conditions: string[]) => lumpSumParts([{ ...cover("p", "p-doc", "Death Benefit", { figure: { kind: "worked_out", amount: own, currency: cur, how: "100%" },
+      conditions }), percentOf: "sum_insured" } as Parameters<typeof lumpSumParts>[0][number]], [], [{ ...held("p", "p-doc", own), currency: cur }], "Death").parts[0];
+    for (const c of ["reduced by half after age sixty-five", "less any amount already paid under this policy", "subject to a co-payment of 10%",
+      "only if death occurs after age 65, otherwise a return of premiums", "payable in five yearly instalments"]) {
+      const p = withConds([c]);
+      assert.equal(p.amount, own, c);
+      assert.equal(p.conditional, true, c);
+    }
+    for (const c of ["The Life Assured survives at least 7 days after the date of diagnosis or the date of surgical procedure performed for a Critical Illness covered under this benefit; and",
+      "The waiting period in Section 3.2.", "This benefit is subject to the waiting period as stated in Clause 8."]) {
+      assert.equal(withConds([c]).conditional, undefined, c);
+    }
+  });
   test(`${m}: a schedule line with no amount leaves no total`, () => {
     assert.equal(lumpSumParts([], [line("A", own, "a"), line("B", null, "b")]).total, null);
     assert.equal(lumpSumParts([], [line("A", own, "a"), line("B", sum, "b")]).total, own + sum);
