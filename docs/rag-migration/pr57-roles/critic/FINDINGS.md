@@ -7028,3 +7028,41 @@ Remaining, all on the safe side (the tile shows "Covered", never a wrong figure)
 None of these blocks merge.
 
 Verdict: READY at 724ba9d.
+
+## R246: #148 Home tiles, a confirmed total shows only when every cover is accounted for (e1ea28c): NOT READY, one High
+
+Checked for free:
+- regressions 49/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known safe-side travel notes);
+- `tsc` clean, `next build` passes;
+- tsx probes of `confirmedTotalComplete` with made-up households.
+
+I did not open the live rows file (private household data). Before/after claims are taken from the builder's note.
+
+The direction is right. The old tile summed confirmed lines and ignored a cover only the benefit table knows, so a part sum read as the whole (live: S$100,000 shown against S$1,100,000). This PR only ever turns a figure into "Covered", so it adds no new wrong amount except through Q1. A confirmed line with no amount now also gives "Covered" instead of a part sum. Good. `source.documentId` and `policies.id` are the same id space, so the document match is sound.
+
+- **High (Q1): the amount fallback can still pass a part sum as the whole, by coincidence of equal round sums.** A table cover with no row from a confirmed line's document is "accounted for" by any unused confirmed line, from any insurer, whose amount and currency equal one of its figures. Probes (`confirmedTotalComplete` → true, so the old total shows):
+  - A: confirmed term S$500,000 (its document gives no TPD row) plus group TPD S$500,000, printed only in a scheme summary. The tile shows S$500,000; the real cover is S$1,000,000. This is the same defect the PR fixes, surviving on a coincidence.
+  - E: two confirmed S$200,000 lines plus one group S$200,000 cover shows S$400,000; the real cover is S$600,000.
+  - Fix:
+    1. Match a cover first by its own document: `person.covers[].source.documentId`, the page that names the person with that cover. Today the match uses the benefit rows' source, which is often the wording or a summary, not the schedule.
+    2. Allow the amount fallback only when the line and the cover are the same product. Product words must be equal, as in `wordingDescribes`; insurer or group number must not differ.
+    Sketch:
+  ```ts
+  export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string; productName?: string | null };
+  export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[], coverDocs = new Map<string, string>()): boolean {
+    // docs of a cover = its rows' sources + its own cover document
+    const docsOf = (list: TileRow[]) => new Set([...list.map(doc), coverDocs.get(list[0].coverKey ?? "")].filter(Boolean) as string[]);
+    // inTable = union of docsOf over all covers
+    // own = lines.filter((l) => l.documentIds.some((d) => docsOf(list).has(d)))
+    // free match additionally: productWords(l.productName).join(" ") === productWords(list[0].product).join(" ") (both non-empty)
+  }
+  // route: coverDocs = new Map(person.covers.map((c) => [c.coverKey, c.source.documentId])); lines carry productName: x.productName
+  ```
+  Probe D shows the same change also fixes an over-hide. A personal policy whose TPD row comes from its wording as "100% of sum assured" with no worked figure gives "Covered" today, though its schedule is the confirmed line; by cover document it is accounted for. Gate A, D and E, plus the Charmaine shape (AIA S$100,000 confirmed + group S$1,000,000 → Covered), in SG/MY/UK.
+- Medium (Q2, live check): with Q1 the Charmaine PA S$600,000 must still match through the group cover's own document or same product name. If the live cover document is the scheme summary under a different product name, PA turns to "Covered" too. That is the safe side, but it adds a seventh hidden figure. The builder should confirm on the live covers' `source.documentId`.
+- Low (Q3): Desmond's PA turns to "Covered" because of a single-trip travel cover whose rows are not all abroad-only. That is consistent with #147 (when unsure, the cover stays in). Dropping ended single-trip policies at intake, as the builder notes, is the right place.
+
+On "at least S$X, more cover on Coverage": I recommend against it as the tile headline. The confirmed part is often the small part: Charmaine TPD would read "at least S$100,000" against S$1,100,000. A number on a tile is read as the amount, whatever qualifier sits beside it. The rules say a wrong claimable amount is the worst bug, and an 11× understatement shown as a floor is close to one. "Covered" plus the per-cover figures on Coverage is honest.
+The useful next step is a **sum rule** for lump-sum categories only (Death, TPD, CI, early CI, PA), which pay out independently. Show the total only when every paying cover gives exactly one plain lump-sum figure: its confirmed line, or one SUM row on its own document with no limits, all in one currency. Otherwise show "Covered". That gives Charmaine TPD S$1,100,000 and Desmond Death S$1,005,000, and never sums hospital or indemnity figures. That is DC's call on the decision card; it is not a blocker for #148.
+
+Verdict: NOT READY on Q1.
