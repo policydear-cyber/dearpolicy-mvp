@@ -25,6 +25,8 @@
     "coverage:te148c-test": "node --import tsx scripts/coverage/te-pr148c-test.ts",
     "coverage:te149-test": "node --import tsx scripts/coverage/te-pr149-test.ts",
     "coverage:te149b-test": "node --import tsx scripts/coverage/te-pr149b-test.ts",
+    "coverage:dashboard-dynamic-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/dashboard-dynamic-test.ts",
+    "coverage:te151-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/te-pr151-test.ts",
     "ai:anthropic-post-test": "node --import tsx scripts/ai/anthropic-post-test.ts",
     "ai:model-preset-test": "node --import tsx scripts/ai/model-preset-test.ts",
     "benefit-table:read": "node --import tsx scripts/benefit-table/read.ts",
