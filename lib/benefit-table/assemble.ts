@@ -78,9 +78,15 @@ export const coverKeyOf = (c: { product: string; cover: string; plan: string | n
   [norm(c.product), norm(c.cover), norm(c.plan), ...(c.riderOf ? [norm(c.riderOf)] : [])].join("|");
 /** A printed policy number compared by its letters and digits alone, without leading zeros. */
 const policyNumberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/^0+(?=.)/, "");
-/** Two printed policy numbers that may be one policy's: the same letters and digits, or one starting with the other
- * ("104455-01" and "104455"). Unrelated-looking numbers stay apart, and the tiles never add them up. */
-const samePolicyNumber = (a: string, b: string) => { const x = policyNumberKey(a), y = policyNumberKey(b); return x === y || x.startsWith(y) || y.startsWith(x); };
+/** Two printed policy numbers that may be one policy's: the same letters and digits ("MT-104455", "mt104455",
+ * "00104455" and "104455"), or one printed as the other with a short suffix after a separator ("104455-01"). A number that
+ * only starts with the other ("MT1001", "MT10011") is another policy (TE P152 F3). Unrelated-looking numbers stay apart, and
+ * the tiles never add them up. */
+const samePolicyNumber = (a: string, b: string) => {
+  if (policyNumberKey(a) === policyNumberKey(b)) return true;
+  const suffixed = (long: string, short: string) => { const m = long.trim().match(/^(.*?)[\s\-/.]+([A-Za-z0-9]{1,3})$/); return !!m && policyNumberKey(m[1]) === policyNumberKey(short); };
+  return suffixed(a, b) || suffixed(b, a);
+};
 export const sectionKeyOf = (documentId: string, b: { section: string | null; column: string | null }) => [documentId, norm(b.section), norm(b.column)].join("|");
 const cents = (n: number) => Math.round(n * 100) / 100;
 const money = (amount: number, currency: string | null) =>

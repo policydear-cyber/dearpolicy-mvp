@@ -22,9 +22,9 @@ const NAMES: [string, RegExp][] = [
 ];
 
 const ACC = String.raw`(?:accident\w*|injur(?:y|ies|ed))`;
-/** Accident words the benefit names above do not know: "AD&D" or "ADD" (capitals), "misadventure", "unintentional", and
+/** Accident words the benefit names above do not know: "AD&D" or "ADD" (capitals, never "ADD-ON"), "misadventure", "unintentional", and
  * the Malay "kemalangan" (TE P152). A name with one pays on an accident, whatever else it says. */
-const ACCIDENT_ONLY_NAME = (name: string) => /\bad\s?&\s?d\b|\bmisadventure\b|\bunintentional\w*|\bkemalangan\b/i.test(name) || /\bADD\b/.test(name);
+const ACCIDENT_ONLY_NAME = (name: string) => /\bad\s?&\s?d\b|\bmisadventure\b|\bunintentional\w*|\bkemalangan\b/i.test(name) || /\bADD\b(?![\s-]*ON\b)/.test(name);
 const ACCIDENT_WORD = new RegExp(String.raw`\b${ACC}`, "i");
 const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+causes?)`;
 // "only" binds to the accident words beside it ("accidental death only", "only on accident"), never to the rest of the line

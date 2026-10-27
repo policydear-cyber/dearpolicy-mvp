@@ -103,6 +103,15 @@ for (const { m, cur } of MARKETS) {
     const f2 = tile([...rs], "Death");
     t(`${m} F2 two numbered policies and an un-numbered summary (${order}): both policies listed, no total`, f2.covers === 2 && f2.total === null && f2.parts.length === 2, show(f2));
   }
+  // F3 (TE P152): a number that only starts with the other is another policy: listed, never one policy's total.
+  for (const [x, y] of [["AB1234567", "AB12345678"], ["7", "7104455"], ["MT1001", "MT10011"]]) {
+    const f3 = tile([reading("polA", [cover("polA", { policyNumber: x })], [benefit("polA", "Death Benefit", 100000)]),
+      reading("polB", [cover("polB", { policyNumber: y })], [benefit("polB", "Death Benefit", 100000)])], "Death");
+    t(`${m} F3 "${x}" and "${y}" are two policies: two parts, no total`, f3.covers === 2 && f3.total === null && f3.parts.length === 2, show(f3));
+  }
+  // X8 (TE P152 mutant): a holding's own stated sum insured is compared with its own printed sum only.
+  const x8 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001", sumInsured: 120000 })], [benefit("polA", "Death Benefit", 100000)]), b], "Death");
+  t(`${m} X8 A prints 100,000 but states a 120,000 sum insured: A gets no amount; B keeps its own`, x8.parts.some((x) => x.amount === null) && x8.parts.some((x) => x.amount === 100000), show(x8));
   // X7: rows are grouped by held policy, not cover type: A's only row is a threshold clause, which is left out only when
   // another row of the SAME policy gives the figure (TE P152 mutant X7).
   const x7 = tile([reading("polA", [cover("polA", { policyNumber: "AT-1001" })], [benefit("polA", "Death Benefit, paid in instalments where the sum payable is above S$200,000", 100000)]), b], "Death");
@@ -144,6 +153,7 @@ for (const { m, cur } of MARKETS) {
     t(`${m} Q9 "${n}" stored as Death: no amount`, q(n).amount === null, q(n));
     t(`${m} Q9b "${n}" stored as Personal Accident keeps its amount`, q(n, "Personal Accident").amount === 50000, q(n, "Personal Accident"));
   }
+  t(`${m} Q11 "ADD-ON TERM COVER" and "TERM LIFE ADD ON" keep their amount`, q("ADD-ON TERM COVER").amount === 50000 && q("TERM LIFE ADD ON").amount === 50000, [q("ADD-ON TERM COVER"), q("TERM LIFE ADD ON")]);
   t(`${m} Q10 "Additional Death Benefit" (not the capital ADD) keeps its amount`, q("Additional Death Benefit").amount === 50000, q("Additional Death Benefit"));
   t(`${m} Q8 "Death Benefit (illness or accident)" stored as Death keeps its amount`, q("Death Benefit (illness or accident)").amount === 50000, q("Death Benefit (illness or accident)"));
 

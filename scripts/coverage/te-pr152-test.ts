@@ -137,10 +137,12 @@ for (const { m, cur } of [{ m: "SG", cur: "SGD" }, { m: "MY", cur: "MYR" }, { m:
     if (r.total !== 40000) note(`${m} M9 (also on main): CI-only-on-policy-A tile total ${r.total}, parts ${r.show.parts.join("; ")}`);
   }
 
-  // M11 (R258 H2) policy B's documents give this tile no row: B is still listed, with no amount, and no total.
+  // M11 policy B's documents give this tile no row. Grader correction (logged in pr152-results.md): graded at df4c84b as
+  // "B listed without an amount, no total" (PASS there, original grade kept); since 90797b1 (TE N1, a holding whose own
+  // document gives the tile no row is not listed) B is not listed. Still required: no total, and B never gets an amount.
   {
     const r = tile([numbered("pA", "MT-1001"), rd("pB", [cover("pB", { policyNumber: "MT-2002", sumInsured: 60000 })], [])]);
-    t(`${m} M11 a holding with no row: listed without an amount, no total`, r.total === null && amounts(r) === "100000,", r.show);
+    t(`${m} M11 a holding with no row: never given an amount, and no total`, r.total === null && amounts(r) === "100000", r.show);
   }
   // M12 holdings of one product never stop another person's or another product's tile from adding up.
   {
@@ -149,6 +151,17 @@ for (const { m, cur } of [{ m: "SG", cur: "SGD" }, { m: "MY", cur: "MYR" }, { m:
       rd("om2", [cover("om2", { person: "Omar Rashid", product: "Cedar Whole Life", cover: "Cedar Whole Life", policyNumber: "CW-1", sumInsured: 10000 })], [ben("om2", "Death Benefit", 10000)])];
     const o = tile(rs, "Death", [], "p-2", { om2: keyOf("Cedar Whole Life") });
     t(`${m} M12 Omar (one Maple policy, one Cedar): 100,000 total`, o.total === 100000 && o.parts.length === 2, o.show);
+  }
+
+  // P (9b3dd5a): the "one number starts with the other" rule must not merge two real policies of equal sum.
+  for (const [id, x, y] of [["P1 one digit longer", "AB1234567", "AB12345678"], ["P2 short member number", "7", "7104455"], ["P3 shared stem", "MT1001", "MT10011"]]) {
+    const r = tile([numbered("pA", x), numbered("pB", y)]);
+    t(`${m} ${id}: "${x}" and "${y}" (two policies, equal sums) never show a one-policy total`, r.total !== 100000, r.show);
+  }
+  // Unrelated-looking numbers of one policy: listed, no total (R258).
+  {
+    const r = tile([numbered("pA", "SG-104455"), numbered("pB", "104455")]);
+    t(`${m} P4 "SG-104455" vs "104455": total 100,000 or none, never 200,000`, r.total === 100000 || r.total === null, r.show);
   }
 
   // M10 a table row named "AD&D Benefit" (not a confirmed line) belongs on the Personal Accident tile, not Death.
@@ -163,17 +176,19 @@ for (const { m, cur } of [{ m: "SG", cur: "SGD" }, { m: "MY", cur: "MYR" }, { m:
   const q = (name: string, category: string) => lumpSumParts([], [line(name, ["x"], 50000)], [], category).parts[0].amount;
   const accident = ["AD&D Benefit", "AD & D", "ad&d", "Accidental Death & Dismemberment", "Accidental Death and Disablement", "Accident Benefit", "Accidental Death Benefit",
     "Death by Accident", "Accident Death Benefit Rider", "Injury Benefit", "Accidental TPD", "Personal Accident Cover", "Death due to accident only", "Death (Accident)",
-    "Travel Accident Death", "Accidental Dismemberment", "Accident Plan", "Accidents Cover", "Injured Person Benefit", "Accidental Total Permanent Disability"];
+    "Travel Accident Death", "Accidental Dismemberment", "Accident Plan", "Accidents Cover", "Injured Person Benefit", "Accidental Total Permanent Disability",
+    // Added at 9b3dd5a (were notes at 85841ce/df4c84b, where they showed an amount):
+    "Manfaat Kematian Akibat Kemalangan", "Death by Misadventure", "ADD Benefit", "Unintentional death benefit"];
   for (const cat of ["Death", "Total Permanent Disability", "Critical Illness"]) for (const n of accident)
     t(`${m} A ${cat}: "${n}" gives no amount`, q(n, cat) === null, q(n, cat));
-  for (const n of ["AD&D Benefit", "Accident Benefit", "Accidental Death Benefit", "Injury Benefit"])
+  for (const n of ["AD&D Benefit", "Accident Benefit", "Accidental Death Benefit", "Injury Benefit", "Manfaat Kematian Akibat Kemalangan", "Death by Misadventure", "ADD Benefit"])
     t(`${m} A-PA control: "${n}" on the Personal Accident tile keeps its amount`, q(n, "Personal Accident") === 50000, q(n, "Personal Accident"));
   const anyCause: [string, string][] = [["Group Term Life", "Death"], ["Whole Life Plan", "Death"], ["Death Benefit (illness or accident)", "Death"],
     ["Term Life", "Death"], ["Total Permanent Disability Benefit", "Total Permanent Disability"], ["Critical Illness Plus", "Critical Illness"], ["Life Assurance", "Death"],
     ["Addendum Life Cover", "Death"], ["Add-on Term Cover", "Death"], ["Roadside Death"]].filter((x) => x.length === 2) as [string, string][];
   for (const [n, cat] of anyCause) t(`${m} A-control ${cat}: "${n}" keeps its amount`, q(n, cat) === 50000, q(n, cat));
   // Notes: phrasings outside the English word list (recorded, not graded).
-  for (const n of ["Manfaat Kematian Akibat Kemalangan", "Death by Misadventure", "ADD Benefit", "Accidents excluded: Death Benefit", "Unintentional death benefit"])
+  for (const n of ["Accidents excluded: Death Benefit", "ADD-ON TERM COVER", "TERM LIFE ADD ON", "ADDITIONAL DEATH BENEFIT", "Manfaat Kematian", "Hayat Berkelompok"])
     note(`${m} A-note Death: "${n}" -> ${q(n, "Death") === null ? "no amount" : "amount shown"}`);
 }
 
