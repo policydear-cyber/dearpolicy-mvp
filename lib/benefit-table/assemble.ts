@@ -15,6 +15,7 @@
  * (a quotation) is not proof that the person holds it. */
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { printedDay, singaporeDay } from "./dates";
+import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
@@ -97,15 +98,17 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
   return { covers, unmatched, illustration, types: [...types.values()] };
 }
 
-/** A cover's term is short when its printed period runs at most this many days: a trip, never a yearly or longer policy. */
+/** A travel cover's term is short when its printed period runs at most this many days: a trip, never an annual plan. */
 export const SHORT_TERM_DAYS = 183;
-/** The last day of a cover's term, as printed, when the cover was for one short term (a single trip) that ended before
- * `today` (a day count); otherwise null. The term is the cover line's own start and end dates, or else the period its
- * document prints for the whole document. Both ends must be printed and dated, and the term at most SHORT_TERM_DAYS long:
- * a yearly or longer policy whose printed end has passed may have been renewed, so its old date never ends it (a dated
- * certificate shows what it printed then; missing renewal papers are not an ended cover). An undated or unreadable end
- * keeps the cover current. */
-export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate">, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
+/** The last day of a cover's term, as printed, when the cover is a single trip that ended before `today` (a day count);
+ * otherwise null. Only travel cover ends this way, by the two signals the Home tiles use (#147): a travel name on its
+ * cover, plan or (non-scheme) product, and no group-scheme name on its cover or product. Its term is the cover line's own
+ * start and end dates, or else the period its own document prints. Both ends must be printed and dated, and the term at
+ * most SHORT_TERM_DAYS long, so an annual multi-trip plan never ends by its old date. Any other cover is never ended by
+ * a printed date: a mid-year joiner's group certificate, a monthly renewable plan or a rider ending with its base may
+ * all have been renewed, and missing renewal papers are not an ended cover (Critic R251 Q2). */
+export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate" | "cover" | "plan" | "product">, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
+  if (!travelName(c) || SCHEME_NAME.test(`${c.cover} ${c.product}`)) return null;
   const own = c.endDate != null;
   const fromText = own ? c.startDate ?? r.periodFrom ?? null : r.periodFrom ?? null, toText = own ? c.endDate : r.periodTo ?? null;
   const from = printedDay(fromText), to = printedDay(toText);

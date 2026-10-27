@@ -117,23 +117,19 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** A row that is a limit on what other benefits pay together, not a benefit of its own: the most an insurer pays for
  * several benefits' claims, or across policies, on one life ("Limits of compensation: most paid for TI and critical
- * illness (CI) claims in total on the same life", "the most we pay across all policies on the same life"). It never pays on
- * an event, so it is never a person's cover in a category, and never what a claim pays (live 27f35c1: a whole-life plan's
- * S$2,000,000 limit row was read as critical illness cover). Two shapes only, read from the row's own name, heading and
- * words:
- *  - a "limit(s) of compensation" heading or name, the words insurers print over this limit;
- *  - a cap word ("most", "maximum", "up to", "in total", "not exceed") with a scope wider than one benefit: "the same life",
- *    "all (your) policies / plans", "all benefits combined", "total of all benefits".
- * A benefit's own cap ("up to S$1,000,000 in total for all claims during the trip", "on any one life", "limit of
- * indemnity") is not one: it is what that benefit pays. */
-const COMPENSATION_LIMIT = /\blimits?\s+of\s+compensation\b/i;
-const COMBINED_CAP = /\b(?:most|max(?:imum)?|up\s+to|in\s+total|in\s+aggregate|aggregate|not\s+(?:to\s+)?exceed\w*|limit(?:ed|s)?)\b/i;
+ * illness (CI) claims in total on the same life"). It never pays on an event, so it is never a person's cover in a
+ * category, and never what a claim pays (live 27f35c1: a whole-life plan's S$2,000,000 limit row was read as critical
+ * illness cover). Decided on the head of the row's own name (before the first ":", dash, bracket or comma), like the
+ * accident names of #142: the head must be limit wording ("Limits of compensation", "Overall limit", "Maximum amount
+ * payable", "Most paid"), and the name or quote must give a scope wider than one benefit ("the same life", "all policies", "all
+ * benefits combined"). A row whose head names a benefit ("TPD benefit: 100% of sum assured, up to S$5,000,000 for all
+ * policies on the same life") is that benefit, whatever cap its line adds, and its heading alone never makes it a limit
+ * (Critic R251 Q1): a wrong mark here hides real cover. */
+const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
 const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
-export function combinedLimit(b: { benefit: string; section: string | null; quote?: string | null }): boolean {
-  const words = [b.benefit, b.section ?? "", b.quote ?? ""].join("\n");
-  if (COMPENSATION_LIMIT.test(words)) return true;
-  const own = [b.benefit, b.quote ?? ""].join("\n");
-  return COMBINED_CAP.test(own) && COMBINED_SCOPE.test(own);
+export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null }): boolean {
+  const head = b.benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
+  return LIMIT_HEAD.test(head) && COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"));
 }
 
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */

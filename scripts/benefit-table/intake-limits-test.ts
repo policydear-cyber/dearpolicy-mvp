@@ -38,12 +38,11 @@ for (const { m, sign } of MARKETS) {
   test(`${m}: a limit on several benefits or policies together is a combined limit`, () => {
     for (const [benefit, section, quote] of [
       ["Limits of compensation: most paid for TI and critical illness (CI) claims in total on the same life", null, `Limits of compensation ${sign}2,000,000`],
-      ["Critical Illness", "LIMITS OF COMPENSATION", `Critical Illness ${sign}2,000,000`],
       ["Limit of compensation for critical illness", null, `${sign}1,500,000 under all policies`],
-      ["Most paid for critical illness", null, `The most we will pay across all policies on the same life is ${sign}500,000`],
-      ["Maximum for terminal illness", null, `Maximum ${sign}3,000,000 for all claims on the same life`],
-      ["Total of all benefits", null, `The total of all benefits payable shall not exceed ${sign}300,000`],
-      ["All benefits combined", null, `All benefits combined up to ${sign}250,000`],
+      ["Overall limit: the most we pay for all benefits combined", null, `Overall limit ${sign}250,000`],
+      ["Maximum amount payable", null, `The maximum amount payable across all policies on the same life is ${sign}3,000,000`],
+      ["Aggregate limit (all policies)", null, `Aggregate limit ${sign}1,000,000`],
+      ["Most paid across all policies", null, `The most we pay across all policies on the same life is ${sign}1,000,000`],
     ] as const) assert.equal(combinedLimit({ benefit, section, quote }), true, benefit);
   });
   test(`${m}: a benefit's own amount or cap is not a combined limit`, () => {
@@ -58,6 +57,21 @@ for (const { m, sign } of MARKETS) {
       ["Sub-limit for laptop / tablet (in total)", null, `Sub-limit for laptop / tablet (in total) ${sign}1,000`],
       ["Death or TPD (the most paid on this policy)", null, `Death or TPD ${sign}500,000`],
       ["Death benefit for all plans", null, `Death benefit ${sign}50,000`],
+      // A benefit whose own line adds a cap across policies or plans is that benefit (Critic R251 Q1).
+      ["Total Permanent Disability", null, `TPD benefit: 100% of sum assured, up to a maximum of ${sign}5,000,000 for all policies on the same life`],
+      ["Critical Illness", null, `Critical Illness ${sign}300,000; the maximum we pay across all policies on the same life is ${sign}3,000,000`],
+      ["Daily Hospital Cash", null, `${sign}100 a day, up to 30 days a year in total for all plans`],
+      ["Accidental Death", null, `${sign}200,000; in aggregate across all your policies with us the most we pay is ${sign}1,000,000`],
+      ["Death Benefit", "Benefits and limits of compensation", `Sum assured ${sign}500,000`],
+      ["Death Benefit", null, `Sum assured ${sign}500,000 (see limits of compensation)`],
+      ["Critical Illness", "LIMITS OF COMPENSATION", `Critical Illness ${sign}2,000,000`],
+      ["Death Benefit", "LIMITS OF COMPENSATION", `Death Benefit ${sign}500,000 for all policies on the same life`],
+      // TE P150-1 L5-L7.
+      ["Critical Illness Benefit", null, `Critical Illness Benefit ${sign}200,000. The maximum we pay for critical illness across all policies on the same life is ${sign}2,000,000.`],
+      ["TPD Benefit", null, `TPD Benefit 100% of the sum assured ${sign}400,000, subject to a maximum of ${sign}5,000,000 for all plans on the same life`],
+      ["Critical Illness Benefit limited to the same life cap", null, `Critical Illness Benefit limited to ${sign}350,000 on the same life`],
+      // Limit wording with no scope wider than one benefit: that benefit's own limit.
+      ["Maximum amount payable", null, `Maximum amount payable ${sign}10,000 per claim`],
     ] as const) assert.equal(combinedLimit({ benefit, section, quote }), false, benefit);
   });
 
@@ -124,23 +138,40 @@ test("a claim for a critical illness never takes the combined limit as what it p
 
 // ------------------------------------------------------------------------------------------------- 2. ended short terms
 
-test("coverEnded: a short printed term that is over has ended; a long one, an undated one or a running one has not", () => {
+test("coverEnded: a single trip whose short printed term is over has ended; a long, undated or running one has not", () => {
   const day = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
-  const noCover = { startDate: null, endDate: null };
-  assert.equal(coverEnded(noCover, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-27")), "04/10/2026");
-  assert.equal(coverEnded(noCover, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-04")), null, "the last day is still covered");
-  assert.equal(coverEnded(noCover, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-05")), "04/10/2026");
-  assert.equal(coverEnded(noCover, { periodFrom: "29 September 2026", periodTo: "4 October 2026" }, day("2026-10-27")), "4 October 2026");
-  assert.equal(coverEnded(noCover, { periodFrom: "2026-09-29", periodTo: "2026-10-04" }, day("2026-10-27")), "2026-10-04");
-  // A yearly policy whose printed end has passed may have been renewed: never ended by its old date.
-  assert.equal(coverEnded(noCover, { periodFrom: "01/04/2025", periodTo: "31/03/2026" }, day("2026-10-27")), null);
+  const trip = { cover: "Single Trip", plan: "Business", product: "Travel insurance summary", startDate: null, endDate: null };
+  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-27")), "04/10/2026");
+  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-04")), null, "the last day is still covered");
+  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-05")), "04/10/2026");
+  assert.equal(coverEnded(trip, { periodFrom: "29 September 2026", periodTo: "4 October 2026" }, day("2026-10-27")), "4 October 2026");
+  assert.equal(coverEnded(trip, { periodFrom: "2026-09-29", periodTo: "2026-10-04" }, day("2026-10-27")), "2026-10-04");
+  assert.equal(coverEnded({ ...trip, startDate: "01/08/2026", endDate: "15/08/2026" }, { periodFrom: null, periodTo: null }, day("2026-10-27")), "15/08/2026");
+  // An annual multi-trip plan past its printed end may have been renewed.
+  assert.equal(coverEnded({ ...trip, cover: "Annual Multi-Trip" }, { periodFrom: "01/04/2025", periodTo: "31/03/2026" }, day("2026-10-27")), null);
   // Only one end printed, an unreadable date, or an end before the start: kept.
-  assert.equal(coverEnded(noCover, { periodFrom: null, periodTo: "04/10/2026" }, day("2026-10-27")), null);
-  assert.equal(coverEnded(noCover, { periodFrom: "29/09/2026", periodTo: "Oct 4th" }, day("2026-10-27")), null);
-  assert.equal(coverEnded(noCover, { periodFrom: "04/10/2026", periodTo: "29/09/2026" }, day("2026-10-27")), null);
-  // The cover line's own dates come first: a trip on a yearly document's page.
-  assert.equal(coverEnded({ startDate: "01/10/2026", endDate: "10/10/2026" }, { periodFrom: "01/01/2026", periodTo: "31/12/2026" }, day("2026-10-27")), "10/10/2026");
-  assert.equal(coverEnded({ startDate: "01/01/2026", endDate: "31/12/2026" }, { periodFrom: "01/10/2026", periodTo: "10/10/2026" }, day("2026-10-27")), null);
+  assert.equal(coverEnded(trip, { periodFrom: null, periodTo: "04/10/2026" }, day("2026-10-27")), null);
+  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "Oct 4th" }, day("2026-10-27")), null);
+  assert.equal(coverEnded(trip, { periodFrom: "04/10/2026", periodTo: "29/09/2026" }, day("2026-10-27")), null);
+  // The cover line's own dates come first.
+  assert.equal(coverEnded({ ...trip, startDate: "01/10/2026", endDate: "10/10/2026" }, { periodFrom: "01/01/2026", periodTo: "31/12/2026" }, day("2026-10-27")), "10/10/2026");
+  assert.equal(coverEnded({ ...trip, startDate: "01/01/2026", endDate: "31/12/2026" }, { periodFrom: "01/10/2026", periodTo: "10/10/2026" }, day("2026-10-27")), null);
+});
+test("coverEnded: a short, passed term on anything but a single trip may have been renewed, so it stays current (Critic R251 Q2)", () => {
+  const day = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000), today = day("2026-10-27");
+  const none = { periodFrom: null, periodTo: null };
+  // A mid-year joiner's group certificate (renewed each 1 January).
+  assert.equal(coverEnded({ cover: "Group Term Life", plan: null, product: "Acme Staff Group Insurance Scheme", startDate: "01/10/2025", endDate: "31/12/2025" }, none, today), null);
+  // A monthly renewable accident plan printing the current month.
+  assert.equal(coverEnded({ cover: "Personal Accident", plan: null, product: "MonthlyGuard PA", startDate: "01/09/2026", endDate: "30/09/2026" }, none, today), null);
+  // A rider attached mid-term, ending with its annual base.
+  assert.equal(coverEnded({ cover: "Hospital Cash Rider", plan: null, product: "LifeFirst", startDate: "01/06/2026", endDate: "31/08/2026" }, none, today), null);
+  // A short period printed for a whole group certificate never ends its covers.
+  assert.equal(coverEnded({ cover: "Group Personal Accident", plan: null, product: "Group Scheme", startDate: null, endDate: null }, { periodFrom: "01/07/2026", periodTo: "30/09/2026" }, today), null);
+  // A group travel scheme is a scheme, not one trip.
+  assert.equal(coverEnded({ cover: "Group Travel Insurance", plan: null, product: "Staff Benefits", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
+  // A product name with a travel-like word is standing cover.
+  assert.equal(coverEnded({ cover: "Life Journey Saver", plan: null, product: "Life Journey Saver", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
 });
 
 for (const { m, person, sign } of MARKETS) {

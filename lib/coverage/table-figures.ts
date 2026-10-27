@@ -101,8 +101,8 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
 const TRAVEL_NAME = /\btravel\w*\s+(?:insurance|cover|protection|policy|assurance)\b|\b(?:holiday|journey|trip)\s+(?:insurance|cover|policy)\b|\b(?:single|annual|multi)[\s-]*trips?\b/i;
 /** A group scheme's product name is often the employer's ("Holiday Inn Group Insurance", Critic R243): only the cover and
  * plan names are read for it, never the product name. */
-const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|corporate|company|employer)\b/i;
-const travelName = (r: CoverRow) => TRAVEL_NAME.test([r.cover, r.plan, r.product && !SCHEME_NAME.test(r.product) ? r.product : null].filter(Boolean).join(" · "));
+export const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|corporate|company|employer)\b/i;
+export const travelName = (r: { cover?: string | null; plan?: string | null; product?: string | null }) => TRAVEL_NAME.test([r.cover, r.plan, r.product && !SCHEME_NAME.test(r.product) ? r.product : null].filter(Boolean).join(" · "));
 const ABROAD_ROW = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\bduring\s+(?:the|your|a)\s+(?:trip|journey)\b/i;
 /** A row that also pays at home is not trip-only ("including while overseas", "or at home", "in Singapore and overseas"). */
 const ALSO_HOME = /\b(?:including|incl\.?|also|as\s+well\s+as|even|at\s+home|locally|home\s+country)\b|\bin\s+[A-Z][\w-]*\s+(?:and|or|&)\b/;
