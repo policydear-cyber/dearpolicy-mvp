@@ -107,13 +107,23 @@ export const SHORT_TERM_DAYS = 183;
  * most SHORT_TERM_DAYS long, so an annual multi-trip plan never ends by its old date. Any other cover is never ended by
  * a printed date: a mid-year joiner's group certificate, a monthly renewable plan or a rider ending with its base may
  * all have been renewed, and missing renewal papers are not an ended cover (Critic R251 Q2). */
-export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate" | "cover" | "plan" | "product">, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
-  if (!travelName(c) || SCHEME_NAME.test(`${c.cover} ${c.product}`)) return null;
+export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate" | "cover" | "plan" | "product"> & { riderOf?: string | null }, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
+  // A rider ends with its base plan, which may have been renewed, whatever its name (Critic R253 L2).
+  if (c.riderOf || !travelName(c) || SCHEME_NAME.test(`${c.cover} ${c.product}`)) return null;
   const own = c.endDate != null;
   const fromText = own ? c.startDate ?? r.periodFrom ?? null : r.periodFrom ?? null, toText = own ? c.endDate : r.periodTo ?? null;
   const from = printedDay(fromText), to = printedDay(toText);
   if (from == null || to == null || to < from || to - from > SHORT_TERM_DAYS) return null;
   return to < today ? toText : null;
+}
+
+/** Whether a row's figure is its cover's own stated sum insured, in the same currency. Under a heading that names the
+ * limits of compensation, only such a row is cover ("Death Benefit S$100,000" under "Benefits and limits of
+ * compensation"); any other figure there, or any figure when no sum insured is held, is a limit on what several benefits
+ * pay together, never what a claim or a tile pays (TE P150-2: "Critical Illness up to S$2,000,000"). */
+function printsSumInsured(f: Figure, c: PersonCover): boolean {
+  if ((f.kind !== "printed" && f.kind !== "worked_out") || c.sumInsured == null || f.amount !== c.sumInsured) return false;
+  return !f.currency || !c.currency || f.currency === c.currency;
 }
 
 /** One entry per (document, heading, column) that prints a benefit row. */
@@ -246,13 +256,14 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     const l = linkOf.get(sectionKeyOf(r.documentId, b));
     if (!l?.cover) continue;
     for (const p of people) for (const c of p.covers.filter((x) => x.coverKey === l.cover)) {
+      const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
-        section: b.section, column: b.column, pays: b.pays, figure: figureFor(b, c, r.kind === "illustration"), fromDay: b.fromDay, maxDays: b.maxDays,
+        section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
-        combinedLimit: b.combinedLimit ?? false, coverEnded: c.ended ?? null });
+        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && !printsSumInsured(figure, c)), coverEnded: c.ended ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
