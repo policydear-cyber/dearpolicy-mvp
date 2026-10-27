@@ -7399,3 +7399,26 @@ H1 is closed: no total whenever a cover type is split. That is the right call; d
 Checks:
 - cover-holdings 72/0, intake 39/0, benefit-table 107/0, chat 96/0, headline 16/0, parity 10/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
 - tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R260 — #152 at a1db9a1 (via 9b3dd5a and 90797b1): READY, two nits
+
+Probes on a1db9a1, network-blocked:
+- R1 renewal: no total, parts 100k + 100k.
+- R2 summary + certificate: no total, one part.
+- R3 certificate-only B: no total, A's part only.
+- R4 lines-only over two holdings: no total (R259 M1 closed).
+- P1 "1001"/"10011": two policies, no total (it was merged on 9b3dd5a and 90797b1).
+- P2 "MT-104455"/"MT104455": one cover, 100,000 (same as main).
+- P3 un-numbered copy + A + B, all at the same sum: no total.
+- P5 "1001" 100k / "10011" 250k: no total, both sums.
+
+**On dropping the row-less holding (TE P152 N1): I agree.** A policy whose own document gives the tile no row may not hold that benefit, and its sum insured may be another benefit's sum. The harm I raised in R258 H2, a part total shown as complete, stays closed because any tile touching a split cover type has no total. So I withdraw R259 L1.
+
+Nits, optional:
+- `ADD-ONS` still reads as AD&D, because `(?![\s-]*ON\b)` misses the plural. Use `ONS?\b`.
+- P4 (an un-numbered copy at A's sum, plus B at another sum): the un-numbered copy absorbs A because the dedupe groups by sum, so the tile shows one `?` part and no holdings. That matches main and gives no wrong figure. Counting numbers per person + cover type, not per sum group, would keep both policies visible.
+
+Checks:
+- cover-holdings 144/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr148c 81/0;
+- on 90797b1 also intake 39/0, headline 16/0, parity 10/0, te-pr149 84/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
