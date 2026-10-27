@@ -158,6 +158,12 @@ for (const { m, cur } of [{ m: "SG", cur: "SGD" }, { m: "MY", cur: "MYR" }, { m:
     const r = tile([numbered("pA", x), numbered("pB", y)]);
     t(`${m} ${id}: "${x}" and "${y}" (two policies, equal sums) never show a one-policy total`, r.total !== 100000, r.show);
   }
+  // P5-P6 (a1db9a1, notes): a 1-3 character suffix after a separator is read as the same policy.
+  for (const [x, y] of [["MT-1001-2", "MT-1001"], ["P-12345-01", "P-12345-02"]]) {
+    const r = tile([numbered("pA", x), numbered("pB", y)]);
+    note(`${m} P5 "${x}" vs "${y}" (equal sums): total ${r.total}, parts ${r.show.parts.join("; ")}`);
+    t(`${m} P6 "${x}" vs "${y}": never 200,000`, r.total !== 200000, r.show);
+  }
   // Unrelated-looking numbers of one policy: listed, no total (R258).
   {
     const r = tile([numbered("pA", "SG-104455"), numbered("pB", "104455")]);
