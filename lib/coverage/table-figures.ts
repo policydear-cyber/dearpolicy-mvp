@@ -252,9 +252,22 @@ export type TilePart = { name: string; amount: number | null; currency: string |
 /** A survival or waiting period only decides when a sum is paid, not how much: an allow-list of its words, every word known. */
 const TIMING_WORDS = new Set(["the", "a", "an", "life", "assured", "insured", "person", "survives", "survive", "surviving", "survival", "at", "least",
   "day", "days", "after", "from", "date", "of", "diagnosis", "or", "and", "surgical", "procedure", "performed", "for", "critical", "illness", "covered",
-  "under", "this", "benefit", "waiting", "period", "periods", "in", "section", "clause", "as", "stated", "is", "subject", "to", "policy"]);
-const timingOnly = (c: string) => /\bsurviv|\bwaiting\s+period/i.test(c)
-  && c.toLowerCase().split(/[\s,.;:()]+/).filter(Boolean).every((w) => TIMING_WORDS.has(w) || /^\d+(?:\.\d+)*$/.test(w));
+  "under", "this", "benefit", "waiting", "period", "periods", "month", "months", "in", "section", "clause", "as", "stated", "is", "subject", "to", "policy"]);
+// A number is timing only as a count of days or months ("7 days", "(90) days") or as a clause number ("Section 3.2");
+// any other number ("0.5 of the benefit") may be an amount (TE P149b).
+const timingOnly = (c: string) => {
+  if (!/\bsurviv|\bwaiting\s+period/i.test(c)) return false;
+  const w = c.toLowerCase().split(/[\s,;:()]+/).map((t) => t.replace(/\.$/, "")).filter(Boolean);
+  return w.every((t, i) => TIMING_WORDS.has(t) || (/^\d+(?:\.\d+)*$/.test(t)
+    && (/^(?:days?|months?)$/.test(w[i + 1] ?? "") || /^(?:section|clause)$/.test(w[i - 1] ?? ""))));
+};
+/** The event a benefit is paid on, and nothing more ("If the Life Assured dies while the Policy is in force and We receive
+ * satisfactory proof of claim"): an allow-list of its words, every word known. Anything else ("before the maturity date",
+ * "has not been converted") is a condition. */
+const TRIGGER_WORDS = new Set(["if", "the", "a", "life", "assured", "insured", "person", "dies", "die", "death", "of", "sustains", "suffers", "tpd",
+  "total", "and", "permanent", "disability", "while", "this", "your", "policy", "supplementary", "agreement", "rider", "benefit", "cover", "is", "in",
+  "force", "we", "receive", "satisfactory", "proof", "claim"]);
+const triggerOnly = (c: string) => /^\s*if\b/i.test(c) && c.toLowerCase().split(/[\s,.;:()]+/).filter(Boolean).every((w) => TRIGGER_WORDS.has(w));
 /** Only an affirmative "accelerat-" marks a cover: none of its own words says "non-", "not", "no", "never", "without" or
  * "-n't" before it in the same phrase ("Non-accelerated Critical Illness", "does not accelerate the death benefit": no
  * mark). Any negated mention anywhere in the cover's wording leaves the cover unmarked (TE P149-1). */
@@ -302,9 +315,11 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // insured and its document states the currency. A sum insured the benefit is not worked out from (a plan whose
     // schedule says its sum insured is notional and the death benefit is the higher of premiums or cash value) gives none.
     const ofSumInsured = list.some((r) => (r as { percentOf?: string | null }).percentOf === "sum_insured");
-    // A sum insured counted through a row whose wording may change what is paid ("half after sixty-five", "less amounts
-    // already paid") is marked: the sum insured, with conditions (Critic R249).
-    const conditional = !!asInsured && sums.size !== 1 && asInsured.r.conditions.some((c) => isLimit(c) && !timingOnly(c));
+    // A cover any of whose rows has wording that may change what is paid ("half after sixty-five", "less amounts already
+    // paid", "a return of premiums before 65") is marked wherever its amount shows, through its own rows or through the
+    // schedule line matched to it: the sum insured, with conditions. Survival and waiting periods are timing, and the event
+    // the benefit is paid on is its trigger; neither marks it (R249, R250).
+    const conditional = list.some((r) => r.conditions.some((c) => isLimit(c) && !timingOnly(c) && !triggerOnly(c)));
     const one = sums.size === 1 ? [...sums.values()][0]
       : asInsured ? { amount: asInsured.m!.amount, currency: normalizeCurrencyCode(asInsured.m!.currency!, "") }
       : list.every((r) => !moneyOf(r)) && ofSumInsured && insured.size === 1 && heldCurrency.size === 1 && [...heldCurrency][0] ? { amount: [...insured][0], currency: [...heldCurrency][0] } : null;
@@ -313,7 +328,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
-    return { docs: coverDocs(key, list, held), sum, accelerates, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+    return { docs: coverDocs(key, list, held), sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   let unsure = false;
@@ -333,7 +348,8 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   // another category ("Accidental Death" stored as Death) is named with no amount here (Critic R247 Q1b).
   const elsewhere = (l: { name: string }) => { const c = category ? categoryOfBenefit(l.name) : null; return !!c && c !== category; };
   const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
-    ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}) })),
+    ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
+    ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
     ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
   // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
   const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");
