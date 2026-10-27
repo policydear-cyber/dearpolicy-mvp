@@ -7348,3 +7348,34 @@ Checks, all network-blocked:
 - dashboard-dynamic 25/0, including both TE F1 cases;
 - intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
 - tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+## R258 — #152 at 85841ce (cover holdings by policy number; accident-worded lines): NOT READY, two Highs
+
+Probe (made-up SG household, "Alder Term", run on the PR's own assembleTable → tileRows → lumpSumParts path, network-blocked; main 44fb9ec vs PR):
+
+| Case | main | 85841ce |
+|---|---|---|
+| R1 one policy renewed: 2025 and 2026 schedules, new number each year (GT-2025-77 / GT-2026-77), S$100,000, periods 1 Jan–31 Dec 2025 and 2026 | **100,000** | **200,000** (two parts) |
+| R2 one policy: product summary prints group no. G-55000 (benefit table), member certificate prints C-000123 (no rows) | 100,000 | 100,000, but 2 covers |
+| R3 two real policies: A's contract prints the benefit table (AT-1001, 100k); B has only its certificate (AT-2002, 250k) | no total (`?`) | **total 100,000, B's part missing** |
+
+**H1 (High, wrong amount): `assemble.ts` coversOf holdings.** A different printed number is not enough to prove a second policy. Annual renewals (group schemes and many term/PA plans re-number every year), a summary's group number against a certificate number, and endorsement or renewal notices all print different numbers for one policy. R1 doubles a renewed policy. Main merged it because the sums were equal.
+
+**H2 (High, hides a policy and shows a part total as complete): `ownCovers` + `lumpSumParts`.** A section on one holding's own document is given only to that holding. A holding with no rows and no line then produces no part at all, so the tile adds up only the policies that have rows. In R3, B's S$250,000 disappears and Home shows S$100,000. Main showed no total there. R2 also shows how the H2 fix exposes H1: once every held holding becomes a part, the summary and certificate of ONE policy would add to 200,000.
+
+Proposed fix (one rule, unsure → no figure):
+1. Keep the split. Each holding is its own part, with its own sum when its own document prints one, else no amount. Add a part for every held holding that has no rows and no line, so nothing disappears.
+2. Give a total across holdings of one cover type only when every holding's own document prints both a start and an end date, the periods overlap, and none has ended. Otherwise `unsure` → no total, and the parts still list each one.
+3. Where the periods do not overlap (R1), the earlier holding is a past year of the same cover, not a second policy. Show the current one only, or no total.
+
+**M1 (Medium, pre-existing but now in conflict with holdings): chat groups by coverKey.**
+- `chat.ts:77` keys `coverSince` by `person|coverKey`, so the last holding's start date wins for both. A new policy's start date applied to an older one (or the reverse) gets the waiting-period answer wrong, which means a wrong claimable answer.
+- `chat.ts:464` (ruledOut siblings), `:531/538` (companions, first-year), and `:647/796` (twins) also treat two holdings as one cover. An exclusion on X's document rules out Y's same benefit, and a twin collapse can give one policy's figure for both.
+
+Fix: key on `holding ?? coverKey` in those places, in this PR or straight after. (A confirmation keyed by coverKey also applies to both holdings. Low, since households do not confirm amounts.)
+
+**Q1b remainder: fine.** ACCIDENT_WORD only removes an amount from non-PA tiles, a name that places elsewhere keeps the R247 rule, and bare `acc` is rightly not added.
+
+Checks:
+- cover-holdings-test 57/0, intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
