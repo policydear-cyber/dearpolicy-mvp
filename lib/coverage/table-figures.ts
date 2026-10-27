@@ -335,10 +335,21 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
-    return { docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+    return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
-  let unsure = false;
+  // Where the person holds several policies of a cover type here (printed policy numbers differ), each held policy is a
+  // part, even one whose own document gives this tile no row: it is named with no amount, never left out (Critic R258 H2).
+  const split = new Set(covers.filter((c) => c.holding).map((c) => c.coverKey));
+  for (const h of held) {
+    const key = policyOf(h)!;
+    if (!split.has(h.coverKey) || covers.some((c) => c.key === key)) continue;
+    covers.push({ key, coverKey: h.coverKey, docs: new Set(h.documentId ? [h.documentId] : []), holding: h.holding, sum: h.sumInsured, accelerates: false,
+      conditional: false, part: { name: partName(h.name), amount: null, currency: null } });
+  }
+  // A different printed number does not prove a second policy: a renewal, a scheme's group number beside a certificate
+  // number, or an endorsement can re-number one policy (Critic R258 H1). Such parts are listed, never added up.
+  let unsure = split.size > 0;
   const taken = new Set<(typeof covers)[number]>();
   const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
   for (const l of lines) {
@@ -364,13 +375,10 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
     ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
-  // The held policy behind each part, where the person holds several of its cover type (printed policy numbers differ).
-  const holdings = [...lines.map((l) => lineCover.get(l)?.holding), ...covers.filter((c) => !taken.has(c)).map((c) => c.holding)];
-  // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3). Two parts
-  // that are two held policies with different printed numbers are two policies, whatever their names (Critic Q4).
+  // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
   const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");
   if (parts.some((a, i) => parts.some((b, j) => j > i && a.amount != null && a.amount === b.amount && a.currency === b.currency
-    && !!words(a.name) && words(a.name) === words(b.name) && !(holdings[i] && holdings[j] && holdings[i] !== holdings[j])))) unsure = true;
+    && !!words(a.name) && words(a.name) === words(b.name)))) unsure = true;
   const currencies = new Set(parts.map((p) => p.currency));
   const total = !unsure && parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
   return { parts, total };
