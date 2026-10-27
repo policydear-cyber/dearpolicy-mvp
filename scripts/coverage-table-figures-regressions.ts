@@ -4,7 +4,7 @@
  *   npm run coverage:table-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { categoryOfBenefit, categoryRows, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryOfBenefit, categoryRows, confirmedTotalComplete, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type ConfirmedLine } from "@/lib/coverage/table-figures";
 import type { SummaryRow } from "@/lib/benefit-table/headline";
 
 let passed = 0;
@@ -324,6 +324,138 @@ test("no scheme, product or fixed amount is written into the Home and Coverage c
     assert.doesNotMatch(src, /productFromCategory/, `${f} guesses a product from a category`);
   }
 });
+
+// A confirmed total stands only when it is the whole cover the person's benefit table gives (live 27f35c1: a personal
+// policy's confirmed TPD line beside a scheme TPD only the scheme's summary prints gave the personal sum alone).
+for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 500000, 60000], ["UK", "GBP", 250000, 40000]] as const) {
+  const cover = (coverKey: string, documentId: string, benefit: string, o: Partial<SummaryRow> = {}) =>
+    ({ ...row(benefit, o), coverKey, source: { documentId } });
+  const lump = (amount: number, currency: string | null = cur) => ({ figure: { kind: "printed" as const, amount, currency, unit: "lump_sum" as const } });
+  const seePage = { figure: { kind: "none" as const, why: "no figure printed" } };
+  const line = (amount: number | null, ...documentIds: string[]): ConfirmedLine => ({ amount, currency: cur, documentIds });
+  test(`${m}: a scheme cover only its summary prints makes a personal confirmed sum a part sum`, () => {
+    assert.equal(confirmedTotalComplete([cover("scheme", "summary", "Total and Permanent Disability Benefit", lump(sum)),
+      cover("own", "personal", "Total and Permanent Disability Benefit", seePage)], [line(own, "personal")]), false);
+  });
+  test(`${m}: a scheme summary's cover counts as the certificate's line only through the cover's own document`, () => {
+    const rows = [cover("scheme", "summary", "Death Benefit", lump(sum)), cover("own", "personal", "Death Benefit", seePage)];
+    const lines = [line(sum, "cert-a", "cert-b"), line(own, "personal")];
+    assert.equal(confirmedTotalComplete(rows, lines, [{ coverKey: "scheme", name: "Scheme", documentId: "cert-a", sumInsured: sum }]), true);
+    // An equal amount alone never joins them (TE P148-1): no total.
+    assert.equal(confirmedTotalComplete(rows, lines), false);
+  });
+  test(`${m}: an amount that happens to equal another policy's confirmed line is not that line`, () => {
+    assert.equal(confirmedTotalComplete([cover("own", "personal", "TPD Benefit", lump(own)), cover("other", "second", "TPD Benefit", lump(own))],
+      [line(own, "personal")]), false);
+  });
+  test(`${m}: no printed figure, of any kind, joins a cover to a confirmed line`, () => {
+    const lines = [line(sum, "cert-a")];
+    for (const figure of [lump(sum, null), { figure: { kind: "printed" as const, amount: sum, currency: cur, unit: "per_day" as const } }, lump(sum)])
+      assert.equal(confirmedTotalComplete([cover("scheme", "summary", "TPD Benefit", figure)], lines), false);
+  });
+  test(`${m}: a rider with its own sum on a confirmed policy's document is not counted by that line`, () => {
+    assert.equal(confirmedTotalComplete([cover("base", "personal", "TPD Benefit", lump(own)), cover("rider", "personal", "Rider TPD Benefit", lump(own / 2))],
+      [line(own, "personal")]), false);
+  });
+  test(`${m}: a confirmed line with no amount leaves the total a part sum`, () => {
+    assert.equal(confirmedTotalComplete([cover("own", "personal", "TPD Benefit", seePage)], [line(own, "personal"), line(null, "second")]), false);
+  });
+  test(`${m}: every cover counted, or a cover that pays nothing, keeps the total`, () => {
+    assert.equal(confirmedTotalComplete([cover("own", "personal", "TPD Benefit", seePage), cover("none", "third", "TPD", { pays: "not_covered", ...seePage })],
+      [line(own, "personal")]), true);
+    assert.equal(confirmedTotalComplete([], [line(own, "personal")]), true);
+  });
+  test(`${m}: each line counts for one cover through its own document, never three covers for two lines`, () => {
+    const lines = [line(sum, "cert-a"), line(sum, "cert-c")];
+    const two = [cover("s1", "cert-a", "Death Benefit", lump(sum)), cover("s2", "cert-c", "Death Benefit", lump(sum))];
+    assert.equal(confirmedTotalComplete(two, lines), true);
+    assert.equal(confirmedTotalComplete([...two, cover("s3", "cert-a", "Death Benefit", lump(sum))], lines), false);
+  });
+}
+
+// Lump-sum tiles give every policy's sum and add them up (DC 27 Oct). Equal amounts never join two covers (Critic R246).
+for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 500000, 60000], ["UK", "GBP", 250000, 40000]] as const) {
+  const cover = (coverKey: string, documentId: string, benefit: string, o: Partial<SummaryRow> = {}) =>
+    ({ ...row(benefit, o), coverKey, source: { documentId } });
+  const lump = (amount: number, currency: string | null = cur) => ({ figure: { kind: "printed" as const, amount, currency, unit: "lump_sum" as const } });
+  const seePage = { figure: { kind: "none" as const, why: "no figure printed" } };
+  const line = (name: string, amount: number | null, ...documentIds: string[]) => ({ name, amount, currency: cur, documentIds });
+  const held = (coverKey: string, documentId: string, sumInsured: number | null) => ({ coverKey, name: coverKey, documentId, sumInsured });
+  test(`${m}: a scheme sum only its summary prints is added to a personal schedule line`, () => {
+    const r = lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(sum)), cover("rider", "personal", "TPD Benefit", seePage)],
+      [line("Rider", own, "personal")], [held("scheme", "certificate", sum), held("rider", "personal", own)]);
+    assert.equal(r.total, sum + own);
+    assert.deepEqual(r.parts.map((p) => p.amount), [own, sum]);
+  });
+  test(`${m}: a scheme cover whose own document is the confirmed certificate is counted once`, () => {
+    const r = lumpSumParts([cover("scheme", "summary", "Death Benefit", lump(sum))], [line("Scheme", sum, "certificate")], [held("scheme", "certificate", sum)]);
+    assert.equal(r.total, sum);
+    assert.equal(r.parts.length, 1);
+  });
+  test(`${m}: an equal amount is never taken as the same cover or as another; with nothing to tell them apart, no total (R246 A, E; TE P148-2)`, () => {
+    const a = lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(sum))], [line("Term", sum, "term")], [held("scheme", "scheme-cert", sum)]);
+    assert.equal(a.total, null);
+    assert.deepEqual(a.parts.map((p) => p.amount), [sum, sum]);
+    const e = lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(own))], [line("A", own, "a"), line("B", own, "b")], [held("scheme", "scheme-cert", own)]);
+    assert.equal(e.total, null);
+    assert.equal(e.parts.length, 3);
+    // A different sum beside a line with no cover here is plainly another policy: added.
+    assert.equal(lumpSumParts([cover("scheme", "summary", "TPD Benefit", lump(sum))], [line("Term", own, "term")], [held("scheme", "scheme-cert", sum)]).total, sum + own);
+  });
+  test(`${m}: a certificate holding two covers gives its line to the one with its sum, in any order (R247 Q2)`, () => {
+    const base = cover("life", "summary", "Death Benefit", lump(sum)), topUp = cover("topup", "summary", "Death Benefit (top-up)", lump(own));
+    const h = [held("life", "certificate", sum), held("topup", "certificate", own)];
+    assert.equal(lumpSumParts([base, topUp], [line("Life", sum, "certificate")], h).total, sum + own);
+    assert.equal(lumpSumParts([topUp, base], [line("Life", sum, "certificate")], h).total, sum + own);
+    // Neither cover has the line's sum, or both do: which is the line's cannot be told, so no total.
+    assert.equal(lumpSumParts([base, topUp], [line("Life", sum + own, "certificate")], h).total, null);
+    assert.equal(lumpSumParts([base, cover("life2", "summary", "Death", lump(sum))], [line("Life", sum, "certificate")],
+      [held("life", "certificate", sum), held("life2", "certificate", sum)]).total, null);
+  });
+  test(`${m}: a personal accident cover printing several sums is its certificate line's by its sum insured`, () => {
+    const pa = [cover("pa", "summary", "Death due to Accident", lump(sum)), cover("pa", "summary", "Permanent Disablement due to Accident", lump(sum * 1.5)),
+      cover("pa", "summary", "Compassionate allowance", { figure: { kind: "printed", amount: own / 10, currency: cur, unit: "up_to" } })];
+    const r = lumpSumParts(pa, [line("Group Personal Accident", sum, "certificate")], [held("pa", "certificate", sum)]);
+    assert.equal(r.total, sum);
+    assert.equal(r.parts.length, 1);
+  });
+  test(`${m}: one cover read under two names with the same sum is not added twice (R247 Q3)`, () => {
+    const r = lumpSumParts([cover("gtl", "summary-1", "Death", lump(sum)), cover("group term life", "summary-2", "Death", lump(sum))], [],
+      [{ ...held("gtl", "s1", sum), name: "GTL" }, { ...held("group term life", "s2", sum), name: "Group Term Life (Policy No. 12)" }]);
+    assert.equal(r.total, null);
+  });
+  test(`${m}: a "100% of sum assured" row with no figure is its own schedule line's cover (R246 D)`, () => {
+    const r = lumpSumParts([cover("plan", "wording", "TPD: 100% of sum assured", seePage)], [line("Plan", own, "schedule")], [held("plan", "schedule", own)]);
+    assert.equal(r.total, own);
+  });
+  test(`${m}: a policy whose sum is not read is named with no amount, and there is no total`, () => {
+    const r = lumpSumParts([cover("scheme", "summary", "Death Benefit", lump(sum)), cover("term", "term-doc", "Death benefit: higher of 101% of the cash value", seePage)],
+      [line("Scheme", sum, "certificate")], [held("scheme", "certificate", sum), held("term", "term-doc", null)]);
+    assert.equal(r.total, null);
+    assert.deepEqual(r.parts.map((p) => [p.name, p.amount]), [["Scheme", sum], ["term", null]]);
+  });
+  test(`${m}: an up-to cap, a bare sign, another currency, two figures or a figure that is not the sum insured give no amount`, () => {
+    const lines = [line("Scheme", sum, "certificate")];
+    const one = (rows: ReturnType<typeof cover>[], h = [held("x", "x-doc", null)]) => lumpSumParts(rows, lines, h);
+    assert.equal(one([cover("x", "x-doc", "Limits of compensation", { figure: { kind: "printed", amount: sum, currency: cur, unit: "up_to" } })]).total, null);
+    assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own, null))]).total, null);
+    assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own, cur === "GBP" ? "SGD" : "GBP"))]).total, null);
+    assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own)), cover("x", "x-doc", "TPD Benefit (after 65)", lump(own / 2))]).total, null);
+    assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own))], [held("x", "x-doc", own * 2)]).total, null);
+    assert.equal(one([cover("x", "x-doc", "TPD Benefit", lump(own, { SGD: "S$", MYR: "RM", GBP: "£" }[cur]))], [held("x", "x-doc", own)]).total, sum + own);
+  });
+  test(`${m}: a cover whose rows print no amount gives its own sum insured only when its currency is stated`, () => {
+    const rows = [cover("term", "term-doc", "Death Benefit", seePage)];
+    assert.equal(lumpSumParts(rows, [line("Scheme", sum, "certificate")], [{ ...held("term", "term-doc", own), currency: cur }]).total, sum + own);
+    assert.equal(lumpSumParts(rows, [line("Scheme", sum, "certificate")], [held("term", "term-doc", own)]).total, null);
+    assert.equal(lumpSumParts([...rows, cover("term", "term-doc", "Death Benefit cap", { figure: { kind: "printed", amount: sum, currency: cur, unit: "up_to" } })],
+      [line("Scheme", sum, "certificate")], [{ ...held("term", "term-doc", own), currency: cur }]).total, null);
+  });
+  test(`${m}: a schedule line with no amount leaves no total`, () => {
+    assert.equal(lumpSumParts([], [line("A", own, "a"), line("B", null, "b")]).total, null);
+    assert.equal(lumpSumParts([], [line("A", own, "a"), line("B", sum, "b")]).total, own + sum);
+  });
+}
 
 console.log(`coverage table figures: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("FAIL", f); process.exit(1); }
