@@ -1,5 +1,5 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { NON_COVER_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
+import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
 import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
@@ -665,7 +665,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     const handMatches = await householdNameMatches(args.accountId, args.policyId);
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
-    const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
+    const isPaymentDocument = PAYMENT_ROLES.has(extraction.documentRole ?? "");
     if (args.linkUploadMember && (isPaymentDocument || noCover || readInPart || (namedNobodyPrinted && !linkedByPrintedName)) && !extraction.personalCoverageConfirmed) {
       const { notExcludedClause } = await import("@/lib/policies/member-exclusions");
       await query(

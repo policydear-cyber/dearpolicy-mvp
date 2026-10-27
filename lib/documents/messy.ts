@@ -14,6 +14,10 @@ import type { PdfPage } from "./pdf";
 /** Uploads that are not policies: they never create cover, benefits, ledger rows or premiums. */
 export type CorrespondenceRole = "insurer_letter" | "claim_decision" | "medical_bill" | "app_screenshot" | "personal_notes";
 export const NON_COVER_ROLES: ReadonlySet<string> = new Set<CorrespondenceRole>(["insurer_letter", "claim_decision", "medical_bill", "app_screenshot", "personal_notes"]);
+/** Payment papers: they state premiums, not cover. */
+export const PAYMENT_ROLES: ReadonlySet<string> = new Set(["premium_receipt", "renewal_statement", "annual_statement"]);
+/** Roles intake never reads into the benefit table or the ledger (lib/rag/ingest.ts); Home does not wait for them. */
+export const NO_COVER_READING_ROLES: readonly string[] = [...PAYMENT_ROLES, ...NON_COVER_ROLES];
 /** In household words. */
 export const ROLE_WORDS: Record<CorrespondenceRole, string> = {
   insurer_letter: "a letter from the insurer",

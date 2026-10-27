@@ -26,6 +26,16 @@ if (process.env.DEARPOLICY_DISPOSABLE_DB !== "1" || !/@(localhost|127\.0\.0\.1)[
 const SG = randomUUID(), MY = randomUUID(), PLAIN = randomUUID(), EMPTY = randomUUID();
 const USERS: Record<string, string> = { [SG]: randomUUID(), [MY]: randomUUID(), [PLAIN]: randomUUID(), [EMPTY]: randomUUID() };
 Object.assign(process.env, { DEV_AUTH_ENABLED: "1", DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_ALPHA_ACCOUNTS: [SG, MY, EMPTY].join(",") });
+// Never a paid call: no model key, and every request off this machine is refused and counted.
+for (const k of Object.keys(process.env)) if (/API_KEY|ANTHROPIC_KEY|OPENAI_KEY/i.test(k)) delete process.env[k];
+const outbound: string[] = [];
+const localFetch = globalThis.fetch;
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const u = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (!/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(u)) { outbound.push(u.replace(/[?#].*/, "")); throw new Error("dashboard dynamic test: outbound request refused"); }
+  return localFetch(input, init);
+}) as typeof fetch;
+const settle = () => new Promise((r) => setTimeout(r, 1500));
 
 let passed = 0;
 const failures: string[] = [];
@@ -87,9 +97,10 @@ async function main() {
   }
 
   type Tile = { category: string; status: string; amount: number | null; currency: string; parts: { name: string; amount: number | null; currency: string | null }[] | null };
-  async function tiles(account: string, member?: string) {
+  async function tiles(account: string, member?: string, poll = false) {
     process.env.DEV_ACCOUNT_ID = USERS[account];
-    const res = await GET(new NextRequest(`http://localhost/api/dashboard${member ? `?familyMemberId=${member}` : ""}`));
+    const q = new URLSearchParams(); if (member) q.set("familyMemberId", member); if (poll) q.set("poll", "1");
+    const res = await GET(new NextRequest(`http://localhost/api/dashboard${q.toString() ? `?${q}` : ""}`));
     const body = await res.json() as { coverages: Tile[]; activeMember: { id: string } | null; empty?: boolean; reading?: number; error?: string };
     assert.equal(res.status, 200, JSON.stringify(body));
     return body;
@@ -186,6 +197,35 @@ async function main() {
       assert.equal((await tiles(PLAIN)).reading, 0, "without the benefit table, a ready document is not waited for");
     });
 
+    await test("Home's quiet re-fetch never starts a document read; opening Home still does (Critic R255 L1)", async () => {
+      // A read that an earlier opening of Home started finishes first, so it cannot pick up the document added here.
+      await settle();
+      const me = (await query<{ id: string }>("SELECT id FROM family_members WHERE account_id=$1", [PLAIN])).rows[0].id;
+      const id = await upload({ account: PLAIN, person: "Oliver Bennett", product: "Beacon Life Plan", currency: "SGD", symbol: "S$", sum: 80000, category: "Death",
+        benefit: "Death Benefit", read: false }, me);
+      const touched = async () => (await query<{ n: number }>("SELECT count(*)::int AS n FROM policies WHERE id=$1 AND (ledger_read_at IS NOT NULL OR reading_cache IS NOT NULL)", [id])).rows[0].n;
+      await query("UPDATE policies SET ledger_read_at=now() WHERE account_id=$1 AND id<>$2", [PLAIN, id]);
+      const before = outbound.length;
+      await tiles(PLAIN, undefined, true); await settle();
+      assert.equal(outbound.length - before, 0, "a quiet re-fetch asked a model");
+      assert.equal(await touched(), 0, "a quiet re-fetch started a read");
+      await tiles(PLAIN); await settle();
+      assert.ok(outbound.length > before || await touched() > 0, "opening Home should start the pending read (the probe is live)");
+    });
+
+    await test("a receipt or a letter is not waited for (Critic R255 M2)", async () => {
+      const me = (await query<{ id: string }>("SELECT id FROM family_members WHERE account_id=$1 AND relationship='self'", [SG])).rows[0].id;
+      const receipt = await upload({ account: SG, person: "Priya Nair", product: "Harbour Life Plan receipt", currency: "SGD", symbol: "S$", sum: 1200, category: "Death",
+        benefit: "Premium", read: false, line: false }, me);
+      await query("UPDATE policies SET document_role='premium_receipt',processing_completed_at=now() WHERE id=$1", [receipt]);
+      assert.equal((await tiles(SG, me)).reading, 0);
+      await query("UPDATE policies SET document_role='insurer_letter' WHERE id=$1", [receipt]);
+      assert.equal((await tiles(SG, me)).reading, 0);
+      await query("UPDATE policies SET document_role='schedule' WHERE id=$1", [receipt]);
+      assert.equal((await tiles(SG, me)).reading, 1, "a schedule with no reading yet is still waited for");
+      await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [receipt]);
+    });
+
     await test("a household with nobody yet gets the empty portfolio", async () => {
       await household(EMPTY, "Test household empty", []);
       const b = await tiles(EMPTY);
@@ -199,6 +239,9 @@ async function main() {
     }
   }
 
+  await test("no request tried to leave this machine (no model was asked)", async () => {
+    assert.deepEqual(outbound, []);
+  });
   console.log(`dashboard dynamic: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   process.exit(failures.length ? 1 : 0);

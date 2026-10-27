@@ -19,20 +19,24 @@ function partsText(parts:TilePart[]){const name=(n:string)=>n.replace(/\s*\((?:g
 
 export default function DashboardPage(){
  const [activeId,setActiveId]=useState(""),[data,setData]=useState<Dashboard|null>(null),[loading,setLoading]=useState(true);
- async function load(memberId?:string,quiet=false){if(!quiet)setLoading(true);const q=memberId?`?familyMemberId=${encodeURIComponent(memberId)}`:"";let payload:Dashboard;
+ // Only the newest request may change the page, so a late quiet re-fetch never shows a person the household has since
+ // switched away from; quiet re-fetches follow whoever is chosen now (want), and say so (poll=1) so they start no reading.
+ const seq=useRef(0),want=useRef<string|undefined>(undefined);
+ async function load(memberId?:string,quiet=false){const n=++seq.current;if(!quiet)setLoading(true);const params=new URLSearchParams();if(memberId)params.set("familyMemberId",memberId);if(quiet)params.set("poll","1");
+  const q=params.toString()?`?${params}`:"";let payload:Dashboard;
   try{
    const response=await fetch(`/api/dashboard${q}`);
    payload=await response.json().catch(()=>({error:"The dashboard service returned an unreadable response ("+response.status+")."}) as Dashboard);
    if(!response.ok&&!payload.error)payload={...payload,error:"The dashboard could not be loaded ("+response.status+")."};
   }catch{payload={error:"unavailable"} as Dashboard;}
-  setData(payload);if(!activeId&&payload.activeMember?.id)setActiveId(payload.activeMember.id);setLoading(false);} useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  if(n!==seq.current)return;setData(payload);if(!want.current&&payload.activeMember?.id)want.current=payload.activeMember.id;if(!activeId&&payload.activeMember?.id)setActiveId(payload.activeMember.id);setLoading(false);} useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
  // The tiles follow the documents: while one is still being read, fetch again quietly until its cover shows (for at most
  // ten minutes), and fetch again whenever the page comes back into view, so a policy uploaded elsewhere shows here.
  const readingSince=useRef<number|null>(null);
  useEffect(()=>{if(!data?.reading){readingSince.current=null;return;}readingSince.current??=Date.now();if(Date.now()-readingSince.current>600000)return;
-  const timer=setTimeout(()=>{void load(activeId||undefined,true);},8000);return()=>clearTimeout(timer);},[data]); // eslint-disable-line react-hooks/exhaustive-deps
- useEffect(()=>{const onVisible=()=>{if(document.visibilityState==="visible")void load(activeId||undefined,true);};document.addEventListener("visibilitychange",onVisible);
-  return()=>document.removeEventListener("visibilitychange",onVisible);},[activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const timer=setTimeout(()=>{void load(want.current,true);},8000);return()=>clearTimeout(timer);},[data]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{const onVisible=()=>{if(document.visibilityState==="visible")void load(want.current,true);};document.addEventListener("visibilitychange",onVisible);
+  return()=>document.removeEventListener("visibilitychange",onVisible);},[]); // eslint-disable-line react-hooks/exhaustive-deps
 
  // An uploaded document nobody has claimed is proof the household holds it; the
  // only thing missing is whose it is, and that is one click. Until it is
@@ -47,11 +51,11 @@ export default function DashboardPage(){
      body:JSON.stringify({policyId,familyMemberId,declared:true})});
    const payload=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(payload.error||"Could not link that document.");
-   await load(activeId||undefined);
+   await load(want.current);
   }catch(error){setClaimError(customerError(error,"Could not link that document. Please try again in a moment."));}
   finally{setClaiming("");}
  }
- async function choose(id:string){setActiveId(id);await load(id);} const confirmed=useMemo(()=>data?.coverages?.filter(c=>c.status==="covered")??[],[data]);const active=data?.activeMember;
+ async function choose(id:string){want.current=id;setActiveId(id);await load(id);} const confirmed=useMemo(()=>data?.coverages?.filter(c=>c.status==="covered")??[],[data]);const active=data?.activeMember;
  // Nothing uploaded yet: no cost, no "everything looks current", no
  // per-person protection grid -- just the next step.
  const documentCount=(data?.quality?.personalDocs??0)+(data?.quality?.referenceDocs??0)+(data?.unclaimed?.length??0);
