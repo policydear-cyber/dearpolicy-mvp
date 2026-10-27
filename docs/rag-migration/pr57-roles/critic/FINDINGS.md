@@ -7231,3 +7231,21 @@ Probe of the new trigger and timing allow-lists (Death SI S$200,000):
 - `TRIGGER_WORDS` holds no amount, age, time or premium word. A number in a timing clause counts only before days/months or after section/clause.
 
 Verdict: READY at f3f8ff1.
+
+## R253: #150 at bd94663 (name-head limits; only single-trip travel ends): READY, two Lows
+
+Checked for free:
+- intake 30/0, regressions 82/0, te-pr147d 78/0, te-pr148b 87/0;
+- `tsc` clean, `next build` passes;
+- clean `git merge-tree` with main;
+- tsx probes of `combinedLimit` and `coverEnded`.
+
+R251 Q1 fixed. All six benefit rows with aggregate clauses are now BENEFIT: TPD "…up to a maximum of S$5,000,000 for all policies on the same life", CI "…across all policies on the same life", Daily Hospital Cash "…in total for all plans", Accidental Death "…across all your policies", Death Benefit under a "limits of compensation" heading, and "(see limits of compensation)". The live ReadyBuilder row is LIMIT, written either way ("Limits of compensation" + quote, or the full name). "Overall limit…" and "Maximum amount payable under all policies on the same life" are LIMIT.
+
+R251 Q2 fixed. These are current: the mid-year group certificate 01/10/2025–31/12/2025, the monthly PA, the co-terminous rider, a group certificate with only a short document period, a group business travel line on a short scheme period, and the annual multi-trip plan. "Travel insurance summary / Single Trip / Business" 01/08–15/08/2026 is ENDED.
+
+- Low (L1): a limit-worded head with a single benefit after it is a limit, so the row is hidden. "Total amount payable for death | S$500,000 for all plans" and "Maximum sum payable for hospital cash | S$100 per day across all policies" are LIMIT. Each is arguably a per-benefit cap across policies, but if it is the only row for that benefit, the category loses its cover. Optional: when the name after the head places in exactly one category (`categoryOfBenefit`), keep it as that benefit with the cap as a limit condition.
+- Low (L2): a rider whose own name is travel ends by its printed dates. "HealthPlan / Overseas Travel Cover" 01/06–31/08/2026 (co-terminous with an annual base) is ENDED. Optional: `if (c.riderOf) return null` in `coverEnded`, since riders end with their base.
+- The live "Limits of compensation" row needs a scope ("the same life", "all policies") in its name or quote. A bare "Limits of compensation | TI and CI S$2,000,000" stays a benefit, the old behaviour, which is safe for the tile because CI then has no total. The builder's stored-row run should confirm the live row qualifies.
+
+Verdict: READY at bd94663. L1 and L2 are optional.
