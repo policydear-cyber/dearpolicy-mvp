@@ -2,7 +2,7 @@
  * figure to show for it. Pure, and for any household: it reads only the benefit names and figures the person's own
  * documents print, never a scheme, product or insurer named in code. A category no row names stays as before. */
 import { rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
-import { MONEY_SIGN } from "@/lib/format/currency";
+import { MONEY_SIGN, normalizeCurrencyCode } from "@/lib/format/currency";
 import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 /** Benefit names, as policies in any market print them, for each category. Early critical illness is tested before
@@ -211,6 +211,38 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
   const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
   // Differing wording still shows the limits, which every row prints alike (Critic R239).
   return [[...texts][0], conditions.size === 1 ? [...conditions][0] : rows[0].conditions.filter(isLimit).join(" · ")].filter(Boolean).join(" · ");
+}
+
+/** One confirmed schedule line (a sum insured) of a tile's category: the documents of its policy, and its amount. */
+export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string };
+type TileRow = CoverRow & { source?: { documentId: string } | null };
+const SUM = (r: SummaryRow) => r.figure.kind === "worked_out" || (r.figure.kind === "printed" && (r.figure.unit === "lump_sum" || r.figure.unit === "up_to"));
+/** Whether the confirmed lines' total is the whole of a tile's cover: every paying cover the person's benefit table gives
+ * for the category is one of them. A cover counts when a row comes from a confirmed line's own document, or when it prints
+ * a confirmed line's amount and currency and that line has no cover of its own here (a scheme's summary printing the sum
+ * its certificate confirms). Each line counts for one cover only, so a second cover on the same document (a rider with
+ * its own sum) is not taken as counted. Any other cover (one only the table knows, a figure no line has, a bare
+ * sign), or a confirmed line with no amount, makes the total part of the cover, and the tile then says Covered, never a
+ * part sum (live 27f35c1). */
+export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[]): boolean {
+  if (lines.some((l) => l.amount == null)) return false;
+  const covers = new Map<string, TileRow[]>();
+  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
+  const doc = (r: TileRow) => r.source?.documentId ?? null;
+  const inTable = new Set(rows.map(doc).filter(Boolean));
+  const free = lines.filter((l) => l.amount != null && !l.documentIds.some((d) => inTable.has(d)));
+  const used = new Set<ConfirmedLine>();
+  for (const list of covers.values()) {
+    if (list.every((r) => r.pays === "not_covered")) continue;
+    const own = lines.filter((l) => list.some((r) => l.documentIds.includes(doc(r) ?? "")));
+    const match = own.length ? own.find((l) => !used.has(l)) : free.find((l) => !used.has(l) && list.some((r) => {
+      const m = moneyOf(r);
+      return SUM(r) && !!m && m.amount === l.amount && !!m.currency && normalizeCurrencyCode(m.currency, "") === l.currency;
+    }));
+    if (!match) return false;
+    used.add(match);
+  }
+  return true;
 }
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);

@@ -9,7 +9,7 @@ import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { summarisePremiums } from "@/lib/policies/premium-summary";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
-import { categoryRows, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryRows, confirmedTotalComplete, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -42,7 +42,7 @@ export async function GET(request:NextRequest){
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
-  const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
+  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
   type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
@@ -73,6 +73,9 @@ export async function GET(request:NextRequest){
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[])); if(!rows.length)continue;
         const cur=coverageMap.get(category); const display=tableDisplay(rows);
+        // A confirmed total that leaves out a cover the table gives (a scheme's sum only its summary prints) is part of the
+        // cover: the tile says Covered, never a part sum, and the table's own figure is not shown in its place either.
+        if(cur&&cur.total!=null){const lines=selected.filter(x=>x.category===category).map(x=>({amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)})); if(!confirmedTotalComplete(rows,lines))cur.total=null;continue;}
         if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
         else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
       }
