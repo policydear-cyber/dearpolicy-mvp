@@ -7379,3 +7379,23 @@ Fix: key on `holding ?? coverKey` in those places, in this PR or straight after.
 Checks:
 - cover-holdings-test 57/0, intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
 - tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R259 — #152 at df4c84b (R258 fixes): READY, one Medium (pre-existing) and one Low
+
+I re-ran my probes on the PR path, network-blocked:
+
+| Case | 85841ce | df4c84b |
+|---|---|---|
+| R1 renewal, two numbers, 100k each | 200,000 | no total; parts 100,000 + 100,000 |
+| R2 summary (G no.) + certificate (C no.), one policy | 100,000 (one part) | no total; parts 100,000 + `?` |
+| R3 A's contract has the table; B has a certificate only (250k) | 100,000, B missing | no total; parts 100,000 + `?` |
+
+H1 is closed: no total whenever a cover type is split. That is the right call; date overlap would not separate R2. H2 is closed: every held holding of a split type is a part. Chat (M1): coverSince, the plan-table group, siblings, ruledOut, companions, firstYear, twins and copiedName all key on `holding ?? coverKey`. For an event this year, the ended 2025 holding is still ruled out by its own dates, so a renewal never answers with two current policies.
+
+**M1 (Medium, pre-existing on main; the PR now has what it needs to close it): a split that shows only through schedule lines is still added up.** `split` is built only from row groups. A tile with no table rows, made only of confirmed lines whose documents are two holdings, adds them. Probe R4: lines 100,000 (polA) and 250,000 (polB), with held holdings k#a and k#b → **total 350,000**. A renewal whose sum changed (2025 100k, 2026 120k) gives 220,000 the same way. Equal sums are already caught by the same-name rule. Fix: also add a held holding's `coverKey` to `split` when its `documentId` is in any line's `documentIds`.
+
+**L1 (Low): an added holding hides its own printed sum.** In R3, B's certificate prints 250,000, but its added part shows `?`. R1 shows both amounts, and the product rule is "each person's sum assured per policy", so use `amount: h.sumInsured, currency: h.currency` when present. There is no total in either case.
+
+Checks:
+- cover-holdings 72/0, intake 39/0, benefit-table 107/0, chat 96/0, headline 16/0, parity 10/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
