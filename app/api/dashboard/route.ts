@@ -9,7 +9,7 @@ import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { summarisePremiums } from "@/lib/policies/premium-summary";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
-import { categoryRows, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type TilePart } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -42,7 +42,7 @@ export async function GET(request:NextRequest){
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
-  const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
+  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
   type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
@@ -56,7 +56,7 @@ export async function GET(request:NextRequest){
     list.sort((a,b)=>b.authority-a.authority+((b.effectiveDate?Date.parse(b.effectiveDate):Date.parse(b.createdAt))-(a.effectiveDate?Date.parse(a.effectiveDate):Date.parse(a.createdAt)))/1e15);
     const top=list[0]; selected.push(top); const sameAuthority=list.filter(x=>x.authority===top.authority); const amounts=new Set(sameAuthority.map(x=>x.amount).filter(x=>x!=null)); if(amounts.size>1)conflictCategories.add(top.category);
   }
-  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean}>();
+  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[]}>();
   for(const row of selected){
     const cur=coverageMap.get(row.category)??{total:null,currency:row.currency,count:0,policyNames:[],displayAmount:null,derived:false};
     if(row.amount!=null)cur.total=(cur.total??0)+row.amount; cur.count+=1; if(row.productName&&!cur.policyNames.includes(row.productName))cur.policyNames.push(row.productName); coverageMap.set(row.category,cur);
@@ -70,9 +70,24 @@ export async function GET(request:NextRequest){
     if(await benefitTableLive(accountId)){
       const { tableFor }=await import("@/lib/benefit-table/service");
       const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
+      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
       for(const category of COVERAGE_CATEGORIES){
-        const rows=tileRows(categoryRows(category,person?.rows??[])); if(!rows.length)continue;
+        const rows=tileRows(categoryRows(category,person?.rows??[]));
+        const lines=selected.filter(x=>x.category===category).map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)}));
+        // A lump-sum category gives each policy's sum and adds them up: a schedule line, and any cover only the table knows
+        // (a scheme's sum only its summary prints). A policy whose sum is not read is named with no amount, and there is
+        // then no total, never a part sum (DC 27 Oct).
+        if(LUMP_SUM_CATEGORIES.has(category)&&(rows.length||lines.length)){
+          const {parts,total}=lumpSumParts(rows,lines,held); const cur=coverageMap.get(category);
+          const entry=cur??{total:null,currency:"SGD",count:0,policyNames:[],displayAmount:null,derived:false,fromTable:true};
+          entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.count=parts.length; entry.currency=normalizeCurrencyCode(parts.find(p=>p.currency)?.currency??entry.currency,"SGD");
+          entry.policyNames=[...new Set(parts.map(p=>p.name))]; coverageMap.set(category,entry); continue;
+        }
+        if(!rows.length)continue;
         const cur=coverageMap.get(category); const display=tableDisplay(rows);
+        // A confirmed total that leaves out a cover the table gives (a scheme's sum only its summary prints) is part of the
+        // cover: the tile says Covered, never a part sum, and the table's own figure is not shown in its place either.
+        if(cur&&cur.total!=null){if(!confirmedTotalComplete(rows,lines,held))cur.total=null;continue;}
         if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
         else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
       }
@@ -88,7 +103,7 @@ export async function GET(request:NextRequest){
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null};});
 
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the
