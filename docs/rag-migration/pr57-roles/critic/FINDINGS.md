@@ -8105,3 +8105,19 @@ What checks out:
 Checks on 4bc052f, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium:table-test 18/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
 - **tsc exits 2 and next build fails (H1)**; merge-tree with main b865388 is clean.
+
+## R301 — #163 at 31fe4c3: NOT READY (R300 H2 and M1 still open, plus a new High)
+
+- R300 H1 is fixed (68cbf94). tsc is clean and next build passes.
+- R300 H2 is still open. Probe A: a combined schedule with two policies, neither read, names only the first. Probe B: one read and one not names nothing.
+- R300 M1 is still open. Probe C: same insurer, other product, no numbers still gives maybe_counted.
+
+**H3 (new) — the ended tests now drop held policies silently.** A cover is skipped with no note when its page is in endedPages, its printed period has ended, or it started more than 396 days ago with no end. In tablePremiumItems, each of these is *named* "not_current". Here none is named. Made-up probes, with today = 28 Oct 2026:
+- E: a whole-life schedule started 2019-01-05 with no end printed gives [], so a policy that is still held is left out silently. Old schedules with no end printed are the normal case for whole life and endowment policies.
+- F: a schedule page reading "This policy will be terminated if the premium is not paid within the grace period." matches ENDED_WORDS (bare "terminated") and gives [].
+- G: a yearly term schedule whose period ran to 2026-03-31 gives []. A renewal that was not uploaded is still a held policy.
+Fix: skip only what is proven ended (c.ended, or doc.lapsedOrEnded from printedStatus). Name every other ended-test hit as "not_current", the same as tablePremiumItems. The unsure case is named, never dropped.
+
+Checks on 31fe4c3, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 18/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
