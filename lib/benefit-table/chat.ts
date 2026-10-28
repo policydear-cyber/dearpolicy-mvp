@@ -74,6 +74,11 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
   // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
   for (const r of planTableRows(rows, household)) add(r);
+  // A daily cash whose own words print a second daily rate for a day in intensive care ("daily income amount will be
+  // doubled if hospitalised in intensive care, capped at S$400 per day") pays that rate for such a day: it is a row of its
+  // own, named for intensive care, so the rate is never left out of an answer about an ICU day (overnight run 23 Oct, N119).
+  // Added last, so every other row keeps its number.
+  for (const r of intensiveCareRows(rows, household)) add(r);
   const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
   for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
@@ -238,6 +243,60 @@ function dailyRateOf(excerpt: string, limit: number): number | null {
   }).map((f) => f.value));
   const [rate] = [...rates];
   return rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit ? rate : null;
+}
+
+const INTENSIVE_CARE = /\bicu\b|\bintensive\s+care\b|\bhigh\s+dependency\b|\bhdu\b/i;
+/** Every word a clause giving an intensive-care day's rate may hold besides its one figure. Any other word (a day rule, an
+ * age, a plan, "not", "only", "excess") may change what the figure pays, so a clause holding one gives no row. */
+const INTENSIVE_CARE_WORDS = new Set(("note the a an this daily day cash income hospital benefit amount will be is shall doubled double twice "
+  + "if when while whilst during insured person life assured hospitalised hospitalized confined admitted warded in into to "
+  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for and or overseas stay").split(" "));
+/** One clause of a row's own words that prints the daily rate for a day in intensive care, or null: it names intensive care,
+ * prints exactly one money figure, paid per day, holds no other number and only the words above. */
+export function intensiveCareRateOf(clause: string): { amount: number; currency: string | null } | null {
+  if (!INTENSIVE_CARE.test(clause)) return null;
+  const figures = moneyFiguresIn(clause);
+  if (figures.length !== 1 || !figures[0].raw) return null;
+  const [f] = figures;
+  const at = clause.indexOf(f.raw!);
+  if (at < 0 || !/^\s*(?:per|a|each)\s+day\b/i.test(clause.slice(at + f.raw!.length))) return null;
+  const rest = clause.slice(0, at) + " " + clause.slice(at + f.raw!.length);
+  if (/\d/.test(rest)) return null;
+  if (!(rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => INTENSIVE_CARE_WORDS.has(w))) return null;
+  return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null };
+}
+/** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
+ * intensive care and prints no day rule of its own (a first paid day or most days might hold for an ICU day too, and the
+ * row would lose it), each clause of its conditions and its quote (split at brackets, semicolons and lines) that prints
+ * such a rate in the row's own document. A rate the person's rows already give for that cover gives none. */
+function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
+  const out: TableRow[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (r.figure.kind !== "printed" || (r.figure.unit !== "up_to" && r.figure.unit !== "per_day")) continue;
+    if (INTENSIVE_CARE.test(r.benefit) || INTENSIVE_CARE.test(r.qualifier ?? "")) continue;
+    // Its limit's row too (the daily rate of a limit is a row without the limit's day rule).
+    const same = rows.filter((o) => o.personId === r.personId && o.coverKey === r.coverKey && o.source.documentId === r.source.documentId && o.benefit === r.benefit);
+    if (same.some((o) => o.fromDay != null || o.maxDays != null || /\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(o.source.excerpt))) continue;
+    const clauses = [...r.conditions, r.source.excerpt].flatMap((t) => t.split(/[()\n;]/)).map((t) => t.replace(/^\s*note\s*:\s*/i, "").trim()).filter(Boolean);
+    for (const clause of clauses) {
+      const rate = intensiveCareRateOf(clause);
+      if (!rate) continue;
+      const key = `${r.personId}|${r.coverKey}|${r.source.documentId}|${r.qualifier ?? ""}|${rate.amount}`;
+      if (seen.has(key)) continue;
+      // The rate is a row already (the reading took it as a row of its own).
+      if (rows.some((o) => o.personId === r.personId && o.coverKey === r.coverKey && INTENSIVE_CARE.test(`${o.benefit} ${o.qualifier ?? ""}`)
+        && o.figure.kind === "printed" && Math.abs(o.figure.amount - rate.amount) < 0.005)) continue;
+      // Printed in the row's own document, where the checks find it again.
+      const found = locateQuote(household, clause, r.docIndex);
+      if (!found || found.docIndex !== r.docIndex) continue;
+      seen.add(key);
+      out.push({ ...r, benefit: `${r.benefit} in intensive care`, pays: "per_day", conditions: [], fromDay: null, maxDays: null,
+        figure: { kind: "printed", amount: rate.amount, currency: rate.currency, unit: "per_day", period: null },
+        source: { ...r.source, page: found.page, excerpt: found.excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
+    }
+  }
+  return out;
 }
 
 /** The same benefit of the same cover, for the same person and group, printed in another of their documents. */

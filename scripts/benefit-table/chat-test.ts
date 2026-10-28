@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -1624,6 +1624,95 @@ test("a limit whose own line prints one daily rate gives that rate as a row of i
     const other = chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE);
     assert.equal(other.filter((r) => r.benefit === "Daily hospital cash while overseas").length, 1, excerpt);
   }
+});
+
+// ------------------------------------------------------------------ an intensive-care day's own daily rate (overnight run 23 Oct, N119)
+const TRIP = "aaaaaaaa-0000-0000-0000-000000000031", STAY = "aaaaaaaa-0000-0000-0000-000000000032";
+const ICU_NOTE = "(Note: daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day)";
+const HOUSE_ICU: Household = { ...HOUSE, documents: [...HOUSE.documents,
+  doc(TRIP, "Wayfarer travel summary.pdf", [{ page: 7, text: `Protecting you and your health\tSilver\tGold\tPlatinum\nDaily hospital cash while overseas\nCapped at S$200 per day\nS$5,000\tS$8,000\tS$10,000\n${ICU_NOTE}\nEmergency phone charges\tS$100\tS$200\tS$300` }]),
+  doc(STAY, "Rawat income terms.pdf", [{ page: 2, text: "Hospital Income\tRM100 per day (RM200 per day if confined in ICU)\nThe Life Assured must be confined for at least 24 hours." }]),
+] };
+function icuRows(o: { benefit?: string; excerpt?: string; conditions?: string[]; figure?: TableRowFigure; fromDay?: number | null; extra?: Partial<ChatRow>[]; documentId?: string; page?: number; printed?: string } = {}) {
+  const t = tableWith();
+  const person = t.people.find((p) => p.name === "Lim Ah Kow")!;
+  const base = person.rows.find((r) => r.benefit === "Ambulance Cost")!;
+  const row = { ...base, benefit: o.benefit ?? "Daily hospital cash while overseas", coverKey: "wayfarer|single trip|gold", product: "Wayfarer travel summary", cover: "Single Trip", plan: "Gold",
+    conditions: o.conditions ?? ["Capped at S$200 per day", ICU_NOTE], fromDay: o.fromDay ?? null, maxDays: null,
+    figure: o.figure ?? { kind: "printed" as const, amount: 8000, currency: "SGD", unit: "up_to" as const, period: null },
+    source: { documentId: o.documentId ?? TRIP, document: "Wayfarer travel summary.pdf", page: o.page ?? 7, excerpt: o.excerpt ?? "Capped at S$200 per day\nS$5,000\tS$8,000\tS$10,000" } };
+  const extra = (o.extra ?? []).map((x) => ({ ...row, ...x }));
+  // Words printed on the travel page too, so a clause is refused for its words and not only for not being found.
+  const house = o.printed ? { ...HOUSE_ICU, documents: HOUSE_ICU.documents.map((d) => d.policyId === TRIP ? { ...d, pages: d.pages.map((p) => ({ ...p, text: `${p.text}\n${o.printed}` })) } : d) } : HOUSE_ICU;
+  return chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, row, ...extra] as typeof p.rows } : p) }, house);
+}
+type TableRowFigure = ChatRow["figure"];
+const icuOf = (rs: ChatRow[]) => rs.filter((r) => /intensive care$/.test(r.benefit)).map((r) => [r.person, r.benefit, r.figure.kind === "printed" ? [r.figure.amount, r.figure.currency, r.figure.unit] : null, r.source.page]);
+test("a daily cash whose own note prints an intensive-care rate gives that rate as a row of its own, named for intensive care, last (N119)", () => {
+  const plain = icuRows({ conditions: [] });
+  const rs = icuRows();
+  assert.deepEqual(icuOf(rs), [["Lim Ah Kow", "Daily hospital cash while overseas in intensive care", [400, "SGD", "per_day"], 7]]);
+  // One row only, though the limit and its own daily rate both carry the note; every other row keeps its number.
+  assert.equal(rs.length, plain.length + 1);
+  assert.deepEqual(rs.slice(0, plain.length).map((r) => [r.id, r.benefit]), plain.map((r) => [r.id, r.benefit]));
+  assert.equal(rs.at(-1)!.benefit, "Daily hospital cash while overseas in intensive care");
+  // The limit and its daily rate are unchanged.
+  assert.deepEqual(rs.filter((r) => r.benefit === "Daily hospital cash while overseas").map((r) => r.figure.kind === "printed" ? [r.figure.amount, r.figure.unit] : null), [[8000, "up_to"], [200, "per_day"]]);
+  assert.match(renderTable(rs), /Daily hospital cash while overseas in intensive care \| S\$400 a day \| D\d+ page 7/);
+  // Another market: a rate printed in brackets in the row's own line ("RM200 per day if confined in ICU").
+  const myr = icuRows({ documentId: STAY, page: 2, benefit: "Hospital Income", conditions: [], excerpt: "Hospital Income\tRM100 per day (RM200 per day if confined in ICU)",
+    figure: { kind: "printed", amount: 100, currency: "MYR", unit: "per_day", period: null } });
+  assert.deepEqual(icuOf(myr), [["Lim Ah Kow", "Hospital Income in intensive care", [200, "MYR", "per_day"], 2]]);
+});
+test("an intensive-care rate gives no row unless its words are provably only that rate (N119 negative controls)", () => {
+  const none = (o: Parameters<typeof icuRows>[0], why: string) => assert.deepEqual(icuOf(icuRows(o)), [], why);
+  // No figure (only "doubled"), two figures, a figure not paid per day, a day count, an age, a group, a "not", an excess.
+  for (const note of ["(Note: daily income amount will be doubled if hospitalised in intensive care)",
+    "S$200 per day or S$400 per day in intensive care", "S$400 per admission in intensive care", "S$400 in total for intensive care",
+    "capped at S$400 per day in intensive care, for at most 10 days", "S$400 per day in intensive care from the 3rd day",
+    "S$400 per day in intensive care for insured persons aged 70 and above", "S$400 per day in intensive care for children only",
+    "S$400 per day in intensive care is not payable for pre-existing conditions", "S$400 per day in intensive care, less an excess",
+    "S$400 per day for a companion while in intensive care", "S$400 per day in a private ward"])
+    none({ conditions: [note], printed: note }, note);
+  // Each of those clauses is refused for its words: with the words left out that make it unsure, it gives the row.
+  assert.equal(icuOf(icuRows({ conditions: ["capped at S$400 per day in intensive care"], printed: "capped at S$400 per day in intensive care" })).length, 1);
+  // Each check on its own: a number of days in known words, a figure not paid per day in known words.
+  assert.equal(intensiveCareRateOf("S$400 per day in intensive care for 5 day"), null);
+  assert.equal(intensiveCareRateOf("S$400 in intensive care"), null);
+  assert.equal(intensiveCareRateOf("S$400 per day in the hospital"), null);
+  assert.deepEqual(intensiveCareRateOf("S$400 per day in ICU"), { amount: 400, currency: "SGD" });
+  // A bare "$" names no currency.
+  assert.deepEqual(intensiveCareRateOf("$400 per day in ICU"), { amount: 400, currency: null });
+  // A clause that is not printed in the row's own document (only in another one) gives none.
+  none({ conditions: ["RM200 per day if confined in ICU"] }, "printed in another document");
+  none({ conditions: ["capped at S$450 per day in intensive care"] }, "not printed at all");
+  // A row with a day rule of its own (it might hold for an ICU day too), or a row that is itself for intensive care.
+  none({ fromDay: 11 }, "first paid day");
+  none({ excerpt: "Capped at S$200 per day from the 11th day\nS$5,000\tS$8,000\tS$10,000" }, "day rule in the quote");
+  none({ benefit: "ICU daily cash" }, "row for intensive care");
+  // A rate the person's rows already give for that cover.
+  none({ extra: [{ benefit: "Intensive care daily cash", conditions: [], figure: { kind: "printed", amount: 400, currency: "SGD", unit: "per_day", period: null } }] }, "already a row");
+  // A row with no figure.
+  none({ figure: { kind: "none", why: "no figure printed" } }, "no figure");
+});
+test("an intensive-care rate card says intensive care, gives the printed rate as a limit, and is never worked out over a stay (N119)", () => {
+  const rs = icuRows();
+  const icu = rs.find((r) => /intensive care$/.test(r.benefit))!;
+  const ask = (row: string, asked: string[]) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null,
+      conditions: [{ text: "Doubled for intensive care, capped at S$400 per day", quote: ICU_NOTE }], alternativeGroup: null, perDay: { stayDays: 3 }, ofBill: null, row, eventFit: "any_event" }] };
+    const fromRows = amountsFromRows(raw, rs, HOUSE_ICU);
+    const { answer: a } = verifyAnswer(HOUSE_ICU, readModelAnswer(fromRows.json)!, asked, new Set(fromRows.report.labels));
+    return keepLabelledAmounts(a.statements ?? [], fromRows.report).kept.filter((s) => s.amount);
+  };
+  const cards = ask(icu.id, ["he was in ICU for one of those days", "he was hospitalised overseas for 3 days"]);
+  assert.deepEqual(cards.map((s) => [s.personName, s.amount!.text]), [["Lim Ah Kow", "Up to S$400"]]);
+  assert.match(cards[0].text, /^Daily hospital cash while overseas in intensive care \(.*\): paid per day\.$/);
+  // The base daily rate is still the base rate, with no intensive-care words.
+  const daily = rs.find((r) => r.benefit === "Daily hospital cash while overseas" && r.figure.kind === "printed" && r.figure.unit === "per_day")!;
+  const base = ask(daily.id, ["he was hospitalised overseas for 3 days"]);
+  assert.deepEqual(base.map((s) => s.amount!.text), ["Up to S$200"]);
+  assert.ok(!/intensive/i.test(base[0].text));
 });
 
 test("a daily card says its first paid day and most days (stress run 23 Oct, S008)", () => {
