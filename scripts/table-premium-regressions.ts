@@ -265,6 +265,7 @@ test("a stacked figure that another field could own is never the premium, in eve
   // A figure equal to the cover's sum insured is never its premium, from the reading or from the page.
   none(schedule("SUM ASSURED\tTERM (S$)\nS$49,000.00\nPREMIUM"), "the sum insured set over the premium label");
   none(schedule("S$49,000.00\nSUM ASSURED\nPREMIUM\nWaived"), "the reading gives the sum insured as the premium", { premium: 49000, premiumQuote: "S$49,000.00" });
+  none(schedule("S$49,000.00\nPREMIUM"), "the reading quotes a stacked sum insured over PREMIUM", { premium: 49000, premiumQuote: "S$49,000.00" });
   // Blank lines are not read, so a figure two lines from a label is beside it (Critic R297 H1).
   none(schedule("RIDER PREMIUM\n\nS$50.00\nPREMIUM\n\nS$399.24 (MONTHLY)"), "a rider's figure under its label, blank-separated");
   none(schedule("FIRST YEAR PREMIUM\n\nS$376.68\nPREMIUM\n\nS$470.85 per month"), "a first-year figure under its label, blank-separated");
@@ -275,4 +276,9 @@ test("a stacked figure that another field could own is never the premium, in eve
   none(schedule("Total Premium\nS$45.00 Monthly"), "label above the figure, a header row under it");
   // The label's other side: a value of its own ("POLICY TERM\t10 YEARS" holds a figure) gives none.
   none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nPOLICY TERM\t10 YEARS"), "the line under the label holds a figure");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWAIVED\tFROM\tYEAR 2"), "three cells under the label, one with a figure");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWaived"), "a value under the label");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWaived\tYearly"), "a two-cell value under the label");
+  // Only a currency row is harmless over the figure: a key with any other value is not one.
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM", "CURRENCY\tSEE BELOW"), "a currency key with no currency");
 });

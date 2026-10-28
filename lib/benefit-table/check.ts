@@ -413,10 +413,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
     // A premium equal to the cover's sum insured is not proved by the quote that prints the sum insured: it needs its own
-    // premium line (TE pr161 R1).
+    // premium line (TE pr161 R1), and a stacked figure equal to the sum insured is not one (TE pr162 S1).
     if (premium != null && (!printsNumber(source.excerpt, premium) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
       const at = find(str(c.premiumQuote), source.page);
-      const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005) : undefined;
+      const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005 && (sumInsured == null || Math.abs(x.amount - sumInsured) >= 0.005)) : undefined;
       const said = stacked ? stacked.label : at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
       // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
       if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainPremiumLineCount(pageText(source.page)) === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
