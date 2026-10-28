@@ -202,6 +202,13 @@ async function main() {
       ["blank form", doc("SCHEDULE PAGE\nPolicy number:\nPolicy owner  Signature  Date")],
       ["number to be issued", doc("SCHEDULE PAGE\nPolicy number to be issued\nInsured person aged 1 to 65")],
       ["illustration", doc("SCHEDULE PAGE\nThis is an illustration.\nPolicy number: 70012345\nLife insured: Tan Mei Ling")],
+      // TE #160 round 2: each refusal on its own, so only that refusal can stop it
+      ["specimen with a real-looking name", doc("SPECIMEN\nSCHEDULE PAGE\nPOLICY NUMBER: 70012345\nLIFE INSURED\tTAN AH KOW")],
+      ["number with no digit", doc("SCHEDULE PAGE\nPolicy number: PENDING\nLife insured: Ng Hui Min")],
+      ["one-word value", doc("SCHEDULE PAGE\nPolicy number: 70012345\nInsured: Beneficiary")],
+      ["Schedule of Benefits is not a schedule title", doc("SCHEDULE OF BENEFITS\nPolicy No. 1234567 must be quoted on claims\nInsured Person\tWard Class A\nRoom and board\tS$300 per day")],
+      ["Schedule of Benefits with a number and a name", doc("SCHEDULE OF BENEFITS\nPolicy No.: 70012345\nLife insured: Tan Mei Ling\nRoom and board\tS$300 per day")],
+      ["title below the fourth line", doc("Example Life\n8 Example Street\nwww.example.com\nClause 12\nSCHEDULE PAGE\nPolicy No.: 70012345\nLife insured: Tan Mei Ling")],
     ];
     for (const [name, pages] of notSchedules) {
       assert.equal(schedulePage(pages), null, name);
