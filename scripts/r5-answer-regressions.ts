@@ -30,7 +30,7 @@ import { pool } from "@/lib/db/client";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
-import { premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { isOneOffPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -226,6 +226,28 @@ async function main() {
       assert.equal(data.premiums.medisaveAnnual, 1050); assert.equal(data.premiums.cashAnnual, 1120);
       assert.ok(data.reminders.some((r: { title: string; detail: string }) => /premiums are missing/i.test(r.title) && /TermSecure 20/.test(r.detail)));
       assert.equal(data.empty, false);
+    });
+
+    await check("P4 a single-trip premium with no frequency is a one-off: never annualised into the yearly or monthly cost (Home tile S$6.10, 27 Oct)", async () => {
+      assert.equal(isOneOffPremium({ frequency: null, period_end: "2026-10-04" }), true);
+      assert.equal(isOneOffPremium({ frequency: "Single premium", period_end: null }), true);
+      assert.equal(isOneOffPremium({ frequency: "annual", period_end: "2027-03-31" }), false, "a yearly premium with its period stays yearly");
+      assert.equal(isOneOffPremium({ frequency: "Monthly", period_end: null }), false);
+      assert.equal(isOneOffPremium({ frequency: null, period_end: null }), false, "unchanged: no frequency and no period");
+      const trip = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_page,notes)
+        VALUES($1,NULL,NULL,$2,'Harbour Travel Insurance','Travel Insurance','HTI-TRIP-5521',73.17,'SGD',NULL,'2026-09-28','2026-09-29','2026-10-04',1,'Total premium') RETURNING id`, [H, mei.id]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.equal(Math.round(s.annual * 100) / 100, 2170, "the trip premium is not a yearly cost: " + s.annual);
+        assert.equal(s.items.length, 2);
+        assert.deepEqual(s.oneOff.map((i) => i.amount), [73.17]);
+        assert.ok(!s.missing.some((m) => /travel/i.test(m)), "a policy with a one-off premium is not 'missing' a premium");
+        const { GET } = await import("@/app/api/dashboard/route");
+        process.env.DEV_ACCOUNT_ID = H;
+        const data = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
+        assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
+        assert.ok(!data.premiums.items.some((i: { amount: number }) => i.amount === 73.17), "the trip is not a current premium line on Home");
+      } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [trip.rows[0].id]); }
     });
 
     // ================================================================ C currentness
