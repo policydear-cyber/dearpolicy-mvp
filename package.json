@@ -18,6 +18,7 @@
     "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
     "benefit-table:per-child-test": "node --import tsx scripts/benefit-table/per-child-test.ts",
     "benefit-table:te154-test": "node --import tsx scripts/benefit-table/te-pr154-test.ts",
+    "benefit-table:te155-test": "node --import tsx scripts/benefit-table/te-pr155-test.ts",
     "coverage:table-test": "node --import tsx scripts/coverage-table-figures-regressions.ts",
     "coverage:te147-test": "node --import tsx scripts/coverage/te-pr147-test.ts",
     "coverage:te147b-test": "node --import tsx scripts/coverage/te-pr147b-test.ts",

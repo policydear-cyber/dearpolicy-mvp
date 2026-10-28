@@ -1849,6 +1849,136 @@ test("library groups: the same people in any order are one group, and a replaced
   assert.doesNotMatch(lines[0], /Old\.pdf/);
 });
 
+// ------------------------------------------------------------------ a premium's parts, and a clause's total limit (overnight run 23 Oct, N087, N088, N092)
+const PARTS_DOC = "aaaaaaaa-0000-0000-0000-0000000000p1", LIMIT_DOC = "aaaaaaaa-0000-0000-0000-0000000000p2";
+// A made-up schedule in the shape of a CI plan's: the benefit's own premium on its line, an extra charged on it below.
+const PARTS_SCHED = (o: { extra?: string; currency?: string; sum?: string } = {}) => "Policy Schedule\nAssured\t: Lim Ah Kow\nFirst Year Instalment Premium * : 300.00\n"
+  + `: ${o.currency ?? "Singapore Dollar"}\nInstalment Premium\t: 350.50\tCurrency\nPayment Frequency\t: Monthly\n`
+  + "Basic Benefits\tSum\tInstalment\tPremium\tBenefit\tBenefit\nAssured/\tPremium\tCessation\tCommencement\tCessation\nBenefit\tDate\tDate\tDate\n"
+  + `Critical Illness Cover\t${o.sum ?? "200,000.00"}\t250.25\t01/10/2036\t01/10/2026\t01/10/2036\nPlus\n${o.extra ?? "- Occupation Extra\t---\t100.25\t01/10/2036\t---\t---"}\nDeath Benefit\t10,000.00\t---\t---\t01/10/2026\t01/10/2036`;
+const partsHouse = (sched: string, wording = ""): Household => ({ ...HOUSE, documents: [
+  doc(PARTS_DOC, "Schedule.pdf", [{ page: 1, text: sched }]),
+  ...(wording ? [doc(LIMIT_DOC, "Wording.pdf", [{ page: 4, text: wording }])] : []),
+] });
+const partsCover = { person: "Lim Ah Kow", product: "CI Plan", cover: "Critical Illness Cover", plan: null, sumInsured: 200000, asOf: "01/10/2026", page: 1, quote: "Critical Illness Cover\t200,000.00\t250.25\t01/10/2036" };
+const ciKey = coverKeyOf({ product: "CI Plan", cover: "Critical Illness Cover", plan: null });
+const currencyOf = (r: ChatRow) => (r.figure.kind === "none" ? null : r.figure.currency);
+function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover) {
+  const sched = checkReading(src(house.documents[0]), reading("personal_proof", "CI Plan", [cover], []));
+  const readings = [sched];
+  if (house.documents[1]) readings.push(checkReading(src(house.documents[1]), reading("policy_wording", "CI Plan", [], benefits)));
+  const t = assembleTable(readings, family, house.documents[1] ? [{ section: sectionKeyOf(LIMIT_DOC, { section: "Benefits", column: null }), cover: ciKey, why: "the plan's wording" }] : []);
+  const rs = chatRows(t, house);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: statements.map((st) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "no_event", ...st, ...(typeof st.row === "function" ? { row: (st.row as (r: typeof rs) => string)(rs) } : {}) })) };
+  const fromRows = amountsFromRows(raw, rs, house);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, ["how much"], new Set(fromRows.report.labels));
+  const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  return { rows: rs, cover: sched.covers[0], amounts: kept.filter((x) => x.amount).map((x) => x.amount!.text), kept, report: fromRows.report };
+}
+test("a premium's parts on the schedule line are rows of their own, after every other row (N088, N092)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED()), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }, { row: rowNamed(/^Premium for/), text: "Basic." }]);
+  assert.deepEqual(r.cover.premiumParts?.map((x) => [x.label, x.amount]), [[null, 250.25], ["Occupation Extra", 100.25]]);
+  assert.deepEqual(r.rows.slice(-2).map((x) => x.benefit), ["Premium for Critical Illness Cover, Monthly (part of the Instalment Premium; the first policy year's premium is different)",
+    "Occupation Extra (premium), Monthly (part of the Instalment Premium; the first policy year's premium is different)"]);
+  // The rows before them keep their numbers: the premium and the first-year premium come first, as on main.
+  assert.ok(r.rows.findIndex((x) => /^First Year/.test(x.benefit)) < r.rows.findIndex((x) => /^Premium for/.test(x.benefit)));
+  assert.deepEqual(r.amounts, ["S$100.25", "S$250.25"]);
+  // Each part is printed on its own line, in the schedule's currency.
+  assert.match(r.rows.at(-1)!.source.excerpt, /Occupation Extra --- 100\.25/);
+  assert.equal(currencyOf(r.rows.at(-1)!), "SGD");
+});
+test("a premium's parts are given in any currency the schedule settles (parity)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED({ currency: "Ringgit Malaysia" })), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }]);
+  assert.equal(currencyOf(r.rows.at(-1)!), r.cover.premiumCurrency ?? r.cover.currency);
+  assert.notEqual(r.cover.premiumCurrency, "SGD");
+});
+test("no parts unless they plainly add up to the premium, from the cover's own one line", () => {
+  const none = (sched: string, why: string, cover = partsCover) => assert.equal(partsAnswer(partsHouse(sched), [], [], cover).cover.premiumParts ?? null, null, why);
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t---\t99.25\t01/10/2036\t---\t---" }), "parts that do not add up");
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t50,000.00\t100.25\t01/10/2036\t---\t---" }), "a part that prints a sum");
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t---\t60.25\t40.00\t---\t---" }), "a part with two premium-like cells");
+  none(PARTS_SCHED({ extra: "Occupation Extra\t---\t100.25\t01/10/2036\t---\t---" }), "a line with no dash is another row");
+  none(PARTS_SCHED() + "\nRider\t200,000.00\t12.00\t-\t-\t-", "the sum printed on two lines");
+  none(PARTS_SCHED({ extra: "Plus more words" }), "no extra line at all");
+  // Another member on the page: never read.
+  none(PARTS_SCHED() + "\nSpouse\t: Tan Mei Ling", "another life on the page");
+});
+const LIMIT_WORDING = (limit: string, next = "2.3. Intensive Care Benefit\nAn additional 20% of the Sum Assured is payable.") => "2. BENEFITS\n2.1. Death Benefit\nWe will pay S$10,000 on death.\n"
+  + "2.2. Critical Illness Benefit\n100% of the Sum Assured will be payable in one lump sum.\ni.\tThe Life Assured survives at least 7 days.\n"
+  + `${limit}\nRefer to Appendix A for the list.\n${next}`;
+const TOTAL = "The most We will pay in total for all Early Stage Critical Illness claims under this Policy and\nall Policies covering the same Life Assured shall not exceed S$800,000 (or equivalent currency).";
+const ciRow = { section: "Benefits", benefit: "Critical Illness Benefit", pays: "percent", value: 100, percentOf: "sum_insured", page: 4, quote: "100% of the Sum Assured will be payable in one lump sum." };
+const limitRow = (rs: ChatRow[]) => rs.find((x) => /^Limit in total/.test(x.benefit))?.id ?? "R99";
+test("a clause's printed total limit is a row of its own, shown when asked with no event (N087)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL)), [{ row: limitRow, text: "The most in total." }], [b(ciRow)]);
+  const row = r.rows.find((x) => /^Limit in total/.test(x.benefit))!;
+  assert.equal(row.benefit, "Limit in total on Critical Illness Benefit claims");
+  assert.equal(row.combinedLimit, true);
+  assert.deepEqual(row.conditions, ["The most We will pay in total for all Early Stage Critical Illness claims under this Policy and all Policies covering the same Life Assured"]);
+  assert.equal(row.source.excerpt, TOTAL);
+  assert.equal(r.rows.at(-1), row, "after every other row");
+  assert.deepEqual(r.amounts, ["S$800,000"]);
+  // The benefit named in the plural ("Critical Illnesses claims", as printed) is still the row's benefit.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL.replace("Critical Illness claims", "Critical Illnesses claims"))), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "plural");
+  // A sentence in capitals with a full stop is no heading: the clause goes on past it.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(`THIS BENEFIT ENDS ON PAYMENT.\n${TOTAL}`)), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "capitals sentence");
+  // The card says what the limit is for, though the model gave no condition.
+  const card = r.kept.find((x) => x.amount?.text === "S$800,000")!;
+  assert.ok(JSON.stringify(card).includes("for all Early Stage Critical Illness claims"), JSON.stringify(card));
+});
+test("a total limit is never what an event pays", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL)), [{ row: limitRow, text: "Paid.", eventFit: "on_list" }], [b(ciRow)]);
+  assert.deepEqual(r.amounts, []);
+  assert.match(r.report.dropped.map((d) => d.why).join(" "), /most paid for several benefits together/);
+});
+test("a total limit in ringgit or pounds is read the same way (parity)", () => {
+  for (const [fig, code] of [["RM 800,000", "MYR"], ["£800,000", "GBP"], ["SGD 800,000", "SGD"]]) {
+    const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL.replace("S$800,000", fig))), [], [b(ciRow)]);
+    const row = r.rows.find((x) => /^Limit in total/.test(x.benefit));
+    assert.equal(row?.figure.kind === "printed" && row.figure.currency, code, fig);
+  }
+});
+test("no total limit row unless the clause plainly prints one total in a stated currency for the row's own benefit", () => {
+  const none = (wording: string, why: string, row: Record<string, unknown> = ciRow) =>
+    assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), wording), [], [b(row)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 0, why);
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "$800,000")), "a bare $ names no currency");
+  none(LIMIT_WORDING(TOTAL.replace("claims under", "claims for children under")), "a total for some insured persons");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$800,000 or S$400,000 after age 65")), "two figures");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "50% of the Sum Assured")), "a share, no figure");
+  none(LIMIT_WORDING("The amount payable for each claim shall not exceed S$800,000."), "no word says it is a total");
+  none(LIMIT_WORDING("We will pay S$800,000 in one lump sum for all Early Stage claims under all Policies covering the same Life Assured."), "no limit wording");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 per year")), "a total for each period");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all", "in total for any one claim among all")), "a limit for each claim");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all Early Stage Critical Illness claims", "in total for any one Early Stage Critical Illness claim")), "a limit for any one named claim (TE P155 F3)");
+  // A scale word after the figure, or words after it that can change the limit (TE P155 F1, F2).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$1 million")), "a figure in millions");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "the higher of S$800,000 and the Sum Insured")), "the higher of");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 or the Sum Insured, whichever is lower")), "whichever is lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, less any amount already paid")), "less any amount paid");
+  // Another benefit's limit printed in the clause, after an unnumbered heading, or naming no benefit (Critic R270 H1).
+  const DEATH_TOTAL = "The most We will pay in total for all Accidental Death claims under all Policies covering the same Life Assured shall not exceed S$300,000.";
+  none(LIMIT_WORDING(DEATH_TOTAL), "another benefit's total in the clause");
+  none(LIMIT_WORDING("", `GENERAL PROVISIONS\n${TOTAL}`), "a total after an unnumbered heading");
+  none(LIMIT_WORDING("", `Appendix B\n${TOTAL}`), "a total in an appendix");
+  none(LIMIT_WORDING("The maximum total amount payable under all policies for the same life shall not exceed S$300,000."), "a total naming no benefit");
+  // "this Basic Benefit" may be a wider benefit than the row's (a plan's basic benefit holds several): it names no row.
+  none(LIMIT_WORDING("The most We will pay in total for all claims under this Basic Benefit and all Policies covering the same Life Assured shall not exceed S$300,000."), "this basic benefit");
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING("The most We will pay in total for all claims under this benefit and all Policies covering the same Life Assured shall not exceed S$300,000.")), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "this benefit, in its own clause");
+  none(LIMIT_WORDING("The most We will pay in total for all Critical Illness and Death Benefit claims under all Policies covering the same Life Assured shall not exceed S$300,000."), "a total shared with another heading's benefit");
+  // Words after the figure (Critic R270 M1).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 less any amount already paid under the Death Benefit")), "less an amount paid");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, or the Sum Assured if that is lower")), "or the sum assured if lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, reduced by any Early Stage payment made before age sixty-five")), "reduced by a payment");
+  // The limit printed under the next heading is that benefit's, never the critical illness row's.
+  none(LIMIT_WORDING("", `2.3. Intensive Care Benefit\n${TOTAL}`), "another clause's limit");
+  // A heading that does not name the row's benefit: its limit is not the row's.
+  none(LIMIT_WORDING(TOTAL).replace("2.2. Critical Illness Benefit", "2.2. Special Benefit"), "a heading naming another benefit");
+  // The row's own cap said again adds nothing.
+  none(LIMIT_WORDING("The most We will pay in total under this benefit and all Policies covering the same Life Assured shall not exceed S$25,000.").replace("will be payable in one lump sum.", "will be payable, subject to a maximum amount of S$25,000."),
+    "the row's own cap", { ...ciRow, quote: "100% of the Sum Assured will be payable, subject to a maximum amount of S$25,000." });
+});
+
 async function atest(name: string, fn: () => Promise<void>) {
   try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }
