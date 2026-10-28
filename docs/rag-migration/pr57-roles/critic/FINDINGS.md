@@ -7911,3 +7911,18 @@ NOT READY, because of H1. I checked by running schedulePage and deterministicDoc
 Checks on fa8a95e, run network-blocked with model keys stripped:
 - documents:role-test 18 cases, r10 messy docs, benefit-table intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R290: #160 at d3099bd (TE F1–F3)
+
+NOT READY, because R289 M1 is still open. H1 is fixed: the four R289 shapes (wording "Schedule of Benefits" with a header row, SPECIMEN, a blank number with a signature line, product summary) are all policy_wording again. The real packs still pass: the colon form, the lone number under "POLICY NUMBER", the all-capitals name, and "binti". A "Proposal Number" page with "Policy Number: To be advised" is refused.
+
+- **M1 (Medium, from R289, still open) an endorsement that reissues the schedule page is filed as the schedule.** Example: a cover letter, then SCHEDULE PAGE with the number, the life insured and "Endorsement No. 3 effective 1 Oct 2026". This PR gives personal_schedule; main gives endorsement. Fix: skip schedulePage when the document prints a real endorsement marker ("endorsement no. N" or "this endorsement"). The Manulife pack's generic "Endorsement: any change to this policy" is unaffected.
+- **On the coordinator's question (the NOT_A_NAME deny-list):** a miss can upgrade a role only on a page that already has "SCHEDULE PAGE", "Policy Schedule" or "Schedule of Insurance" in its first 4 lines, a policy number with a digit beside its label, and no specimen, sample or group words. Line 108 on main already files any document that prints "policy schedule" anywhere as personal_schedule, so the only newly reachable title is "SCHEDULE PAGE". I found two misses that upgrade a page; both are Low, given that bound:
+  - header rows pass as names: "Life Assured  Age Next Birthday  Gender", and "Life Assured  Main Life" / "Second Life Assured  Not Applicable". Add age, next, birthday, date, birth, gender, main, joint, second, life, not, applicable, confirmed, self, nric, occupation, class and relationship;
+  - an illustrative brochure page ("For illustrative purposes", "Life Insured  John Doe") passes, because only "illustration only" is refused. Refuse illustrative|illustration|example|dummy|quotation|proposal anywhere on the page.
+  Neither can change an amount on its own, but a personal-authority role on a brochure would count its figures as the person's own cover. So treat the brochure one as needing a fix, not optional.
+- Low, safe direction: a non-Latin name ("Life Insured  陈美玲") gives no match and falls back to main's behaviour.
+
+Checks on d3099bd, run network-blocked with model keys stripped:
+- role-test 21, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
