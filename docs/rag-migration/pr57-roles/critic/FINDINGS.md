@@ -7839,3 +7839,28 @@ Checks on 74c1b47, run network-blocked with model keys stripped:
 - r5 20/20 (P5 included), simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22;
 - all other rag2 suites match main: adversarial (U1), conv, fix, live-budget, live-ledger and tools (F4) fail the same way on main 5000e99, because they need a DB or the import rule;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R286: #159 at 6bbdea9 (re-review after R285 and the TE's F1–F3)
+
+NOT READY, because of M1. It is a small fix. H1 from R285 works when the whole set of documents is named together. The R285 M1–M3 points are fixed, and I checked each with a probe:
+- "保单 2024", "生命保険証券", "GE" and "My CI" are now names a person chose;
+- the UUID with "beef", CamScanner, WhatsApp, PXL, DSC and Adobe Scan names are now made up;
+- "MetLife Mexico", "Allianz Monaco" and "Tesco" keep their letters, and the Singapore forms are still removed;
+- two fallback names with different policy numbers get "(ending 4821)" and "(ending 7777)".
+
+- **M1 (Medium) the same document can get two names, because each call site names a different set.**
+  - buildContracts names the whole inventory.
+  - documentsByPerson names only the people passed in.
+  - retrieveContractSources (lib/policies/inventory.ts:312) names only the ready documents of the contracts selected for this question.
+  So when two colliding schedules exist but only one contract is selected, that contract is "AIA Singapore policy schedule (ending 4821)" while its citations say "AIA Singapore policy schedule". Two effects:
+  - lib/claims/answer-shape.ts:57 compares `c.policyName === label`, which fails, so the card loses its page.
+  - The bare name is a substring of both suffixed names, so `item.title.includes(c.policyName)` can match the other policy's card.
+  Fix: name once over the account's documents, for example a `display_name` set in loadPolicyInventory with documentNames over every document, and reuse it everywhere. Give documentsByPerson and rag2's unlinked list the same account-wide set (one extra id/name query, or name the linked and unlinked rows together).
+- **M2 (Low–Medium) a fallback name that matches a chosen name is not told apart.** Only fallback names are grouped. So a made-up file name with no insurer ("Policy schedule") next to a person's own "Policy schedule.pdf", or a fallback "AIA Singapore policy schedule" next to a product named exactly that, keep the same name (probe). Fix: group by every final name, and rename only the fallback members.
+- Low: when two fallback names can't be told apart (one number missing, or the same last 4), the readable file name comes back. For two UUID files that is "817d6e8b 874f 4527 A45d 05e03adaf14c", the very text this PR set out to remove. Consider the upload date ("uploaded 3 Oct 2026") or the effective date before falling back to the file name.
+- Low: the app-screenshot check `/\bapp screenshot$/` misses the suffixed form ("… app screenshot (ending 4821)"), so "showing …" comes back. Low: "Screenshot_20241011-143211_Chrome" still counts as chosen ("Chrome"). Low: "Pty" is still not removed.
+- I agree with leaving whoIsCovered's token matching as it is.
+
+Checks on 6bbdea9, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22, roster 10/10, release 23/23, scenario 16/16, presentation passes;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
