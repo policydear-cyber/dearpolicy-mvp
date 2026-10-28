@@ -190,8 +190,14 @@ export function buildDeterministicReferenceExtraction(pages: PdfPage[], role: No
 }
 
 function pageScore(text: string) {
+  // A page that opens with its own schedule or certificate title is the page the reading must see: in a 58-page policy
+  // pack the contract pages mention "endorsement", "life assured" and "premium" too, and outranked the schedule, so the
+  // reading saw only the cover letter and the wording and filed the policy as a letter or an endorsement.
+  const opening = text.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 4);
+  const titled = opening.some((l) => /^(?:policy schedule|schedule page|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy information page)\b/i.test(l));
   const patterns: Array<[RegExp, number]> = [
-    [/certificate of insurance|policy schedule|schedule of insurance|endorsement/i, 8],
+    [/certificate of insurance|policy schedule|schedule of insurance|schedule page/i, 8],
+    [/endorsement/i, 3],
     [/insured person|life assured|policyholder|name of insured/i, 6],
     [/sum insured|sum assured|coverage amount/i, 5],
     [/policy no\.?|policy number|certificate no\.?/i, 4],
@@ -199,10 +205,11 @@ function pageScore(text: string) {
     [/premium/i, 3],
     [/S\$|SGD|\$\s?\d/i, 2],
   ];
-  return patterns.reduce((score, [pattern, weight]) => score + (pattern.test(text) ? weight : 0), 0);
+  return (titled ? 20 : 0) + patterns.reduce((score, [pattern, weight]) => score + (pattern.test(text) ? weight : 0), 0);
 }
 
-function compactSample(pages: PdfPage[], maxChars: number, perPageChars: number) {
+/** The pages the reading is shown. Exported for the document-role regressions. */
+export function compactSample(pages: PdfPage[], maxChars: number, perPageChars: number) {
   if (!pages.length) return "";
   const ranked = pages.map((page, index) => ({ page, index, score: pageScore(page.text) }))
     .sort((a, b) => b.score - a.score || a.index - b.index);
