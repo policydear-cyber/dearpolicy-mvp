@@ -275,7 +275,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   }
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
-  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message) : { json: reply.json, report: null };
+  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse()) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });

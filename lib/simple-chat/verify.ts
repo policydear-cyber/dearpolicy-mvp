@@ -215,7 +215,8 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
+type Count = { value: number; text: string; currencyResolved: boolean; count: number; payable: number; most: number | null; unit: string; rule: string };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
   /** A point about one file, or one person's files, stated from the library's record (libraryFact, libraryList). */
   libraryDoc?: number; libraryPerson?: string };
 
@@ -710,6 +711,65 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   const value = Math.round(amount.value * payable * 100) / 100;
   const sign = amount.text.replace(/^up to\s+/i, "").replace(/[\d,.\s]+$/, "");
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
+}
+
+/** What a figure printed per child could pay for the number of children the household's latest message gives
+ * (overnight run 23 Oct, N023: "how much in total if we have two kids" was refused; "S$5,000 per child (up to 2 children)"
+ * is S$10,000 for two). Read from the row's printed words alone, and only when they print exactly one money figure, the
+ * card's own, followed by "per child" (or "for each child", "per dependant"), at most one most-children figure ("up to 2
+ * children", "subject to a maximum of two children"), and no other limit (an overall or family limit, "up to S$5,000 per
+ * child", "whichever is less"). The count must be the only number of children the household's latest message gives. A
+ * count above the printed most is paid for the most. Anything less shows the figure per child as printed. */
+const CHILD_UNIT = String.raw`(?:dependant\s+|dependent\s+|eligible\s+)?(?:child(?:ren)?|dependants?|dependents?)`;
+const CHILD_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const CHILD_COUNT = String.raw`(\d{1,2}|${Object.keys(CHILD_WORDS).join("|")})`;
+const countValue = (v: string) => (/^\d+$/.test(v) ? Number(v) : CHILD_WORDS[v.toLowerCase()]);
+/** The one number of children the household's message gives ("two kids", "my 3 children", "we have 2 sons"), or null:
+ * none, or more than one ("2 sons and a daughter" gives 2 and a word that is not a number, so none is taken). */
+export function childrenSaid(message: string): number | null {
+  const q = message ?? "";
+  const counted = [...q.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "gi"))].map((m) => countValue(m[1]));
+  // A child added without a number ("2 sons and a daughter", "one more child", "twins") leaves the number unclear. A
+  // benefit's name ("the child education fund") adds no child.
+  const added = /\b(?:a|an|another|more|other|extra|plus|new)\s+(?:(?:young|little|baby|third|second|fourth)\s+)?(?:kid|kiddo|child|son|daughter|boy|girl|dependant|dependent|baby)\b|\b(?:twins|triplets|baby|babies|newborn|pregnant|expecting)\b/i.test(q);
+  const found = new Set(counted);
+  if (found.size !== 1 || added) return null;
+  const n = [...found][0];
+  return n >= 1 && n <= 10 ? n : null;
+}
+/** The per-child words printed right after a figure: "per child", "for each child", "each dependant". */
+const PER_CHILD = new RegExp(String.raw`^\s*(?:per|for\s+each|each|for\s+every)\s+${CHILD_UNIT}\b`, "i");
+const MOST_CHILDREN = new RegExp(String.raw`\(?\s*(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(?:\w+\s+)?\(?${CHILD_COUNT}\)?\s+${CHILD_UNIT}\s*\)?`, "gi");
+const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimit(?:ed)?\b|\bcapped\b|\baggregate\b|\boverall\b|\bin\s+total\b|\bper\s+(?:family|policy|household)\b|\bcombined\b/i;
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Count | null {
+  const count = childrenSaid(asked[0] ?? "");
+  // One child is paid the amount printed per child: nothing to work out.
+  if (!count || count < 2 || amount.illustration || /^up\s+to\b/i.test(amount.text)) return null;
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!page) return null;
+  const row = rowWithContinuation(page.text, found.offset).replace(/\s+/g, " ");
+  const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
+  const rule = squash(row).text.includes(squash(quoted).text) ? row : quoted;
+  const figures = moneyFiguresIn(rule);
+  if (figures.length !== 1 || !sameValue(figures[0].value, amount.value)) return null;
+  const after = rule.slice(rule.indexOf(figures[0].raw ?? "") + (figures[0].raw ?? "").length);
+  const per = PER_CHILD.exec(after);
+  if (!per) return null;
+  const mosts = [...after.matchAll(MOST_CHILDREN)];
+  if (mosts.length > 1) return null;
+  const most = mosts.length ? countValue(mosts[0][1]) : null;
+  // Once the most-children words are taken out, no other limit is left (an overall limit is never multiplied past).
+  const rest = mosts.length ? rule.replace(mosts[0][0], " ") : rule;
+  if (OTHER_CHILD_LIMIT.test(rest) || CAP_BEFORE.test(rule.slice(0, rule.indexOf(figures[0].raw ?? "")))) return null;
+  // Every number of children printed is the most: "(up to 2 children)" only.
+  const childNumbers = [...rule.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\)?\s+${CHILD_UNIT}\b`, "gi"))].map((m) => countValue(m[1]));
+  if (childNumbers.some((n) => n !== most)) return null;
+  const payable = most == null ? count : Math.min(count, most);
+  const value = Math.round(amount.value * payable * 100) / 100;
+  const sign = amount.text.replace(/[\d,.\s]+$/, "");
+  const unit = per[0].trim().replace(/\s+/g, " ").replace(/^(?:for\s+each|each|for\s+every)\b/i, "per").toLowerCase();
+  return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, count, payable, most, unit,
+    rule: `${amount.text} ${unit}${most != null ? `, for at most ${most} ${most === 1 ? "child" : "children"}` : ""}` };
 }
 
 type Billed = { raw: string; kind: RegExp | null };
@@ -1378,7 +1438,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
@@ -1532,6 +1592,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
         basis: `${st.rule} (${st.payable} × ${c.amount!.text}), for the stay you described`,
+        conditions, asOf: null, source, group: null,
+      });
+    }
+    if (c.count) {
+      const k = c.count, children = (n: number) => `${n} ${n === 1 ? "child" : "children"}`;
+      const said = k.payable < k.count
+        ? `For ${children(k.count)}, this pays for at most ${children(k.payable)}, if this benefit's conditions are met for each child.`
+        : `For ${children(k.count)}, this works out to ${k.payable} times the amount ${k.unit}, if this benefit's conditions are met for each child.`;
+      statements.push({
+        id: `s${i + 1}-count`, kind: "calculation", text: said, fullText: said, personName: c.person,
+        amount: { text: k.text, currencyResolved: k.currencyResolved, illustration: true },
+        basis: `${k.rule} (${k.payable} × ${c.amount!.text}), for the children you described`,
         conditions, asOf: null, source, group: null,
       });
     }

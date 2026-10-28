@@ -11,7 +11,7 @@ import { figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
@@ -432,7 +432,8 @@ function nameHead(row: ChatRow): string | null {
 }
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = ""): { json: unknown; report: RowReport } {
+/** `earlier`: the household's earlier messages in this conversation, latest first. */
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = []): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {} };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -456,7 +457,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // A benefit the question asks about by name is what was asked, never "not described" (live run 23 Oct, H7: "what is
     // the mobility aid benefit" lost its S$10,000).
     const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list`
-      : x.eventFit === "not_described" ? (asksFor(question, r) ? null : `${names(r)} pays only on something not described`)
+      // So is a figure paid per child, when the household gives a number of children right after asking about that benefit by
+      // name ("what's the child education fund" then "how much in total if we have two kids", overnight run 23 Oct, N023).
+      : x.eventFit === "not_described" ? (asksFor(question, r) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
       // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1).
       : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
@@ -958,6 +961,8 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
 }
 
+/** A row whose printed figure is paid per child ("S$5,000 per child (up to 2 children)"). */
+const perChild = (row: ChatRow) => row.figure.kind === "printed" && /^per\s+(?:dependant\s+|dependent\s+|eligible\s+)?(?:child(?:ren)?|dependants?|dependents?)\b/i.test(perUnit(row.source.excerpt, row.figure.amount) ?? "");
 /** What a printed figure is counted per, as its quote prints it right after the figure: "S$5,000 per child (up to 2
  * children)" gives "per child (up to 2 children)". Null when nothing follows. */
 function perUnit(excerpt: string, amount: number): string | null {
@@ -1008,7 +1013,25 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
     const rows = parent && labels.has(parent.text) ? report.days?.[parent.text] ?? [] : [];
     return !!rule && rows.length > 0 && rows.every((r) => r.alone && r.maxDays === Number(rule[2]) && (r.fromDay == null || r.fromDay === Number(rule[1])));
   };
-  const refused = statements.filter((st) => st.amount && !labels.has(st.text) && !stayOf(st));
+  // What a number of children could pay under a labelled per-child row (the checks' own "For 2 children ..." card,
+  // overnight run 23 Oct, N023): kept only when the row's label prints the same per-child words and the same most children,
+  // and the amount is that many times the row's own.
+  const countOf = (st: T) => {
+    if (!st.id?.endsWith("-count")) return false;
+    const parent = statements.find((s) => s.id === st.id!.slice(0, -"-count".length));
+    const rule = /^(.+?) (per (?:dependant |dependent |eligible )?(?:child(?:ren)?|dependants?|dependents?))(?:, for at most (\d+) child(?:ren)?)? \((\d+) × (.+?)\), for the children you described$/.exec(st.basis ?? "");
+    if (!rule || !parent || !labels.has(parent.text) || !parent.amount || !parent.text.toLowerCase().includes(rule[2])) return false;
+    const most = rule[3] != null ? Number(rule[3]) : null, times = Number(rule[4]);
+    const said = /\(?(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:dependant\s+|dependent\s+|eligible\s+)?(?:child(?:ren)?|dependants?|dependents?)/i.exec(parent.text);
+    const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    const printed = said ? (/^\d+$/.test(said[1]) ? Number(said[1]) : WORDS.indexOf(said[1].toLowerCase())) : null;
+    if (printed !== most || (most != null && times > most)) return false;
+    const figure = (x: unknown) => { const t = (x as { text?: unknown } | null)?.text; const m = typeof t === "string" ? /(\d[\d,]*(?:\.\d+)?)\s*$/.exec(t) : null; return m ? Number(m[1].replace(/,/g, "")) : NaN; };
+    const sign = (x: unknown) => String((x as { text?: unknown }).text ?? "").replace(/[\d,.\s]+$/, "");
+    return rule[5] === (parent.amount as { text?: unknown }).text && sign(st.amount) === sign(parent.amount)
+      && Math.abs(figure(st.amount) - times * figure(parent.amount)) < 0.005;
+  };
+  const refused = statements.filter((st) => st.amount && !labels.has(st.text) && !stayOf(st) && !countOf(st));
   return { kept: statements.filter((st) => !refused.includes(st)), refused };
 }
 
