@@ -7864,3 +7864,17 @@ NOT READY, because of M1. It is a small fix. H1 from R285 works when the whole s
 Checks on 6bbdea9, run network-blocked with model keys stripped:
 - r5 20/20, simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22, roster 10/10, release 23/23, scenario 16/16, presentation passes;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R287: #159 at ab58477 (per-document names)
+
+READY, with one Medium I recommend fixing before merge.
+- R286 M1 is closed. documentName depends only on its own document: the product name, else a chosen file name, else the insurer short name plus kind plus "(ending NNNN)" from its own policy number. Every site now passes policy_number: buildContracts, citations, documentsByPerson, rag2 unlinked, and policy-answer (its docRows already selects policy_number). So a contract and its citations carry the same name. The Home premium note takes contract names (premium-summary.ts:114), so it is covered.
+- The R286 Lows are closed: the screenshot line allows "(ending …)", Chrome/Gmail/Safari/iOS/Android/Edited are device words, and Pty is removed.
+- I accept leaving M2 as is.
+- **M1 (Medium, recommended) two no-number fallback names still merge people.** Two documents with no product name, a made-up file name, no policy number and the same insurer and role get one name. On main they had different (ugly) file names. lib/chat/household-status.ts:120 whoIsCovered groups by `d.name`, so two such schedules for two people read as "AIA Singapore policy schedule covers Ann and Ben". Fix in one line: group plans by `d.id` and print `d.name`. Likewise compare ids at lib/chat/workflow.ts:2253 (premium receipt vs contract). This is independent of naming, so equal product names on main stop merging too.
+- Low: a placeholder number prints as an ending: "N/A" gives "(ending NA)" and "TBA" gives "(ending TBA)". Consider requiring a digit in the last 4.
+
+Checks on ab58477, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- on ef57002 also monetary-boundary 32, roster 10/10, release 23/23, scenario 16/16;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
