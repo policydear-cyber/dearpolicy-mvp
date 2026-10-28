@@ -12,6 +12,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
+import { maskIdentityNumbers } from "@/lib/chat/identity-numbers";
 import { getConversation, historyToken, openConversation, saveTurn, ChatConflict } from "@/lib/chat/store";
 import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
@@ -159,18 +160,9 @@ export function datesSaidNote(message: string, now: Date, windows: number[] = []
   return said.length ? `(Days the household named: ${said.join("; ")}.) ` : "";
 }
 
-/** An NRIC or FIN ("S1234567D") is shown the way the household's own certificate prints it, "S****567D": in every word of the
- * answer, whatever was asked (overnight run 23 Oct, N291, N292). */
-const IDENTITY_NUMBER = /\b([STFGM])\d{4}(\d{3}[A-Z])\b/g;
-export function maskIdentityNumbers<T>(value: T): T {
-  const walk = (v: unknown): unknown => {
-    if (typeof v === "string") return v.replace(IDENTITY_NUMBER, "$1****$2");
-    if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = walk(v[i]); return v; }
-    if (v && typeof v === "object") { for (const k of Object.keys(v)) (v as Record<string, unknown>)[k] = walk((v as Record<string, unknown>)[k]); return v; }
-    return v;
-  };
-  return walk(value) as T;
-}
+/** An identity number is masked in every word of the answer, whatever was asked (overnight run 23 Oct, N291, N292); saveTurn
+ * masks again for every chat path (lib/chat/identity-numbers.ts). */
+export { maskIdentityNumbers };
 
 /** Words that say a claim's deadline has passed, or that a claim would be late. */
 const LATE = /\b(?:has|have|had)\s+(?:already\s+)?(?:passed|expired|closed|lapsed|run\s+out)\b|\b(?:may\s+)?already\s+(?:be\s+)?(?:past|over|outside|beyond)\b|\b(?:would|will)\s+(?:also\s+)?be\s+(?:too\s+)?late\b|\btoo\s+late\b|\bout\s+of\s+time\b/i;

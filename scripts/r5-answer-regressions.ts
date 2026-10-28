@@ -30,7 +30,7 @@ import { pool } from "@/lib/db/client";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
-import { premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -226,6 +226,35 @@ async function main() {
       assert.equal(data.premiums.medisaveAnnual, 1050); assert.equal(data.premiums.cashAnnual, 1120);
       assert.ok(data.reminders.some((r: { title: string; detail: string }) => /premiums are missing/i.test(r.title) && /TermSecure 20/.test(r.detail)));
       assert.equal(data.empty, false);
+    });
+
+    await check("P4 a short-period premium with no frequency (a trip) is never annualised into the yearly or monthly cost (Home tile S$6.10, 27 Oct)", async () => {
+      const trip = { period_start: "2026-09-29", period_end: "2026-10-04" }, year = { period_start: "2026-01-01", period_end: "2026-12-31" };
+      assert.equal(isOneOffPremium({ frequency: "Single premium" }), true);
+      assert.equal(isOneOffPremium({ frequency: null }), false, "no frequency is not proof of a one-off premium");
+      assert.equal(isShortPeriodPremium({ frequency: null, ...trip }), true);
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: "2026-10-01", period_end: "2026-10-31" }), true, "a month's statement with no frequency is not a year's premium (Critic R264)");
+      assert.equal(isShortPeriodPremium({ frequency: "annual", ...trip }), false, "a stated yearly premium stays yearly");
+      assert.equal(isShortPeriodPremium({ frequency: null, ...year }), false, "a renewal for a year with no frequency stays yearly (Critic R263)");
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: "2026-10-04" }), false, "an end date alone proves no short period");
+      for (const f of ["Monthly", "per annum", "p.a.", "Fortnightly", "Tahunan", "Bulanan", "Yearly"]) assert.equal(isShortPeriodPremium({ frequency: f, ...trip }), false, f);
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: null }), false, "unchanged: no frequency and no period");
+      const tripRow = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_page,notes)
+        VALUES($1,NULL,NULL,$2,'Harbour Travel Insurance','Travel Insurance','HTI-TRIP-5521',73.17,'SGD',NULL,'2026-09-28','2026-09-29','2026-10-04',1,'Total premium') RETURNING id`, [H, mei.id]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.equal(Math.round(s.annual * 100) / 100, 2170, "the trip premium is not a yearly cost: " + s.annual);
+        assert.equal(s.items.length, 2);
+        assert.deepEqual(s.shortPeriod.map((i) => i.amount), [73.17]);
+        assert.equal(s.complete, false, "a total that leaves a premium out is not complete");
+        assert.match(s.note ?? "", /also leaves out Travel Insurance \(S\$73\.17 for 29 September 2026 to 4 October 2026\)/);
+        assert.ok(!s.missing.some((m) => /travel/i.test(m)), "a policy with a one-off premium is not 'missing' a premium");
+        const { GET } = await import("@/app/api/dashboard/route");
+        process.env.DEV_ACCOUNT_ID = H;
+        const data = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
+        assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
+        assert.ok(!data.premiums.items.some((i: { amount: number }) => i.amount === 73.17), "the trip is not a current premium line on Home");
+      } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [tripRow.rows[0].id]); }
     });
 
     // ================================================================ C currentness

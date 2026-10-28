@@ -26,6 +26,7 @@
 import { flagUnclearFigures } from "@/lib/documents/messy";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import type { ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
+import { maskIdentityNumbers } from "./identity-numbers";
 
 export const POLICY_STATED_LIMIT_LABEL = "Policy-stated coverage limit" as const;
 export const POLICY_STATED_LIMIT_NOTICE = "This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.";
@@ -303,6 +304,8 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
  * calculation. Anything that is not a recognisable answer is returned as-is. */
 export function sanitizeStoredAnswer<T>(stored: T): T {
   if (!stored || typeof stored !== "object") return stored;
+  // An answer saved before identity numbers were masked at save time is masked when it is reopened; the stored row is unchanged.
+  stored = maskIdentityNumbers(JSON.parse(JSON.stringify(stored)) as T);
   const candidate = stored as unknown as { answer?: unknown };
   if (candidate.answer && typeof candidate.answer === "object") {
     return { ...(stored as object), answer: sanitizeStoredAnswer(candidate.answer) } as T;
