@@ -8136,3 +8136,17 @@ Low, accepted (safe direction, the total is marked incomplete): a cover with no 
 Checks on 4114756, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R303 — #163 at 9bc3927: NOT READY (1 High, 2 Medium)
+
+R302's probes A to D still pass. The new grouping falls back to the *document's* filed policy number, which is not per-policy evidence. Made-up probes on one schedule with Harbour Protector and Harbour Health Saver. The covers print no number, and the document is filed under HL-1001:
+
+**H1 — L: Protector's premium read, Saver's not → [] (silent).** premiumRead treats any cover whose numberOf() is set as tied to a read premium with the same key. Here numberOf falls back to the document number, so Saver is hidden by Protector's premium. This is R300 H2-B again, through the document-number fallback. Fix: tie by number only when the covers' *own* printed policyNumber matches. With only the document's number, use the product rule (r === c or oneProduct), as for no number.
+
+**M1 — K and M: neither read → only "Harbour Protector" is named** (both with only the document number and with no numbers). The group takes its name from its first cover, so a second plan on the document is silent. Fix: within a group, name each distinct product that oneProduct does not link to another. If TE R1b's case is riders that carry their own product names, naming them as well errs toward extra names, which is the safe direction.
+
+**M2 — N: a combined schedule with HL-1001 and HL-2002 printed per cover, plus one premium record from that document that has no number and no product → [] (both silent).** link() returns "same" for every group of the document whenever hint.number is set and the record has no number. Fix: when the document has more than one numbered group, a record from it that has no number and no product links "maybe", not "same", so each policy is named maybe_counted.
+
+Checks on 9bc3927, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
