@@ -84,6 +84,24 @@ async function main() {
       assert.deepEqual(labels, kindsOfTable(rows, covers), doc);
     }
   });
+  // TE W1: a schedule prints a cover whose name names no kind; its benefits were read from the separate wording.
+  const WORDING = "00000000-0000-0000-0000-00000000f006", SCHED2 = "00000000-0000-0000-0000-00000000f007", OTHER = "00000000-0000-0000-0000-00000000f008";
+  const w1 = [
+    { id: "p1", rows: [row(WORDING, "Example Life 88", "Basic Plan", "Death"), row(OTHER, "Example Saver", "Basic", "Total and permanent disability")],
+      covers: [{ product: "Example Life 88", cover: "Basic Plan", source: src(SCHED2) }, { product: "Example Saver", cover: "Basic", source: src(OTHER) }] },
+    // Another person holds the same plan with a critical illness row: never added to Lim Ah Kow's schedule.
+    { id: "p2", rows: [row(WORDING, "Example Life 88", "Basic Plan", "Critical illness")], covers: [] },
+  ];
+  await test("W1 a schedule printing a cover whose rows were read from its wording shows that cover's kinds, not Other", () => {
+    const out = documentTableKinds!(w1 as typeof people);
+    assert.deepEqual(out[SCHED2], ["Death"]);
+    assert.deepEqual(out[WORDING], ["Death", "Critical illness"]);
+  });
+  await test("W2 a cover takes only its own rows: the schedule's other cover and another person's rows don't spill", () => {
+    const out = documentTableKinds!(w1 as typeof people);
+    assert.ok(!out[SCHED2].includes("Disability") && !out[SCHED2].includes("Critical illness"));
+    assert.deepEqual(out[OTHER], ["Disability"]);
+  });
   // Negative control: a household not on the table keeps its Coverage-row labels.
   await test("C1 a household not on the table: Found from its Coverage rows, unchanged", () => {
     assert.deepEqual(documentFoundLabels(ledgerRows), { [LIFE]: ["Critical illness"], [TRIP]: ["Motor damage"], [EMPTY]: ["Death"] });
