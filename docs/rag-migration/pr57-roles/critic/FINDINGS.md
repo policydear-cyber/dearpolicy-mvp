@@ -7480,3 +7480,26 @@ Fix (structural, unsure → recurring as before):
 Checks on 657ede2 and ed6295a:
 - r5:answer-test 19/19, identity:mask-test 5/0, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main clean.
+
+## R264 — #153 re-check at 8615065 (one-off premium fix for R263)
+
+R263 H1 is fixed. An annual statement with no frequency word and a one-year printed period now stays yearly. An end date with no start date stays recurring. "per annum", "p.a.", "Fortnightly", "Bulanan" and "Tahunan" are all read as recurring. annualisePremium gives Bulanan 10 → 120 and Fortnightly 10 → 260. A trip premium with no frequency and 6 printed days is still one-off, and so is "Single premium" with no dates.
+
+**M1 (Medium, lib/policies/premium-summary.ts isOneOffPremium).** A monthly plan's statement can print no frequency word and a one-month period (2026-10-01 to 2026-10-31). That row is ≤ SHORT_TERM_DAYS, so it is classed one-off. Two things follow:
+- it drops out of the Home yearly total;
+- `missing` is worked out over `all`, so that policy is not flagged either. The total quietly goes down, with nothing on screen to say so.
+
+Premium rows carry no cover name or document role, so a travel-name check can't be done here. Suggested fix, in line with "the unsure case shows no figure":
+- treat a row as one-off only when the frequency word says so (single, one-off, "for the period");
+- treat a row with no frequency word and a short printed period as **unsure**: keep it out of the total and count it in `missing`, so Home shows the total as incomplete rather than quietly smaller;
+- add a P4 case for a monthly statement with no frequency and a one-month period, expecting it in `missing` and not in `oneOff`.
+
+If the builder judges this rare, it can be a follow-up. It is still a quietly wrong total, not a wrong claim amount.
+
+Minor: premium-summary imports SHORT_TERM_DAYS from lib/benefit-table/assemble. There is no import cycle, but it pulls a heavy module into the premium path. A shared constants file would avoid that.
+
+Checks on 8615065, run network-blocked with model keys stripped:
+- r5:answer-test 19/19, identity:mask-test passing, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main clean.
+
+Verdict: READY once M1 is fixed (or accepted as a follow-up). The masking side stays READY from R262/R263.
