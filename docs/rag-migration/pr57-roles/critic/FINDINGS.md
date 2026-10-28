@@ -8150,3 +8150,19 @@ R302's probes A to D still pass. The new grouping falls back to the *document's*
 Checks on 9bc3927, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R304 — #163 at ba629c8: NOT READY (2 High)
+
+R303 H1, M1 and M2 are fixed. Probes L, K and M now name Health Saver, and N gives maybe_counted for both policies. Two more silent paths remain. Made-up schedules: one document holding Harbour Protector and a second plan, with no policy number of their own on the covers.
+
+**H1 — P: Protector (end 2040) + Harbour Whole Life (start 2019, no end) → only "Harbour Protector".** The R5 rule `live = products.filter(p => p.some(g => !g.old))` drops every product whose covers are all "old" whenever another product is current. But "old" includes the whole-life shape (old start, no end) and an ending word on the page. R301 H3 decided those are held policies to name. So a whole-life plan beside a term plan on one schedule is left out silently. Fix: apply R5 only to covers of the *same* product (a rider row whose term ran out). Never drop a different product. It may be named with the unread_old wording, or joined into the name.
+
+**H2 — Q: the document is filed under HL-1001, a counted record from it prints HL-1001 and "Harbour Protector", and Health Saver is unread → [] (silent).** In link(), hint.number falls back to doc.policyNumber, so the record's number matches the *document's* filed number and returns "same" for Health Saver too. This is R303 H1 again, on the record side. Fix: tie a same-document record by number only against the cover's own printed policyNumber. Otherwise use the product rule: the same product gives "same", a record naming another product gives "maybe", and no product gives "same" only when numbersOn ≤ 1.
+
+Low: when one product in an entry is maybe_counted and another unread, the whole entry is labelled maybe_counted. complete stays false.
+
+Lesson for this PR: every `continue` or filter in unreadPremiumCovers is a place where a policy can drop silently. Before the next push, list them all and give each one a made-up probe: a held policy beside it on the same document, with no own number.
+
+Checks on ba629c8, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
