@@ -246,12 +246,16 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     // (TE pr163 R1b). Numbers tell a combined schedule's policies apart (Critic R300 H2).
     return (c.source?.documentId ?? "") + "|" + (number ? numberKey(number) : "");
   };
-  const numberOf = (c: TablePremiumCover) => c.policyNumber ?? documents.get(c.source?.documentId ?? "")?.policyNumber ?? null;
   const oneProduct = (a: string | null | undefined, b: string | null | undefined) => (!!productKey(a) && productKey(a) === productKey(b)) || maySameProduct(a, b);
   const read = covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended);
-  // A read premium is its policy's when a number ties them; with no number, only the cover whose product it is (TE pr163 R3).
-  const premiumRead = (c: TablePremiumCover) => read.some((r) => policyOf(r) === policyOf(c) && (numberOf(c) != null || r === c || oneProduct(r.product, c.product)));
-  const groups = new Map<string, { cover: TablePremiumCover; doc: TablePremiumDocument; old: boolean }[]>();
+  // A read premium is its policy's when both covers print the same number; a document's filed number says nothing about which of
+  // its plans a premium is for (Critic R303 H1). Otherwise only the cover whose product it is (TE pr163 R3).
+  const premiumRead = (c: TablePremiumCover) => read.some((r) => r === c || (r.source.documentId === c.source.documentId
+    && (c.policyNumber && r.policyNumber ? numberKey(c.policyNumber) === numberKey(r.policyNumber) : oneProduct(r.product, c.product))));
+  // How many policies a document prints its own numbers for: with more than one, a record that names neither is not tied to either (R303 M2).
+  const numbersOn = (documentId: string) => new Set(covers.filter((c) => c.source.documentId === documentId && c.policyNumber).map((c) => numberKey(c.policyNumber!))).size;
+  type Entry = { cover: TablePremiumCover; doc: TablePremiumDocument; old: boolean };
+  const groups = new Map<string, Entry[]>();
   for (const c of covers) {
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
     if (!documentId || !doc || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
@@ -267,24 +271,35 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
   }
   const out: TableLeftOut[] = [];
   for (const group of groups.values()) {
-    // A rider whose own term ran out is not the policy's name when a current cover of it is listed (TE pr163 R5).
-    const { cover: c, doc, old } = group.find((g) => !g.old) ?? group[0];
-    const documentId = c.source.documentId;
-    const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
-    // The same document is the same policy unless both print numbers that differ (a combined schedule's other policy). With no number
-    // on the document, a record naming no product, or the same product, is; another plan's premium on it may be this one's (TE pr163 R3).
-    const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
-      if (i.policy_id === documentId) {
-        const number = hint.number;
-        if (number && i.policy_number) { if (samePolicyNumber(number, i.policy_number) || numberKey(number) === numberKey(i.policy_number)) return "same"; }
-        else return number || !i.product_name?.trim() || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
-      }
-      const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
-      return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
-    };
-    const overlap = counted.map(link), already = named.map(link);
-    if (overlap.includes("same") || already.includes("same") || already.includes("maybe")) continue;
-    out.push({ name: c.product?.trim() || (doc.insurer ? doc.insurer + " policy" : "one policy"), why: overlap.includes("maybe") ? "maybe_counted" : old ? "unread_old" : "unread" });
+    // One entry per policy, naming each product on it that is not another's rider by name (Critic R303 M1): plans a schedule
+    // prints with no number of their own cannot be told apart from riders. A product whose every cover's term ran out is not
+    // named while a current one is (TE pr163 R5).
+    const products: Entry[][] = [];
+    for (const g of group) { const p = products.find((x) => oneProduct(x[0].cover.product, g.cover.product)); if (p) p.push(g); else products.push([g]); }
+    const live = products.filter((p) => p.some((g) => !g.old));
+    const kept: { entry: Entry; old: boolean; maybe: boolean }[] = [];
+    for (const p of live.length ? live : products) {
+      const { cover: c, doc } = p.find((g) => !g.old) ?? p[0], old = p.every((g) => g.old);
+      const documentId = c.source.documentId;
+      const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
+      // From the same document: the same policy when the numbers agree, or with a number missing, when the record names this
+      // product or (on a document with one policy number at most) no product; another plan's premium on it may be this one's (R3, R303 M2).
+      const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
+        if (i.policy_id === documentId) {
+          if (hint.number && i.policy_number) { if (samePolicyNumber(hint.number, i.policy_number) || numberKey(hint.number) === numberKey(i.policy_number)) return "same"; }
+          else return (!i.product_name?.trim() && numbersOn(documentId) <= 1) || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
+        }
+        const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
+        return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
+      };
+      const overlap = counted.map(link), already = named.map(link);
+      if (overlap.includes("same") || already.includes("same") || already.includes("maybe")) continue;
+      kept.push({ entry: { cover: c, doc, old }, old, maybe: overlap.includes("maybe") });
+    }
+    if (!kept.length) continue;
+    const doc = kept[0].entry.doc;
+    const name = [...new Set(kept.map((k) => k.entry.cover.product?.trim()).filter((x): x is string => !!x))].join(" and ") || (doc.insurer ? doc.insurer + " policy" : "one policy");
+    out.push({ name, why: kept.some((k) => k.maybe) ? "maybe_counted" : kept.every((k) => k.old) ? "unread_old" : "unread" });
   }
   return out;
 }
