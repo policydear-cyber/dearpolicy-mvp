@@ -7732,3 +7732,19 @@ Checks on 0e7f60e, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
 
 Verdict: READY.
+
+## R278: #156 at 8a8dfcf (Test engineer F1 and F2; delta since 6ee2b18)
+
+Still READY. These are now on allow-lists:
+- the words of every condition (the model's and the row's own) must be in HARMLESS_CONDITION_WORDS, and a % refuses;
+- the printed line's words before and after the figure must be the benefit's name, NAME_WORDS or harmless words;
+- a leftover digit or number word in the question gives no count: "2 kids and 1 from my wife" gives null, and so does "if I die within one year", which is conservative.
+The positives still count 2: "two kids", and "from the child education fund for our two children".
+
+Optional Lows:
+- **L1.** countPays takes the name words from `st.text`. In the row path that is the server's own label, which is fine. In a path with no benefit table, it would be the model's text, so the model's words could widen the allow-list. Taking the name from the matched row's benefitName (or only from labelled text) would close this.
+- **L2.** HARMLESS_CONDITION_WORDS holds "not", "no" and "only". So a condition such as "This benefit is not payable under the voluntary plan" still lets the total show. The per-child card carries the same condition and the total card says "if this benefit's conditions are met for each child", so this is acceptable. It is noted because "not" and "only" can narrow a total.
+
+Checks on 8a8dfcf, run network-blocked with model keys stripped:
+- per-child 17/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
