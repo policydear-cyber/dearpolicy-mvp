@@ -8050,3 +8050,23 @@ NOT READY, because of H1 and H2. I checked by running stackedPremiumLines over m
 Checks on 6e77c3f, run network-blocked with model keys stripped:
 - premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R298 — #162 stacked premium lines, re-review of c3da070: READY
+
+Both R297 Highs are fixed.
+- H1 (blank lines): blank lines are filtered before pairing, so a blank-separated header row or rider row is now seen as a neighbour and refuses the figure. Probed: gives [].
+- H2 (figure-side neighbour): only the page's currency row is harmless on the figure's other side. A cover-table header, a sum assured, a fee or any other row there gives none.
+
+Builder's question, "is a row of 3+ field names with no figure safe below the label?": yes.
+- The figure's other side admits only the currency row, which is a complete key and value, so it cannot own the figure. The only label left that can own the figure is PREMIUM.
+- A row with no digit cannot be PREMIUM's own money value, so it cannot take PREMIUM away from the figure either.
+
+Probes (made-up schedules):
+- every earlier bad case gives []: riders, first year, sum assured, blank-separated rows, header-owned figures, Waived, 2-cell header, currency row with extra words, rider chain, label over value;
+- 399.24 MONTHLY is read for: a currency row above the figure with a 4-cell header below PREMIUM, the earlier ReadyBuilder shape, and "CURRENCY : SGD" with PREMIUM at the page edge.
+
+Known cost, accepted: the bare value-over-label layout without a currency row, with a cover-table header under the figure, now gives none (unsure case shows no figure).
+
+Checks on c3da070, run network-blocked with model keys stripped:
+- premium:table-test pass, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
