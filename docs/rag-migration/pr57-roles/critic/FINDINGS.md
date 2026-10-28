@@ -8287,3 +8287,26 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - both: tsc clean, next build passes, merge-tree with main clean; premium:table, simple chat 84, replay 22/22, r5 21/21 and v11:claims 5 pass.
 - own tests: source-caption pass, failed-advice 6, chat failed-document 6.
 - cross-merges of #165b and #174 with #164b, #166b, #167, #168, #169b, #170, #171, #172 and #173 are all clean.
+
+## R310 — #167 (c41180a), #170 (9cc62e1), #172 stacked on #171 (221e5b3): all READY
+
+**#167 c41180a and #170 9cc62e1: READY. R308 M1 is fixed.**
+- "Being read" now needs a live intake job: `policyJobLive` (lib/rag/live-job.ts) is the same SQL the Documents page uses (livePolicyJob with the 10-minute unclaimed limit). It is an EXISTS subquery over the unique (job_type, idempotency_key) index.
+- Both callers run on the service `query`, so background_jobs (service-only) is readable. No new `FROM policies`.
+- #167: still being read only with in-progress status, a scan that can go on, and a live job. A stalled document keeps "could not be read (queued)", and adds "It can be tried again on the Documents page" only for queued, extracting and indexing (the page's inFlightIds).
+- #170: in intake with a live job → waiting; in intake with no live job → stalled; scan-rejected → not_readable; a ready document with a live re-read → waiting. live-job.ts is identical on both PRs, and #167 × #170 merges clean.
+- Real-database checks: I set up a local scratch database (db:setup plus sql/benefit-table.sql). still-reading gives 9/9, including the live, lapsed-lease, 9- and 11-minute, dead_letter, succeeded, other-type and other-key cases. unread-notice gives 15/15.
+- Low L1, a deliberate trade-off: Coverage and chat drop the Documents page's 2-minute updated_at grace. Right after a person is linked to a stalled document, Coverage and chat say "try again", but for up to 2 minutes the page shows "Reading this document…" with no button. This fails safe. The longer-term fix is to key the page's grace on the job row, not on updated_at.
+- Low L2, also on the Documents page today: with malware scanning on, a document whose job went unclaimed while its scan is still pending shows as stalled, but Try again answers 409 "not passed malware scanning".
+- Low L3, also on main today: scripts/setup-db.ts does not apply sql/benefit-table.sql, so unread-notice's database check fails on a fresh db:setup database.
+- On the builder's question, keep the link to the Documents page and don't add a Read again or Try again button on Coverage. The reprocess route's checks (scan cleared, already processing) and the card's errors live on the page. An optional nicety for a single stalled document is to link to `/policies#doc-<id>`, since cards carry `id="doc-…"`.
+
+**#172 221e5b3, stacked on #171: READY.**
+- The RowReport merge keeps conditionPoints, cards and premiumLabels.
+- #172's base is main and it contains #171 (77b69b5). So merge #171 first, or merging #172 alone lands both.
+
+Checks, network-blocked with model keys stripped:
+- every check below ran in a fresh worktree with npm ci, and next build ran in a worktree with real node_modules;
+- all three heads: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: still-reading 9, unread-notice 15, claim-note 9, conditions-twice 8;
+- cross-merges with #164b, #165b, #166b, #168, #169b, #171, #173 and #174 are all clean, and #172b with #167b and #170b is clean too.
