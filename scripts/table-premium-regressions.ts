@@ -309,12 +309,14 @@ test("a policy is not named as unread when its premium is counted, read, already
   assert.deepEqual(unread([{ ...bare, ended: "the cover ended" as never }]), [], "an ended cover is no current cost");
   assert.deepEqual(unread([{ ...bare, source: src("doc-e") as never }]), [], "a document whose pages say the policy ended");
   assert.deepEqual(unread([{ ...bare, source: src("doc-gone") as never }]), [], "a deleted or superseded document (not in the current documents)");
-  // A period that ended, or an old start with no end printed, is no current cost; no dates printed is named (TE pr163 N6-N8).
-  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: "28/02/2024" }]), [], "a period that ended");
-  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: null }]), [], "an old start, no end");
+  // A period that ran out, an old start with no end (whole life), or an ending word on the page may still be a held policy:
+  // named, its document perhaps out of date; no dates printed is plainly unread (TE pr163 N6-N8, Critic R301 H3).
+  const old = [{ name: "Harbour Protector", why: "unread_old" }];
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: "28/02/2024" }]), old, "a period that ran out");
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "05/01/2019", documentPeriodTo: null }]), old, "an old start, no end");
   assert.deepEqual(unread([{ ...bare, documentPeriodFrom: null, documentPeriodTo: null }]), [{ name: "Harbour Protector", why: "unread" }], "no dates printed");
   const endedDocs = new Map([...docs, ["doc-t", { insurer: "Harbour Life", lapsedOrEnded: false, endedPages: [1] }]]);
-  assert.deepEqual(unreadPremiumCovers([{ ...bare, source: src("doc-t") as never }], [], endedDocs, new Set(), TODAY), [], "a page that says the policy was terminated");
+  assert.deepEqual(unreadPremiumCovers([{ ...bare, source: src("doc-t") as never }], [], endedDocs, new Set(), TODAY), old, "a page with an ending word");
   // The cover's own number matches a record's (TE U11); an ended rider's premium does not mark its document as read (TE U12).
   assert.deepEqual(unread([{ ...bare, policyNumber: "HL-0099" }], [item({ policy_number: "HL 99", insurer: "Gull Insurance" })]), []);
   assert.deepEqual(unread([bare, cover({ product: "Harbour Protector Rider", ended: "the rider ended" as never })]), [{ name: "Harbour Protector", why: "unread" }]);

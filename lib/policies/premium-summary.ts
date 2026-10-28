@@ -155,7 +155,7 @@ function samePolicy(a: PolicyHint, b: PolicyHint): "same" | "maybe" | "different
 }
 /** Why a table premium was left out, for the note: its document may not show what is paid now, it may be a policy whose
  * premium is already counted, two documents give it a premium, or how often or in what currency it is paid is not plain. */
-export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" | "unread" };
+export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" | "unread" | "unread_old" };
 const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
@@ -249,12 +249,13 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
   for (const c of covers) {
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
     if (!documentId || !doc || done.has(policyOf(c)) || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
-    if (withPremium.has(policyOf(c)) || namedDocumentIds.has(documentId) || doc.endedPages?.includes(c.source.page)) continue;
-    // A cover whose printed period has ended, or that started more than about thirteen months ago with no end printed, is no
-    // current cost (tablePremiumItems' test). One with no dates printed is named: it is not known to have ended (TE pr163 N6-N8).
+    if (withPremium.has(policyOf(c)) || namedDocumentIds.has(documentId)) continue;
+    // Only a proven end (c.ended, doc.lapsedOrEnded, above) drops a policy. A printed period that has run out, an old start with
+    // no end (whole life), or a page with an ending word ("will be terminated if ...") may still be a held policy: named, with
+    // its document perhaps out of date (TE pr163 N6-N8, Critic R301 H3).
     const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
     const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
-    if (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS) continue;
+    const old = doc.endedPages?.includes(c.source.page) || (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS);
     done.add(policyOf(c));
     const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
     // The same document is the same policy unless both print numbers that differ (a combined schedule's other policy).
@@ -265,7 +266,7 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     };
     const overlap = counted.map(link), already = named.map(link);
     if (overlap.includes("same") || already.includes("same") || already.includes("maybe")) continue;
-    out.push({ name: c.product?.trim() || (doc.insurer ? doc.insurer + " policy" : "one policy"), why: overlap.includes("maybe") ? "maybe_counted" : "unread" });
+    out.push({ name: c.product?.trim() || (doc.insurer ? doc.insurer + " policy" : "one policy"), why: overlap.includes("maybe") ? "maybe_counted" : old ? "unread_old" : "unread" });
   }
   return out;
 }
@@ -324,6 +325,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     unclear: ["its document does not say plainly how often, or in what currency, the premium is paid", "their documents do not say plainly how often, or in what currency, the premiums are paid"],
     two_documents: ["two of its documents print a premium, and which is current is not known", "two of their documents print a premium, and which is current is not known"],
     unread: ["no premium could be read from its documents", "no premium could be read from their documents"],
+    unread_old: ["no premium could be read from its documents, which may not show the policy as it is now", "no premium could be read from their documents, which may not show the policies as they are now"],
   };
   const tableNote = (Object.keys(WHY) as TableLeftOut["why"][]).map((why) => {
     const names = [...new Set(tableLeftOut.filter((x) => x.why === why).map((x) => x.name))];
