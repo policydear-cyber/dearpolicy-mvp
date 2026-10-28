@@ -7503,3 +7503,35 @@ Checks on 8615065, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main clean.
 
 Verdict: READY once M1 is fixed (or accepted as a follow-up). The masking side stays READY from R262/R263.
+
+## R265 — #154 at 7c4ee65 (intensive-care daily rate row, N119)
+
+**H1 (High, lib/benefit-table/chat.ts intensiveCareRateOf): the base rate becomes the ICU rate.** The allow-list holds both the multiplier words (doubled, double, twice, this) and the cap words. Nothing checks where the figure sits relative to them, so a clause that prints the *base* rate and then says it doubles passes. The figure is then given as the intensive-care rate, which understates the ICU day by half. That is a wrong claimable amount. Probe results:
+- "Daily hospital cash S$200 per day, doubled in ICU" gives 200 (should be 400 or no row);
+- "Hospital cash benefit S$100 per day doubled if hospitalised in intensive care" gives 100;
+- "S$150 per day, double if in ICU" gives 150;
+- "S$200 per day, twice this amount in ICU" gives 200;
+- "S$400 per day in ICU or the daily amount" gives 400. "or" plus an unpriced alternative leaves it unsure which applies.
+
+Commas don't split clauses, so in the row path each of these is one clause. It is printed in the row's own document, and the only dedupe is against existing ICU rows.
+
+Fix (structural, allow-list):
+- when the clause holds a multiplier word, give a row only if the multiplier comes before the figure and a cap word (capped, up to, maximum, max, limited) sits between them. Otherwise return null;
+- drop "or" from the words unless both sides are priced (the existing two-figure check already refuses those);
+- add the four cases above to the negative controls.
+
+**M1 (Medium): "doubled, capped at S$400" is a cap, but the table line reads as a flat rate.** The card renders "Up to S$400", which is fine. The model-visible table line is "… in intensive care | S$400 a day" with `conditions: []`, so the doubling is lost. With a base of S$150, an ICU day pays min(2×150, 400) = S$300, not S$400. Fix, either of:
+- keep the clause as the row's condition when a multiplier is present, so the line reads "doubled, at most S$400 a day";
+- when the same row prints one base per-day figure, give min(multiplier × base, cap) and quote both. The first is simpler and default-safe.
+
+**M2 (Medium): dropping the base row's overall limit.** The ICU row is cloned from the limit row (S$8,000 up_to in the test), and its limit is cleared. ICU days count against that overall limit. With nothing on the ICU card, 25 ICU days read as 25 × S$400 = S$10,000 against an S$8,000 limit, which overstates. Day-count limits are already refused (rows with maxDays give no row). A money overall limit should not be silently dropped either. Fix, either of:
+- carry it as a condition ("counts toward the S$8,000 overall limit"), keeping capSource;
+- give no ICU row when the base has an overall money limit. That hides the rate, so the first is better.
+
+Model-visible change: one more table line, added last, so ids are stable. The replay gate is 22/22 and unchanged, so I see no other risk there once H1/M1 are fixed.
+
+Checks on 7c4ee65, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: NOT READY. H1 must be fixed; M1 and M2 before merge if cheap.
