@@ -11,6 +11,7 @@ import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
+import { printedDay } from "./dates";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -29,6 +30,9 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   /** The first policy year's premium, when the premium's page prints exactly one first-year premium line with a figure
    * ("First Year Instalment Premium * : 376.68"), and that line's words. */
   firstYearPremium?: number | null; firstYearSource?: Source | null; firstYearLabel?: string | null;
+  /** The policy's start as the first-year premium's page labels it ("Policy Effective Date : 19/10/2026"), when that page
+   * prints exactly one such date: the first policy year runs from it. */
+  firstYearFrom?: string | null;
   /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
    * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
    * premium (premiumPartsOf). */
@@ -45,6 +49,9 @@ const premiumLineLabel = (line: string, value: number) => {
   const at = [...line.matchAll(/\d[\d,]*(?:\.\d+)?/g)].find((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
   return at ? line.slice(0, at.index).replace(new RegExp(String.raw`${MONEY_SIGN}\s*$`, "i"), "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
 };
+/** A policy's start date as a schedule labels it: "Policy Effective Date : 19/10/2026", "POLICY START DATE 27 JUN 2020",
+ * "Commencement Date: 1 March 2026". */
+const POLICY_START = /\b(?:policy\s+(?:effective|start|commencement|inception)\s+date|(?:risk\s+)?commencement\s+date|date\s+of\s+commencement)[ \t]*[\t:][ \t:]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}[ \t]+[A-Za-z]{3,9}\.?,?[ \t]+\d{4})/gi;
 /** A schedule cell holding a premium: a figure with cents ("269.05"), never a date or a whole sum. */
 const PREMIUM_CELL = /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*\.\d{2}$/;
 const EMPTY_CELL = /^(?:-+|–+|—+|nil|n\/?a)?$/i;
@@ -420,6 +427,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const at = m ? find(lines[0].trim(), page) : null;
     if (!m || !at || at.page !== page || otherLife(pageText(page), c.person, doc.people ?? [])) continue;
     c.firstYearPremium = Number(m[2].replace(/,/g, "")); c.firstYearSource = at; c.firstYearLabel = m[1].replace(/\s+/g, " ").trim();
+    // The day the first policy year starts, from the same page: a policy start labelled as such, never an issue or letter
+    // date. Two different such dates on the page give none (Critic R284 M3).
+    const starts = [...pageText(page).matchAll(POLICY_START)].map((x) => x[1].trim());
+    c.firstYearFrom = new Set(starts.map((x) => printedDay(x))).size === 1 && printedDay(starts[0]) != null ? starts[0] : null;
   }
 
   for (const c of out.covers) {
