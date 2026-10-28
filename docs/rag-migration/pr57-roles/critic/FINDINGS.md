@@ -8010,3 +8010,24 @@ READY.
 Checks on b342309, run network-blocked with model keys stripped:
 - premium:table-test 13/0, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R296: #161 at 197d191 (premium figure set over or under its label)
+
+NOT READY, because of H1. I checked by running stackedPremiumLines over made-up page text in a scratch script outside git.
+
+- **H1 (High) in a label-over-value layout, the value of the label above is paired with PREMIUM.** When the premium's own value line has words after the figure ("S$399.24 per month", "S$470.85 monthly from 2nd year", "See premium table"), it is not a STACKED_FIGURE. So the figure above the PREMIUM label, which belongs to the label above it, pairs downward and is read as the plain premium:
+  - "RIDER PREMIUM / S$50.00 / PREMIUM / S$399.24 per month" gives 50;
+  - "FIRST YEAR PREMIUM / S$376.68 / PREMIUM / S$470.85 monthly from 2nd year" gives 376.68;
+  - "SUM ASSURED / S$100,000.00 / PREMIUM / See premium table" gives 100,000;
+  - "Waiver of Premium Rider / S$12.50 / PREMIUM / …" gives 12.5;
+  - "S$200.00 / PREMIUM / DEPOSIT PAID" gives 200.
+  The page-only path (filling c.premium when the reading gave none) then sets the premium, because the same-line count sees no other plain line. With "Payment frequency : Monthly" elsewhere on the page, Home (#158) would count S$100,000 a month. Fix with an orientation allow-list. Accept a figure over its label only when both hold:
+  - the line above the figure is the start of the page, or a no-digit line that already has its own figure directly above it (the value-over-label chain, as in "S$100,000.00 / SUM ASSURED / S$399.24 (MONTHLY) / PREMIUM");
+  - the line below the label holds no money figure.
+  Mirror this for a figure under its label. Anything else gives none. Add the five cases above as premium:table-test cases.
+- Correct as it stands: the ReadyBuilder value-over-label shape gives 399.24 monthly, and the two-label label-over-value shape ("SUM ASSURED / S$100,000.00 / PREMIUM / S$399.24") gives none.
+- Low: a stacked "(SINGLE)" premium is read with frequency "single". #158's premiumsPerYear has no "single", so it is named "unclear", which is safe.
+
+Checks on 197d191, run network-blocked with model keys stripped:
+- premium:table-test 15/0, benefit-table 107/0, benefit-table chat 107/0, r5 20/20, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 17074d4 clean.
