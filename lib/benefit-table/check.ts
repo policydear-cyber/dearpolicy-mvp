@@ -46,7 +46,7 @@ const premiumLineLabel = (line: string, value: number) => {
   return at ? line.slice(0, at.index).replace(new RegExp(String.raw`${MONEY_SIGN}\s*$`, "i"), "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
 };
 /** A schedule cell holding a premium: a figure with cents ("269.05"), never a date or a whole sum. */
-const PREMIUM_CELL = /^(?:[A-Z]{0,3}\$)?\d[\d,]*\.\d{2}$/;
+const PREMIUM_CELL = /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*\.\d{2}$/;
 const EMPTY_CELL = /^(?:-+|–+|—+|nil|n\/?a)?$/i;
 const DATE_CELL = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/;
 /** The parts of a cover's premium as its schedule line prints them (overnight run 23 Oct, N088, N092):
@@ -63,7 +63,7 @@ export function premiumPartsOf(text: string, sumInsured: number | null, premium:
   const lines = text.split("\n");
   const cells = (l: string) => l.split("\t").map((c) => c.trim()).filter(Boolean);
   const value = (c: string) => Number(c.replace(/[^\d.]/g, ""));
-  const own = lines.flatMap((l, i) => cells(l).slice(1).some((c) => /^(?:[A-Z]{0,3}\$)?\d[\d,]*(?:\.\d{2})?$/.test(c) && Math.abs(value(c) - sumInsured) < 0.005) ? [i] : []);
+  const own = lines.flatMap((l, i) => cells(l).slice(1).some((c) => /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*(?:\.\d{2})?$/.test(c) && Math.abs(value(c) - sumInsured) < 0.005) ? [i] : []);
   if (own.length !== 1) return null;
   const at = own[0], line = cells(lines[at]);
   const sumAt = line.findIndex((c, k) => k > 0 && Math.abs(value(c) - sumInsured) < 0.005);

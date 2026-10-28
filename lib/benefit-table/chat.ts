@@ -268,6 +268,8 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
       const sentence = joined.slice(bounds[k], bounds[k + 1]).replace(/\s+/g, " ").trim().replace(/^\d{1,2}(?:\.\d{1,2})+\s*/, "");
       if (!TOTAL_LIMIT_WORDS.test(sentence) || !TOTAL_SCOPE.test(sentence) || TOTAL_QUALIFIER.test(sentence)) continue;
       const figures = anyMoneyFigures(sentence);
+      // A figure with a scale word after it ("S$1 million", "RM2.5 m") is not the number read (TE P155 F1).
+      if (figures.some((f) => SCALE_AFTER.test(sentence.slice(f.index + f.length)))) continue;
       const values = new Set(figures.map((f) => f.value));
       if (values.size !== 1) continue;
       const signs = new Set(figures.map((f) => statedCurrencyCode(new RegExp(`^${MONEY_SIGN}`, "i").exec(sentence.slice(f.index, f.index + f.length))?.[0] ?? null)));
@@ -283,6 +285,10 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
       const cut = /\s(?:(?:shall|will|must)\s+not\s+exceed|(?:will\s+be\s+)?aggregated\s+up\s+to|(?:is|are)\s+(?:limited\s+to|capped\s+at)|(?:is|are)\b(?=[^.]*\d))/i.exec(sentence);
       const scope = cut ? sentence.slice(0, cut.index).replace(/[\s,]+$/, "") : "";
       if (scope.split(/\s+/).length < 4 || anyMoneyFigures(scope).length || /\d/.test(scope)) continue;
+      // After the limit words, only the figure and words known to change nothing: the amount spelled out, its currency,
+      // "(or equivalent currency)", "per life". Anything else ("the higher of", "or the Sum Insured, whichever is lower",
+      // "three times the Sum Insured, up to", "less any amount already paid") can change the limit, so no row (TE P155 F2).
+      if (!limitTailHarmless(sentence.slice(cut!.index + cut![0].length), figures.map((f) => sentence.slice(f.index, f.index + f.length)))) continue;
       const key = [r.personId, r.coverKey, r.source.documentId, page.page, amount, plain(sentence)].join("|");
       if (seen.has(key)) continue;
       seen.add(key);
@@ -292,6 +298,22 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
     }
   }
   return out;
+}
+const SCALE_AFTER = /^\s*(?:million|mil|mn|m|billion|bn|b|thousand|k)\b/i;
+const EQUIVALENT = /\(\s*or\s+(?:its\s+)?equivalent(?:\s+currency)?(?:\s+based\s+on\s+the\s+exchange\s+rate\s+as\s+(?:decided|determined)\s+by\s+us)?\s*\)/gi;
+/** Words that may follow a total's limit words without changing it: the limit verb's own words, the amount spelled out
+ * and its currency. An allow-list: a word not on it gives no row. */
+const LIMIT_TAIL_WORDS = new Set(("exceed exceeding limited to capped at of a the total sum amount one two three four five six seven eight nine ten eleven twelve "
+  + "fifteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million and singapore dollars dollar ringgit malaysia "
+  + "pounds pound sterling euros euro us hong kong sgd myr gbp usd hkd eur rm per life").split(" "));
+function limitTailHarmless(tail: string, figures: string[]): boolean {
+  let rest = tail.replace(EQUIVALENT, " ");
+  for (const f of figures) rest = rest.split(f).join(" ");
+  // A figure's own brackets ("Dollars (S$1,050,000)") and the closing full stop.
+  rest = rest.replace(/[()]/g, " ").replace(/[.\s]+$/, "");
+  // "per" only as "per life": "per policy year" or "per claim" is no total.
+  if (/\bper\b(?!\s+life\b)/i.test(rest)) return false;
+  return rest.toLowerCase().split(/[\s,-]+/).filter(Boolean).every((w) => LIMIT_TAIL_WORDS.has(w));
 }
 const printsAmount = (text: string, amount: number) => anyMoneyFigures(text).some((f) => Math.abs(f.value - amount) < 0.005);
 

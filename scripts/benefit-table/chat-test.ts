@@ -1839,6 +1839,11 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   none(LIMIT_WORDING("We will pay S$800,000 in one lump sum for all Early Stage claims under all Policies covering the same Life Assured."), "no limit wording");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 per year")), "a total for each period");
   none(LIMIT_WORDING(TOTAL.replace("in total for all", "in total for any one claim among all")), "a limit for each claim");
+  // A scale word after the figure, or words after it that can change the limit (TE P155 F1, F2).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$1 million")), "a figure in millions");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "the higher of S$800,000 and the Sum Insured")), "the higher of");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 or the Sum Insured, whichever is lower")), "whichever is lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, less any amount already paid")), "less any amount paid");
   // The limit printed under the next heading is that benefit's, never the critical illness row's.
   none(LIMIT_WORDING("", `2.3. Intensive Care Benefit\n${TOTAL}`), "another clause's limit");
   // A heading that does not name the row's benefit: its limit is not the row's.
