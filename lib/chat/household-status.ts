@@ -69,7 +69,7 @@ export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[], sa
     else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + d.filename + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
     else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + d.filename + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
     else if (d.status === "unreadable") lines.push(whose("“" + d.filename + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
-    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename && !/\bapp screenshot$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
+    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename && !/\bapp screenshot(?: \(ending \w+\))?$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
     else if (d.status === "processing") lines.push(whose("“" + d.filename + "” is still being read.") + once("Ask again in a few minutes."));
   }
   return lines;

@@ -280,6 +280,8 @@ async function main() {
       // A company form is a word of its own (TE P159 F3).
       for (const n of ["Tesco", "Zinc", "Seguros Mexico", "Allianz Morocco"]) assert.equal(insurerShortName(n), n);
       assert.equal(insurerShortName("Contoh Insurans Sdn. Bhd."), "Contoh Insurans");
+      assert.equal(insurerShortName("Example Insurance Australia Pty Ltd"), "Example Insurance Australia");
+      assert.equal(isMachineFilename("Screenshot_20261001-101500_Chrome.jpg"), true);
       // Two policies named by insurer and kind alone are told apart by their numbers, the same wherever the document is named (Critic R285 H1, TE P159 G1-G3).
       const sched = (original_filename: string, policy_number: string | null) => documentName({ product_name: null, original_filename, insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number });
       assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "EL-11-4821"), "Example Life policy schedule (ending 4821)");

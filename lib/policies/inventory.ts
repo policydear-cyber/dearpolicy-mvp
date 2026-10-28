@@ -24,7 +24,7 @@ export function prettifyFilename(filename:string):string {
 
 // A word a device, scanner or app puts in a file name, never a document's own name (with any number run on: "Document1",
 // "WA0001"); months and times are how such names are dated ("Adobe Scan 28 Oct 2026", "... at 10.15.32").
-const MACHINE_WORD=/^(?:output|scan(?:ned|ner)?|camscanner|cam|img|image|vid|mvimg|dsc|dscn|dcim|pxl|photo|pic|picture|whatsapp|whats|app|adobe|microsoft|word|document|doc|docs|file|download|attachment|copy|page|untitled|screenshot|screen|shot|print|final|new|pdf|wa|at|of|am|pm|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d*$/i;
+const MACHINE_WORD=/^(?:output|scan(?:ned|ner)?|camscanner|cam|img|image|vid|mvimg|dsc|dscn|dcim|pxl|photo|pic|picture|whatsapp|whats|app|adobe|microsoft|chrome|gmail|safari|ios|android|edited|word|document|doc|docs|file|download|attachment|copy|page|untitled|screenshot|screen|shot|print|final|new|pdf|wa|at|of|am|pm|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d*$/i;
 // A UUID, whatever its first part holds ("fbdcaeef-1234-4abc-8def-0123456789ab").
 const UUID=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 /** A file name a device or system made up ("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf",
@@ -39,7 +39,7 @@ export function isMachineFilename(filename:string):boolean {
  * A form is a word of its own, after a space, comma or "(": "Tesco" and "Zinc" keep their letters (TE P159 F3). */
 export function insurerShortName(insurer:string):string {
   let name=insurer.trim(),before="";
-  while(name!==before){before=name;name=name.replace(/(?:^|[\s,&]+)\(?(?:pte|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?\)?$/i,"").trim();}
+  while(name!==before){before=name;name=name.replace(/(?:^|[\s,&]+)\(?(?:pte|pty|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?\)?$/i,"").trim();}
   return name||insurer.trim();
 }
 /** What a document is, in words, from its role ("policy_wording" -> "policy wording"). */
