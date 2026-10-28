@@ -74,6 +74,42 @@ test("N4 an insurer that is only a company form ('Pte. Ltd.') never leaves an em
   assert.ok(!/^\s/.test(n), n);
 });
 
+// ------------------------------------------------------------ collisions (ef57002: a name depends on its own document only)
+// Grader correction (ef57002, agreed design, Critic R285 H1 follow-up): X3-X5 first required two documents' names to differ
+// whatever their numbers (original grade on 6bbdea9: FAIL). The builder chose names that depend only on their own document:
+// two fallback documents with no policy number share a plain name, as main already does for two same-named products.
+// X3 now requires no broken code to come back; X4/X5 are noted.
+const D = (id: string, f: string, o: { product?: string | null; insurer?: string | null; role?: string | null; num?: string | null } = {}) =>
+  ({ id, product_name: o.product ?? null, original_filename: f, insurer: o.insurer === undefined ? "Harbourline Assurance Pte. Ltd." : o.insurer, document_role: o.role === undefined ? "personal_schedule" : o.role, policy_number: o.num ?? null });
+const names = (docs: ReturnType<typeof D>[]) => docs.map((d) => documentName(d as never));
+test("X1 a fallback name adds '(ending NNNN)' from its own policy number", () => {
+  assert.deepEqual(names([D("a", "IMG_2041.jpg", { num: "HL-0012-4821" }), D("b", "IMG_2042.jpg", { num: "HL-0099-7310" })]),
+    ["Harbourline Assurance policy schedule (ending 4821)", "Harbourline Assurance policy schedule (ending 7310)"]);
+});
+test("X2 a chosen file name or product name never gets an ending", () => {
+  assert.equal(documentName(D("a", "Harbour schedule.pdf", { num: "HL-0012-4821" }) as never), "Harbour schedule");
+  assert.equal(documentName(D("a", "IMG_2041.jpg", { product: "Harbour Shield", num: "HL-0012-4821" }) as never), "Harbour Shield");
+});
+test("X3 no number, numbers ending alike, UUID names: never a broken code or a made-up file name", () => {
+  for (const docs of [[D("a", "IMG_2041.jpg", { num: "SG-0001-4821" }), D("b", "IMG_2042.jpg", { num: "MY-9999-4821" })], [D("a", "scan 1.pdf", { num: "HL-1" }), D("b", "scan 2.pdf")],
+    [D("a", "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf"), D("b", "0f3e2a1b-1111-4222-8333-444455556666.pdf")]]) {
+    const got = names(docs);
+    notes.push("X3 " + JSON.stringify(got));
+    assert.ok(!got.some((n) => /[0-9a-f]{8} [0-9a-f]{4}|\bIMG\b|\bScan \d/i.test(n)), "a made-up file name comes back: " + JSON.stringify(got));
+  }
+});
+test("X4 a short or odd policy number ('A1', '  ', '----') gives a clean ending or none", () => {
+  for (const num of ["A1", "  ", "----", "0000004821"]) {
+    const n = documentName(D("a", "IMG_2041.jpg", { num }) as never);
+    notes.push(`X4 '${num}': ${n}`);
+    assert.ok(!/\(ending \)|ending\s*-|ending\s*$/.test(n), n);
+  }
+});
+test("X7 a name is the same at every site: it depends only on its own document", () => {
+  const a = D("a", "IMG_2041.jpg", { num: "HL-0012-4821" });
+  assert.equal(documentName(a as never), documentName({ ...a } as never));
+});
+
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);
