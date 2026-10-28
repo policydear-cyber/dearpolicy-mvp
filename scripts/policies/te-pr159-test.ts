@@ -33,6 +33,14 @@ for (const f of ["817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_20260928114
     assert.equal(isMachineFilename(f), true, `'${f}' stays as '${doc(f)}'`);
   });
 
+for (const f of ["Screenshot_20261001-101532_Chrome.jpg", "Screenshot_20261001_Gmail.jpg", "MVIMG_20261001_101532.jpg", "Image from iOS.jpg", "IMG_2041 (Edited).jpg", "VID_20261001.mp4", "Photo 01-10-2026, 10 15 32 am.jpg",
+  "Scan Oct 28.pdf", "Doc - 28 Oct 2026 - 10-15.pdf", "Outlook-abc123.pdf", "image0.jpeg", "AnyScanner_10_01_2026.pdf", "Scanned with Genius Scan.pdf"])
+  test(`M2 more made-up names '${f}'`, () => { if (!isMachineFilename(f)) notes.push(`M2 '${f}' stays as '${doc(f)}'`); });
+for (const f of ["Oct renewal.pdf", "New policy 2026.pdf", "Final schedule.pdf", "Copy of AIA.pdf", "Mon & Dad.pdf", "May plan.pdf", "Image Shield.pdf", "PM Hospital Plan.pdf", "AM Life.pdf"])
+  test(`S3 chosen names using list words '${f}' stay`, () => assert.equal(isMachineFilename(f), false, `'${f}' replaced by '${doc(f)}'`));
+for (const [full, short] of [["Tesco Bank plc", "Tesco Bank"], ["Smith & Co.", "Smith"], ["Cigna Mexico Co", "Cigna Mexico"], ["Insurance (Pte) Ltd", "Insurance"], ["Hong Leong Assurance Berhad", "Hong Leong Assurance"]] as const)
+  test(`I2 '${full}' -> '${short}'`, () => assert.equal(insurerShortName(full), short));
+
 // ------------------------------------------------------------ insurer company forms
 for (const [full, short] of [["AIA Singapore Private Limited", "AIA Singapore"], ["FWD Singapore Pte. Ltd.", "FWD Singapore"], ["Manulife (Singapore) Pte. Ltd.", "Manulife (Singapore)"],
   ["Allianz General Insurance Company (Malaysia) Berhad", "Allianz General Insurance Company (Malaysia)"], ["Etiqa General Takaful Berhad", "Etiqa General Takaful"], ["Tokio Marine Life Insurance Malaysia Bhd", "Tokio Marine Life Insurance Malaysia"],
