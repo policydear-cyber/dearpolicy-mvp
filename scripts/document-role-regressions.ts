@@ -25,8 +25,8 @@ async function t(name: string, fn: () => unknown | Promise<unknown>) {
 
 async function main() {
   const { deterministicDocumentRole, sanitizePolicyExtraction } = await import("@/lib/documents/intelligence");
-  const { correspondenceRole } = await import("@/lib/documents/messy");
-  const { detectHighConfidenceReferenceRole, buildCodeOnlyExtraction } = await import("@/lib/ai/extract-policy");
+  const { correspondenceRole, schedulePage } = await import("@/lib/documents/messy");
+  const { detectHighConfidenceReferenceRole, buildCodeOnlyExtraction, compactSample } = await import("@/lib/ai/extract-policy");
   const doc = (...texts: string[]): PdfPage[] => texts.map((text, i) => ({ pageNumber: i + 1, text } as PdfPage));
 
   // 1. Part 2 of a group certificate on its own
@@ -144,6 +144,42 @@ async function main() {
   await t("TE-EXTRA control 2: an endorsement citing the policy wording", () => {
     const endorsement = doc("Example Life Ltd\nNotice to policyholder\nPolicy number: 77001234\nLife assured: Lim Wei Jie\nThis endorsement changes your effective date.\nAll other terms of the policy wording stay the same.");
     assert.equal(deterministicDocumentRole(endorsement, null), "endorsement", "the words policy wording deep in an endorsement do not make it the wording");
+  });
+
+  // 5. A policy pack: a cover page, a welcome letter, the "SCHEDULE PAGE", then the contract and its endorsement clauses
+  const packCover = "Example Life\n\nYour Policy\nInside";
+  const packLetter = "Example Life (Singapore) Pte. Ltd.\n8 Example Street\n1 MAR 2026\nFor enquiries, please contact our\nTAN MEI LING\tClient Services Officers\nBLK 1 EXAMPLE ROAD\tTel: 6000 0000\nDear Ms Tan\nWelcome to Example Life. Enclosed is your policy contract.\nYours sincerely\nA Person";
+  const packSchedule = "Page 1 of 2\nSCHEDULE PAGE\n70012345\nPOLICY NUMBER\nOWNER\tTAN MEI LING\nLIFE INSURED\tTAN MEI LING\nPOLICY START DATE\t1 MAR 2026\nPLAN NAME\tEXAMPLE BUILDER 10\nSUM INSURED\t$50,000\nPREMIUM\t$400.00 MONTHLY";
+  const packValues = "Page 2 of 2\n70012345\nPOLICY NUMBER\nTABLE OF GUARANTEED CASH VALUE\nEND OF POLICY YEAR\tGUARANTEED CASH VALUE\n1\t0";
+  const packWording = (n: number) => "Example Life (Singapore) Pte Ltd\nExampleBuilder\nGeneral conditions " + n + "\nThis policy is a contract between you and us. The life insured and the premium are shown in the schedule page.\nEndorsement\nAny endorsement we issue forms part of this policy. Sum insured means the amount in the schedule page.";
+  const pack = doc(packCover, packLetter, packSchedule, packValues, ...Array.from({ length: 54 }, (_, i) => packWording(i + 1)));
+  await t("5: a policy pack holding its SCHEDULE PAGE is the policy, not an endorsement or a letter", () => {
+    assert.equal(schedulePage(pack), 3);
+    assert.equal(correspondenceRole(pack), null, "the letter encloses the schedule page");
+    assert.equal(deterministicDocumentRole(pack, null), "personal_schedule");
+    assert.equal(deterministicDocumentRole(pack, "endorsement"), "personal_schedule", "the model's endorsement does not stand");
+    assert.equal(deterministicDocumentRole(pack, "insurer_letter"), "personal_schedule");
+    const unsigned = doc(packCover, packLetter.replace(/\nYours sincerely\nA Person$/, ""), packSchedule, packValues, ...Array.from({ length: 54 }, (_, i) => packWording(i + 1)));
+    assert.equal(deterministicDocumentRole(unsigned, "endorsement"), "personal_schedule", "without a sign-off the endorsement clauses decided it before");
+  });
+  await t("5: the reading is shown the schedule page of a long pack, not only the letter and the wording", () => {
+    const sample = compactSample(pack, 7_500, 2_200);
+    assert.match(sample, /--- PAGE 3 ---\nPage 1 of 2\nSCHEDULE PAGE/);
+  });
+  await t("5 controls: wording that cites the schedule page, a specimen, a group schedule and a plain letter keep their roles", () => {
+    const wordingOnly = doc("Example Life\nPolicy wording\nThis is your contract.", ...Array.from({ length: 6 }, (_, i) => packWording(i + 1)));
+    assert.equal(schedulePage(wordingOnly), null);
+    assert.equal(deterministicDocumentRole(wordingOnly, null), "policy_wording");
+    const specimen = doc("Example Life\nProduct guide", "SCHEDULE PAGE\nPOLICY NUMBER\t[policy number]\nLIFE INSURED\t[name of the life insured]\nSUM INSURED\t[amount]");
+    assert.equal(schedulePage(specimen), null, "a specimen names nobody");
+    const definition = doc("SCHEDULE PAGE\nPolicy number means the number shown on this page.\nLife insured means the person named here.");
+    assert.equal(schedulePage(definition), null, "a definition is not a name");
+    const group = doc("Example Union Group Insurance\nSCHEDULE PAGE\nGroup policy no. G120034\nPolicyholder\tExample Union");
+    assert.equal(schedulePage(group), null, "a group policy number is not the policy's own number");
+    const deep = doc("Example Life\nNotice to policyholder\nPolicy number: 77001234\nLife assured: Lim Wei Jie\nYour schedule page shows the new premium.\nSCHEDULE PAGE\nThis endorsement changes your effective date.");
+    assert.equal(schedulePage(deep), null, "a title deep inside a page is not the page's own title");
+    assert.equal(deterministicDocumentRole(deep, null), "endorsement");
+    assert.equal(correspondenceRole(doc(letter, signOff)), "insurer_letter", "a letter with nothing enclosed is still a letter");
   });
 
   if (failed.length) { console.error(`document role regressions FAILED: ${failed.length} of ${cases + failed.length}`); process.exit(1); }

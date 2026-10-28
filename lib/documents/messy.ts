@@ -32,9 +32,25 @@ const FURNITURE = /DPTEST-|^[A-Za-z0-9+/=]{40,}$|^:DPTEST/;
 export function printedLines(text: string): string[] {
   return String(text ?? "").replace(/DPTEST-EXTRACTION:[\s\S]*?:DPTEST-END/g, "").split("\n").map((l) => l.trim()).filter((l) => l && !FURNITURE.test(l));
 }
-const TITLE = /\b(?:policy schedule|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy contract|renewal certificate|certificate of renewal|annual (?:policy )?statement|policy wording|product summary|benefit (?:illustration|summary)|policy information page)\b/i;
+const TITLE = /\b(?:policy schedule|schedule page|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy contract|renewal certificate|certificate of renewal|annual (?:policy )?statement|policy wording|product summary|benefit (?:illustration|summary)|policy information page)\b/i;
 
 const TITLE_LINE = new RegExp("^" + TITLE.source + "(?:\\s*\\(continued\\))?$", "i");
+
+/** A page that is a policy's own schedule: it opens with a schedule title on a line of its own ("Policy Schedule",
+ * "SCHEDULE PAGE"), and prints the policy's own number and a named person beside a label ("LIFE INSURED  Lim Wei Jie").
+ * A pack that sends the schedule behind a cover letter and before the contract wording holds one; a wording that only
+ * says "as shown in your policy schedule", or a specimen with no name, does not. Returns its page number, or null. */
+export function schedulePage(pages: Pick<PdfPage, "pageNumber" | "text">[]): number | null {
+  const SCHEDULE_LINE = /^(?:policy schedule|schedule page|schedule of (?:insurance|benefits))(?:\s*\(continued\))?$/i;
+  const NAMED = /\b(?:policy ?holder|policy ?owner|owner|life insured|life assured|assured|insured(?: person)?|name of (?:the )?insured)\b[ \t]*[:\-]?[ \t]*(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|is|will|must|shall|named)\b)[a-z][a-z.'-]+[ \t,]+[a-z]/i;
+  for (const p of pages) {
+    const lines = printedLines(p.text);
+    if (!lines.slice(0, 4).some((l) => SCHEDULE_LINE.test(l))) continue;
+    if (!/(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\b/i.test(p.text)) continue;
+    if (lines.some((l) => NAMED.test(l.toLowerCase()))) return p.pageNumber;
+  }
+  return null;
+}
 
 /** Letters, claim decisions, bills, app screenshots and notes, by what the page itself prints; null for anything else. */
 export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]): CorrespondenceRole | null {
