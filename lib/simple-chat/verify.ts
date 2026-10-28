@@ -762,7 +762,7 @@ const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?
  * number of children" each changed the total, and a list of limit words never held them all). Any other word stops it. */
 const HARMLESS_CONDITION_WORDS = new Set(("a an the of in into on to and or nor not no is are be been must should shall will may can if when where who whose which that this these "
   + "child children child's children's dependant dependants dependent dependents son sons daughter daughters legitimate natural adopted step stepchild stepchildren legally "
-  + "unmarried single married full time full-time student students studying study school education educational institution higher learning tertiary university "
+  + "unmarried married full time full-time student students studying study school education educational institution higher learning tertiary university "
   + "including include includes age aged ages year years old below under up till until enlisted national service military "
   + "insured person persons life assured member members policyholder he she his her their him they it its "
   + "accident accidental accidentally bodily injury injuries sustains sustained result results resulting resulted caused due death dies die died dead "
@@ -775,9 +775,16 @@ const NAME_WORDS = new Set("benefit benefits the of for and fund allowance pay p
 /** An age limit ("aged 25 or younger", "younger than 21") names who counts as a child. "Older", "younger" and "only" on
  * their own may pick one child ("payable to the younger child only"), so they are known only in these shapes, in "only
  * if", and in "can only be claimed either under the Core Scheme or ..." (a choice of scheme, not of child) (TE #156 F3). */
-const AGE_LIMIT = /\b\d{1,2}\s*(?:years?\s*)?(?:old\s+)?(?:or|and)\s+(?:older|younger|above|below|under|over)\b|\b(?:younger|older)\s+than\s+\d{1,2}\b/gi;
-const plainWordsOf = (t: string) => t.replace(AGE_LIMIT, " ").replace(/\bonly\s+(?=(?:if|when|where)\b)/gi, " ")
-  .replace(/\b(can|may)\s+only\s+be\s+(claimed|paid)\s+(?:either\s+)?under\b/gi, "$1 be $2 under").toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? [];
+const AGE_LIMIT = /\b\d{1,2}\s*(?:years?\s*)?(?:old\s+)?(?:or|and)\s+(?:older|younger|above|below|under|over)\b|\b(?:younger|older)\s+than\s+\d{1,2}\b|\b(?:under|below)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?\d{1,2}\b/gi;
+/** A time to claim in ("within 30 days of death") changes no amount. */
+const CLAIM_WITHIN = /\bwithin\s+\d{1,3}\s+(?:days?|months?)\b/gi;
+/** The words of a condition or line, once the known shapes are taken out. A number left over ("payable to 1 child") is
+ * returned as a word no list holds, so it always stops the total (TE #156 F4). */
+const plainWordsOf = (t: string) => {
+  const rest = t.replace(AGE_LIMIT, " ").replace(CLAIM_WITHIN, " ").replace(/\bonly\s+(?=(?:if|when|where)\b)/gi, " ")
+    .replace(/\b(can|may)\s+only\s+be\s+(claimed|paid)\s+(?:either\s+)?under\b/gi, "$1 be $2 under");
+  return [...(rest.toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? []), ...(/\d/.test(rest) ? ["#number"] : [])];
+};
 function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = []): Count | null {
   const count = childrenSaid(asked[0] ?? "");
   const conditionTexts = [...conditions.flatMap((c) => [c.text, c.quote ?? ""]), ...rowConditions];

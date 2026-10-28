@@ -175,14 +175,16 @@ test("words that may change the total, on the line or in a condition, stop it: a
     const shown = verifyAnswer(household(line, 5000).house, echoed, ["how much in total if we have 2 kids"]).answer.statements ?? [];
     assert.deepEqual(shown.filter((x) => x.amount).map((x) => x.amount!.text), ["S$5,000"], `echoed: ${line}`);
   }
-  for (const c of ["The allowance is reduced by 50% after the Life Assured reaches age 65.", "Payable once only, regardless of the number of children.", "Paid to the eldest child only.", "Payable to the younger child only.", "Payable to either child only."]) {
+  for (const c of ["The allowance is reduced by 50% after the Life Assured reaches age 65.", "Payable once only, regardless of the number of children.", "Paid to the eldest child only.", "Payable to the younger child only.", "Payable to either child only.",
+    // A number left in a condition (TE #156 F4).
+    "Payable to 1 child.", "Paid to 1 child under age 25.", "Payable under the policy to 1 child if the insured dies.", "Payable to a single child."]) {
     const h = household(`${TABLE_LINE}\n•\t${c}`, 5000, TABLE_LINE, "S$", [c]);
     assert.ok(h.rows.some((r) => r.conditions.includes(c)), `the reading keeps the printed condition: ${c}`);
     assert.ok(!answer(h, ["how much in total if we have two kids"]).count, `row condition: ${c}`);
     assert.ok(!answer(household(TABLE_LINE, 5000), ["how much in total if we have two kids"], { conditions: [{ text: c, quote: c }] }).count, `model condition: ${c}`);
   }
   // Who counts as a child, and the insured's own death, leave it as printed.
-  for (const c of ["The child must be unmarried, a full-time student and aged 25 or below.", "Only if an accident results in the insured person's death, with proof of death.", "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.", "The child must be aged 21 or younger.", "The child must be younger than 23 years."])
+  for (const c of ["The child must be unmarried, a full-time student and aged 25 or below.", "Only if an accident results in the insured person's death, with proof of death.", "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.", "The child must be aged 21 or younger.", "The child must be younger than 23 years.", "The child must be under age 25.", "Claim within 30 days of the insured person's death."])
     assert.deepEqual(answer(household(`${TABLE_LINE}\n•\t${c}`, 5000, TABLE_LINE, "S$", [c]), ["how much in total if we have two kids"]).amounts, ["S$5,000", "S$10,000"], c);
 });
 test("a daily or percentage figure is never treated as per child", () => {
