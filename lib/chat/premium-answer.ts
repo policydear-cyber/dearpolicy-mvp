@@ -121,6 +121,10 @@ async function statusFor(accountId: string, docId: string, memo: DocMemo): Promi
   const expiry = (await datesOf(accountId, docId, memo)).expiry;
   return printedStatus(await pagesOf(accountId, docId, memo), expiry, todayIso());
 }
+/** The cover period the premium record itself prints, when its document prints none the reader recognises. */
+function recordPeriod(item: PremiumItem) {
+  return item.period_start && item.period_end ? longDate(item.period_start) + " to " + longDate(item.period_end) : null;
+}
 async function periodFor(accountId: string, docId: string, memo: DocMemo) {
   const end = printedPeriodEnd(await pagesOf(accountId, docId, memo));
   const start = (await datesOf(accountId, docId, memo)).start;
@@ -186,7 +190,7 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
   const perPerson: { person: ClaimPerson; lines: Line[]; missing: string[]; annual: number; cash: number | null; medisave: number | null; currency: string }[] = [];
   for (const person of args.people) {
     const summary = await summarisePremiums(args.accountId, person);
-    const ids = summary.items.map((i) => i.id);
+    const listed = [...summary.items, ...summary.oneOff, ...summary.shortPeriod], ids = listed.map((i) => i.id);
     const sources = ids.length ? (await query<{ id: string; doc_id: string | null; page: number | null; product_name: string | null; role: string | null; insurer: string | null; policy_type: string | null; active: boolean }>(
       `SELECT pr.id::text AS id,coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.source_page AS page,p.product_name,p.document_role AS role,p.insurer,p.policy_type,
               (p.id IS NOT NULL) AS active
@@ -195,18 +199,21 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
     const byId = new Map(sources.map((s) => [s.id, s]));
     // A premium printed in a deleted document is not on file any more.
     const lines: Line[] = [];
-    for (const item of summary.items.filter((i) => byId.get(i.id)?.active)) {
+    for (const item of listed.filter((i) => byId.get(i.id)?.active)) {
       // A policy that has lapsed or ended costs nothing now; a one-off premium for a cover period is not a yearly one.
       const docId = byId.get(item.id)?.doc_id ?? null;
       const status = docId ? await statusFor(args.accountId, docId, memo) : null;
       if (status && (status.state === "lapsed" || status.state === "ended")) { if (docId && status.page) uncounted.push({ docId, page: status.page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id }); notCounted.push((item.product_name ?? byId.get(item.id)?.product_name ?? "A policy") + " — it " + (status.state === "lapsed" ? "lapsed" : "ended") + " on " + status.printed); continue; }
-      if (/single|one[- ]?off|for the period/i.test(item.frequency ?? "")) {
-        const span = docId ? await periodFor(args.accountId, docId, memo) : null;
+      if (item.oneOff || item.shortPeriod) {
+        const span = (docId ? await periodFor(args.accountId, docId, memo) : null) ?? recordPeriod(item);
         const docPages = docId ? await pagesOf(args.accountId, docId, memo) : [];
         const amountPage = docPages.find((p) => p.text.replace(/(\d),(?=\d{3}\b)/g, "$1").includes(String(item.amount)))?.page ?? byId.get(item.id)?.page ?? null;
         for (const page of new Set([amountPage, printedPeriodEnd(docPages)?.page ?? null]))
           if (docId && page) uncounted.push({ docId, page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id });
-        notCounted.push((item.product_name ?? "A policy") + " — a one-off premium of " + (item.currencyStated ? money(item.amount, item.currency) : formatMoney(item.amount, null)) + (span ? " for " + span : "") + ", not a yearly one");
+        const amount = item.currencyStated ? money(item.amount, item.currency) : formatMoney(item.amount, null);
+        notCounted.push((item.product_name ?? "A policy") + (item.oneOff
+          ? " — a one-off premium of " + amount + (span ? " for " + span : "") + ", not a yearly one"
+          : " — a premium of " + amount + (span ? " for " + span : "") + "; no payment frequency is printed, so it is not counted as a yearly one"));
         if (docId && amountPage && item.currencyStated) oneOffs.push({ docId, page: amountPage, subjectId: person.id, amount: item.amount, currency: item.currency, pageText: docPages.find((p) => p.page === amountPage)?.text ?? null });
         continue;
       }

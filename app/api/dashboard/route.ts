@@ -73,7 +73,7 @@ export async function GET(request:NextRequest){
     if(await benefitTableLive(accountId)){
       const { tableFor }=await import("@/lib/benefit-table/service");
       const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
-      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
+      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
         const lines=selected.filter(x=>x.category===category).map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)}));

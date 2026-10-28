@@ -12,7 +12,7 @@ import { canonicalInsurer } from "@/lib/policies/insurer-name";
 const NAMES: [string, RegExp][] = [
   ["Early Critical Illness", /\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b/i],
   ["Critical Illness", /\b(?:critical\s+illness|dread\s+disease)\b/i],
-  ["Personal Accident", /\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b[^\n]*\b(?:death|died|dies|disab\w*|tpd|dismember\w*)\b|\b(?:death|disab\w*|tpd|dismember\w*)\b[^\n]*\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b|\bpersonal\s+accident\b/i],
+  ["Personal Accident", /\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b[^\n]*\b(?:death|died|dies|disab\w*|tpd|dismember\w*)\b|\b(?:death|disab\w*|tpd|dismember\w*)\b[^\n]*\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b|\bpersonal\s+accident\b|\bad\s?&\s?d\b/i],
   ["Total Permanent Disability", /\btpd\b|\btotal\s+(?:and|&)\s+permanent\s+disab|\bpermanent\s+total\s+disab/i],
   ["Death", /\bdeath\b/i],
   ["Hospital Cash", /\b(?:hospital(?:isation)?|daily)\s+(?:cash|income|allowance)\b/i],
@@ -22,6 +22,10 @@ const NAMES: [string, RegExp][] = [
 ];
 
 const ACC = String.raw`(?:accident\w*|injur(?:y|ies|ed))`;
+/** Accident words the benefit names above do not know: "AD&D" or "ADD" (capitals, never "ADD-ON"), "misadventure", "unintentional", and
+ * the Malay "kemalangan" (TE P152). A name with one pays on an accident, whatever else it says. */
+const ACCIDENT_ONLY_NAME = (name: string) => /\bad\s?&\s?d\b|\bmisadventure\b|\bunintentional\w*|\bkemalangan\b/i.test(name) || /\bADD\b(?![\s-]*ONS?\b)/.test(name);
+const ACCIDENT_WORD = new RegExp(String.raw`\b${ACC}`, "i");
 const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+causes?)`;
 // "only" binds to the accident words beside it ("accidental death only", "only on accident"), never to the rest of the line
 // ("Death due to illness or accident, payable only once"; Critic R232).
@@ -117,7 +121,10 @@ const CLAUSE = new RegExp(String.raw`${THRESHOLD}\s+(?:\w+\s+){0,2}?${FIGURE}|${
  * on total and permanent disability benefit"). */
 const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
 
-type CoverRow = SummaryRow & { coverKey?: string; product?: string; cover?: string; plan?: string | null };
+type CoverRow = SummaryRow & { coverKey?: string; holding?: string; product?: string; cover?: string; plan?: string | null };
+/** The policy a row or held cover belongs to: its own holding when the person holds several policies of its cover type
+ * (two policy numbers, lib/benefit-table/assemble.ts), else its cover type. */
+const policyOf = (r: { coverKey?: string; holding?: string }) => r.holding ?? r.coverKey;
 /** The rows a Home tile takes its figure from. A row is left out of the comparison only for a fact about its own cover:
  *  - a threshold clause or a waiver of premium, when another row of the SAME cover is left to give its figure;
  *  - a whole travel cover, or a cover whose rows here are all waivers, when another cover is left.
@@ -125,7 +132,7 @@ type CoverRow = SummaryRow & { coverKey?: string; product?: string; cover?: stri
  * figure (TE round 5). A person with travel cover only still sees its rows. The Coverage page keeps every row. */
 export function tileRows<T extends CoverRow>(rows: T[]): T[] {
   const covers = new Map<string, T[]>();
-  for (const r of rows) { const k = r.coverKey ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
+  for (const r of rows) { const k = policyOf(r) ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
   const kept = [...covers.values()].map((list) => {
     const own = list.filter((r) => !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
     return { list: own.length ? own : list, travel: list.some(travelName) && list.every((r) => abroadOnly(r.benefit)),
@@ -237,17 +244,17 @@ export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[], 
 }
 const coversOf = (rows: TileRow[]) => {
   const covers = new Map<string, TileRow[]>();
-  rows.forEach((r, i) => { const k = r.coverKey ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
+  rows.forEach((r, i) => { const k = policyOf(r) ?? `#${i}`; covers.set(k, [...(covers.get(k) ?? []), r]); });
   return covers;
 };
 const coverDocs = (key: string, list: TileRow[], held: HeldCover[]) =>
-  new Set([...list.map((r) => r.source?.documentId), ...held.filter((h) => h.coverKey === key).map((h) => h.documentId)].filter(Boolean) as string[]);
+  new Set([...list.map((r) => r.source?.documentId), ...held.filter((h) => policyOf(h) === key).map((h) => h.documentId)].filter(Boolean) as string[]);
 
 /** Lump-sum categories, whose covers each pay their own sum: a tile adds them up. Hospital and indemnity figures are never
  * added (Critic R246). */
 export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
 /** A cover the person's benefit table holds: its own document (the page that names the person with it) and sum insured. */
-export type HeldCover = { coverKey: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
+export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean };
@@ -299,7 +306,7 @@ const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figur
  * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
 export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null } {
   const covers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
-    const own = held.filter((h) => h.coverKey === key);
+    const own = held.filter((h) => policyOf(h) === key);
     const sums = new Map<string, { amount: number; currency: string }>();
     for (const r of list) {
       const m = moneyOf(r); const currency = m?.currency ? normalizeCurrencyCode(m.currency, "") : "";
@@ -330,10 +337,19 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
-    return { docs: coverDocs(key, list, held), sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+    return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
-  let unsure = false;
+  // Where the person holds several policies of a cover type here (printed policy numbers differ), through a row or a
+  // confirmed line's document, the tile gives no total: a different number does not prove a second policy (a renewal, a
+  // scheme's group number beside a certificate number), and a policy whose own document gives the tile no row may or may
+  // not hold the benefit (Critic R258 H1, H2, R259 M1). Such a policy is not listed: nothing shows it holds the benefit
+  // (TE P152 N1).
+  const split = new Set([...covers.filter((c) => c.holding).map((c) => c.coverKey),
+    ...held.filter((h) => h.holding && !!h.documentId && lines.some((l) => l.documentIds.includes(h.documentId!))).map((h) => h.coverKey)]);
+  // A different printed number does not prove a second policy: a renewal, a scheme's group number beside a certificate
+  // number, or an endorsement can re-number one policy (Critic R258 H1). Such parts are listed, never added up.
+  let unsure = split.size > 0;
   const taken = new Set<(typeof covers)[number]>();
   const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
   for (const l of lines) {
@@ -347,8 +363,15 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     else if (covers.some((c) => !taken.has(c) && c.part.amount === l.amount && c.part.currency === l.currency)) unsure = true;
   }
   // A schedule line is stored under a category, but its own name decides where it pays: a line whose name places it in
-  // another category ("Accidental Death" stored as Death) is named with no amount here (Critic R247 Q1b).
-  const elsewhere = (l: { name: string }) => { const c = category ? categoryOfBenefit(l.name) : null; return !!c && c !== category; };
+  // another category ("Accidental Death" stored as Death, "AD&D") is named with no amount here (Critic R247 Q1b). So is a
+  // line outside the accident tile whose name has an accident or injury word but places it nowhere ("Accident Benefit"
+  // stored as Death): it may pay on an accident only. A name with no such word ("Group Term Life") keeps its category.
+  const elsewhere = (l: { name: string }) => {
+    if (!category) return false;
+    if (ACCIDENT_ONLY_NAME(l.name)) return category !== "Personal Accident";
+    const c = categoryOfBenefit(l.name);
+    return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
+  };
   const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),

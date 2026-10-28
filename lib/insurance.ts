@@ -48,7 +48,9 @@ export function normalizeCoverageCategory(value: string) {
 
 export function annualisePremium(amount: number, frequency?: string | null) {
   const f = (frequency ?? "").toLowerCase();
-  if (/month/.test(f)) return amount * 12;
+  // "Bulanan" is Malay for monthly and "Tahunan" for yearly (Critic R263).
+  if (/fortnight/.test(f)) return amount * 26;
+  if (/month|bulanan/.test(f)) return amount * 12;
   if (/quarter/.test(f)) return amount * 4;
   if (/semi|half.?year|6 month/.test(f)) return amount * 2;
   if (/week/.test(f)) return amount * 52;

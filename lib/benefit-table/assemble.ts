@@ -43,6 +43,8 @@ export type TableRow = {
   capSource: Source | null;
   /** The row is a limit on what several benefits or policies pay together, never a benefit of its own (check.ts). */
   combinedLimit?: boolean;
+  /** The held policy the row was built for, when the person holds several of its cover type (PersonCover.holding). */
+  holding?: string;
   /** The last day of the row's cover, as printed, when that cover was for one short term that is over (a single trip):
    * the row is no longer current cover, but it still answers for an event inside that term. */
   coverEnded?: string | null;
@@ -50,6 +52,9 @@ export type TableRow = {
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
 export type PersonCover = CheckedCover & { personId: string; coverKey: string;
+  /** Set when the person holds two or more policies of this cover type with different printed policy numbers: this one's
+   * own key, so a tile counts each policy (coversOf). Unset otherwise. */
+  holding?: string;
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
@@ -71,6 +76,17 @@ export type BenefitTable = {
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 export const coverKeyOf = (c: { product: string; cover: string; plan: string | null; riderOf?: string | null }) =>
   [norm(c.product), norm(c.cover), norm(c.plan), ...(c.riderOf ? [norm(c.riderOf)] : [])].join("|");
+/** A printed policy number compared by its letters and digits alone, without leading zeros. */
+const policyNumberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/^0+(?=.)/, "");
+/** Two printed policy numbers that may be one policy's: the same letters and digits ("MT-104455", "mt104455",
+ * "00104455" and "104455"), or one printed as the other with a short suffix after a separator ("104455-01"). A number that
+ * only starts with the other ("MT1001", "MT10011") is another policy (TE P152 F3). Unrelated-looking numbers stay apart, and
+ * the tiles never add them up. */
+const samePolicyNumber = (a: string, b: string) => {
+  if (policyNumberKey(a) === policyNumberKey(b)) return true;
+  const suffixed = (long: string, short: string) => { const m = long.trim().match(/^(.*?)[\s\-/.]+([A-Za-z0-9]{1,3})$/); return !!m && policyNumberKey(m[1]) === policyNumberKey(short); };
+  return suffixed(a, b) || suffixed(b, a);
+};
 export const sectionKeyOf = (documentId: string, b: { section: string | null; column: string | null }) => [documentId, norm(b.section), norm(b.column)].join("|");
 const cents = (n: number) => Math.round(n * 100) / 100;
 const money = (amount: number, currency: string | null) =>
@@ -79,14 +95,38 @@ const money = (amount: number, currency: string | null) =>
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
 export function coversOf(readings: CheckedReading[], family: FamilyMember[], today: number = singaporeDay(new Date())) {
   const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [];
+  const found: PersonCover[] = [];
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    const coverKey = coverKeyOf(c);
-    // The same cover printed twice for one person (a pack that repeats its schedule) is one cover.
-    if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured)) continue;
-    covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null, ended: coverEnded(c, r, today) });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today) });
+  }
+  // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
+  // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).
+  const numberOf = new Map<PersonCover, string>();
+  for (const c of found) {
+    if (!c.policyNumber || !policyNumberKey(c.policyNumber)) continue;
+    const same = [...numberOf].find(([x, n]) => x.personId === c.personId && x.coverKey === c.coverKey && samePolicyNumber(x.policyNumber!, c.policyNumber!));
+    numberOf.set(c, same ? same[1] : policyNumberKey(c.policyNumber));
+  }
+  // The same cover printed twice for one person (a pack that repeats its schedule, a summary and its certificate) is one
+  // cover, the first read. Where its copies print two or more different policy numbers, the first of each number is kept
+  // and a copy with no number is dropped, in whatever order they were read (TE P152 F2): two policies of one product
+  // (TE P148-3, Critic Q4), or one policy re-numbered, which the tiles list but never add up (Critic R258).
+  const groups = new Map<string, PersonCover[]>();
+  for (const c of found) { const k = `${c.personId}\u0000${c.coverKey}\u0000${c.sumInsured}`; groups.set(k, [...(groups.get(k) ?? []), c]); }
+  for (const c of found) {
+    const group = groups.get(`${c.personId}\u0000${c.coverKey}\u0000${c.sumInsured}`)!;
+    const numbers = new Set(group.map((x) => numberOf.get(x)).filter(Boolean));
+    if (numbers.size <= 1 ? group[0] === c : numberOf.has(c) && group.find((x) => numberOf.get(x) === numberOf.get(c)) === c) covers.push(c);
+  }
+  // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own part
+  // on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording still links
+  // once for everyone who holds it. A cover with no printed number, or the only number, has no holding.
+  for (const c of covers) {
+    const numbers = new Set(covers.filter((x) => x.personId === c.personId && x.coverKey === c.coverKey && numberOf.has(x)).map((x) => numberOf.get(x)));
+    if (numbers.size > 1 && numberOf.has(c)) c.holding = `${c.coverKey}#${numberOf.get(c)}`;
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
@@ -219,6 +259,15 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
   return `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
+/** The covers a linked section's rows are built for. Where the person holds several policies of the cover type
+ * (holdings), a section printed on one policy's own document belongs to that policy only, never to the other; a section
+ * on a document that holds none of them (a wording, a product summary) belongs to each. */
+function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
+  if (!list.some((c) => c.holding)) return list;
+  const own = list.filter((c) => c.source.documentId === documentId);
+  return own.length ? own : list;
+}
+
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, types } = coversOf(readings, family, singaporeDay(now));
@@ -262,7 +311,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const r of readings) for (const b of r.benefits) {
     const l = linkOf.get(sectionKeyOf(r.documentId, b));
     if (!l?.cover) continue;
-    for (const p of people) for (const c of p.covers.filter((x) => x.coverKey === l.cover)) {
+    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover), r.documentId)) {
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
@@ -270,7 +319,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
-        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), coverEnded: c.ended ?? null });
+        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };

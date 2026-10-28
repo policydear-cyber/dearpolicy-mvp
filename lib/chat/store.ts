@@ -5,6 +5,7 @@ import { pool, query } from "@/lib/db/client";
 import type { ChatAnswer } from "@/types";
 import { legacyState } from "./facts";
 import { guardChatAnswer } from "./output-guard";
+import { maskIdentityNumbers } from "./identity-numbers";
 import type { Conversation, ConversationState, HistoryToken } from "./types";
 
 export class ChatConflict extends Error {}
@@ -90,7 +91,10 @@ export async function recentMessages(accountId:string,id:string) {
   return r.rows;
 }
 export async function saveTurn(args:{conversation:Conversation;token:HistoryToken;state:ConversationState;message:string;answer:ChatAnswer;jobId?:string}) {
-  // The last check before anything reaches the household (lib/chat/output-guard.ts).
+  // The last check before anything reaches the household (lib/chat/output-guard.ts). An identity number is masked in the
+  // answer and in what is kept with the turn, for every chat path, before it is saved or returned.
+  maskIdentityNumbers(args.answer);
+  maskIdentityNumbers(args.state);
   guardChatAnswer(args.answer);
   const client=await pool.connect();
   try{
