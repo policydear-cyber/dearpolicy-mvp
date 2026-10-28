@@ -17,16 +17,16 @@
 const SHAPES: [RegExp, string][] = [
   // Singapore NRIC / FIN.
   [/\b([STFGM])\d{4}(\d{3}[A-Z])\b/g, "$1****$2"],
-  // Malaysia MyKad, as printed with its dashes.
-  [/\b\d{6}-\d{2}-(\d{4})\b/g, "******-**-$1"],
   // Hong Kong identity card, with its bracketed check digit.
   [/\b([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/g, "$1***$2($3)"],
-  // United States Social Security number, dashed.
-  [/\b\d{3}-\d{2}-(\d{4})\b/g, "***-**-$1"],
 ];
+// Malaysia MyKad as printed with its dashes, whose first six digits are a birth date (YYMMDD): "Group policy 123456-78-0001"
+// is not one. A dashed US Social Security number is masked only after its label: unlabelled, "123-45-6789" is as likely a
+// claim reference (Critic R262 M1).
+const MYKAD = /\b(\d{2})(\d{2})(\d{2})-\d{2}-(\d{4})\b/g;
 
 /** A label that says the value after it is a person's identity number; "policy no." and "member ID" are not among them. */
-const LABEL = String.raw`(?:NRIC|FIN|NIRC|I\/?C|MyKad|HKID|NINO|SSN|TFN|PAN|Aadhaar|National\s+Insurance|NI|Passport|National\s+ID(?:entity)?|Identity(?:\s+Card)?|Identification|ID|Social\s+Security|Tax\s+File)`;
+const LABEL = String.raw`(?:NRIC|FIN|NIRC|I\/?C|(?:No\.?\s*)?K\/P|Kad\s+Pengenalan|MyKad|MyKid|Birth\s+Cert(?:ificate)?|HKID|NINO|SSN|TFN|PAN|Aadhaar|National\s+Insurance|NI|Passport|National\s+ID(?:entity)?|Identity(?:\s+Card)?|Identification|ID|Social\s+Security|Tax\s+File)`;
 const NOT_A_PERSON = String.raw`(?<!\b(?:policy|member|membership|claim|group|plan|certificate|scheme|account|staff|employee|card|reference|case|invoice|receipt)\s{1,3})`;
 const LABELLED = new RegExp(String.raw`${NOT_A_PERSON}\b(${LABEL}\b(?:\s*(?:No\.?|Number|#))?\s*[:.]?\s*(?:(?:is|was)\s+)?)([A-Z0-9][A-Z0-9 -]{4,22}[A-Z0-9])(?![A-Z0-9*])`, "gi");
 // "ID" and "NI" alone are only labels when a number word follows them ("ID No.", "NI number"), never "ID: ..." on a membership card.
@@ -42,11 +42,16 @@ function maskValue(value: string) {
 export function maskIdentityText(text: string): string {
   let out = text;
   for (const [re, to] of SHAPES) out = out.replace(re, to);
+  out = out.replace(MYKAD, (all, _yy: string, mm: string, dd: string, last: string) =>
+    Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31 ? "******-**-" + last : all);
   return out.replace(LABELLED, (all, label: string, value: string) => {
     const digits = value.replace(/\D/g, "").length;
     if (digits < 5 || BARE_SHORT.test(label)) return all;
-    // A sentence that runs on after the number ("ID No. S1234567D and plan A") keeps its words: only the number is masked.
-    const number = value.match(/^[A-Z0-9-]*\d[A-Z0-9-]*(?:\s\d[\d -]*\d)?/i)?.[0] ?? value;
+    // Only the number is masked: a sentence that runs on after it ("ID No. S1234567D and plan A") keeps its words, and a
+    // label word that starts a sentence about something else ("Identity theft cover up to 50000", "Passport replacement
+    // costs 25000") is not followed by a number at all (Critic R262 H1). A number printed in groups ("QQ 12 34 56 C") is one.
+    const number = value.match(/^(?:[A-Z]{1,2}\s+)?[A-Z0-9-]*\d[A-Z0-9-]*(?:\s+[A-Z0-9-]*\d[A-Z0-9-]*)*(?:\s+[A-Z](?![A-Z0-9]))?/i)?.[0];
+    if (!number) return all;
     return label + maskValue(number) + value.slice(number.length);
   });
 }

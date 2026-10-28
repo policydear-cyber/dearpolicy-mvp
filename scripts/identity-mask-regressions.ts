@@ -42,6 +42,11 @@ test("each market's identity number shape is masked, keeping what the certificat
   assert.equal(maskIdentityText("Aadhaar 1234 5678 9012"), "Aadhaar **** **** 9012");
   assert.equal(maskIdentityText("IC No. 850101145678"), "IC No. ********5678");
   assert.equal(maskIdentityText("ID No. S1234567D"), "ID No. S****567D");
+  // Printed in groups, and Malaysian labels (Critic R262 L1).
+  assert.equal(maskIdentityText("NI number QQ 12 34 56 C"), "NI number ** ** *4 56 C");
+  assert.equal(maskIdentityText("No. K/P 850101145678"), "No. K/P ********5678");
+  assert.equal(maskIdentityText("Kad Pengenalan: 850101145678"), "Kad Pengenalan: ********5678");
+  assert.equal(maskIdentityText("Birth Certificate No. 150101145678"), "Birth Certificate No. ********5678");
 });
 
 test("policy, member and claim numbers, amounts, dates and ids are not identity numbers", async () => {
@@ -57,6 +62,13 @@ test("policy, member and claim numbers, amounts, dates and ids are not identity 
     "Admitted 01/10/2026, discharged 2026-10-05; call 6123 4567",
     "Japan trip PAN-asian 12345",
     "NRIC S****567D already masked",
+    // A label word that starts a sentence about something else (Critic R262 H1).
+    "Identity theft cover up to 50000 per trip",
+    "Passport replacement costs 25000",
+    "the NRIC holder may claim 10000 per year",
+    // A dashed reference that is not a birth-dated MyKad, and an unlabelled SSN-shaped reference (Critic R262 M1).
+    "Group policy 123456-78-0001",
+    "Claim reference 123-45-6789",
   ]) assert.equal(maskIdentityText(text), text);
 });
 
