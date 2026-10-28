@@ -118,6 +118,7 @@ test("B2 bare '$' rate and limit with the document's currency declared ('All amo
   const line = "Overseas hospital cash\tUp to $8,000, capped at $200 per day";
   const { rows, house } = build(lim({ line, value: 8000, sym: "$", extra: "All amounts are in Singapore Dollars." }));
   const lim0 = limits(rows), rate0 = rates(rows);
+  assert.deepEqual(lim0, [[8000, "SGD"]], "a bare '$' limit takes the page's declared currency");
   notes.push(`B2 declared SGD: limit ${JSON.stringify(lim0)}, rate ${JSON.stringify(rate0)}`);
   assert.equal(rate0.length, 1, JSON.stringify(rate0));
   assert.ok(rate0[0]![1] === null || rate0[0]![1] === lim0[0]?.[1], "rate currency differs from the declared one: " + JSON.stringify({ lim0, rate0 }));
@@ -150,6 +151,7 @@ test("B5 the same bare-'$' line on a page declaring Singapore Dollars: the limit
 test("B6 a limit printed in two currencies ('Up to S$8,000 (US$8,000 if overseas)'): never one picked by position alone", () => {
   const { rows } = build(lim({ line: "Overseas hospital cash\tUp to S$8,000 (US$8,000 if overseas)", value: 8000, sym: "S$" }));
   notes.push("B6 two-currency limit read as " + JSON.stringify(limits(rows)));
+  assert.ok(limits(rows).every((l) => l && l[1] === null), "a limit printed in two currencies took one: " + JSON.stringify(limits(rows)));
 });
 test("B7 the limit's own S$ wins over a different-value US$ figure printed first ('US$50 excess; up to S$8,000')", () => {
   const { rows } = build(lim({ line: "Overseas hospital cash\tAn excess of US$50 applies; up to S$8,000", value: 8000, sym: "S$" }));
@@ -159,6 +161,15 @@ test("B7 the limit's own S$ wins over a different-value US$ figure printed first
 test("N7 a rate printed twice in two currencies ('capped at S$200 per day (US$200 per day overseas)') gives no daily row", () => {
   const { rows } = build(lim({ line: "Overseas hospital cash\tUp to S$8,000, capped at S$200 per day (maximum US$200 per day overseas)", value: 8000, sym: "S$" }));
   assert.deepEqual(rates(rows), []);
+});
+
+test("H1 a currency printed only in the row's label or column heading ('Overseas hospital cash (S$)  8,000') is kept, or no row", () => {
+  for (const [line, code] of [["Overseas hospital cash (S$)\t8,000", "SGD"], ["Overseas hospital cash (RM)\tUp to 8,000", "MYR"], ["Overseas hospital cash, S$\t8,000 maximum", "SGD"]] as const) {
+    const { rows } = build(lim({ line, value: 8000, sym: code === "SGD" ? "S$" : "RM" }));
+    const got = limits(rows);
+    notes.push(`H1 ${line.replace("\t", " | ")}: ${JSON.stringify(got)}`);
+    assert.ok(got.every((l) => l && (l[1] === code || l[1] === null)), line + ": " + JSON.stringify(got));
+  }
 });
 
 // ------------------------------------------------------------ footnote
