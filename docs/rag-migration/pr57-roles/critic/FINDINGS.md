@@ -7422,3 +7422,37 @@ Checks:
 - cover-holdings 144/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr148c 81/0;
 - on 90797b1 also intake 39/0, headline 16/0, parity 10/0, te-pr149 84/0;
 - tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R262 — #153 at 89da910 (identity numbers masked in chat answers): one High, then READY
+
+All probes use made-up numbers and the network was blocked. No real ID appears below.
+
+**H1 (High, corrupts answer text and amounts): `identity-numbers.ts` maskIdentityText.** After a label, the value may run on as words. When its first word has no digit, `value.match(...)?.[0] ?? value` falls back to the WHOLE value and masks every word before the last 4 characters:
+- "Identity theft cover up to 50000 per trip" → "Identity ***** ***** ** ** *0000 per trip"
+- "Identity Theft Expenses 10 000" → "Identity ***** ******** *0 000"
+- "Passport replacement costs 25000" → "Passport *********** ***** *5000"
+- "the NRIC holder may claim 10000 per year" → "the NRIC ****** *** ***** *0000 per year"
+
+Identity-theft and passport-loss benefits are ordinary travel benefits, so a bare or space-grouped amount after such a word gets garbled. Fix: the masked part must be a number that starts the value, an optional 1–2 letter prefix allowed. Otherwise leave the text alone:
+
+```ts
+const number = value.match(/^(?:[A-Z]{1,2}\s+)?[A-Z0-9-]*\d[A-Z0-9-]*(?:\s+[A-Z0-9-]*\d[A-Z0-9-]*)*(?:\s+[A-Z](?![A-Z0-9]))?/i)?.[0];
+if (!number) return all;
+```
+
+With it, all four sentences are unchanged. The spaced forms stay masked: "NI number QQ ## ## ## C", "NRIC: S #### ### Z", "Passport No. K #### ####", and "ID No. … and plan A" keeps its words. identity:mask-test stays 5/0. A plain `?? value → return all` is not enough, because it would unmask those spaced IDs.
+
+**M1 (Medium, useful references hidden): unlabelled dashed shapes.** The SSN shape (3-2-4) and the MyKad shape (6-2-4) mask any reference that happens to match: "Claim reference 123-45-6789" → "***-**-6789", "Group policy 202501-01-0001" → "******-**-0001". Fix: mask the SSN shape only with an SSN or Social Security label (US is not a launch market). Accept the MyKad shape only when its first 6 digits are a real date (YYMMDD, month 01–12, day 01–31). "202501…" then fails, since month 25 is not valid.
+
+**L1 (Low, missing labels for Malaysia):** "No. K/P", "Kad Pengenalan", "MyKid" and "Birth Certificate No." are not labels, so 12-digit MyKad numbers without dashes (and birth-certificate numbers) after them stay visible. Add `K\/P|Kad\s+Pengenalan|MyKid|Birth\s+Cert(?:ificate)?`.
+
+**L2 (Low, accepted trade-offs, no change needed):**
+- An NRIC-shaped policy or certificate number ("Policy No. T1234567X") is masked. Keep this: group certificates often use the NRIC as the member number.
+- "<word> ID No." is masked for Customer, Agent, Transaction, Document, Policyholder, and possessives ("Member's ID No."), because the not-a-person lookbehind only sees a bare preceding word. Only the last 4 stay visible, and erring towards privacy is acceptable. If you change it, allow `'s` in the lookbehind rather than growing the word list.
+
+**Re-render and gates: fine.** sanitizeStoredAnswer masks a deep copy before the calculation recompute and sentence matching. Both sides are masked the same way, and ids, UUIDs and hashes do not fit any shape. The stored row is untouched. User messages are deliberately left unmasked. Note that a household's own typed NRIC still shows in history, and still goes back to the model through recentMessages; say whether that is intended.
+
+Checks:
+- identity:mask-test 5/0, security:live-chat-monetary-boundary 32 cases, rag2:scenario-replay 22/22, dj-live-3 replay 48/48;
+- simple offline 17, simple chat 84, simple style 22/0, benefit-table chat 96/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
