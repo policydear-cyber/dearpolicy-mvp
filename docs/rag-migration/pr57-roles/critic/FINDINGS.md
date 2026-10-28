@@ -8031,3 +8031,22 @@ NOT READY, because of H1. I checked by running stackedPremiumLines over made-up 
 Checks on 197d191, run network-blocked with model keys stripped:
 - premium:table-test 15/0, benefit-table 107/0, benefit-table chat 107/0, r5 20/20, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 17074d4 clean.
+
+## R297: #162 at 6e77c3f (replaces #161; stacked premium with harmless neighbours)
+
+NOT READY, because of H1 and H2. I checked by running stackedPremiumLines over made-up page text in a scratch script outside git. All five R296 cases now give none, and ReadyBuilder's shape with a "CURRENCY\tSINGAPORE DOLLARS" row gives 399.24 monthly.
+
+- **H1 (High) a blank line counts as harmless, and PDF text is full of blank lines.** In a label-over-value schedule that separates rows with a blank line, the figure above PREMIUM belongs to the label above it:
+  - "RIDER PREMIUM / (blank) / S$50.00 / PREMIUM / (blank) / S$399.24 (MONTHLY)" gives 50;
+  - "FIRST YEAR PREMIUM / (blank) / S$376.68 / PREMIUM / (blank) / S$470.85 per month" gives 376.68.
+  Fix: make a blank line transparent, not harmless. Skip blank lines and judge the next non-blank line. Pairing should also look past blank lines, so that in the first case PREMIUM sits between two figures and the page gives none.
+- **H2 (High, your question) a multi-cell row with no digit can be the header that owns the lone figure below it.** Examples:
+  - "RIDER\tSUM ASSURED / S$50,000.00 / PREMIUM / (blank) / S$399.24 per month" gives 50,000;
+  - "SUM ASSURED\tTERM / S$100,000.00 / PREMIUM / (blank) / 20 years" gives 100,000.
+  The sum-insured guard catches the second only when the reading's sumInsured equals the figure, and never a rider's or a total's sum assured. Fix with an allow-list: accept a several-cell row only as a key–value pair whose value is not a field name. Simplest is to allow just the shapes stored data needs: "CURRENCY" followed by a currency name or code, and any other exact key–value pair seen on stored schedules, with each key listed. A header row of field names must give none.
+- Correct as it stands: value-over-label with blank lines ("(blank) / S$399.24 (MONTHLY) / PREMIUM / (blank) / S$100,000.00 / SUM ASSURED") gives 399.24 monthly. R1 (a premium equal to the sum insured needs its own premium line) is right. But note that a stacked line counts as that line, so H2 also feeds the reading path.
+- Low: a stacked "(SINGLE)" premium gives frequency "single", which #158 names "unclear" (safe).
+
+Checks on 6e77c3f, run network-blocked with model keys stripped:
+- premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
