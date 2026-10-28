@@ -192,3 +192,14 @@ test("only a personal schedule or certificate gives a current premium; a page th
   assert.deepEqual(run([cover({ product: "", documentKind: "letter" })]).leftOut, [{ name: "one policy", why: "not_current" }]);
 });
 
+test("a record with another number but the same amount and insurer may be this policy (Critic R294 H1); an unclear premium is named", () => {
+  const harbour = new Map([["doc-a", { insurer: "Harbour Life", policyNumber: "84339090", lapsedOrEnded: false }]]);
+  const receipt = run([cover({ premium: 470.85 })], TODAY, [rec({ product_name: "Premium receipt", policy_number: "C98765", amount: "470.85", insurer: "Harbour Life Ltd" })], harbour);
+  assert.deepEqual(receipt.items, []); assert.deepEqual(receipt.leftOut, [{ name: "Harbour Critical Illness", why: "maybe_counted" }]);
+  // Another insurer, or another amount, with a different number: a different policy.
+  assert.equal(run([cover({ premium: 470.85 })], TODAY, [rec({ policy_number: "C98765", amount: "470.85", insurer: "Gull Travel" })], harbour).items.length, 1);
+  assert.equal(run([cover({ premium: 470.85 })], TODAY, [rec({ policy_number: "C98765", amount: "120.00", insurer: "Harbour Life" })], harbour).items.length, 1);
+  assert.deepEqual(run([cover({ premiumFrequency: "6-monthly" })]).leftOut, [{ name: "Harbour Critical Illness", why: "unclear" }]);
+  assert.deepEqual(run([cover({ premiumCurrency: null, currency: null })]).leftOut, [{ name: "Harbour Critical Illness", why: "unclear" }]);
+});
+

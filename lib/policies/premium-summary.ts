@@ -141,18 +141,21 @@ const numberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").repl
 type PolicyHint = { number: string | null; product: string | null; amounts?: number[]; insurer?: string | null };
 /** Whether two premiums are one policy's: "same" when both print a number and the numbers may be one (#152
  * samePolicyNumber, or equal without leading zeros); "different" when both print numbers that differ, whatever their names
- * say (TE O1, O4); otherwise "maybe" when the names may be one product, the amounts are equal, or the insurer is the same
+ * say (TE O1, O4), unless their amount and insurer are the same; otherwise "maybe" when the names may be one product, the amounts are equal, or the insurer is the same
  * (Critic R284 H1, TE O2), and "different" when nothing links them. */
 function samePolicy(a: PolicyHint, b: PolicyHint): "same" | "maybe" | "different" {
-  if (a.number && b.number) return samePolicyNumber(a.number, b.number) || numberKey(a.number) === numberKey(b.number) ? "same" : "different";
+  const sameAmount = (a.amounts ?? []).some((x) => (b.amounts ?? []).some((y) => Math.abs(x - y) < 0.005));
+  const sameInsurer = !!a.insurer && !!b.insurer && canonicalDeathInsurer(a.insurer) === canonicalDeathInsurer(b.insurer);
+  // Numbers that differ are two policies, unless the amount and the insurer are the same: a record may print a receipt or
+  // contract number instead of the policy's (Critic R294 H1). Two identical plans of one insurer are then named, not added.
+  if (a.number && b.number) return samePolicyNumber(a.number, b.number) || numberKey(a.number) === numberKey(b.number) ? "same" : sameAmount && sameInsurer ? "maybe" : "different";
   if (maySameProduct(a.product, b.product)) return "maybe";
-  if ((a.amounts ?? []).some((x) => (b.amounts ?? []).some((y) => Math.abs(x - y) < 0.005))) return "maybe";
-  if (a.insurer && b.insurer && canonicalDeathInsurer(a.insurer) === canonicalDeathInsurer(b.insurer)) return "maybe";
+  if (sameAmount || sameInsurer) return "maybe";
   return "different";
 }
 /** Why a table premium was left out, for the note: its document may not show what is paid now, it may be a policy whose
- * premium is already counted, or two documents give it a premium. */
-export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" };
+ * premium is already counted, two documents give it a premium, or how often or in what currency it is paid is not plain. */
+export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" };
 const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
@@ -194,7 +197,7 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     seen.add(key);
     const currency = statedCurrencyCode(c.premiumCurrency === undefined ? c.currency : c.premiumCurrency);
     const perYear = premiumsPerYear(c.premiumFrequency);
-    if (!currency || !perYear || !c.premiumFrequency) continue;
+    if (!currency || !perYear || !c.premiumFrequency) { leftOut.push({ name, why: "unclear" }); continue; }
     // With no end printed, the latest printed start counts: a renewal's period may start years after the policy (TE Y6).
     const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
     const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
@@ -271,6 +274,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const WHY: Record<TableLeftOut["why"], [string, string]> = {
     not_current: ["the premium its document prints may not be what is paid now", "the premiums their documents print may not be what is paid now"],
     maybe_counted: ["it may be the policy of a premium already counted, so it is not added again", "they may be policies whose premiums are already counted, so they are not added again"],
+    unclear: ["its document does not say plainly how often, or in what currency, the premium is paid", "their documents do not say plainly how often, or in what currency, the premiums are paid"],
     two_documents: ["two of its documents print a premium, and which is current is not known", "two of their documents print a premium, and which is current is not known"],
   };
   const tableNote = (Object.keys(WHY) as TableLeftOut["why"][]).map((why) => {
