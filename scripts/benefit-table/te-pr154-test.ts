@@ -144,7 +144,7 @@ test("N10 an ICU rate the reading already took as its own row is not added twice
   assert.equal(rows.filter((r) => r.figure.kind === "printed" && r.figure.amount === 300).length, 1, JSON.stringify(rows.map((r) => [r.benefit, r.figure.kind === "printed" ? r.figure.amount : null])));
 });
 test("N11 a row that is itself for intensive care gives no second ICU row from its own note", () => {
-  const { rows } = build(single({ benefit: "ICU Hospital Income", line: "ICU Hospital Income\tRM300 per day (RM450 per day if confined in ICU overseas)", value: 300, sym: "RM" }));
+  const { rows } = build(single({ benefit: "ICU Hospital Income", line: "ICU Hospital Income\tRM300 per day (RM450 per day if confined in ICU)", value: 300, sym: "RM" }));
   assert.ok(!rows.some((r) => r.figure.kind === "printed" && r.figure.amount === 450), JSON.stringify(rows.map((r) => r.benefit)));
 });
 
@@ -154,6 +154,50 @@ test("N12 a day count in otherwise known words ('maximum 30 day') gives no row",
 });
 test("N13 an ICU figure not paid per day ('RM300 if confined in ICU') gives no row", () => {
   const { rows } = build(single({ line: "Hospital Income\tRM150 per day (RM300 if confined in ICU)", value: 150, sym: "RM" }));
+  assert.deepEqual(icu(rows), []);
+});
+
+test("N14 'doubled, capped at S$400 per day' with S$250 a day: the ICU row is S$400 (twice the rate reaches the cap), and its card says 'doubled'", () => {
+  const { rows } = build(single({ person: "Lim Boon Huat", line: "Daily hospital income\tS$250 per day", value: 250, sym: "S$",
+    conditions: ["daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day"],
+    extra: "Note: daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day" }));
+  assert.deepEqual(icu(rows).map((r) => r.amount), [400]);
+  const row = rows.find((r) => /intensive care$/.test(r.benefit))!;
+  assert.ok(row.conditions.some((c) => /doubled/.test(c)), "the clause is the row's condition: " + JSON.stringify(row.conditions));
+});
+test("N15 'S$200 per day, doubled in ICU' (the figure is the base rate) gives no ICU row of S$200", () => {
+  const { rows } = build(single({ person: "Lim Boon Huat", line: "Hospital cash\tS$100 per day (S$200 per day, doubled in ICU)", value: 100, sym: "S$" }));
+  assert.ok(!icu(rows).some((r) => r.amount === 200), JSON.stringify(icu(rows)));
+});
+test("N16 a place word in the benefit's own name is allowed ('Overseas hospital cash' ... 'if hospitalised overseas in ICU')", () => {
+  const { rows } = build(single({ benefit: "Overseas hospital cash", person: "Lim Boon Huat", line: "Overseas hospital cash\tS$100 per day (S$300 per day if hospitalised overseas in ICU)", value: 100, sym: "S$" }));
+  assert.deepEqual(icu(rows).map((r) => r.amount), [300]);
+});
+test("N17 'twice the daily amount, up to S$400 per day' with S$150 a day gives no S$400 row", () => {
+  const { rows } = build(single({ person: "Lim Boon Huat", line: "Hospital cash\tS$150 per day (twice the daily amount in ICU, up to S$400 per day)", value: 150, sym: "S$" }));
+  assert.ok(!icu(rows).some((r) => (r.amount ?? 0) > 300), JSON.stringify(icu(rows)));
+});
+test("N18 plan columns: Plan C (S$200 a day) with 'doubled, capped at S$300' gets S$300; Plan A gets none", () => {
+  const note = "(Note: the daily amount is doubled if hospitalised in intensive care, capped at S$300 per day)";
+  const page = `HOSPITAL CASH\tPlan A\tPlan B\tPlan C\nDaily hospital cash\tS$100 per day\tS$150 per day\tS$200 per day\n${note}`;
+  const mk = (plan: string) => { const person = "Wong Li Hua", D = "dddddddd-0000-0000-0000-000000000011", C = "dddddddd-0000-0000-0000-000000000012";
+    return build({ people: [person], docs: [
+      { id: C, name: "Certificate.pdf", kind: "personal_proof", product: "HealthShield", pages: [{ page: 1, text: `CERTIFICATE\nInsured\t${person}\t${plan}\tS$50,000` }],
+        covers: [{ person, cover: "Hospital Cash", plan, sum: 50000, page: 1, quote: `${person} ${plan} S$50,000` }], benefits: [] },
+      { id: D, name: "Benefit summary.pdf", kind: "benefit_summary", product: "HealthShield", pages: [{ page: 3, text: page }], covers: [],
+        benefits: (["Plan A", "Plan B", "Plan C"] as const).map((col, i) => ({ section: "Hospital", column: col, benefit: "Daily hospital cash", pays: "per_day", value: [100, 150, 200][i], page: 3, quote: "Daily hospital cash\tS$100 per day\tS$150 per day\tS$200 per day", conditions: [note] })) },
+    ], links: [{ doc: D, section: "Hospital", column: plan, product: "HealthShield", cover: "Hospital Cash", plan }] }).rows; };
+  const c = mk("Plan C"); assert.deepEqual(icu(c).map((r) => r.amount), [300], JSON.stringify(c.map((r) => [r.benefit, r.plan, r.figure.kind === "printed" ? r.figure.amount : null])));
+  assert.deepEqual(icu(mk("Plan A")).map((r) => r.amount), []);
+});
+
+test("N19 two daily rates for the benefit (S$100 government, S$250 private) with 'doubled, capped at S$400': no ICU row", () => {
+  const note = "Note: the daily amount will be doubled if hospitalised in intensive care, capped at S$400 per day";
+  const person = "Lim Boon Huat";
+  const spec = single({ person, line: "Hospital cash (government hospital)\tS$100 per day\nHospital cash (private hospital)\tS$250 per day", value: 100, sym: "S$", quote: "Hospital cash (government hospital)\tS$100 per day", conditions: [note], extra: note });
+  spec.docs[0].benefits.push({ section: "Hospital", benefit: "Hospital Income", pays: "per_day", value: 250, page: 1, quote: "Hospital cash (private hospital)\tS$250 per day", conditions: [note] });
+  const { rows } = build(spec);
+  assert.equal(rows.filter((r) => r.benefit === "Hospital Income" && r.figure.kind === "printed" && r.figure.unit === "per_day").length, 2, "fixture: two daily rows");
   assert.deepEqual(icu(rows), []);
 });
 
