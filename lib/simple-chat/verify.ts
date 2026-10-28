@@ -747,7 +747,7 @@ export function childrenSaid(message: string): number | null {
 }
 /** The words a question for a total for every child may hold besides its number of children (Critic R275 H2). */
 const TOTAL_QUESTION_WORDS = new Set(("how much many what whats what's is are was be would will could can does do did it its them there in total totally "
-  + "altogether all together both combined for of to pay pays paid payable payout get gets got receive claim we us our my me i i'm im you your the "
+  + "altogether all together both combined for of from to pay pays paid payable payout get gets got receive claim we us our my me i i'm im you your the "
   + "have has had if when then and so this that benefit fund policy cover insurance amount sum money "
   + "die dies died dying pass passes passed away death dead am become becomes disabled disability permanently totally accident accidental accidentally "
   + "killed an wife husband spouse partner").split(" "));
