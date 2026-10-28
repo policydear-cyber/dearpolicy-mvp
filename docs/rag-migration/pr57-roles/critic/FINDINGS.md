@@ -7764,3 +7764,23 @@ Checks on e159247, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (fb1a769) clean.
 
 Verdict: READY.
+
+## R280: #156 at 11ef8cd (R278 L1, Test engineer F3)
+
+The content is READY:
+- the statement's own text no longer widens the word lists (R278 L1 is closed);
+- "either", "only", "older", "younger" and "than" are off the harmless list, allowed only in age-limit shapes, "only if/when/where", and "can only be claimed either under … Scheme".
+Checks: per-child 17/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22; tsc clean; next build passes.
+
+**Blocker: it no longer merges cleanly.** merge-tree against the new origin/main (fb1a769, after #154) gives a CONFLICT in package.json, where both add a test script. chat.ts and hook.ts merge on their own. Merge main into the branch, keep both script lines, and re-run the suites.
+
+## R281: #157 at afcce98 (Test engineer F1–F3; delta from e159247)
+
+READY.
+- dailyRateOf now returns the rate figure's own currency. A bare "$" gives null, and different printings give "mixed", which gives no row. ownCurrency is removed, so the R279 Low is closed. chatRows is the only caller of dailyRateOf.
+- In check.ts, figureCurrency reads the currency at each same-value figure's own position (benefit-rows statedCurrencyCode on the figure slice, which I checked: S$8,000 gives SGD, RM 8,000 MYR, £8,000 GBP, US$200 USD, $8,000 null). If that is none, it takes the page's declared currency. If a figure is printed in two ways, it gets none. The excerpt fallback is gone. Under the old code, "Up to $8,000, capped at US$200 per day" gave the 8,000 USD, because statedCurrencyCode on the whole excerpt returned USD. That is now fixed.
+- On the builder's question: a same-value figure in another currency elsewhere on the line now gives null (mixed), not a borrowed currency, which is the safe direction.
+
+Checks on afcce98, run network-blocked with model keys stripped:
+- benefit-table chat 100/0, benefit-table 107/0, parity 10/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
