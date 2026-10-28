@@ -8070,3 +8070,12 @@ Known cost, accepted: the bare value-over-label layout without a currency row, w
 Checks on c3da070, run network-blocked with model keys stripped:
 - premium:table-test pass, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R299 — #162 at 8c5e69b (on top of c3da070): READY
+
+- check.ts:419: the reading path now refuses a stacked figure equal to the sum insured (TE S1). With the stacked match refused, a bare figure line carries no premium word, so premiumLineLabel gives no label and the premium is dropped. This matches the page-only path.
+- Five new made-up regressions (stacked sum insured quoted by the reading, a figure in a 3-cell row under the label, "Waived" and a 2-cell value under the label, a currency key with no currency) all give none. R298's verdict on c3da070 carries over.
+
+Checks on 8c5e69b, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
