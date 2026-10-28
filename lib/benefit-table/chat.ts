@@ -74,8 +74,13 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
   // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
   for (const r of planTableRows(rows, household)) add(r);
-  const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
-  for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
+  // A daily cash whose own words print a second daily rate for a day in intensive care ("daily income amount will be
+  // doubled if hospitalised in intensive care, capped at S$400 per day") pays that rate for such a day: it is a row of its
+  // own, named for intensive care, so the rate is never left out of an answer about an ICU day (overnight run 23 Oct, N119).
+  // Added last, so every other row keeps its number.
+  for (const r of intensiveCareRows(rows, household)) add(r);
+  const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.holding ?? c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
+  for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.holding ?? r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
     r.lesserOf = true;
   return rows;
@@ -99,7 +104,7 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
   const seen = new Set<string>();
   for (const template of rows) {
     if (!template.column || !template.plan || template.figure.kind !== "printed") continue;
-    const group = `${template.personId}|${template.source.documentId}|${template.coverKey}`;
+    const group = `${template.personId}|${template.source.documentId}|${template.holding ?? template.coverKey}`;
     if (seen.has(group)) continue;
     seen.add(group);
     const doc = household.documents[template.docIndex];
@@ -240,8 +245,88 @@ function dailyRateOf(excerpt: string, limit: number): number | null {
   return rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit ? rate : null;
 }
 
+const INTENSIVE_CARE = /\bicu\b|\bintensive\s+care\b|\bhigh\s+dependency\b|\bhdu\b/i;
+/** Every word a clause giving an intensive-care day's rate may hold besides its one figure. Any other word (a day rule, an
+ * age, a plan, "not", "only", "excess") may change what the figure pays, so a clause holding one gives no row. */
+const INTENSIVE_CARE_WORDS = new Set(("note the a an this daily day cash income hospital benefit amount will be is shall doubled double twice "
+  + "if when while whilst during insured person life assured hospitalised hospitalized confined admitted warded in into to "
+  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for").split(" "));
+/** One clause of a row's own words that prints the daily rate for a day in intensive care, or null: it names intensive care,
+ * prints exactly one money figure, paid per day, holds no other number and only the words above (or the benefit's own name's),
+ * and a figure with "doubled" is the cap printed after it. */
+export function intensiveCareRateOf(clause: string, ownWords: Iterable<string> = []): { amount: number; currency: string | null; doubled: boolean } | null {
+  if (!INTENSIVE_CARE.test(clause)) return null;
+  const figures = moneyFiguresIn(clause);
+  if (figures.length !== 1 || !figures[0].raw) return null;
+  const [f] = figures;
+  const at = clause.indexOf(f.raw!);
+  if (at < 0 || !/^\s*(?:per|a|each)\s+day\b/i.test(clause.slice(at + f.raw!.length))) return null;
+  const rest = clause.slice(0, at) + " " + clause.slice(at + f.raw!.length);
+  if (/\d/.test(rest)) return null;
+  // A place or stay word ("overseas", "abroad") narrows the rate unless the benefit's own name already says it (TE pr154 F2).
+  const own = new Set(ownWords);
+  if (!(rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => INTENSIVE_CARE_WORDS.has(w) || own.has(w))) return null;
+  // A clause that doubles the daily amount prints the ICU day's own figure only as the cap after it ("doubled if in intensive
+  // care, capped at S$400 per day"). A figure before the multiplier, or with no cap word between them, is the base rate
+  // ("S$200 per day, doubled in ICU"), never the ICU day's (Critic R265 H1).
+  const times = /\b(?:doubled|double|twice)\b/i.exec(clause);
+  if (times && !(times.index < at && /\b(?:capped|up\s+to|maximum|max|limited)\b/i.test(clause.slice(times.index, at)))) return null;
+  return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null, doubled: !!times };
+}
+/** The currency printed with a figure in a row's own words, when they print it with a stated currency (a limit's daily rate
+ * row carries the limit's currency, not necessarily its own). */
+function ownCurrency(excerpt: string, amount: number): string | null {
+  const f = moneyFiguresIn(excerpt).find((x) => Math.abs(x.value - amount) < 0.005 && x.currency !== "$");
+  return f ? statedCurrencyCode(f.currency) : null;
+}
+/** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
+ * intensive care and prints no day rule of its own (a first paid day or most days might hold for an ICU day too, and the
+ * row would lose it), each clause of its conditions and its quote (split at brackets, semicolons and lines) that prints
+ * such a rate in the row's own document. A rate the person's rows already give for that cover gives none. */
+function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
+  const out: TableRow[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (r.figure.kind !== "printed" || (r.figure.unit !== "up_to" && r.figure.unit !== "per_day")) continue;
+    if (INTENSIVE_CARE.test(r.benefit) || INTENSIVE_CARE.test(r.qualifier ?? "")) continue;
+    // Its limit's row too (the daily rate of a limit is a row without the limit's day rule).
+    const same = rows.filter((o) => o.personId === r.personId && o.coverKey === r.coverKey && o.source.documentId === r.source.documentId && o.benefit === r.benefit);
+    if (same.some((o) => o.fromDay != null || o.maxDays != null || /\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(o.source.excerpt))) continue;
+    const ownWords = r.benefit.toLowerCase().match(/[a-z]+/g) ?? [];
+    // The row's own daily rate: one figure a day among the benefit's rows (its limit's daily rate is one of them).
+    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [`${ownCurrency(o.source.excerpt, o.figure.amount) ?? o.figure.currency}|${o.figure.amount}`] : []))]
+      .map((k) => ({ currency: k.slice(0, k.indexOf("|")), amount: Number(k.slice(k.indexOf("|") + 1)) }));
+    const clauses = [...r.conditions, r.source.excerpt].flatMap((t) => t.split(/[()\n;]/)).map((t) => t.replace(/^\s*note\s*:\s*/i, "").trim()).filter(Boolean);
+    for (const clause of clauses) {
+      const rate = intensiveCareRateOf(clause, ownWords);
+      if (!rate) continue;
+      // "Doubled ..., capped at S$400 per day" pays the cap only when twice the row's own daily rate reaches it: with S$200 a
+      // day (or more) an ICU day is S$400; with S$120 it is S$240, and with no known rate it is unknown, so no row (TE pr154 F1).
+      // The rate and the cap must be in one stated currency (Critic R268).
+      if (rate.doubled && !(dailies.length === 1 && rate.currency != null && dailies[0].currency === rate.currency && 2 * dailies[0].amount >= rate.amount - 0.005)) continue;
+      const key = `${r.personId}|${r.coverKey}|${r.source.documentId}|${r.qualifier ?? ""}|${rate.amount}`;
+      if (seen.has(key)) continue;
+      // The rate is a row already (the reading took it as a row of its own).
+      if (rows.some((o) => o.personId === r.personId && o.coverKey === r.coverKey && INTENSIVE_CARE.test(`${o.benefit} ${o.qualifier ?? ""}`)
+        && o.figure.kind === "printed" && Math.abs(o.figure.amount - rate.amount) < 0.005)) continue;
+      // Printed in the row's own document, where the checks find it again.
+      const found = locateQuote(household, clause, r.docIndex);
+      if (!found || found.docIndex !== r.docIndex) continue;
+      seen.add(key);
+      // The clause is the row's condition: "doubled ..., capped at" says the figure is a cap, not what every ICU day pays (R265 M1).
+      out.push({ ...r, benefit: `${r.benefit} in intensive care`, pays: "per_day", conditions: [clause], fromDay: null, maxDays: null,
+        figure: { kind: "printed", amount: rate.amount, currency: rate.currency, unit: "per_day", period: null },
+        source: { ...r.source, page: found.page, excerpt: found.excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
+    }
+  }
+  return out;
+}
+
 /** The same benefit of the same cover, for the same person and group, printed in another of their documents. */
-const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row && o.personId === row.personId && o.coverKey === row.coverKey
+/** Rows of one held policy: its holding where the person holds several policies of the cover type (assemble.ts), else
+ * its cover type. */
+const samePolicy = (a: { coverKey: string; holding?: string }, b: { coverKey: string; holding?: string }) => (a.holding ?? a.coverKey) === (b.holding ?? b.coverKey);
+const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row && o.personId === row.personId && samePolicy(o, row)
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit));
 const lesserOf = (excerpt: string) => /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less)\b|\b(?:the\s+)?(?:lesser|lower)\s+of\b/i.test(excerpt);
 
@@ -464,7 +549,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
-    if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
+    if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
@@ -531,14 +616,14 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
-    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && samePolicy(o, row)
       && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
     // A premium whose page prints a different first-year premium is given with that first-year premium (release-set A6):
     // one after the other, never alternatives and never a total.
-    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && samePolicy(o, row)
       && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
     // The named row's own conditions that the row given in its place does not print go with it, each as a point quoting
     // the named row's document (Critic R131-2).
@@ -650,7 +735,7 @@ const PERIOD_ROW = /first policy year(?: only)?\)$/;
  * "Return of Premium", Critic R162-1). */
 const PREMIUM_ROW = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
 /** The same benefit of the same cover, printed in another of the person's documents. */
-const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && o.coverKey === row.coverKey
+const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && samePolicy(o, row)
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit);
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
@@ -799,7 +884,7 @@ function awayConditions(row: ChatRow, conditions: unknown, rows: ChatRow[], hous
  * conditions, and the named row's conditions that its page does not print are carried as points of their own. Never a
  * different figure: that is a companion, given with it. */
 function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): { row: ChatRow; carried: string[] } {
-  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && samePolicy(o, row)
     && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && sameFigure(o.figure, row.figure));
   const named = { row, carried: [] as string[] };
   if (!twins.length) return named;
@@ -854,7 +939,7 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
   if (freq(copied) && freq(copied) !== freq(row.benefit)) return false;
   // Rows that could be the one meant: the person's other rows, not the same benefit in another document.
   // Only a same-name twin from another document is no rival; "Accidental Death (Public Transport)" still is.
-  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier
+  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(samePolicy(o, row) && o.qualifier === row.qualifier
     && o.source.documentId !== row.source.documentId && nameParts(o.benefit).core === nameParts(row.benefit).core && sameBenefit(o.benefit, row.benefit)));
   const s = short(copied, FREQUENCY);
   if (s && s === short(row.benefit, TRAILING_NOTES)) return !others.some((o) => short(o.benefit, TRAILING_NOTES) === s);
