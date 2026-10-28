@@ -7938,3 +7938,15 @@ NOT READY, because of H1.
 Checks on fbd0bea, run network-blocked with model keys stripped:
 - role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R292: #160 at dbc8881
+
+READY.
+- R291 H1 is fixed (ca3ef58). The endorsement marker counts only on or before the schedule page. A pack with a rider "ENDORSEMENT NO. 1 … This endorsement forms part of the policy" page after the wording is personal_schedule again. The reissued schedule page carrying "Endorsement No. 3" stays an endorsement.
+- R291 M1 is fixed: illustrative, dummy and quotation pages are refused, and the "For illustrative purposes / John Doe" page is policy_wording. I accept leaving out "example" and "proposal": real schedules say "issued on the basis of your proposal", and a page that says "Proposal Number" with "Policy Number: To be advised" is already refused by the 4-digit number rule.
+- The Low is fixed: "Main Life" and "Not Applicable" are not names. A word added there can only refuse more.
+- All R289–R291 probes give the intended role. The four real-pack shapes (colon form, lone number, all-capitals name, "binti") still give personal_schedule. A non-Latin name gives no match, which is the safe direction.
+
+Checks on dbc8881, run network-blocked with model keys stripped:
+- role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
