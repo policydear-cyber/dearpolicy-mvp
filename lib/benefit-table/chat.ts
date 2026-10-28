@@ -79,8 +79,8 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // own, named for intensive care, so the rate is never left out of an answer about an ICU day (overnight run 23 Oct, N119).
   // Added last, so every other row keeps its number.
   for (const r of intensiveCareRows(rows, household)) add(r);
-  const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
-  for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
+  const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.holding ?? c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
+  for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.holding ?? r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
     r.lesserOf = true;
   return rows;
@@ -104,7 +104,7 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
   const seen = new Set<string>();
   for (const template of rows) {
     if (!template.column || !template.plan || template.figure.kind !== "printed") continue;
-    const group = `${template.personId}|${template.source.documentId}|${template.coverKey}`;
+    const group = `${template.personId}|${template.source.documentId}|${template.holding ?? template.coverKey}`;
     if (seen.has(group)) continue;
     seen.add(group);
     const doc = household.documents[template.docIndex];
@@ -323,7 +323,10 @@ function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
 }
 
 /** The same benefit of the same cover, for the same person and group, printed in another of their documents. */
-const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row && o.personId === row.personId && o.coverKey === row.coverKey
+/** Rows of one held policy: its holding where the person holds several policies of the cover type (assemble.ts), else
+ * its cover type. */
+const samePolicy = (a: { coverKey: string; holding?: string }, b: { coverKey: string; holding?: string }) => (a.holding ?? a.coverKey) === (b.holding ?? b.coverKey);
+const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row && o.personId === row.personId && samePolicy(o, row)
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit));
 const lesserOf = (excerpt: string) => /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less)\b|\b(?:the\s+)?(?:lesser|lower)\s+of\b/i.test(excerpt);
 
@@ -543,7 +546,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
-    if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
+    if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
@@ -610,14 +613,14 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
-    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && samePolicy(o, row)
       && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
     // A premium whose page prints a different first-year premium is given with that first-year premium (release-set A6):
     // one after the other, never alternatives and never a total.
-    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && samePolicy(o, row)
       && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
     // The named row's own conditions that the row given in its place does not print go with it, each as a point quoting
     // the named row's document (Critic R131-2).
@@ -726,7 +729,7 @@ const PERIOD_ROW = /first policy year(?: only)?\)$/;
  * "Return of Premium", Critic R162-1). */
 const PREMIUM_ROW = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
 /** The same benefit of the same cover, printed in another of the person's documents. */
-const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && o.coverKey === row.coverKey
+const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && samePolicy(o, row)
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit);
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
@@ -875,7 +878,7 @@ function awayConditions(row: ChatRow, conditions: unknown, rows: ChatRow[], hous
  * conditions, and the named row's conditions that its page does not print are carried as points of their own. Never a
  * different figure: that is a companion, given with it. */
 function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): { row: ChatRow; carried: string[] } {
-  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && samePolicy(o, row)
     && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && sameFigure(o.figure, row.figure));
   const named = { row, carried: [] as string[] };
   if (!twins.length) return named;
@@ -930,7 +933,7 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
   if (freq(copied) && freq(copied) !== freq(row.benefit)) return false;
   // Rows that could be the one meant: the person's other rows, not the same benefit in another document.
   // Only a same-name twin from another document is no rival; "Accidental Death (Public Transport)" still is.
-  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier
+  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(samePolicy(o, row) && o.qualifier === row.qualifier
     && o.source.documentId !== row.source.documentId && nameParts(o.benefit).core === nameParts(row.benefit).core && sameBenefit(o.benefit, row.benefit)));
   const s = short(copied, FREQUENCY);
   if (s && s === short(row.benefit, TRAILING_NOTES)) return !others.some((o) => short(o.benefit, TRAILING_NOTES) === s);

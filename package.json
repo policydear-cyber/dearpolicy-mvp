@@ -26,6 +26,8 @@
     "coverage:te148c-test": "node --import tsx scripts/coverage/te-pr148c-test.ts",
     "coverage:te149-test": "node --import tsx scripts/coverage/te-pr149-test.ts",
     "coverage:te149b-test": "node --import tsx scripts/coverage/te-pr149b-test.ts",
+    "coverage:cover-holdings-test": "node --import tsx scripts/coverage/cover-holdings-test.ts",
+    "coverage:te152-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/te-pr152-test.ts",
     "coverage:dashboard-dynamic-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/dashboard-dynamic-test.ts",
     "coverage:te151-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/te-pr151-test.ts",
     "ai:anthropic-post-test": "node --import tsx scripts/ai/anthropic-post-test.ts",
@@ -250,7 +252,8 @@
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
     "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts",
-    "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts"
+    "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts",
+    "identity:mask-test": "node --import tsx scripts/identity-mask-regressions.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
