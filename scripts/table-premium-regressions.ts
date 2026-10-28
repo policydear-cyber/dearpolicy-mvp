@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { premiumsPerYear, tablePremiumItems, type TablePremiumCover, type TablePremiumDocument } from "@/lib/policies/premium-summary";
-import { checkReading } from "@/lib/benefit-table/check";
+import { checkReading, stackedPremiumLines } from "@/lib/benefit-table/check";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
@@ -203,3 +203,41 @@ test("a record with another number but the same amount and insurer may be this p
   assert.deepEqual(run([cover({ premiumCurrency: null, currency: null })]).leftOut, [{ name: "Harbour Critical Illness", why: "unclear" }]);
 });
 
+// ---------------------------------------------------------------- the premium check reads a value set over its label
+
+const schedule = (premiumLines: string, currency = "CURRENCY\tSINGAPORE DOLLARS", person = "LEE SIEW MEI", extra = "", sign = "S$") =>
+  `SCHEDULE PAGE\nPOLICY NUMBER\nLIFE INSURED\t${person}\nPOLICY START DATE\t27 JUN 2020\nPLAN NAME\tHARBOUR SAVER 10\n${currency}\n${premiumLines}\nBASIC/CORE BENEFIT\tSUM INSURED\tBENEFIT START\nHARBOUR SAVER 10\t${sign}49,000.00\t27 JUN 2020\t27 JUN 2112${extra}`;
+const readOne = (text: string, cover: Record<string, unknown> = {}, people = ["LEE SIEW MEI"], sign = "S$") =>
+  checkReading({ id: "d1", name: "schedule.pdf", readable: true, people, pages: [{ page: 3, text }] },
+    { document: { kind: "personal_proof", product: "HARBOUR SAVER 10", namedPeople: [people[0]] }, covers: [{ page: 3, person: people[0], product: "HARBOUR SAVER 10", cover: "HARBOUR SAVER 10", plan: null,
+      quote: `HARBOUR SAVER 10\t${sign}49,000.00\t27 JUN 2020\t27 JUN 2112`, sumInsured: 49000, ...cover }], benefits: [] }).covers[0];
+
+test("a premium figure set over (or under) its plain label is the policy's premium, in every market", () => {
+  const sg = readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"));
+  assert.deepEqual([sg.premium, sg.premiumCurrency, sg.premiumFrequency, sg.premiumLabel], [399.24, "SGD", "MONTHLY", "PREMIUM"]);
+  // The reading gave it, quoting the figure line: kept, labelled by the line under it.
+  const given = readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"), { premium: 399.24, premiumQuote: "S$399.24 (MONTHLY)", premiumFrequency: "monthly" });
+  assert.deepEqual([given.premium, given.premiumLabel, given.premiumFrequency], [399.24, "PREMIUM", "monthly"]);
+  const my = readOne(schedule("RM 150.00 (MONTHLY)\nPREMIUM", "MATA WANG\tRM", undefined, "", "RM"), {}, undefined, "RM");
+  assert.deepEqual([my.premium, my.premiumCurrency, my.premiumFrequency], [150, "MYR", "MONTHLY"]);
+  const uk = readOne(schedule("Total Premium\n£45.00 Monthly", "CURRENCY\tGBP", undefined, "", "£"), {}, undefined, "£");
+  // A premium in another currency than the cover's own line is not this cover's (check.ts).
+  assert.equal(readOne(schedule("RM 150.00 (MONTHLY)\nPREMIUM", "MATA WANG\tRM")).premium, null);
+  assert.deepEqual([uk.premium, uk.premiumCurrency, uk.premiumFrequency], [45, "GBP", "Monthly"]);
+  assert.deepEqual(stackedPremiumLines("S$399.24 (MONTHLY)\nPREMIUM").map((x) => [x.amount, x.label, x.frequency]), [[399.24, "PREMIUM", "MONTHLY"]]);
+});
+
+test("a stacked figure that is not plainly the one premium is never used", () => {
+  const none = (text: string, why: string, cover: Record<string, unknown> = {}, people?: string[]) => assert.equal(readOne(text, cover, people).premium, null, why);
+  none(schedule("PREMIUM\nS$399.24 (MONTHLY)\nPREMIUM"), "a label above and below: which one is not known");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nS$120.00 (MONTHLY)\nINSTALMENT PREMIUM"), "two premiums on the page, a label between them");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nPOLICY TERM\nS$120.00 (MONTHLY)\nINSTALMENT PREMIUM"), "two premiums on the page, apart");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM", undefined, undefined, "\nInstalment Premium\t: 120.00"), "a stacked and a same-line premium");
+  none(schedule("S$399.24 (MONTHLY)\nRIDER PREMIUM"), "a label that qualifies the premium");
+  none(schedule("S$399.24 (MONTHLY)\nSUM ASSURED"), "a label that is not a premium");
+  none(schedule("S$399 (MONTHLY)\nPREMIUM"), "a whole figure is not read as a premium");
+  none(schedule("S$399.24\t27 JUN 2030\nPREMIUM"), "a line with other cells is a table row, not a figure on its own");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM") + "\nLIFE INSURED 2\tTAN AH KOW", "another life on the page", {}, ["LEE SIEW MEI", "TAN AH KOW"]);
+  // A reading's figure that is not the printed one is dropped; the page's own one premium line is used, as for a same-line one.
+  assert.equal(readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"), { premium: 399.42, premiumQuote: "S$399.24 (MONTHLY)" }).premium, 399.24);
+});

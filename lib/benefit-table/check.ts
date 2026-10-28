@@ -90,6 +90,34 @@ export function premiumPartsOf(text: string, sumInsured: number | null, premium:
   const total = Math.round(parts.reduce((t, p) => t + p.amount * 100, 0));
   return parts.length > 1 && total === Math.round(premium * 100) ? parts : null;
 }
+const labelOf = (l: string) => l.replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim();
+/** A premium printed as a figure on a line of its own, with only its currency sign and how often it is paid
+ * ("S$399.24 (MONTHLY)"), whose plain premium label is the line just below or above it ("PREMIUM"): a schedule that sets
+ * each value over its label. One label line beside it, never two, and a label line holds no figure. */
+const STACKED_FIGURE = new RegExp(String.raw`^[ \t]*${MONEY_SIGN}?[ \t]*(\d[\d,]*\.\d{2})[ \t]*(?:\(?[ \t]*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)[ \t]*\)?)?[ \t]*$`, "i");
+export function stackedPremiumLines(text: string): { figureLine: string; label: string; amount: number; frequency: string | null }[] {
+  const lines = text.split("\n");
+  const isLabel = (i: number) => lines[i] != null && !/\d/.test(lines[i]) && PLAIN_PREMIUM.test(labelOf(lines[i]));
+  const isFigure = (i: number) => lines[i] != null && STACKED_FIGURE.test(lines[i]);
+  // Each figure beside exactly one label, and each such label beside exactly one figure: a label between two figures, or a
+  // figure between two labels, cannot be told apart, and then the page gives none (TE pr158: two stacked premiums).
+  const pairs: { figure: number; label: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!isFigure(i)) continue;
+    const labels = [i - 1, i + 1].filter(isLabel);
+    if (labels.length > 1) return [];
+    if (labels.length === 1) pairs.push({ figure: i, label: labels[0] });
+  }
+  if (pairs.some((p) => [p.label - 1, p.label + 1].filter(isFigure).length !== 1)) return [];
+  return pairs.map(({ figure, label }) => {
+    const m = STACKED_FIGURE.exec(lines[figure])!;
+    return { figureLine: lines[figure], label: labelOf(lines[label]), amount: Number(m[1].replace(/,/g, "")), frequency: m[2] ?? null };
+  });
+}
+/** The page's plain premium lines: a label and its figure on one line ("Instalment Premium : 470.85"), and a figure set over
+ * or under its label (stackedPremiumLines). */
+const plainPremiumLineCount = (text: string) =>
+  text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(labelOf(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, "")))).length + stackedPremiumLines(text).length;
 
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
@@ -375,10 +403,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
     if (premium != null && !printsNumber(source.excerpt, premium)) {
       const at = find(str(c.premiumQuote), source.page);
-      const said = at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
+      const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005) : undefined;
+      const said = stacked ? stacked.label : at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
       // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
-      const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, "").replace(/\s+/g, " ").trim()));
-      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
+      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainPremiumLineCount(pageText(source.page)) === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
       else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
     }
     const currency = sumInsured == null && premium == null ? null
@@ -399,18 +427,22 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     seen.add(key);
     if (out.covers.some((o) => o.page === c.page && normalizePersonName(o.person) === normalizePersonName(c.person) && o.premium != null)) continue;
     const text = pageText(c.page);
-    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, "").replace(/\s+/g, " ").trim()));
-    if (lines.length !== 1 || otherLife(text, c.person, doc.people ?? [])) continue;
-    const amount = new RegExp(String.raw`^[^\d]*?${MONEY_SIGN}?\s*(\d[\d,]*(?:\.\d+)?)`).exec(lines[0]);
+    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(labelOf(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, ""))));
+    const stacked = stackedPremiumLines(text);
+    if (lines.length + stacked.length !== 1 || otherLife(text, c.person, doc.people ?? [])) continue;
+    const line = lines[0] ?? stacked[0].figureLine;
+    const amount = new RegExp(String.raw`^[^\d]*?${MONEY_SIGN}?\s*(\d[\d,]*(?:\.\d+)?)`).exec(line);
     const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
     if (!Number.isFinite(premium) || premium <= 0) continue;
-    const at = find(lines[0].trim(), c.page);
-    const said = at && at.page === c.page && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
+    const at = find(line.trim(), c.page);
+    const said = !at || at.page !== c.page || at.excerpt.includes("\n") ? null : stacked.length ? stacked[0].label : premiumLineLabel(at.excerpt, premium);
     if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;
     const currency = statedCurrencyCode(at.excerpt) ?? declaredCurrency(text);
     if (c.currency && currency && c.currency !== currency) continue;
     const frequencies = [...text.matchAll(/\b(?:payment|premium)\s+(?:frequency|mode)\s*[\t:]+\s*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)\b/gi)].map((m) => m[1]);
     c.premium = premium; c.premiumSource = at; c.premiumLabel = said; c.premiumCurrency = currency;
+    // A stacked premium's own line may say how often it is paid ("S$399.24 (MONTHLY)").
+    if (stacked[0]?.frequency) frequencies.push(stacked[0].frequency);
     c.premiumFrequency = new Set(frequencies.map((f) => f.toLowerCase())).size === 1 ? frequencies[0] : null;
   }
   // The premium line's page also printing a first-year premium (a first-year discount): the plain premium is not what is
