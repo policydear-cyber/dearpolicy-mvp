@@ -69,7 +69,11 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // 23 Oct, S016). Added last, so every other row keeps its number.
   for (const r of [...rows]) {
     const rate = r.figure.kind === "printed" && r.figure.unit === "up_to" ? dailyRateOf(r.source.excerpt, r.figure.amount) : null;
-    if (rate != null && r.figure.kind === "printed") add({ ...r, figure: { kind: "printed", amount: rate, currency: r.figure.currency, unit: "per_day" }, fromDay: null, maxDays: null });
+    // The rate's own printed currency, never the limit's: "Capped at US$300 per day" under an S$ limit is not S$300 a day,
+    // and a rate in another currency than its limit gives no row (a bare "$" states none).
+    const own = rate != null ? ownCurrency(r.source.excerpt, rate) : null;
+    if (rate != null && r.figure.kind === "printed" && (own == null || own === r.figure.currency))
+      add({ ...r, figure: { kind: "printed", amount: rate, currency: own, unit: "per_day" }, fromDay: null, maxDays: null });
   }
   // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
   // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
