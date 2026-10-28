@@ -32,6 +32,7 @@ import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/li
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { whoIsCovered } from "@/lib/chat/household-status";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -288,6 +289,12 @@ async function main() {
       assert.equal(sched("output_202609281146053.pdf", "EL-22-9017"), "Example Life policy schedule (ending 9017)");
       assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", null), "Example Life policy schedule", "no number: no ending, and never the made-up file name");
       assert.equal(documentName({ product_name: "Example Shield", original_filename: "x.pdf", insurer: "Example Life", document_role: "personal_schedule", policy_number: "EL-11-4821" }), "Example Shield", "a product name is kept as it is");
+      assert.equal(sched("scan.pdf", "N/A"), "Example Life policy schedule", "a number with no digit is no number");
+      // Two documents that share a name are two policies in "who is covered", never one plan covering both people (Critic R287 M1).
+      const ann = { id: "pa", display_name: "Ann Example", preferred_name: "Ann", relationship: "self" }, ben = { id: "pb", display_name: "Ben Example", preferred_name: "Ben", relationship: "spouse" };
+      const pd = (id: string) => ({ id, name: "Example Life policy schedule", filename: id + ".pdf", role: "personal_schedule", policyType: "Life", confirmed: true, tier: null, insurer: "Example Life", status: "ready" as const, effectiveDate: null, renewalOrExpiryDate: null });
+      const who = whoIsCovered("who is covered by the life plan?", [ann, ben], new Map([["pa", [pd("d1"), pd("d3")]], ["pb", [pd("d2")]]]))!.text;
+      assert.equal(who, "Example Life policy schedule covers you, going by the documents on file. Example Life policy schedule covers Ben, going by the documents on file.", who);
       assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
       const doc = id(104);
       await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)

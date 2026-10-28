@@ -116,10 +116,12 @@ export function whoIsCovered(question: string, family: ClaimPerson[], docs: Map<
   const kind = PLAN_WORDS.find(([asks]) => asks.test(question));
   const matched = byName.length ? byName : kind ? all.filter(({ d }) => kind[1].test((d.policyType ?? "") + " " + d.name)) : [];
   if (!matched.length) return kind || byName.length ? { text: "I couldn’t find a policy like that in your household’s documents.", matched: [] } : null;
-  const plans = new Map<string, ClaimPerson[]>();
-  for (const { p, d } of matched) { const list = plans.get(d.name) ?? []; if (!list.includes(p)) list.push(p); plans.set(d.name, list); }
+  // Each document is its own policy: two schedules that share a name ("Example Life policy schedule") are not one plan
+  // covering both people (Critic R287 M1). The same sentence twice (one person's schedule and renewal) is said once.
+  const plans = new Map<string, { name: string; people: ClaimPerson[] }>();
+  for (const { p, d } of matched) { const plan = plans.get(d.id) ?? { name: d.name, people: [] }; if (!plan.people.includes(p)) plan.people.push(p); plans.set(d.id, plan); }
   const names = (people: ClaimPerson[]) => { const n = people.map((p) => isSelf(p) ? "you" : personName(p)); return n.length <= 1 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n.at(-1); };
-  return { text: [...plans].map(([plan, people]) => plan + " covers " + names(people) + ", going by the documents on file.").join(" "), matched: matched.map(({ p, d }) => ({ person: p, document: d })) };
+  return { text: [...new Set([...plans.values()].map(({ name, people }) => name + " covers " + names(people) + ", going by the documents on file."))].join(" "), matched: matched.map(({ p, d }) => ({ person: p, document: d })) };
 }
 /** Round 12: the page of each matched document that names the most of its insured people (the schedule's
  * "Insured persons" table), for the citation of a who-is-covered answer. */

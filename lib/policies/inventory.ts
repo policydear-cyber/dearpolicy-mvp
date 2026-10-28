@@ -62,7 +62,7 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
   // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
   // the same document gets the same name everywhere (Critic R285 H1, TE P159 G3).
-  const ending=normalizedIdentifier(doc.policy_number).slice(-4);
+  const number=normalizedIdentifier(doc.policy_number),ending=/\d/.test(number)?number.slice(-4):"";
   return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
 }
 
