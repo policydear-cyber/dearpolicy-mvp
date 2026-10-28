@@ -7976,3 +7976,20 @@ Checks on f3767c0, run network-blocked with model keys stripped:
 - premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes;
 - merge-tree with main 5000e99 has a CONFLICT in lib/benefit-table/check.ts.
+
+## R294: #158 at efeb797 (re-review of R293, main merged)
+
+NOT READY, because of H1. It is a small fix.
+
+Fixed (probe):
+- R293 H1: a premium from a "letter" reading is left out and named, and so is a premium printed on a page that says the policy ended.
+- R293 M1: a cover with no product name is named "Example Life Ltd policy".
+- The main merge is clean, and #155's premiumParts are kept.
+- Every earlier probe still holds. The same-policy record is now named as "maybe counted", and two documents for one policy are named.
+
+- **H1 (High) a premium record under another number for the same policy now double-counts.** Since 3a5a2e2 (TE O1/O4), two numbers that differ mean "different" before the amount or insurer is looked at. A premium record whose number is a receipt or contract number ("C98765"), for the same insurer and the same S$470.85, gives the table item S$470.85 on top of the record (probe). That is double counting, the worst-amount direction. Fix: when the numbers differ but the amount (or first-year amount) is equal and the insurer is the same, return "maybe", so the item is left out and named. Two children's identical plans then also become "maybe counted", which is the safe direction and is named in the note.
+- Low: a premium with an unknown frequency ("6-monthly") or no stated currency is dropped without a leftOut entry. If the policy has no premium record, the missing note already names it, so this is acceptable.
+
+Checks on efeb797, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
