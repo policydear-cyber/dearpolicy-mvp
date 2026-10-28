@@ -95,14 +95,20 @@ const labelOf = (l: string) => l.replace(/[\t:]+/g, " ").replace(/\s+/g, " ").tr
  * ("S$399.24 (MONTHLY)"), whose plain premium label is the line just below or above it ("PREMIUM"): a schedule that sets
  * each value over its label. One label line beside it, never two, and a label line holds no figure. */
 const STACKED_FIGURE = new RegExp(String.raw`^[ \t]*${MONEY_SIGN}?[ \t]*(\d[\d,]*\.\d{2})[ \t]*(?:\(?[ \t]*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)[ \t]*\)?)?[ \t]*$`, "i");
+/** A schedule's currency row ("CURRENCY\tSINGAPORE DOLLARS", "MATA WANG\tRM"): a key and a currency, nothing else. */
+const CURRENCY_ROW = /^[ \t]*(?:currency|mata[ \t]+wang)[ \t]*[\t:][ \t:]*(?:singapore[ \t]+dollars?|(?:us|united[ \t]+states)[ \t]+dollars?|hong[ \t]+kong[ \t]+dollars?|australian[ \t]+dollars?|ringgit(?:[ \t]+malaysia)?|pounds?[ \t]+sterling|euros?|SGD|USD|HKD|AUD|MYR|RM|GBP|EUR)[ \t]*$/i;
 export function stackedPremiumLines(text: string): { figureLine: string; label: string; amount: number; frequency: string | null }[] {
-  const lines = text.split("\n");
+  // Blank lines are not read: PDF text puts them between rows, and a figure two lines from its label is still beside it.
+  const lines = text.split("\n").filter((l) => l.trim());
   const isLabel = (i: number) => lines[i] != null && !/\d/.test(lines[i]) && PLAIN_PREMIUM.test(labelOf(lines[i]));
   const isFigure = (i: number) => lines[i] != null && STACKED_FIGURE.test(lines[i]);
-  // A line that cannot own the figure or the label: the page's edge, a blank line, or a row of several cells with no figure
-  // ("CURRENCY\tSINGAPORE DOLLARS"). Anything else (another field's label, a value such as "Waived", another figure) could
-  // be the figure's own label or the label's own value, as in a schedule that prints each label above its value.
-  const harmless = (i: number) => lines[i] == null || !lines[i].trim() || (!/\d/.test(lines[i]) && lines[i].trim().split(/\t+|\s*:\s*|\s{2,}/).filter(Boolean).length > 1);
+  // The figure's other side could be the figure's own label (a schedule that prints each label above its value, or a header
+  // row of field names over it), so only the page's currency row is harmless there. The label's other side could be the
+  // label's own value ("Waived", "S$212.40 per month"), so only the page's edge, the currency row, or a header row of three
+  // or more field names with no figure is harmless there (Critic R297 H1, H2; TE pr161 A1-A4, B1-B3).
+  const cells = (i: number) => lines[i].trim().split(/\t+|\s*:\s*|\s{2,}/).filter(Boolean).length;
+  const figureSideHarmless = (i: number) => lines[i] != null && CURRENCY_ROW.test(lines[i]);
+  const labelSideHarmless = (i: number) => lines[i] == null || CURRENCY_ROW.test(lines[i]) || (!/\d/.test(lines[i]) && cells(i) >= 3);
   // Each figure beside exactly one label, and each such label beside exactly one figure: a label between two figures, or a
   // figure between two labels, cannot be told apart, and then the page gives none (TE pr158: two stacked premiums).
   const pairs: { figure: number; label: number }[] = [];
@@ -113,8 +119,7 @@ export function stackedPremiumLines(text: string): { figureLine: string; label: 
     if (labels.length === 1) pairs.push({ figure: i, label: labels[0] });
   }
   if (pairs.some((p) => [p.label - 1, p.label + 1].filter(isFigure).length !== 1)) return [];
-  // The figure's other side and the label's other side must both be harmless, or the page gives none (TE pr161 A1-A4, B1-B3).
-  if (pairs.some(({ figure, label }) => !harmless(2 * figure - label) || !harmless(2 * label - figure))) return [];
+  if (pairs.some(({ figure, label }) => !figureSideHarmless(2 * figure - label) || !labelSideHarmless(2 * label - figure))) return [];
   return pairs.map(({ figure, label }) => {
     const m = STACKED_FIGURE.exec(lines[figure])!;
     return { figureLine: lines[figure], label: labelOf(lines[label]), amount: Number(m[1].replace(/,/g, "")), frequency: m[2] ?? null };
