@@ -10,6 +10,7 @@ import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
+import { policyJobLive } from "@/lib/rag/live-job";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
@@ -41,14 +42,14 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
 /** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
  * and for telling whether the table will ever read it. */
 export type DocumentFile = { original_filename: string; product_name: string | null; insurer: string | null; document_role: string | null;
-  policy_number: string | null; completed_at: string | null; quarantine: string | null;
-  /** The newest of the row's other times (updated_at, created_at): older rows have no completion time. */
-  touched_at: string | null };
-type HouseholdDoc = SourceDoc & { status: string; file: DocumentFile };
+  policy_number: string | null; quarantine: string | null };
+/** `live`: a live intake job is reading the document now (lib/rag/live-job.ts, the Documents page's own rule). */
+type HouseholdDoc = SourceDoc & { status: string; live: boolean; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string): Promise<HouseholdDoc[]> {
-  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, processing_completed_at, quarantine_status, updated_at, created_at FROM policies
+  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status,
+      ${policyJobLive("policies")} AS reading_live FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
@@ -56,41 +57,36 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
   const pages = await db("SELECT policy_id, page_number, text FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked' ORDER BY policy_id, page_number",
     [accountId, docs.map((d) => String(d.id))]);
   return docs.map((d) => ({
-    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready",
+    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true,
     pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
-      policy_number: text(d.policy_number), completed_at: isoTime(d.processing_completed_at), quarantine: text(d.quarantine_status), touched_at: newest(d.updated_at, d.created_at) },
+      policy_number: text(d.policy_number), quarantine: text(d.quarantine_status) },
   }));
 }
 const text = (v: unknown) => (v == null ? null : String(v));
-const newest = (...vs: unknown[]) => vs.map(isoTime).filter((t): t is string => !!t).sort().pop() ?? null;
-const isoTime = (v: unknown) => { const t = v instanceof Date ? v.getTime() : typeof v === "string" ? Date.parse(v) : NaN; return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 /** Statuses of a document intake is still working on (lib/rag/ingest.ts); Read again puts a document back to "queued". */
 const IN_INTAKE = new Set(["uploaded", "queued", "extracting", "indexing"]);
 /** Upload scan states from which intake goes on (allow-list): a rejected or blank upload stays "queued" for good and is
  * not being read. */
 const SCAN_GOES_ON = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
-/** Intake marks a document ready and then reads it into the table; for this long after, a ready document with no reading
- * is still being read (the same window Home waits for, app/api/dashboard/route.ts). */
-export const TABLE_READ_WINDOW_MS = 10 * 60_000;
-export type DocumentState = "read" | "waiting" | "no_table" | "not_readable";
+export type DocumentState = "read" | "waiting" | "stalled" | "no_table" | "not_readable";
 
-/** Where a document stands in the table. "waiting" only while it is genuinely being read: in intake, or ready so recently
- * that intake's table reading may not have finished. A receipt or letter (which intake never reads into the table), and a
- * ready document whose reading was not stored in that time, are "no_table": nothing will read them by itself, so they are
- * never shown as unread or sent to Read again (nor as having no benefits: it may have some). A document the app could not read (failed, or an upload the scan rejected)
- * stays "not_readable". */
-export function documentState(d: { status: string; pages: number; file: Pick<DocumentFile, "document_role" | "completed_at" | "quarantine" | "touched_at"> }, hasReading: boolean, now = Date.now()): DocumentState {
-  if (IN_INTAKE.has(d.status)) return SCAN_GOES_ON.has(d.file.quarantine ?? "") ? "waiting" : "not_readable";
+/** Where a document stands in the table. "waiting" only while it is genuinely being read: a live intake job is reading it
+ * (lib/rag/live-job.ts, the rule the Documents page uses), whether still in intake or ready and being read into the table
+ * by that same job. In intake with no live job (the job died, its lease lapsed, or nothing claimed it) it is "stalled":
+ * the Documents page offers Try again, and it is never said to be still being read. A receipt or letter (which intake
+ * never reads into the table), and a ready document whose reading was not stored and that no job is reading, are
+ * "no_table": nothing will read them by itself, so they are never shown as unread or sent to Read again (nor as having no
+ * benefits: it may have some). A document the app could not read (failed, or an upload the scan rejected) stays
+ * "not_readable". */
+export function documentState(d: { status: string; pages: number; live: boolean; file: Pick<DocumentFile, "document_role" | "quarantine"> }, hasReading: boolean): DocumentState {
+  if (IN_INTAKE.has(d.status)) return !SCAN_GOES_ON.has(d.file.quarantine ?? "") ? "not_readable" : d.live === true ? "waiting" : "stalled";
   if (d.status !== "ready") return "not_readable";
   if (hasReading) return "read";
   if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) return "no_table";
   if (!d.pages) return "not_readable";
-  // When intake finished; an older row with no completion time goes by its newest other time. No time at all: nothing
-  // shows it is being read, so it is never "waiting" for good.
-  const at = d.file.completed_at ?? d.file.touched_at, done = at == null ? NaN : Date.parse(at);
-  return Number.isFinite(done) && now - done <= TABLE_READ_WINDOW_MS ? "waiting" : "no_table";
+  return d.live === true ? "waiting" : "no_table";
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
@@ -141,7 +137,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations,
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, file: d.file }, stored.has(d.id)), file: d.file })) };
+    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
