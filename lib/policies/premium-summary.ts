@@ -269,19 +269,24 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     const key = policyOf(c);
     groups.set(key, [...(groups.get(key) ?? []), { cover: c, doc, old }]);
   }
+  // A document's products, a rider joined to the plan it is named after: with one, its filed number is that plan's (Critic R304 H2).
+  const productsOn = (documentId: string) => {
+    const seen: (string | null)[] = [];
+    for (const c of covers) if (c.source.documentId === documentId && !c.ended && !seen.some((p) => oneProduct(p, c.product))) seen.push(c.product);
+    return seen.length;
+  };
   const out: TableLeftOut[] = [];
   for (const group of groups.values()) {
     // One entry per policy, naming each product on it that is not another's rider by name (Critic R303 M1): plans a schedule
-    // prints with no number of their own cannot be told apart from riders. A product whose every cover's term ran out is not
-    // named while a current one is (TE pr163 R5).
+    // prints with no number of their own cannot be told apart from riders. Within a product, a cover whose term ran out does not
+    // name it while a current one is listed (TE pr163 R5); another product is never dropped for being old (Critic R304 H1).
     const products: Entry[][] = [];
     for (const g of group) { const p = products.find((x) => oneProduct(x[0].cover.product, g.cover.product)); if (p) p.push(g); else products.push([g]); }
-    const live = products.filter((p) => p.some((g) => !g.old));
     const kept: { entry: Entry; old: boolean; maybe: boolean }[] = [];
-    for (const p of live.length ? live : products) {
+    for (const p of products) {
       const { cover: c, doc } = p.find((g) => !g.old) ?? p[0], old = p.every((g) => g.old);
       const documentId = c.source.documentId;
-      const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
+      const hint = { number: c.policyNumber ?? (productsOn(documentId) <= 1 ? doc.policyNumber ?? null : null), product: c.product, insurer: doc.insurer };
       // From the same document: the same policy when the numbers agree, or with a number missing, when the record names this
       // product or (on a document with one policy number at most) no product; another plan's premium on it may be this one's (R3, R303 M2).
       const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
@@ -289,6 +294,8 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
           if (hint.number && i.policy_number) { if (samePolicyNumber(hint.number, i.policy_number) || numberKey(hint.number) === numberKey(i.policy_number)) return "same"; }
           else return (!i.product_name?.trim() && numbersOn(documentId) <= 1) || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
         }
+        // The filed number and this product both printed on the record: this plan's, whatever else the schedule holds.
+        if (doc.policyNumber && i.policy_number && numberKey(doc.policyNumber) === numberKey(i.policy_number) && oneProduct(c.product, i.product_name)) return "same";
         const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
         return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
       };
@@ -298,7 +305,7 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     }
     if (!kept.length) continue;
     const doc = kept[0].entry.doc;
-    const name = [...new Set(kept.map((k) => k.entry.cover.product?.trim()).filter((x): x is string => !!x))].join(" and ") || (doc.insurer ? doc.insurer + " policy" : "one policy");
+    const name = [...new Set([...kept].sort((a, b) => Number(a.old) - Number(b.old)).map((k) => k.entry.cover.product?.trim()).filter((x): x is string => !!x))].join(" and ") || (doc.insurer ? doc.insurer + " policy" : "one policy");
     out.push({ name, why: kept.some((k) => k.maybe) ? "maybe_counted" : kept.every((k) => k.old) ? "unread_old" : "unread" });
   }
   return out;
