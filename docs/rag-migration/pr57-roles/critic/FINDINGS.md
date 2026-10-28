@@ -7798,3 +7798,19 @@ Checks on 3d2650c, run network-blocked with model keys stripped:
 ## R283: #156 at d39c3c3 (prompt only)
 
 READY. This one-line change to lib/simple-chat/prompt.ts follows the builder's paid check (US$0.11). The model is now told never to state, promise or describe a total for the children itself, in bottomLine or in any statement, and it keeps "never say it cannot be worked out". That closes a real gap: when the server shows no total card (for example on a single-child event), prose saying "the app works out the total" would promise a figure that never appears. The old clause "the app works out what that number of children could pay" is removed, so the model has nothing to echo. The code is unchanged since R282, so the R282 checks stand.
+
+## R284: #158 at 85ea61c (Home cost from a policy's printed premium)
+
+NOT READY, because of H1 and H2. I checked by running tablePremiumItems over made-up covers and records in a scratch script outside git.
+
+- **H1 (High) double counting.** A premium record for the same policy that is linked to another document, has different product wording and has no policy number does not stop the table item. The record and the printed premium are then both counted (probe: a record of S$470.85 with other wording still gave a table item of S$470.85). Fix: when a record of the same member has the same amount as c.premium or c.firstYearPremium, or the same insurer and no policy number to tell them apart, treat the cover as unsure and skip it (name it in the note). Unsure means no figure.
+- **H2 (High) lapsed or ended policies counted as current.** A lapse or termination letter that prints a premium and a frequency is counted as a current cost (probe: a lapse letter gave S$120 per month). Only the short-term `c.ended` is checked. Fix: skip documents whose status is lapsed or ended (reuse the status test in lib/chat/premium-answer.ts), and skip covers whose printed expiry or cessation date is before today.
+- **M1 (Medium) stale premium.** A renewable plan's schedule from 2019 counts its 2019 premium in 2026 (probe confirmed), and those plans reprice. Count a printed premium only when the document is current (its printed period covers today, or it is dated within about 13 months). Otherwise list the policy in the note and give no figure.
+- **M2 (Medium) one premium line counted twice.** The dedupe key includes productKey(product), so two covers from one document with different product names, both citing the same premium line, are counted twice (probe: two items of S$470.85). Dedupe on documentId plus the premium source excerpt only.
+- **M3 (Medium) wrong anniversary.** documentPeriodFrom can be an endorsement or letter date rather than the start of cover, so the first-year to later-year switch moves. Use the cover's startDate. Use documentPeriodFrom only when the document is a schedule or new-business document. Otherwise, when the first-year premium differs from the later premium, give no figure.
+- Low: a 29 February start gives an anniversary of 1 March, which is acceptable. A payer record held under another member is not seen by the guard. Raise it only if payer records are added.
+- Point 4, "unsure means no figure": it holds for a missing currency, a non-recurring frequency, two documents disagreeing, and a missing first-year start date. It does not hold for H1, H2, M1 or M3 above.
+
+Checks on 85ea61c, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main fb1a769 clean.
