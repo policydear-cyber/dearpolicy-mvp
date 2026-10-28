@@ -7814,3 +7814,28 @@ NOT READY, because of H1 and H2. I checked by running tablePremiumItems over mad
 Checks on 85ea61c, run network-blocked with model keys stripped:
 - premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main fb1a769 clean.
+
+## R285: #159 at 74c1b47 (document names in sentences)
+
+NOT READY, because of H1. I checked by running isMachineFilename, insurerShortName and documentName over made-up file and insurer names in a scratch script outside git.
+
+- **H1 (High) two documents get the same name, and code keys on the name.** Every document with no product name, a made-up file name and the same insurer and role gets one name ("AIA Singapore policy schedule"). With no insurer, every such schedule is "Policy schedule". Before, the made-up file names at least differed. Three places compare or key on the name:
+  - lib/chat/household-status.ts:120 whoIsCovered groups people by `d.name`. Two separate schedules, one for each of two people, become "AIA Singapore policy schedule covers Ann and Ben", which reads as one policy covering both. That is the wrong-person class.
+  - lib/chat/workflow.ts:980 resolves a card's contract by `text.includes(c.name)` only when exactly one contract matches. Two contracts with the same name give null, so the card loses its contract.
+  - lib/chat/workflow.ts:2253 drops a premium receipt when `c.name===d.name`.
+  Fix: key those three on the document or contract id, not the name. Also make fallback names unique within a household. Add a distinguishing detail: the policy number's last 4 characters ("ending 4821"; never the full number), or else the effective date. If two names are still equal, keep the readable file name.
+- **M1 (Medium) file names in other scripts are treated as made up.** The split is on [^A-Za-z0-9], so "保单 2024.pdf" and "生命保険証券.pdf" leave no word, and the person's own name is replaced by "AIA Singapore policy schedule". This matters for a SaaS used worldwide. Fix: split on /[^\p{L}\p{N}]+/u and count letters with \p{L}. Treat one or more letters from a script that is written without spaces (Han, Hiragana, Katakana, Thai) as a word. Low: two-letter names such as "GE.pdf", "CI.pdf" and "HL 2024.pdf" are also lost. That falls back safely, so it is acceptable.
+- **M2 (Medium) the insurer short name cuts into the last word.** The company-form pattern has no word boundary, and "co" is in the list, so "MetLife Mexico" gives "MetLife Mexi", "Allianz Monaco" gives "Allianz Mona", "Mapfre Puerto Rico" gives "Mapfre Puerto Ri" and "Tesco" gives "Tes". Fix: require a space, comma or "(" before the form word, i.e. `(?:^|[\s,]+)\(?(?:pte|private|…|company)\.?\)?\.?$`, and keep the existing fallback when nothing is left. These come out correctly today: "Prudential Assurance Company Singapore (Pte) Limited", "Great Eastern … (Malaysia) Berhad", "HSBC Life (Singapore) Pte. Ltd.", "NTUC Income Insurance Co-operative Limited", "Swiss Re Life & Health Asia Pte Ltd". Low: "Pty" is not removed ("Discovery Vitality Pty").
+- **M3 (Medium) common device file names still pass as chosen.** These still show raw in the note:
+  - a UUID with an all-letter segment ("817d6e8b-874f-4527-beef-…" gives "817d6e8b 874f 4527 Beef 05e03adaf14c"; about 1 in 16 UUIDs has one);
+  - "CamScanner 10-11-2024 14.32" gives "Cam Scanner 10 11 2024 14.32";
+  - "WhatsApp Image 2024-10-11 at 14.32.11";
+  - "PXL_20241011_…", "DSC_0001" and "Screenshot_…_Chrome".
+  Fix: match the UUID shape first. Treat as made up a file name whose only words are device or app words (camscanner, whatsapp, pxl, dsc, dcim, screenshot, chrome, adobe, lens, at, …) next to a run of 6 or more digits. This only affects how a name reads, never an amount.
+- Low: the app-screenshot line now reads "“IMG_2041.jpg” is a screenshot of the insurer’s app showing AIA Singapore app screenshot". Skip the "showing" part when the name came from the fallback.
+- Low: whoIsCovered byName now matches kind words of 5 or more letters ("schedule", "letter", "wording", "receipt") that are in every fallback name. "Who is covered under my schedule" matches every fallback-named schedule. That is arguably right, but it is new.
+
+Checks on 74c1b47, run network-blocked with model keys stripped:
+- r5 20/20 (P5 included), simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22;
+- all other rag2 suites match main: adversarial (U1), conv, fix, live-budget, live-ledger and tools (F4) fail the same way on main 5000e99, because they need a DB or the import rule;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
