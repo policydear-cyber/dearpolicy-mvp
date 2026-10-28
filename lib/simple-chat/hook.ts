@@ -280,7 +280,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     report.sentencesLeftOut.push(...dropAmountPointers(answer, fromRows.report.labels, fromRows.report.dropped.some((d) => !d.notFit)));
     report.sentencesLeftOut.push(...dropAgreeingDayRules(answer, fromRows.report));
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
-    answer.statements = noteNarrowedPages(answer.statements, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
+    answer.statements = noteNarrowedPages(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
   // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
   // introduction to nothing. A bottom line that answers on its own stands alone (live run 23 Oct, E2).
