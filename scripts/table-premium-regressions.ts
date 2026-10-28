@@ -291,7 +291,7 @@ test("a current schedule's policy with no premium read and nothing counted for i
     ["doc-c", { insurer: "Thames Mutual", lapsedOrEnded: false }]]);
   const none = { premium: null, premiumFrequency: null, premiumCurrency: null };
   const covers = [cover({ ...none, product: "Harbour Protector" }), cover({ ...none, product: "Harbour Protector", cover: "Total and Permanent Disability" }),
-    cover({ ...none, doc: "doc-b", product: "Pelan Lindung", currency: "MYR" }), cover({ ...none, doc: "doc-c", product: null, currency: "GBP" })];
+    cover({ ...none, doc: "doc-b", product: "Pelan Lindung", currency: "MYR" }), cover({ ...none, doc: "doc-c", product: "", currency: "GBP" })];
   assert.deepEqual(unreadPremiumCovers(covers, [], docs, new Set()), [{ name: "Harbour Protector", why: "unread" }, { name: "Pelan Lindung", why: "unread" }, { name: "Thames Mutual policy", why: "unread" }]);
 });
 
