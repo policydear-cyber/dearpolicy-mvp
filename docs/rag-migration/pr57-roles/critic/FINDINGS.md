@@ -7710,3 +7710,7 @@ Checks on 8d5a6c7, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with main clean.
 
 Verdict: NOT READY (H2).
+
+## R276: #155 at 08619a7
+
+Still READY. TOTAL_QUALIFIER now allows up to four words between each/every/any one/per and claim/event/accident/admission, so "for any one Critical Illness claim" is read as a per-claim cap, not a total. The N087 sentence ("for all … claims") has none of those words, so its control still gives its row. Checks: benefit-table chat, simple chat and scenario-replay pass; tsc clean; next build passes.
