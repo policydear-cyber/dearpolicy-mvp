@@ -23,7 +23,9 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   lesserOf?: boolean;
   /** The date the person's cover started, as its own cover line prints it (a start date, or the date the line is printed
    * for): a cover this new may still be inside a waiting period. */
-  coverSince?: string | null };
+  coverSince?: string | null;
+  /** The row's own conditions are always on its card (a total limit's printed sentence: totalLimitRows). */
+  scopeOnCard?: boolean };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string }[]; labels: string[];
@@ -209,7 +211,7 @@ const CLAUSE = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?[\t ]+(\S.*)$/;
 const TOTAL_LIMIT_WORDS = /\b(?:shall|will|must)\s+not\s+exceed\b|\bmost\s+(?:we|the\s+company|the\s+insurer)\s+(?:will\s+)?pay\b|\bup\s+to\s+(?:a|the)\s+(?:total\s+|aggregate\s+|overall\s+)?limit\s+of\b|\bmaximum\s+(?:total|aggregate)\s+(?:amount|limit|benefit)\b/i;
 const TOTAL_SCOPE = /\bin\s+total\b|\baggregated?\b|\ball\s+(?:the\s+)?(?:policies|plans|claims)\b|\bsame\s+life(?:\s+assured)?\b|\bin\s+(?:its|their)\s+lifetime\b/i;
 /** A total that is for some insured persons, ages or periods only, or a share, is not the benefit's whole limit. */
-const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|years?\s+old|spouses?|dependants?|elderly|per\s+(?:day|week|month|year|visit|item|trip|journey))\b|\b(?:above|below|over|under)\s+(?:the\s+)?(?:age\b|\d)|%|\bper\s*cent\b|\bpercent\b/i;
+const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|years?\s+old|spouses?|dependants?|elderly|per\s+(?:day|week|month|year|visit|item|trip|journey|claim|event|accident|admission|condition)|(?:each|any\s+one)\s+(?:claim|event|accident|admission))\b|\b(?:above|below|over|under)\s+(?:the\s+)?(?:age\b|\d)|%|\bper\s*cent\b|\bpercent\b/i;
 /** The most a benefit pays in total that its own clause prints, as a row of its own after every other (overnight run
  * 23 Oct, N087: "The most We will pay in total for all Early or Intermediate Stages of Critical Illnesses claims under this
  * Policy and all Policies We have issued covering the same Life Assured shall not exceed S$1,050,000"). The reading left
@@ -219,8 +221,8 @@ const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|y
  * numbered heading above it that names the row's benefit, and the clause runs to the next heading that is not one of its
  * sub-clauses (or the page's end). A sentence in it gives a row only when it says it is a total (limit wording and scope
  * words), prints exactly one money figure in a stated currency, and names no group, age, period or share. A figure that is
- * the row's own cap adds nothing. The row is a limit, never what an event pays (combinedLimit), and its condition is the
- * sentence as printed. A clause that cannot be found, or a sentence that is not plainly one total, gives none: a missing
+ * the row's own cap adds nothing. The row is a limit, never what an event pays (combinedLimit), and its condition, always
+ * on its card, is the sentence as printed up to its limit words (what the limit is for), which a sentence must have. A clause that cannot be found, or a sentence that is not plainly one total, gives none: a missing
  * card, never a wrong one. */
 export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[] {
   const out: TableRow[] = [];
@@ -276,12 +278,17 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
       if ((r.capSource || r.figure.kind === "printed") && printsAmount(r.source.excerpt, amount)) continue;
       const excerpt = body.slice(lineAt(bounds[k] + (joined.slice(bounds[k]).length - joined.slice(bounds[k]).trimStart().length)), lineAt(bounds[k + 1] - 1) + 1).join("\n");
       if (anyMoneyFigures(excerpt).some((f) => f.value !== amount)) continue;
+      // What the limit is printed for, without its figure: the sentence up to its limit words. A card's conditions never
+      // state money, so this is what goes on the card with the figure.
+      const cut = /\s(?:(?:shall|will|must)\s+not\s+exceed|(?:will\s+be\s+)?aggregated\s+up\s+to|(?:is|are)\s+(?:limited\s+to|capped\s+at)|(?:is|are)\b(?=[^.]*\d))/i.exec(sentence);
+      const scope = cut ? sentence.slice(0, cut.index).replace(/[\s,]+$/, "") : "";
+      if (scope.split(/\s+/).length < 4 || anyMoneyFigures(scope).length || /\d/.test(scope)) continue;
       const key = [r.personId, r.coverKey, r.source.documentId, page.page, amount, plain(sentence)].join("|");
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ ...r, benefit: `Limit in total on ${benefitName(r.benefit)} claims`, pays: "up_to", conditions: [sentence], fromDay: null, maxDays: null, qualifier: null,
+      out.push({ ...r, benefit: `Limit in total on ${benefitName(r.benefit)} claims`, pays: "up_to", conditions: [scope], fromDay: null, maxDays: null, qualifier: null,
         figure: { kind: "printed", amount, currency, unit: "up_to", period: null }, source: { ...r.source, excerpt }, baseSource: null, percent: null, percentOf: null,
-        base: null, baseCorrected: false, capSource: null, combinedLimit: true, coverEnded: r.coverEnded ?? null } as TableRow);
+        base: null, baseCorrected: false, capSource: null, combinedLimit: true, coverEnded: r.coverEnded ?? null, scopeOnCard: true } as TableRow);
     }
   }
   return out;
@@ -397,7 +404,7 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
   // The premium's parts its schedule line prints (the benefit's own premium and an extra such as "Health Extra": overnight
   // run 23 Oct, N088, N092), named as parts of the premium, never as premiums of their own.
   for (const part of c.premium != null ? c.premiumParts ?? [] : [])
-    out.push(row(`${part.label}${/premium/i.test(part.label) ? "" : " (premium)"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (part of the ${c.premiumLabel || "Premium"}${c.premiumNote ? "; the first policy year's premium is different" : ""})`,
+    out.push(row(`${part.label == null ? `Premium for ${noNumbers(c.cover) || c.cover}` : `${part.label}${/premium/i.test(part.label) ? "" : " (premium)"}`}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (part of the ${c.premiumLabel || "Premium"}${c.premiumNote ? "; the first policy year's premium is different" : ""})`,
       { kind: "printed", amount: part.amount, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, part.source));
   if (c.premium != null && c.firstYearPremium != null && c.firstYearSource)
     out.push(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource));
@@ -657,7 +664,11 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
       // Premiums for different policy years are paid one after the other, never alternatives (live run 23 Oct, A6).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      // A total limit's card always says what the limit is printed for (its sentence), whatever the model gave: its name
+      // alone ("Limit in total on Critical Illness Benefit claims") would leave out a scope such as early stages only.
+      const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
+      const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
       // A card shown with no event, for a cover whose printed period has ended, says so (S008: an ended trip's daily cash).
       // So does an event card with no date said (Critic R156-1).
       const event = raw.eventFit === "on_list" || raw.eventFit === "any_event";

@@ -1755,6 +1755,7 @@ const partsHouse = (sched: string, wording = ""): Household => ({ ...HOUSE, docu
 ] });
 const partsCover = { person: "Lim Ah Kow", product: "CI Plan", cover: "Critical Illness Cover", plan: null, sumInsured: 200000, asOf: "01/10/2026", page: 1, quote: "Critical Illness Cover\t200,000.00\t250.25\t01/10/2036" };
 const ciKey = coverKeyOf({ product: "CI Plan", cover: "Critical Illness Cover", plan: null });
+const currencyOf = (r: ChatRow) => (r.figure.kind === "none" ? null : r.figure.currency);
 function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover) {
   const sched = checkReading(src(house.documents[0]), reading("personal_proof", "CI Plan", [cover], []));
   const readings = [sched];
@@ -1769,20 +1770,20 @@ function partsAnswer(house: Household, statements: Record<string, unknown>[], be
   return { rows: rs, cover: sched.covers[0], amounts: kept.filter((x) => x.amount).map((x) => x.amount!.text), kept, report: fromRows.report };
 }
 test("a premium's parts on the schedule line are rows of their own, after every other row (N088, N092)", () => {
-  const r = partsAnswer(partsHouse(PARTS_SCHED()), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }, { row: rowNamed(/^Basic premium/), text: "Basic." }]);
-  assert.deepEqual(r.cover.premiumParts?.map((x) => [x.label, x.amount]), [["Basic premium", 250.25], ["Occupation Extra", 100.25]]);
-  assert.deepEqual(r.rows.slice(-2).map((x) => x.benefit), ["Basic premium, Monthly (part of the Instalment Premium; the first policy year's premium is different)",
+  const r = partsAnswer(partsHouse(PARTS_SCHED()), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }, { row: rowNamed(/^Premium for/), text: "Basic." }]);
+  assert.deepEqual(r.cover.premiumParts?.map((x) => [x.label, x.amount]), [[null, 250.25], ["Occupation Extra", 100.25]]);
+  assert.deepEqual(r.rows.slice(-2).map((x) => x.benefit), ["Premium for Critical Illness Cover, Monthly (part of the Instalment Premium; the first policy year's premium is different)",
     "Occupation Extra (premium), Monthly (part of the Instalment Premium; the first policy year's premium is different)"]);
   // The rows before them keep their numbers: the premium and the first-year premium come first, as on main.
-  assert.ok(r.rows.findIndex((x) => /^First Year/.test(x.benefit)) < r.rows.findIndex((x) => /^Basic premium/.test(x.benefit)));
+  assert.ok(r.rows.findIndex((x) => /^First Year/.test(x.benefit)) < r.rows.findIndex((x) => /^Premium for/.test(x.benefit)));
   assert.deepEqual(r.amounts, ["S$100.25", "S$250.25"]);
   // Each part is printed on its own line, in the schedule's currency.
   assert.match(r.rows.at(-1)!.source.excerpt, /Occupation Extra --- 100\.25/);
-  assert.equal(r.rows.at(-1)!.figure.kind === "printed" && r.rows.at(-1)!.figure.currency, "SGD");
+  assert.equal(currencyOf(r.rows.at(-1)!), "SGD");
 });
 test("a premium's parts are given in any currency the schedule settles (parity)", () => {
   const r = partsAnswer(partsHouse(PARTS_SCHED({ currency: "Ringgit Malaysia" })), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }]);
-  assert.equal(r.rows.at(-1)!.figure.kind === "printed" && r.rows.at(-1)!.figure.currency, r.cover.premiumCurrency ?? r.cover.currency);
+  assert.equal(currencyOf(r.rows.at(-1)!), r.cover.premiumCurrency ?? r.cover.currency);
   assert.notEqual(r.cover.premiumCurrency, "SGD");
 });
 test("no parts unless they plainly add up to the premium, from the cover's own one line", () => {
@@ -1807,10 +1808,13 @@ test("a clause's printed total limit is a row of its own, shown when asked with 
   const row = r.rows.find((x) => /^Limit in total/.test(x.benefit))!;
   assert.equal(row.benefit, "Limit in total on Critical Illness Benefit claims");
   assert.equal(row.combinedLimit, true);
-  assert.deepEqual(row.conditions, [TOTAL.replace(/\n/g, " ")]);
+  assert.deepEqual(row.conditions, ["The most We will pay in total for all Early Stage Critical Illness claims under this Policy and all Policies covering the same Life Assured"]);
   assert.equal(row.source.excerpt, TOTAL);
   assert.equal(r.rows.at(-1), row, "after every other row");
   assert.deepEqual(r.amounts, ["S$800,000"]);
+  // The card says what the limit is for, though the model gave no condition.
+  const card = r.kept.find((x) => x.amount?.text === "S$800,000")!;
+  assert.ok(JSON.stringify(card).includes("for all Early Stage Critical Illness claims"), JSON.stringify(card));
 });
 test("a total limit is never what an event pays", () => {
   const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL)), [{ row: limitRow, text: "Paid.", eventFit: "on_list" }], [b(ciRow)]);
@@ -1834,6 +1838,7 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   none(LIMIT_WORDING("The amount payable for each claim shall not exceed S$800,000."), "no word says it is a total");
   none(LIMIT_WORDING("We will pay S$800,000 in one lump sum for all Early Stage claims under all Policies covering the same Life Assured."), "no limit wording");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 per year")), "a total for each period");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all", "in total for any one claim among all")), "a limit for each claim");
   // The limit printed under the next heading is that benefit's, never the critical illness row's.
   none(LIMIT_WORDING("", `2.3. Intensive Care Benefit\n${TOTAL}`), "another clause's limit");
   // A heading that does not name the row's benefit: its limit is not the row's.

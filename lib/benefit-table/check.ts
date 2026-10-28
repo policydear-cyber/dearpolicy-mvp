@@ -32,7 +32,7 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
    * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
    * premium (premiumPartsOf). */
-  premiumParts?: { label: string; amount: number; source: Source }[] | null };
+  premiumParts?: { label: string | null; amount: number; source: Source }[] | null };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -53,12 +53,12 @@ const DATE_CELL = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/;
  *   Comprehensive Critical\t300,000.00\t269.05\t19/10/2036\t...
  *   Illness Benefit
  *   - Health Extra\t---\t201.80\t19/10/2036\t---\t---
- * The cover's line is the one page line whose cells hold its sum insured; its premium is that line's one other cell with
- * cents. The extras are the lines just below it (after any wrap of the cover's name) that open with a dash and print no
+ * The cover's line is the one page line whose cells hold its sum insured; its own premium (label null) is that line's one
+ * other cell with cents. The extras are the lines just below it (after any wrap of the cover's name) that open with a dash and print no
  * sum, and exactly one cell with cents. Given only when the parts add up to the premium to the cent: anything else (two
  * lines with the sum, a second premium-like cell, parts that do not add up) gives none. A part left out is a missing card,
  * never a wrong one. */
-export function premiumPartsOf(text: string, sumInsured: number | null, premium: number): { label: string; amount: number; line: string }[] | null {
+export function premiumPartsOf(text: string, sumInsured: number | null, premium: number): { label: string | null; amount: number; line: string }[] | null {
   if (sumInsured == null) return null;
   const lines = text.split("\n");
   const cells = (l: string) => l.split("\t").map((c) => c.trim()).filter(Boolean);
@@ -69,7 +69,7 @@ export function premiumPartsOf(text: string, sumInsured: number | null, premium:
   const sumAt = line.findIndex((c, k) => k > 0 && Math.abs(value(c) - sumInsured) < 0.005);
   const basic = line.slice(sumAt + 1).filter((c) => PREMIUM_CELL.test(c));
   if (basic.length !== 1 || !line.slice(sumAt + 1).every((c) => PREMIUM_CELL.test(c) || DATE_CELL.test(c) || EMPTY_CELL.test(c))) return null;
-  const parts = [{ label: "Basic premium", amount: value(basic[0]), line: lines[at] }];
+  const parts: { label: string | null; amount: number; line: string }[] = [{ label: null, amount: value(basic[0]), line: lines[at] }];
   for (let i = at + 1; i < lines.length && i <= at + 4; i++) {
     const c = cells(lines[i]);
     // The cover's name wrapped onto its own line ("Illness Benefit"): no cells, no figure.
