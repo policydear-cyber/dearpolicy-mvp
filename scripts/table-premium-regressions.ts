@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { premiumsPerYear, tablePremiumItems, type TablePremiumCover, type TablePremiumDocument } from "@/lib/policies/premium-summary";
-import { checkReading } from "@/lib/benefit-table/check";
+import { checkReading, stackedPremiumLines } from "@/lib/benefit-table/check";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
@@ -203,3 +203,83 @@ test("a record with another number but the same amount and insurer may be this p
   assert.deepEqual(run([cover({ premiumCurrency: null, currency: null })]).leftOut, [{ name: "Harbour Critical Illness", why: "unclear" }]);
 });
 
+// ---------------------------------------------------------------- the premium check reads a value set over its label
+
+const schedule = (premiumLines: string, currency = "CURRENCY\tSINGAPORE DOLLARS", person = "LEE SIEW MEI", extra = "", sign = "S$") =>
+  `SCHEDULE PAGE\nPOLICY NUMBER\nLIFE INSURED\t${person}\nPOLICY START DATE\t27 JUN 2020\nPLAN NAME\tHARBOUR SAVER 10\n${currency}\n${premiumLines}\nBASIC/CORE BENEFIT\tSUM INSURED\tBENEFIT START\nHARBOUR SAVER 10\t${sign}49,000.00\t27 JUN 2020\t27 JUN 2112${extra}`;
+const readOne = (text: string, cover: Record<string, unknown> = {}, people = ["LEE SIEW MEI"], sign = "S$") =>
+  checkReading({ id: "d1", name: "schedule.pdf", readable: true, people, pages: [{ page: 3, text }] },
+    { document: { kind: "personal_proof", product: "HARBOUR SAVER 10", namedPeople: [people[0]] }, covers: [{ page: 3, person: people[0], product: "HARBOUR SAVER 10", cover: "HARBOUR SAVER 10", plan: null,
+      quote: `HARBOUR SAVER 10\t${sign}49,000.00\t27 JUN 2020\t27 JUN 2112`, sumInsured: 49000, ...cover }], benefits: [] }).covers[0];
+
+test("a premium figure set over (or under) its plain label is the policy's premium, in every market", () => {
+  const sg = readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"));
+  assert.deepEqual([sg.premium, sg.premiumCurrency, sg.premiumFrequency, sg.premiumLabel], [399.24, "SGD", "MONTHLY", "PREMIUM"]);
+  // The reading gave it, quoting the figure line: kept, labelled by the line under it.
+  const given = readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"), { premium: 399.24, premiumQuote: "S$399.24 (MONTHLY)", premiumFrequency: "monthly" });
+  assert.deepEqual([given.premium, given.premiumLabel, given.premiumFrequency], [399.24, "PREMIUM", "monthly"]);
+  const my = readOne(schedule("RM 150.00 (MONTHLY)\nPREMIUM", "MATA WANG\tRM", undefined, "", "RM"), {}, undefined, "RM");
+  assert.deepEqual([my.premium, my.premiumCurrency, my.premiumFrequency], [150, "MYR", "MONTHLY"]);
+  const uk = readOne(schedule("£45.00 Monthly\nTotal Premium", "CURRENCY\tGBP", undefined, "", "£"), {}, undefined, "£");
+  // Blank lines between rows (PDF text) are not read.
+  const gaps = readOne(schedule("\nS$399.24 (MONTHLY)\n\nPREMIUM\n"));
+  assert.deepEqual([gaps.premium, gaps.premiumFrequency], [399.24, "MONTHLY"]);
+  // A premium in another currency than the cover's own line is not this cover's (check.ts).
+  assert.equal(readOne(schedule("RM 150.00 (MONTHLY)\nPREMIUM", "MATA WANG\tRM")).premium, null);
+  assert.deepEqual([uk.premium, uk.premiumCurrency, uk.premiumFrequency], [45, "GBP", "Monthly"]);
+  assert.deepEqual(stackedPremiumLines("CURRENCY\tSGD\nS$399.24 (MONTHLY)\nPREMIUM").map((x) => [x.amount, x.label, x.frequency]), [[399.24, "PREMIUM", "MONTHLY"]]);
+  // At the page's top the figure's own label may be on the page before, so none.
+  assert.deepEqual(stackedPremiumLines("S$399.24 (MONTHLY)\nPREMIUM"), []);
+});
+
+test("a stacked figure that is not plainly the one premium is never used", () => {
+  const none = (text: string, why: string, cover: Record<string, unknown> = {}, people?: string[]) => assert.equal(readOne(text, cover, people).premium, null, why);
+  none(schedule("PREMIUM\nS$399.24 (MONTHLY)\nPREMIUM"), "a label above and below: which one is not known");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nS$120.00 (MONTHLY)\nINSTALMENT PREMIUM"), "two premiums on the page, a label between them");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nPOLICY TERM\nS$120.00 (MONTHLY)\nINSTALMENT PREMIUM"), "two premiums on the page, apart");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM", undefined, undefined, "\nInstalment Premium\t: 120.00"), "a stacked and a same-line premium");
+  none(schedule("S$399.24 (MONTHLY)\nRIDER PREMIUM"), "a label that qualifies the premium");
+  none(schedule("S$399.24 (MONTHLY)\nSUM ASSURED"), "a label that is not a premium");
+  none(schedule("S$399 (MONTHLY)\nPREMIUM"), "a whole figure is not read as a premium");
+  none(schedule("S$399.24\t27 JUN 2030\nPREMIUM"), "a line with other cells is a table row, not a figure on its own");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM") + "\nLIFE INSURED 2\tTAN AH KOW", "another life on the page", {}, ["LEE SIEW MEI", "TAN AH KOW"]);
+  // A reading's figure that is not the printed one is dropped; the page's own one premium line is used, as for a same-line one.
+  assert.equal(readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"), { premium: 399.42, premiumQuote: "S$399.24 (MONTHLY)" }).premium, 399.24);
+});
+
+test("a stacked figure that another field could own is never the premium, in every market (TE pr161)", () => {
+  const none = (text: string, why: string, cover: Record<string, unknown> = {}, sign = "S$") => assert.equal(readOne(text, cover, undefined, sign).premium, null, why);
+  const markets: [string, string][] = [["S$", "CURRENCY\tSINGAPORE DOLLARS"], ["RM ", "MATA WANG\tRM"], ["£", "CURRENCY\tGBP"]];
+  for (const [sign, currency] of markets) {
+    const s = (lines: string) => schedule(lines, currency, undefined, "", sign.trim());
+    const f = (n: string) => `${sign}${n}`;
+    none(s(`SUM ASSURED\n${f("49,000.00")}\nPREMIUM\n${f("212.40")} per month`), `${sign} label above each value: the figure above PREMIUM is the sum assured`, {}, sign.trim());
+    none(s(`POLICY FEE\n${f("12.00")}\nPREMIUM\nWaived`), `${sign} the figure above PREMIUM is the policy fee`, {}, sign.trim());
+    none(s(`CASH VALUE AT YEAR 10\n${f("3,450.00")}\nPREMIUM`), `${sign} the figure above PREMIUM is another field's`, {}, sign.trim());
+    none(s(`PREMIUM\n${f("212.40")}\n${f("37.60")}\n${f("250.00")}`), `${sign} a column of figures under one label`, {}, sign.trim());
+    none(s(`${f("212.40")} (MONTHLY)\n${f("250.00")} (MONTHLY)\nPREMIUM`), `${sign} two figures over one label`, {}, sign.trim());
+    none(s(`${f("212.40")} (MONTHLY)\nBASIC PREMIUM\n${f("37.60")} (MONTHLY)\nPREMIUM`), `${sign} a qualified label above the figure`, {}, sign.trim());
+    // The mirror layout: a label above each value, the next line another field's label. Unsure, so none.
+    none(s(`PREMIUM\n${f("212.40")} (MONTHLY)\nSUM ASSURED\n${f("49,000.00")}`), `${sign} the figure under PREMIUM sits over another field's label`, {}, sign.trim());
+  }
+  // A figure equal to the cover's sum insured is never its premium, from the reading or from the page.
+  none(schedule("SUM ASSURED\tTERM (S$)\nS$49,000.00\nPREMIUM"), "the sum insured set over the premium label");
+  none(schedule("S$49,000.00\nSUM ASSURED\nPREMIUM\nWaived"), "the reading gives the sum insured as the premium", { premium: 49000, premiumQuote: "S$49,000.00" });
+  none(schedule("S$49,000.00\nPREMIUM"), "the reading quotes a stacked sum insured over PREMIUM", { premium: 49000, premiumQuote: "S$49,000.00" });
+  none(schedule("S$49,000.00\nPREMIUM"), "the page's stacked sum insured over PREMIUM, the reading giving none");
+  // Blank lines are not read, so a figure two lines from a label is beside it (Critic R297 H1).
+  none(schedule("RIDER PREMIUM\n\nS$50.00\nPREMIUM\n\nS$399.24 (MONTHLY)"), "a rider's figure under its label, blank-separated");
+  none(schedule("FIRST YEAR PREMIUM\n\nS$376.68\nPREMIUM\n\nS$470.85 per month"), "a first-year figure under its label, blank-separated");
+  // A header row of field names over a lone figure may own it (Critic R297 H2); only the currency row is harmless there.
+  none(schedule("RIDER\tSUM ASSURED\nS$50,000.00\nPREMIUM\n\nS$399.24 per month"), "a two-cell header over the figure");
+  none(schedule("PLAN\tSUM ASSURED\tTERM\nS$50,000.00\nPREMIUM"), "a three-cell header over the figure");
+  // Label above its figure, with the cover table's header under the figure: that header could own it, so none (a known gap).
+  none(schedule("Total Premium\nS$45.00 Monthly"), "label above the figure, a header row under it");
+  // The label's other side: a value of its own ("POLICY TERM\t10 YEARS" holds a figure) gives none.
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nPOLICY TERM\t10 YEARS"), "the line under the label holds a figure");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWAIVED\tFROM\tYEAR 2"), "three cells under the label, one with a figure");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWaived"), "a value under the label");
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM\nWaived\tYearly"), "a two-cell value under the label");
+  // Only a currency row is harmless over the figure: a key with any other value is not one.
+  none(schedule("S$399.24 (MONTHLY)\nPREMIUM", "CURRENCY\tSEE BELOW"), "a currency key with no currency");
+});
