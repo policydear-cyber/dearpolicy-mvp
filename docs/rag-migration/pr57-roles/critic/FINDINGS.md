@@ -7550,3 +7550,23 @@ Checks on 3a5fff0, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
 
 Verdict: READY.
+
+## R267: #154 re-check at b842a74
+
+H1 is fixed. With "doubled", "double" or "twice" in the clause, a figure counts only when it comes after the multiplier with a cap word between them. My probes:
+- "S$200 per day, doubled in ICU": null.
+- "S$200 per day, twice this amount in ICU": null.
+- "S$400 per day in ICU or the daily amount": null.
+- "doubled ... capped at / up to a maximum of / max / limited to S$400 per day": 400.
+- "doubled to S$400 per day": null. This is conservative, and the base row still carries the doubling text.
+- "subject to S$400": null, because "subject" is not an allowed word.
+
+M1 is fixed. The clause is now the ICU row's condition, so the table line shows "doubled …, capped at".
+
+M2 is accepted as answered. The ICU row never gets a stay total (stayPays refuses intensive-care wording), and the model cannot put money in prose. A money condition on the card would be dropped by verify, so carrying the overall limit would buy nothing.
+
+Checks on b842a74, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
