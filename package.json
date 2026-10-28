@@ -18,6 +18,7 @@
     "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
     "benefit-table:per-child-test": "node --import tsx scripts/benefit-table/per-child-test.ts",
     "benefit-table:te154-test": "node --import tsx scripts/benefit-table/te-pr154-test.ts",
+    "benefit-table:te157-test": "node --import tsx scripts/benefit-table/te-pr157-test.ts",
     "benefit-table:te155-test": "node --import tsx scripts/benefit-table/te-pr155-test.ts",
     "coverage:table-test": "node --import tsx scripts/coverage-table-figures-regressions.ts",
     "coverage:te147-test": "node --import tsx scripts/coverage/te-pr147-test.ts",
@@ -256,7 +257,8 @@
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
     "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts",
     "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts",
-    "identity:mask-test": "node --import tsx scripts/identity-mask-regressions.ts"
+    "identity:mask-test": "node --import tsx scripts/identity-mask-regressions.ts",
+    "premium:table-test": "node --import tsx scripts/table-premium-regressions.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

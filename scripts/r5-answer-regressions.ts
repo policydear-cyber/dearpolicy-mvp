@@ -33,6 +33,7 @@ import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/curre
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { whoIsCovered } from "@/lib/chat/household-status";
+import { singaporeDay } from "@/lib/benefit-table/dates";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -62,7 +63,7 @@ async function main() {
 
   const db = new PGlite({ extensions: { vector, pgcrypto } });
   await db.waitReady;
-  for (const file of ["schema.sql", "chat-upgrade.sql", "benefit-catalog.sql", "claim-evidence.sql", "model-usage.sql", "model-provenance.sql", "coverage-ledger.sql", "cover-conditions.sql", "background-jobs.sql", "household-rls.sql", "lifecycle.sql", "storage-purge.sql"])
+  for (const file of ["schema.sql", "chat-upgrade.sql", "benefit-catalog.sql", "claim-evidence.sql", "model-usage.sql", "model-provenance.sql", "coverage-ledger.sql", "cover-conditions.sql", "background-jobs.sql", "household-rls.sql", "lifecycle.sql", "storage-purge.sql", "benefit-table.sql"])
     await db.exec(await readFile(path.resolve("sql/" + file), "utf8"));
   await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
   for (const t of ["policy_coverages", "policy_benefits", "coverage_rules"])
@@ -259,7 +260,56 @@ async function main() {
       } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [tripRow.rows[0].id]); }
     });
 
-    await check("P5 the premium note names a document with no product name by what it is, never by a made-up file name (Home note named \"817d6e8b 874f ...\", 28 Oct)", async () => {
+    await check("P5 a policy with no premium record is counted on Home from the premium its own schedule prints (CI II S$470.85, 28 Oct)", async () => {
+      const CI = id(104);
+      await addDoc(CI, "LifeGuard Critical Illness", "LG-88120", [{ pageNumber: 1, text: "LifeGuard Critical Illness\nPolicy Schedule\nLife Assured\t: Tan Mei Ling\nPolicy Effective Date\t: 01/03/2026\n: Singapore Dollar\nInstalment Premium\t: 95.40\tCurrency\nPayment Frequency\t: Monthly\nCritical Illness Benefit\t150,000.00\t01/03/2026\t01/03/2046" }], "2026-03-01", null, null, "personal_schedule");
+      // The premium is not in the reading: the table takes it from the page's one plain premium line (check.ts).
+      const reading = { pages: [], document: { covers: [{ page: 1, person: "Tan Mei Ling", product: "LifeGuard Critical Illness", cover: "Critical Illness Benefit", plan: null, quote: "Critical Illness Benefit\t150,000.00\t01/03/2026\t01/03/2046", sumInsured: 150000 }],
+        benefits: [], document: { kind: "personal_proof", product: "LifeGuard Critical Illness", plan: null, insurer: "Merlion Mutual Assurance", periodFrom: "01/03/2026", periodTo: "01/03/2046", namedPeople: ["Tan Mei Ling"] } } };
+      await db.query("INSERT INTO benefit_readings(policy_id,account_id,reading,model,prompt_version) VALUES($1,$2,$3::jsonb,'test','test')", [CI, H, JSON.stringify(reading)]);
+      const env = { table: process.env.DEARPOLICY_BENEFIT_TABLE, alpha: process.env.DEARPOLICY_ALPHA_ACCOUNTS };
+      try {
+        const { GET } = await import("@/app/api/dashboard/route");
+        process.env.DEV_ACCOUNT_ID = H;
+        // Without the benefit table, unchanged: no premium record, so it is named as missing and not counted.
+        const before = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
+        assert.equal(Math.round(before.premiums.annual), 2170, "without the table " + before.premiums.annual);
+        assert.ok(before.premiums.missing.some((m: string) => /LifeGuard/.test(m)), JSON.stringify(before.premiums.missing));
+        Object.assign(process.env, { DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_ALPHA_ACCOUNTS: H });
+        const data = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
+        const line = data.premiums.items.find((i: { product_name: string }) => i.product_name === "LifeGuard Critical Illness");
+        assert.ok(line, "the schedule's premium is a line on Home: " + JSON.stringify(data.premiums.items.map((i: { product_name: string }) => i.product_name)));
+        assert.equal(line.amount, 95.4); assert.equal(line.currency, "SGD"); assert.equal(line.frequency, "Monthly"); assert.equal(Math.round(line.annual * 100) / 100, 1144.8);
+        assert.equal(Math.round(data.premiums.annual * 100) / 100, 3314.8, "S$2,170 + S$95.40 x 12: " + data.premiums.annual);
+        assert.ok(!data.premiums.missing.some((m: string) => /LifeGuard/.test(m)), "no longer missing: " + JSON.stringify(data.premiums.missing));
+        assert.ok(data.premiums.missing.some((m: string) => /TermSecure/.test(m)), "a policy whose document prints no premium is still named");
+        // Records stay as they were: the ShieldCare lines are the records', never doubled by the table.
+        assert.equal(data.premiums.items.filter((i: { product_name: string }) => /ShieldCare/.test(i.product_name)).length, 2);
+        // The chat's premium total is not changed by this (it reads records only).
+        const chat = await summarisePremiums(H, mei);
+        assert.equal(Math.round(chat.annual), 2170);
+        // A first-year premium on the page: the first-year figure is paid in the first policy year, the other after it.
+        await db.query("UPDATE policy_pages SET text=replace(text, ': Singapore Dollar', 'First Year Instalment Premium * : 76.32' || chr(10) || ': Singapore Dollar') WHERE policy_id=$1", [CI]);
+        const today = singaporeDay(new Date("2026-10-28T04:00:00Z"));
+        const { tableFor } = await import("@/lib/benefit-table/service");
+        const { appDb } = await import("@/lib/benefit-table/app");
+        const covers = (await tableFor(appDb, H)).table.people.find((p) => p.id === mei.id)!.covers;
+        const first = await summarisePremiums(H, mei, { covers, today });
+        const lg = first.items.find((i) => i.product_name === "LifeGuard Critical Illness")!;
+        assert.equal(lg.amount, 76.32); assert.match(lg.detail ?? "", /first policy year; S\$95\.40 monthly from 1 March 2027/);
+        const later = await summarisePremiums(H, mei, { covers, today: singaporeDay(new Date("2027-03-02T04:00:00Z")) });
+        assert.equal(later.items.find((i) => i.product_name === "LifeGuard Critical Illness")!.amount, 95.4);
+        // A deleted document's premium is never counted, even while its reading is still stored.
+        await db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [CI]);
+        assert.ok(!(await summarisePremiums(H, mei, { covers, today })).items.some((i) => i.product_name === "LifeGuard Critical Illness"));
+      } finally {
+        Object.assign(process.env, { DEARPOLICY_BENEFIT_TABLE: env.table ?? "", DEARPOLICY_ALPHA_ACCOUNTS: env.alpha ?? "" });
+        for (const t of ["benefit_readings", "policy_chunks", "policy_pages", "policy_members"]) await db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [CI]);
+        await db.query("DELETE FROM policies WHERE id=$1", [CI]);
+      }
+    });
+
+    await check("P6 the premium note names a document with no product name by what it is, never by a made-up file name (Home note named \"817d6e8b 874f ...\", 28 Oct)", async () => {
       const name = (original_filename: string, insurer: string | null = null, document_role: string | null = null, product_name: string | null = null) => documentName({ product_name, original_filename, insurer, document_role });
       // Made-up file names, in any market: the insurer (without its company form) and the kind of document.
       assert.equal(name("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "Example Life", "policy_wording"), "Example Life policy wording");
@@ -296,7 +346,7 @@ async function main() {
       const who = whoIsCovered("who is covered by the life plan?", [ann, ben], new Map([["pa", [pd("d1"), pd("d3")]], ["pb", [pd("d2")]]]))!.text;
       assert.equal(who, "Example Life policy schedule covers you, going by the documents on file. Example Life policy schedule covers Ben, going by the documents on file.", who);
       assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
-      const doc = id(104);
+      const doc = id(105);
       await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)
         VALUES($1,$2,$3,'Merlion Mutual Assurance Pte. Ltd.',NULL,'MMA-CI-4410','Health','certificate',true,90,'ready','3f9a1c2e-7b4d-4e21-9c0a-55d2e1f0a9b7.pdf',$4,'2026-01-01','scan_clean','active',$5)`, [doc, H, mei.id, H + "/" + doc + ".pdf", "sha256:" + doc]);
       await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [doc, mei.id, H]);

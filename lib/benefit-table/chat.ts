@@ -74,7 +74,11 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // 23 Oct, S016). Added last, so every other row keeps its number.
   for (const r of [...rows]) {
     const rate = r.figure.kind === "printed" && r.figure.unit === "up_to" ? dailyRateOf(r.source.excerpt, r.figure.amount) : null;
-    if (rate != null && r.figure.kind === "printed") add({ ...r, figure: { kind: "printed", amount: rate, currency: r.figure.currency, unit: "per_day" }, fromDay: null, maxDays: null });
+    // The rate's own printed currency, never the limit's: "Capped at US$300 per day" under an S$ limit is not S$300 a day,
+    // and a rate in another currency than its limit gives no row (a bare "$" states none).
+    // The currency is the rate figure's own, never another figure's of the same value on the line (TE pr157 F2).
+    if (rate != null && r.figure.kind === "printed" && rate.currency !== "mixed" && (rate.currency == null || rate.currency === r.figure.currency))
+      add({ ...r, figure: { kind: "printed", amount: rate.value, currency: rate.currency, unit: "per_day" }, fromDay: null, maxDays: null });
   }
   // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
   // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
@@ -373,20 +377,24 @@ function perBlock(above: string | undefined, figures: string[], lengths: string[
 
 /** The one daily rate a limit's own line caps it at ("Capped at S$200 per day", "maximum S$300 per day"), when it is not the
  * limit itself; null when it prints none, or more than one. */
-function dailyRateOf(excerpt: string, limit: number): number | null {
+function dailyRateOf(excerpt: string, limit: number): { value: number; currency: string | null } | null {
   // A daily figure that is something else (an ICU rate, an excess, a companion's or an allowance's) is never the limit's
   // own rate, so a line that names one gives none (Critic R153-2).
   if (/\b(?:ICU|intensive|excess|deductible|co-?pay\w*|companion|allowance)\b/i.test(excerpt)) return null;
   // A line with its own day rule ("from the 11th day") would lose it on a row of its own (TE R6).
   if (/\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(excerpt)) return null;
-  const rates = new Set(moneyFiguresIn(excerpt).filter((f) => {
+  const figures = moneyFiguresIn(excerpt).filter((f) => {
     const at = excerpt.indexOf(f.raw ?? "");
     // Only a rate that caps what is paid: "Capped at S$200 per day", "maximum S$300 per day".
     return at >= 0 && /^\s*(?:per|a|each|every)\s+day\b/i.test(excerpt.slice(at + (f.raw ?? "").length))
       && /\b(?:capped\s+at|up\s+to|maximum(?:\s+of)?|max\.?|limited\s+to|not\s+exceeding)\s*:?\s*$/i.test(excerpt.slice(Math.max(0, at - 30), at));
-  }).map((f) => f.value));
+  });
+  const rates = new Set(figures.map((f) => f.value));
   const [rate] = [...rates];
-  return rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit ? rate : null;
+  if (!(rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit)) return null;
+  // The rate figure's own currency: a bare "$" states none; two printings in different currencies are "mixed" (no row).
+  const currencies = new Set(figures.map((f) => (f.currency === "$" ? null : statedCurrencyCode(f.currency))));
+  return { value: rate, currency: currencies.size === 1 ? [...currencies][0] : "mixed" };
 }
 
 const INTENSIVE_CARE = /\bicu\b|\bintensive\s+care\b|\bhigh\s+dependency\b|\bhdu\b/i;
@@ -417,12 +425,6 @@ export function intensiveCareRateOf(clause: string, ownWords: Iterable<string> =
   if (times && !(times.index < at && /\b(?:capped|up\s+to|maximum|max|limited)\b/i.test(clause.slice(times.index, at)))) return null;
   return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null, doubled: !!times };
 }
-/** The currency printed with a figure in a row's own words, when they print it with a stated currency (a limit's daily rate
- * row carries the limit's currency, not necessarily its own). */
-function ownCurrency(excerpt: string, amount: number): string | null {
-  const f = moneyFiguresIn(excerpt).find((x) => Math.abs(x.value - amount) < 0.005 && x.currency !== "$");
-  return f ? statedCurrencyCode(f.currency) : null;
-}
 /** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
  * intensive care and prints no day rule of its own (a first paid day or most days might hold for an ICU day too, and the
  * row would lose it), each clause of its conditions and its quote (split at brackets, semicolons and lines) that prints
@@ -438,7 +440,7 @@ function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
     if (same.some((o) => o.fromDay != null || o.maxDays != null || /\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(o.source.excerpt))) continue;
     const ownWords = r.benefit.toLowerCase().match(/[a-z]+/g) ?? [];
     // The row's own daily rate: one figure a day among the benefit's rows (its limit's daily rate is one of them).
-    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [`${ownCurrency(o.source.excerpt, o.figure.amount) ?? o.figure.currency}|${o.figure.amount}`] : []))]
+    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [`${o.figure.currency}|${o.figure.amount}`] : []))]
       .map((k) => ({ currency: k.slice(0, k.indexOf("|")), amount: Number(k.slice(k.indexOf("|") + 1)) }));
     const clauses = [...r.conditions, r.source.excerpt].flatMap((t) => t.split(/[()\n;]/)).map((t) => t.replace(/^\s*note\s*:\s*/i, "").trim()).filter(Boolean);
     for (const clause of clauses) {

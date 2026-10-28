@@ -8,7 +8,8 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { summarisePremiums } from "@/lib/policies/premium-summary";
+import { summarisePremiums, type TablePremiumCover } from "@/lib/policies/premium-summary";
+import { singaporeDay } from "@/lib/benefit-table/dates";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type TilePart } from "@/lib/coverage/table-figures";
 
@@ -68,11 +69,13 @@ export async function GET(request:NextRequest){
   // The person's benefit table (the same rows the Family page and the chat use): a category its rows name shows the
   // figure the document prints for it, and a category nothing else confirms is covered by those rows. Nothing here is
   // tied to one scheme, product or insurer. Read from stored readings only: no model call.
+  let tableCovers:TablePremiumCover[]|null=null;
   try{
     const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
     if(await benefitTableLive(accountId)){
       const { tableFor }=await import("@/lib/benefit-table/service");
       const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
+      tableCovers=person?.covers??[];
       const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
@@ -126,7 +129,8 @@ export async function GET(request:NextRequest){
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the
   // policies with no premium evidence named -- never the rider alone.
-  const premiumSummary=await summarisePremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship});
+  // A policy with no premium record is counted from the premium its own document prints (the benefit table's checked line).
+  const premiumSummary=await summarisePremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers?{covers:tableCovers,today:singaporeDay(new Date())}:undefined);
   const premiumItems=premiumSummary.items;
   const annual=premiumSummary.annual,monthly=premiumSummary.monthly;
 

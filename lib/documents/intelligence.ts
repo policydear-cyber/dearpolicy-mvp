@@ -1,6 +1,6 @@
 import type { PdfPage } from "@/lib/documents/pdf";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
-import { NON_COVER_ROLES, correspondenceRole } from "@/lib/documents/messy";
+import { NON_COVER_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
 
 export const PERSONAL_AUTHORITY_ROLES = new Set([
   "personal_schedule",
@@ -106,6 +106,9 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
+  // A policy pack (cover letter, then "SCHEDULE PAGE" with the policy number and the life insured, then the contract and
+  // its endorsement clauses) is the policy: the word "endorsement" in its wording does not make it one.
+  if (schedulePage(pages) != null) return "personal_schedule" as const;
   // A document whose own title line is "Policy wording" is the wording, whatever endorsements it describes; an
   // endorsement that only cites "the policy wording" is not.
   if (/^\s*policy wording\s*$/m.test(opening) && !/\bthis endorsement\b/.test(opening)) return "policy_wording" as const;
