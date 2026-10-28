@@ -7,7 +7,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { prettifyFilename, referenceRoles } from "@/lib/policies/inventory";
+import { documentName, referenceRoles } from "@/lib/policies/inventory";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -35,7 +35,7 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
       : "processing";
     const error = row.processing_error ?? "";
     const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
-    out.get(row.family_member_id)?.push({ id: row.id, name: row.product_name?.trim() || prettifyFilename(row.original_filename), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
+    out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
   }
   return out;

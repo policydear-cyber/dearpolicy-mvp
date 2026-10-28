@@ -22,6 +22,40 @@ export function prettifyFilename(filename:string):string {
   return spaced;
 }
 
+// A word a device or scanner puts in a file name, never a document's own name.
+const MACHINE_WORD=/^(?:output|scan(?:ned)?|img|image|photo|pic|document|doc|file|download|attachment|copy|page|untitled|screenshot|print|final|new|pdf)$/i;
+/** A file name a device or system made up ("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf",
+ * "IMG_2041.jpg", "scan 3.pdf"): once its numbers, hex codes and device words are taken out, no word of three letters is left. */
+export function isMachineFilename(filename:string):boolean {
+  const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"");
+  return !base.split(/[^A-Za-z0-9]+/).some(token=>!!token&&!/^\d+$/.test(token)&&!(/\d/.test(token)&&/^[0-9a-f]+$/i.test(token))&&!/^[A-Za-z]{0,3}\d+$/.test(token)&&!MACHINE_WORD.test(token)&&/[A-Za-z]{3,}/.test(token));
+}
+/** An insurer's name without its company form ("AIA Singapore Private Limited" -> "AIA Singapore", "FWD Singapore Pte. Ltd." -> "FWD Singapore"). */
+export function insurerShortName(insurer:string):string {
+  let name=insurer.trim(),before="";
+  while(name!==before){before=name;name=name.replace(/[\s,]*(?:\(?(?:pte|private|pvt|sdn)\.?\)?|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?$/i,"").trim();}
+  return name||insurer.trim();
+}
+/** What a document is, in words, from its role ("policy_wording" -> "policy wording"). */
+function documentKind(role:string|null|undefined):string {
+  switch(role){
+    case "personal_schedule":case "schedule":return "policy schedule";
+    case "insurer_letter":return "letter";
+    case null:case undefined:case "":return "document";
+    default:return role.replace(/_/g," ");
+  }
+}
+/** The name a sentence gives a document ("The total leaves out ..."): its product name; else its file name, made readable,
+ * when the file name is one a person chose; else what it is, by insurer and kind ("Singlife policy wording"). A made-up
+ * file name ("817d6e8b 874f 4527 ...", "Output 202609281146053") reads as broken in a sentence (Home premium note, 28 Oct). */
+export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null}):string {
+  const product=doc.product_name?.trim();
+  if(product)return product;
+  if(!isMachineFilename(doc.original_filename))return prettifyFilename(doc.original_filename);
+  const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
+  return insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1);
+}
+
 export type InventoryDocument = {
   id:string;insurer:string|null;product_name:string|null;policy_number:string|null;group_policy_number:string|null;
   policy_type:string|null;document_role:string|null;personal_coverage_confirmed:boolean;document_authority:number;
@@ -128,7 +162,7 @@ export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[
       const identity=normalizedIdentifier(owner.policy_number)||("document:"+owner.id);
       const key=person.id+":"+canonicalDeathInsurer(owner.insurer)+":"+identity;
       const contract=contracts.get(key)??{id:key,ownerId:person.id,ownerName:person.display_name,
-        name:owner.product_name??prettifyFilename(owner.original_filename),insurer:owner.insurer,documents:[],references:[],coverages:[],
+        name:documentName(owner),insurer:owner.insurer,documents:[],references:[],coverages:[],
         confirmed:false,effectiveDate:owner.effective_date,
         ownershipBasis:evidenced?"evidence" as const:"declared" as const};
       contract.documents.push(owner);contract.coverages.push(...owned);
@@ -293,7 +327,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
       return {id:row.id,policyId:row.policy_id,text:row.text,pageStart:row.page_start,pageEnd:row.page_end,
         lexicalMatch:row.lexical_match,semanticDistance:row.semantic_distance,
         productScopes:scopes.get(doc.id)?.get(row.page_start)??[],
-        citation:{chunkId:row.id,policyId:doc.id,policyName:doc.product_name??prettifyFilename(doc.original_filename),insurer:doc.insurer??undefined,
+        citation:{chunkId:row.id,policyId:doc.id,policyName:documentName(doc),insurer:doc.insurer??undefined,
           pageStart:row.page_start,pageEnd:row.page_end,documentRole:doc.document_role,
           personalEvidence:contract.documents.some(d=>d.id===doc.id),evidenceLabel:contract.documents.some(d=>d.id===doc.id)?"Personal document":"Policy wording"}};
     }));

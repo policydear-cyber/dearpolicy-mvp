@@ -31,6 +31,7 @@ import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -255,6 +256,36 @@ async function main() {
         assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
         assert.ok(!data.premiums.items.some((i: { amount: number }) => i.amount === 73.17), "the trip is not a current premium line on Home");
       } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [tripRow.rows[0].id]); }
+    });
+
+    await check("P5 the premium note names a document with no product name by what it is, never by a made-up file name (Home note named \"817d6e8b 874f ...\", 28 Oct)", async () => {
+      const name = (original_filename: string, insurer: string | null = null, document_role: string | null = null, product_name: string | null = null) => documentName({ product_name, original_filename, insurer, document_role });
+      // Made-up file names, in any market: the insurer (without its company form) and the kind of document.
+      assert.equal(name("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "Example Life", "policy_wording"), "Example Life policy wording");
+      assert.equal(name("output_202609281146053.pdf", "Harbour Travel Insurance Pte. Ltd.", "endorsement"), "Harbour Travel Insurance endorsement");
+      assert.equal(name("IMG_2041.jpg", "Contoh Takaful Berhad", "personal_schedule"), "Contoh Takaful policy schedule");
+      assert.equal(name("scan 3.pdf", "Example Assurance Limited", "premium_receipt"), "Example Assurance premium receipt");
+      assert.equal(name("doc (1).pdf", null, "certificate"), "Certificate");
+      assert.equal(name("20240101.pdf"), "Document");
+      // A name a person chose, or the product name, is kept as before.
+      assert.equal(name("Certificate of Insurance.pdf", "Example Life", "certificate"), "Certificate of Insurance");
+      assert.equal(name("careshield_life_welcome_booklet.pdf"), "Careshield Life Welcome Booklet");
+      assert.equal(name("Polisi Takaful 2024.pdf"), "Polisi Takaful 2024");
+      assert.equal(name("MSIG_2024_receipt.pdf"), "MSIG 2024 receipt");
+      assert.equal(name("817d6e8b-874f.pdf", "Example Life", "policy_wording", "Example Shield Plan"), "Example Shield Plan");
+      assert.equal(isMachineFilename("Bupa.pdf"), false); assert.equal(isMachineFilename("a1b2c3d4e5.pdf"), true);
+      assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
+      const doc = id(104);
+      await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)
+        VALUES($1,$2,$3,'Merlion Mutual Assurance Pte. Ltd.',NULL,'MMA-CI-4410','Health','certificate',true,90,'ready','3f9a1c2e-7b4d-4e21-9c0a-55d2e1f0a9b7.pdf',$4,'2026-01-01','scan_clean','active',$5)`, [doc, H, mei.id, H + "/" + doc + ".pdf", "sha256:" + doc]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [doc, mei.id, H]);
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [H, doc, "Certificate for Tan Mei Ling.\nCritical illness benefit\tS$100,000"]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.ok(s.missing.includes("Merlion Mutual Assurance certificate"), "missing: " + JSON.stringify(s.missing));
+        assert.match(s.note ?? "", /leaves out [^:]*Merlion Mutual Assurance certificate/);
+        assert.doesNotMatch(s.note ?? "", /3f9a1c2e|7b4d|55d2e1f0a9b7/i, "no made-up file name in the note");
+      } finally { await db.query("DELETE FROM policy_pages WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policy_members WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policies WHERE id=$1", [doc]); }
     });
 
     // ================================================================ C currentness
