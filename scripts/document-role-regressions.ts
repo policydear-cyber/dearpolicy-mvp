@@ -221,6 +221,12 @@ async function main() {
     const reissued = doc(packLetter, "SCHEDULE PAGE\nPOLICY NUMBER\t70012345\nLIFE INSURED\tTAN MEI LING\nEndorsement No. 3 effective 1 May 2026", packWording(1));
     assert.equal(schedulePage(reissued), null);
     assert.notEqual(deterministicDocumentRole(reissued, "endorsement"), "personal_schedule");
+    const opens = doc("ENDORSEMENT NO. 3\nThis endorsement forms part of policy 70012345.", "SCHEDULE PAGE\nPOLICY NUMBER\t70012345\nLIFE INSURED\tTAN MEI LING");
+    assert.equal(schedulePage(opens), null, "an endorsement that opens with its marker");
+    // TE G1: a pack with an exclusion endorsement attached after its schedule page is still the policy.
+    const attached = doc(packLetter, "SCHEDULE PAGE\nPOLICY NUMBER\t70012345\nLIFE INSURED\tTAN MEI LING", packWording(1), "ENDORSEMENT NO. 1\nThis endorsement forms part of policy 70012345. We will not pay for any claim arising from scuba diving.");
+    assert.equal(schedulePage(attached), 2);
+    assert.equal(deterministicDocumentRole(attached, "endorsement"), "personal_schedule");
   });
   await t("6: names as households print them, in any market", () => {
     for (const [name, line] of [["MY", "Life Assured: Siti Aminah binti Ahmad"], ["IN", "LIFE INSURED\tKUMAR A/L RAJAN"], ["NL", "Policyholder: Jan van Dijk"], ["SG", "Assured\t: Tan Wei Jie, Daniel\tIdentity No."], ["UK", "Policy Owner  Mr James Whitfield"]]) {

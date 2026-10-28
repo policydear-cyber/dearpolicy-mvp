@@ -65,10 +65,11 @@ export function schedulePage(pages: Pick<PdfPage, "pageNumber" | "text">[]): num
   const LONE_NUMBER = /^[A-Z0-9][A-Z0-9-]{5,}$/i;
   // A real number: four or more digits ("XXXXXXXX", "to be issued" and a blank are not one) (Critic R289 H1).
   const realNumber = (x: string) => (x.match(/\d/g) ?? []).length >= 4;
-  // An endorsement that reissues the schedule page says so ("Endorsement No. 3", "this endorsement"): it stays an
-  // endorsement (Critic R289 M1).
-  if (pages.some((p) => /\bendorsement\s+(?:no\.?|number)\s*\d|\bthis\s+endorsement\b/i.test(p.text))) return null;
-  for (const p of pages) {
+  // An endorsement that reissues the schedule page says so ("Endorsement No. 3", "this endorsement") on or before that
+  // page: it stays an endorsement (Critic R289 M1). An endorsement attached after the schedule is part of the pack (TE G1).
+  const ENDORSED = /\bendorsement\s+(?:no\.?|number)\s*\d|\bthis\s+endorsement\b/i;
+  for (const p of [...pages].sort((a, b) => a.pageNumber - b.pageNumber)) {
+    if (ENDORSED.test(p.text)) return null;
     const lines = printedLines(p.text);
     if (!lines.slice(0, 4).some((l) => SCHEDULE_LINE.test(l))) continue;
     if (/\b(?:specimen|sample|illustration)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
