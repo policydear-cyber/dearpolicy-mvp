@@ -252,11 +252,17 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
     const t = words(title), b = words(benefitName(r.benefit));
     if (!t.length || !b.length || !(t.every((w) => b.includes(w)) || b.every((w) => t.includes(w)))) continue;
     let end = head + 1;
+    // The clause ends at the next heading that is not one of its sub-clauses, or at any heading-like line without a
+    // number ("GENERAL PROVISIONS", "Appendix B"): what follows is not the row's clause (Critic R270 H1).
     while (end < lines.length) {
       const m = CLAUSE.exec(lines[end].trim());
-      if (m && !m[1].startsWith(`${number}.`)) break;
+      if (m ? !m[1].startsWith(`${number}.`) : headingLike(lines[end])) break;
       end++;
     }
+    // Every clause heading on the page other than the row's and its sub-clauses': a total naming one of their benefits is
+    // not only the row's.
+    const others = lines.flatMap((l, i) => { const h = CLAUSE.exec(l.trim()); return h && i !== head && !h[1].startsWith(`${number}.`) && h[2].split(/\s+/).length <= 8 && !/[.,;:]$/.test(h[2].trim()) ? [words(h[2])] : []; })
+      .filter((w) => w.length && !(w.every((x) => b.includes(x)) && b.every((x) => w.includes(x))));
     // The clause's sentences, each with the page lines it is printed on.
     const body = lines.slice(head + 1, end);
     const offsets: number[] = [];
@@ -285,6 +291,13 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
       const cut = /\s(?:(?:shall|will|must)\s+not\s+exceed|(?:will\s+be\s+)?aggregated\s+up\s+to|(?:is|are)\s+(?:limited\s+to|capped\s+at)|(?:is|are)\b(?=[^.]*\d))/i.exec(sentence);
       const scope = cut ? sentence.slice(0, cut.index).replace(/[\s,]+$/, "") : "";
       if (scope.split(/\s+/).length < 4 || anyMoneyFigures(scope).length || /\d/.test(scope)) continue;
+      // The total names the row's own benefit (every word of its name, plurals too) and no other heading's benefit: a
+      // limit for "all Accidental Death claims" printed in the critical illness clause is not the critical illness
+      // benefit's (Critic R270 H1).
+      const said = words(scope).map(singular);
+      const names = (ws: string[]) => ws.every((w) => said.includes(singular(w)));
+      // "under this benefit" in the benefit's own clause names it too.
+      if (!(names(b) || /\bthis\s+benefit\b/i.test(scope)) || others.some((o) => names(o))) continue;
       // After the limit words, only the figure and words known to change nothing: the amount spelled out, its currency,
       // "(or equivalent currency)", "per life". Anything else ("the higher of", "or the Sum Insured, whichever is lower",
       // "three times the Sum Insured, up to", "less any amount already paid") can change the limit, so no row (TE P155 F2).
@@ -299,6 +312,16 @@ export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[
   }
   return out;
 }
+/** A line that reads as a heading without a number: short, no sentence punctuation at its end, and in capitals or title
+ * case ("GENERAL PROVISIONS", "Exclusions"), or opening with "Appendix", "Section", "Schedule", "Part" or "Annex". */
+function headingLike(line: string): boolean {
+  const t = line.trim();
+  if (!t || /[.,;:]$/.test(t) || t.split(/\s+/).length > 6) return false;
+  if (/^(?:appendix|section|schedule|part|annex)\b/i.test(t)) return true;
+  if (!/[A-Za-z]/.test(t)) return false;
+  return t === t.toUpperCase() || t.split(/\s+/).every((w) => /^[A-Z(“"]/.test(w) || /^(?:of|and|the|or|for|in|to|on|a|an|&)$/.test(w));
+}
+const singular = (w: string) => w.replace(/ies$/, "y").replace(/sses$/, "ss").replace(/([^s])s$/, "$1");
 const SCALE_AFTER = /^\s*(?:million|mil|mn|m|billion|bn|b|thousand|k)\b/i;
 const EQUIVALENT = /\(\s*or\s+(?:its\s+)?equivalent(?:\s+currency)?(?:\s+based\s+on\s+the\s+exchange\s+rate\s+as\s+(?:decided|determined)\s+by\s+us)?\s*\)/gi;
 /** Words that may follow a total's limit words without changing it: the limit verb's own words, the amount spelled out

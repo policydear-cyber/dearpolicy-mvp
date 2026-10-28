@@ -1844,6 +1844,20 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   none(LIMIT_WORDING(TOTAL.replace("S$800,000", "the higher of S$800,000 and the Sum Insured")), "the higher of");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 or the Sum Insured, whichever is lower")), "whichever is lower");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, less any amount already paid")), "less any amount paid");
+  // Another benefit's limit printed in the clause, after an unnumbered heading, or naming no benefit (Critic R270 H1).
+  const DEATH_TOTAL = "The most We will pay in total for all Accidental Death claims under all Policies covering the same Life Assured shall not exceed S$300,000.";
+  none(LIMIT_WORDING(DEATH_TOTAL), "another benefit's total in the clause");
+  none(LIMIT_WORDING("", `GENERAL PROVISIONS\n${TOTAL}`), "a total after an unnumbered heading");
+  none(LIMIT_WORDING("", `Appendix B\n${TOTAL}`), "a total in an appendix");
+  none(LIMIT_WORDING("The maximum total amount payable under all policies for the same life shall not exceed S$300,000."), "a total naming no benefit");
+  // "this Basic Benefit" may be a wider benefit than the row's (a plan's basic benefit holds several): it names no row.
+  none(LIMIT_WORDING("The most We will pay in total for all claims under this Basic Benefit and all Policies covering the same Life Assured shall not exceed S$300,000."), "this basic benefit");
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING("The most We will pay in total for all claims under this benefit and all Policies covering the same Life Assured shall not exceed S$300,000.")), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "this benefit, in its own clause");
+  none(LIMIT_WORDING("The most We will pay in total for all Critical Illness and Death Benefit claims under all Policies covering the same Life Assured shall not exceed S$300,000."), "a total shared with another heading's benefit");
+  // Words after the figure (Critic R270 M1).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 less any amount already paid under the Death Benefit")), "less an amount paid");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, or the Sum Assured if that is lower")), "or the sum assured if lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, reduced by any Early Stage payment made before age sixty-five")), "reduced by a payment");
   // The limit printed under the next heading is that benefit's, never the critical illness row's.
   none(LIMIT_WORDING("", `2.3. Intensive Care Benefit\n${TOTAL}`), "another clause's limit");
   // A heading that does not name the row's benefit: its limit is not the row's.
