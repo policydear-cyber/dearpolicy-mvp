@@ -32,7 +32,7 @@ function fakeDb(opts: { tables?: boolean } = {}) {
     if (q.startsWith("SELECT to_regclass")) return [{ ok: opts.tables !== false }];
     if (q.startsWith("SELECT id, display_name, preferred_name FROM family_members"))
       return s.family.filter((f) => f.account_id === p[0] && f.lifecycle_state === "active");
-    if (q.startsWith("SELECT id, original_filename, processing_status FROM policies"))
+    if (q.startsWith("SELECT id, original_filename, processing_status"))
       return s.policies.filter((x) => x.account_id === p[0] && x.lifecycle_state === "active" && !x.superseded_at && (p.length < 2 || x.id === p[1]));
     if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages"))
       return s.pages.filter((x) => x.account_id === p[0] && (p[1] as string[]).includes(x.policy_id)).sort((a, b) => a.page_number - b.page_number);

@@ -14,7 +14,7 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
 type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
-export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"not_readable"}[];
+export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"no_table"|"not_readable"}[];
   unmatchedCovers:Other[];illustrationCovers:Other[];
   unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[]};
 
@@ -82,7 +82,10 @@ function TellUs({person}:{person:Person}){
 }
 
 export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>Promise<void>}){
-  const waiting=data.documents.filter(d=>d.state==="waiting"),unreadable=data.documents.filter(d=>d.state==="not_readable");
+  // "waiting" is only a document DearPolicy is reading now; it needs nothing from the household. A document the table
+  // never reads, or that left nothing to show, is "no_table": named plainly, never as unread or sent to Read again.
+  const waiting=data.documents.filter(d=>d.state==="waiting"),unreadable=data.documents.filter(d=>d.state==="not_readable"),
+    noTable=data.documents.filter(d=>d.state==="no_table");
   const people=data.people.filter(p=>p.covers.length);
   return <div className="page cov">
     <header className="page-header"><div>
@@ -90,9 +93,10 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
       <h1>Who is covered for what.</h1>
       <p className="lead">Read from your documents. Tap a page number to see where it&rsquo;s printed.</p>
     </div></header>
-    {waiting.length?<div className="unread-documents" role="status"><div><strong>{waiting.length===1?"One document has":`${waiting.length} documents have`} not been read into this page yet.</strong>
-      <span>{waiting.map(d=>d.name).join(", ")}. Use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
+    {waiting.length?<div className="unread-documents" role="status"><div><strong>{waiting.length===1?"One document is":`${waiting.length} documents are`} still being read.</strong>
+      <span>{waiting.map(d=>d.name).join(", ")}. {waiting.length===1?"Its benefits show":"Their benefits show"} here when DearPolicy has finished.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
+    {noTable.length?<p className="muted" data-testid="table-no-benefits">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"has":"have"} no benefits to show here.</p>:null}
     {!people.length?<div className="empty-card">No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you.</div>:null}
     {people.length>1?<nav className="cov-people" aria-label="People">{people.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {people.map(person=><section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">

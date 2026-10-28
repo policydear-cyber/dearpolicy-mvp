@@ -9,6 +9,7 @@ import { assembleTable, coversOf, sectionsOf, type BenefitTable, type Confirmati
 import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
+import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
@@ -37,9 +38,15 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
     .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name) }));
 }
 
+/** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
+ * and for telling whether the table will ever read it. */
+export type DocumentFile = { original_filename: string; product_name: string | null; insurer: string | null; document_role: string | null;
+  policy_number: string | null; completed_at: string | null };
+type HouseholdDoc = SourceDoc & { status: string; file: DocumentFile };
+
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
-async function documents(db: Db, accountId: string, policyId?: string): Promise<(SourceDoc & { status: string })[]> {
-  const docs = await db(`SELECT id, original_filename, processing_status FROM policies
+async function documents(db: Db, accountId: string, policyId?: string): Promise<HouseholdDoc[]> {
+  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, processing_completed_at FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
@@ -49,7 +56,32 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
   return docs.map((d) => ({
     id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready",
     pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
+    file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
+      policy_number: text(d.policy_number), completed_at: isoTime(d.processing_completed_at) },
   }));
+}
+const text = (v: unknown) => (v == null ? null : String(v));
+const isoTime = (v: unknown) => { const t = v instanceof Date ? v.getTime() : typeof v === "string" ? Date.parse(v) : NaN; return Number.isFinite(t) ? new Date(t).toISOString() : null; };
+
+/** Statuses of a document intake is still working on (lib/rag/ingest.ts); Read again puts a document back to "queued". */
+const IN_INTAKE = new Set(["uploaded", "queued", "extracting", "indexing"]);
+/** Intake marks a document ready and then reads it into the table; for this long after, a ready document with no reading
+ * is still being read (the same window Home waits for, app/api/dashboard/route.ts). */
+export const TABLE_READ_WINDOW_MS = 10 * 60_000;
+export type DocumentState = "read" | "waiting" | "no_table" | "not_readable";
+
+/** Where a document stands in the table. "waiting" only while it is genuinely being read: in intake, or ready so recently
+ * that intake's table reading may not have finished. A receipt or letter (which intake never reads into the table), and a
+ * ready document whose reading was not stored in that time, are "no_table": nothing will read them by itself, so they are
+ * never shown as unread or sent to Read again. A document the app could not read stays "not_readable". */
+export function documentState(d: { status: string; pages: number; file: Pick<DocumentFile, "document_role" | "completed_at"> }, hasReading: boolean, now = Date.now()): DocumentState {
+  if (IN_INTAKE.has(d.status)) return "waiting";
+  if (d.status !== "ready") return "not_readable";
+  if (hasReading) return "read";
+  if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) return "no_table";
+  if (!d.pages) return "not_readable";
+  const done = d.file.completed_at == null ? NaN : Date.parse(d.file.completed_at);
+  return Number.isFinite(done) && now - done > TABLE_READ_WINDOW_MS ? "no_table" : "waiting";
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
@@ -85,7 +117,7 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
 }
 
 type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (SectionLink & { chosenBy: "model" | "household" })[]; confirmations: Confirmation[];
-  documents: { id: string; name: string; state: "read" | "waiting" | "not_readable" }[] };
+  documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[] };
 
 async function load(db: Db, accountId: string): Promise<Loaded> {
   const [people, docs] = await Promise.all([family(db, accountId), documents(db, accountId)]);
@@ -100,7 +132,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations,
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: !d.readable ? "not_readable" as const : stored.has(d.id) ? "read" as const : "waiting" as const })) };
+    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
