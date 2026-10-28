@@ -9,7 +9,7 @@ import { HomeAttention } from "@/components/home-attention";
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string;count:number;policyNames:string[];derived:boolean;parts?:TilePart[]|null};
 type TilePart={name:string;amount:number|null;currency:string|null;accelerates?:boolean;conditional?:boolean};
-type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;frequency:string|null;annual:number;monthly:number;shared:boolean;fromTable?:boolean;detail?:string|null;source?:string};
+type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;frequency:string|null;annual:number;monthly:number;shared:boolean;fromTable?:boolean;detail?:string|null;source?:string|null};
 type Reminder={kind:string;title:string;detail:string;href:string};
 type Unclaimed={id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null};
 type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number;annual:number;items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};error?:string};

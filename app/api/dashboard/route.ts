@@ -132,7 +132,8 @@ export async function GET(request:NextRequest){
   // policies with no premium evidence named -- never the rider alone.
   // A policy with no premium record is counted from the premium its own document prints (the benefit table's checked line).
   const premiumSummary=await summarisePremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers?{covers:tableCovers,today:singaporeDay(new Date())}:undefined);
-  // Each counted premium says where it was read (a policy schedule or a premium record), so Home names the real source.
+  // Each counted premium says where it was read (a policy schedule, or a payment record by its source document's role;
+  // null when not known), so Home names the real source or the neutral "from your documents".
   const premiumItems=premiumSummary.items.map((i)=>({...i,source:premiumSourceKind(i)}));
   const annual=premiumSummary.annual,monthly=premiumSummary.monthly;
 
