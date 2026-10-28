@@ -297,6 +297,9 @@ async function main() {
         assert.equal(lg.amount, 76.32); assert.match(lg.detail ?? "", /first policy year; S\$95\.40 monthly from 1 March 2027/);
         const later = await summarisePremiums(H, mei, { covers, today: singaporeDay(new Date("2027-03-02T04:00:00Z")) });
         assert.equal(later.items.find((i) => i.product_name === "LifeGuard Critical Illness")!.amount, 95.4);
+        // A deleted document's premium is never counted, even while its reading is still stored.
+        await db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [CI]);
+        assert.ok(!(await summarisePremiums(H, mei, { covers, today })).items.some((i) => i.product_name === "LifeGuard Critical Illness"));
       } finally {
         Object.assign(process.env, { DEARPOLICY_BENEFIT_TABLE: env.table ?? "", DEARPOLICY_ALPHA_ACCOUNTS: env.alpha ?? "" });
         for (const t of ["benefit_readings", "policy_chunks", "policy_pages", "policy_members"]) await db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [CI]);

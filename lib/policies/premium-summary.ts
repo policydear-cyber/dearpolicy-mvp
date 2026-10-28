@@ -12,6 +12,7 @@
  * as missing rather than silently counted as zero.
  */
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { annualisePremium } from "@/lib/insurance";
 import { SHORT_TERM_DAYS, samePolicyNumber, type PersonCover } from "@/lib/benefit-table/assemble";
 import { printedDay } from "@/lib/benefit-table/dates";
@@ -207,12 +208,13 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   let fromTable: PremiumItem[] = [], tableLeftOut: string[] = [];
   if (table?.covers.some((c) => c.premium != null)) {
     const ids = [...new Set(table.covers.filter((c) => c.premium != null).map((c) => c.source.documentId))];
-    const docs = await query<{ id: string; insurer: string | null; policy_number: string | null; expiry: string | null }>(`SELECT id::text AS id,insurer,policy_number,renewal_or_expiry_date::text AS expiry FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[])`, [accountId, ids]);
+    // Only current documents: a premium from a deleted or superseded one is never counted (no row, so it is left out below).
+    const docs = await query<{ id: string; insurer: string | null; policy_number: string | null; expiry: string | null }>(`SELECT p.id::text AS id,p.insurer,p.policy_number,p.renewal_or_expiry_date::text AS expiry FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL`, [accountId, ids]);
     const pages = await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`, [accountId, ids]);
     const todayIso = isoOfDay(table.today);
     const documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
       lapsedOrEnded: ["lapsed", "ended"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
-    ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers, r.rows, member, table.today, documents));
+    ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }
   const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod);
   const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod);
