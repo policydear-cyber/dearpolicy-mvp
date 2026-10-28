@@ -8166,3 +8166,20 @@ Lesson for this PR: every `continue` or filter in unreadPremiumCovers is a place
 Checks on ba629c8, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R305 — #163 at d6c83cd: NOT READY (1 High)
+
+R304 H1 and H2 are fixed:
+- P names "Harbour Protector and Harbour Whole Life".
+- Q from the same document gives maybe_counted. Q from another document gives unread.
+- Earlier probes A–D, K, L and N are unchanged and correct.
+- T (one plan plus a rider, record printing the filed number) is skipped as "same", which is correct.
+- S (record from another document printing the filed number, no product) names both. That leans toward extra names, which is safe.
+
+**H1 — R: a schedule with two products and no numbers of their own on the covers (filed under HL-1001), plus a counted record from that document that has no number and no product → [] (both silent).** In link(), with hint.number null (productsOn = 2), the else branch returns "same" when `!i.product_name && numbersOn(documentId) <= 1`. numbersOn counts only the covers' own numbers, which is 0 here, so one bare record ties every product on the document. This is R303 M2 again, with products in place of numbers. Fix: require `numbersOn(documentId) <= 1 && productsOn(documentId) <= 1` for a bare record to be "same". Otherwise give "maybe", so each plan is named maybe_counted.
+
+Low, kept from R304: an entry that mixes an old product with a current one is worded "unread", without the "may not show the policy as it is now" clause.
+
+Checks on d6c83cd, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
