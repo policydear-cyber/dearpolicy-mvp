@@ -61,6 +61,7 @@ Amounts are shown only on cards the app builds from your statements. Write no mo
   - "document" is the document id (D1, D2, ...) and "quote" copies the supporting words from that document exactly as they appear on the page, one short contiguous passage that includes the amount (with its currency sign) or percentage. Use "..." only to join two passages from the same page.
   - For a percentage, "quote" is the table row itself, with its label and percentage (such as "Hip	75%" or "Total and Permanent Disablement due to Accident	150% of Sum Insured"), not the table's heading or a paragraph of wording.
   - "perDay": only for a daily amount (such as a hospital cash benefit paid per day) when the household has said how many days the stay lasted: {"stayDays": that number of days}. Quote the words that print the daily amount, the day it starts from and the most days it pays; the app works out what that stay could pay. Otherwise null.
+  - A figure paid per child (such as "per child, up to 2 children"): when the household asks what it pays in total for a number of children, give that figure's amount statement as printed, with its conditions. Never say it cannot be worked out or added up, and never state, promise or describe a total for the children yourself, in bottomLine or any statement.
   - "ofBill": only on a per-visit or per-claim limit (not a co-payment) when the household has given the bill for that visit or claim, or on the "not_found" statement saying no cover in their documents pays that bill: {"bill": the bill exactly as they wrote it, such as "$800"}; the app shows the bill against the limit, or says it is not shown to be covered. Otherwise null.
   - "conditions": what the amount or fact depends on. Each has plain "text" and a "quote" of the exact words that state it, from the same document as the statement, or, for a certificate line, from any document's section about that same cover. A condition printed only for another document's row is not this statement's condition.
 - Give every amount that could apply to the event, from each of the person's covers and documents, each as its own statement: an accident and a term-life benefit for the same disability, the Product Summary's and the Benefit Summary's figure for the same fracture, or two rows that depend on a fact not yet known (such as whether any perception of light remains). Never give only the larger. This includes the smaller benefits a cover pays on that same event (a funeral or compassionate allowance, a child education fund, mobility aids or home changes after a disability), each with the conditions its page prints, such as paying the cost up to the limit, whichever is less, and the proof it needs. When two documents print different amounts for the same thing, add an "uncertainty" statement saying they differ and the insurer decides which applies.
@@ -134,6 +135,8 @@ export type ModelStatement = {
   perDay?: { stayDays: number } | null;
   /** The bill the household gave for a visit or claim: the server shows how much of it a per-visit limit could cover. */
   ofBill?: { bill: string } | null;
+  /** Server only: the benefit-table row's own printed conditions (never asked of the model). */
+  rowConditions?: string[];
 };
 export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; nextSteps: string[]; question: string | null };
 
