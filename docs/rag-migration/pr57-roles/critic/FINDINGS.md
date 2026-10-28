@@ -7456,3 +7456,27 @@ Checks:
 - identity:mask-test 5/0, security:live-chat-monetary-boundary 32 cases, rag2:scenario-replay 22/22, dj-live-3 replay 48/48;
 - simple offline 17, simple chat 84, simple style 22/0, benefit-table chat 96/0;
 - tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R263 — #153 at ed6295a: masking READY; one-off premiums (657ede2) one High
+
+**Masking (R262 fixes): READY.** All of these stay unchanged now: the identity-theft, passport-replacement and NRIC-holder sentences, "Claim reference 123-45-6789", "Group policy 202501-01-0001", and "ID card replacement 30000". These are masked: spaced NINO, NRIC and passport forms; No. K/P, Kad Pengenalan and MyKid 12-digit numbers; a birth certificate; dashed MyKad; a bare NRIC; mid-sentence "ID no is …"; and SSN when labelled. Leaving the household's own typed words unmasked is accepted as a project rule.
+
+**H1 (High, the Home cost total drops a recurring premium and still says it is complete): `premium-summary.ts` isOneOffPremium.** It treats any record with no recurring frequency word and a `period_end` as a one-off. Ingest stores renewal_statement and annual_statement payments with the model's `frequency` (often null) and the printed period end (`lib/rag/ingest.ts:753`). A yearly renewal notice ("Premium S$300, period 1 Jan–31 Dec 2026") is therefore a one-off. It drops out of `items` and the annual total. Because `missing` is now computed over `all`, its policy is not listed as missing either, so `complete` can be true while the total leaves it out.
+
+The RECURRING word list also misses common frequencies. Probe results (isOneOffPremium, with period_end set):
+
+| frequency | result |
+|---|---|
+| null (single trip, 6-day period) | one-off ✓ |
+| null (annual statement to 31 Dec) | **one-off ✗** |
+| "per annum", "p.a.", "Fortnightly", "Tahunan", "Bulanan", "12" | **one-off ✗** |
+| "Yearly" | recurring ✓ |
+
+Fix (structural, unsure → recurring as before):
+1. One-off when the frequency says single, one-off or "for the period".
+2. Otherwise one-off only when there is no recurring frequency AND the record prints both `period_start` and `period_end` AND the span is ≤ 183 days (a short-term cover, the same bound as SHORT_TERM_DAYS). A year-long period stays recurring.
+3. Add `annum|p\.?\s*a\.?|fortnight|bulanan|tahunan` to RECURRING. Pre-existing: `annualisePremium` treats "Bulanan" (monthly) and "Fortnightly" as annual, which undercounts 12× and 26×. Teach it the same words.
+
+Checks on 657ede2 and ed6295a:
+- r5:answer-test 19/19, identity:mask-test 5/0, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
