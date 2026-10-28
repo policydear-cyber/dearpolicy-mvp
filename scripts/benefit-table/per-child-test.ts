@@ -71,7 +71,9 @@ test("the number of children is read from the household's own words, and only wh
     "we have 2 sons and 2 daughters, how much in total", "I have 3 children from my first marriage and 3 children with my wife, in total",
     // A total must be asked for, and never for one child's own event (Critic R271 H2).
     "we have two kids", "if one of my 2 kids gets cancer how much do we get in total",
-    "we have 2 kids; if one gets cancer how much in total", "we have 2 kids, if Jamie is diagnosed how much in total", "in total, what if the elder of our 2 kids is hospitalised", "we have 2 kids, if he gets dengue how much in total", "total payout for our 2 kids if the younger gets cancer", "if they have an accident, how much in total for our 2 kids", "our child dies, we have 2 kids, how much in total", "my 2 kids: if either is hospitalised, how much in total", "we have 2 kids; how much in total if my son is hurt", "of our 3 children, the eldest one, in total"])
+    "we have 2 kids; if one gets cancer how much in total", "we have 2 kids, if Jamie is diagnosed how much in total", "in total, what if the elder of our 2 kids is hospitalised", "we have 2 kids, if he gets dengue how much in total", "total payout for our 2 kids if the younger gets cancer", "if they have an accident, how much in total for our 2 kids", "our child dies, we have 2 kids, how much in total", "my 2 kids: if either is hospitalised, how much in total", "we have 2 kids; how much in total if my son is hurt", "of our 3 children, the eldest one, in total",
+    // Any other number left in the question leaves the count unclear (TE #156 F2).
+    "how much in total for our 2 kids and 1 from my wife", "2 kids from me and 2 from my wife, in total", "our 2 kids, and 3 for my partner, how much in total", "how much in total for our 2 kids from 2 marriages"])
     assert.equal(childrenSaid(q), null, q);
 });
 
@@ -152,6 +154,23 @@ test("a per-child row paid on a child's own event is never multiplied for one ch
   for (const q of ["if one of my 2 kids gets cancer how much do we get", "if one of my 2 kids gets cancer how much do we get in total", "we have 2 kids, my son broke his arm, how much in total"])
     assert.ok(!answer(h, [q], { eventFit: "any_event" }).count, q);
 });
+test("words that may change the total, on the line or in a condition, stop it: an allow-list, not a list of limits (TE #156 F1)", () => {
+  for (const line of [
+    "Child Education Fund Benefit\tS$5,000 per child, shared equally among all children",
+    "Child Education Fund Benefit\tS$5,000 per child (up to 2 children), reduced by 50% after age 65",
+    "Child Education Fund Benefit\tS$5,000 per child (up to 2 children) payable once only",
+    "Child Education Fund Benefit\tS$5,000 per child (up to 2 children) and S$1,000 per spouse",
+  ]) assert.ok(!answer(household(line, 5000), ["how much in total if we have two kids"]).count, line);
+  for (const c of ["The allowance is reduced by 50% after the Life Assured reaches age 65.", "Payable once only, regardless of the number of children.", "Paid to the eldest child only."]) {
+    const h = household(`${TABLE_LINE}\n•\t${c}`, 5000, TABLE_LINE, "S$", [c]);
+    assert.ok(h.rows.some((r) => r.conditions.includes(c)), `the reading keeps the printed condition: ${c}`);
+    assert.ok(!answer(h, ["how much in total if we have two kids"]).count, `row condition: ${c}`);
+    assert.ok(!answer(household(TABLE_LINE, 5000), ["how much in total if we have two kids"], { conditions: [{ text: c, quote: c }] }).count, `model condition: ${c}`);
+  }
+  // Who counts as a child, and the insured's own death, leave it as printed.
+  for (const c of ["The child must be unmarried, a full-time student and aged 25 or below.", "Only if an accident results in the insured person's death, with proof of death.", "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."])
+    assert.deepEqual(answer(household(`${TABLE_LINE}\n•\t${c}`, 5000, TABLE_LINE, "S$", [c]), ["how much in total if we have two kids"]).amounts, ["S$5,000", "S$10,000"], c);
+});
 test("a daily or percentage figure is never treated as per child", () => {
   const h = household("Child Education Fund Benefit\tS$50 per day per child", 50);
   assert.ok(!answer(h, ["how much in total if we have two kids"]).count);
@@ -200,6 +219,9 @@ test("a follow-up giving the number of children right after asking about the ben
   // fracture of two children is not a death.
   for (const asked of [["my two kids broke their arms", "hi"], ["my two kids broke their arms"], ["how much in total if we have two kids", "what does the accident cover pay"]])
     assert.deepEqual(answer(h, asked, { eventFit: "not_described" }).amounts, [], asked.join(" / "));
+  // Only the message right before counts, and only with a number of children in this one (TE #156 C21, C22).
+  assert.deepEqual(answer(h, ["how much in total if we have two kids", "thanks", "what's the child education fund benefit"], { eventFit: "not_described" }).amounts, []);
+  assert.deepEqual(answer(h, ["how much is it in total", "what's the child education fund benefit"], { eventFit: "not_described" }).amounts, []);
   // A list cover the event is not on stays out whatever the number.
   assert.deepEqual(answer(h, ["how much in total if we have two kids", "what's the child education fund benefit"], { eventFit: "not_on_list" }).amounts, []);
 });

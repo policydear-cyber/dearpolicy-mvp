@@ -741,6 +741,8 @@ export function childrenSaid(message: string): number | null {
   // taken (Critic R275 H2: a list of single-child words always leaked).
   const rest = q.replace(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "i"), " ")
     .replace(/\bchild(?:ren)?(?:['’]s)?\s+education\s+fund(?:\s+benefit)?\b/gi, " ").toLowerCase();
+  // Any other number left ("2 kids and 1 from my wife", "and 3 for my partner") leaves the count unclear (TE #156 F2).
+  if (new RegExp(String.raw`\d|\b(?:${Object.keys(CHILD_WORDS).join("|")})\b`, "i").test(rest)) return null;
   if (!total || !(rest.match(/[a-z]+(?:['’][a-z]+)?/g) ?? []).every((w) => TOTAL_QUESTION_WORDS.has(w))) return null;
   const n = counted[0];
   return n >= 1 && n <= 10 ? n : null;
@@ -755,8 +757,26 @@ const TOTAL_QUESTION_WORDS = new Set(("how much many what whats what's is are wa
 const PER_CHILD = new RegExp(String.raw`^\s*(?:per|for\s+each|each|for\s+every)\s+${CHILD_UNIT}\b`, "i");
 const MOST_CHILDREN = new RegExp(String.raw`\(?\s*(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(?:\w+\s+)?\(?${CHILD_COUNT}\)?\s+${CHILD_UNIT}\s*\)?`, "gi");
 const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimit(?:ed)?\b|\bcapped\b|\baggregate\b|\boverall\b|\bin\s+total\b|\bper\s+(?:family|policy|household)\b|\bcombined\b/i;
-function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = []): Count | null {
+/** The words a condition may hold and still leave the total as printed per child: who counts as a child, and the insured's
+ * own death or disability as the event (TE #156 F1: "reduced by 50% after age 65", "payable once only, regardless of the
+ * number of children" each changed the total, and a list of limit words never held them all). Any other word stops it. */
+const HARMLESS_CONDITION_WORDS = new Set(("a an the of in into on to and or nor not no is are be been must should shall will may can only if when where who whose which that this these "
+  + "child children child's children's dependant dependants dependent dependents son sons daughter daughters legitimate natural adopted step stepchild stepchildren legally "
+  + "unmarried single married full time full-time student students studying study school education educational institution higher learning tertiary university "
+  + "including include includes age aged ages year years old older below under younger than up till until enlisted national service military "
+  + "insured person persons life assured member members policyholder he she his her their him they it its "
+  + "accident accidental accidentally bodily injury injuries sustains sustained result results resulting resulted caused due death dies die died dead "
+  + "disability disabled permanent permanently total totally becomes become "
+  + "with proof receipt relevant documents document required requires form forms prescribed insurer insurer's company company's us we our "
+  + "within days day months month from date event occurrence happening "
+  + "benefit benefits claim claims claimed claimable payable paid either under scheme schemes core voluntary plan plans cover policy").split(" "));
+/** Words a figure's own line may print before it besides the benefit's name ("• Child Education Fund Benefit*"). */
+const NAME_WORDS = new Set("benefit benefits the of for and fund allowance pay pays we will as provided clause".split(" "));
+const plainWordsOf = (t: string) => t.toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? [];
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = [], named = ""): Count | null {
   const count = childrenSaid(asked[0] ?? "");
+  const conditionTexts = [...conditions.flatMap((c) => [c.text, c.quote ?? ""]), ...rowConditions];
+  if (conditionTexts.some((t) => /%/.test(t) || !plainWordsOf(t).every((w) => HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, "")) || HARMLESS_CONDITION_WORDS.has(w)))) return null;
   // A condition that states money or a limit ("the total payable under this benefit shall not exceed S$8,000") may cap
   // the total: never multiplied past it (Critic R271 M1).
   if ([...conditions, ...rowConditions.map((t) => ({ text: t, quote: null }))].some((c) => [c.text, c.quote ?? ""].some((t) => moneyFiguresIn(t).length > 0 || OTHER_CHILD_LIMIT.test(t) || /\b(?:total|exceed\w*|sum\s+of|amounts?\s+paid)\b/i.test(t)))) return null;
@@ -778,6 +798,16 @@ function countPays(found: Found, household: Household, amount: NonNullable<Check
   // Once the most-children words are taken out, no other limit is left (an overall limit is never multiplied past).
   const rest = mosts.length ? rule.replace(mosts[0][0], " ") : rule;
   if (OTHER_CHILD_LIMIT.test(rest) || CAP_BEFORE.test(rule.slice(0, rule.indexOf(figures[0].raw ?? "")))) return null;
+  // The line prints nothing but the benefit's name, the figure, "per child" and the most children: any other word after
+  // the figure ("shared equally among all children", "reduced by 50% after age 65") may change the total (TE #156 F1).
+  // A paragraph that prints the figure ("... pay child education fund of $5,000 per child, subject to a maximum of two
+  // children, provided the Dependant child is unmarried ...") may hold only who counts as a child and the insured's own
+  // event.
+  const name = new Set(plainWordsOf(named));
+  const known = (w: string) => name.has(w) || NAME_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, ""));
+  const tail = after.slice(per.index + per[0].length).replace(mosts.length ? mosts[0][0] : "", " ");
+  const before = rule.slice(0, rule.indexOf(figures[0].raw ?? ""));
+  if (/%/.test(tail + before) || !plainWordsOf(tail).every(known) || !plainWordsOf(before).every(known)) return null;
   // Every number of children printed is the most: "(up to 2 children)" only.
   const childNumbers = [...rule.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\)?\s+${CHILD_UNIT}\b`, "gi"))].map((m) => countValue(m[1]));
   if (childNumbers.some((n) => n !== most)) return null;
@@ -1458,7 +1488,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions, st.text), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
