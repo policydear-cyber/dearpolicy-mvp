@@ -724,25 +724,32 @@ const CHILD_UNIT = String.raw`(?:dependant\s+|dependent\s+|eligible\s+)?(?:child
 const CHILD_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 const CHILD_COUNT = String.raw`(\d{1,2}|${Object.keys(CHILD_WORDS).join("|")})`;
 const countValue = (v: string) => (/^\d+$/.test(v) ? Number(v) : CHILD_WORDS[v.toLowerCase()]);
-/** The one number of children the household's message gives ("two kids", "my 3 children", "we have 2 sons"), or null:
- * none, or more than one ("2 sons and a daughter" gives 2 and a word that is not a number, so none is taken). */
+/** The number of children the household's message asks a total for ("how much in total if we have two kids"), or null.
+ * The number must be said once ("2 sons and 2 daughters" is four children, never two: Critic R271 H1) and the message
+ * must ask for a total for them all ("in total", "altogether", "both", "all of them"): a benefit paid on one child's own
+ * event ("if one of my 2 kids gets cancer") is never multiplied by every child (Critic R271 H2). */
 export function childrenSaid(message: string): number | null {
   const q = message ?? "";
   const counted = [...q.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "gi"))].map((m) => countValue(m[1]));
   // A child added without a number ("2 sons and a daughter", "one more child", "twins") leaves the number unclear. A
   // benefit's name ("the child education fund") adds no child.
   const added = /\b(?:a|an|another|more|other|extra|plus|new)\s+(?:(?:young|little|baby|third|second|fourth)\s+)?(?:kid|kiddo|child|son|daughter|boy|girl|dependant|dependent|baby)\b|\b(?:twins|triplets|baby|babies|newborn|pregnant|expecting)\b/i.test(q);
-  const found = new Set(counted);
-  if (found.size !== 1 || added) return null;
-  const n = [...found][0];
+  if (counted.length !== 1 || added) return null;
+  const total = /\b(?:in\s+total|total(?:ly)?|altogether|all\s+together|combined|in\s+all|both|all\s+(?:of\s+)?(?:them|my|our|the)|for\s+(?:all|both|them)|for\s+the\s+(?:kids|children))\b/i.test(q);
+  const oneChild = /\b(?:one\s+of|either|neither|each|a\s+(?:kid|child|son|daughter|boy|girl)|my\s+(?:son|daughter|kid|child|boy|girl)|our\s+(?:son|daughter|kid|child|boy|girl)|one\s+(?:kid|child|son|daughter|boy|girl)|(?:eldest|oldest|youngest|first|second|older|younger)\s+(?:one|kid|child|son|daughter|boy|girl))\b/i.test(q);
+  if (!total || oneChild) return null;
+  const n = counted[0];
   return n >= 1 && n <= 10 ? n : null;
 }
 /** The per-child words printed right after a figure: "per child", "for each child", "each dependant". */
 const PER_CHILD = new RegExp(String.raw`^\s*(?:per|for\s+each|each|for\s+every)\s+${CHILD_UNIT}\b`, "i");
 const MOST_CHILDREN = new RegExp(String.raw`\(?\s*(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(?:\w+\s+)?\(?${CHILD_COUNT}\)?\s+${CHILD_UNIT}\s*\)?`, "gi");
 const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimit(?:ed)?\b|\bcapped\b|\baggregate\b|\boverall\b|\bin\s+total\b|\bper\s+(?:family|policy|household)\b|\bcombined\b/i;
-function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Count | null {
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = []): Count | null {
   const count = childrenSaid(asked[0] ?? "");
+  // A condition that states money or a limit ("the total payable under this benefit shall not exceed S$8,000") may cap
+  // the total: never multiplied past it (Critic R271 M1).
+  if (conditions.some((c) => [c.text, c.quote ?? ""].some((t) => moneyFiguresIn(t).length > 0 || OTHER_CHILD_LIMIT.test(t) || /\b(?:total|exceed\w*|sum\s+of|amounts?\s+paid)\b/i.test(t)))) return null;
   // One child is paid the amount printed per child: nothing to work out.
   if (!count || count < 2 || amount.illustration || /^up\s+to\b/i.test(amount.text)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
@@ -1438,7 +1445,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it

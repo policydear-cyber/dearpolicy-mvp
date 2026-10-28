@@ -64,9 +64,13 @@ const PROSE_QUOTE = "pay child education fund of $5,000 per child, subject to a 
 
 // ------------------------------------------------------------------ the household's number of children
 test("the number of children is read from the household's own words, and only when it is the one number given", () => {
-  for (const [q, n] of [["how much in total if we have two kids", 2], ["we have 3 children", 3], ["my 2 sons", 2], ["what about our two young kids?", 2], ["one child", 1], ["Child education fund for 2 kids?", 2], ["for our 2 children: the child education fund", 2]] as const)
+  for (const [q, n] of [["how much in total if we have two kids", 2], ["we have 3 children, how much altogether", 3], ["my 2 sons, both of them", 2], ["what about our two young kids in total?", 2], ["Child education fund for 2 kids combined?", 2], ["for our 2 children: the child education fund for all of them", 2]] as const)
     assert.equal(childrenSaid(q), n, q);
-  for (const q of ["how much is the child education fund", "2 sons and a daughter", "my two kids and another child", "we have twins", "my 2 sons and 1 daughter", "she is 2 and has a brother", "we have kids", "a 25 year old child", "two-year-old child", "we have 11 children", "expecting a baby, we have two kids"])
+  for (const q of ["how much is the child education fund", "2 sons and a daughter in total", "my two kids and another child, in total", "we have twins in total", "my 2 sons and 1 daughter in total", "she is 2 and has a brother", "we have kids", "a 25 year old child", "two-year-old child in total", "we have 11 children in total", "expecting a baby, we have two kids, in total",
+    // The number must be said once: equal groups are never collapsed (Critic R271 H1).
+    "we have 2 sons and 2 daughters, how much in total", "I have 3 children from my first marriage and 3 children with my wife, in total",
+    // A total must be asked for, and never for one child's own event (Critic R271 H2).
+    "we have two kids", "if one of my 2 kids gets cancer how much do we get in total", "my 2 kids: if either is hospitalised, how much in total", "we have 2 kids; how much in total if my son is hurt", "of our 3 children, the eldest one, in total"])
     assert.equal(childrenSaid(q), null, q);
 });
 
@@ -81,24 +85,24 @@ test("S$5,000 per child (up to 2 children) is S$10,000 for two children, as a co
   assert.ok(r.count!.source, "the illustration cites its row's page");
 });
 test("more children than the printed most are paid for the most only", () => {
-  const r = answer(household(TABLE_LINE, 5000), ["we have 3 children, how much would the fund pay?"]);
+  const r = answer(household(TABLE_LINE, 5000), ["we have 3 children, how much would the fund pay in total?"]);
   assert.deepEqual(r.amounts, ["S$5,000", "S$10,000"]);
   assert.match(r.count!.text, /^For 3 children, this pays for at most 2 children/);
 });
 test("the most printed in words in a paragraph is used, and a bare $ stays unresolved", () => {
-  const r = answer(household(PROSE_LINE, 5000, PROSE_QUOTE, "$"), ["if we have 4 kids"]);
+  const r = answer(household(PROSE_LINE, 5000, PROSE_QUOTE, "$"), ["how much altogether if we have 4 kids"]);
   assert.deepEqual(r.amounts, ["$5,000", "$10,000"]);
   assert.equal((r.count!.amount as { currencyResolved?: boolean }).currencyResolved, false);
   assert.match(r.count!.basis ?? "", /^\$5,000 per child, for at most 2 children \(2 × \$5,000\)/);
 });
 test("a per-child figure with no most printed is multiplied by the number given", () => {
-  const r = answer(household("Child Education Fund Benefit\tS$3,000 per child", 3000), ["we have three kids"]);
+  const r = answer(household("Child Education Fund Benefit\tS$3,000 per child", 3000), ["we have three kids, how much altogether"]);
   assert.deepEqual(r.amounts, ["S$3,000", "S$9,000"]);
 });
 test("another market's currency is worked out the same way (RM, £)", () => {
-  const rm = answer(household("Child Education Fund Benefit\tRM5,000 per child (maximum of 3 children)", 5000, undefined, "RM"), ["we have 4 kids"]);
+  const rm = answer(household("Child Education Fund Benefit\tRM5,000 per child (maximum of 3 children)", 5000, undefined, "RM"), ["we have 4 kids, what is the total"]);
   assert.deepEqual(rm.amounts, ["RM5,000", "RM15,000"]);
-  const gbp = answer(household("Child Education Fund Benefit\t£2,000 for each child (up to 2 children)", 2000, undefined, "£"), ["2 children"]);
+  const gbp = answer(household("Child Education Fund Benefit\t£2,000 for each child (up to 2 children)", 2000, undefined, "£"), ["2 children, both covered?"]);
   assert.equal(gbp.amounts[0], "£2,000");
   // "for each child" is not the label's "per child" words: the illustration is not shown, never a wrong one.
   assert.ok(gbp.amounts.length === 1 || gbp.amounts[1] === "£4,000", JSON.stringify(gbp.amounts));
@@ -106,7 +110,7 @@ test("another market's currency is worked out the same way (RM, £)", () => {
 
 // ------------------------------------------------------------------ never worked out
 test("no illustration without a number of children, for one child, or when the number is unclear", () => {
-  for (const q of ["how much is the child education fund", "one child", "2 sons and a daughter", "we have twins"])
+  for (const q of ["how much is the child education fund", "one child", "how much in total for our 1 kid", "2 sons and a daughter", "we have twins"])
     assert.deepEqual(answer(household(TABLE_LINE, 5000), [q]).amounts, ["S$5,000"], q);
   // A number given only in an earlier message is not taken for this one.
   assert.deepEqual(answer(household(TABLE_LINE, 5000), ["and the compassionate allowance?", "we have two kids"]).amounts, ["S$5,000"]);
@@ -123,13 +127,22 @@ test("a line with another limit is never multiplied (default safe)", () => {
     "Child Education Fund Benefit\tS$5,000 per child (max 2 children), 3 children if adopted",
   ]) {
     const value = 5000;
-    const r = answer(household(line, value), ["we have two kids"]);
+    const r = answer(household(line, value), ["how much in total if we have two kids"]);
     assert.ok(!r.count, `${line}: ${JSON.stringify(r.amounts)}`);
   }
 });
+test("a condition stating money or a limit stops the total (Critic R271 M1)", () => {
+  for (const c of [{ text: "The total payable under this benefit shall not exceed S$8,000.", quote: "x" }, { text: "Paid once per family.", quote: "the total amount paid for all children is S$8,000" }, { text: "Subject to the overall limit.", quote: "x" }])
+    assert.ok(!answer(household(TABLE_LINE, 5000), ["how much in total if we have two kids"], { conditions: [c] }).count, c.text);
+});
+test("a per-child row paid on a child's own event is never multiplied for one child's event (Critic R271 H2)", () => {
+  const h = household("Child Education Fund Benefit\tS$10,000 per child (up to 3 children)", 10000);
+  for (const q of ["if one of my 2 kids gets cancer how much do we get", "if one of my 2 kids gets cancer how much do we get in total", "we have 2 kids, my son broke his arm, how much in total"])
+    assert.ok(!answer(h, [q], { eventFit: "any_event" }).count, q);
+});
 test("a daily or percentage figure is never treated as per child", () => {
   const h = household("Child Education Fund Benefit\tS$50 per day per child", 50);
-  assert.ok(!answer(h, ["we have two kids"]).count);
+  assert.ok(!answer(h, ["how much in total if we have two kids"]).count);
 });
 
 // ------------------------------------------------------------------ the simple chat without a table
@@ -137,7 +150,7 @@ test("without a benefit table, the model's own amount statement quoting the per-
   const h = household(TABLE_LINE, 5000);
   const parsed = readModelAnswer({ bottomLine: "The fund pays per child.", nextSteps: [], question: null, statements: [{ kind: "amount", text: "The child education fund pays per child, up to two children.", person: "Lim Ah Kow",
     document: "D2", quote: "Child Education Fund Benefit*\tS$5,000 per child (up to 2 children)", amount: "S$5,000", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!;
-  const two = verifyAnswer(h.house, parsed, ["how much if we have 2 kids"]).answer.statements ?? [];
+  const two = verifyAnswer(h.house, parsed, ["how much in total if we have 2 kids"]).answer.statements ?? [];
   assert.deepEqual(two.filter((s) => s.amount).map((s) => s.amount!.text), ["S$5,000", "S$10,000"], JSON.stringify(two));
   const none = verifyAnswer(h.house, parsed, ["how much is it"]).answer.statements ?? [];
   assert.deepEqual(none.filter((s) => s.amount).map((s) => s.amount!.text), ["S$5,000"]);
