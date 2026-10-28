@@ -7950,3 +7950,29 @@ READY.
 Checks on dbc8881, run network-blocked with model keys stripped:
 - role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R293: #158 at f3767c0 (re-review of R284)
+
+NOT READY, because of H1 and the merge conflict. I checked by running tablePremiumItems and printedStatus over made-up covers, records and pages in a scratch script outside git.
+
+Fixed (probe):
+- R284 H1: a same-policy record from another document, with other wording and no number, now stops the table premium. Records for another insurer or with a different number still let it count.
+- R284 M1: a 2019 schedule with no end date is left out and named. A level term with a printed end in 2060 counts.
+- R284 M2: two covers on one document give one premium.
+- R284 M3: with only the document's periodFrom there is no figure. The cover's start date or the page's labelled policy start gives the first-year switch on 19 Oct 2027.
+- Two documents for one policy give no figure. "6-monthly" gives none.
+
+- **H1 (High, rest of R284 H2) a terminated, cancelled or surrendered policy still counts.** printedStatus finds a lapse only in "lapsed on DATE". These all give "unknown":
+  - "terminated with effect from 1 October 2026";
+  - "cancelled your policy on 1 October 2026";
+  - "surrendered on 1 October 2026";
+  - "void from inception";
+  - "has lapsed" with no date.
+  So a letter that prints its premium, a frequency and a start date within 396 days is counted as current cost. coversOf builds covers from every reading kind except illustration, letters included. Fix with an allow-list: pass the reading's document kind into PersonCover, and take a table premium only from kind "personal_proof" (a schedule or certificate). As a second guard, treat terminat*, cancel*, surrender*, void, "no longer in force" and an undated "has lapsed" as ended.
+- **Merge conflict:** lib/benefit-table/check.ts conflicts with main 5000e99. Merge main and re-run the suites on the merge.
+- **M1 (Medium) a cover with no product name prints an empty name in the note.** The leftOut list holds null, so the note reads "leaves out , …" or "leaves out : the premium …". Name it as insurer + "policy", else "one policy".
+
+Checks on f3767c0, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes;
+- merge-tree with main 5000e99 has a CONFLICT in lib/benefit-table/check.ts.
