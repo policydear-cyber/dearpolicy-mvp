@@ -22,18 +22,24 @@ export function prettifyFilename(filename:string):string {
   return spaced;
 }
 
-// A word a device or scanner puts in a file name, never a document's own name.
-const MACHINE_WORD=/^(?:output|scan(?:ned)?|img|image|photo|pic|document|doc|file|download|attachment|copy|page|untitled|screenshot|print|final|new|pdf)$/i;
+// A word a device, scanner or app puts in a file name, never a document's own name (with any number run on: "Document1",
+// "WA0001"); months and times are how such names are dated ("Adobe Scan 28 Oct 2026", "... at 10.15.32").
+const MACHINE_WORD=/^(?:output|scan(?:ned|ner)?|camscanner|cam|img|image|vid|mvimg|dsc|dscn|dcim|pxl|photo|pic|picture|whatsapp|whats|app|adobe|microsoft|word|document|doc|docs|file|download|attachment|copy|page|untitled|screenshot|screen|shot|print|final|new|pdf|wa|at|of|am|pm|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d*$/i;
+// A UUID, whatever its first part holds ("fbdcaeef-1234-4abc-8def-0123456789ab").
+const UUID=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 /** A file name a device or system made up ("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf",
- * "IMG_2041.jpg", "scan 3.pdf"): once its numbers, hex codes and device words are taken out, no word of three letters is left. */
+ * "IMG_2041.jpg", "WhatsApp Image 2026-10-01 at 10.15.32.jpeg"): once its UUIDs, numbers, hex codes and device words are
+ * taken out, no word of two letters is left. Letters of any script count ("保险单.pdf", "Bảo hiểm.pdf", "My CI.pdf" are
+ * names a person chose, TE P159 F1). */
 export function isMachineFilename(filename:string):boolean {
-  const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"");
-  return !base.split(/[^A-Za-z0-9]+/).some(token=>!!token&&!/^\d+$/.test(token)&&!(/\d/.test(token)&&/^[0-9a-f]+$/i.test(token))&&!/^[A-Za-z]{0,3}\d+$/.test(token)&&!MACHINE_WORD.test(token)&&/[A-Za-z]{3,}/.test(token));
+  const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"").replace(UUID," ");
+  return !base.split(/[^\p{L}\p{M}\p{N}]+/u).some(token=>!!token&&!/^\p{N}+$/u.test(token)&&!(/\d/.test(token)&&/^[0-9a-f]+$/i.test(token))&&!/^[A-Za-z]{0,3}\d+$/.test(token)&&!MACHINE_WORD.test(token)&&(token.match(/\p{L}/gu)??[]).length>=2);
 }
-/** An insurer's name without its company form ("AIA Singapore Private Limited" -> "AIA Singapore", "FWD Singapore Pte. Ltd." -> "FWD Singapore"). */
+/** An insurer's name without its company form ("AIA Singapore Private Limited" -> "AIA Singapore", "FWD Singapore Pte. Ltd." -> "FWD Singapore").
+ * A form is a word of its own, after a space, comma or "(": "Tesco" and "Zinc" keep their letters (TE P159 F3). */
 export function insurerShortName(insurer:string):string {
   let name=insurer.trim(),before="";
-  while(name!==before){before=name;name=name.replace(/[\s,]*(?:\(?(?:pte|private|pvt|sdn)\.?\)?|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?$/i,"").trim();}
+  while(name!==before){before=name;name=name.replace(/(?:^|[\s,&]+)\(?(?:pte|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?\)?$/i,"").trim();}
   return name||insurer.trim();
 }
 /** What a document is, in words, from its role ("policy_wording" -> "policy wording"). */

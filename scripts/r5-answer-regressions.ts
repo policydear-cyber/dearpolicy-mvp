@@ -274,6 +274,12 @@ async function main() {
       assert.equal(name("MSIG_2024_receipt.pdf"), "MSIG 2024 receipt");
       assert.equal(name("817d6e8b-874f.pdf", "Example Life", "policy_wording", "Example Shield Plan"), "Example Shield Plan");
       assert.equal(isMachineFilename("Bupa.pdf"), false); assert.equal(isMachineFilename("a1b2c3d4e5.pdf"), true);
+      // Letters of any script, and two-letter names, are a person's choice; device and app names are not (TE P159 F1, F2).
+      for (const f of ["保险单.pdf", "보험증권.pdf", "Bảo hiểm nhân thọ.pdf", "ประกันชีวิต.pdf", "GE.pdf", "My CI.pdf"]) assert.equal(isMachineFilename(f), false, f);
+      for (const f of ["DSC_0042.JPG", "PXL_20260101_123456789.jpg", "WhatsApp Image 2026-10-01 at 10.15.32.jpeg", "CamScanner 10-01-2026 10.15.pdf", "Microsoft Word - Document1.pdf", "Adobe Scan 28 Oct 2026.pdf", "fbdcaeef-1234-4abc-8def-0123456789ab.pdf"]) assert.equal(isMachineFilename(f), true, f);
+      // A company form is a word of its own (TE P159 F3).
+      for (const n of ["Tesco", "Zinc", "Seguros Mexico", "Allianz Morocco"]) assert.equal(insurerShortName(n), n);
+      assert.equal(insurerShortName("Contoh Insurans Sdn. Bhd."), "Contoh Insurans");
       assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
       const doc = id(104);
       await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)
