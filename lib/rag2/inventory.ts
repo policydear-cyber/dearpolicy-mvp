@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentsByPerson, isGroupGuide, type PersonDocument } from "@/lib/chat/household-status";
-import { prettifyFilename } from "@/lib/policies/inventory";
+import { documentName } from "@/lib/policies/inventory";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadMembers, loadPages } from "./store";
 
@@ -28,8 +28,8 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
   const members = await loadMembers(accountId);
   const people = members.map((m) => ({ id: m.id, display_name: m.displayName, preferred_name: m.preferredName, relationship: m.relationship }));
   const byPerson = await documentsByPerson(accountId, people);
-  const unlinkedRows = (await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; document_role: string | null; processing_status: string }>(
-    `SELECT p.id::text AS id, p.product_name, p.insurer, p.original_filename, p.document_role, p.processing_status
+  const unlinkedRows = (await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; document_role: string | null; processing_status: string; policy_number: string | null }>(
+    `SELECT p.id::text AS id, p.product_name, p.insurer, p.original_filename, p.document_role, p.processing_status, p.policy_number
        FROM policies p
       WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)
@@ -48,7 +48,7 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
     reason: d.status === "password" ? UNREADABLE_WHY.password : d.status === "unreadable" ? UNREADABLE_WHY[d.reason ?? "scan"] ?? UNREADABLE_WHY.scan : d.status === "processing" ? "it is still being read" : null, evidence: d.status === "ready" ? titleOf(d.id) : null });
   return {
     people: members.map((m) => ({ id: m.id, name: m.displayName, short: m.preferredName?.trim() || m.displayName.split(/\s+/)[0], documents: (byPerson.get(m.id) ?? []).map(toDoc) })),
-    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: r.product_name?.trim() || prettifyFilename(r.original_filename), insurer: r.insurer?.trim() || null, filename: r.original_filename, role: r.document_role, kind: "unlinked" as const,
+    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: documentName(r), insurer: r.insurer?.trim() || null, filename: r.original_filename, role: r.document_role, kind: "unlinked" as const,
       readable: r.processing_status === "ready" ? "ready" as const : r.processing_status === "failed" ? "unreadable" as const : "processing" as const, reason: null, evidence: r.processing_status === "ready" ? titleOf(r.id) : null })),
   };
 }

@@ -31,6 +31,8 @@ import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { whoIsCovered } from "@/lib/chat/household-status";
 import { singaporeDay } from "@/lib/benefit-table/dates";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
@@ -305,6 +307,56 @@ async function main() {
         for (const t of ["benefit_readings", "policy_chunks", "policy_pages", "policy_members"]) await db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [CI]);
         await db.query("DELETE FROM policies WHERE id=$1", [CI]);
       }
+    });
+
+    await check("P6 the premium note names a document with no product name by what it is, never by a made-up file name (Home note named \"817d6e8b 874f ...\", 28 Oct)", async () => {
+      const name = (original_filename: string, insurer: string | null = null, document_role: string | null = null, product_name: string | null = null) => documentName({ product_name, original_filename, insurer, document_role });
+      // Made-up file names, in any market: the insurer (without its company form) and the kind of document.
+      assert.equal(name("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "Example Life", "policy_wording"), "Example Life policy wording");
+      assert.equal(name("output_202609281146053.pdf", "Harbour Travel Insurance Pte. Ltd.", "endorsement"), "Harbour Travel Insurance endorsement");
+      assert.equal(name("IMG_2041.jpg", "Contoh Takaful Berhad", "personal_schedule"), "Contoh Takaful policy schedule");
+      assert.equal(name("scan 3.pdf", "Example Assurance Limited", "premium_receipt"), "Example Assurance premium receipt");
+      assert.equal(name("doc (1).pdf", null, "certificate"), "Certificate");
+      assert.equal(name("20240101.pdf"), "Document");
+      // A name a person chose, or the product name, is kept as before.
+      assert.equal(name("Certificate of Insurance.pdf", "Example Life", "certificate"), "Certificate of Insurance");
+      assert.equal(name("careshield_life_welcome_booklet.pdf"), "Careshield Life Welcome Booklet");
+      assert.equal(name("Polisi Takaful 2024.pdf"), "Polisi Takaful 2024");
+      assert.equal(name("MSIG_2024_receipt.pdf"), "MSIG 2024 receipt");
+      assert.equal(name("817d6e8b-874f.pdf", "Example Life", "policy_wording", "Example Shield Plan"), "Example Shield Plan");
+      assert.equal(isMachineFilename("Bupa.pdf"), false); assert.equal(isMachineFilename("a1b2c3d4e5.pdf"), true);
+      // Letters of any script, and two-letter names, are a person's choice; device and app names are not (TE P159 F1, F2).
+      for (const f of ["保险单.pdf", "보험증권.pdf", "Bảo hiểm nhân thọ.pdf", "ประกันชีวิต.pdf", "GE.pdf", "My CI.pdf"]) assert.equal(isMachineFilename(f), false, f);
+      for (const f of ["DSC_0042.JPG", "PXL_20260101_123456789.jpg", "WhatsApp Image 2026-10-01 at 10.15.32.jpeg", "CamScanner 10-01-2026 10.15.pdf", "Microsoft Word - Document1.pdf", "Adobe Scan 28 Oct 2026.pdf", "fbdcaeef-1234-4abc-8def-0123456789ab.pdf"]) assert.equal(isMachineFilename(f), true, f);
+      // A company form is a word of its own (TE P159 F3).
+      for (const n of ["Tesco", "Zinc", "Seguros Mexico", "Allianz Morocco"]) assert.equal(insurerShortName(n), n);
+      assert.equal(insurerShortName("Contoh Insurans Sdn. Bhd."), "Contoh Insurans");
+      assert.equal(insurerShortName("Example Insurance Australia Pty Ltd"), "Example Insurance Australia");
+      assert.equal(isMachineFilename("Screenshot_20261001-101500_Chrome.jpg"), true);
+      // Two policies named by insurer and kind alone are told apart by their numbers, the same wherever the document is named (Critic R285 H1, TE P159 G1-G3).
+      const sched = (original_filename: string, policy_number: string | null) => documentName({ product_name: null, original_filename, insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number });
+      assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "EL-11-4821"), "Example Life policy schedule (ending 4821)");
+      assert.equal(sched("output_202609281146053.pdf", "EL-22-9017"), "Example Life policy schedule (ending 9017)");
+      assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", null), "Example Life policy schedule", "no number: no ending, and never the made-up file name");
+      assert.equal(documentName({ product_name: "Example Shield", original_filename: "x.pdf", insurer: "Example Life", document_role: "personal_schedule", policy_number: "EL-11-4821" }), "Example Shield", "a product name is kept as it is");
+      assert.equal(sched("scan.pdf", "N/A"), "Example Life policy schedule", "a number with no digit is no number");
+      // Two documents that share a name are two policies in "who is covered", never one plan covering both people (Critic R287 M1).
+      const ann = { id: "pa", display_name: "Ann Example", preferred_name: "Ann", relationship: "self" }, ben = { id: "pb", display_name: "Ben Example", preferred_name: "Ben", relationship: "spouse" };
+      const pd = (id: string) => ({ id, name: "Example Life policy schedule", filename: id + ".pdf", role: "personal_schedule", policyType: "Life", confirmed: true, tier: null, insurer: "Example Life", status: "ready" as const, effectiveDate: null, renewalOrExpiryDate: null });
+      const who = whoIsCovered("who is covered by the life plan?", [ann, ben], new Map([["pa", [pd("d1"), pd("d3")]], ["pb", [pd("d2")]]]))!.text;
+      assert.equal(who, "Example Life policy schedule covers you, going by the documents on file. Example Life policy schedule covers Ben, going by the documents on file.", who);
+      assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
+      const doc = id(105);
+      await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)
+        VALUES($1,$2,$3,'Merlion Mutual Assurance Pte. Ltd.',NULL,'MMA-CI-4410','Health','certificate',true,90,'ready','3f9a1c2e-7b4d-4e21-9c0a-55d2e1f0a9b7.pdf',$4,'2026-01-01','scan_clean','active',$5)`, [doc, H, mei.id, H + "/" + doc + ".pdf", "sha256:" + doc]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [doc, mei.id, H]);
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [H, doc, "Certificate for Tan Mei Ling.\nCritical illness benefit\tS$100,000"]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.ok(s.missing.includes("Merlion Mutual Assurance certificate (ending 4410)"), "missing: " + JSON.stringify(s.missing));
+        assert.match(s.note ?? "", /leaves out [^:]*Merlion Mutual Assurance certificate \(ending 4410\)/);
+        assert.doesNotMatch(s.note ?? "", /3f9a1c2e|7b4d|55d2e1f0a9b7/i, "no made-up file name in the note");
+      } finally { await db.query("DELETE FROM policy_pages WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policy_members WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policies WHERE id=$1", [doc]); }
     });
 
     // ================================================================ C currentness

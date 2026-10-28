@@ -7,7 +7,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { prettifyFilename, referenceRoles } from "@/lib/policies/inventory";
+import { documentName, referenceRoles } from "@/lib/policies/inventory";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -22,9 +22,9 @@ export type PersonDocument = { id: string; name: string; filename: string; role:
 export async function documentsByPerson(accountId: string, people: ClaimPerson[]): Promise<Map<string, PersonDocument[]>> {
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
   if (!people.length) return out;
-  const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
+  const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; policy_number: string | null; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
     processing_status: string; processing_error: string | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null }>(
-    `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,
+    `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.policy_number,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,
             pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
@@ -35,7 +35,7 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
       : "processing";
     const error = row.processing_error ?? "";
     const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
-    out.get(row.family_member_id)?.push({ id: row.id, name: row.product_name?.trim() || prettifyFilename(row.original_filename), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
+    out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
   }
   return out;
@@ -69,7 +69,7 @@ export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[], sa
     else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + d.filename + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
     else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + d.filename + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
     else if (d.status === "unreadable") lines.push(whose("“" + d.filename + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
-    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
+    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename && !/\bapp screenshot(?: \(ending \w+\))?$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
     else if (d.status === "processing") lines.push(whose("“" + d.filename + "” is still being read.") + once("Ask again in a few minutes."));
   }
   return lines;
@@ -116,10 +116,12 @@ export function whoIsCovered(question: string, family: ClaimPerson[], docs: Map<
   const kind = PLAN_WORDS.find(([asks]) => asks.test(question));
   const matched = byName.length ? byName : kind ? all.filter(({ d }) => kind[1].test((d.policyType ?? "") + " " + d.name)) : [];
   if (!matched.length) return kind || byName.length ? { text: "I couldn’t find a policy like that in your household’s documents.", matched: [] } : null;
-  const plans = new Map<string, ClaimPerson[]>();
-  for (const { p, d } of matched) { const list = plans.get(d.name) ?? []; if (!list.includes(p)) list.push(p); plans.set(d.name, list); }
+  // Each document is its own policy: two schedules that share a name ("Example Life policy schedule") are not one plan
+  // covering both people (Critic R287 M1). The same sentence twice (one person's schedule and renewal) is said once.
+  const plans = new Map<string, { name: string; people: ClaimPerson[] }>();
+  for (const { p, d } of matched) { const plan = plans.get(d.id) ?? { name: d.name, people: [] }; if (!plan.people.includes(p)) plan.people.push(p); plans.set(d.id, plan); }
   const names = (people: ClaimPerson[]) => { const n = people.map((p) => isSelf(p) ? "you" : personName(p)); return n.length <= 1 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n.at(-1); };
-  return { text: [...plans].map(([plan, people]) => plan + " covers " + names(people) + ", going by the documents on file.").join(" "), matched: matched.map(({ p, d }) => ({ person: p, document: d })) };
+  return { text: [...new Set([...plans.values()].map(({ name, people }) => name + " covers " + names(people) + ", going by the documents on file."))].join(" "), matched: matched.map(({ p, d }) => ({ person: p, document: d })) };
 }
 /** Round 12: the page of each matched document that names the most of its insured people (the schedule's
  * "Insured persons" table), for the citation of a who-is-covered answer. */

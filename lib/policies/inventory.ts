@@ -22,6 +22,50 @@ export function prettifyFilename(filename:string):string {
   return spaced;
 }
 
+// A word a device, scanner or app puts in a file name, never a document's own name (with any number run on: "Document1",
+// "WA0001"); months and times are how such names are dated ("Adobe Scan 28 Oct 2026", "... at 10.15.32").
+const MACHINE_WORD=/^(?:output|scan(?:ned|ner)?|camscanner|cam|img|image|vid|mvimg|dsc|dscn|dcim|pxl|photo|pic|picture|whatsapp|whats|app|adobe|microsoft|chrome|gmail|safari|ios|android|edited|word|document|doc|docs|file|download|attachment|copy|page|untitled|screenshot|screen|shot|print|final|new|pdf|wa|at|of|am|pm|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d*$/i;
+// A UUID, whatever its first part holds ("fbdcaeef-1234-4abc-8def-0123456789ab").
+const UUID=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+/** A file name a device or system made up ("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf",
+ * "IMG_2041.jpg", "WhatsApp Image 2026-10-01 at 10.15.32.jpeg"): once its UUIDs, numbers, hex codes and device words are
+ * taken out, no word of two letters is left. Letters of any script count ("保险单.pdf", "Bảo hiểm.pdf", "My CI.pdf" are
+ * names a person chose, TE P159 F1). */
+export function isMachineFilename(filename:string):boolean {
+  const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"").replace(UUID," ");
+  return !base.split(/[^\p{L}\p{M}\p{N}]+/u).some(token=>!!token&&!/^\p{N}+$/u.test(token)&&!(/\d/.test(token)&&/^[0-9a-f]+$/i.test(token))&&!/^[A-Za-z]{0,3}\d+$/.test(token)&&!MACHINE_WORD.test(token)&&(token.match(/\p{L}/gu)??[]).length>=2);
+}
+/** An insurer's name without its company form ("AIA Singapore Private Limited" -> "AIA Singapore", "FWD Singapore Pte. Ltd." -> "FWD Singapore").
+ * A form is a word of its own, after a space, comma or "(": "Tesco" and "Zinc" keep their letters (TE P159 F3). */
+export function insurerShortName(insurer:string):string {
+  let name=insurer.trim(),before="";
+  while(name!==before){before=name;name=name.replace(/(?:^|[\s,&]+)\(?(?:pte|pty|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\.?\)?$/i,"").trim();}
+  return name||insurer.trim();
+}
+/** What a document is, in words, from its role ("policy_wording" -> "policy wording"). */
+function documentKind(role:string|null|undefined):string {
+  switch(role){
+    case "personal_schedule":case "schedule":return "policy schedule";
+    case "insurer_letter":return "letter";
+    case null:case undefined:case "":return "document";
+    default:return role.replace(/_/g," ");
+  }
+}
+/** The name a sentence gives a document ("The total leaves out ..."): its product name; else its file name, made readable,
+ * when the file name is one a person chose; else what it is, by insurer and kind ("Singlife policy wording"). A made-up
+ * file name ("817d6e8b 874f 4527 ...", "Output 202609281146053") reads as broken in a sentence (Home premium note, 28 Oct). */
+export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
+  const product=doc.product_name?.trim();
+  if(product)return product;
+  if(!isMachineFilename(doc.original_filename))return prettifyFilename(doc.original_filename);
+  const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
+  // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
+  // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
+  // the same document gets the same name everywhere (Critic R285 H1, TE P159 G3).
+  const number=normalizedIdentifier(doc.policy_number),ending=/\d/.test(number)?number.slice(-4):"";
+  return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
+}
+
 export type InventoryDocument = {
   id:string;insurer:string|null;product_name:string|null;policy_number:string|null;group_policy_number:string|null;
   policy_type:string|null;document_role:string|null;personal_coverage_confirmed:boolean;document_authority:number;
@@ -128,7 +172,7 @@ export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[
       const identity=normalizedIdentifier(owner.policy_number)||("document:"+owner.id);
       const key=person.id+":"+canonicalDeathInsurer(owner.insurer)+":"+identity;
       const contract=contracts.get(key)??{id:key,ownerId:person.id,ownerName:person.display_name,
-        name:owner.product_name??prettifyFilename(owner.original_filename),insurer:owner.insurer,documents:[],references:[],coverages:[],
+        name:documentName(owner),insurer:owner.insurer,documents:[],references:[],coverages:[],
         confirmed:false,effectiveDate:owner.effective_date,
         ownershipBasis:evidenced?"evidence" as const:"declared" as const};
       contract.documents.push(owner);contract.coverages.push(...owned);
@@ -293,7 +337,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
       return {id:row.id,policyId:row.policy_id,text:row.text,pageStart:row.page_start,pageEnd:row.page_end,
         lexicalMatch:row.lexical_match,semanticDistance:row.semantic_distance,
         productScopes:scopes.get(doc.id)?.get(row.page_start)??[],
-        citation:{chunkId:row.id,policyId:doc.id,policyName:doc.product_name??prettifyFilename(doc.original_filename),insurer:doc.insurer??undefined,
+        citation:{chunkId:row.id,policyId:doc.id,policyName:documentName(doc),insurer:doc.insurer??undefined,
           pageStart:row.page_start,pageEnd:row.page_end,documentRole:doc.document_role,
           personalEvidence:contract.documents.some(d=>d.id===doc.id),evidenceLabel:contract.documents.some(d=>d.id===doc.id)?"Personal document":"Policy wording"}};
     }));
