@@ -7794,3 +7794,7 @@ READY.
 Checks on 3d2650c, run network-blocked with model keys stripped:
 - per-child 17/0, benefit-table chat 99/0 (includes #154's ICU tests), benefit-table 107/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes.
+
+## R283: #156 at d39c3c3 (prompt only)
+
+READY. This one-line change to lib/simple-chat/prompt.ts follows the builder's paid check (US$0.11). The model is now told never to state, promise or describe a total for the children itself, in bottomLine or in any statement, and it keeps "never say it cannot be worked out". That closes a real gap: when the server shows no total card (for example on a single-child event), prose saying "the app works out the total" would promise a figure that never appears. The old clause "the app works out what that number of children could pay" is removed, so the model has nothing to echo. The code is unchanged since R282, so the R282 checks stand.
