@@ -8121,3 +8121,18 @@ Fix: skip only what is proven ended (c.ended, or doc.lapsedOrEnded from printedS
 Checks on 31fe4c3, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 18/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R302 — #163 at 4114756 (via bb3d83c): READY
+
+All R300 and R301 findings are closed. Made-up probes:
+- H2: A (two policies on one schedule, neither read) names both. B (one read, one not) names Harbour Health Saver.
+- M1: C (same insurer, other product, no numbers) now gives "unread", not maybe_counted.
+- H3: D, E, F and G (an old schedule; a 2019 whole-life with no end; "will be terminated if unpaid"; a yearly term whose period has run out) are each named "unread_old". The note says the documents may not show the policy as it is now.
+- Proven ends are still dropped: a lapsed document (I) and an ended cover (J) give [].
+- L1 and L2 are fixed: a policy the inventory names as missing is not named twice, and when the inventory fails, every unread policy is named. L3 is kept, which is acceptable.
+
+Low, accepted (safe direction, the total is marked incomplete): a cover with no policy number beside a numbered cover of the same policy on one schedule is keyed apart. So, for example, an unnumbered rider row next to a numbered base plan whose premium is counted names the plan as "unread" (probe H). This is extra naming, never a silent omission or a wrong figure.
+
+Checks on 4114756, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
