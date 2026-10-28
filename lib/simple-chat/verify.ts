@@ -760,20 +760,25 @@ const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?
 /** The words a condition may hold and still leave the total as printed per child: who counts as a child, and the insured's
  * own death or disability as the event (TE #156 F1: "reduced by 50% after age 65", "payable once only, regardless of the
  * number of children" each changed the total, and a list of limit words never held them all). Any other word stops it. */
-const HARMLESS_CONDITION_WORDS = new Set(("a an the of in into on to and or nor not no is are be been must should shall will may can only if when where who whose which that this these "
+const HARMLESS_CONDITION_WORDS = new Set(("a an the of in into on to and or nor not no is are be been must should shall will may can if when where who whose which that this these "
   + "child children child's children's dependant dependants dependent dependents son sons daughter daughters legitimate natural adopted step stepchild stepchildren legally "
   + "unmarried single married full time full-time student students studying study school education educational institution higher learning tertiary university "
-  + "including include includes age aged ages year years old older below under younger than up till until enlisted national service military "
+  + "including include includes age aged ages year years old below under up till until enlisted national service military "
   + "insured person persons life assured member members policyholder he she his her their him they it its "
   + "accident accidental accidentally bodily injury injuries sustains sustained result results resulting resulted caused due death dies die died dead "
   + "disability disabled permanent permanently total totally becomes become "
   + "with proof receipt relevant documents document required requires form forms prescribed insurer insurer's company company's us we our "
   + "within days day months month from date event occurrence happening "
-  + "benefit benefits claim claims claimed claimable payable paid either under scheme schemes core voluntary plan plans cover policy").split(" "));
-/** Words a figure's own line may print before it besides the benefit's name ("• Child Education Fund Benefit*"). */
+  + "benefit benefits claim claims claimed claimable payable paid under scheme schemes core voluntary plan plans cover policy").split(" "));
+/** Words a figure's own line may print before it ("• Child Education Fund Benefit*", "pay child education fund of"). */
 const NAME_WORDS = new Set("benefit benefits the of for and fund allowance pay pays we will as provided clause".split(" "));
-const plainWordsOf = (t: string) => t.toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? [];
-function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = [], named = ""): Count | null {
+/** An age limit ("aged 25 or younger", "younger than 21") names who counts as a child. "Older", "younger" and "only" on
+ * their own may pick one child ("payable to the younger child only"), so they are known only in these shapes, in "only
+ * if", and in "can only be claimed either under the Core Scheme or ..." (a choice of scheme, not of child) (TE #156 F3). */
+const AGE_LIMIT = /\b\d{1,2}\s*(?:years?\s*)?(?:old\s+)?(?:or|and)\s+(?:older|younger|above|below|under|over)\b|\b(?:younger|older)\s+than\s+\d{1,2}\b/gi;
+const plainWordsOf = (t: string) => t.replace(AGE_LIMIT, " ").replace(/\bonly\s+(?=(?:if|when|where)\b)/gi, " ")
+  .replace(/\b(can|may)\s+only\s+be\s+(claimed|paid)\s+(?:either\s+)?under\b/gi, "$1 be $2 under").toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? [];
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = []): Count | null {
   const count = childrenSaid(asked[0] ?? "");
   const conditionTexts = [...conditions.flatMap((c) => [c.text, c.quote ?? ""]), ...rowConditions];
   if (conditionTexts.some((t) => /%/.test(t) || !plainWordsOf(t).every((w) => HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, "")) || HARMLESS_CONDITION_WORDS.has(w)))) return null;
@@ -803,11 +808,11 @@ function countPays(found: Found, household: Household, amount: NonNullable<Check
   // A paragraph that prints the figure ("... pay child education fund of $5,000 per child, subject to a maximum of two
   // children, provided the Dependant child is unmarried ...") may hold only who counts as a child and the insured's own
   // event.
-  const name = new Set(plainWordsOf(named));
-  const known = (w: string) => name.has(w) || NAME_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, ""));
+  // The statement's own words never count: the model can echo the line (Critic R278 L1).
+  const harmless = (w: string) => NAME_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, ""));
   const tail = after.slice(per.index + per[0].length).replace(mosts.length ? mosts[0][0] : "", " ");
   const before = rule.slice(0, rule.indexOf(figures[0].raw ?? ""));
-  if (/%/.test(tail + before) || !plainWordsOf(tail).every(known) || !plainWordsOf(before).every(known)) return null;
+  if (/%/.test(tail + before) || !plainWordsOf(tail).every(harmless) || !plainWordsOf(before).every(harmless)) return null;
   // Every number of children printed is the most: "(up to 2 children)" only.
   const childNumbers = [...rule.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\)?\s+${CHILD_UNIT}\b`, "gi"))].map((m) => countValue(m[1]));
   if (childNumbers.some((n) => n !== most)) return null;
@@ -1488,7 +1493,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions, st.text), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
