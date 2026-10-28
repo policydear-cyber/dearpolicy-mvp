@@ -7926,3 +7926,15 @@ NOT READY, because R289 M1 is still open. H1 is fixed: the four R289 shapes (wor
 Checks on d3099bd, run network-blocked with model keys stripped:
 - role-test 21, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R291: #160 at fbd0bea (supersedes R290, which was written for d3099bd and not sent)
+
+NOT READY, because of H1.
+- R289 M1 and the R290 header row are fixed: the reissued schedule page with "Endorsement No. 3" is an endorsement again, and "Life Assured  Age Next Birthday  Gender" is no longer a name.
+- **H1 (High) the new endorsement guard brings back the bug this PR fixes.** The marker check runs on every page. A policy pack issued with a rider endorsement page (cover letter, then SCHEDULE PAGE with the number and the life insured, then the wording, then "ENDORSEMENT NO. 1 / Waiver of Premium Rider / This endorsement forms part of the policy") now gives schedulePage null and falls through to line 115, so it is filed as an endorsement. Packs commonly carry riders like this. Check whether the stored Manulife or CI II packs print such a page. Fix: look for the marker only on the schedule page itself and on the pages before it (cover letter, opening). A rider endorsement printed after the wording must not count.
+- **M1 (Medium) an illustrative page still passes.** `\billustration\b` does not match "illustrative", so "For illustrative purposes" with "Life Insured  John Doe" gives personal_schedule, a personal-authority role on a brochure. Use `illustrat(?:ion|ive)|example|dummy|quotation|proposal`.
+- Low: "Life Assured  Main Life" and "Second Life Assured  Not Applicable" still read as names. Add main, joint, second, life, not, applicable, confirmed and self. Low, safe direction: a non-Latin name gives no match.
+
+Checks on fbd0bea, run network-blocked with model keys stripped:
+- role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
