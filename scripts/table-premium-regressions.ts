@@ -384,6 +384,8 @@ test("no plan on a schedule without numbers of its own is left out by an old pro
   // Q: a record printing the filed number and one plan's name does not hide the other plan (H2).
   assert.deepEqual(run([protector, saver], [{ policy_id: "doc-a", policy_number: "HL-1001", product_name: "Harbour Protector", amount: 50, insurer: "Harbour Life" }]), [{ name: "Harbour Health Saver", why: "maybe_counted" }]);
   assert.deepEqual(run([protector, saver], [{ policy_id: "r9", policy_number: "HL-1001", product_name: "Harbour Protector", amount: 50, insurer: "Harbour Life" }]), [{ name: "Harbour Health Saver", why: "unread" }]);
+  // R: a same-document record naming no number and no product ties neither of two plans (Critic R305 H1).
+  assert.deepEqual(run([protector, saver], [{ policy_id: "doc-a", policy_number: null, product_name: null, amount: 50, insurer: null }]), [{ name: "Harbour Protector and Harbour Health Saver", why: "maybe_counted" }]);
   // One plan, a record from elsewhere printing the filed number: that plan's premium (filed number holds with one product).
   assert.deepEqual(run([saver], [{ policy_id: "r9", policy_number: "HL-0001001", product_name: "Something", amount: 50, insurer: "Harbour Life" }]), []);
   // TE S2: a read premium and a rider printing the same own number in another format: one policy.

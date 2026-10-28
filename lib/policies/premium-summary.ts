@@ -269,7 +269,8 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     const key = policyOf(c);
     groups.set(key, [...(groups.get(key) ?? []), { cover: c, doc, old }]);
   }
-  // A document's products, a rider joined to the plan it is named after: with one, its filed number is that plan's (Critic R304 H2).
+  // A document's products, a rider joined to the plan it is named after: with one, its filed number, or a record naming no
+  // product, is that plan's (Critic R304 H2, R305 H1).
   const productsOn = (documentId: string) => {
     const seen: (string | null)[] = [];
     for (const c of covers) if (c.source.documentId === documentId && !c.ended && !seen.some((p) => oneProduct(p, c.product))) seen.push(c.product);
@@ -288,11 +289,11 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
       const documentId = c.source.documentId;
       const hint = { number: c.policyNumber ?? (productsOn(documentId) <= 1 ? doc.policyNumber ?? null : null), product: c.product, insurer: doc.insurer };
       // From the same document: the same policy when the numbers agree, or with a number missing, when the record names this
-      // product or (on a document with one policy number at most) no product; another plan's premium on it may be this one's (R3, R303 M2).
+      // product or (on a document with one policy and one product at most) no product; another plan's premium on it may be this one's (R3, R303 M2).
       const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
         if (i.policy_id === documentId) {
           if (hint.number && i.policy_number) { if (samePolicyNumber(hint.number, i.policy_number) || numberKey(hint.number) === numberKey(i.policy_number)) return "same"; }
-          else return (!i.product_name?.trim() && numbersOn(documentId) <= 1) || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
+          else return (!i.product_name?.trim() && numbersOn(documentId) <= 1 && productsOn(documentId) <= 1) || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
         }
         // The filed number and this product both printed on the record: this plan's, whatever else the schedule holds.
         if (doc.policyNumber && i.policy_number && numberKey(doc.policyNumber) === numberKey(i.policy_number) && oneProduct(c.product, i.product_name)) return "same";
