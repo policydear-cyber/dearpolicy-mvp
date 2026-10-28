@@ -1,8 +1,8 @@
 /** Coverage's "not read yet" notice (lib/benefit-table/service.ts documentState, components/benefit-table-coverage.tsx):
  * a document is "waiting" only while DearPolicy is genuinely reading it. A receipt or letter (which intake never reads
  * into the table), or a document whose table reading was never stored, is never described as unread and never sent to
- * Read again (which re-reads and re-links every section, at a model cost); it is named plainly as having no benefits to
- * show. A document the app could not read keeps its "could not be read" notice. In-memory rows, made-up names, no model.
+ * Read again (which re-reads and re-links every section, at a model cost); it is said not to be shown on this page (never "no
+ * benefits": it may have some), and can still be asked about in chat. A document the app could not read keeps its "could not be read" notice. In-memory rows, made-up names, no model.
  *   npm run benefit-table:unread-notice-test */
 import assert from "node:assert/strict";
 import { createElement } from "react";
@@ -22,9 +22,9 @@ const NOW = Date.now();
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
 const DAY = 24 * 3600_000;
 type Policy = { id: string; original_filename: string; processing_status: string; document_role: string | null; product_name: string | null;
-  insurer: string | null; policy_number: string | null; processing_completed_at: string | null };
+  insurer: string | null; policy_number: string | null; processing_completed_at: string | null; quarantine_status: string | null };
 const policy = (id: string, o: Partial<Policy>): Policy => ({ id, original_filename: `${id}.pdf`, processing_status: "ready", document_role: "personal_schedule",
-  product_name: null, insurer: "Example Insurance", policy_number: null, processing_completed_at: ago(3 * DAY), ...o });
+  product_name: null, insurer: "Example Insurance", policy_number: null, processing_completed_at: ago(3 * DAY), quarantine_status: "scan_clean", ...o });
 
 const reading = (covers: unknown[]) => ({ document: { document: { kind: "personal_proof", product: "Example Shield", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
   covers, benefits: [] }, pages: [] });
@@ -37,6 +37,9 @@ const policies: Policy[] = [
   policy("summary", { original_filename: "0b6f3c1e-1a2b-4c3d-8e9f-0123456789ab.pdf", document_role: "product_summary", product_name: null, policy_number: "TRV-000-4821" }), // reading never stored
   policy("fresh", { product_name: "Example Critical Care", processing_completed_at: ago(60_000) }),         // ready a minute ago, being read now
   policy("intake", { product_name: "Example Hospital Plan", processing_status: "extracting", processing_completed_at: null }), // still in intake
+  policy("scanning", { product_name: "Example Home Cover", processing_status: "queued", quarantine_status: "scan_pending", processing_completed_at: null }), // upload scan running
+  policy("rejected", { product_name: "Example Rejected Upload", processing_status: "queued", quarantine_status: "scan_rejected", processing_completed_at: null }), // stays queued for good
+  policy("blank", { product_name: "Example Blank Upload", processing_status: "queued", quarantine_status: null, processing_completed_at: null }),
   policy("legacy", { product_name: "Example Term Life", processing_completed_at: null }),                    // no completion time known
   policy("scan", { product_name: "Example Blurry Scan", processing_status: "failed" }),                      // could not be read
   policy("unchecked", { product_name: "Example Unchecked Pages" }),                                          // ready, but no page could be checked
@@ -76,6 +79,11 @@ async function main() {
   });
   await test("a document in intake is waiting (it is being read), not 'could not be read'", () => {
     assert.equal(state.intake, "waiting");
+    assert.equal(state.scanning, "waiting", "the upload scan is still running");
+  });
+  await test("an upload the scan rejected (or with no scan state) stays queued for good: could not be read, never waiting", () => {
+    assert.equal(state.rejected, "not_readable");
+    assert.equal(state.blank, "not_readable");
   });
   await test("controls: a document ready a minute ago is waiting; one with no known completion time stays waiting", () => {
     assert.equal(state.fresh, "waiting");
@@ -97,26 +105,28 @@ async function main() {
     assert.equal(ds(doc(9), false, NOW), "waiting");
     assert.equal(ds(doc(11), false, NOW), "no_table");
     assert.equal(ds(doc(11), true, NOW), "read");
-    assert.equal(ds({ status: "queued", pages: 0, file: { document_role: null, completed_at: null } }, false, NOW), "waiting", "Read again puts a document back in the queue");
+    assert.equal(ds({ status: "queued", pages: 0, file: { document_role: null, completed_at: null, quarantine: "scan_clean" } }, false, NOW), "waiting", "Read again puts a document back in the queue");
+    assert.equal(ds({ status: "queued", pages: 0, file: { document_role: null, completed_at: null, quarantine: "scan_rejected" } }, false, NOW), "not_readable");
   });
 
   // What the Coverage page says, with each document named the way the route names it.
   const named = documents.map((d) => ({ id: d.id, state: d.state as BenefitTableData["documents"][number]["state"],
     name: (d as { file?: Parameters<typeof documentName>[0] }).file ? documentName((d as unknown as { file: Parameters<typeof documentName>[0] }).file) : d.name }));
   const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: named, unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [] } }));
-  const text = html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;/g, "'").replace(/\s+/g, " ");
+  const text = html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;|’/g, "'").replace(/\s+/g, " ");
 
   await test("the page never tells the household to Read again a document that will never give rows", () => {
     assert.ok(!/Read again/i.test(text), text);
     assert.ok(!/not been read/i.test(text), text);
   });
-  await test("a document with no table is named plainly as having no benefits to show, by its readable name", () => {
-    assert.match(text, /Example Shield receipt, Letter from Example Insurance, Example Insurance product summary \(ending 4821\) have no benefits to show here\./);
+  await test("a document with no table is said not to be shown here (never 'no benefits'), by its readable name", () => {
+    assert.match(text, /Example Shield receipt, Letter from Example Insurance, Example Insurance product summary \(ending 4821\) aren't shown on this page\. You can still ask about them in chat\./);
+    assert.ok(!/no benefits/i.test(text), "missing information never reads as no benefits");
     assert.ok(!/0b6f3c1e/.test(text), "never the made-up file name");
   });
   await test("controls: documents being read and documents that could not be read keep their notices", () => {
-    assert.match(text, /3 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Term Life\./);
-    assert.match(text, /Some documents could not be read\. Example Blurry Scan, Example Unchecked Pages/);
+    assert.match(text, /4 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Home Cover, Example Term Life\./);
+    assert.match(text, /Some documents could not be read\. Example Rejected Upload, Example Blank Upload, Example Blurry Scan, Example Unchecked Pages/);
   });
 
   console.log(`${passed} passed, ${failures.length} failed`);

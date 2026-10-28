@@ -83,7 +83,9 @@ function TellUs({person}:{person:Person}){
 
 export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>Promise<void>}){
   // "waiting" is only a document DearPolicy is reading now; it needs nothing from the household. A document the table
-  // never reads, or that left nothing to show, is "no_table": named plainly, never as unread or sent to Read again.
+  // never reads, or whose table reading was not stored, is "no_table": said not to be shown here, which claims nothing
+  // about what it holds (it may well have benefits), never as unread or sent to Read again. The chat reads every ready
+  // document's pages (lib/simple-chat/library.ts), so it can still be asked about.
   const waiting=data.documents.filter(d=>d.state==="waiting"),unreadable=data.documents.filter(d=>d.state==="not_readable"),
     noTable=data.documents.filter(d=>d.state==="no_table");
   const people=data.people.filter(p=>p.covers.length);
@@ -96,7 +98,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {waiting.length?<div className="unread-documents" role="status"><div><strong>{waiting.length===1?"One document is":`${waiting.length} documents are`} still being read.</strong>
       <span>{waiting.map(d=>d.name).join(", ")}. {waiting.length===1?"Its benefits show":"Their benefits show"} here when DearPolicy has finished.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
-    {noTable.length?<p className="muted" data-testid="table-no-benefits">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"has":"have"} no benefits to show here.</p>:null}
+    {noTable.length?<p className="muted" data-testid="table-not-shown">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"isn’t shown on this page. You can still ask about it in chat.":"aren’t shown on this page. You can still ask about them in chat."}</p>:null}
     {!people.length?<div className="empty-card">No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you.</div>:null}
     {people.length>1?<nav className="cov-people" aria-label="People">{people.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {people.map(person=><section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
