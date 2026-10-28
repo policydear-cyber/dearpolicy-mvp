@@ -571,6 +571,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       const undated = printedDay((raw.period as { eventOn?: unknown } | null | undefined)?.eventOn) == null;
       const ended = st && (!event || undated) ? periodEnded(raw, today) : null;
       if (st && ended) st.text = `${String(st.text).replace(/\.?\s*$/, ".")} Its cover period ended on ${ended}${event ? ", so it pays only for an event on or before that day" : ""}.`;
+      // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
+      // (Critic R275 M1).
+      if (st) st.rowConditions = r.conditions;
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")

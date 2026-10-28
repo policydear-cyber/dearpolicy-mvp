@@ -736,20 +736,30 @@ export function childrenSaid(message: string): number | null {
   const added = /\b(?:a|an|another|more|other|extra|plus|new)\s+(?:(?:young|little|baby|third|second|fourth)\s+)?(?:kid|kiddo|child|son|daughter|boy|girl|dependant|dependent|baby)\b|\b(?:twins|triplets|baby|babies|newborn|pregnant|expecting)\b/i.test(q);
   if (counted.length !== 1 || added) return null;
   const total = /\b(?:in\s+total|total(?:ly)?|altogether|all\s+together|combined|in\s+all|both|all\s+(?:of\s+)?(?:them|my|our|the)|for\s+(?:all|both|them)|for\s+the\s+(?:kids|children))\b/i.test(q);
-  const oneChild = /\b(?:one\s+of|either|neither|each|a\s+(?:kid|child|son|daughter|boy|girl)|my\s+(?:son|daughter|kid|child|boy|girl)|our\s+(?:son|daughter|kid|child|boy|girl)|one\s+(?:kid|child|son|daughter|boy|girl)|(?:eldest|oldest|youngest|first|second|older|younger)\s+(?:one|kid|child|son|daughter|boy|girl))\b/i.test(q);
-  if (!total || oneChild) return null;
+  // Every other word is one of a small set: question and total words, and the insured's own death or disability. Any
+  // other word (a name, "he", "one", "the elder", "hospitalised") may single out one child's own event, so no number is
+  // taken (Critic R275 H2: a list of single-child words always leaked).
+  const rest = q.replace(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "i"), " ")
+    .replace(/\bchild(?:ren)?(?:['’]s)?\s+education\s+fund(?:\s+benefit)?\b/gi, " ").toLowerCase();
+  if (!total || !(rest.match(/[a-z]+(?:['’][a-z]+)?/g) ?? []).every((w) => TOTAL_QUESTION_WORDS.has(w))) return null;
   const n = counted[0];
   return n >= 1 && n <= 10 ? n : null;
 }
+/** The words a question for a total for every child may hold besides its number of children (Critic R275 H2). */
+const TOTAL_QUESTION_WORDS = new Set(("how much many what whats what's is are was be would will could can does do did it its them there in total totally "
+  + "altogether all together both combined for of to pay pays paid payable payout get gets got receive claim we us our my me i i'm im you your the "
+  + "have has had if when then and so this that benefit fund policy cover insurance amount sum money "
+  + "die dies died dying pass passes passed away death dead am become becomes disabled disability permanently totally accident accidental accidentally "
+  + "killed an wife husband spouse partner").split(" "));
 /** The per-child words printed right after a figure: "per child", "for each child", "each dependant". */
 const PER_CHILD = new RegExp(String.raw`^\s*(?:per|for\s+each|each|for\s+every)\s+${CHILD_UNIT}\b`, "i");
 const MOST_CHILDREN = new RegExp(String.raw`\(?\s*(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(?:\w+\s+)?\(?${CHILD_COUNT}\)?\s+${CHILD_UNIT}\s*\)?`, "gi");
 const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimit(?:ed)?\b|\bcapped\b|\baggregate\b|\boverall\b|\bin\s+total\b|\bper\s+(?:family|policy|household)\b|\bcombined\b/i;
-function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = []): Count | null {
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = []): Count | null {
   const count = childrenSaid(asked[0] ?? "");
   // A condition that states money or a limit ("the total payable under this benefit shall not exceed S$8,000") may cap
   // the total: never multiplied past it (Critic R271 M1).
-  if (conditions.some((c) => [c.text, c.quote ?? ""].some((t) => moneyFiguresIn(t).length > 0 || OTHER_CHILD_LIMIT.test(t) || /\b(?:total|exceed\w*|sum\s+of|amounts?\s+paid)\b/i.test(t)))) return null;
+  if ([...conditions, ...rowConditions.map((t) => ({ text: t, quote: null }))].some((c) => [c.text, c.quote ?? ""].some((t) => moneyFiguresIn(t).length > 0 || OTHER_CHILD_LIMIT.test(t) || /\b(?:total|exceed\w*|sum\s+of|amounts?\s+paid)\b/i.test(t)))) return null;
   // One child is paid the amount printed per child: nothing to work out.
   if (!count || count < 2 || amount.illustration || /^up\s+to\b/i.test(amount.text)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
@@ -1172,6 +1182,9 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
     conditions: readConditions(s.conditions), alternativeGroup: typeof s.alternativeGroup === "string" && s.alternativeGroup.trim() ? s.alternativeGroup.trim() : null,
     perDay: perDayOf(s.perDay),
     ofBill: s.ofBill && typeof s.ofBill === "object" && typeof (s.ofBill as { bill?: unknown }).bill === "string" ? { bill: (s.ofBill as { bill: string }).bill } : null,
+    // The benefit table row's own printed conditions, set by the row step (lib/benefit-table/chat.ts): only ever used to
+    // refuse more.
+    ...(Array.isArray(s.rowConditions) ? { rowConditions: asStrings(s.rowConditions) } : {}),
   }));
   return { bottomLine: o.bottomLine, statements, nextSteps: asStrings(o.nextSteps).slice(0, 3), question: typeof o.question === "string" && o.question.trim() ? o.question.trim() : null };
 }
@@ -1445,7 +1458,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it

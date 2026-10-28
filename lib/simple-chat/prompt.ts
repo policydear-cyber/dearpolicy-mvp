@@ -135,6 +135,8 @@ export type ModelStatement = {
   perDay?: { stayDays: number } | null;
   /** The bill the household gave for a visit or claim: the server shows how much of it a per-visit limit could cover. */
   ofBill?: { bill: string } | null;
+  /** Server only: the benefit-table row's own printed conditions (never asked of the model). */
+  rowConditions?: string[];
 };
 export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; nextSteps: string[]; question: string | null };
 
