@@ -273,6 +273,12 @@ export function intensiveCareRateOf(clause: string, ownWords: Iterable<string> =
   if (times && !(times.index < at && /\b(?:capped|up\s+to|maximum|max|limited)\b/i.test(clause.slice(times.index, at)))) return null;
   return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null, doubled: !!times };
 }
+/** The currency printed with a figure in a row's own words, when they print it with a stated currency (a limit's daily rate
+ * row carries the limit's currency, not necessarily its own). */
+function ownCurrency(excerpt: string, amount: number): string | null {
+  const f = moneyFiguresIn(excerpt).find((x) => Math.abs(x.value - amount) < 0.005 && x.currency !== "$");
+  return f ? statedCurrencyCode(f.currency) : null;
+}
 /** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
  * intensive care and prints no day rule of its own (a first paid day or most days might hold for an ICU day too, and the
  * row would lose it), each clause of its conditions and its quote (split at brackets, semicolons and lines) that prints
@@ -288,14 +294,16 @@ function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
     if (same.some((o) => o.fromDay != null || o.maxDays != null || /\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(o.source.excerpt))) continue;
     const ownWords = r.benefit.toLowerCase().match(/[a-z]+/g) ?? [];
     // The row's own daily rate: one figure a day among the benefit's rows (its limit's daily rate is one of them).
-    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [o.figure.amount] : []))];
+    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [`${ownCurrency(o.source.excerpt, o.figure.amount) ?? o.figure.currency}|${o.figure.amount}`] : []))]
+      .map((k) => ({ currency: k.slice(0, k.indexOf("|")), amount: Number(k.slice(k.indexOf("|") + 1)) }));
     const clauses = [...r.conditions, r.source.excerpt].flatMap((t) => t.split(/[()\n;]/)).map((t) => t.replace(/^\s*note\s*:\s*/i, "").trim()).filter(Boolean);
     for (const clause of clauses) {
       const rate = intensiveCareRateOf(clause, ownWords);
       if (!rate) continue;
       // "Doubled ..., capped at S$400 per day" pays the cap only when twice the row's own daily rate reaches it: with S$200 a
       // day (or more) an ICU day is S$400; with S$120 it is S$240, and with no known rate it is unknown, so no row (TE pr154 F1).
-      if (rate.doubled && !(dailies.length === 1 && 2 * dailies[0] >= rate.amount - 0.005)) continue;
+      // The rate and the cap must be in one stated currency (Critic R268).
+      if (rate.doubled && !(dailies.length === 1 && rate.currency != null && dailies[0].currency === rate.currency && 2 * dailies[0].amount >= rate.amount - 0.005)) continue;
       const key = `${r.personId}|${r.coverKey}|${r.source.documentId}|${r.qualifier ?? ""}|${rate.amount}`;
       if (seen.has(key)) continue;
       // The rate is a row already (the reading took it as a row of its own).

@@ -1695,6 +1695,8 @@ test("an intensive-care rate gives no row unless its words are provably only tha
   none({ excerpt: "Capped at S$120 per day\nS$5,000\tS$8,000\tS$10,000" }, "rate S$120, cap S$400");
   none({ excerpt: "S$5,000\tS$8,000\tS$10,000" }, "no daily rate");
   assert.deepEqual(icuOf(icuRows({ excerpt: "Capped at S$250 per day\nS$5,000\tS$8,000\tS$10,000" })).map((r) => r[2]), [[400, "SGD", "per_day"]]);
+  // A daily rate in another currency, or a bare "$" cap, says nothing about the cap (Critic R268).
+  none({ excerpt: "Capped at US$300 per day\nS$5,000\tS$8,000\tS$10,000" }, "rate in US$");
   // A place word narrows the rate unless the benefit's own name says it (TE pr154 F2).
   const abroad = "S$300 per day if hospitalised overseas in ICU";
   none({ benefit: "Hospital cash", conditions: [abroad], printed: abroad }, "overseas, not in the name");
