@@ -8183,3 +8183,18 @@ Low, kept from R304: an entry that mixes an old product with a current one is wo
 Checks on d6c83cd, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R306 — #163 at 7750bd3: READY
+
+R305 H1 is fixed. A bare record from the same document is "same" only when the document holds at most one number of its own and one product. Made-up probes:
+- R (two products, filed number, bare record) and R0 (no filed number) each name both plans as maybe_counted.
+- T (one plan plus a rider, bare record) is still "same", so nothing is named.
+- U (a plan plus a row with no product, bare record) names the plan as maybe_counted. This is the safe direction: an extra name, never a drop.
+- A–D, K, L, N, P and Q are unchanged from R305 and correct.
+- Every drop left has a probe beside a held plan: a proven end or lapse, not a personal proof, a premium read on the same product or own number, the inventory naming the document, and a "same" link.
+
+Low, accepted: a mixed entry carries one reason, as TE S10 grades it. complete stays false, so no figure is wrong and no policy is hidden.
+
+Checks on 7750bd3, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
