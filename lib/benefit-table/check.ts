@@ -99,6 +99,10 @@ export function stackedPremiumLines(text: string): { figureLine: string; label: 
   const lines = text.split("\n");
   const isLabel = (i: number) => lines[i] != null && !/\d/.test(lines[i]) && PLAIN_PREMIUM.test(labelOf(lines[i]));
   const isFigure = (i: number) => lines[i] != null && STACKED_FIGURE.test(lines[i]);
+  // A line that cannot own the figure or the label: the page's edge, a blank line, or a row of several cells with no figure
+  // ("CURRENCY\tSINGAPORE DOLLARS"). Anything else (another field's label, a value such as "Waived", another figure) could
+  // be the figure's own label or the label's own value, as in a schedule that prints each label above its value.
+  const harmless = (i: number) => lines[i] == null || !lines[i].trim() || (!/\d/.test(lines[i]) && lines[i].trim().split(/\t+|\s*:\s*|\s{2,}/).filter(Boolean).length > 1);
   // Each figure beside exactly one label, and each such label beside exactly one figure: a label between two figures, or a
   // figure between two labels, cannot be told apart, and then the page gives none (TE pr158: two stacked premiums).
   const pairs: { figure: number; label: number }[] = [];
@@ -109,6 +113,8 @@ export function stackedPremiumLines(text: string): { figureLine: string; label: 
     if (labels.length === 1) pairs.push({ figure: i, label: labels[0] });
   }
   if (pairs.some((p) => [p.label - 1, p.label + 1].filter(isFigure).length !== 1)) return [];
+  // The figure's other side and the label's other side must both be harmless, or the page gives none (TE pr161 A1-A4, B1-B3).
+  if (pairs.some(({ figure, label }) => !harmless(2 * figure - label) || !harmless(2 * label - figure))) return [];
   return pairs.map(({ figure, label }) => {
     const m = STACKED_FIGURE.exec(lines[figure])!;
     return { figureLine: lines[figure], label: labelOf(lines[label]), amount: Number(m[1].replace(/,/g, "")), frequency: m[2] ?? null };
@@ -401,7 +407,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     let premium = num(c.premium);
     // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
-    if (premium != null && !printsNumber(source.excerpt, premium)) {
+    // A premium equal to the cover's sum insured is not proved by the quote that prints the sum insured: it needs its own
+    // premium line (TE pr161 R1).
+    if (premium != null && (!printsNumber(source.excerpt, premium) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
       const at = find(str(c.premiumQuote), source.page);
       const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005) : undefined;
       const said = stacked ? stacked.label : at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
@@ -433,7 +441,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const line = lines[0] ?? stacked[0].figureLine;
     const amount = new RegExp(String.raw`^[^\d]*?${MONEY_SIGN}?\s*(\d[\d,]*(?:\.\d+)?)`).exec(line);
     const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
-    if (!Number.isFinite(premium) || premium <= 0) continue;
+    // A stacked figure equal to the cover's sum insured may be the sum insured set over the wrong label: never the premium.
+    if (!Number.isFinite(premium) || premium <= 0 || (stacked.length && c.sumInsured != null && Math.abs(premium - c.sumInsured) < 0.005)) continue;
     const at = find(line.trim(), c.page);
     const said = !at || at.page !== c.page || at.excerpt.includes("\n") ? null : stacked.length ? stacked[0].label : premiumLineLabel(at.excerpt, premium);
     if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;

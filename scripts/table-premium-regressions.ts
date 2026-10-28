@@ -241,3 +241,25 @@ test("a stacked figure that is not plainly the one premium is never used", () =>
   // A reading's figure that is not the printed one is dropped; the page's own one premium line is used, as for a same-line one.
   assert.equal(readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM"), { premium: 399.42, premiumQuote: "S$399.24 (MONTHLY)" }).premium, 399.24);
 });
+
+test("a stacked figure that another field could own is never the premium, in every market (TE pr161)", () => {
+  const none = (text: string, why: string, cover: Record<string, unknown> = {}, sign = "S$") => assert.equal(readOne(text, cover, undefined, sign).premium, null, why);
+  const markets: [string, string][] = [["S$", "CURRENCY\tSINGAPORE DOLLARS"], ["RM ", "MATA WANG\tRM"], ["£", "CURRENCY\tGBP"]];
+  for (const [sign, currency] of markets) {
+    const s = (lines: string) => schedule(lines, currency, undefined, "", sign.trim());
+    const f = (n: string) => `${sign}${n}`;
+    none(s(`SUM ASSURED\n${f("49,000.00")}\nPREMIUM\n${f("212.40")} per month`), `${sign} label above each value: the figure above PREMIUM is the sum assured`, {}, sign.trim());
+    none(s(`POLICY FEE\n${f("12.00")}\nPREMIUM\nWaived`), `${sign} the figure above PREMIUM is the policy fee`, {}, sign.trim());
+    none(s(`CASH VALUE AT YEAR 10\n${f("3,450.00")}\nPREMIUM`), `${sign} the figure above PREMIUM is another field's`, {}, sign.trim());
+    none(s(`PREMIUM\n${f("212.40")}\n${f("37.60")}\n${f("250.00")}`), `${sign} a column of figures under one label`, {}, sign.trim());
+    none(s(`${f("212.40")} (MONTHLY)\n${f("250.00")} (MONTHLY)\nPREMIUM`), `${sign} two figures over one label`, {}, sign.trim());
+    none(s(`${f("212.40")} (MONTHLY)\nBASIC PREMIUM\n${f("37.60")} (MONTHLY)\nPREMIUM`), `${sign} a qualified label above the figure`, {}, sign.trim());
+    // The mirror layout: a label above each value, the next line another field's label. Unsure, so none.
+    none(s(`PREMIUM\n${f("212.40")} (MONTHLY)\nSUM ASSURED\n${f("49,000.00")}`), `${sign} the figure under PREMIUM sits over another field's label`, {}, sign.trim());
+  }
+  // A figure equal to the cover's sum insured is never its premium, from the reading or from the page.
+  none(schedule("SUM ASSURED\tTERM (S$)\nS$49,000.00\nPREMIUM"), "the sum insured set over the premium label");
+  none(schedule("S$49,000.00\nSUM ASSURED\nPREMIUM\nWaived"), "the reading gives the sum insured as the premium", { premium: 49000, premiumQuote: "S$49,000.00" });
+  // Still read: the figure's and the label's other sides are a several-cell row with no figure, or the page's edge.
+  assert.equal(readOne(schedule("S$399.24 (MONTHLY)\nPREMIUM\n\nPOLICY TERM\t10 YEARS")).premium, 399.24);
+});
