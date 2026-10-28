@@ -54,32 +54,16 @@ function documentKind(role:string|null|undefined):string {
 /** The name a sentence gives a document ("The total leaves out ..."): its product name; else its file name, made readable,
  * when the file name is one a person chose; else what it is, by insurer and kind ("Singlife policy wording"). A made-up
  * file name ("817d6e8b 874f 4527 ...", "Output 202609281146053") reads as broken in a sentence (Home premium note, 28 Oct). */
-export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null}):string {
+export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   const product=doc.product_name?.trim();
   if(product)return product;
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(doc.original_filename);
   const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
-  return insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1);
-}
-type NamedDocument={id:string;product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null};
-/** Each of a household's documents' names (documentName), told apart: two documents named by insurer and kind alone
- * ("AIA Singapore policy schedule") are two policies, and code groups and matches documents by name (who is covered,
- * which card's policy, a premium notice's plan), so each such name gets its policy number's last four characters
- * ("ending 4821"), else the readable file name it had before (Critic R285 H1). */
-export function documentNames(documents:NamedDocument[]):Map<string,string> {
-  const out=new Map<string,string>(),fallback=new Map<string,NamedDocument[]>();
-  for(const doc of documents){
-    if(out.has(doc.id))continue;
-    out.set(doc.id,documentName(doc));
-    if(!doc.product_name?.trim()&&isMachineFilename(doc.original_filename)){const k=out.get(doc.id)!.toLowerCase();fallback.set(k,[...(fallback.get(k)??[]),doc]);}
-  }
-  const ending=(doc:NamedDocument)=>normalizedIdentifier(doc.policy_number).slice(-4);
-  for(const group of fallback.values()){
-    if(group.length<2)continue;
-    const endings=group.map(ending),distinct=endings.every((e,i)=>e&&endings.indexOf(e)===i);
-    for(const [i,doc] of group.entries())out.set(doc.id,distinct?`${out.get(doc.id)} (ending ${endings[i]})`:prettifyFilename(doc.original_filename));
-  }
-  return out;
+  // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
+  // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
+  // the same document gets the same name everywhere (Critic R285 H1, TE P159 G3).
+  const ending=normalizedIdentifier(doc.policy_number).slice(-4);
+  return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
 }
 
 export type InventoryDocument = {
@@ -177,7 +161,7 @@ export function referenceMatches(owner:InventoryDocument,reference:InventoryDocu
   return referenceMatchReason(owner,reference).matches;
 }
 export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[],coverages:OwnedCoverage[]):PolicyContract[] {
-  const contracts=new Map<string,PolicyContract>(),names=documentNames(documents);
+  const contracts=new Map<string,PolicyContract>();
   for(const owner of documents){
     const evidenced=owner.personal_coverage_confirmed&&owner.document_authority>=70;
     const declaredFor=new Set(owner.declared_member_ids??[]);
@@ -188,7 +172,7 @@ export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[
       const identity=normalizedIdentifier(owner.policy_number)||("document:"+owner.id);
       const key=person.id+":"+canonicalDeathInsurer(owner.insurer)+":"+identity;
       const contract=contracts.get(key)??{id:key,ownerId:person.id,ownerName:person.display_name,
-        name:names.get(owner.id)!,insurer:owner.insurer,documents:[],references:[],coverages:[],
+        name:documentName(owner),insurer:owner.insurer,documents:[],references:[],coverages:[],
         confirmed:false,effectiveDate:owner.effective_date,
         ownershipBasis:evidenced?"evidence" as const:"declared" as const};
       contract.documents.push(owner);contract.coverages.push(...owned);
@@ -342,7 +326,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
     productsByDoc.set(doc.id,products);
   }
   const scopes=new Map(documents.map(doc=>[doc.id,pageProductScopes(pagesByDoc.get(doc.id)??[],[...(productsByDoc.get(doc.id)??[]),...doc.products])]));
-  const docsById=new Map(documents.map(doc=>[doc.id,doc])),names=documentNames(documents);
+  const docsById=new Map(documents.map(doc=>[doc.id,doc]));
   const rowsByDoc=new Map<string,typeof r.rows>();
   for(const row of r.rows){const values=rowsByDoc.get(row.policy_id)??[];values.push(row);rowsByDoc.set(row.policy_id,values);}
   const sourceMap=new Map<string,PolicySource[]>();
@@ -353,7 +337,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
       return {id:row.id,policyId:row.policy_id,text:row.text,pageStart:row.page_start,pageEnd:row.page_end,
         lexicalMatch:row.lexical_match,semanticDistance:row.semantic_distance,
         productScopes:scopes.get(doc.id)?.get(row.page_start)??[],
-        citation:{chunkId:row.id,policyId:doc.id,policyName:names.get(doc.id)!,insurer:doc.insurer??undefined,
+        citation:{chunkId:row.id,policyId:doc.id,policyName:documentName(doc),insurer:doc.insurer??undefined,
           pageStart:row.page_start,pageEnd:row.page_end,documentRole:doc.document_role,
           personalEvidence:contract.documents.some(d=>d.id===doc.id),evidenceLabel:contract.documents.some(d=>d.id===doc.id)?"Personal document":"Policy wording"}};
     }));

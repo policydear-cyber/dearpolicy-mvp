@@ -31,7 +31,7 @@ import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
-import { documentName, documentNames, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -280,17 +280,12 @@ async function main() {
       // A company form is a word of its own (TE P159 F3).
       for (const n of ["Tesco", "Zinc", "Seguros Mexico", "Allianz Morocco"]) assert.equal(insurerShortName(n), n);
       assert.equal(insurerShortName("Contoh Insurans Sdn. Bhd."), "Contoh Insurans");
-      // Two policies named by insurer and kind alone are told apart, by policy number, else by their file names as before (Critic R285 H1).
-      const two = (a: string | null, b: string | null) => [...documentNames([
-        { id: "a", product_name: null, original_filename: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: a },
-        { id: "b", product_name: null, original_filename: "output_202609281146053.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: b },
-        { id: "c", product_name: "Example Shield", original_filename: "x.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: null },
-        { id: "a", product_name: null, original_filename: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: a },
-      ]).values()];
-      assert.deepEqual(two("EL-11-4821", "EL-22-9017"), ["Example Life policy schedule (ending 4821)", "Example Life policy schedule (ending 9017)", "Example Shield"]);
-      assert.deepEqual(two(null, null), ["817d6e8b 874f 4527 A45d 05e03adaf14c", "Output 202609281146053", "Example Shield"]);
-      assert.deepEqual(two("EL-11-4821", "EL-99-4821"), ["817d6e8b 874f 4527 A45d 05e03adaf14c", "Output 202609281146053", "Example Shield"], "the same ending tells nothing apart");
-      assert.equal(documentNames([{ id: "a", product_name: null, original_filename: "scan.pdf", insurer: "Example Life", document_role: "certificate", policy_number: "EL-1" }]).get("a"), "Example Life certificate", "one document needs no ending");
+      // Two policies named by insurer and kind alone are told apart by their numbers, the same wherever the document is named (Critic R285 H1, TE P159 G1-G3).
+      const sched = (original_filename: string, policy_number: string | null) => documentName({ product_name: null, original_filename, insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number });
+      assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "EL-11-4821"), "Example Life policy schedule (ending 4821)");
+      assert.equal(sched("output_202609281146053.pdf", "EL-22-9017"), "Example Life policy schedule (ending 9017)");
+      assert.equal(sched("817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", null), "Example Life policy schedule", "no number: no ending, and never the made-up file name");
+      assert.equal(documentName({ product_name: "Example Shield", original_filename: "x.pdf", insurer: "Example Life", document_role: "personal_schedule", policy_number: "EL-11-4821" }), "Example Shield", "a product name is kept as it is");
       assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
       const doc = id(104);
       await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)
@@ -299,8 +294,8 @@ async function main() {
       await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [H, doc, "Certificate for Tan Mei Ling.\nCritical illness benefit\tS$100,000"]);
       try {
         const s = await summarisePremiums(H, mei);
-        assert.ok(s.missing.includes("Merlion Mutual Assurance certificate"), "missing: " + JSON.stringify(s.missing));
-        assert.match(s.note ?? "", /leaves out [^:]*Merlion Mutual Assurance certificate/);
+        assert.ok(s.missing.includes("Merlion Mutual Assurance certificate (ending 4410)"), "missing: " + JSON.stringify(s.missing));
+        assert.match(s.note ?? "", /leaves out [^:]*Merlion Mutual Assurance certificate \(ending 4410\)/);
         assert.doesNotMatch(s.note ?? "", /3f9a1c2e|7b4d|55d2e1f0a9b7/i, "no made-up file name in the note");
       } finally { await db.query("DELETE FROM policy_pages WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policy_members WHERE policy_id=$1", [doc]); await db.query("DELETE FROM policies WHERE id=$1", [doc]); }
     });

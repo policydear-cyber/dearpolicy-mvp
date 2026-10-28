@@ -7,7 +7,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { documentNames, referenceRoles } from "@/lib/policies/inventory";
+import { documentName, referenceRoles } from "@/lib/policies/inventory";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -29,14 +29,13 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
       ORDER BY p.created_at,p.id`, [accountId, people.map((p) => p.id)]);
-  const names = documentNames(r.rows);
   for (const row of r.rows) {
     const status: PersonDocument["status"] = row.processing_status === "ready" ? "ready"
       : row.processing_status === "failed" ? ([PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE].includes(row.processing_error ?? "") || /password/i.test(row.processing_error ?? "") ? "password" : "unreadable")
       : "processing";
     const error = row.processing_error ?? "";
     const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
-    out.get(row.family_member_id)?.push({ id: row.id, name: names.get(row.id)!, filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
+    out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
   }
   return out;
