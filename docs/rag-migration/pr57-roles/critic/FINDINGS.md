@@ -7570,3 +7570,53 @@ Checks on b842a74, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
 
 Verdict: READY.
+
+## R268: #154 at 78065b8 (Test engineer F1 and F2)
+
+Still READY. A "doubled …, capped at X" clause now gives a row only when the benefit has one known daily rate and twice that rate reaches X, so the card's X is exactly what an ICU day pays. Place words count only when the benefit's own name holds them: "while overseas" passes with a name such as "Daily hospital cash while overseas" and is refused with no name.
+
+Optional Low: `dailies` does not check that the daily rate's currency matches the cap's. A cross-currency pair on one benefit is unlikely, and the row is refused unless 2 × rate ≥ cap anyway.
+
+Checks on 78065b8, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+## R269: #153 at db91c15 (Test engineer F1: an ID inside a file name)
+
+Still READY. Shapes are now bounded by non-alphanumerics: "Certificate_S1234567D.pdf" gives S****567D, and "x_850101-14-5678.pdf" is masked. "National Insurance at 12500 a year" is left unchanged. "ID No. S1234567D and plan A" and the HKID shape are masked. "S1234567Dx" is not masked, which is correct because it is not the NRIC shape.
+
+Optional Low: dropping the `i` flag means a lowercase spaced NINO after its label ("NINO qq 12 34 56 c") is now not masked at all. Before, it was masked. Unspaced lowercase after a label ("NRIC: s1234567d") is still masked. A fix: allow `[A-Za-z]{1,2}\s+` as the prefix only when a digit group follows.
+
+Checks on db91c15, run network-blocked: identity mask passing, r5 19/19, simple chat 84, tsc clean.
+
+## R270: #155 at a3fd531 (premium parts, and a clause's total limit)
+
+premiumPartsOf is sound:
+- it reads one cover line holding the sum;
+- extras are lines that open with a dash, with no sum and one cell with cents;
+- the parts must add up to the premium to the cent;
+- it refuses when another life is on the page.
+I found no wrong-cover path.
+
+**H1 (High, lib/benefit-table/chat.ts totalLimitRows): another benefit's limit is attached to this benefit.** The heading must name the row's benefit, but the sentence itself never has to. The clause also runs on past any heading that has no number. My probes, using the PR's own LIMIT_WORDING and CI row:
+- inside 2.2, "The most We will pay in total for all Accidental Death claims under all Policies covering the same Life Assured shall not exceed S$300,000." gives **"Limit in total on Critical Illness Benefit claims: S$300,000"**;
+- with no limit in 2.2 and an unnumbered "GENERAL PROVISIONS" section after it holding the same sentence, it gives the same CI card. The scope reads "GENERAL PROVISIONS The most We will pay …";
+- "Appendix B\nThe maximum total amount payable under all policies for the same life shall not exceed S$300,000." gives a CI card. That limit names no benefit at all.
+
+The card's name and figure point at the wrong benefit (or at none), which is the wrong-attachment case you asked about. Fix (allow-list):
+- the scope (the sentence up to its limit words) must name the row's benefit: every word of benefitName, allowing a plural ("Illnesses");
+- it must name no other benefit heading on the page;
+- end the clause at any line that looks like a heading (no sentence punctuation, Title or ALL CAPS, or "Appendix" / "Section" / "Schedule"), not only at numbered ones.
+
+**M1 (Medium): words after the figure are dropped from the card.** The scope is cut at the limit words, and the tail after the figure is never checked. Probes, each giving "up to S$800,000" with nothing about the tail:
+- "S$800,000 less any amount already paid under the Death Benefit";
+- "S$800,000, or the Sum Assured if that is lower";
+- "S$800,000, reduced by any Early Stage payment made before the Life Assured reaches sixty-five".
+
+"Up to" stays an upper bound, but the lessons log (#147) says condition text that is not provably harmless must block the figure. Fix: the tail after the figure, up to the sentence end, must be empty or an allow-listed phrase such as "(or equivalent currency)". Anything else gives no row.
+
+Checks on a3fd531, run network-blocked with model keys stripped:
+- benefit-table chat 103/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H1). Add the six probes above as negative controls.
