@@ -42,6 +42,11 @@ test("each market's identity number shape is masked, keeping what the certificat
   assert.equal(maskIdentityText("Aadhaar 1234 5678 9012"), "Aadhaar **** **** 9012");
   assert.equal(maskIdentityText("IC No. 850101145678"), "IC No. ********5678");
   assert.equal(maskIdentityText("ID No. S1234567D"), "ID No. S****567D");
+  // Joined to a file name by "_" (TE pr153 F1).
+  assert.equal(maskIdentityText("Certificate_S1234567D.pdf"), "Certificate_S****567D.pdf");
+  assert.equal(maskIdentityText("scan_850101-14-5678_ic.jpg"), "scan_******-**-5678_ic.jpg");
+  assert.equal(maskIdentityText("hkid_A123456(7).png"), "hkid_A***456(7).png");
+  assert.equal(maskIdentityText("XS1234567DY"), "XS1234567DY");
   // Printed in groups, and Malaysian labels (Critic R262 L1).
   assert.equal(maskIdentityText("NI number QQ 12 34 56 C"), "NI number ** ** *4 56 C");
   assert.equal(maskIdentityText("No. K/P 850101145678"), "No. K/P ********5678");
@@ -66,6 +71,7 @@ test("policy, member and claim numbers, amounts, dates and ids are not identity 
     "Identity theft cover up to 50000 per trip",
     "Passport replacement costs 25000",
     "the NRIC holder may claim 10000 per year",
+    "National Insurance at 12500 a year",
     // A dashed reference that is not a birth-dated MyKad, and an unlabelled SSN-shaped reference (Critic R262 M1).
     "Group policy 123456-78-0001",
     "Claim reference 123-45-6789",

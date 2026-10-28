@@ -14,16 +14,18 @@
  * an identity number. The household's own page text and the document viewer are not changed: the document is theirs.
  */
 
+// Bounded by any non-alphanumeric, not \b: a file name joins an ID with "_" ("Certificate_S1234567D.pdf"), and "_" is a
+// word character, so \b would leave it whole (TE pr153 F1).
 const SHAPES: [RegExp, string][] = [
   // Singapore NRIC / FIN.
-  [/\b([STFGM])\d{4}(\d{3}[A-Z])\b/g, "$1****$2"],
+  [/(?<![A-Za-z0-9])([STFGM])\d{4}(\d{3}[A-Z])(?![A-Za-z0-9])/g, "$1****$2"],
   // Hong Kong identity card, with its bracketed check digit.
-  [/\b([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/g, "$1***$2($3)"],
+  [/(?<![A-Za-z0-9])([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/g, "$1***$2($3)"],
 ];
 // Malaysia MyKad as printed with its dashes, whose first six digits are a birth date (YYMMDD): "Group policy 123456-78-0001"
 // is not one. A dashed US Social Security number is masked only after its label: unlabelled, "123-45-6789" is as likely a
 // claim reference (Critic R262 M1).
-const MYKAD = /\b(\d{2})(\d{2})(\d{2})-\d{2}-(\d{4})\b/g;
+const MYKAD = /(?<![A-Za-z0-9])(\d{2})(\d{2})(\d{2})-\d{2}-(\d{4})(?![A-Za-z0-9])/g;
 
 /** A label that says the value after it is a person's identity number; "policy no." and "member ID" are not among them. */
 const LABEL = String.raw`(?:NRIC|FIN|NIRC|I\/?C|(?:No\.?\s*)?K\/P|Kad\s+Pengenalan|MyKad|MyKid|Birth\s+Cert(?:ificate)?|HKID|NINO|SSN|TFN|PAN|Aadhaar|National\s+Insurance|NI|Passport|National\s+ID(?:entity)?|Identity(?:\s+Card)?|Identification|ID|Social\s+Security|Tax\s+File)`;
@@ -50,7 +52,8 @@ export function maskIdentityText(text: string): string {
     // Only the number is masked: a sentence that runs on after it ("ID No. S1234567D and plan A") keeps its words, and a
     // label word that starts a sentence about something else ("Identity theft cover up to 50000", "Passport replacement
     // costs 25000") is not followed by a number at all (Critic R262 H1). A number printed in groups ("QQ 12 34 56 C") is one.
-    const number = value.match(/^(?:[A-Z]{1,2}\s+)?[A-Z0-9-]*\d[A-Z0-9-]*(?:\s+[A-Z0-9-]*\d[A-Z0-9-]*)*(?:\s+[A-Z](?![A-Z0-9]))?/i)?.[0];
+    // The letter groups of a spaced number are capitals ("QQ 12 34 56 C"): "National Insurance at 12500 a year" has none (TE pr153 C20).
+    const number = value.match(/^(?:[A-Z]{1,2}\s+)?[A-Za-z0-9-]*\d[A-Za-z0-9-]*(?:\s+[A-Za-z0-9-]*\d[A-Za-z0-9-]*)*(?:\s+[A-Z](?![A-Za-z0-9]))?/)?.[0];
     if (!number) return all;
     return label + maskValue(number) + value.slice(number.length);
   });
