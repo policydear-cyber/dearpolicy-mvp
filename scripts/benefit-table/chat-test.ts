@@ -1687,9 +1687,18 @@ test("an intensive-care rate gives no row unless its words are provably only tha
   assert.equal(intensiveCareRateOf("S$400 per day in intensive care for 5 day"), null);
   assert.equal(intensiveCareRateOf("S$400 in intensive care"), null);
   assert.equal(intensiveCareRateOf("S$400 per day in the hospital"), null);
-  assert.deepEqual(intensiveCareRateOf("S$400 per day in ICU"), { amount: 400, currency: "SGD" });
+  assert.deepEqual(intensiveCareRateOf("S$400 per day in ICU"), { amount: 400, currency: "SGD", doubled: false });
   // A bare "$" names no currency.
-  assert.deepEqual(intensiveCareRateOf("$400 per day in ICU"), { amount: 400, currency: null });
+  assert.deepEqual(intensiveCareRateOf("$400 per day in ICU"), { amount: 400, currency: null, doubled: false });
+  // "Doubled ..., capped at S$400" is an ICU day's figure only when twice the row's own daily rate reaches the cap: at S$120 a
+  // day an ICU day is S$240, not S$400; with no daily rate (only the limit) it is unknown (TE pr154 F1). At S$250 it is the cap.
+  none({ excerpt: "Capped at S$120 per day\nS$5,000\tS$8,000\tS$10,000" }, "rate S$120, cap S$400");
+  none({ excerpt: "S$5,000\tS$8,000\tS$10,000" }, "no daily rate");
+  assert.deepEqual(icuOf(icuRows({ excerpt: "Capped at S$250 per day\nS$5,000\tS$8,000\tS$10,000" })).map((r) => r[2]), [[400, "SGD", "per_day"]]);
+  // A place word narrows the rate unless the benefit's own name says it (TE pr154 F2).
+  const abroad = "S$300 per day if hospitalised overseas in ICU";
+  none({ benefit: "Hospital cash", conditions: [abroad], printed: abroad }, "overseas, not in the name");
+  assert.equal(icuOf(icuRows({ benefit: "Hospital cash overseas", conditions: [abroad], printed: abroad })).length, 1);
   // A clause that is not printed in the row's own document (only in another one) gives none.
   none({ conditions: ["RM200 per day if confined in ICU"] }, "printed in another document");
   none({ conditions: ["capped at S$450 per day in intensive care"] }, "not printed at all");

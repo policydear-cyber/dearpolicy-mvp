@@ -250,11 +250,11 @@ const INTENSIVE_CARE = /\bicu\b|\bintensive\s+care\b|\bhigh\s+dependency\b|\bhdu
  * age, a plan, "not", "only", "excess") may change what the figure pays, so a clause holding one gives no row. */
 const INTENSIVE_CARE_WORDS = new Set(("note the a an this daily day cash income hospital benefit amount will be is shall doubled double twice "
   + "if when while whilst during insured person life assured hospitalised hospitalized confined admitted warded in into to "
-  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for overseas stay").split(" "));
+  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for").split(" "));
 /** One clause of a row's own words that prints the daily rate for a day in intensive care, or null: it names intensive care,
- * prints exactly one money figure, paid per day, holds no other number and only the words above, and a figure with "doubled"
- * is the cap printed after it. */
-export function intensiveCareRateOf(clause: string): { amount: number; currency: string | null } | null {
+ * prints exactly one money figure, paid per day, holds no other number and only the words above (or the benefit's own name's),
+ * and a figure with "doubled" is the cap printed after it. */
+export function intensiveCareRateOf(clause: string, ownWords: Iterable<string> = []): { amount: number; currency: string | null; doubled: boolean } | null {
   if (!INTENSIVE_CARE.test(clause)) return null;
   const figures = moneyFiguresIn(clause);
   if (figures.length !== 1 || !figures[0].raw) return null;
@@ -263,13 +263,15 @@ export function intensiveCareRateOf(clause: string): { amount: number; currency:
   if (at < 0 || !/^\s*(?:per|a|each)\s+day\b/i.test(clause.slice(at + f.raw!.length))) return null;
   const rest = clause.slice(0, at) + " " + clause.slice(at + f.raw!.length);
   if (/\d/.test(rest)) return null;
-  if (!(rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => INTENSIVE_CARE_WORDS.has(w))) return null;
+  // A place or stay word ("overseas", "abroad") narrows the rate unless the benefit's own name already says it (TE pr154 F2).
+  const own = new Set(ownWords);
+  if (!(rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => INTENSIVE_CARE_WORDS.has(w) || own.has(w))) return null;
   // A clause that doubles the daily amount prints the ICU day's own figure only as the cap after it ("doubled if in intensive
   // care, capped at S$400 per day"). A figure before the multiplier, or with no cap word between them, is the base rate
   // ("S$200 per day, doubled in ICU"), never the ICU day's (Critic R265 H1).
   const times = /\b(?:doubled|double|twice)\b/i.exec(clause);
   if (times && !(times.index < at && /\b(?:capped|up\s+to|maximum|max|limited)\b/i.test(clause.slice(times.index, at)))) return null;
-  return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null };
+  return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null, doubled: !!times };
 }
 /** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
  * intensive care and prints no day rule of its own (a first paid day or most days might hold for an ICU day too, and the
@@ -284,10 +286,16 @@ function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
     // Its limit's row too (the daily rate of a limit is a row without the limit's day rule).
     const same = rows.filter((o) => o.personId === r.personId && o.coverKey === r.coverKey && o.source.documentId === r.source.documentId && o.benefit === r.benefit);
     if (same.some((o) => o.fromDay != null || o.maxDays != null || /\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(o.source.excerpt))) continue;
+    const ownWords = r.benefit.toLowerCase().match(/[a-z]+/g) ?? [];
+    // The row's own daily rate: one figure a day among the benefit's rows (its limit's daily rate is one of them).
+    const dailies = [...new Set(same.flatMap((o) => o.figure.kind === "printed" && o.figure.unit === "per_day" ? [o.figure.amount] : []))];
     const clauses = [...r.conditions, r.source.excerpt].flatMap((t) => t.split(/[()\n;]/)).map((t) => t.replace(/^\s*note\s*:\s*/i, "").trim()).filter(Boolean);
     for (const clause of clauses) {
-      const rate = intensiveCareRateOf(clause);
+      const rate = intensiveCareRateOf(clause, ownWords);
       if (!rate) continue;
+      // "Doubled ..., capped at S$400 per day" pays the cap only when twice the row's own daily rate reaches it: with S$200 a
+      // day (or more) an ICU day is S$400; with S$120 it is S$240, and with no known rate it is unknown, so no row (TE pr154 F1).
+      if (rate.doubled && !(dailies.length === 1 && 2 * dailies[0] >= rate.amount - 0.005)) continue;
       const key = `${r.personId}|${r.coverKey}|${r.source.documentId}|${r.qualifier ?? ""}|${rate.amount}`;
       if (seen.has(key)) continue;
       // The rate is a row already (the reading took it as a row of its own).
