@@ -7993,3 +7993,20 @@ Fixed (probe):
 Checks on efeb797, run network-blocked with model keys stripped:
 - premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R295: #158 at b342309
+
+READY.
+- R294 H1 is fixed. A record under another number, for the same insurer and the same S$470.85, is now "maybe counted": left out and named, never added (probe). A record with a different number and a different amount still lets the item count.
+- The R294 Low is fixed: an unknown frequency ("6-monthly") or currency is named as "unclear".
+- Every probe from R284–R294 gives the intended result:
+  - letters, ended pages, lapsed documents and stale documents are left out and named;
+  - one premium per document;
+  - the first-year switch only from the cover's start date or the page's labelled policy start;
+  - two documents for one policy are named;
+  - a cover with no name falls back to the insurer.
+  Each unsure drop is named in the note and makes `complete` false.
+
+Checks on b342309, run network-blocked with model keys stripped:
+- premium:table-test 13/0, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
