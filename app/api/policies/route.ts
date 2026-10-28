@@ -10,6 +10,8 @@ import { livePolicyJob, POLICY_PROCESSING_JOB_TYPE, UNCLAIMED_STALL_MINUTES } fr
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
 import { notDismissedCondition } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
+import { planChoiceAsked } from "@/lib/policies/plan-choice";
+import { simpleChatEnabled } from "@/lib/simple-chat/flag";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -121,8 +123,13 @@ export async function GET(request: NextRequest) {
     // processing_error holds the raw pipeline error for operators; the UI only
     // needs to know that analysis stopped, so a fixed string is returned.
     const documentSafetyMode: DocumentSafetyMode = malwareScanningIntentionallyDisabled() ? "not_scanned_prototype" : "malware_scan";
+    // Whether the page asks which plan each covered person is on: not when the household's Coverage and chat both run
+    // on the benefit table, which never reads the plan (lib/policies/plan-choice.ts). Stored plans are returned as before.
+    const benefitTable = await import("@/lib/benefit-table/app").then((m) => m.benefitTableLive(ctx.householdId)).catch(() => false);
+    const planChoice = planChoiceAsked({ benefitTable, simpleChat: simpleChatEnabled(process.env, ctx.householdId) });
     return NextResponse.json({
       documentSafetyMode,
+      planChoice,
       policies: policies.map((p) => ({
         ...p,
         scan_result_detail: userFacingScanResultDetail(p),

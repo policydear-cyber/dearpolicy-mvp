@@ -8,6 +8,7 @@ import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-docu
 import type { ReadingDocument } from "@/components/reading-status";
 import { isToConfirm, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
+import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -81,6 +82,8 @@ export default function PoliciesPage() {
   // "malware_scan" (default) or "not_scanned_prototype" -- reported by the
   // policies API so held documents never show malware-scan language when
   // scanning is intentionally disabled in this prototype build.
+  // Whether to ask which plan each covered person is on: decided by GET /api/policies (planChoice; lib/policies/plan-choice.ts).
+  const [planChoice, setPlanChoice] = useState(true);
   const [documentSafetyMode, setDocumentSafetyMode] = useState<"malware_scan" | "not_scanned_prototype">("malware_scan");
   const [memberId, setMemberId] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -206,6 +209,7 @@ export default function PoliciesPage() {
     }).catch(() => undefined);
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);
+    setPlanChoice(p.planChoice !== false);
     setLoaded(true);
     if (p.documentSafetyMode === "not_scanned_prototype" || p.documentSafetyMode === "malware_scan") setDocumentSafetyMode(p.documentSafetyMode);
   }
@@ -468,7 +472,7 @@ export default function PoliciesPage() {
               <label htmlFor={`who-${policy.id}-${person.name}`}>&ldquo;{person.name}&rdquo; is named in it. Who is this?</label>
               <select id={`who-${policy.id}-${person.name}`} defaultValue="" onChange={(e) => { const select = e.target; if (select.value === "__not_family") void markNotFamily(policy.id, person.name).then((taken) => { if (!taken) select.value = ""; }); else if (select.value) void linkPerson(policy.id, person.name, select.value); }}><option value="">Choose a family member…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
             </div>)}<small className="muted">Until you choose, nothing in it is used for that person.</small></div>}
-          </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
+          </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} planChoice={planChoice} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
 
           {!processing && policy.processing_status === "ready" && (() => {
             const state = benefitReading[policy.id];
@@ -545,9 +549,10 @@ function LockedPdf({ policy, onUnlock }: { policy: Policy; onUnlock: (password: 
 /** Who a document covers. A booklet can cover several people (employee,
  * spouse, children): each family member is a toggle -- press everyone it
  * covers -- and, when the booklet has cover tiers, each covered person gets
- * a tier. Every change is saved at once and confirmed. People the booklet
+ * a tier (only where the household's answers read it: lib/policies/plan-choice.ts).
+ * Every change is saved at once and confirmed. People the booklet
  * names are pointed out. */
-function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Policy; family: Member[]; onSave: (assignments: { familyMemberId: string; planTier: string | null }[]) => Promise<void>; referenceLinks: string[] }) {
+function CoversPicker({ policy, family, planChoice, onSave, referenceLinks }: { policy: Policy; family: Member[]; planChoice: boolean; onSave: (assignments: { familyMemberId: string; planTier: string | null }[]) => Promise<void>; referenceLinks: string[] }) {
   const tiers = policy.tier_options ?? [];
   const named = policy.named_tiers ?? [];
   const namedFor = (m: Member) => named.find((n) => {
@@ -577,7 +582,8 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   const [open, setOpen] = useState(false);
   useEffect(() => { if (!saved) return; const t = setTimeout(() => setSaved(false), 2500); return () => clearTimeout(t); }, [saved]);
   const summary = covered.map((p) => p.planTier ? `${p.name} (${p.planTier})` : p.name).join(", ");
-  const planMissing = tiers.length > 0 && covered.some((p) => !p.planTier);
+  // A household whose answers never read the plan is not asked for it (lib/policies/plan-choice.ts); stored plans stay.
+  const { planMissing, tierSelect } = coversPlanPrompt({ tierOptions: tiers, covered, planChoice });
   // Always one line until "Change" opens it: a library of reference documents would otherwise be a wall of empty choices.
   // A reference document already used as matching wording for someone's plan says whose; only one linked to nobody at
   // all says "nobody yet" and what choosing does.
@@ -600,7 +606,7 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
         <span className="chip-check" aria-hidden="true">{on ? "\u2713" : ""}</span>{m.display_name}{!on && namedFor(m) ? <small> · named in it</small> : null}
       </button>;
     })}</div>
-    {tiers.length > 0 && covered.length > 0 && <div className="covers-list">{covered.map((p) => (
+    {tierSelect && <div className="covers-list">{covered.map((p) => (
       <div className="covers-row" key={p.id}>
         <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover (which plan?)</label>
         <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => { setSaved(false); setTier(p.id, e.target.value); }}>
