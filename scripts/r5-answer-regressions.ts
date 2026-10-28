@@ -229,12 +229,15 @@ async function main() {
     });
 
     await check("P4 a single-trip premium with no frequency is a one-off: never annualised into the yearly or monthly cost (Home tile S$6.10, 27 Oct)", async () => {
-      assert.equal(isOneOffPremium({ frequency: null, period_end: "2026-10-04" }), true);
-      assert.equal(isOneOffPremium({ frequency: "Single premium", period_end: null }), true);
-      assert.equal(isOneOffPremium({ frequency: "annual", period_end: "2027-03-31" }), false, "a yearly premium with its period stays yearly");
-      assert.equal(isOneOffPremium({ frequency: "Monthly", period_end: null }), false);
-      assert.equal(isOneOffPremium({ frequency: null, period_end: null }), false, "unchanged: no frequency and no period");
-      const trip = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_page,notes)
+      const trip = { period_start: "2026-09-29", period_end: "2026-10-04" }, year = { period_start: "2026-01-01", period_end: "2026-12-31" };
+      assert.equal(isOneOffPremium({ frequency: null, ...trip }), true);
+      assert.equal(isOneOffPremium({ frequency: "Single premium", period_start: null, period_end: null }), true);
+      assert.equal(isOneOffPremium({ frequency: "annual", ...trip }), false, "a stated yearly premium stays yearly");
+      assert.equal(isOneOffPremium({ frequency: null, ...year }), false, "a renewal for a year with no frequency stays yearly (Critic R263)");
+      assert.equal(isOneOffPremium({ frequency: null, period_start: null, period_end: "2026-10-04" }), false, "an end date alone proves no short period");
+      for (const f of ["Monthly", "per annum", "p.a.", "Fortnightly", "Tahunan", "Bulanan", "Yearly"]) assert.equal(isOneOffPremium({ frequency: f, ...trip }), false, f);
+      assert.equal(isOneOffPremium({ frequency: null, period_start: null, period_end: null }), false, "unchanged: no frequency and no period");
+      const tripRow = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_page,notes)
         VALUES($1,NULL,NULL,$2,'Harbour Travel Insurance','Travel Insurance','HTI-TRIP-5521',73.17,'SGD',NULL,'2026-09-28','2026-09-29','2026-10-04',1,'Total premium') RETURNING id`, [H, mei.id]);
       try {
         const s = await summarisePremiums(H, mei);
@@ -247,7 +250,7 @@ async function main() {
         const data = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
         assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
         assert.ok(!data.premiums.items.some((i: { amount: number }) => i.amount === 73.17), "the trip is not a current premium line on Home");
-      } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [trip.rows[0].id]); }
+      } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [tripRow.rows[0].id]); }
     });
 
     // ================================================================ C currentness

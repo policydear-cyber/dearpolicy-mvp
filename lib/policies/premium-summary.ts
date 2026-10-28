@@ -13,6 +13,7 @@
  */
 import { query } from "@/lib/db/client";
 import { annualisePremium } from "@/lib/insurance";
+import { SHORT_TERM_DAYS } from "@/lib/benefit-table/assemble";
 import { normalizeCurrencyCode, statedCurrencyCode } from "@/lib/format/currency";
 import { loadPolicyInventory, normalizedIdentifier } from "@/lib/policies/inventory";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -60,13 +61,16 @@ function component(row: PremiumRecordRow) {
   const product = (row.product_name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return (normalizedIdentifier(row.policy_number) || row.policy_id || (row.insurer ?? "")) + "|" + product;
 }
-const RECURRING = /month|quarter|semi|half.?year|6 month|week|year|annual/i;
-/** A premium the record gives no recurring frequency for, paid for a cover period the record itself prints (29 Sep to
- * 4 Oct), is a one-off premium for that period: S$73.17 for a six-day trip is not S$73.17 a year, and once the trip has
- * ended it is not a current cost either (Home tile showed "S$6.10/month", 27 Oct). */
-export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency" | "period_end">) {
+const RECURRING = /month|quarter|semi|half.?year|6 month|week|fortnight|year|annum|annual|\bp\.?\s*a\b\.?|bulanan|tahunan/i;
+/** A premium paid once for a short cover period the record itself prints (a single trip, 29 Sep to 4 Oct) is a one-off
+ * premium for that period: S$73.17 for a six-day trip is not S$73.17 a year, and once the trip has ended it is not a current
+ * cost either (Home tile showed "S$6.10/month", 27 Oct). A renewal notice for a year (1 Jan to 31 Dec) stored with no
+ * frequency stays a yearly premium (Critic R263): only a printed period of at most SHORT_TERM_DAYS counts as one-off. */
+export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency" | "period_start" | "period_end">) {
   if (/single|one[- ]?off|for the period/i.test(row.frequency ?? "")) return true;
-  return !RECURRING.test(row.frequency ?? "") && !!row.period_end;
+  if (RECURRING.test(row.frequency ?? "") || !row.period_start || !row.period_end) return false;
+  const days = (Date.parse(row.period_end.slice(0, 10)) - Date.parse(row.period_start.slice(0, 10))) / 86_400_000;
+  return Number.isFinite(days) && days >= 0 && days <= SHORT_TERM_DAYS;
 }
 export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   // rows arrive newest first: the latest record of each premium component.
