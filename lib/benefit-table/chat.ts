@@ -54,14 +54,17 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   const premiums = new Set<string>();
   // First-year premiums come last, so the other rows keep their numbers.
   const firstYears: TableRow[] = [];
+  // A premium's parts come after every other row (below), so recorded answers keep their row numbers.
+  const parts: TableRow[] = [];
   for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) {
     const firstYear = r.source === c.firstYearSource;
-    if (r.benefit === premiumName(c) || firstYear) {
-      const key = [p.id, firstYear ? "first year" : "premium", c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
+    const part = c.premiumParts?.some((x) => x.source === r.source) ?? false;
+    if (r.benefit === premiumName(c) || firstYear || part) {
+      const key = [p.id, firstYear ? "first year" : part ? `part ${r.benefit}` : "premium", c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
       if (premiums.has(key)) continue;
       premiums.add(key);
     }
-    if (firstYear) firstYears.push(r); else add(r);
+    if (firstYear) firstYears.push(r); else if (part) parts.push(r); else add(r);
   }
   for (const r of firstYears) add(r);
   // A limit whose own line prints one daily rate ("Capped at S$200 per day" over "S$8,000") pays that rate a day, up to the
@@ -74,6 +77,8 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
   // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
   for (const r of planTableRows(rows, household)) add(r);
+  for (const r of parts) add(r);
+  for (const r of totalLimitRows(rows, household)) add(r);
   const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
   for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
@@ -197,6 +202,92 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
   return [...out, ...blocks];
 }
 
+/** A numbered clause heading ("2.2. Critical Illness Benefit", "3.1\tCritical Illness Benefit"): its number, and its words. */
+const CLAUSE = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?[\t ]+(\S.*)$/;
+/** Limit wording that says the figure is the most paid in total ("The most We will pay in total ... shall not exceed",
+ * "aggregated up to the limit of"), and the scope words that say it is a total, never one claim's payment. */
+const TOTAL_LIMIT_WORDS = /\b(?:shall|will|must)\s+not\s+exceed\b|\bmost\s+(?:we|the\s+company|the\s+insurer)\s+(?:will\s+)?pay\b|\bup\s+to\s+(?:a|the)\s+(?:total\s+|aggregate\s+|overall\s+)?limit\s+of\b|\bmaximum\s+(?:total|aggregate)\s+(?:amount|limit|benefit)\b/i;
+const TOTAL_SCOPE = /\bin\s+total\b|\baggregated?\b|\ball\s+(?:the\s+)?(?:policies|plans|claims)\b|\bsame\s+life(?:\s+assured)?\b|\bin\s+(?:its|their)\s+lifetime\b/i;
+/** A total that is for some insured persons, ages or periods only, or a share, is not the benefit's whole limit. */
+const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|years?\s+old|spouses?|dependants?|elderly|per\s+(?:day|week|month|year|visit|item|trip|journey))\b|\b(?:above|below|over|under)\s+(?:the\s+)?(?:age\b|\d)|%|\bper\s*cent\b|\bpercent\b/i;
+/** The most a benefit pays in total that its own clause prints, as a row of its own after every other (overnight run
+ * 23 Oct, N087: "The most We will pay in total for all Early or Intermediate Stages of Critical Illnesses claims under this
+ * Policy and all Policies We have issued covering the same Life Assured shall not exceed S$1,050,000"). The reading left
+ * it out, so the chat could only drop it.
+ *
+ * Read from the stored page, never the model: the row's own line is found once on its page, its clause is the nearest
+ * numbered heading above it that names the row's benefit, and the clause runs to the next heading that is not one of its
+ * sub-clauses (or the page's end). A sentence in it gives a row only when it says it is a total (limit wording and scope
+ * words), prints exactly one money figure in a stated currency, and names no group, age, period or share. A figure that is
+ * the row's own cap adds nothing. The row is a limit, never what an event pays (combinedLimit), and its condition is the
+ * sentence as printed. A clause that cannot be found, or a sentence that is not plainly one total, gives none: a missing
+ * card, never a wrong one. */
+export function totalLimitRows(rows: ChatRow[], household: Household): TableRow[] {
+  const out: TableRow[] = [];
+  const seen = new Set<string>();
+  const plain = (t: string) => ` ${t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const STOP = new Set(["benefit", "benefits", "the", "of", "and", "for", "a", "an", "to", "in", "on"]);
+  const words = (t: string) => plain(t).trim().split(" ").filter((w) => w && !STOP.has(w));
+  for (const r of rows) {
+    if (r.combinedLimit || r.linkWhy === "the person's own cover line" || r.pays === "not_covered" || r.figure.kind === "none") continue;
+    const page = household.documents[r.docIndex]?.pages.find((p) => p.page === r.source.page);
+    if (!page) continue;
+    const lines = page.text.split("\n");
+    // The row's own line: where its quote's first words start, found once on the page.
+    const first = plain(r.source.excerpt).trim().split(" ").slice(0, 6).join(" ");
+    if (first.split(" ").length < 4) continue;
+    const starts = lines.flatMap((_, i) => plain(lines.slice(i, i + 3).join(" ")).includes(` ${first} `) && !plain(lines.slice(i + 1, i + 3).join(" ")).includes(` ${first} `) ? [i] : []);
+    if (starts.length !== 1) continue;
+    let head = -1;
+    for (let i = starts[0]; i >= 0; i--) {
+      const m = CLAUSE.exec(lines[i].trim());
+      // A heading is short and is no sentence: "3.1.1 While this Basic Benefit is in force, ..." is a clause's text.
+      if (m && m[2].split(/\s+/).length <= 8 && !/[.,;:]$/.test(m[2].trim())) { head = i; break; }
+    }
+    if (head < 0) continue;
+    const [, number, title] = CLAUSE.exec(lines[head].trim())!;
+    // The heading names the row's benefit: every word of one is a word of the other.
+    const t = words(title), b = words(benefitName(r.benefit));
+    if (!t.length || !b.length || !(t.every((w) => b.includes(w)) || b.every((w) => t.includes(w)))) continue;
+    let end = head + 1;
+    while (end < lines.length) {
+      const m = CLAUSE.exec(lines[end].trim());
+      if (m && !m[1].startsWith(`${number}.`)) break;
+      end++;
+    }
+    // The clause's sentences, each with the page lines it is printed on.
+    const body = lines.slice(head + 1, end);
+    const offsets: number[] = [];
+    let joined = "";
+    for (const l of body) { offsets.push(joined.length); joined += `${l} `; }
+    const lineAt = (pos: number) => { let k = 0; while (k + 1 < offsets.length && offsets[k + 1] <= pos) k++; return k; };
+    const bounds = [0, ...[...joined.matchAll(/[.;](?=\s+(?:[A-Z(“"]|\d{1,2}(?:\.\d{1,2})+))/g)].map((m) => m.index! + 1), joined.length];
+    for (let k = 0; k + 1 < bounds.length; k++) {
+      const sentence = joined.slice(bounds[k], bounds[k + 1]).replace(/\s+/g, " ").trim().replace(/^\d{1,2}(?:\.\d{1,2})+\s*/, "");
+      if (!TOTAL_LIMIT_WORDS.test(sentence) || !TOTAL_SCOPE.test(sentence) || TOTAL_QUALIFIER.test(sentence)) continue;
+      const figures = anyMoneyFigures(sentence);
+      const values = new Set(figures.map((f) => f.value));
+      if (values.size !== 1) continue;
+      const signs = new Set(figures.map((f) => statedCurrencyCode(new RegExp(`^${MONEY_SIGN}`, "i").exec(sentence.slice(f.index, f.index + f.length))?.[0] ?? null)));
+      const [amount] = [...values], [currency] = [...signs];
+      if (signs.size !== 1 || !currency || !(amount > 0)) continue;
+      // The row's own cap ("subject to a maximum amount of S$25,000 per life") said again adds nothing.
+      if (r.figure.kind === "worked_out" && r.figure.capped && Math.abs(r.figure.amount - amount) < 0.005) continue;
+      if ((r.capSource || r.figure.kind === "printed") && printsAmount(r.source.excerpt, amount)) continue;
+      const excerpt = body.slice(lineAt(bounds[k] + (joined.slice(bounds[k]).length - joined.slice(bounds[k]).trimStart().length)), lineAt(bounds[k + 1] - 1) + 1).join("\n");
+      if (anyMoneyFigures(excerpt).some((f) => f.value !== amount)) continue;
+      const key = [r.personId, r.coverKey, r.source.documentId, page.page, amount, plain(sentence)].join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...r, benefit: `Limit in total on ${benefitName(r.benefit)} claims`, pays: "up_to", conditions: [sentence], fromDay: null, maxDays: null, qualifier: null,
+        figure: { kind: "printed", amount, currency, unit: "up_to", period: null }, source: { ...r.source, excerpt }, baseSource: null, percent: null, percentOf: null,
+        base: null, baseCorrected: false, capSource: null, combinedLimit: true, coverEnded: r.coverEnded ?? null } as TableRow);
+    }
+  }
+  return out;
+}
+const printsAmount = (text: string, amount: number) => anyMoneyFigures(text).some((f) => Math.abs(f.value - amount) < 0.005);
+
 const BLOCK_FIGURE = new RegExp(String.raw`^(${MONEY_SIGN})\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$`, "i");
 const BLOCK_LENGTH = /^(?:[a-z]+|\d+)[- ]hours?(?:\s+(?:of\s+)?delay)?$/i;
 /** A plan table's per-block cells wrapped over two lines under the benefit's name (overnight run 23 Oct, N106, N107):
@@ -303,6 +394,11 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
   if (c.premium != null)
     out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
   // The first policy year's premium its page prints (release-set A6), named as that page names it.
+  // The premium's parts its schedule line prints (the benefit's own premium and an extra such as "Health Extra": overnight
+  // run 23 Oct, N088, N092), named as parts of the premium, never as premiums of their own.
+  for (const part of c.premium != null ? c.premiumParts ?? [] : [])
+    out.push(row(`${part.label}${/premium/i.test(part.label) ? "" : " (premium)"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (part of the ${c.premiumLabel || "Premium"}${c.premiumNote ? "; the first policy year's premium is different" : ""})`,
+      { kind: "printed", amount: part.amount, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, part.source));
   if (c.premium != null && c.firstYearPremium != null && c.firstYearSource)
     out.push(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource));
   return out;
