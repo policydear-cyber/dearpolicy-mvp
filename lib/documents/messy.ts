@@ -40,16 +40,16 @@ const TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)(?:\
 
 /** The words a printed person's name is never made of: a value such as "Refer To Page 2", "To Be Advised" or "Plan Holder
  * And Spouse" names nobody. */
-const NOT_A_NAME = /\b(?:and|or|of|the|to|be|see|refer|as|per|by|for|plan|holder|spouse|member|members|employee|employees|child|children|dependants?|name|insured|assured|owner|advised|page|schedule|policy|sample|specimen|any|all|each|every|who|whose|which|payable|amount|sum|ltd|limited|pte|plc|inc|bhd|berhad|sdn|llp|llc|company|co|corporation|union|association|society|trust|bank|insurance)\b/i;
+const NOT_A_NAME = /\b(?:and|or|of|the|to|be|see|refer|as|per|by|for|plan|holder|spouse|member|members|employee|employees|child|children|dependants?|name|insured|assured|owner|advised|page|schedule|policy|sample|specimen|any|all|each|every|who|whose|which|payable|amount|sum|ltd|limited|pte|plc|inc|bhd|berhad|sdn|llp|llc|company|co|corporation|union|association|society|trust|bank|insurance|date|birth|gender|sex|age|aged|signature|class|occupation|nric|id|identity|number|no|smoker|status|relationship|nationality|address|premium|benefit|benefits|cover|signed)\b/i;
 /** A label that starts its line ("LIFE INSURED", "Policy Owner :", "Assured\t:") and the value beside it, up to the next
  * column. */
 const PERSON_CELL = /^(?:life\s+insured|life\s+assured|insured(?:\s+person)?|assured|policy\s*owner|policy\s*holder|owner|name\s+of\s+(?:the\s+)?insured)\s*(?:[:：]\s*|\t+\s*:?\s*|\s{2,})([^\t]+?)(?:\t|\s{2,}|$)/i;
-/** A person's name as printed: two to six words of letters, each starting with a capital letter, except the particles a
+/** A person's name as printed: two to five words of letters, each starting with a capital letter, except the particles a
  * name may carry in between ("Siti Aminah binti Ahmad", "Kumar a/l Rajan", "Jan van Dijk"). */
 const NAME_PARTICLE = /^(?:bin|binti|bte|bt|a\/l|a\/p|s\/o|d\/o|van|von|der|den|de|da|das|dos|del|della|di|du|le|la|al|el|ibn)$/i;
 function nameShaped(value: string): boolean {
   const words = value.replace(/,/g, " ").split(/\s+/).filter(Boolean);
-  return words.length >= 2 && words.length <= 6 && /^[A-Z]/.test(words[0]) && /^[A-Z]/.test(words[words.length - 1])
+  return words.length >= 2 && words.length <= 5 && /^[A-Z]/.test(words[0]) && /^[A-Z]/.test(words[words.length - 1])
     && words.every((w) => /^[A-Z][A-Za-z.'’-]*$/.test(w) || NAME_PARTICLE.test(w));
 }
 
@@ -61,18 +61,23 @@ function nameShaped(value: string): boolean {
  * a specimen or sample page are not one. Returns its page number, or null. */
 export function schedulePage(pages: Pick<PdfPage, "pageNumber" | "text">[]): number | null {
   const SCHEDULE_LINE = /^(?:policy schedule|schedule page|schedule of insurance)(?:\s*\(continued\))?(?:\s+[^\x00-\x7F].*)?$/i;
-  const OWN_NUMBER = /\bpolicy\s+(?:number|no\.?)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{4,})/i;
-  const LONE_NUMBER = /^[A-Z0-9][A-Z0-9-]{4,}$/i;
+  const OWN_NUMBER = /\bpolicy\s+(?:number|no\.?)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{5,})/i;
+  const LONE_NUMBER = /^[A-Z0-9][A-Z0-9-]{5,}$/i;
+  // A real number: four or more digits ("XXXXXXXX", "to be issued" and a blank are not one) (Critic R289 H1).
+  const realNumber = (x: string) => (x.match(/\d/g) ?? []).length >= 4;
+  // An endorsement that reissues the schedule page says so ("Endorsement No. 3", "this endorsement"): it stays an
+  // endorsement (Critic R289 M1).
+  if (pages.some((p) => /\bendorsement\s+(?:no\.?|number)\s*\d|\bthis\s+endorsement\b/i.test(p.text))) return null;
   for (const p of pages) {
     const lines = printedLines(p.text);
     if (!lines.slice(0, 4).some((l) => SCHEDULE_LINE.test(l))) continue;
-    if (/\b(?:specimen|sample|illustration\s+only)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
+    if (/\b(?:specimen|sample|illustration)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
     const numbered = lines.some((l, i) => {
       if (!/\bpolicy\s+(?:number|no\.?)\b/i.test(l)) return false;
       const own = OWN_NUMBER.exec(l)?.[1];
-      if (own) return /\d/.test(own);
+      if (own) return realNumber(own);
       // "2492015437" above or below a "POLICY NUMBER" line of its own.
-      return /^policy\s+(?:number|no\.?)$/i.test(l) && [lines[i - 1], lines[i + 1]].some((x) => !!x && LONE_NUMBER.test(x) && /\d/.test(x));
+      return /^policy\s+(?:number|no\.?)$/i.test(l) && [lines[i - 1], lines[i + 1]].some((x) => !!x && LONE_NUMBER.test(x) && realNumber(x));
     });
     if (!numbered) continue;
     const named = lines.some((l) => {

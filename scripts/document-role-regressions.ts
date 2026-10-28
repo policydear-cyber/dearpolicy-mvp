@@ -196,6 +196,12 @@ async function main() {
       ["company policyholder", doc("SCHEDULE PAGE\nPolicy number: 70012345\nPolicyholder: Example Union Pte Ltd")],
       ["person label mid-sentence", doc("SCHEDULE PAGE\nPolicy No. must be quoted: 70012345.\nThe Insured Person Whose Claim Is Approved")],
       ["no number", doc("SCHEDULE PAGE\nPOLICY NUMBER\nLIFE INSURED\tTAN MEI LING")],
+      // Critic R289 H1
+      ["header row", doc("SCHEDULE PAGE\nPolicy No.: as shown in your certificate\nInsured Person  Plan A  Plan B")],
+      ["specimen placeholders", doc("Schedule Page\nPolicy Number  XXXXXXXX\nLife Assured  Date of Birth  Gender")],
+      ["blank form", doc("SCHEDULE PAGE\nPolicy number:\nPolicy owner  Signature  Date")],
+      ["number to be issued", doc("SCHEDULE PAGE\nPolicy number to be issued\nInsured person aged 1 to 65")],
+      ["illustration", doc("SCHEDULE PAGE\nThis is an illustration.\nPolicy number: 70012345\nLife insured: Tan Mei Ling")],
     ];
     for (const [name, pages] of notSchedules) {
       assert.equal(schedulePage(pages), null, name);
@@ -203,6 +209,11 @@ async function main() {
     }
     const plainLetter = doc("Example Life\n8 Example Street\n3 APR 2026\nDear Mr Lee\nYour revised schedule page will be sent separately.\nPolicy number: 70012345\nYours sincerely\nClient Services");
     assert.equal(correspondenceRole(plainLetter), "insurer_letter", "a letter that mentions its schedule page is still a letter");
+  });
+  await t("6: an endorsement that reissues the schedule page stays an endorsement (Critic R289 M1)", () => {
+    const reissued = doc(packLetter, "SCHEDULE PAGE\nPOLICY NUMBER\t70012345\nLIFE INSURED\tTAN MEI LING\nEndorsement No. 3 effective 1 May 2026", packWording(1));
+    assert.equal(schedulePage(reissued), null);
+    assert.notEqual(deterministicDocumentRole(reissued, "endorsement"), "personal_schedule");
   });
   await t("6: names as households print them, in any market", () => {
     for (const [name, line] of [["MY", "Life Assured: Siti Aminah binti Ahmad"], ["IN", "LIFE INSURED\tKUMAR A/L RAJAN"], ["NL", "Policyholder: Jan van Dijk"], ["SG", "Assured\t: Tan Wei Jie, Daniel\tIdentity No."], ["UK", "Policy Owner  Mr James Whitfield"]]) {
