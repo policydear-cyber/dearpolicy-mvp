@@ -134,9 +134,18 @@ test("TL3 MY: tab heading '3.2\\tCritical Illness Benefit', sentence over two li
   const r = run({ wording: WORDING("The most we will pay in total for all claims under this\nbenefit for the same Life Insured shall not exceed RM1,000,000.", { head: "3.2\tCritical Illness Benefit" }) });
   assert.deepEqual(limits(r.rows).map((x) => [x.amount, x.currency]), [[1000000, "MYR"]]);
 });
-test("TL4 UK: 'The maximum total amount we will pay for all claims under this policy is £250,000.'", () => {
-  const r = run({ wording: WORDING("The maximum total amount we will pay for all claims under this policy is £250,000.") });
+// Grader correction (cd93f9e, Critic R270 H1, agreed): TL4 first expected a £250,000 row for "all claims under this policy".
+// Original grade on cd93f9e: FAIL (no row). A whole-policy limit labelled "Limit in total on Critical Illness Benefit claims"
+// would mislead, so a policy-wide sentence now gives no row (TL4b) and TL4 names the benefit.
+test("TL4 UK: 'The maximum total amount we will pay for all claims under this benefit is £250,000.'", () => {
+  const r = run({ wording: WORDING("The maximum total amount we will pay for all claims under this benefit is £250,000.") });
   assert.deepEqual(limits(r.rows).map((x) => [x.amount, x.currency]), [[250000, "GBP"]]);
+});
+test("TL4b UK: a whole-policy total ('for all claims under this policy') gives no CI row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING("The maximum total amount we will pay for all claims under this policy is £250,000.") }).rows), []);
+});
+test("TL4c a total naming another benefit inside the CI clause ('all Death Benefit claims') gives no CI row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("all Critical Illness claims", "all Death Benefit claims")) }).rows), []);
 });
 test("TL5 'S$1 million' is never a limit of S$1 (spelled-out unit)", () => {
   const r = run({ wording: WORDING(TOTAL.replace("S$600,000", "S$1 million")) });
@@ -208,6 +217,43 @@ test("TL22 a sentence with no total word ('The most we will pay under this benef
 });
 test("TL23 a scope naming clause numbers gives no row (a scope never carries figures)", () => {
   assert.deepEqual(limits(run({ wording: WORDING("The most we will pay in total for all claims under clauses 3.2 and 3.4 for the same Life Insured shall not exceed S$600,000.") }).rows), []);
+});
+
+test("TL24 an amount spelled out with its figure ('one million Singapore dollars (S$1,000,000)') is a row of S$1,000,000", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("S$600,000", "one million Singapore dollars (S$1,000,000)")) }).rows).map((x) => x.amount), [1000000]);
+});
+test("TL25 'S$600,000 per life assured' gives no row unless it stays S$600,000", () => {
+  assert.ok(limits(run({ wording: WORDING(TOTAL.replace("S$600,000", "S$600,000 per life assured")) }).rows).every((x) => x.amount === 600000));
+});
+test("TL26 'S$1.05m' gives no row of S$1.05", () => {
+  assert.ok(limits(run({ wording: WORDING(TOTAL.replace("S$600,000", "S$1.05m")) }).rows).every((x) => x.amount === 1050000));
+});
+test("TL27 'S$600,000 in respect of each policy' gives no row (per policy, not in total)", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("S$600,000.", "S$600,000 in respect of each policy.")) }).rows), []);
+});
+test("TL28 'S$600,000 (or its equivalent in other currencies), after deducting earlier claims' gives no row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("S$600,000.", "S$600,000, after deducting earlier claims.")) }).rows), []);
+});
+
+// cd93f9e (Critic R270 H1): the clause ends at an unnumbered heading, and the total must name the row's own benefit only.
+test("TL29 a total printed after an unnumbered heading ('GENERAL PROVISIONS', 'Appendix B') gives no CI row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING("GENERAL PROVISIONS\n" + TOTAL) }).rows), []);
+  assert.deepEqual(limits(run({ wording: WORDING("Appendix B\n" + TOTAL) }).rows), []);
+});
+test("TL30 a plural name ('all Critical Illnesses claims') still names the benefit: a row of S$600,000", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("all Critical Illness claims", "all Critical Illnesses claims")) }).rows).map((x) => x.amount), [600000]);
+});
+test("TL31 a combined total ('all Critical Illness and Death Benefit claims') gives no CI row (not only this benefit's)", () => {
+  assert.deepEqual(limits(run({ wording: WORDING(TOTAL.replace("all Critical Illness claims", "all Critical Illness and Death claims")) }).rows), []);
+});
+test("TL32 a sentence in capitals that ends with a full stop is not a heading: the row stays", () => {
+  assert.deepEqual(limits(run({ wording: WORDING("PLEASE READ THIS CLAUSE CAREFULLY.\n" + TOTAL) }).rows).map((x) => x.amount), [600000]);
+});
+test("TL10b a limit for any one Critical Illness claim (the benefit named) gives no row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING("The most we will pay in total for any one Critical Illness claim under all policies covering the same Life Insured shall not exceed S$600,000.") }).rows), []);
+});
+test("TL23b a scope naming the benefit and clause numbers gives no row", () => {
+  assert.deepEqual(limits(run({ wording: WORDING("The most we will pay in total for all Critical Illness claims under clauses 3.2 and 3.4 for the same Life Insured shall not exceed S$600,000.") }).rows), []);
 });
 
 // ================================================================ row numbers unchanged

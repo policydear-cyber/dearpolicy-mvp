@@ -1812,6 +1812,10 @@ test("a clause's printed total limit is a row of its own, shown when asked with 
   assert.equal(row.source.excerpt, TOTAL);
   assert.equal(r.rows.at(-1), row, "after every other row");
   assert.deepEqual(r.amounts, ["S$800,000"]);
+  // The benefit named in the plural ("Critical Illnesses claims", as printed) is still the row's benefit.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL.replace("Critical Illness claims", "Critical Illnesses claims"))), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "plural");
+  // A sentence in capitals with a full stop is no heading: the clause goes on past it.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(`THIS BENEFIT ENDS ON PAYMENT.\n${TOTAL}`)), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "capitals sentence");
   // The card says what the limit is for, though the model gave no condition.
   const card = r.kept.find((x) => x.amount?.text === "S$800,000")!;
   assert.ok(JSON.stringify(card).includes("for all Early Stage Critical Illness claims"), JSON.stringify(card));
@@ -1839,6 +1843,7 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   none(LIMIT_WORDING("We will pay S$800,000 in one lump sum for all Early Stage claims under all Policies covering the same Life Assured."), "no limit wording");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 per year")), "a total for each period");
   none(LIMIT_WORDING(TOTAL.replace("in total for all", "in total for any one claim among all")), "a limit for each claim");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all Early Stage Critical Illness claims", "in total for any one Early Stage Critical Illness claim")), "a limit for any one named claim (TE P155 F3)");
   // A scale word after the figure, or words after it that can change the limit (TE P155 F1, F2).
   none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$1 million")), "a figure in millions");
   none(LIMIT_WORDING(TOTAL.replace("S$800,000", "the higher of S$800,000 and the Sum Insured")), "the higher of");

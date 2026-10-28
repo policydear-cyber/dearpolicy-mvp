@@ -211,7 +211,7 @@ const CLAUSE = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?[\t ]+(\S.*)$/;
 const TOTAL_LIMIT_WORDS = /\b(?:shall|will|must)\s+not\s+exceed\b|\bmost\s+(?:we|the\s+company|the\s+insurer)\s+(?:will\s+)?pay\b|\bup\s+to\s+(?:a|the)\s+(?:total\s+|aggregate\s+|overall\s+)?limit\s+of\b|\bmaximum\s+(?:total|aggregate)\s+(?:amount|limit|benefit)\b/i;
 const TOTAL_SCOPE = /\bin\s+total\b|\baggregated?\b|\ball\s+(?:the\s+)?(?:policies|plans|claims)\b|\bsame\s+life(?:\s+assured)?\b|\bin\s+(?:its|their)\s+lifetime\b/i;
 /** A total that is for some insured persons, ages or periods only, or a share, is not the benefit's whole limit. */
-const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|years?\s+old|spouses?|dependants?|elderly|per\s+(?:day|week|month|year|visit|item|trip|journey|claim|event|accident|admission|condition)|(?:each|any\s+one)\s+(?:claim|event|accident|admission))\b|\b(?:above|below|over|under)\s+(?:the\s+)?(?:age\b|\d)|%|\bper\s*cent\b|\bpercent\b/i;
+const TOTAL_QUALIFIER = /\b(?:child(?:ren)?|juveniles?|minors?|adults?|ages?d?|years?\s+old|spouses?|dependants?|elderly|per\s+(?:day|week|month|year|visit|item|trip|journey|claim|event|accident|admission|condition)|(?:each|every|any\s+one|per)\s+(?:[A-Za-z]+\s+){0,4}(?:claim|event|accident|admission)s?)\b|\b(?:above|below|over|under)\s+(?:the\s+)?(?:age\b|\d)|%|\bper\s*cent\b|\bpercent\b/i;
 /** The most a benefit pays in total that its own clause prints, as a row of its own after every other (overnight run
  * 23 Oct, N087: "The most We will pay in total for all Early or Intermediate Stages of Critical Illnesses claims under this
  * Policy and all Policies We have issued covering the same Life Assured shall not exceed S$1,050,000"). The reading left
