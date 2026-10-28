@@ -84,6 +84,15 @@ test("rows and covers without an end field (older callers) are listed as before"
   assert.deepEqual(kindsOfTable([{ benefit: "Loss of baggage", pays: "up_to", product: "Example Travel Insurance", cover: "Single Trip" }],
     [{ product: "Example Term Life", cover: "Term Life" }]), ["Death", "Travel"]);
 });
+test("an ended single trip beside a current one of the same name whose rows are not linked yet: Travel (TE E9)", () => {
+  assert.deepEqual(kindsOfTable(
+    [{ benefit: "Loss of baggage", pays: "up_to", product: "Example Travel Insurance", cover: "Single Trip", coverEnded: "2026-10-04" }],
+    [{ product: "Example Travel Insurance", cover: "Single Trip", ended: "2026-10-04" }, { product: "Example Travel Insurance", cover: "Single Trip", ended: null }]),
+  ["Travel"]);
+});
+test("a cover sent with ended: null and no rows is still listed (TE Q3)", () => {
+  assert.deepEqual(kindsOfTable([], [{ product: "Example Term Life", cover: "Term Life", ended: null }]), ["Death"]);
+});
 
 if (failures.length) {
   console.error(`family-ended: ${failures.length} failed, ${passed} passed`);

@@ -65,8 +65,10 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
     // rows are all printed as not covered is no cover (TE P124-2).
     if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
-    counted.add(`${r.product}\u0000${r.cover}`);
+    // An ended cover's rows are not counted: a current cover of the same name whose rows are not linked yet still
+    // lists (TE E9: a renewed single trip beside the one that ended).
     if (r.coverEnded) continue;
+    counted.add(`${r.product}\u0000${r.cover}`);
     if (r.pays === "not_covered") continue;
     const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
     if (cover) found.add(cover);
