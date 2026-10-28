@@ -32,22 +32,54 @@ const FURNITURE = /DPTEST-|^[A-Za-z0-9+/=]{40,}$|^:DPTEST/;
 export function printedLines(text: string): string[] {
   return String(text ?? "").replace(/DPTEST-EXTRACTION:[\s\S]*?:DPTEST-END/g, "").split("\n").map((l) => l.trim()).filter((l) => l && !FURNITURE.test(l));
 }
-const TITLE = /\b(?:policy schedule|schedule page|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy contract|renewal certificate|certificate of renewal|annual (?:policy )?statement|policy wording|product summary|benefit (?:illustration|summary)|policy information page)\b/i;
+const TITLE = /\b(?:policy schedule|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy contract|renewal certificate|certificate of renewal|annual (?:policy )?statement|policy wording|product summary|benefit (?:illustration|summary)|policy information page)\b/i;
 
-const TITLE_LINE = new RegExp("^" + TITLE.source + "(?:\\s*\\(continued\\))?$", "i");
+/** A title on a line of its own. "SCHEDULE PAGE" is one only here: a letter that says "your revised schedule page will
+ * follow" is still a letter (TE #160 F3). */
+const TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)(?:\\s*\\(continued\\))?$", "i");
 
-/** A page that is a policy's own schedule: it opens with a schedule title on a line of its own ("Policy Schedule",
- * "SCHEDULE PAGE"), and prints the policy's own number and a named person beside a label ("LIFE INSURED  Lim Wei Jie").
- * A pack that sends the schedule behind a cover letter and before the contract wording holds one; a wording that only
- * says "as shown in your policy schedule", or a specimen with no name, does not. Returns its page number, or null. */
+/** The words a printed person's name is never made of: a value such as "Refer To Page 2", "To Be Advised" or "Plan Holder
+ * And Spouse" names nobody. */
+const NOT_A_NAME = /\b(?:and|or|of|the|to|be|see|refer|as|per|by|for|plan|holder|spouse|member|members|employee|employees|child|children|dependants?|name|insured|assured|owner|advised|page|schedule|policy|sample|specimen|any|all|each|every|who|whose|which|payable|amount|sum|ltd|limited|pte|plc|inc|bhd|berhad|sdn|llp|llc|company|co|corporation|union|association|society|trust|bank|insurance)\b/i;
+/** A label that starts its line ("LIFE INSURED", "Policy Owner :", "Assured\t:") and the value beside it, up to the next
+ * column. */
+const PERSON_CELL = /^(?:life\s+insured|life\s+assured|insured(?:\s+person)?|assured|policy\s*owner|policy\s*holder|owner|name\s+of\s+(?:the\s+)?insured)\s*(?:[:：]\s*|\t+\s*:?\s*|\s{2,})([^\t]+?)(?:\t|\s{2,}|$)/i;
+/** A person's name as printed: two to six words of letters, each starting with a capital letter, except the particles a
+ * name may carry in between ("Siti Aminah binti Ahmad", "Kumar a/l Rajan", "Jan van Dijk"). */
+const NAME_PARTICLE = /^(?:bin|binti|bte|bt|a\/l|a\/p|s\/o|d\/o|van|von|der|den|de|da|das|dos|del|della|di|du|le|la|al|el|ibn)$/i;
+function nameShaped(value: string): boolean {
+  const words = value.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  return words.length >= 2 && words.length <= 6 && /^[A-Z]/.test(words[0]) && /^[A-Z]/.test(words[words.length - 1])
+    && words.every((w) => /^[A-Z][A-Za-z.'’-]*$/.test(w) || NAME_PARTICLE.test(w));
+}
+
+/** A page that is a policy's own schedule: a schedule title on one of its first four lines ("Policy Schedule",
+ * "SCHEDULE PAGE"), the policy's own number beside its label, and a person's name in a cell that starts with a person
+ * label ("LIFE INSURED  Lim Wei Jie"). A pack that sends the schedule behind a cover letter and before the contract
+ * wording holds one. Default-safe (TE #160 F1, F2): a wording's "Schedule of Benefits", a value that is not a name
+ * ("Refer to page 2", "Plan holder and spouse", "Sum Assured payable on death"), a company, a group or master policy, and
+ * a specimen or sample page are not one. Returns its page number, or null. */
 export function schedulePage(pages: Pick<PdfPage, "pageNumber" | "text">[]): number | null {
-  const SCHEDULE_LINE = /^(?:policy schedule|schedule page|schedule of (?:insurance|benefits))(?:\s*\(continued\))?$/i;
-  const NAMED = /\b(?:policy ?holder|policy ?owner|owner|life insured|life assured|assured|insured(?: person)?|name of (?:the )?insured)\b[ \t]*[:\-]?[ \t]*(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|is|will|must|shall|named)\b)[a-z][a-z.'-]+[ \t,]+[a-z]/i;
+  const SCHEDULE_LINE = /^(?:policy schedule|schedule page|schedule of insurance)(?:\s*\(continued\))?(?:\s+[^\x00-\x7F].*)?$/i;
+  const OWN_NUMBER = /\bpolicy\s+(?:number|no\.?)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]{4,})/i;
+  const LONE_NUMBER = /^[A-Z0-9][A-Z0-9-]{4,}$/i;
   for (const p of pages) {
     const lines = printedLines(p.text);
     if (!lines.slice(0, 4).some((l) => SCHEDULE_LINE.test(l))) continue;
-    if (!/(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\b/i.test(p.text)) continue;
-    if (lines.some((l) => NAMED.test(l.toLowerCase()))) return p.pageNumber;
+    if (/\b(?:specimen|sample|illustration\s+only)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
+    const numbered = lines.some((l, i) => {
+      if (!/\bpolicy\s+(?:number|no\.?)\b/i.test(l)) return false;
+      const own = OWN_NUMBER.exec(l)?.[1];
+      if (own) return /\d/.test(own);
+      // "2492015437" above or below a "POLICY NUMBER" line of its own.
+      return /^policy\s+(?:number|no\.?)$/i.test(l) && [lines[i - 1], lines[i + 1]].some((x) => !!x && LONE_NUMBER.test(x) && /\d/.test(x));
+    });
+    if (!numbered) continue;
+    const named = lines.some((l) => {
+      const value = PERSON_CELL.exec(l)?.[1]?.trim();
+      return !!value && nameShaped(value) && !NOT_A_NAME.test(value);
+    });
+    if (named) return p.pageNumber;
   }
   return null;
 }

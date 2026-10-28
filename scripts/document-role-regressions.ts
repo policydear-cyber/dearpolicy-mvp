@@ -182,6 +182,39 @@ async function main() {
     assert.equal(correspondenceRole(doc(letter, signOff)), "insurer_letter", "a letter with nothing enclosed is still a letter");
   });
 
+  // 6. What is not a schedule page, though it carries a schedule title (TE #160 F1-F3): only a person's name in a cell
+  // that starts with a person label counts, the policy's own number, and no group, specimen or sample page.
+  await t("6: wordings, summaries, nameless, specimen and group schedules are not a policy's own schedule", () => {
+    const notSchedules: [string, PdfPage[]][] = [
+      ["travel wording, Schedule of Benefits", doc("Example Travel Insurance\nPolicy wording", "SCHEDULE OF BENEFITS\nInsured person who is hospitalised overseas\tS$200 per day\nPlease quote your policy number on every claim.")],
+      ["Sum Assured payable", doc("Example Life\nPolicy wording", "SCHEDULE PAGE\nSum Assured payable on death of the life assured\nSum Assured Amount\tS$100,000\nQuote the policy number 70012345.")],
+      ["Plan holder and spouse", doc("Product Summary", "SCHEDULE PAGE\nPolicy number: 70012345\nInsured: Plan holder and spouse")],
+      ["Refer to page 2", doc("SCHEDULE PAGE\nPOLICY NUMBER\t70011111\nLIFE INSURED: Refer to page 2")],
+      ["To Be Advised", doc("SCHEDULE PAGE\nPOLICY NUMBER\t70011112\nINSURED: To Be Advised")],
+      ["specimen", doc("SPECIMEN\nSCHEDULE PAGE\nPOLICY NUMBER\t70000000\nLIFE INSURED\tJohn Sample")],
+      ["group number with a word between", doc("SCHEDULE PAGE\nGroup Insurance Policy Number: G120034\nPolicyholder: Lim Wei Jie")],
+      ["company policyholder", doc("SCHEDULE PAGE\nPolicy number: 70012345\nPolicyholder: Example Union Pte Ltd")],
+      ["person label mid-sentence", doc("SCHEDULE PAGE\nPolicy No. must be quoted: 70012345.\nThe Insured Person Whose Claim Is Approved")],
+      ["no number", doc("SCHEDULE PAGE\nPOLICY NUMBER\nLIFE INSURED\tTAN MEI LING")],
+    ];
+    for (const [name, pages] of notSchedules) {
+      assert.equal(schedulePage(pages), null, name);
+      assert.notEqual(deterministicDocumentRole(pages, null), "personal_schedule", name);
+    }
+    const plainLetter = doc("Example Life\n8 Example Street\n3 APR 2026\nDear Mr Lee\nYour revised schedule page will be sent separately.\nPolicy number: 70012345\nYours sincerely\nClient Services");
+    assert.equal(correspondenceRole(plainLetter), "insurer_letter", "a letter that mentions its schedule page is still a letter");
+  });
+  await t("6: names as households print them, in any market", () => {
+    for (const [name, line] of [["MY", "Life Assured: Siti Aminah binti Ahmad"], ["IN", "LIFE INSURED\tKUMAR A/L RAJAN"], ["NL", "Policyholder: Jan van Dijk"], ["SG", "Assured\t: Tan Wei Jie, Daniel\tIdentity No."], ["UK", "Policy Owner  Mr James Whitfield"]]) {
+      assert.equal(schedulePage(doc("POLICY SCHEDULE\nPolicy No.: HB-2026-55120\n" + line)), 1, name);
+    }
+  });
+  await t("6: the schedule page is in the reading's sample even when every wording page outscores it on words", () => {
+    const rich = (n: number) => "Example Life\nClause " + n + "\nThe life insured, sum insured and premium (S$) are shown in the schedule page. Any endorsement forms part of this policy. Policy number means the number on the schedule page.";
+    const p = doc("Example Life\nYour Policy", packLetter, "SCHEDULE PAGE\nPOLICY NUMBER\t70098765\nOWNER\tLIM WEI JIE\nLIFE INSURED\tLIM WEI JIE", ...Array.from({ length: 54 }, (_, i) => rich(i + 1)));
+    assert.match(compactSample(p, 7_500, 2_200), /--- PAGE 3 ---\nSCHEDULE PAGE/);
+  });
+
   if (failed.length) { console.error(`document role regressions FAILED: ${failed.length} of ${cases + failed.length}`); process.exit(1); }
   console.log(`document role regressions passed: ${cases} cases`);
 }
