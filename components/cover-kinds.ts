@@ -75,6 +75,25 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
+/** What each document was found to pay for (Documents page), for a household on the benefit table: the kinds of cover
+ * (kindsOfTable, the rules Family uses) of the table rows read from that document, and of the covers printed in it. Its
+ * Coverage rows are no longer read or refreshed, so they are never used for it. A document with no table row or cover is
+ * not listed: nothing is shown for it. */
+export function documentTableKinds(people: { rows?: (TableKindRow & { source?: { documentId?: string | null } | null })[];
+  covers?: (TableKindCover & { source?: { documentId?: string | null } | null })[] }[]): Record<string, string[]> {
+  const rows = new Map<string, TableKindRow[]>(), covers = new Map<string, TableKindCover[]>();
+  for (const p of people) {
+    for (const r of p.rows ?? []) { const id = r.source?.documentId; if (id) (rows.get(id) ?? rows.set(id, []).get(id)!).push(r); }
+    for (const c of p.covers ?? []) { const id = c.source?.documentId; if (id) (covers.get(id) ?? covers.set(id, []).get(id)!).push(c); }
+  }
+  const out: Record<string, string[]> = {};
+  for (const id of new Set([...rows.keys(), ...covers.keys()])) {
+    const kinds = kindsOfTable(rows.get(id) ?? [], covers.get(id) ?? []);
+    if (kinds.length) out[id] = kinds;
+  }
+  return out;
+}
+
 /** The parts of a Coverage row (GET /api/ledger) these helpers read. */
 export type KindRow = { eventType: string; eventLabel?: string | null; detail?: string | null; origin?: string; status?: string };
 export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfName(`${row.eventLabel ?? ""} ${row.detail ?? ""}`) : coverKindOf(row.eventType);

@@ -6,7 +6,7 @@ import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } f
 import { customerError, customerMessage } from "@/components/customer-text";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
-import { documentFoundLabels, type KindRow } from "@/components/cover-kinds";
+import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 
 /* V1.1: the household library shows what each document is, whose it is and
@@ -182,7 +182,7 @@ export default function PoliciesPage() {
     return () => clearTimeout(timer);
   }, [loaded]);
 
-  // What each document was found to pay for (Coverage rows by document), and documents whose benefits are still
+  // What each document was found to pay for (benefit table or Coverage rows by document), and documents whose benefits are still
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
   const [found, setFound] = useState<Record<string, string[]>>({});
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
@@ -191,10 +191,17 @@ export default function PoliciesPage() {
       fetch("/api/family", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
     ]);
-    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { policyId: string | null; eventLabel: string; status: string })[]; reading?: { documents?: ReadingDocument[] } } | null) => {
+    // What each document was found to pay for. A household on the benefit table: from its table rows (documentTableKinds),
+    // never from its Coverage rows, which stopped updating; the table not loaded (an error, offline): no Found line.
+    // Otherwise from the Coverage rows; what only a plan type suggests is never shown as cover.
+    const table = fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null);
+    const ledger = fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null);
+    void Promise.all([table, ledger]).then(([t, l]: [{ enabled?: boolean; people?: Parameters<typeof documentTableKinds>[0] } | null, { rows?: (KindRow & { policyId: string | null; eventLabel: string; status: string })[] } | null]) => {
+      if (t?.enabled) return setFound(documentTableKinds(t.people ?? []));
+      if (t && l) setFound(documentFoundLabels(l.rows ?? []));
+    }).catch(() => undefined);
+    void ledger.then((l: { reading?: { documents?: ReadingDocument[] } } | null) => {
       if (!l) return;
-      // What a document was found to pay for. What only its plan type suggests is never shown as cover.
-      setFound(documentFoundLabels(l.rows ?? []));
       setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
     }).catch(() => undefined);
     setFamily(f.family ?? []);
