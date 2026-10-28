@@ -7535,3 +7535,18 @@ Checks on 7c4ee65, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
 
 Verdict: NOT READY. H1 must be fixed; M1 and M2 before merge if cheap.
+
+## R266: #153 re-check at 3a5fff0 (short-period premiums)
+
+R264 M1 is fixed. One-off now means only that the frequency word says so (single, one-off, "for the period"). A row with no frequency word and a printed period of 183 days or less is `shortPeriod`. It is never totalled and sets `complete=false`, and the note names it with its amount and period. Both the chat and the dashboard (`app/api/dashboard/route.ts:156`, through `complete` and `note`) carry this, so the Home total says it is incomplete instead of quietly shrinking. The new import of longDate from lib/chat/policy-status adds no cycle.
+
+Optional Lows:
+- **L1.** A trip that ended long ago keeps Home marked incomplete for good. That is the safe direction, because an ended short-period row could also be an old monthly statement. If it gets noisy, a later follow-up could drop ended short-period rows only when a newer record for the same policy exists.
+- **L2.** shortNote has no "and N more" past four, unlike missingNote. It also says "so it may be a one-off premium" when it names several premiums.
+- **L3.** The mutant gap the builder already named: the P4 fixture already has a missing policy, so dropping shortPeriod from `complete` survives. A P4 case with no missing policy would close it.
+
+Checks on 3a5fff0, run network-blocked with model keys stripped:
+- r5 19/19, identity mask passing, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
