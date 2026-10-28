@@ -7645,3 +7645,19 @@ Checks on ebd7ed4, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with main clean.
 
 Verdict: NOT READY (H1, H2). Add the probes above as negative controls.
+
+## R272: #154 at 3679205 (currency of the doubled cap)
+
+Still READY. The daily rate's currency is now read from its own printed words, and the cap must print the same stated currency. A bare "$" cap gives no row, and the US$-versus-S$ negative control is added.
+
+The builder flagged a pre-existing issue in dailyRateOf: a limit's derived daily row borrows the limit's currency, so "US$300 per day" under an S$ limit shows as S$300. That is a wrong-currency amount. It deserves its own small fix (use ownCurrency, and give no row when the currencies differ), as a separate PR rather than widening #154.
+
+## R273: #155 at 9e92988 (Test engineer F1 and F2)
+
+R270 M1 is fixed. With every word after the limit words on an allow-list, "less any amount already paid …" and "…, or the Sum Assured if that is lower" now give no row. The N087 control still gives S$800,000 with its scope.
+
+R270 H1 is still open at this head. All three wrong-benefit probes still give "Limit in total on Critical Illness Benefit claims: S$300,000":
+- an Accidental Death sentence inside 2.2;
+- the same sentence under an unnumbered "GENERAL PROVISIONS" heading;
+- "Appendix B …", which names no benefit.
+The fix is as in R270. Still NOT READY.
