@@ -8225,3 +8225,37 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - #165: own test 5/0, premium:table 16/0.
 - #166: own test 8, benefit-table 107/0, parity 10/0.
 - v11:customer-screens fails "chat: one direct answer…" on #164, and fails identically on main (not this PR's). The browser e2e was not run (no database in this container).
+
+## R308 — overnight batch 2 on main b865388, plus re-checks of #164 and #166
+
+| PR | head | verdict |
+|---|---|---|
+| #164 Documents drops guesses | ba61adf | READY. R307 M1 is fixed: the test waits for Family Shield's found line before checking that the guess is absent. L1 is fixed: no tsbuildinfo in the diff. L2 stays a suggestion. |
+| #166 Family drops an ended trip | 2b4dbee | READY. Ended rows are skipped before they are counted (TE E9), so a renewed trip with the same name still lists. Own test 10. |
+| #167 chat "still being read" | 8443134 | NOT READY (M1) |
+| #168 hide plan question | 8ad7e01 | READY |
+| #169 Found line from the table | 98386a4 (via 5d5f229, 606bd3f) | READY |
+| #170 Coverage unread notice | bf98c0b | NOT READY (M1, same cause as #167; M2) |
+| #171 no claim note on premium-only answers | 77b69b5 | READY |
+| #172 condition said once | 172fe23 | READY (conflicts with #171 on RowReport, as the lead said; re-run both tests on the stacked head) |
+| #173 failed-document advice | ed87556 | READY |
+
+**#167 M1 and #170 M1 — a stalled intake is "still being read" forever.** Both PRs treat processing_status in {uploaded, queued, extracting, indexing} as reading now, with no time limit. Intake can stall: app/api/policies/reprocess/route.ts already treats a document as stalled once no live job has run it for UNCLAIMED_STALL_MINUTES, or after 2 minutes with no update.
+- With #167, the chat would tell the household "still being read; ask again in a minute" every time they ask, for good.
+- With #170, Coverage now says "still being read … show here when DearPolicy has finished" and drops the Read again pointer. That pointer was the only way out of a stall.
+- Fix: count a document as still being read only while it is fresh, meaning updated_at is within the stall window (or a live job exists, as the reprocess route checks). A stale one keeps the earlier wording (could not be read / Read again).
+
+**#170 M2 (not blocking; owner call)** — a ready personal schedule or certificate with pages, but no stored table reading after 10 minutes, becomes "no_table": "isn't shown on this page; ask in chat". This is most likely a table reading that failed. The household's own proof of cover then stays off Coverage and the Home tiles with no way to get it read. The PR deliberately removes Read again because it re-reads and re-links every section at a model cost. Suggest that for personal-proof roles the note says plainly that the cover isn't on this page yet, and gives a way to recover.
+
+Notes from probing:
+- #168: no benefit-table or simple-chat path reads policy_members.benefit_tier. The only tier use is in member-tier.ts and the older ledger and chat paths, so hiding the picker only when both flags are on changes nothing the household sees. Stored tiers are kept.
+- #169: a cover takes rows of the same person by coverKey, or by product plus cover when both sides lack a key, so there is no cross-person bleed. If /api/benefit-table fails, no Found line is shown; nothing falls back to stale ledger rows.
+- #171: only rows that coverRows made are premium rows (WeakSet identity). A label also given for a benefit row is not counted as a premium. A table that has lost object identity keeps the note, which is the safe direction.
+- #172: a point is dropped only when every card it was said for shows the same words. If any card is missing, it is kept.
+- #173: the API passes only USER_ACTIONABLE_PROCESSING_ERRORS through verbatim, so exact matching covers every value the page can see; "Analysis stopped" maps to unknown. DOCUMENT_READING_SERVICE_MESSAGE is stored as processing_error only when no deferred read is scheduled (lib/rag/ingest.ts:1079), so dropping "will try again automatically" is correct. Password detection by exact string loses nothing, since the old regex only ever saw the same two strings.
+- No real names, insurers or ID numbers appear in any diff.
+
+Checks, each PR in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- every PR: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107/0, chat 107/0, r5 21/21.
+- own tests: still-reading 8, plan-choice pass, found-line 11, no-guessed 8, unread-notice 12, claim-note 9, conditions-twice 8, failed-advice 6.
+- pairwise merge-trees across #164 to #173 are clean except #171 × #172 (expected).
