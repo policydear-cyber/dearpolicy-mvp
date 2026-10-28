@@ -388,6 +388,15 @@ test("no plan on a schedule without numbers of its own is left out by an old pro
   assert.deepEqual(run([protector, saver], [{ policy_id: "doc-a", policy_number: null, product_name: null, amount: 50, insurer: null }]), [{ name: "Harbour Protector and Harbour Health Saver", why: "maybe_counted" }]);
   // One plan, a record from elsewhere printing the filed number: that plan's premium (filed number holds with one product).
   assert.deepEqual(run([saver], [{ policy_id: "r9", policy_number: "HL-0001001", product_name: "Something", amount: 50, insurer: "Harbour Life" }]), []);
+  // TE S5c and T6: an ended second plan does not stop a bare record, or the filed number, tying the live plan.
+  const endedSaver = cover({ ...none, product: "Harbour Health Saver", ended: "Surrendered 2025" } as never);
+  assert.deepEqual(run([protector, endedSaver], [{ policy_id: "doc-a", policy_number: null, product_name: null, amount: 50, insurer: null }]), []);
+  assert.deepEqual(run([protector, endedSaver], [{ policy_id: "r9", policy_number: "HL-0001001", product_name: null, amount: 50, insurer: "Harbour Life" }]), []);
+  // TE S5e: two policies of one plan, each printing its own number, a bare same-document record: neither hidden.
+  assert.deepEqual(run([cover({ ...none, product: "Harbour Protector", policyNumber: "HL-111" }), cover({ ...none, product: "Harbour Protector", policyNumber: "HL-222" })],
+    [{ policy_id: "doc-a", policy_number: null, product_name: null, amount: 50, insurer: null }]).map((x) => x.why), ["maybe_counted", "maybe_counted"]);
+  // TE S11: one plan on an ended page and a live page is named by its live cover's spelling.
+  assert.deepEqual(run([cover({ ...none, product: "HARBOUR PROTECTOR PLAN", endDate: "28/02/2026" }), cover({ ...none, product: "Harbour Protector" })]), [{ name: "Harbour Protector", why: "unread" }]);
   // TE S2: a read premium and a rider printing the same own number in another format: one policy.
   assert.deepEqual(run([cover({ product: "Harbour Protector", policyNumber: "HL001234" }), cover({ ...none, product: "Rider Wakaf", policyNumber: "hl-1234" })]), []);
   // TE S9: a premium read on another document never hides this one.
