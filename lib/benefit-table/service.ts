@@ -41,12 +41,14 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
 /** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
  * and for telling whether the table will ever read it. */
 export type DocumentFile = { original_filename: string; product_name: string | null; insurer: string | null; document_role: string | null;
-  policy_number: string | null; completed_at: string | null; quarantine: string | null };
+  policy_number: string | null; completed_at: string | null; quarantine: string | null;
+  /** The newest of the row's other times (updated_at, created_at): older rows have no completion time. */
+  touched_at: string | null };
 type HouseholdDoc = SourceDoc & { status: string; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string): Promise<HouseholdDoc[]> {
-  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, processing_completed_at, quarantine_status FROM policies
+  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, processing_completed_at, quarantine_status, updated_at, created_at FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
@@ -57,10 +59,11 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
     id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready",
     pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
-      policy_number: text(d.policy_number), completed_at: isoTime(d.processing_completed_at), quarantine: text(d.quarantine_status) },
+      policy_number: text(d.policy_number), completed_at: isoTime(d.processing_completed_at), quarantine: text(d.quarantine_status), touched_at: newest(d.updated_at, d.created_at) },
   }));
 }
 const text = (v: unknown) => (v == null ? null : String(v));
+const newest = (...vs: unknown[]) => vs.map(isoTime).filter((t): t is string => !!t).sort().pop() ?? null;
 const isoTime = (v: unknown) => { const t = v instanceof Date ? v.getTime() : typeof v === "string" ? Date.parse(v) : NaN; return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 /** Statuses of a document intake is still working on (lib/rag/ingest.ts); Read again puts a document back to "queued". */
@@ -78,14 +81,16 @@ export type DocumentState = "read" | "waiting" | "no_table" | "not_readable";
  * ready document whose reading was not stored in that time, are "no_table": nothing will read them by itself, so they are
  * never shown as unread or sent to Read again (nor as having no benefits: it may have some). A document the app could not read (failed, or an upload the scan rejected)
  * stays "not_readable". */
-export function documentState(d: { status: string; pages: number; file: Pick<DocumentFile, "document_role" | "completed_at" | "quarantine"> }, hasReading: boolean, now = Date.now()): DocumentState {
+export function documentState(d: { status: string; pages: number; file: Pick<DocumentFile, "document_role" | "completed_at" | "quarantine" | "touched_at"> }, hasReading: boolean, now = Date.now()): DocumentState {
   if (IN_INTAKE.has(d.status)) return SCAN_GOES_ON.has(d.file.quarantine ?? "") ? "waiting" : "not_readable";
   if (d.status !== "ready") return "not_readable";
   if (hasReading) return "read";
   if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) return "no_table";
   if (!d.pages) return "not_readable";
-  const done = d.file.completed_at == null ? NaN : Date.parse(d.file.completed_at);
-  return Number.isFinite(done) && now - done > TABLE_READ_WINDOW_MS ? "no_table" : "waiting";
+  // When intake finished; an older row with no completion time goes by its newest other time. No time at all: nothing
+  // shows it is being read, so it is never "waiting" for good.
+  const at = d.file.completed_at ?? d.file.touched_at, done = at == null ? NaN : Date.parse(at);
+  return Number.isFinite(done) && now - done <= TABLE_READ_WINDOW_MS ? "waiting" : "no_table";
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
