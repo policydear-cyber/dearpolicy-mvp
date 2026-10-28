@@ -138,6 +138,29 @@ test("B3 bare '$' rate, US$ limit: no US$ borrowed", () => {
   assert.ok(rates(rows).every((r) => r && r[1] === null), JSON.stringify(rates(rows)));
 });
 
+test("B4 bare '$' limit with a US$ rate on the line ('Up to $8,000, capped at US$200 per day'): the limit never borrows US$", () => {
+  const { rows } = build(lim({ line: "Overseas hospital cash\tUp to $8,000, capped at US$200 per day", value: 8000, sym: "$" }));
+  assert.ok(limits(rows).every((l) => l && l[1] !== "USD"), "limit " + JSON.stringify(limits(rows)));
+  assert.ok(!rates(rows).some((r) => r && r[1] === "USD" && limits(rows).some((l) => l && l[1] === "USD")), JSON.stringify(rates(rows)));
+});
+test("B5 the same bare-'$' line on a page declaring Singapore Dollars: the limit is SGD (declared), never USD", () => {
+  const { rows } = build(lim({ line: "Overseas hospital cash\tUp to $8,000, capped at US$200 per day", value: 8000, sym: "$", extra: "All amounts are in Singapore Dollars." }));
+  assert.ok(limits(rows).every((l) => l && l[1] !== "USD"), "limit " + JSON.stringify(limits(rows)));
+});
+test("B6 a limit printed in two currencies ('Up to S$8,000 (US$8,000 if overseas)'): never one picked by position alone", () => {
+  const { rows } = build(lim({ line: "Overseas hospital cash\tUp to S$8,000 (US$8,000 if overseas)", value: 8000, sym: "S$" }));
+  notes.push("B6 two-currency limit read as " + JSON.stringify(limits(rows)));
+});
+test("B7 the limit's own S$ wins over a different-value US$ figure printed first ('US$50 excess; up to S$8,000')", () => {
+  const { rows } = build(lim({ line: "Overseas hospital cash\tAn excess of US$50 applies; up to S$8,000", value: 8000, sym: "S$" }));
+  assert.ok(limits(rows).every((l) => l && l[1] === "SGD"), "limit " + JSON.stringify(limits(rows)));
+});
+
+test("N7 a rate printed twice in two currencies ('capped at S$200 per day (US$200 per day overseas)') gives no daily row", () => {
+  const { rows } = build(lim({ line: "Overseas hospital cash\tUp to S$8,000, capped at S$200 per day (maximum US$200 per day overseas)", value: 8000, sym: "S$" }));
+  assert.deepEqual(rates(rows), []);
+});
+
 // ------------------------------------------------------------ footnote
 test("F1 a footnote rate on another page ('* capped at S$200 per day') is not in the row's own words: no daily row (status quo)", () => {
   const pages = [{ page: 1, text: "TRAVEL CARE SUMMARY\nInsured\tWong Mei Yee\tPlan Standard\nOverseas hospital cash*\tUp to S$8,000\nEmergency phone\tS$100" }, { page: 3, text: "Notes\n* Capped at US$200 per day" }];
