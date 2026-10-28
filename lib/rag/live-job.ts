@@ -13,8 +13,9 @@ export const UNCLAIMED_STALL_MINUTES = 10;
 export const livePolicyJob = (j: string, minutes: string) =>
   `((${j}.status IN ('queued','failed_retryable') AND ${j}.available_at > now() - make_interval(mins => ${minutes}))
      OR (${j}.status='processing' AND ${j}.lease_expires_at > now()))`;
-/** SQL: true when the policy row (alias `p`) has a live intake job (livePolicyJob). Without one, a document in an
+/** SQL: true when the policy row (alias `p`) has a live intake job (livePolicyJob): its own, or the later re-read intake
+ * schedules after a reading-service failure (key `<id>:retry-read`, lib/rag/ingest.ts; TE). Without one, a document in an
  * in-progress status is stalled, not being read. Only server constants are written into the text. */
 export const policyJobLive = (p: string) =>
-  `EXISTS (SELECT 1 FROM background_jobs bj WHERE bj.job_type='${POLICY_PROCESSING_JOB_TYPE}' AND bj.idempotency_key=${p}.id::text
+  `EXISTS (SELECT 1 FROM background_jobs bj WHERE bj.job_type='${POLICY_PROCESSING_JOB_TYPE}' AND bj.idempotency_key IN (${p}.id::text, ${p}.id::text || ':retry-read')
      AND ${livePolicyJob("bj", String(UNCLAIMED_STALL_MINUTES))})`;

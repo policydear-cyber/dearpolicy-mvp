@@ -169,6 +169,16 @@ async function main() {
           await client.query(`UPDATE background_jobs SET ${job} WHERE job_type='policy_processing' AND idempotency_key=$1`, [id]);
         }
       }
+      // A document waiting for the re-read intake scheduled after a reading-service failure (`<id>:retry-read`, due in 30
+      // minutes) is being read, not stalled: Try again would read it twice (TE). A dead re-read is stalled.
+      for (const [file, set, want] of [["deferred.pdf", "available_at=now()+interval '30 minutes'", "waiting"], ["deferred-dead.pdf", "status='dead_letter'", "stalled"]] as const) {
+        const id = randomUUID();
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status)
+          VALUES($1,$2,$3,$4,$5,'queued','scan_clean')`, [id, acct, member, file, `test/${id}`]);
+        await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'policy_processing',$2,'{}'::jsonb)", [acct, id + ":retry-read"]);
+        await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='policy_processing' AND idempotency_key=$1`, [id + ":retry-read"]);
+        cases.push([file, "queued", null, null, want]);
+      }
       const got = await service.tableFor(async (sql, params) => (await client.query(sql, params as unknown[])).rows, acct);
       const by = Object.fromEntries(got.documents.map((d) => [d.name, d.state]));
       for (const [file, , , , want] of cases) assert.equal(by[file], want, file);
