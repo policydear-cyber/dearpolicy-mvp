@@ -7784,3 +7784,13 @@ READY.
 Checks on afcce98, run network-blocked with model keys stripped:
 - benefit-table chat 100/0, benefit-table 107/0, parity 10/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main clean.
+
+## R282: #156 at 3d2650c (Test engineer F4, and main merged)
+
+READY.
+- 9c50dba: once the known shapes are taken out (age limits including "under the age of 21", and "within 30 days"), any digit left in a condition or in the printed line becomes a word no list holds, so there is no total. "single" is off the harmless list. Both changes only refuse more.
+- 3d2650c merges main fb1a769, which closes my R280 blocker. package.json keeps both per-child-test and the #154 test script, and merge-tree with main is now clean.
+
+Checks on 3d2650c, run network-blocked with model keys stripped:
+- per-child 17/0, benefit-table chat 99/0 (includes #154's ICU tests), benefit-table 107/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes.
