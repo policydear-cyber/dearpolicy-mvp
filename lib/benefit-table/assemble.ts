@@ -58,7 +58,9 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
-  ended?: string | null };
+  ended?: string | null;
+  /** The first day of cover its document prints for the whole document (CheckedReading.periodFrom), when it prints one. */
+  documentPeriodFrom?: string | null };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
@@ -100,7 +102,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today) });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).

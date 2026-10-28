@@ -13,7 +13,8 @@
  */
 import { query } from "@/lib/db/client";
 import { annualisePremium } from "@/lib/insurance";
-import { SHORT_TERM_DAYS } from "@/lib/benefit-table/assemble";
+import { SHORT_TERM_DAYS, type PersonCover } from "@/lib/benefit-table/assemble";
+import { printedDay } from "@/lib/benefit-table/dates";
 import { longDate } from "@/lib/chat/policy-status";
 import { formatMoney, normalizeCurrencyCode, statedCurrencyCode } from "@/lib/format/currency";
 import { loadPolicyInventory, normalizedIdentifier } from "@/lib/policies/inventory";
@@ -30,7 +31,11 @@ export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amou
   oneOff: boolean;
   /** The record prints no payment frequency, only a short cover period: it may be a trip's one-off premium or one month of a
    * monthly plan, so it is never annualised or totalled, and the total says it leaves it out (Critic R264). */
-  shortPeriod: boolean };
+  shortPeriod: boolean;
+  /** Read from the premium line the policy's own document prints (its benefit table), not from a premium record. */
+  fromTable?: boolean;
+  /** Said with the premium: a first-year premium, and the premium from the next policy year. */
+  detail?: string | null };
 export type PremiumSummary = { monthly: number; annual: number; cashAnnual: number | null; medisaveAnnual: number | null; items: PremiumItem[];
   /** Premiums the record says are one-off (PremiumItem.oneOff): listed, never in the totals or treated as missing. */
   oneOff: PremiumItem[];
@@ -92,13 +97,70 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
       oneOff: isOneOffPremium(row), shortPeriod: isShortPeriodPremium(row), annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : annualisePremium(split.cash, row.frequency), medisaveAnnual: split.medisave == null ? null : annualisePremium(split.medisave, row.frequency) };
   });
 }
-export async function summarisePremiums(accountId: string, member: ClaimPerson): Promise<PremiumSummary> {
+/** The parts of a benefit-table cover its printed premium needs (lib/benefit-table/check.ts). */
+export type TablePremiumCover = Pick<PersonCover, "product" | "cover" | "plan" | "policyNumber" | "premium" | "premiumFrequency" | "currency" | "premiumCurrency" |
+  "premiumNote" | "firstYearPremium" | "startDate" | "documentPeriodFrom" | "source" | "premiumSource" | "ended">;
+const productKey = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const isoOfDay = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
+
+/** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
+ * its instalment premium and "Payment Frequency : Monthly" had no premium record, so Home said "Not known yet"). Only a
+ * premium the benefit table has checked against its page is used (one plain premium line for this life, check.ts), and only
+ * when what is paid now is certain; anything unsure is left out, never guessed:
+ * - a stated currency and a recurring payment frequency printed on the page (a single or unstated one is not yearly);
+ * - a page that prints a different first-year premium gives the first-year figure while today is in the first policy year,
+ *   and the other figure after, from the cover's own start date or its document's; with no start date it is left out;
+ * - one document per policy: two documents giving a premium for one product or policy number may be a renewal that
+ *   changed it, so neither is used;
+ * - never a policy a premium record already covers (by document, policy number or product), so nothing is counted twice.
+ * `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). */
+export function tablePremiumItems(covers: TablePremiumCover[], records: Pick<PremiumRecordRow, "policy_id" | "policy_number" | "product_name">[], member: { id: string }, today: number): PremiumItem[] {
+  const recordDocs = new Set(records.map((r) => r.policy_id).filter(Boolean));
+  const recordNumbers = new Set(records.map((r) => normalizedIdentifier(r.policy_number)).filter(Boolean));
+  const recordProducts = new Set(records.map((r) => productKey(r.product_name)).filter(Boolean));
+  const seen = new Set<string>(), found: { cover: TablePremiumCover; item: PremiumItem }[] = [];
+  for (const c of covers) {
+    if (c.premium == null || !(c.premium > 0) || c.ended) continue;
+    const documentId = c.source?.documentId;
+    if (!documentId || recordDocs.has(documentId) || (c.policyNumber && recordNumbers.has(normalizedIdentifier(c.policyNumber))) || recordProducts.has(productKey(c.product))) continue;
+    // One premium per policy line: a schedule read as two covers (a benefit and its death benefit) prints it once.
+    const key = [documentId, productKey(c.product), c.premium, (c.premiumSource ?? c.source).excerpt].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const currency = statedCurrencyCode(c.premiumCurrency === undefined ? c.currency : c.premiumCurrency);
+    if (!currency || !c.premiumFrequency || !RECURRING.test(c.premiumFrequency) || isOneOffPremium({ frequency: c.premiumFrequency })) continue;
+    let amount = c.premium, detail: string | null = null;
+    if (c.premiumNote || c.firstYearPremium != null) {
+      const start = printedDay(c.startDate ?? c.documentPeriodFrom ?? null);
+      if (c.firstYearPremium == null || start == null) continue;
+      const from = new Date(start * 86_400_000); from.setUTCFullYear(from.getUTCFullYear() + 1);
+      const anniversary = from.getTime() / 86_400_000;
+      if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
+    }
+    const annual = annualisePremium(amount, c.premiumFrequency);
+    found.push({ cover: c, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: null, product_name: c.product,
+      policy_number: c.policyNumber ?? null, frequency: c.premiumFrequency, payment_date: null, period_start: null, period_end: null, created_at: "", notes: null,
+      amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
+      oneOff: false, shortPeriod: false, fromTable: true, detail } });
+  }
+  // Two documents giving a premium for one policy (by product or printed policy number): which is current is not known.
+  const docsOf = (pick: (c: TablePremiumCover) => string) => {
+    const out = new Map<string, Set<string>>();
+    for (const { cover } of found) { const k = pick(cover); if (k) out.set(k, (out.get(k) ?? new Set()).add(cover.source.documentId)); }
+    return out;
+  };
+  const byProduct = docsOf((c) => productKey(c.product)), byNumber = docsOf((c) => normalizedIdentifier(c.policyNumber));
+  return found.filter(({ cover }) => (byProduct.get(productKey(cover.product))?.size ?? 0) <= 1 && (!normalizedIdentifier(cover.policyNumber) || (byNumber.get(normalizedIdentifier(cover.policyNumber))?.size ?? 0) <= 1)).map((x) => x.item);
+}
+
+export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
     `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes
        FROM premium_records pr
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
-  const all = summariseRecords(r.rows), items = all.filter((i) => !i.oneOff && !i.shortPeriod);
+  const fromTable = table ? tablePremiumItems(table.covers, r.rows, member, table.today) : [];
+  const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod);
   const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod);
   const annual = items.reduce((sum, item) => sum + item.annual, 0);
   const cashAnnual = items.some((i) => i.cashAnnual != null) ? items.reduce((sum, i) => sum + (i.cashAnnual ?? i.annual), 0) : null;
