@@ -250,9 +250,10 @@ const INTENSIVE_CARE = /\bicu\b|\bintensive\s+care\b|\bhigh\s+dependency\b|\bhdu
  * age, a plan, "not", "only", "excess") may change what the figure pays, so a clause holding one gives no row. */
 const INTENSIVE_CARE_WORDS = new Set(("note the a an this daily day cash income hospital benefit amount will be is shall doubled double twice "
   + "if when while whilst during insured person life assured hospitalised hospitalized confined admitted warded in into to "
-  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for and or overseas stay").split(" "));
+  + "intensive care unit icu hdu high dependency capped at up maximum max of limited per each payable paid pays for overseas stay").split(" "));
 /** One clause of a row's own words that prints the daily rate for a day in intensive care, or null: it names intensive care,
- * prints exactly one money figure, paid per day, holds no other number and only the words above. */
+ * prints exactly one money figure, paid per day, holds no other number and only the words above, and a figure with "doubled"
+ * is the cap printed after it. */
 export function intensiveCareRateOf(clause: string): { amount: number; currency: string | null } | null {
   if (!INTENSIVE_CARE.test(clause)) return null;
   const figures = moneyFiguresIn(clause);
@@ -263,6 +264,11 @@ export function intensiveCareRateOf(clause: string): { amount: number; currency:
   const rest = clause.slice(0, at) + " " + clause.slice(at + f.raw!.length);
   if (/\d/.test(rest)) return null;
   if (!(rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => INTENSIVE_CARE_WORDS.has(w))) return null;
+  // A clause that doubles the daily amount prints the ICU day's own figure only as the cap after it ("doubled if in intensive
+  // care, capped at S$400 per day"). A figure before the multiplier, or with no cap word between them, is the base rate
+  // ("S$200 per day, doubled in ICU"), never the ICU day's (Critic R265 H1).
+  const times = /\b(?:doubled|double|twice)\b/i.exec(clause);
+  if (times && !(times.index < at && /\b(?:capped|up\s+to|maximum|max|limited)\b/i.test(clause.slice(times.index, at)))) return null;
   return { amount: f.value, currency: f.currency !== "$" ? statedCurrencyCode(f.currency) : null };
 }
 /** Rows for a daily cash's intensive-care rate (see chatRows): from a printed row of the benefit that is not itself for
@@ -291,7 +297,8 @@ function intensiveCareRows(rows: ChatRow[], household: Household): TableRow[] {
       const found = locateQuote(household, clause, r.docIndex);
       if (!found || found.docIndex !== r.docIndex) continue;
       seen.add(key);
-      out.push({ ...r, benefit: `${r.benefit} in intensive care`, pays: "per_day", conditions: [], fromDay: null, maxDays: null,
+      // The clause is the row's condition: "doubled ..., capped at" says the figure is a cap, not what every ICU day pays (R265 M1).
+      out.push({ ...r, benefit: `${r.benefit} in intensive care`, pays: "per_day", conditions: [clause], fromDay: null, maxDays: null,
         figure: { kind: "printed", amount: rate.amount, currency: rate.currency, unit: "per_day", period: null },
         source: { ...r.source, page: found.page, excerpt: found.excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
     }

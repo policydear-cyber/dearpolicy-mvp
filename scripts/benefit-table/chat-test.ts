@@ -1656,9 +1656,11 @@ test("a daily cash whose own note prints an intensive-care rate gives that rate 
   assert.equal(rs.length, plain.length + 1);
   assert.deepEqual(rs.slice(0, plain.length).map((r) => [r.id, r.benefit]), plain.map((r) => [r.id, r.benefit]));
   assert.equal(rs.at(-1)!.benefit, "Daily hospital cash while overseas in intensive care");
+  // The clause is the row's own condition, so "doubled ..., capped at" goes with the figure (R265 M1).
+  assert.deepEqual(rs.at(-1)!.conditions, ["daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day"]);
   // The limit and its daily rate are unchanged.
   assert.deepEqual(rs.filter((r) => r.benefit === "Daily hospital cash while overseas").map((r) => r.figure.kind === "printed" ? [r.figure.amount, r.figure.unit] : null), [[8000, "up_to"], [200, "per_day"]]);
-  assert.match(renderTable(rs), /Daily hospital cash while overseas in intensive care \| S\$400 a day \| D\d+ page 7/);
+  assert.match(renderTable(rs), /Daily hospital cash while overseas in intensive care \| S\$400 a day \| conditions: daily income amount will be doubled if hospitalised in\s+intensive care, capped at S\$400 per day \| D\d+ page 7/);
   // Another market: a rate printed in brackets in the row's own line ("RM200 per day if confined in ICU").
   const myr = icuRows({ documentId: STAY, page: 2, benefit: "Hospital Income", conditions: [], excerpt: "Hospital Income\tRM100 per day (RM200 per day if confined in ICU)",
     figure: { kind: "printed", amount: 100, currency: "MYR", unit: "per_day", period: null } });
@@ -1672,7 +1674,12 @@ test("an intensive-care rate gives no row unless its words are provably only tha
     "capped at S$400 per day in intensive care, for at most 10 days", "S$400 per day in intensive care from the 3rd day",
     "S$400 per day in intensive care for insured persons aged 70 and above", "S$400 per day in intensive care for children only",
     "S$400 per day in intensive care is not payable for pre-existing conditions", "S$400 per day in intensive care, less an excess",
-    "S$400 per day for a companion while in intensive care", "S$400 per day in a private ward"])
+    "S$400 per day for a companion while in intensive care", "S$400 per day in a private ward",
+    // The base rate is never the ICU day's: a figure before "doubled", or with no cap word between them (Critic R265 H1).
+    "Daily hospital cash S$200 per day, doubled in ICU", "Daily hospital cash S$100 per day doubled if hospitalised in intensive care",
+    "S$150 per day, double if in ICU", "S$200 per day, twice this amount in ICU", "doubled in ICU to S$400 per day",
+    // "or" leaves which applies unsure.
+    "S$400 per day in ICU or the daily amount"])
     none({ conditions: [note], printed: note }, note);
   // Each of those clauses is refused for its words: with the words left out that make it unsure, it gives the row.
   assert.equal(icuOf(icuRows({ conditions: ["capped at S$400 per day in intensive care"], printed: "capped at S$400 per day in intensive care" })).length, 1);
