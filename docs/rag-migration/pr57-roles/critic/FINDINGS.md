@@ -7661,3 +7661,25 @@ R270 H1 is still open at this head. All three wrong-benefit probes still give "L
 - the same sentence under an unnumbered "GENERAL PROVISIONS" heading;
 - "Appendix B …", which names no benefit.
 The fix is as in R270. Still NOT READY.
+
+## R274: #155 at cd93f9e
+
+R270 H1 is fixed. The total's scope must now name the row's benefit (or say "this benefit") and name no other heading's benefit, and the clause ends at an unnumbered heading-like line. My probes:
+- these now give no row:
+  - an Accidental Death limit inside 2.2;
+  - the same limit under an unnumbered "GENERAL PROVISIONS";
+  - "Appendix B …";
+  - "Critical Illness and Death claims";
+  - a CI limit printed inside the Death clause;
+  - a "Waiting Period" sub-heading before the limit (conservative);
+- these give the right CI row:
+  - the "this benefit" scope gives S$300,000;
+  - the N087 control and the "Illnesses" plural each give S$800,000.
+
+R270 M1 stays fixed by the tail allow-list from 9e92988.
+
+Checks on cd93f9e, run network-blocked with model keys stripped:
+- benefit-table chat 103/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
