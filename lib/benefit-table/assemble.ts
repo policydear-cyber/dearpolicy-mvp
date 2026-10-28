@@ -59,8 +59,8 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
   ended?: string | null;
-  /** The first day of cover its document prints for the whole document (CheckedReading.periodFrom), when it prints one. */
-  documentPeriodFrom?: string | null };
+  /** The period of cover its document prints for the whole document (CheckedReading.periodFrom, periodTo), when printed. */
+  documentPeriodFrom?: string | null; documentPeriodTo?: string | null };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
@@ -84,7 +84,7 @@ const policyNumberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, ""
  * "00104455" and "104455"), or one printed as the other with a short suffix after a separator ("104455-01"). A number that
  * only starts with the other ("MT1001", "MT10011") is another policy (TE P152 F3). Unrelated-looking numbers stay apart, and
  * the tiles never add them up. */
-const samePolicyNumber = (a: string, b: string) => {
+export const samePolicyNumber = (a: string, b: string) => {
   if (policyNumberKey(a) === policyNumberKey(b)) return true;
   const suffixed = (long: string, short: string) => { const m = long.trim().match(/^(.*?)[\s\-/.]+([A-Za-z0-9]{1,3})$/); return !!m && policyNumberKey(m[1]) === policyNumberKey(short); };
   return suffixed(a, b) || suffixed(b, a);
@@ -102,7 +102,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).

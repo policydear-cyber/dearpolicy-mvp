@@ -13,9 +13,10 @@
  */
 import { query } from "@/lib/db/client";
 import { annualisePremium } from "@/lib/insurance";
-import { SHORT_TERM_DAYS, type PersonCover } from "@/lib/benefit-table/assemble";
+import { SHORT_TERM_DAYS, samePolicyNumber, type PersonCover } from "@/lib/benefit-table/assemble";
 import { printedDay } from "@/lib/benefit-table/dates";
-import { longDate } from "@/lib/chat/policy-status";
+import { longDate, printedStatus } from "@/lib/chat/policy-status";
+import { canonicalDeathInsurer } from "@/lib/claims/death-evidence";
 import { formatMoney, normalizeCurrencyCode, statedCurrencyCode } from "@/lib/format/currency";
 import { loadPolicyInventory, normalizedIdentifier } from "@/lib/policies/inventory";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -99,58 +100,102 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
 }
 /** The parts of a benefit-table cover its printed premium needs (lib/benefit-table/check.ts). */
 export type TablePremiumCover = Pick<PersonCover, "product" | "cover" | "plan" | "policyNumber" | "premium" | "premiumFrequency" | "currency" | "premiumCurrency" |
-  "premiumNote" | "firstYearPremium" | "startDate" | "documentPeriodFrom" | "source" | "premiumSource" | "ended">;
+  "premiumNote" | "firstYearPremium" | "firstYearFrom" | "startDate" | "endDate" | "documentPeriodFrom" | "documentPeriodTo" | "source" | "premiumSource" | "ended">;
+/** What the summary knows of a premium's document beyond the table: the insurer and policy number it was filed under (a
+ * cover the reading gave no number still has its document's), and whether its pages
+ * say the policy lapsed or ended (lib/chat/policy-status.ts printedStatus). */
+export type TablePremiumDocument = { insurer: string | null; policyNumber?: string | null; lapsedOrEnded: boolean };
+type RecordKey = Pick<PremiumRecordRow, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">;
 const productKey = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const isoOfDay = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
+/** How many times a year a premium is paid, for the frequency words a premium line prints, exactly as listed: any other
+ * wording ("6-monthly", "Bi-monthly", "Annual (paid by employer)", "10 years") gives none, so the premium is left out
+ * rather than multiplied by the first word known (TE pr158 F1). */
+const PERIODS_PER_YEAR: [RegExp, number][] = [
+  [/^(?:monthly|per month|a month|bulanan)$/, 12],
+  [/^(?:quarterly|per quarter)$/, 4],
+  [/^(?:half yearly|semi annual|semi annually)$/, 2],
+  [/^(?:yearly|annual|annually|per annum|p a|pa|a year|per year|tahunan)$/, 1],
+  [/^(?:weekly)$/, 52],
+  [/^(?:fortnightly)$/, 26],
+];
+export function premiumsPerYear(frequency: string | null | undefined): number | null {
+  const f = (frequency ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return PERIODS_PER_YEAR.find(([re]) => re.test(f))?.[1] ?? null;
+}
+/** Every word of the shorter name is in the longer: "Term Shield", "Lionrock Life Term Shield", "Term Shield Plan (with
+ * rider)" may all be one policy (TE pr158 F2). */
+function maySameProduct(a: string | null | undefined, b: string | null | undefined) {
+  const x = productKey(a).split(" ").filter(Boolean), y = productKey(b).split(" ").filter(Boolean);
+  if (!x.length || !y.length) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.every((w) => long.includes(w));
+}
+/** A printed number's letters and digits with the zeros that lead its digits dropped: "LT-00918273" and "LT918273". */
+const numberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/(^|[A-Z])0+(?=\d)/g, "$1");
+const maySamePolicy = (a: { number: string | null; product: string | null }, b: { number: string | null; product: string | null }) =>
+  (!!a.number && !!b.number && (samePolicyNumber(a.number, b.number) || numberKey(a.number) === numberKey(b.number))) || maySameProduct(a.product, b.product);
+const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
  * its instalment premium and "Payment Frequency : Monthly" had no premium record, so Home said "Not known yet"). Only a
  * premium the benefit table has checked against its page is used (one plain premium line for this life, check.ts), and only
  * when what is paid now is certain; anything unsure is left out, never guessed:
- * - a stated currency and a recurring payment frequency printed on the page (a single or unstated one is not yearly);
+ * - a stated currency, and a payment frequency from an exact list (premiumsPerYear);
+ * - a current document: the cover's or document's printed period runs to today or later, or, with no end printed, starts
+ *   within about thirteen months; never a document whose pages say the policy lapsed or ended (Critic R284 H2, M1);
  * - a page that prints a different first-year premium gives the first-year figure while today is in the first policy year,
- *   and the other figure after, from the cover's own start date or its document's; with no start date it is left out;
- * - one document per policy: two documents giving a premium for one product or policy number may be a renewal that
- *   changed it, so neither is used;
- * - never a policy a premium record already covers (by document, policy number or product), so nothing is counted twice.
- * `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). */
-export function tablePremiumItems(covers: TablePremiumCover[], records: Pick<PremiumRecordRow, "policy_id" | "policy_number" | "product_name">[], member: { id: string }, today: number): PremiumItem[] {
-  const recordDocs = new Set(records.map((r) => r.policy_id).filter(Boolean));
-  const recordNumbers = new Set(records.map((r) => normalizedIdentifier(r.policy_number)).filter(Boolean));
-  const recordProducts = new Set(records.map((r) => productKey(r.product_name)).filter(Boolean));
-  const seen = new Set<string>(), found: { cover: TablePremiumCover; item: PremiumItem }[] = [];
+ *   and the other figure after, counted from the cover's own start date or the policy start that page labels; with neither
+ *   it is left out, as a document's period may start at a renewal or a letter (Critic R284 M3, TE pr158 Y4);
+ * - never a policy a premium record of this person may be: the same document, a policy number that may be the same, a
+ *   product name whose words are all in the other's, the same amount, or the same insurer with no numbers to tell them
+ *   apart (Critic R284 H1, TE pr158 F2);
+ * - one premium per document and amount (one premium printed on two pages, or quoted by two covers, is one), and none at
+ *   all for a policy two documents give a premium (a renewal may have changed it) (TE pr158 F3, Critic R284 M2).
+ * `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). `leftOut` names what was left out as not
+ * known to be current, for the note. */
+export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKey[], member: { id: string }, today: number,
+  documents: Map<string, TablePremiumDocument> = new Map()): { items: PremiumItem[]; leftOut: string[] } {
+  const seen = new Set<string>(), leftOut: string[] = [];
+  const found: { cover: TablePremiumCover; item: PremiumItem }[] = [];
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
     const documentId = c.source?.documentId;
-    if (!documentId || recordDocs.has(documentId) || (c.policyNumber && recordNumbers.has(normalizedIdentifier(c.policyNumber))) || recordProducts.has(productKey(c.product))) continue;
-    // One premium per policy line: a schedule read as two covers (a benefit and its death benefit) prints it once.
-    const key = [documentId, productKey(c.product), c.premium, (c.premiumSource ?? c.source).excerpt].join("|");
+    if (!documentId) continue;
+    const doc = documents.get(documentId);
+    const amounts = [c.premium, c.firstYearPremium].filter((x): x is number => x != null);
+    const number = c.policyNumber ?? doc?.policyNumber ?? null;
+    if (records.some((r) => r.policy_id === documentId || maySamePolicy({ number, product: c.product }, { number: r.policy_number, product: r.product_name })
+      || amounts.some((a) => Math.abs(Number(r.amount) - a) < 0.005)
+      || (!!doc?.insurer && !!r.insurer && canonicalDeathInsurer(doc.insurer) === canonicalDeathInsurer(r.insurer) && (!number || !r.policy_number)))) continue;
+    const key = documentId + "|" + c.premium;
     if (seen.has(key)) continue;
     seen.add(key);
     const currency = statedCurrencyCode(c.premiumCurrency === undefined ? c.currency : c.premiumCurrency);
-    if (!currency || !c.premiumFrequency || !RECURRING.test(c.premiumFrequency) || isOneOffPremium({ frequency: c.premiumFrequency })) continue;
+    const perYear = premiumsPerYear(c.premiumFrequency);
+    if (!currency || !perYear || !c.premiumFrequency) continue;
+    const name = c.product;
+    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null), from = printedDay(c.startDate ?? c.documentPeriodFrom ?? null);
+    const current = to != null ? to >= today : from != null && today - from <= DOCUMENT_CURRENT_DAYS;
+    if (!current || doc?.lapsedOrEnded) { leftOut.push(name); continue; }
     let amount = c.premium, detail: string | null = null;
     if (c.premiumNote || c.firstYearPremium != null) {
-      const start = printedDay(c.startDate ?? c.documentPeriodFrom ?? null);
-      if (c.firstYearPremium == null || start == null) continue;
-      const from = new Date(start * 86_400_000); from.setUTCFullYear(from.getUTCFullYear() + 1);
-      const anniversary = from.getTime() / 86_400_000;
+      const start = printedDay(c.startDate ?? c.firstYearFrom ?? null);
+      if (c.firstYearPremium == null || start == null) { leftOut.push(name); continue; }
+      const next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
+      const anniversary = next.getTime() / 86_400_000;
       if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
     }
-    const annual = annualisePremium(amount, c.premiumFrequency);
-    found.push({ cover: c, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: null, product_name: c.product,
+    const annual = amount * perYear;
+    found.push({ cover: c, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: doc?.insurer ?? null, product_name: c.product,
       policy_number: c.policyNumber ?? null, frequency: c.premiumFrequency, payment_date: null, period_start: null, period_end: null, created_at: "", notes: null,
       amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
       oneOff: false, shortPeriod: false, fromTable: true, detail } });
   }
-  // Two documents giving a premium for one policy (by product or printed policy number): which is current is not known.
-  const docsOf = (pick: (c: TablePremiumCover) => string) => {
-    const out = new Map<string, Set<string>>();
-    for (const { cover } of found) { const k = pick(cover); if (k) out.set(k, (out.get(k) ?? new Set()).add(cover.source.documentId)); }
-    return out;
-  };
-  const byProduct = docsOf((c) => productKey(c.product)), byNumber = docsOf((c) => normalizedIdentifier(c.policyNumber));
-  return found.filter(({ cover }) => (byProduct.get(productKey(cover.product))?.size ?? 0) <= 1 && (!normalizedIdentifier(cover.policyNumber) || (byNumber.get(normalizedIdentifier(cover.policyNumber))?.size ?? 0) <= 1)).map((x) => x.item);
+  // A policy two documents give a premium (by a number or a name that may be the same): which is current is not known.
+  const items = found.filter(({ cover }) => !found.some((o) => o.cover.source.documentId !== cover.source.documentId
+    && maySamePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }))).map((x) => x.item);
+  return { items, leftOut: [...new Set(leftOut)] };
 }
 
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
@@ -159,7 +204,16 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
        FROM premium_records pr
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
-  const fromTable = table ? tablePremiumItems(table.covers, r.rows, member, table.today) : [];
+  let fromTable: PremiumItem[] = [], tableLeftOut: string[] = [];
+  if (table?.covers.some((c) => c.premium != null)) {
+    const ids = [...new Set(table.covers.filter((c) => c.premium != null).map((c) => c.source.documentId))];
+    const docs = await query<{ id: string; insurer: string | null; policy_number: string | null; expiry: string | null }>(`SELECT id::text AS id,insurer,policy_number,renewal_or_expiry_date::text AS expiry FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[])`, [accountId, ids]);
+    const pages = await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`, [accountId, ids]);
+    const todayIso = isoOfDay(table.today);
+    const documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
+      lapsedOrEnded: ["lapsed", "ended"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
+    ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers, r.rows, member, table.today, documents));
+  }
   const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod);
   const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod);
   const annual = items.reduce((sum, item) => sum + item.annual, 0);
@@ -183,6 +237,9 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     ? "The total " + (missingNote ? "also " : "") + "leaves out " + shortPeriod.slice(0, 4).map((i) => (i.product_name ?? i.insurer ?? "a policy") + " (" + (i.currencyStated ? formatMoney(i.amount, i.currency) : formatMoney(i.amount, null)) + " for " + longDate(i.period_start!) + " to " + longDate(i.period_end!) + ")").join(", ") +
       ": the record prints no payment frequency, so it may be a one-off premium and is not counted as a yearly one."
     : null;
-  const note = [missingNote, shortNote].filter(Boolean).join(" ") || null;
-  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, complete: missing.length === 0 && shortPeriod.length === 0 && items.length > 0, note };
+  const tableNote = tableLeftOut.length
+    ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " + tableLeftOut.slice(0, 4).join(", ") + ": the premium " + (tableLeftOut.length === 1 ? "its document prints" : "their documents print") + " may not be what is paid now."
+    : null;
+  const note = [missingNote, shortNote, tableNote].filter(Boolean).join(" ") || null;
+  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, complete: missing.length === 0 && shortPeriod.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
 }
