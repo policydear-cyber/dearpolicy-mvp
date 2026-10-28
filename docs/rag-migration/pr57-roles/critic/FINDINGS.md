@@ -7878,3 +7878,15 @@ Checks on ab58477, run network-blocked with model keys stripped:
 - r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
 - on ef57002 also monetary-boundary 32, roster 10/10, release 23/23, scenario 16/16;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R288: #159 at a3e93b7
+
+READY.
+- R287 M1 is fixed. whoIsCovered groups by document id and prints the name. So two equally named schedules for two people give two sentences, one family document that lists both still gives "covers Ann and Ben", and a repeat of the same sentence (one person's schedule and its renewal) is said once.
+- I accept leaving workflow.ts:2253 as is: a receipt's fallback kind differs from a schedule's, so a fallback name can't make them equal.
+- An ending now needs a digit in the number, so "N/A" and "TBA" give no ending.
+- Low, no change needed: a family document covering Ann and Ben next to a renewal that names only Ann gives two true sentences ("covers Ann and Ben. … covers Ann.").
+
+Checks on a3e93b7, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22, scenario 16/16, monetary-boundary 32;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
