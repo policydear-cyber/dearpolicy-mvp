@@ -5,6 +5,7 @@
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
 import { uncheckedText } from "@/lib/documents/layout-check";
+import { policyJobLive } from "@/lib/rag/live-job";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
@@ -26,6 +27,8 @@ export type HouseholdDocument = {
   processingStatus?: string | null;
   /** The upload's safety-scan status (sql/schema.sql quarantine_status), when read: a rejected upload is never read. */
   quarantineStatus?: string | null;
+  /** Whether a live intake job is reading it now (lib/rag/live-job.ts, the Documents page's rule), when read. */
+  readingLive?: boolean;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
@@ -52,7 +55,8 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
-            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.quarantine_status, f.display_name AS uploaded_for
+            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.quarantine_status, f.display_name AS uploaded_for,
+            ${policyJobLive("p")} AS reading_live
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
     [accountId]);
@@ -79,7 +83,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       insurer: text(d.insurer), productName: text(d.product_name), policyNumber: text(d.policy_number),
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
-      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status),
+      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status), readingLive: d.reading_live === true,
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
@@ -118,9 +122,16 @@ export const STILL_READING = "still being read; ask again in a minute";
 // is recorded but empty, keeps "could not be read".
 const READING_NOW = new Set(["uploaded", "queued", "extracting", "indexing"]);
 const SCAN_CAN_READ = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
-/** An unreadable document the app has not finished reading yet. Its text is not sent or quoted either. */
-export const stillReading = (doc: HouseholdDocument) => unreadable(doc) && READING_NOW.has(doc.processingStatus!) &&
+const inProgress = (doc: HouseholdDocument) => unreadable(doc) && READING_NOW.has(doc.processingStatus!) &&
   (doc.quarantineStatus === undefined || SCAN_CAN_READ.has(doc.quarantineStatus ?? ""));
+/** An unreadable document the app is reading right now: in progress, with a live intake job (the Documents page's rule,
+ * lib/rag/live-job.ts). Its text is not sent or quoted either. */
+export const stillReading = (doc: HouseholdDocument) => inProgress(doc) && doc.readingLive === true;
+/** In progress, but no job is reading it (its job died, its lease lapsed, or nothing claimed it): the Documents page
+ * calls it stalled and offers Try again. It keeps "could not be read", never "still being read". */
+export const stalledReading = (doc: HouseholdDocument) => inProgress(doc) && doc.readingLive !== true;
+/** A stalled document in a status the Documents page offers Try again for (app/api/policies/route.ts, inFlightIds). */
+export const offersTryAgain = (doc: HouseholdDocument) => stalledReading(doc) && ["queued", "extracting", "indexing"].includes(doc.processingStatus!);
 
 /** "page 3", "pages 3 and 4", "pages 2, 3 and 4". */
 export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;

@@ -25,7 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
-import { documentId, pageList, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
+import { documentId, offersTryAgain, pageList, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
@@ -1292,7 +1292,7 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const label = labelFor(household, d);
   const named = label === d.name ? d.name : `${label} (${d.name})`;
   const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
-    : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.`
+    : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}`
     : d.uncheckedPages?.length || d.partCheckedPages?.length ? `${named} was read in part:${d.uncheckedPages?.length ? ` ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
       // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
