@@ -124,18 +124,30 @@ export function premiumsPerYear(frequency: string | null | undefined): number | 
   const f = (frequency ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return PERIODS_PER_YEAR.find(([re]) => re.test(f))?.[1] ?? null;
 }
-/** Every word of the shorter name is in the longer: "Term Shield", "Lionrock Life Term Shield", "Term Shield Plan (with
- * rider)" may all be one policy (TE pr158 F2). */
+/** Every word of the shorter name is in the longer, and the shorter has two words or more: "Term Shield", "Lionrock Life
+ * Term Shield", "Term Shield Plan (with rider)" may all be one policy (TE pr158 F2); "Plan" alone says nothing (TE O3). */
 function maySameProduct(a: string | null | undefined, b: string | null | undefined) {
   const x = productKey(a).split(" ").filter(Boolean), y = productKey(b).split(" ").filter(Boolean);
-  if (!x.length || !y.length) return false;
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  return short.every((w) => long.includes(w));
+  return short.length >= 2 && short.every((w) => long.includes(w));
 }
 /** A printed number's letters and digits with the zeros that lead its digits dropped: "LT-00918273" and "LT918273". */
 const numberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/(^|[A-Z])0+(?=\d)/g, "$1");
-const maySamePolicy = (a: { number: string | null; product: string | null }, b: { number: string | null; product: string | null }) =>
-  (!!a.number && !!b.number && (samePolicyNumber(a.number, b.number) || numberKey(a.number) === numberKey(b.number))) || maySameProduct(a.product, b.product);
+type PolicyHint = { number: string | null; product: string | null; amounts?: number[]; insurer?: string | null };
+/** Whether two premiums are one policy's: "same" when both print a number and the numbers may be one (#152
+ * samePolicyNumber, or equal without leading zeros); "different" when both print numbers that differ, whatever their names
+ * say (TE O1, O4); otherwise "maybe" when the names may be one product, the amounts are equal, or the insurer is the same
+ * (Critic R284 H1, TE O2), and "different" when nothing links them. */
+function samePolicy(a: PolicyHint, b: PolicyHint): "same" | "maybe" | "different" {
+  if (a.number && b.number) return samePolicyNumber(a.number, b.number) || numberKey(a.number) === numberKey(b.number) ? "same" : "different";
+  if (maySameProduct(a.product, b.product)) return "maybe";
+  if ((a.amounts ?? []).some((x) => (b.amounts ?? []).some((y) => Math.abs(x - y) < 0.005))) return "maybe";
+  if (a.insurer && b.insurer && canonicalDeathInsurer(a.insurer) === canonicalDeathInsurer(b.insurer)) return "maybe";
+  return "different";
+}
+/** Why a table premium was left out, for the note: its document may not show what is paid now, it may be a policy whose
+ * premium is already counted, or two documents give it a premium. */
+export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" };
 const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
@@ -153,11 +165,11 @@ const DOCUMENT_CURRENT_DAYS = 396;
  *   apart (Critic R284 H1, TE pr158 F2);
  * - one premium per document and amount (one premium printed on two pages, or quoted by two covers, is one), and none at
  *   all for a policy two documents give a premium (a renewal may have changed it) (TE pr158 F3, Critic R284 M2).
- * `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). `leftOut` names what was left out as not
- * known to be current, for the note. */
+ * `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). `leftOut` names every premium left out for
+ * being unsure, with why, for the note: an unsure drop is never silent, so the total never looks complete without it. */
 export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKey[], member: { id: string }, today: number,
-  documents: Map<string, TablePremiumDocument> = new Map()): { items: PremiumItem[]; leftOut: string[] } {
-  const seen = new Set<string>(), leftOut: string[] = [];
+  documents: Map<string, TablePremiumDocument> = new Map()): { items: PremiumItem[]; leftOut: TableLeftOut[] } {
+  const seen = new Set<string>(), leftOut: TableLeftOut[] = [];
   const found: { cover: TablePremiumCover; item: PremiumItem }[] = [];
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
@@ -165,10 +177,12 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     if (!documentId) continue;
     const doc = documents.get(documentId);
     const amounts = [c.premium, c.firstYearPremium].filter((x): x is number => x != null);
-    const number = c.policyNumber ?? doc?.policyNumber ?? null;
-    if (records.some((r) => r.policy_id === documentId || maySamePolicy({ number, product: c.product }, { number: r.policy_number, product: r.product_name })
-      || amounts.some((a) => Math.abs(Number(r.amount) - a) < 0.005)
-      || (!!doc?.insurer && !!r.insurer && canonicalDeathInsurer(doc.insurer) === canonicalDeathInsurer(r.insurer) && (!number || !r.policy_number)))) continue;
+    const hint = { number: c.policyNumber ?? doc?.policyNumber ?? null, product: c.product, amounts, insurer: doc?.insurer ?? null };
+    // A record from this document, or with this policy's number, is this premium: it is already counted. One that may be
+    // this policy is not added again, and the note says so (TE O1-O4).
+    const overlap = records.map((r) => r.policy_id === documentId ? "same" : samePolicy(hint, { number: r.policy_number, product: r.product_name, amounts: [Number(r.amount)], insurer: r.insurer }));
+    if (overlap.includes("same")) continue;
+    if (overlap.includes("maybe")) { leftOut.push({ name: c.product, why: "maybe_counted" }); continue; }
     const key = documentId + "|" + c.premium;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -176,13 +190,16 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     const perYear = premiumsPerYear(c.premiumFrequency);
     if (!currency || !perYear || !c.premiumFrequency) continue;
     const name = c.product;
-    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null), from = printedDay(c.startDate ?? c.documentPeriodFrom ?? null);
+    // With no end printed, the latest printed start counts: a renewal's period may start years after the policy (TE Y6).
+    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
+    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
+    const from = starts.length ? Math.max(...starts) : null;
     const current = to != null ? to >= today : from != null && today - from <= DOCUMENT_CURRENT_DAYS;
-    if (!current || doc?.lapsedOrEnded) { leftOut.push(name); continue; }
+    if (!current || doc?.lapsedOrEnded) { leftOut.push({ name, why: "not_current" }); continue; }
     let amount = c.premium, detail: string | null = null;
     if (c.premiumNote || c.firstYearPremium != null) {
       const start = printedDay(c.startDate ?? c.firstYearFrom ?? null);
-      if (c.firstYearPremium == null || start == null) { leftOut.push(name); continue; }
+      if (c.firstYearPremium == null || start == null) { leftOut.push({ name, why: "not_current" }); continue; }
       const next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
       const anniversary = next.getTime() / 86_400_000;
       if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
@@ -193,10 +210,14 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
       amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
       oneOff: false, shortPeriod: false, fromTable: true, detail } });
   }
-  // A policy two documents give a premium (by a number or a name that may be the same): which is current is not known.
-  const items = found.filter(({ cover }) => !found.some((o) => o.cover.source.documentId !== cover.source.documentId
-    && maySamePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }))).map((x) => x.item);
-  return { items, leftOut: [...new Set(leftOut)] };
+  // A policy two documents give a premium (by a number, or a name, that may be one): which is current is not known.
+  const items: PremiumItem[] = [];
+  for (const { cover, item } of found) {
+    const twice = found.some((o) => o.cover.source.documentId !== cover.source.documentId
+      && samePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }) !== "different");
+    if (twice) leftOut.push({ name: cover.product, why: "two_documents" }); else items.push(item);
+  }
+  return { items, leftOut: leftOut.filter((x, i) => leftOut.findIndex((y) => y.name === x.name && y.why === x.why) === i) };
 }
 
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
@@ -205,7 +226,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
        FROM premium_records pr
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
-  let fromTable: PremiumItem[] = [], tableLeftOut: string[] = [];
+  let fromTable: PremiumItem[] = [], tableLeftOut: TableLeftOut[] = [];
   if (table?.covers.some((c) => c.premium != null)) {
     const ids = [...new Set(table.covers.filter((c) => c.premium != null).map((c) => c.source.documentId))];
     // Only current documents: a premium from a deleted or superseded one is never counted (no row, so it is left out below).
@@ -239,9 +260,15 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     ? "The total " + (missingNote ? "also " : "") + "leaves out " + shortPeriod.slice(0, 4).map((i) => (i.product_name ?? i.insurer ?? "a policy") + " (" + (i.currencyStated ? formatMoney(i.amount, i.currency) : formatMoney(i.amount, null)) + " for " + longDate(i.period_start!) + " to " + longDate(i.period_end!) + ")").join(", ") +
       ": the record prints no payment frequency, so it may be a one-off premium and is not counted as a yearly one."
     : null;
-  const tableNote = tableLeftOut.length
-    ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " + tableLeftOut.slice(0, 4).join(", ") + ": the premium " + (tableLeftOut.length === 1 ? "its document prints" : "their documents print") + " may not be what is paid now."
-    : null;
+  const WHY: Record<TableLeftOut["why"], [string, string]> = {
+    not_current: ["the premium its document prints may not be what is paid now", "the premiums their documents print may not be what is paid now"],
+    maybe_counted: ["it may be the policy of a premium already counted, so it is not added again", "they may be policies whose premiums are already counted, so they are not added again"],
+    two_documents: ["two of its documents print a premium, and which is current is not known", "two of their documents print a premium, and which is current is not known"],
+  };
+  const tableNote = (Object.keys(WHY) as TableLeftOut["why"][]).map((why) => {
+    const names = [...new Set(tableLeftOut.filter((x) => x.why === why).map((x) => x.name))];
+    return names.length ? names.slice(0, 4).join(", ") + ": " + WHY[why][names.length === 1 ? 0 : 1] : null;
+  }).filter(Boolean).map((part, i) => (i === 0 ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " : "It also leaves out ") + part + ".").join(" ") || null;
   const note = [missingNote, shortNote, tableNote].filter(Boolean).join(" ") || null;
   return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, complete: missing.length === 0 && shortPeriod.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
 }

@@ -65,7 +65,7 @@ test("a page that prints a first-year premium: that figure in the first policy y
   // A document's period may start at a renewal or a letter: it never starts the first policy year (Critic R284 M3, TE Y4).
   const renewal = { ...c, firstYearFrom: null, documentPeriodFrom: "01/10/2026" };
   assert.deepEqual(run([renewal]).items, []);
-  assert.deepEqual(run([renewal]).leftOut, ["Harbour Critical Illness"]);
+  assert.deepEqual(run([renewal]).leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
 });
 
 test("anything unsure is left out, never guessed", () => {
@@ -84,14 +84,14 @@ test("anything unsure is left out, never guessed", () => {
 test("a document that is not current, or says the policy lapsed or ended, gives no figure and is named (Critic R284 H2, M1)", () => {
   const old = cover({ documentPeriodFrom: "01/01/2019", documentPeriodTo: "31/12/2019" });
   assert.deepEqual(run([old]).items, []);
-  assert.deepEqual(run([old]).leftOut, ["Harbour Critical Illness"]);
+  assert.deepEqual(run([old]).leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
   assert.deepEqual(amounts([cover({ endDate: "01/10/2026" })]), [], "the cover's own printed end is past");
   assert.deepEqual(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: "01/01/2024" })]), [], "no end printed, and it started long ago");
   assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: "01/03/2026" })]).length, 1, "no end printed, started this year");
   assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: null })]).length, 0, "no period printed at all");
   const lapsed = new Map([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: true }]]);
   assert.deepEqual(amounts([cover({})], TODAY, [], lapsed), []);
-  assert.deepEqual(run([cover({})], TODAY, [], lapsed).leftOut, ["Harbour Critical Illness"]);
+  assert.deepEqual(run([cover({})], TODAY, [], lapsed).leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
 });
 
 test("a policy a premium record may be is never counted twice (TE pr158 F2, Critic R284 H1)", () => {
@@ -152,3 +152,24 @@ test("the first policy year starts at the policy start the premium's page labels
   assert.equal(read(page("Policy Issue Date\t: 20/10/2026")).firstYearFrom, null, "an issue date is not the start");
   assert.equal(read(page("Policy Effective Date\t: 19/10/2026\nCommencement Date : 01/11/2026")).firstYearFrom, null, "two different starts");
 });
+
+test("an unsure drop is always named; numbers that differ are different policies (TE pr158 O1-O4, Y6)", () => {
+  // O1: two policies of one product with different printed numbers are both counted.
+  assert.deepEqual(amounts([cover({ product: "Term Shield", policyNumber: "LT11112222", premium: 50 }), cover({ doc: "doc-b", product: "Term Shield", policyNumber: "LT33334444", premium: 80 })]).map((x) => x[1]), [50, 80]);
+  // Two documents that may be one policy: neither is counted, and both are named.
+  const twice = run([cover({}), cover({ doc: "doc-b", premium: 120 })]);
+  assert.deepEqual(twice.items, []); assert.deepEqual(twice.leftOut, [{ name: "Harbour Critical Illness", why: "two_documents" }]);
+  // O2: a record of the same amount for another insurer's numbered policy, against a numbered cover: different policies.
+  assert.equal(amounts([cover({ product: "Harbourline Saver", policyNumber: "HB-1" })], TODAY, [rec({ product_name: "Thamesgate Protect", amount: "100.00", policy_number: "TG-9" })]).length, 1);
+  // The same amount with no number to tell them apart: left out and named.
+  const same = run([cover({ product: "Harbourline Saver" })], TODAY, [rec({ product_name: "Thamesgate Protect", amount: "100.00" })]);
+  assert.deepEqual(same.items, []); assert.deepEqual(same.leftOut, [{ name: "Harbourline Saver", why: "maybe_counted" }]);
+  // O3: a record named just "Plan" does not stop "Hospital Plan".
+  assert.equal(amounts([cover({ product: "Hospital Plan" })], TODAY, [rec({ product_name: "Plan", amount: "12.00", insurer: null })]).length, 1);
+  // O4: a same-insurer record for a numbered policy, against a cover with no number anywhere: left out and named.
+  const ins = run([cover({ product: "Harbour Protect" })], TODAY, [rec({ product_name: "Harbour Saver Max", insurer: "Harbour Life", policy_number: "HL-55" })], new Map([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: false }]]));
+  assert.deepEqual(ins.leftOut, [{ name: "Harbour Protect", why: "maybe_counted" }]);
+  // Y6: a renewal period that started this year counts as current even when the policy started years ago.
+  assert.equal(amounts([cover({ startDate: "01/01/2024", documentPeriodFrom: "01/01/2026", documentPeriodTo: null })]).length, 1);
+});
+
