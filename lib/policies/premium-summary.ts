@@ -101,11 +101,16 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
 }
 /** The parts of a benefit-table cover its printed premium needs (lib/benefit-table/check.ts). */
 export type TablePremiumCover = Pick<PersonCover, "product" | "cover" | "plan" | "policyNumber" | "premium" | "premiumFrequency" | "currency" | "premiumCurrency" |
-  "premiumNote" | "firstYearPremium" | "firstYearFrom" | "startDate" | "endDate" | "documentPeriodFrom" | "documentPeriodTo" | "source" | "premiumSource" | "ended">;
+  "premiumNote" | "firstYearPremium" | "firstYearFrom" | "startDate" | "endDate" | "documentPeriodFrom" | "documentPeriodTo" | "documentKind" | "source" | "premiumSource" | "ended">;
 /** What the summary knows of a premium's document beyond the table: the insurer and policy number it was filed under (a
  * cover the reading gave no number still has its document's), and whether its pages
  * say the policy lapsed or ended (lib/chat/policy-status.ts printedStatus). */
-export type TablePremiumDocument = { insurer: string | null; policyNumber?: string | null; lapsedOrEnded: boolean };
+export type TablePremiumDocument = { insurer: string | null; policyNumber?: string | null; lapsedOrEnded: boolean;
+  /** Pages that say the policy ended (ENDED_WORDS): a premium printed on one is not a current cost. */
+  endedPages?: number[] };
+/** Words that say a policy has ended, said of it rather than of what may happen: "terminated with effect from", "cancelled
+ * your policy", "surrendered on", "void from inception", "no longer in force", an undated "has lapsed" (Critic R293 H1). */
+export const ENDED_WORDS = /\b(?:terminated|cancell?ed|surrendered)\b|\bvoid\s+(?:from|ab\s+initio)\b|\bno\s+longer\s+in\s+force\b|\b(?:has|had|have)\s+(?:been\s+)?lapsed\b|\blapsed\s+on\b/i;
 type RecordKey = Pick<PremiumRecordRow, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">;
 const productKey = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const isoOfDay = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
@@ -170,32 +175,34 @@ const DOCUMENT_CURRENT_DAYS = 396;
 export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKey[], member: { id: string }, today: number,
   documents: Map<string, TablePremiumDocument> = new Map()): { items: PremiumItem[]; leftOut: TableLeftOut[] } {
   const seen = new Set<string>(), leftOut: TableLeftOut[] = [];
-  const found: { cover: TablePremiumCover; item: PremiumItem }[] = [];
+  const found: { cover: TablePremiumCover; name: string; item: PremiumItem }[] = [];
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
     const documentId = c.source?.documentId;
     if (!documentId) continue;
     const doc = documents.get(documentId);
+    const name = c.product?.trim() || (doc?.insurer ? doc.insurer + " policy" : "one policy");
     const amounts = [c.premium, c.firstYearPremium].filter((x): x is number => x != null);
     const hint = { number: c.policyNumber ?? doc?.policyNumber ?? null, product: c.product, amounts, insurer: doc?.insurer ?? null };
     // A record from this document, or with this policy's number, is this premium: it is already counted. One that may be
     // this policy is not added again, and the note says so (TE O1-O4).
     const overlap = records.map((r) => r.policy_id === documentId ? "same" : samePolicy(hint, { number: r.policy_number, product: r.product_name, amounts: [Number(r.amount)], insurer: r.insurer }));
     if (overlap.includes("same")) continue;
-    if (overlap.includes("maybe")) { leftOut.push({ name: c.product, why: "maybe_counted" }); continue; }
+    if (overlap.includes("maybe")) { leftOut.push({ name, why: "maybe_counted" }); continue; }
     const key = documentId + "|" + c.premium;
     if (seen.has(key)) continue;
     seen.add(key);
     const currency = statedCurrencyCode(c.premiumCurrency === undefined ? c.currency : c.premiumCurrency);
     const perYear = premiumsPerYear(c.premiumFrequency);
     if (!currency || !perYear || !c.premiumFrequency) continue;
-    const name = c.product;
     // With no end printed, the latest printed start counts: a renewal's period may start years after the policy (TE Y6).
     const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
     const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
     const from = starts.length ? Math.max(...starts) : null;
     const current = to != null ? to >= today : from != null && today - from <= DOCUMENT_CURRENT_DAYS;
-    if (!current || doc?.lapsedOrEnded) { leftOut.push({ name, why: "not_current" }); continue; }
+    // Only a personal schedule or certificate shows what is paid now: never a letter, a wording or a bill (Critic R293 H1).
+    const page = (c.premiumSource ?? c.source).page;
+    if (!current || doc?.lapsedOrEnded || doc?.endedPages?.includes(page) || c.documentKind !== "personal_proof") { leftOut.push({ name, why: "not_current" }); continue; }
     let amount = c.premium, detail: string | null = null;
     if (c.premiumNote || c.firstYearPremium != null) {
       const start = printedDay(c.startDate ?? c.firstYearFrom ?? null);
@@ -205,17 +212,17 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
       if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
     }
     const annual = amount * perYear;
-    found.push({ cover: c, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: doc?.insurer ?? null, product_name: c.product,
+    found.push({ cover: c, name, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: doc?.insurer ?? null, product_name: c.product,
       policy_number: c.policyNumber ?? null, frequency: c.premiumFrequency, payment_date: null, period_start: null, period_end: null, created_at: "", notes: null,
       amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
       oneOff: false, shortPeriod: false, fromTable: true, detail } });
   }
   // A policy two documents give a premium (by a number, or a name, that may be one): which is current is not known.
   const items: PremiumItem[] = [];
-  for (const { cover, item } of found) {
+  for (const { cover, name, item } of found) {
     const twice = found.some((o) => o.cover.source.documentId !== cover.source.documentId
       && samePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }) !== "different");
-    if (twice) leftOut.push({ name: cover.product, why: "two_documents" }); else items.push(item);
+    if (twice) leftOut.push({ name, why: "two_documents" }); else items.push(item);
   }
   return { items, leftOut: leftOut.filter((x, i) => leftOut.findIndex((y) => y.name === x.name && y.why === x.why) === i) };
 }
@@ -234,6 +241,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     const pages = await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`, [accountId, ids]);
     const todayIso = isoOfDay(table.today);
     const documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
+      endedPages: pages.rows.filter((p) => p.policy_id === d.id && ENDED_WORDS.test(p.text)).map((p) => p.page_number),
       lapsedOrEnded: ["lapsed", "ended"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }

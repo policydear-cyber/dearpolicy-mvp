@@ -60,7 +60,9 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
   ended?: string | null;
   /** The period of cover its document prints for the whole document (CheckedReading.periodFrom, periodTo), when printed. */
-  documentPeriodFrom?: string | null; documentPeriodTo?: string | null };
+  documentPeriodFrom?: string | null; documentPeriodTo?: string | null;
+  /** What its document is (CheckedReading.kind): a premium is taken for Home only from a personal schedule or certificate. */
+  documentKind?: CheckedReading["kind"] };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
@@ -102,7 +104,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).

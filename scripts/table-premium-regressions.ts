@@ -18,7 +18,7 @@ const src = (documentId: string, excerpt = "Instalment Premium : 100.00") => ({ 
 const cover = (over: Partial<TablePremiumCover> & { doc?: string }): TablePremiumCover => {
   const { doc = "doc-a", ...rest } = over;
   return { product: "Harbour Critical Illness", cover: "Critical Illness Benefit", plan: null, policyNumber: null, premium: 100, premiumFrequency: "Monthly", currency: "SGD",
-    premiumCurrency: "SGD", premiumNote: null, firstYearPremium: null, firstYearFrom: null, startDate: null, endDate: null, documentPeriodFrom: "01/03/2026", documentPeriodTo: "01/03/2046",
+    premiumCurrency: "SGD", premiumNote: null, firstYearPremium: null, firstYearFrom: null, startDate: null, endDate: null, documentPeriodFrom: "01/03/2026", documentPeriodTo: "01/03/2046", documentKind: "personal_proof",
     source: src(doc) as never, premiumSource: null, ended: null, ...rest };
 };
 type Rec = { policy_id: string | null; policy_number: string | null; product_name: string | null; amount: string; insurer: string | null };
@@ -171,5 +171,24 @@ test("an unsure drop is always named; numbers that differ are different policies
   assert.deepEqual(ins.leftOut, [{ name: "Harbour Protect", why: "maybe_counted" }]);
   // Y6: a renewal period that started this year counts as current even when the policy started years ago.
   assert.equal(amounts([cover({ startDate: "01/01/2024", documentPeriodFrom: "01/01/2026", documentPeriodTo: null })]).length, 1);
+});
+
+test("only a personal schedule or certificate gives a current premium; a page that says the policy ended gives none (Critic R293 H1, M1)", async () => {
+  const { ENDED_WORDS } = await import("@/lib/policies/premium-summary");
+  for (const kind of ["letter", "policy_wording", "bill_or_receipt", "other", undefined] as const) {
+    const r = run([cover({ documentKind: kind })]);
+    assert.deepEqual(r.items, [], String(kind)); assert.deepEqual(r.leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }], String(kind));
+  }
+  for (const t of ["Your policy was terminated with effect from 1 October 2026", "We have cancelled your policy on 3 Sept 2026", "The policy was surrendered on 2 May 2026",
+    "This policy is void from inception", "Your policy is no longer in force", "Your policy has lapsed", "The plan lapsed on 1 Oct 2026"]) assert.match(t, ENDED_WORDS, t);
+  // Words about what may happen, or a schedule's footnote, do not end a policy.
+  for (const t of ["THE SUM INSURED DOES NOT REPRESENT THE AMOUNT TO BE PAID OUT FOR CLAIMS OR SURRENDER", "The policy will lapse if premiums are unpaid", "You may cancel within the free-look period",
+    "Termination of policy: see clause 9", "Instalment Premium : 470.85"]) assert.doesNotMatch(t, ENDED_WORDS, t);
+  const ended = run([cover({})], TODAY, [], new Map([["doc-a", { insurer: null, lapsedOrEnded: false, endedPages: [1] }]]));
+  assert.deepEqual(ended.items, []); assert.deepEqual(ended.leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
+  assert.equal(run([cover({})], TODAY, [], new Map([["doc-a", { insurer: null, lapsedOrEnded: false, endedPages: [7] }]])).items.length, 1, "another page of the document");
+  // A cover with no product name is named by its insurer, or as one policy (never an empty name in the note).
+  assert.deepEqual(run([cover({ product: "", documentKind: "letter" })], TODAY, [], new Map([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: false }]])).leftOut, [{ name: "Harbour Life policy", why: "not_current" }]);
+  assert.deepEqual(run([cover({ product: "", documentKind: "letter" })]).leftOut, [{ name: "one policy", why: "not_current" }]);
 });
 
