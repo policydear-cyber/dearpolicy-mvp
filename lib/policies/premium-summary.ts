@@ -236,13 +236,18 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
  * when a counted premium may be its policy (samePolicy). Documents the inventory already names as missing
  * (`namedDocumentIds`), and documents with a premium the table read (tablePremiumItems names those), are skipped. */
 export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<PremiumItem, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">[],
-  documents: Map<string, TablePremiumDocument>, namedDocumentIds: Set<string>): TableLeftOut[] {
+  documents: Map<string, TablePremiumDocument>, namedDocumentIds: Set<string>, today: number): TableLeftOut[] {
   const withPremium = new Set(covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended).map((c) => c.source?.documentId));
   const out: TableLeftOut[] = [], done = new Set<string>();
   for (const c of covers) {
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
     if (!documentId || !doc || done.has(documentId) || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
-    if (withPremium.has(documentId) || namedDocumentIds.has(documentId)) continue;
+    if (withPremium.has(documentId) || namedDocumentIds.has(documentId) || doc.endedPages?.includes(c.source.page)) continue;
+    // A cover whose printed period has ended, or that started more than about thirteen months ago with no end printed, is no
+    // current cost (tablePremiumItems' test). One with no dates printed is named: it is not known to have ended (TE pr163 N6-N8).
+    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
+    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
+    if (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS) continue;
     done.add(documentId);
     const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
     const overlap = counted.map((i) => i.policy_id === documentId ? "same" : samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: [Number(i.amount)], insurer: i.insurer }));
@@ -290,7 +295,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   missing = [...new Set(missing)];
   // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent.
   // Skipped when the inventory could not be read, as then which documents it names is not known.
-  if (table && inventoryRead) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds));
+  if (table && inventoryRead) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today));
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
     : null;

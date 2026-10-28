@@ -292,14 +292,14 @@ test("a current schedule's policy with no premium read and nothing counted for i
   const none = { premium: null, premiumFrequency: null, premiumCurrency: null };
   const covers = [cover({ ...none, product: "Harbour Protector" }), cover({ ...none, product: "Harbour Protector", cover: "Total and Permanent Disability" }),
     cover({ ...none, doc: "doc-b", product: "Pelan Lindung", currency: "MYR" }), cover({ ...none, doc: "doc-c", product: "", currency: "GBP" })];
-  assert.deepEqual(unreadPremiumCovers(covers, [], docs, new Set()), [{ name: "Harbour Protector", why: "unread" }, { name: "Pelan Lindung", why: "unread" }, { name: "Thames Mutual policy", why: "unread" }]);
+  assert.deepEqual(unreadPremiumCovers(covers, [], docs, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }, { name: "Pelan Lindung", why: "unread" }, { name: "Thames Mutual policy", why: "unread" }]);
 });
 
 test("a policy is not named as unread when its premium is counted, read, already named, or not a current personal schedule", () => {
   const docs = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-0042", lapsedOrEnded: false }], ["doc-e", { insurer: "Harbour Life", lapsedOrEnded: true }]]);
   const bare = cover({ premium: null, premiumFrequency: null, premiumCurrency: null, product: "Harbour Protector" });
   const item = (over: Record<string, unknown>) => ({ policy_id: null, policy_number: null, product_name: "Other Plan", amount: 50, insurer: "Gull Insurance", ...over });
-  const unread = (covers: TablePremiumCover[], counted: ReturnType<typeof item>[] = [], named = new Set<string>()) => unreadPremiumCovers(covers, counted as never, docs, named);
+  const unread = (covers: TablePremiumCover[], counted: ReturnType<typeof item>[] = [], named = new Set<string>()) => unreadPremiumCovers(covers, counted as never, docs, named, TODAY);
   assert.deepEqual(unread([bare], [item({ policy_id: "doc-a" })]), [], "a premium counted from this document");
   assert.deepEqual(unread([bare], [item({ policy_number: "HL 42" })]), [], "a record with this policy's number");
   assert.deepEqual(unread([bare], [], new Set(["doc-a"])), [], "already named as missing by the inventory");
@@ -309,6 +309,15 @@ test("a policy is not named as unread when its premium is counted, read, already
   assert.deepEqual(unread([{ ...bare, ended: "the cover ended" as never }]), [], "an ended cover is no current cost");
   assert.deepEqual(unread([{ ...bare, source: src("doc-e") as never }]), [], "a document whose pages say the policy ended");
   assert.deepEqual(unread([{ ...bare, source: src("doc-gone") as never }]), [], "a deleted or superseded document (not in the current documents)");
+  // A period that ended, or an old start with no end printed, is no current cost; no dates printed is named (TE pr163 N6-N8).
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: "28/02/2024" }]), [], "a period that ended");
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: null }]), [], "an old start, no end");
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: null, documentPeriodTo: null }]), [{ name: "Harbour Protector", why: "unread" }], "no dates printed");
+  const endedDocs = new Map([...docs, ["doc-t", { insurer: "Harbour Life", lapsedOrEnded: false, endedPages: [1] }]]);
+  assert.deepEqual(unreadPremiumCovers([{ ...bare, source: src("doc-t") as never }], [], endedDocs, new Set(), TODAY), [], "a page that says the policy was terminated");
+  // The cover's own number matches a record's (TE U11); an ended rider's premium does not mark its document as read (TE U12).
+  assert.deepEqual(unread([{ ...bare, policyNumber: "HL-0099" }], [item({ policy_number: "HL 99", insurer: "Gull Insurance" })]), []);
+  assert.deepEqual(unread([bare, cover({ product: "Harbour Protector Rider", ended: "the rider ended" as never })]), [{ name: "Harbour Protector", why: "unread" }]);
   // A counted premium that may be this policy (same insurer, numbers that cannot tell them apart): named as maybe counted.
   assert.deepEqual(unread([bare], [item({ insurer: "Harbour Life" })]), [{ name: "Harbour Protector", why: "maybe_counted" }]);
   // Plainly another policy: named as unread.
