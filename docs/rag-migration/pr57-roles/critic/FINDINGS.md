@@ -7748,3 +7748,19 @@ Optional Lows:
 Checks on 8a8dfcf, run network-blocked with model keys stripped:
 - per-child 17/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+## R279: #157 at e159247 (a limit's daily rate keeps its own currency; follow-up to R272)
+
+A limit's derived daily row now takes the rate's own printed currency:
+- a different stated currency gives no row;
+- a bare "$" leaves the currency null, where before it borrowed the limit's.
+That fixes "US$300 per day" under an S$ limit showing as S$300. The ICU path is unaffected: its `dailies` read ownCurrency first, and a null currency never matches a stated cap, so no row.
+
+Optional Low: ownCurrency takes the first figure with the same value anywhere in the excerpt. In a line such as "Capped at $200 per day … RM200 transport", it would give the bare-$ rate MYR. This is rare. Taking the currency at the rate's own position (the figure dailyRateOf matched) would be exact.
+
+Checks on e159247, run network-blocked with model keys stripped:
+- benefit-table chat 100/0, benefit-table 107/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- the per-child suite is not on main yet (#156);
+- tsc clean, next build passes, merge-tree with origin/main (fb1a769) clean.
+
+Verdict: READY.
