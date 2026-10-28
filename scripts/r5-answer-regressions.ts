@@ -31,7 +31,7 @@ import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
 import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
-import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { documentName, documentNames, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { drainStoragePurge, enqueueStoragePurge, PURGE_MAX_ATTEMPTS } from "@/lib/storage/purge";
 import { localCleanupDriver } from "@/lib/storage/cleanup";
 import type { ChatAnswer } from "@/types";
@@ -280,6 +280,17 @@ async function main() {
       // A company form is a word of its own (TE P159 F3).
       for (const n of ["Tesco", "Zinc", "Seguros Mexico", "Allianz Morocco"]) assert.equal(insurerShortName(n), n);
       assert.equal(insurerShortName("Contoh Insurans Sdn. Bhd."), "Contoh Insurans");
+      // Two policies named by insurer and kind alone are told apart, by policy number, else by their file names as before (Critic R285 H1).
+      const two = (a: string | null, b: string | null) => [...documentNames([
+        { id: "a", product_name: null, original_filename: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: a },
+        { id: "b", product_name: null, original_filename: "output_202609281146053.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: b },
+        { id: "c", product_name: "Example Shield", original_filename: "x.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: null },
+        { id: "a", product_name: null, original_filename: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", insurer: "Example Life Ltd", document_role: "personal_schedule", policy_number: a },
+      ]).values()];
+      assert.deepEqual(two("EL-11-4821", "EL-22-9017"), ["Example Life policy schedule (ending 4821)", "Example Life policy schedule (ending 9017)", "Example Shield"]);
+      assert.deepEqual(two(null, null), ["817d6e8b 874f 4527 A45d 05e03adaf14c", "Output 202609281146053", "Example Shield"]);
+      assert.deepEqual(two("EL-11-4821", "EL-99-4821"), ["817d6e8b 874f 4527 A45d 05e03adaf14c", "Output 202609281146053", "Example Shield"], "the same ending tells nothing apart");
+      assert.equal(documentNames([{ id: "a", product_name: null, original_filename: "scan.pdf", insurer: "Example Life", document_role: "certificate", policy_number: "EL-1" }]).get("a"), "Example Life certificate", "one document needs no ending");
       assert.equal(insurerShortName("Example Assurance Company Singapore (Pte) Limited"), "Example Assurance Company Singapore");
       const doc = id(104);
       await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash)

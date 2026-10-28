@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentsByPerson, isGroupGuide, type PersonDocument } from "@/lib/chat/household-status";
-import { documentName } from "@/lib/policies/inventory";
+import { documentNames } from "@/lib/policies/inventory";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadMembers, loadPages } from "./store";
 
@@ -34,6 +34,7 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
       WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)
       ORDER BY p.created_at, p.id`, [accountId])).rows;
+  const unlinkedNames = documentNames(unlinkedRows);
   const all = [...[...byPerson.values()].flat().filter((d) => d.status === "ready").map((d) => d.id), ...unlinkedRows.filter((r) => r.processing_status === "ready").map((r) => r.id)];
   const pages = all.length ? await loadPages(accountId, [...new Set(all)], [1]) : [];
   const hashes = new Map((await loadDocs(accountId)).map((d) => [d.id, d.fileHash]));
@@ -48,7 +49,7 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
     reason: d.status === "password" ? UNREADABLE_WHY.password : d.status === "unreadable" ? UNREADABLE_WHY[d.reason ?? "scan"] ?? UNREADABLE_WHY.scan : d.status === "processing" ? "it is still being read" : null, evidence: d.status === "ready" ? titleOf(d.id) : null });
   return {
     people: members.map((m) => ({ id: m.id, name: m.displayName, short: m.preferredName?.trim() || m.displayName.split(/\s+/)[0], documents: (byPerson.get(m.id) ?? []).map(toDoc) })),
-    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: documentName(r), insurer: r.insurer?.trim() || null, filename: r.original_filename, role: r.document_role, kind: "unlinked" as const,
+    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: unlinkedNames.get(r.id)!, insurer: r.insurer?.trim() || null, filename: r.original_filename, role: r.document_role, kind: "unlinked" as const,
       readable: r.processing_status === "ready" ? "ready" as const : r.processing_status === "failed" ? "unreadable" as const : "processing" as const, reason: null, evidence: r.processing_status === "ready" ? titleOf(r.id) : null })),
   };
 }

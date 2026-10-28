@@ -20,7 +20,7 @@ import { printedRuleLines } from "./printed-rules";
 import { figurePremise, premiseLead, premiseOf } from "./premises";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { documentName, loadPolicyInventory, type PolicyContract } from "@/lib/policies/inventory";
+import { documentNames, loadPolicyInventory, type PolicyContract } from "@/lib/policies/inventory";
 import { loadBenefitCatalog, type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { MONEY_PATTERN, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "@/lib/chat/monetary-boundary";
@@ -667,7 +667,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // (One query: the plans the household's own "self" is a member of.)
   const selfPlans = new Set(args.people.length === 1 && groupish && personColumns.length ? (await query<{ policy_id: string }>(`SELECT pm.policy_id::text AS policy_id FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND f.relationship='self'`, [args.accountId]).catch(() => ({ rows: [] as { policy_id: string }[] }))).rows.map((r) => r.policy_id) : []);
   const columnsOf = (ids: Iterable<string>) => [...ids].some((id) => selfPlans.has(id)) ? personColumns : [];
-  const docName = (id: string) => { const d = docs.get(id); return d ? documentName(d) : "Policy document"; };
+  const docNames = documentNames([...docs.values()]);
+  const docName = (id: string) => docNames.get(id) ?? "Policy document";
   const pagesByDocEarly = new Map<string, { page: number; text: string }[]>();
   /** What kind of document a line comes from, when it is not the person's own schedule. */
   // (Round 7 port: an employer's group booklet that names its employees is still a booklet -- the
