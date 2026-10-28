@@ -318,8 +318,34 @@ test("a policy is not named as unread when its premium is counted, read, already
   // The cover's own number matches a record's (TE U11); an ended rider's premium does not mark its document as read (TE U12).
   assert.deepEqual(unread([{ ...bare, policyNumber: "HL-0099" }], [item({ policy_number: "HL 99", insurer: "Gull Insurance" })]), []);
   assert.deepEqual(unread([bare, cover({ product: "Harbour Protector Rider", ended: "the rider ended" as never })]), [{ name: "Harbour Protector", why: "unread" }]);
-  // A counted premium that may be this policy (same insurer, numbers that cannot tell them apart): named as maybe counted.
-  assert.deepEqual(unread([bare], [item({ insurer: "Harbour Life" })]), [{ name: "Harbour Protector", why: "maybe_counted" }]);
+  // The same insurer alone, another product: plainly unread (Critic R300 M1). A product that may be it: maybe counted.
+  assert.deepEqual(unread([bare], [item({ insurer: "Harbour Life" })]), [{ name: "Harbour Protector", why: "unread" }]);
+  assert.deepEqual(unread([bare], [item({ insurer: "Harbour Life", product_name: "Harbour Protector" })]), [{ name: "Harbour Protector", why: "maybe_counted" }]);
   // Plainly another policy: named as unread.
   assert.deepEqual(unread([bare], [item({ policy_number: "GI-77", product_name: "Gull Travel" })]), [{ name: "Harbour Protector", why: "unread" }]);
+});
+
+test("a combined schedule's second policy is named; a rider of a named plan is not; insurer alone is no 'maybe' (Critic R300)", () => {
+  const docs = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: false }]]);
+  const none = { premium: null, premiumFrequency: null, premiumCurrency: null };
+  const a = cover({ ...none, product: "Harbour Protector", policyNumber: "HL-1001" }), b = cover({ ...none, product: "Harbour Health Saver", policyNumber: "HL-2002" });
+  const names = (covers: TablePremiumCover[], counted: unknown[] = [], named: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = []) =>
+    unreadPremiumCovers(covers, counted as never, docs, new Set(), TODAY, named);
+  assert.deepEqual(names([a, b]), [{ name: "Harbour Protector", why: "unread" }, { name: "Harbour Health Saver", why: "unread" }]);
+  // One policy's premium read on the combined schedule: the other is still named.
+  assert.deepEqual(names([{ ...a, premium: 50, premiumFrequency: "Monthly", premiumCurrency: "SGD" }, b]), [{ name: "Harbour Health Saver", why: "unread" }]);
+  // A counted premium from this document with the other policy's number does not hide it.
+  assert.deepEqual(names([b], [{ policy_id: "doc-a", policy_number: "HL-1001", product_name: "Harbour Protector", amount: 50, insurer: "Harbour Life" }]), [{ name: "Harbour Health Saver", why: "unread" }]);
+  // A rider printed with no number of its own is the plan's: named once.
+  const docsNo = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]);
+  assert.deepEqual(unreadPremiumCovers([{ ...a, policyNumber: null }, cover({ ...none, product: "Harbour Protector", cover: "Waiver of Premium" })], [], docsNo, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);
+  // The same insurer, another product, no numbers: plainly unread, not "may be counted" (M1).
+  const plain = cover({ ...none, product: "Harbour Protector" });
+  assert.deepEqual(names([plain], [{ policy_id: null, policy_number: null, product_name: "Harbour Travel Basic", amount: 20, insurer: "Harbour Life" }]), [{ name: "Harbour Protector", why: "unread" }]);
+  // A product name that may be the counted one stays "may be counted".
+  assert.deepEqual(names([plain], [{ policy_id: null, policy_number: null, product_name: "Harbour Protector", amount: 20, insurer: "Harbour Life" }]), [{ name: "Harbour Protector", why: "maybe_counted" }]);
+  // A policy the inventory already names as missing, on another document, is not named twice (L1).
+  assert.deepEqual(names([a], [], [{ policy_number: "HL 1001", product_name: "Harbour Protector", insurer: "Harbour Life" }]), []);
+  assert.deepEqual(names([plain], [], [{ policy_number: null, product_name: "Harbour Protector", insurer: "Harbour Life" }]), []);
+  assert.deepEqual(names([plain], [], [{ policy_number: null, product_name: "Selat Shield", insurer: "Harbour Life" }]), [{ name: "Harbour Protector", why: "unread" }]);
 });

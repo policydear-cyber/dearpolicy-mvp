@@ -232,26 +232,39 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
 
 /** This person's policies the benefit table shows from a current personal schedule or certificate, but for which no premium
  * was read and nothing counted is theirs (28 Oct: two schedules whose premium figure could not be tied to its label were
- * neither counted nor named, so the total looked complete). Each is named once per document: "unread", or "maybe_counted"
- * when a counted premium may be its policy (samePolicy). Documents the inventory already names as missing
- * (`namedDocumentIds`), and documents with a premium the table read (tablePremiumItems names those), are skipped. */
+ * neither counted nor named, so the total looked complete). Each policy is named once: by document and policy (its number,
+ * else its product), so a second policy on a combined schedule is named too and a rider of the same plan is not (Critic
+ * R300 H2). "maybe_counted" when a counted premium may be its policy by number or product name, never by insurer alone (M1).
+ * Skipped: documents the inventory lists (`namedDocumentIds`) and policies it names as missing (`named`, L1), a policy
+ * whose premium the table read (tablePremiumItems names those), and a cover that has ended or whose page says it ended. */
 export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<PremiumItem, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">[],
-  documents: Map<string, TablePremiumDocument>, namedDocumentIds: Set<string>, today: number): TableLeftOut[] {
-  const withPremium = new Set(covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended).map((c) => c.source?.documentId));
+  documents: Map<string, TablePremiumDocument>, namedDocumentIds: Set<string>, today: number,
+  named: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = []): TableLeftOut[] {
+  const policyOf = (c: TablePremiumCover) => {
+    const number = c.policyNumber ?? documents.get(c.source?.documentId ?? "")?.policyNumber;
+    return (c.source?.documentId ?? "") + "|" + (number ? numberKey(number) : "p:" + productKey(c.product));
+  };
+  const withPremium = new Set(covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended).map(policyOf));
   const out: TableLeftOut[] = [], done = new Set<string>();
   for (const c of covers) {
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
-    if (!documentId || !doc || done.has(documentId) || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
-    if (withPremium.has(documentId) || namedDocumentIds.has(documentId) || doc.endedPages?.includes(c.source.page)) continue;
+    if (!documentId || !doc || done.has(policyOf(c)) || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
+    if (withPremium.has(policyOf(c)) || namedDocumentIds.has(documentId) || doc.endedPages?.includes(c.source.page)) continue;
     // A cover whose printed period has ended, or that started more than about thirteen months ago with no end printed, is no
     // current cost (tablePremiumItems' test). One with no dates printed is named: it is not known to have ended (TE pr163 N6-N8).
     const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
     const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
     if (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS) continue;
-    done.add(documentId);
+    done.add(policyOf(c));
     const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
-    const overlap = counted.map((i) => i.policy_id === documentId ? "same" : samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: [Number(i.amount)], insurer: i.insurer }));
-    if (overlap.includes("same")) continue;
+    // The same document is the same policy unless both print numbers that differ (a combined schedule's other policy).
+    const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
+      if (i.policy_id === documentId && !(c.policyNumber && i.policy_number && !samePolicyNumber(c.policyNumber, i.policy_number) && numberKey(c.policyNumber) !== numberKey(i.policy_number))) return "same";
+      const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
+      return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
+    };
+    const overlap = counted.map(link), already = named.map(link);
+    if (overlap.includes("same") || already.includes("same") || already.includes("maybe")) continue;
     out.push({ name: c.product?.trim() || (doc.insurer ? doc.insurer + " policy" : "one policy"), why: overlap.includes("maybe") ? "maybe_counted" : "unread" });
   }
   return out;
@@ -281,21 +294,23 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const cashAnnual = items.some((i) => i.cashAnnual != null) ? items.reduce((sum, i) => sum + (i.cashAnnual ?? i.annual), 0) : null;
   const medisaveAnnual = items.some((i) => i.medisaveAnnual != null) ? items.reduce((sum, i) => sum + (i.medisaveAnnual ?? 0), 0) : null;
   // Which of this person's policies have no premium evidence at all.
-  let missing: string[] = [], inventoryDocumentIds = new Set<string>(), inventoryRead = false;
+  let missing: string[] = [], inventoryDocumentIds = new Set<string>();
+  let missingPolicies: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = [];
   try {
     const inventory = await loadPolicyInventory(accountId, [member]);
     inventoryDocumentIds = new Set(inventory.contracts.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id)));
-    inventoryRead = true;
-    missing = inventory.contracts.filter((c) => {
+    const unpaid = inventory.contracts.filter((c) => {
       const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
       return !all.some((i) => (i.policy_id && ids.has(i.policy_id)) || (normalizedIdentifier(i.policy_number) && numbers.has(normalizedIdentifier(i.policy_number))));
-    }).map((c) => c.name);
+    });
+    missing = unpaid.map((c) => c.name);
+    missingPolicies = unpaid.flatMap((c) => c.documents.map((d) => ({ policy_number: d.policy_number, product_name: d.product_name ?? c.name, insurer: d.insurer })));
   } catch { missing = []; }
   missing = [...new Set(missing)];
-  // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent.
-  // Skipped when the inventory could not be read, as then which documents it names is not known.
-  if (table && inventoryRead) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today));
+  // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent;
+  // when the inventory could not be read, every such policy is named rather than none (Critic R300 L2).
+  if (table) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today, missingPolicies));
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
     : null;
