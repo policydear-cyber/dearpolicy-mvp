@@ -8079,3 +8079,29 @@ Checks on c3da070, run network-blocked with model keys stripped:
 Checks on 8c5e69b, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
 - tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R300 — #163 unread premium covers, 4bc052f: NOT READY (2 High, 1 Medium, 3 Low)
+
+**H1 — next build fails.** scripts/table-premium-regressions.ts:294:113 gives TS2322 "Type 'null' is not assignable to type 'string | undefined'" (the new test passes `product: null` to the `cover` helper). `tsc --noEmit` exits 2, and `next build` stops at "Failed to type check", so production would not deploy. Fix: widen the helper's product type, or pass `undefined`.
+
+**H2 — a second policy on one document is still left out silently** (premium-summary.ts unreadPremiumCovers: `done` and `withPremium` are keyed by document only). Made-up probes:
+- A: a combined schedule with Harbour Protector HL-1001 and Harbour Health Saver HL-2002, neither premium read. Only "Harbour Protector" is named, and Health Saver is silent.
+- B: the same schedule with HL-1001's premium read and HL-2002's not. Nothing is named. tablePremiumItems counts HL-1001, so the note looks complete without HL-2002.
+This is the defect the PR fixes, on a combined schedule, which is the layout plainPremiumLineCount already expects ("one per life, or per policy on a combined schedule"). Fix: key both sets by document plus policy (the cover's policy number, else the product key). Riders share their base plan's product and number, so they stay one entry.
+
+**M1 — "maybe" on the same insurer alone softens a real omission.** For an unread cover the hint has no amounts, so samePolicy gives "maybe" whenever neither side prints a number and the insurers match. Probe C: an unread Harbour Protector beside a counted record for Harbour Travel Basic (same insurer, other product, no numbers) gives maybe_counted. The note then says "it may be the policy of a premium already counted, so it is not added again", but there is no premium to add, and it reads as if the policy is counted. Fix: give maybe_counted only when maySameProduct links the names, and otherwise "unread". If the maybe wording stays, say "no premium could be read from its documents, and it may be the policy of a premium already counted". complete is false either way, so no figure is wrong.
+
+Low:
+- L1: when the same policy appears in the inventory under another document (say, the inventory lists a policy summary and the table shows an unconfirmed schedule of it), it can be named twice, under `missing` and as unread, with two different names. Suggest a samePolicy check against the inventory's missing contracts (their numbers and names).
+- L2: when the inventory cannot be read, the unread step is skipped silently, and complete can still be true. Suggest complete=false when `inventoryRead` is false and some table document had no premium.
+- L3: the policy_pages text query now runs for every table document on each Home load, not only for documents with a premium. That is fine for now but worth watching on large libraries.
+
+What checks out:
+- No wrong person: the covers come from this person's own benefit-table rows (dashboard route, tableFor → person.covers), and the records come from this member only.
+- No double naming against tablePremiumItems: every cover it handles has premium>0 and is not ended, and those documents are in withPremium.
+- Deleted and superseded documents are skipped, because they are not in `documents` (activePredicate, superseded_at).
+- An old schedule with no end date (probe D, start 2019) is named "unread". That is acceptable, since it may be a whole-life policy that is still held.
+
+Checks on 4bc052f, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium:table-test 18/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- **tsc exits 2 and next build fails (H1)**; merge-tree with main b865388 is clean.
