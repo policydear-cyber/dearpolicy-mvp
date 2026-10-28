@@ -215,7 +215,8 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
+type Count = { value: number; text: string; currencyResolved: boolean; count: number; payable: number; most: number | null; unit: string; rule: string };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
   /** A point about one file, or one person's files, stated from the library's record (libraryFact, libraryList). */
   libraryDoc?: number; libraryPerson?: string };
 
@@ -712,6 +713,124 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
 }
 
+/** What a figure printed per child could pay for the number of children the household's latest message gives
+ * (overnight run 23 Oct, N023: "how much in total if we have two kids" was refused; "S$5,000 per child (up to 2 children)"
+ * is S$10,000 for two). Read from the row's printed words alone, and only when they print exactly one money figure, the
+ * card's own, followed by "per child" (or "for each child", "per dependant"), at most one most-children figure ("up to 2
+ * children", "subject to a maximum of two children"), and no other limit (an overall or family limit, "up to S$5,000 per
+ * child", "whichever is less"). The count must be the only number of children the household's latest message gives. A
+ * count above the printed most is paid for the most. Anything less shows the figure per child as printed. */
+const CHILD_UNIT = String.raw`(?:dependant\s+|dependent\s+|eligible\s+)?(?:child(?:ren)?|dependants?|dependents?)`;
+const CHILD_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const CHILD_COUNT = String.raw`(\d{1,2}|${Object.keys(CHILD_WORDS).join("|")})`;
+const countValue = (v: string) => (/^\d+$/.test(v) ? Number(v) : CHILD_WORDS[v.toLowerCase()]);
+/** The number of children the household's message asks a total for ("how much in total if we have two kids"), or null.
+ * The number must be said once ("2 sons and 2 daughters" is four children, never two: Critic R271 H1) and the message
+ * must ask for a total for them all ("in total", "altogether", "both", "all of them"): a benefit paid on one child's own
+ * event ("if one of my 2 kids gets cancer") is never multiplied by every child (Critic R271 H2). */
+export function childrenSaid(message: string): number | null {
+  const q = message ?? "";
+  const counted = [...q.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "gi"))].map((m) => countValue(m[1]));
+  // A child added without a number ("2 sons and a daughter", "one more child", "twins") leaves the number unclear. A
+  // benefit's name ("the child education fund") adds no child.
+  const added = /\b(?:a|an|another|more|other|extra|plus|new)\s+(?:(?:young|little|baby|third|second|fourth)\s+)?(?:kid|kiddo|child|son|daughter|boy|girl|dependant|dependent|baby)\b|\b(?:twins|triplets|baby|babies|newborn|pregnant|expecting)\b/i.test(q);
+  if (counted.length !== 1 || added) return null;
+  const total = /\b(?:in\s+total|total(?:ly)?|altogether|all\s+together|combined|in\s+all|both|all\s+(?:of\s+)?(?:them|my|our|the)|for\s+(?:all|both|them)|for\s+the\s+(?:kids|children))\b/i.test(q);
+  // Every other word is one of a small set: question and total words, and the insured's own death or disability. Any
+  // other word (a name, "he", "one", "the elder", "hospitalised") may single out one child's own event, so no number is
+  // taken (Critic R275 H2: a list of single-child words always leaked).
+  const rest = q.replace(new RegExp(String.raw`\b${CHILD_COUNT}\s+(?:(?:young|little|small|school[-\s]?going|dependant|dependent|eligible|grown[-\s]?up)\s+)?(?:kids?|kiddos?|child(?:ren)?|sons?|daughters?|boys?|girls?|dependants?|dependents?)\b`, "i"), " ")
+    .replace(/\bchild(?:ren)?(?:['’]s)?\s+education\s+fund(?:\s+benefit)?\b/gi, " ").toLowerCase();
+  // Any other number left ("2 kids and 1 from my wife", "and 3 for my partner") leaves the count unclear (TE #156 F2).
+  if (new RegExp(String.raw`\d|\b(?:${Object.keys(CHILD_WORDS).join("|")})\b`, "i").test(rest)) return null;
+  if (!total || !(rest.match(/[a-z]+(?:['’][a-z]+)?/g) ?? []).every((w) => TOTAL_QUESTION_WORDS.has(w))) return null;
+  const n = counted[0];
+  return n >= 1 && n <= 10 ? n : null;
+}
+/** The words a question for a total for every child may hold besides its number of children (Critic R275 H2). */
+const TOTAL_QUESTION_WORDS = new Set(("how much many what whats what's is are was be would will could can does do did it its them there in total totally "
+  + "altogether all together both combined for of from to pay pays paid payable payout get gets got receive claim we us our my me i i'm im you your the "
+  + "have has had if when then and so this that benefit fund policy cover insurance amount sum money "
+  + "die dies died dying pass passes passed away death dead am become becomes disabled disability permanently totally accident accidental accidentally "
+  + "killed an wife husband spouse partner").split(" "));
+/** The per-child words printed right after a figure: "per child", "for each child", "each dependant". */
+const PER_CHILD = new RegExp(String.raw`^\s*(?:per|for\s+each|each|for\s+every)\s+${CHILD_UNIT}\b`, "i");
+const MOST_CHILDREN = new RegExp(String.raw`\(?\s*(?:up\s+to|subject\s+to\s+a\s+maximum\s+of|a\s+maximum\s+of|maximum\s+of|max(?:imum)?\.?(?:\s+of)?)\s+(?:\w+\s+)?\(?${CHILD_COUNT}\)?\s+${CHILD_UNIT}\s*\)?`, "gi");
+const OTHER_CHILD_LIMIT = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimit(?:ed)?\b|\bcapped\b|\baggregate\b|\boverall\b|\bin\s+total\b|\bper\s+(?:family|policy|household)\b|\bcombined\b/i;
+/** The words a condition may hold and still leave the total as printed per child: who counts as a child, and the insured's
+ * own death or disability as the event (TE #156 F1: "reduced by 50% after age 65", "payable once only, regardless of the
+ * number of children" each changed the total, and a list of limit words never held them all). Any other word stops it. */
+const HARMLESS_CONDITION_WORDS = new Set(("a an the of in into on to and or nor not no is are be been must should shall will may can if when where who whose which that this these "
+  + "child children child's children's dependant dependants dependent dependents son sons daughter daughters legitimate natural adopted step stepchild stepchildren legally "
+  + "unmarried married full time full-time student students studying study school education educational institution higher learning tertiary university "
+  + "including include includes age aged ages year years old below under up till until enlisted national service military "
+  + "insured person persons life assured member members policyholder he she his her their him they it its "
+  + "accident accidental accidentally bodily injury injuries sustains sustained result results resulting resulted caused due death dies die died dead "
+  + "disability disabled permanent permanently total totally becomes become "
+  + "with proof receipt relevant documents document required requires form forms prescribed insurer insurer's company company's us we our "
+  + "within days day months month from date event occurrence happening "
+  + "benefit benefits claim claims claimed claimable payable paid under scheme schemes core voluntary plan plans cover policy").split(" "));
+/** Words a figure's own line may print before it ("• Child Education Fund Benefit*", "pay child education fund of"). */
+const NAME_WORDS = new Set("benefit benefits the of for and fund allowance pay pays we will as provided clause".split(" "));
+/** An age limit ("aged 25 or younger", "younger than 21") names who counts as a child. "Older", "younger" and "only" on
+ * their own may pick one child ("payable to the younger child only"), so they are known only in these shapes, in "only
+ * if", and in "can only be claimed either under the Core Scheme or ..." (a choice of scheme, not of child) (TE #156 F3). */
+const AGE_LIMIT = /\b\d{1,2}\s*(?:years?\s*)?(?:old\s+)?(?:or|and)\s+(?:older|younger|above|below|under|over)\b|\b(?:younger|older)\s+than\s+\d{1,2}\b|\b(?:under|below)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?\d{1,2}\b/gi;
+/** A time to claim in ("within 30 days of death") changes no amount. */
+const CLAIM_WITHIN = /\bwithin\s+\d{1,3}\s+(?:days?|months?)\b/gi;
+/** The words of a condition or line, once the known shapes are taken out. A number left over ("payable to 1 child") is
+ * returned as a word no list holds, so it always stops the total (TE #156 F4). */
+const plainWordsOf = (t: string) => {
+  const rest = t.replace(AGE_LIMIT, " ").replace(CLAIM_WITHIN, " ").replace(/\bonly\s+(?=(?:if|when|where)\b)/gi, " ")
+    .replace(/\b(can|may)\s+only\s+be\s+(claimed|paid)\s+(?:either\s+)?under\b/gi, "$1 be $2 under");
+  return [...(rest.toLowerCase().match(/[a-z]+(?:['’-][a-z]+)*/g) ?? []), ...(/\d/.test(rest) ? ["#number"] : [])];
+};
+function countPays(found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[], conditions: ModelStatement["conditions"] = [], rowConditions: string[] = []): Count | null {
+  const count = childrenSaid(asked[0] ?? "");
+  const conditionTexts = [...conditions.flatMap((c) => [c.text, c.quote ?? ""]), ...rowConditions];
+  if (conditionTexts.some((t) => /%/.test(t) || !plainWordsOf(t).every((w) => HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, "")) || HARMLESS_CONDITION_WORDS.has(w)))) return null;
+  // A condition that states money or a limit ("the total payable under this benefit shall not exceed S$8,000") may cap
+  // the total: never multiplied past it (Critic R271 M1).
+  if ([...conditions, ...rowConditions.map((t) => ({ text: t, quote: null }))].some((c) => [c.text, c.quote ?? ""].some((t) => moneyFiguresIn(t).length > 0 || OTHER_CHILD_LIMIT.test(t) || /\b(?:total|exceed\w*|sum\s+of|amounts?\s+paid)\b/i.test(t)))) return null;
+  // One child is paid the amount printed per child: nothing to work out.
+  if (!count || count < 2 || amount.illustration || /^up\s+to\b/i.test(amount.text)) return null;
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!page) return null;
+  const row = rowWithContinuation(page.text, found.offset).replace(/\s+/g, " ");
+  const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
+  const rule = squash(row).text.includes(squash(quoted).text) ? row : quoted;
+  const figures = moneyFiguresIn(rule);
+  if (figures.length !== 1 || !sameValue(figures[0].value, amount.value)) return null;
+  const after = rule.slice(rule.indexOf(figures[0].raw ?? "") + (figures[0].raw ?? "").length);
+  const per = PER_CHILD.exec(after);
+  if (!per) return null;
+  const mosts = [...after.matchAll(MOST_CHILDREN)];
+  if (mosts.length > 1) return null;
+  const most = mosts.length ? countValue(mosts[0][1]) : null;
+  // Once the most-children words are taken out, no other limit is left (an overall limit is never multiplied past).
+  const rest = mosts.length ? rule.replace(mosts[0][0], " ") : rule;
+  if (OTHER_CHILD_LIMIT.test(rest) || CAP_BEFORE.test(rule.slice(0, rule.indexOf(figures[0].raw ?? "")))) return null;
+  // The line prints nothing but the benefit's name, the figure, "per child" and the most children: any other word after
+  // the figure ("shared equally among all children", "reduced by 50% after age 65") may change the total (TE #156 F1).
+  // A paragraph that prints the figure ("... pay child education fund of $5,000 per child, subject to a maximum of two
+  // children, provided the Dependant child is unmarried ...") may hold only who counts as a child and the insured's own
+  // event.
+  // The statement's own words never count: the model can echo the line (Critic R278 L1).
+  const harmless = (w: string) => NAME_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w) || HARMLESS_CONDITION_WORDS.has(w.replace(/['’]s$/, ""));
+  const tail = after.slice(per.index + per[0].length).replace(mosts.length ? mosts[0][0] : "", " ");
+  const before = rule.slice(0, rule.indexOf(figures[0].raw ?? ""));
+  if (/%/.test(tail + before) || !plainWordsOf(tail).every(harmless) || !plainWordsOf(before).every(harmless)) return null;
+  // Every number of children printed is the most: "(up to 2 children)" only.
+  const childNumbers = [...rule.matchAll(new RegExp(String.raw`\b${CHILD_COUNT}\)?\s+${CHILD_UNIT}\b`, "gi"))].map((m) => countValue(m[1]));
+  if (childNumbers.some((n) => n !== most)) return null;
+  const payable = most == null ? count : Math.min(count, most);
+  const value = Math.round(amount.value * payable * 100) / 100;
+  const sign = amount.text.replace(/[\d,.\s]+$/, "");
+  const unit = per[0].trim().replace(/\s+/g, " ").replace(/^(?:for\s+each|each|for\s+every)\b/i, "per").toLowerCase();
+  return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, count, payable, most, unit,
+    rule: `${amount.text} ${unit}${most != null ? `, for at most ${most} ${most === 1 ? "child" : "children"}` : ""}` };
+}
+
 type Billed = { raw: string; kind: RegExp | null };
 /** Where the household wrote a bill figure in this conversation, as money ("$800", "800 dollars"), or null. */
 function billWritten(bill: number, written: string[]): { q: string; value: number; currency: string; raw: string } | null {
@@ -1105,6 +1224,9 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
     conditions: readConditions(s.conditions), alternativeGroup: typeof s.alternativeGroup === "string" && s.alternativeGroup.trim() ? s.alternativeGroup.trim() : null,
     perDay: perDayOf(s.perDay),
     ofBill: s.ofBill && typeof s.ofBill === "object" && typeof (s.ofBill as { bill?: unknown }).bill === "string" ? { bill: (s.ofBill as { bill: string }).bill } : null,
+    // The benefit table row's own printed conditions, set by the row step (lib/benefit-table/chat.ts): only ever used to
+    // refuse more.
+    ...(Array.isArray(s.rowConditions) ? { rowConditions: asStrings(s.rowConditions) } : {}),
   }));
   return { bottomLine: o.bottomLine, statements, nextSteps: asStrings(o.nextSteps).slice(0, 3), question: typeof o.question === "string" && o.question.trim() ? o.question.trim() : null };
 }
@@ -1378,7 +1500,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
@@ -1532,6 +1654,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
         basis: `${st.rule} (${st.payable} × ${c.amount!.text}), for the stay you described`,
+        conditions, asOf: null, source, group: null,
+      });
+    }
+    if (c.count) {
+      const k = c.count, children = (n: number) => `${n} ${n === 1 ? "child" : "children"}`;
+      const said = k.payable < k.count
+        ? `For ${children(k.count)}, this pays for at most ${children(k.payable)}, if this benefit's conditions are met for each child.`
+        : `For ${children(k.count)}, this works out to ${k.payable} times the amount ${k.unit}, if this benefit's conditions are met for each child.`;
+      statements.push({
+        id: `s${i + 1}-count`, kind: "calculation", text: said, fullText: said, personName: c.person,
+        amount: { text: k.text, currencyResolved: k.currencyResolved, illustration: true },
+        basis: `${k.rule} (${k.payable} × ${c.amount!.text}), for the children you described`,
         conditions, asOf: null, source, group: null,
       });
     }

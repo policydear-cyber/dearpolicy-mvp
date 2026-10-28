@@ -32,7 +32,11 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   firstYearPremium?: number | null; firstYearSource?: Source | null; firstYearLabel?: string | null;
   /** The policy's start as the first-year premium's page labels it ("Policy Effective Date : 19/10/2026"), when that page
    * prints exactly one such date: the first policy year runs from it. */
-  firstYearFrom?: string | null };
+  firstYearFrom?: string | null;
+  /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
+   * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
+   * premium (premiumPartsOf). */
+  premiumParts?: { label: string | null; amount: number; source: Source }[] | null };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -48,6 +52,44 @@ const premiumLineLabel = (line: string, value: number) => {
 /** A policy's start date as a schedule labels it: "Policy Effective Date : 19/10/2026", "POLICY START DATE 27 JUN 2020",
  * "Commencement Date: 1 March 2026". */
 const POLICY_START = /\b(?:policy\s+(?:effective|start|commencement|inception)\s+date|(?:risk\s+)?commencement\s+date|date\s+of\s+commencement)[ \t]*[\t:][ \t:]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}[ \t]+[A-Za-z]{3,9}\.?,?[ \t]+\d{4})/gi;
+/** A schedule cell holding a premium: a figure with cents ("269.05"), never a date or a whole sum. */
+const PREMIUM_CELL = /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*\.\d{2}$/;
+const EMPTY_CELL = /^(?:-+|–+|—+|nil|n\/?a)?$/i;
+const DATE_CELL = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/;
+/** The parts of a cover's premium as its schedule line prints them (overnight run 23 Oct, N088, N092):
+ *   Comprehensive Critical\t300,000.00\t269.05\t19/10/2036\t...
+ *   Illness Benefit
+ *   - Health Extra\t---\t201.80\t19/10/2036\t---\t---
+ * The cover's line is the one page line whose cells hold its sum insured; its own premium (label null) is that line's one
+ * other cell with cents. The extras are the lines just below it (after any wrap of the cover's name) that open with a dash and print no
+ * sum, and exactly one cell with cents. Given only when the parts add up to the premium to the cent: anything else (two
+ * lines with the sum, a second premium-like cell, parts that do not add up) gives none. A part left out is a missing card,
+ * never a wrong one. */
+export function premiumPartsOf(text: string, sumInsured: number | null, premium: number): { label: string | null; amount: number; line: string }[] | null {
+  if (sumInsured == null) return null;
+  const lines = text.split("\n");
+  const cells = (l: string) => l.split("\t").map((c) => c.trim()).filter(Boolean);
+  const value = (c: string) => Number(c.replace(/[^\d.]/g, ""));
+  const own = lines.flatMap((l, i) => cells(l).slice(1).some((c) => /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*(?:\.\d{2})?$/.test(c) && Math.abs(value(c) - sumInsured) < 0.005) ? [i] : []);
+  if (own.length !== 1) return null;
+  const at = own[0], line = cells(lines[at]);
+  const sumAt = line.findIndex((c, k) => k > 0 && Math.abs(value(c) - sumInsured) < 0.005);
+  const basic = line.slice(sumAt + 1).filter((c) => PREMIUM_CELL.test(c));
+  if (basic.length !== 1 || !line.slice(sumAt + 1).every((c) => PREMIUM_CELL.test(c) || DATE_CELL.test(c) || EMPTY_CELL.test(c))) return null;
+  const parts: { label: string | null; amount: number; line: string }[] = [{ label: null, amount: value(basic[0]), line: lines[at] }];
+  for (let i = at + 1; i < lines.length && i <= at + 4; i++) {
+    const c = cells(lines[i]);
+    // The cover's name wrapped onto its own line ("Illness Benefit"): no cells, no figure.
+    if (c.length === 1 && !/\d/.test(c[0]) && !/^[-–—]/.test(c[0]) && i === at + 1) continue;
+    const name = /^[-–—]\s*([A-Za-z][A-Za-z &()/'-]{1,40})$/.exec(c[0] ?? "");
+    if (!name) break;
+    const figures = c.slice(1).filter((x) => PREMIUM_CELL.test(x));
+    if (figures.length !== 1 || !c.slice(1).every((x) => PREMIUM_CELL.test(x) || DATE_CELL.test(x) || EMPTY_CELL.test(x)) || !EMPTY_CELL.test(c[1] ?? "")) return null;
+    parts.push({ label: name[1].trim(), amount: value(figures[0]), line: lines[i] });
+  }
+  const total = Math.round(parts.reduce((t, p) => t + p.amount * 100, 0));
+  return parts.length > 1 && total === Math.round(premium * 100) ? parts : null;
+}
 
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
@@ -380,6 +422,14 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // date. Two different such dates on the page give none (Critic R284 M3).
     const starts = [...pageText(page).matchAll(POLICY_START)].map((x) => x[1].trim());
     c.firstYearFrom = new Set(starts.map((x) => printedDay(x))).size === 1 && printedDay(starts[0]) != null ? starts[0] : null;
+  }
+
+  for (const c of out.covers) {
+    if (c.premium == null || (c.premiumSource && c.premiumSource.page !== c.page) || otherLife(pageText(c.page), c.person, doc.people ?? [])) continue;
+    const parts = premiumPartsOf(pageText(c.page), c.sumInsured, c.premium);
+    const sources = parts?.map((p) => find(p.line.trim(), c.page));
+    if (parts && sources && sources.every((s) => s && s.page === c.page))
+      c.premiumParts = parts.map((p, i) => ({ label: p.label, amount: p.amount, source: sources[i]! }));
   }
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {

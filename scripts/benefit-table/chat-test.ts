@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -1626,6 +1626,113 @@ test("a limit whose own line prints one daily rate gives that rate as a row of i
   }
 });
 
+// ------------------------------------------------------------------ an intensive-care day's own daily rate (overnight run 23 Oct, N119)
+const TRIP = "aaaaaaaa-0000-0000-0000-000000000031", STAY = "aaaaaaaa-0000-0000-0000-000000000032";
+const ICU_NOTE = "(Note: daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day)";
+const HOUSE_ICU: Household = { ...HOUSE, documents: [...HOUSE.documents,
+  doc(TRIP, "Wayfarer travel summary.pdf", [{ page: 7, text: `Protecting you and your health\tSilver\tGold\tPlatinum\nDaily hospital cash while overseas\nCapped at S$200 per day\nS$5,000\tS$8,000\tS$10,000\n${ICU_NOTE}\nEmergency phone charges\tS$100\tS$200\tS$300` }]),
+  doc(STAY, "Rawat income terms.pdf", [{ page: 2, text: "Hospital Income\tRM100 per day (RM200 per day if confined in ICU)\nThe Life Assured must be confined for at least 24 hours." }]),
+] };
+function icuRows(o: { benefit?: string; excerpt?: string; conditions?: string[]; figure?: TableRowFigure; fromDay?: number | null; extra?: Partial<ChatRow>[]; documentId?: string; page?: number; printed?: string } = {}) {
+  const t = tableWith();
+  const person = t.people.find((p) => p.name === "Lim Ah Kow")!;
+  const base = person.rows.find((r) => r.benefit === "Ambulance Cost")!;
+  const row = { ...base, benefit: o.benefit ?? "Daily hospital cash while overseas", coverKey: "wayfarer|single trip|gold", product: "Wayfarer travel summary", cover: "Single Trip", plan: "Gold",
+    conditions: o.conditions ?? ["Capped at S$200 per day", ICU_NOTE], fromDay: o.fromDay ?? null, maxDays: null,
+    figure: o.figure ?? { kind: "printed" as const, amount: 8000, currency: "SGD", unit: "up_to" as const, period: null },
+    source: { documentId: o.documentId ?? TRIP, document: "Wayfarer travel summary.pdf", page: o.page ?? 7, excerpt: o.excerpt ?? "Capped at S$200 per day\nS$5,000\tS$8,000\tS$10,000" } };
+  const extra = (o.extra ?? []).map((x) => ({ ...row, ...x }));
+  // Words printed on the travel page too, so a clause is refused for its words and not only for not being found.
+  const house = o.printed ? { ...HOUSE_ICU, documents: HOUSE_ICU.documents.map((d) => d.policyId === TRIP ? { ...d, pages: d.pages.map((p) => ({ ...p, text: `${p.text}\n${o.printed}` })) } : d) } : HOUSE_ICU;
+  return chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, row, ...extra] as typeof p.rows } : p) }, house);
+}
+type TableRowFigure = ChatRow["figure"];
+const icuOf = (rs: ChatRow[]) => rs.filter((r) => /intensive care$/.test(r.benefit)).map((r) => [r.person, r.benefit, r.figure.kind === "printed" ? [r.figure.amount, r.figure.currency, r.figure.unit] : null, r.source.page]);
+test("a daily cash whose own note prints an intensive-care rate gives that rate as a row of its own, named for intensive care, last (N119)", () => {
+  const plain = icuRows({ conditions: [] });
+  const rs = icuRows();
+  assert.deepEqual(icuOf(rs), [["Lim Ah Kow", "Daily hospital cash while overseas in intensive care", [400, "SGD", "per_day"], 7]]);
+  // One row only, though the limit and its own daily rate both carry the note; every other row keeps its number.
+  assert.equal(rs.length, plain.length + 1);
+  assert.deepEqual(rs.slice(0, plain.length).map((r) => [r.id, r.benefit]), plain.map((r) => [r.id, r.benefit]));
+  assert.equal(rs.at(-1)!.benefit, "Daily hospital cash while overseas in intensive care");
+  // The clause is the row's own condition, so "doubled ..., capped at" goes with the figure (R265 M1).
+  assert.deepEqual(rs.at(-1)!.conditions, ["daily income amount will be doubled if hospitalised in intensive care, capped at S$400 per day"]);
+  // The limit and its daily rate are unchanged.
+  assert.deepEqual(rs.filter((r) => r.benefit === "Daily hospital cash while overseas").map((r) => r.figure.kind === "printed" ? [r.figure.amount, r.figure.unit] : null), [[8000, "up_to"], [200, "per_day"]]);
+  assert.match(renderTable(rs), /Daily hospital cash while overseas in intensive care \| S\$400 a day \| conditions: daily income amount will be doubled if hospitalised in\s+intensive care, capped at S\$400 per day \| D\d+ page 7/);
+  // Another market: a rate printed in brackets in the row's own line ("RM200 per day if confined in ICU").
+  const myr = icuRows({ documentId: STAY, page: 2, benefit: "Hospital Income", conditions: [], excerpt: "Hospital Income\tRM100 per day (RM200 per day if confined in ICU)",
+    figure: { kind: "printed", amount: 100, currency: "MYR", unit: "per_day", period: null } });
+  assert.deepEqual(icuOf(myr), [["Lim Ah Kow", "Hospital Income in intensive care", [200, "MYR", "per_day"], 2]]);
+});
+test("an intensive-care rate gives no row unless its words are provably only that rate (N119 negative controls)", () => {
+  const none = (o: Parameters<typeof icuRows>[0], why: string) => assert.deepEqual(icuOf(icuRows(o)), [], why);
+  // No figure (only "doubled"), two figures, a figure not paid per day, a day count, an age, a group, a "not", an excess.
+  for (const note of ["(Note: daily income amount will be doubled if hospitalised in intensive care)",
+    "S$200 per day or S$400 per day in intensive care", "S$400 per admission in intensive care", "S$400 in total for intensive care",
+    "capped at S$400 per day in intensive care, for at most 10 days", "S$400 per day in intensive care from the 3rd day",
+    "S$400 per day in intensive care for insured persons aged 70 and above", "S$400 per day in intensive care for children only",
+    "S$400 per day in intensive care is not payable for pre-existing conditions", "S$400 per day in intensive care, less an excess",
+    "S$400 per day for a companion while in intensive care", "S$400 per day in a private ward",
+    // The base rate is never the ICU day's: a figure before "doubled", or with no cap word between them (Critic R265 H1).
+    "Daily hospital cash S$200 per day, doubled in ICU", "Daily hospital cash S$100 per day doubled if hospitalised in intensive care",
+    "S$150 per day, double if in ICU", "S$200 per day, twice this amount in ICU", "doubled in ICU to S$400 per day",
+    // "or" leaves which applies unsure.
+    "S$400 per day in ICU or the daily amount"])
+    none({ conditions: [note], printed: note }, note);
+  // Each of those clauses is refused for its words: with the words left out that make it unsure, it gives the row.
+  assert.equal(icuOf(icuRows({ conditions: ["capped at S$400 per day in intensive care"], printed: "capped at S$400 per day in intensive care" })).length, 1);
+  // Each check on its own: a number of days in known words, a figure not paid per day in known words.
+  assert.equal(intensiveCareRateOf("S$400 per day in intensive care for 5 day"), null);
+  assert.equal(intensiveCareRateOf("S$400 in intensive care"), null);
+  assert.equal(intensiveCareRateOf("S$400 per day in the hospital"), null);
+  assert.deepEqual(intensiveCareRateOf("S$400 per day in ICU"), { amount: 400, currency: "SGD", doubled: false });
+  // A bare "$" names no currency.
+  assert.deepEqual(intensiveCareRateOf("$400 per day in ICU"), { amount: 400, currency: null, doubled: false });
+  // "Doubled ..., capped at S$400" is an ICU day's figure only when twice the row's own daily rate reaches the cap: at S$120 a
+  // day an ICU day is S$240, not S$400; with no daily rate (only the limit) it is unknown (TE pr154 F1). At S$250 it is the cap.
+  none({ excerpt: "Capped at S$120 per day\nS$5,000\tS$8,000\tS$10,000" }, "rate S$120, cap S$400");
+  none({ excerpt: "S$5,000\tS$8,000\tS$10,000" }, "no daily rate");
+  assert.deepEqual(icuOf(icuRows({ excerpt: "Capped at S$250 per day\nS$5,000\tS$8,000\tS$10,000" })).map((r) => r[2]), [[400, "SGD", "per_day"]]);
+  // A daily rate in another currency, or a bare "$" cap, says nothing about the cap (Critic R268).
+  none({ excerpt: "Capped at US$300 per day\nS$5,000\tS$8,000\tS$10,000" }, "rate in US$");
+  // A place word narrows the rate unless the benefit's own name says it (TE pr154 F2).
+  const abroad = "S$300 per day if hospitalised overseas in ICU";
+  none({ benefit: "Hospital cash", conditions: [abroad], printed: abroad }, "overseas, not in the name");
+  assert.equal(icuOf(icuRows({ benefit: "Hospital cash overseas", conditions: [abroad], printed: abroad })).length, 1);
+  // A clause that is not printed in the row's own document (only in another one) gives none.
+  none({ conditions: ["RM200 per day if confined in ICU"] }, "printed in another document");
+  none({ conditions: ["capped at S$450 per day in intensive care"] }, "not printed at all");
+  // A row with a day rule of its own (it might hold for an ICU day too), or a row that is itself for intensive care.
+  none({ fromDay: 11 }, "first paid day");
+  none({ excerpt: "Capped at S$200 per day from the 11th day\nS$5,000\tS$8,000\tS$10,000" }, "day rule in the quote");
+  none({ benefit: "ICU daily cash" }, "row for intensive care");
+  // A rate the person's rows already give for that cover.
+  none({ extra: [{ benefit: "Intensive care daily cash", conditions: [], figure: { kind: "printed", amount: 400, currency: "SGD", unit: "per_day", period: null } }] }, "already a row");
+  // A row with no figure.
+  none({ figure: { kind: "none", why: "no figure printed" } }, "no figure");
+});
+test("an intensive-care rate card says intensive care, gives the printed rate as a limit, and is never worked out over a stay (N119)", () => {
+  const rs = icuRows();
+  const icu = rs.find((r) => /intensive care$/.test(r.benefit))!;
+  const ask = (row: string, asked: string[]) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null,
+      conditions: [{ text: "Doubled for intensive care, capped at S$400 per day", quote: ICU_NOTE }], alternativeGroup: null, perDay: { stayDays: 3 }, ofBill: null, row, eventFit: "any_event" }] };
+    const fromRows = amountsFromRows(raw, rs, HOUSE_ICU);
+    const { answer: a } = verifyAnswer(HOUSE_ICU, readModelAnswer(fromRows.json)!, asked, new Set(fromRows.report.labels));
+    return keepLabelledAmounts(a.statements ?? [], fromRows.report).kept.filter((s) => s.amount);
+  };
+  const cards = ask(icu.id, ["he was in ICU for one of those days", "he was hospitalised overseas for 3 days"]);
+  assert.deepEqual(cards.map((s) => [s.personName, s.amount!.text]), [["Lim Ah Kow", "Up to S$400"]]);
+  assert.match(cards[0].text, /^Daily hospital cash while overseas in intensive care \(.*\): paid per day\.$/);
+  // The base daily rate is still the base rate, with no intensive-care words.
+  const daily = rs.find((r) => r.benefit === "Daily hospital cash while overseas" && r.figure.kind === "printed" && r.figure.unit === "per_day")!;
+  const base = ask(daily.id, ["he was hospitalised overseas for 3 days"]);
+  assert.deepEqual(base.map((s) => s.amount!.text), ["Up to S$200"]);
+  assert.ok(!/intensive/i.test(base[0].text));
+});
+
 test("a daily card says its first paid day and most days (stress run 23 Oct, S008)", () => {
   const cash = rows.find((r) => r.benefit === "Hospital cash")!;
   assert.match(rowLabel({ ...cash, fromDay: 11, maxDays: 30 }), /: paid per day, from day 11 of the stay, for at most 30 days\.$/);
@@ -1740,6 +1847,136 @@ test("library groups: the same people in any order are one group, and a replaced
   assert.equal(lines.length, 1, lines.join(" | "));
   assert.match(lines[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read/);
   assert.doesNotMatch(lines[0], /Old\.pdf/);
+});
+
+// ------------------------------------------------------------------ a premium's parts, and a clause's total limit (overnight run 23 Oct, N087, N088, N092)
+const PARTS_DOC = "aaaaaaaa-0000-0000-0000-0000000000p1", LIMIT_DOC = "aaaaaaaa-0000-0000-0000-0000000000p2";
+// A made-up schedule in the shape of a CI plan's: the benefit's own premium on its line, an extra charged on it below.
+const PARTS_SCHED = (o: { extra?: string; currency?: string; sum?: string } = {}) => "Policy Schedule\nAssured\t: Lim Ah Kow\nFirst Year Instalment Premium * : 300.00\n"
+  + `: ${o.currency ?? "Singapore Dollar"}\nInstalment Premium\t: 350.50\tCurrency\nPayment Frequency\t: Monthly\n`
+  + "Basic Benefits\tSum\tInstalment\tPremium\tBenefit\tBenefit\nAssured/\tPremium\tCessation\tCommencement\tCessation\nBenefit\tDate\tDate\tDate\n"
+  + `Critical Illness Cover\t${o.sum ?? "200,000.00"}\t250.25\t01/10/2036\t01/10/2026\t01/10/2036\nPlus\n${o.extra ?? "- Occupation Extra\t---\t100.25\t01/10/2036\t---\t---"}\nDeath Benefit\t10,000.00\t---\t---\t01/10/2026\t01/10/2036`;
+const partsHouse = (sched: string, wording = ""): Household => ({ ...HOUSE, documents: [
+  doc(PARTS_DOC, "Schedule.pdf", [{ page: 1, text: sched }]),
+  ...(wording ? [doc(LIMIT_DOC, "Wording.pdf", [{ page: 4, text: wording }])] : []),
+] });
+const partsCover = { person: "Lim Ah Kow", product: "CI Plan", cover: "Critical Illness Cover", plan: null, sumInsured: 200000, asOf: "01/10/2026", page: 1, quote: "Critical Illness Cover\t200,000.00\t250.25\t01/10/2036" };
+const ciKey = coverKeyOf({ product: "CI Plan", cover: "Critical Illness Cover", plan: null });
+const currencyOf = (r: ChatRow) => (r.figure.kind === "none" ? null : r.figure.currency);
+function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover) {
+  const sched = checkReading(src(house.documents[0]), reading("personal_proof", "CI Plan", [cover], []));
+  const readings = [sched];
+  if (house.documents[1]) readings.push(checkReading(src(house.documents[1]), reading("policy_wording", "CI Plan", [], benefits)));
+  const t = assembleTable(readings, family, house.documents[1] ? [{ section: sectionKeyOf(LIMIT_DOC, { section: "Benefits", column: null }), cover: ciKey, why: "the plan's wording" }] : []);
+  const rs = chatRows(t, house);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: statements.map((st) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "no_event", ...st, ...(typeof st.row === "function" ? { row: (st.row as (r: typeof rs) => string)(rs) } : {}) })) };
+  const fromRows = amountsFromRows(raw, rs, house);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, ["how much"], new Set(fromRows.report.labels));
+  const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  return { rows: rs, cover: sched.covers[0], amounts: kept.filter((x) => x.amount).map((x) => x.amount!.text), kept, report: fromRows.report };
+}
+test("a premium's parts on the schedule line are rows of their own, after every other row (N088, N092)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED()), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }, { row: rowNamed(/^Premium for/), text: "Basic." }]);
+  assert.deepEqual(r.cover.premiumParts?.map((x) => [x.label, x.amount]), [[null, 250.25], ["Occupation Extra", 100.25]]);
+  assert.deepEqual(r.rows.slice(-2).map((x) => x.benefit), ["Premium for Critical Illness Cover, Monthly (part of the Instalment Premium; the first policy year's premium is different)",
+    "Occupation Extra (premium), Monthly (part of the Instalment Premium; the first policy year's premium is different)"]);
+  // The rows before them keep their numbers: the premium and the first-year premium come first, as on main.
+  assert.ok(r.rows.findIndex((x) => /^First Year/.test(x.benefit)) < r.rows.findIndex((x) => /^Premium for/.test(x.benefit)));
+  assert.deepEqual(r.amounts, ["S$100.25", "S$250.25"]);
+  // Each part is printed on its own line, in the schedule's currency.
+  assert.match(r.rows.at(-1)!.source.excerpt, /Occupation Extra --- 100\.25/);
+  assert.equal(currencyOf(r.rows.at(-1)!), "SGD");
+});
+test("a premium's parts are given in any currency the schedule settles (parity)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED({ currency: "Ringgit Malaysia" })), [{ row: rowNamed(/^Occupation Extra/), text: "Extra." }]);
+  assert.equal(currencyOf(r.rows.at(-1)!), r.cover.premiumCurrency ?? r.cover.currency);
+  assert.notEqual(r.cover.premiumCurrency, "SGD");
+});
+test("no parts unless they plainly add up to the premium, from the cover's own one line", () => {
+  const none = (sched: string, why: string, cover = partsCover) => assert.equal(partsAnswer(partsHouse(sched), [], [], cover).cover.premiumParts ?? null, null, why);
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t---\t99.25\t01/10/2036\t---\t---" }), "parts that do not add up");
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t50,000.00\t100.25\t01/10/2036\t---\t---" }), "a part that prints a sum");
+  none(PARTS_SCHED({ extra: "- Occupation Extra\t---\t60.25\t40.00\t---\t---" }), "a part with two premium-like cells");
+  none(PARTS_SCHED({ extra: "Occupation Extra\t---\t100.25\t01/10/2036\t---\t---" }), "a line with no dash is another row");
+  none(PARTS_SCHED() + "\nRider\t200,000.00\t12.00\t-\t-\t-", "the sum printed on two lines");
+  none(PARTS_SCHED({ extra: "Plus more words" }), "no extra line at all");
+  // Another member on the page: never read.
+  none(PARTS_SCHED() + "\nSpouse\t: Tan Mei Ling", "another life on the page");
+});
+const LIMIT_WORDING = (limit: string, next = "2.3. Intensive Care Benefit\nAn additional 20% of the Sum Assured is payable.") => "2. BENEFITS\n2.1. Death Benefit\nWe will pay S$10,000 on death.\n"
+  + "2.2. Critical Illness Benefit\n100% of the Sum Assured will be payable in one lump sum.\ni.\tThe Life Assured survives at least 7 days.\n"
+  + `${limit}\nRefer to Appendix A for the list.\n${next}`;
+const TOTAL = "The most We will pay in total for all Early Stage Critical Illness claims under this Policy and\nall Policies covering the same Life Assured shall not exceed S$800,000 (or equivalent currency).";
+const ciRow = { section: "Benefits", benefit: "Critical Illness Benefit", pays: "percent", value: 100, percentOf: "sum_insured", page: 4, quote: "100% of the Sum Assured will be payable in one lump sum." };
+const limitRow = (rs: ChatRow[]) => rs.find((x) => /^Limit in total/.test(x.benefit))?.id ?? "R99";
+test("a clause's printed total limit is a row of its own, shown when asked with no event (N087)", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL)), [{ row: limitRow, text: "The most in total." }], [b(ciRow)]);
+  const row = r.rows.find((x) => /^Limit in total/.test(x.benefit))!;
+  assert.equal(row.benefit, "Limit in total on Critical Illness Benefit claims");
+  assert.equal(row.combinedLimit, true);
+  assert.deepEqual(row.conditions, ["The most We will pay in total for all Early Stage Critical Illness claims under this Policy and all Policies covering the same Life Assured"]);
+  assert.equal(row.source.excerpt, TOTAL);
+  assert.equal(r.rows.at(-1), row, "after every other row");
+  assert.deepEqual(r.amounts, ["S$800,000"]);
+  // The benefit named in the plural ("Critical Illnesses claims", as printed) is still the row's benefit.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL.replace("Critical Illness claims", "Critical Illnesses claims"))), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "plural");
+  // A sentence in capitals with a full stop is no heading: the clause goes on past it.
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(`THIS BENEFIT ENDS ON PAYMENT.\n${TOTAL}`)), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "capitals sentence");
+  // The card says what the limit is for, though the model gave no condition.
+  const card = r.kept.find((x) => x.amount?.text === "S$800,000")!;
+  assert.ok(JSON.stringify(card).includes("for all Early Stage Critical Illness claims"), JSON.stringify(card));
+});
+test("a total limit is never what an event pays", () => {
+  const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL)), [{ row: limitRow, text: "Paid.", eventFit: "on_list" }], [b(ciRow)]);
+  assert.deepEqual(r.amounts, []);
+  assert.match(r.report.dropped.map((d) => d.why).join(" "), /most paid for several benefits together/);
+});
+test("a total limit in ringgit or pounds is read the same way (parity)", () => {
+  for (const [fig, code] of [["RM 800,000", "MYR"], ["£800,000", "GBP"], ["SGD 800,000", "SGD"]]) {
+    const r = partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(TOTAL.replace("S$800,000", fig))), [], [b(ciRow)]);
+    const row = r.rows.find((x) => /^Limit in total/.test(x.benefit));
+    assert.equal(row?.figure.kind === "printed" && row.figure.currency, code, fig);
+  }
+});
+test("no total limit row unless the clause plainly prints one total in a stated currency for the row's own benefit", () => {
+  const none = (wording: string, why: string, row: Record<string, unknown> = ciRow) =>
+    assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), wording), [], [b(row)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 0, why);
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "$800,000")), "a bare $ names no currency");
+  none(LIMIT_WORDING(TOTAL.replace("claims under", "claims for children under")), "a total for some insured persons");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$800,000 or S$400,000 after age 65")), "two figures");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "50% of the Sum Assured")), "a share, no figure");
+  none(LIMIT_WORDING("The amount payable for each claim shall not exceed S$800,000."), "no word says it is a total");
+  none(LIMIT_WORDING("We will pay S$800,000 in one lump sum for all Early Stage claims under all Policies covering the same Life Assured."), "no limit wording");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 per year")), "a total for each period");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all", "in total for any one claim among all")), "a limit for each claim");
+  none(LIMIT_WORDING(TOTAL.replace("in total for all Early Stage Critical Illness claims", "in total for any one Early Stage Critical Illness claim")), "a limit for any one named claim (TE P155 F3)");
+  // A scale word after the figure, or words after it that can change the limit (TE P155 F1, F2).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "S$1 million")), "a figure in millions");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000", "the higher of S$800,000 and the Sum Insured")), "the higher of");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 or the Sum Insured, whichever is lower")), "whichever is lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, less any amount already paid")), "less any amount paid");
+  // Another benefit's limit printed in the clause, after an unnumbered heading, or naming no benefit (Critic R270 H1).
+  const DEATH_TOTAL = "The most We will pay in total for all Accidental Death claims under all Policies covering the same Life Assured shall not exceed S$300,000.";
+  none(LIMIT_WORDING(DEATH_TOTAL), "another benefit's total in the clause");
+  none(LIMIT_WORDING("", `GENERAL PROVISIONS\n${TOTAL}`), "a total after an unnumbered heading");
+  none(LIMIT_WORDING("", `Appendix B\n${TOTAL}`), "a total in an appendix");
+  none(LIMIT_WORDING("The maximum total amount payable under all policies for the same life shall not exceed S$300,000."), "a total naming no benefit");
+  // "this Basic Benefit" may be a wider benefit than the row's (a plan's basic benefit holds several): it names no row.
+  none(LIMIT_WORDING("The most We will pay in total for all claims under this Basic Benefit and all Policies covering the same Life Assured shall not exceed S$300,000."), "this basic benefit");
+  assert.equal(partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING("The most We will pay in total for all claims under this benefit and all Policies covering the same Life Assured shall not exceed S$300,000.")), [], [b(ciRow)]).rows.filter((x) => /^Limit in total/.test(x.benefit)).length, 1, "this benefit, in its own clause");
+  none(LIMIT_WORDING("The most We will pay in total for all Critical Illness and Death Benefit claims under all Policies covering the same Life Assured shall not exceed S$300,000."), "a total shared with another heading's benefit");
+  // Words after the figure (Critic R270 M1).
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000 less any amount already paid under the Death Benefit")), "less an amount paid");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, or the Sum Assured if that is lower")), "or the sum assured if lower");
+  none(LIMIT_WORDING(TOTAL.replace("S$800,000 (or equivalent currency)", "S$800,000, reduced by any Early Stage payment made before age sixty-five")), "reduced by a payment");
+  // The limit printed under the next heading is that benefit's, never the critical illness row's.
+  none(LIMIT_WORDING("", `2.3. Intensive Care Benefit\n${TOTAL}`), "another clause's limit");
+  // A heading that does not name the row's benefit: its limit is not the row's.
+  none(LIMIT_WORDING(TOTAL).replace("2.2. Critical Illness Benefit", "2.2. Special Benefit"), "a heading naming another benefit");
+  // The row's own cap said again adds nothing.
+  none(LIMIT_WORDING("The most We will pay in total under this benefit and all Policies covering the same Life Assured shall not exceed S$25,000.").replace("will be payable in one lump sum.", "will be payable, subject to a maximum amount of S$25,000."),
+    "the row's own cap", { ...ciRow, quote: "100% of the Sum Assured will be payable, subject to a maximum amount of S$25,000." });
 });
 
 async function atest(name: string, fn: () => Promise<void>) {
