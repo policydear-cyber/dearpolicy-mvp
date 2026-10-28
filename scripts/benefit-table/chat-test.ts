@@ -1733,6 +1733,25 @@ test("an intensive-care rate card says intensive care, gives the printed rate as
   assert.ok(!/intensive/i.test(base[0].text));
 });
 
+test("a limit's daily rate keeps its own printed currency; a rate in another currency gives no row (Critic R272)", () => {
+  const t = tableWith();
+  const person = t.people.find((p) => p.name === "Lim Ah Kow")!;
+  const amb = person.rows.find((r) => r.benefit === "Ambulance Cost")!;
+  const dailyOf = (excerpt: string, currency: string) => chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...amb, benefit: "Daily cash",
+    source: { ...amb.source, excerpt }, figure: { kind: "printed" as const, amount: 8000, currency, unit: "up_to" as const, period: null } }] } : p) }, HOUSE)
+    .filter((r) => r.benefit === "Daily cash" && r.figure.kind === "printed" && r.figure.unit === "per_day").map((r) => r.figure.kind === "printed" ? [r.figure.amount, r.figure.currency] : null);
+  // The same layout in four markets: each rate in its own currency.
+  assert.deepEqual(dailyOf("Capped at S$200 per day\nS$8,000", "SGD"), [[200, "SGD"]]);
+  assert.deepEqual(dailyOf("Capped at RM200 per day\nRM8,000", "MYR"), [[200, "MYR"]]);
+  assert.deepEqual(dailyOf("Capped at £200 per day\n£8,000", "GBP"), [[200, "GBP"]]);
+  assert.deepEqual(dailyOf("Capped at US$200 per day\nUS$8,000", "USD"), [[200, "USD"]]);
+  // A rate printed in another currency than its limit is not that limit's rate.
+  assert.deepEqual(dailyOf("Capped at US$300 per day\nS$8,000", "SGD"), []);
+  assert.deepEqual(dailyOf("Capped at RM300 per day\n£8,000", "GBP"), []);
+  // A bare "$" rate states no currency: it never borrows the limit's.
+  assert.deepEqual(dailyOf("Capped at $200 per day\nS$8,000", "SGD"), [[200, null]]);
+});
+
 test("a daily card says its first paid day and most days (stress run 23 Oct, S008)", () => {
   const cash = rows.find((r) => r.benefit === "Hospital cash")!;
   assert.match(rowLabel({ ...cash, fromDay: 11, maxDays: 30 }), /: paid per day, from day 11 of the stay, for at most 30 days\.$/);
