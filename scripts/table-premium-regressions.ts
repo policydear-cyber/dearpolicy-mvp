@@ -338,6 +338,19 @@ test("a combined schedule's second policy is named; a rider of a named plan is n
   assert.deepEqual(names([{ ...a, premium: 50, premiumFrequency: "Monthly", premiumCurrency: "SGD" }, b]), [{ name: "Harbour Health Saver", why: "unread" }]);
   // A counted premium from this document with the other policy's number does not hide it.
   assert.deepEqual(names([b], [{ policy_id: "doc-a", policy_number: "HL-1001", product_name: "Harbour Protector", amount: 50, insurer: "Harbour Life" }]), [{ name: "Harbour Health Saver", why: "unread" }]);
+  // No number printed anywhere: a plan and its riders are one entry for the document (TE pr163 R1b).
+  const docsBare = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: false }]]);
+  assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Harbour Protector" }), cover({ ...none, product: "Harbour Protector Rider: Waiver of Premium" }), cover({ ...none, product: "Early CI Rider" })],
+    [], docsBare, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);
+  // No number, a rider's premium read: the plan's is not, so the plan is named (TE pr163 R3); counted, it may be the plan's.
+  const riderRead = cover({ product: "Early CI Rider", premium: 12.5, premiumFrequency: "Monthly", premiumCurrency: "SGD" }), plan = cover({ ...none, product: "Harbour Protector" });
+  assert.deepEqual(unreadPremiumCovers([plan, riderRead], [], docsBare, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);
+  assert.deepEqual(unreadPremiumCovers([plan, riderRead], [{ policy_id: "doc-a", policy_number: null, product_name: "Early CI Rider", amount: 12.5, insurer: "Harbour Life" }] as never, docsBare, new Set(), TODAY),
+    [{ name: "Harbour Protector", why: "maybe_counted" }]);
+  // The plan's own premium read: not named, nor a rider named after it.
+  assert.deepEqual(unreadPremiumCovers([{ ...plan, premium: 80, premiumFrequency: "Monthly", premiumCurrency: "SGD" }, cover({ ...none, product: "Harbour Protector Rider: Waiver of Premium" })], [], docsBare, new Set(), TODAY), []);
+  // A rider whose term ran out listed first: the current plan names the policy (TE pr163 R5).
+  assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Term Rider 5", endDate: "28/02/2026" }), plan], [], new Map([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]), new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);
   // A rider printed with no number of its own is the plan's: named once.
   const docsNo = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]);
   assert.deepEqual(unreadPremiumCovers([{ ...a, policyNumber: null }, cover({ ...none, product: "Harbour Protector", cover: "Waiver of Premium" })], [], docsNo, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);

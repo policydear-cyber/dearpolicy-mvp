@@ -232,9 +232,9 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
 
 /** This person's policies the benefit table shows from a current personal schedule or certificate, but for which no premium
  * was read and nothing counted is theirs (28 Oct: two schedules whose premium figure could not be tied to its label were
- * neither counted nor named, so the total looked complete). Each policy is named once: by document and policy (its number,
- * else its product), so a second policy on a combined schedule is named too and a rider of the same plan is not (Critic
- * R300 H2). "maybe_counted" when a counted premium may be its policy by number or product name, never by insurer alone (M1).
+ * neither counted nor named, so the total looked complete). Each policy is named once: by document and policy number, so a
+ * second numbered policy on a combined schedule is named too (Critic R300 H2); with no number, once per document, as its
+ * riders cannot be told apart from other plans (TE pr163 R1b). "maybe_counted" when a counted premium may be its policy by number or product name, never by insurer alone (M1).
  * Skipped: documents the inventory lists (`namedDocumentIds`) and policies it names as missing (`named`, L1), a policy
  * whose premium the table read (tablePremiumItems names those), and a cover that has ended or whose page says it ended. */
 export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<PremiumItem, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">[],
@@ -242,25 +242,43 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
   named: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = []): TableLeftOut[] {
   const policyOf = (c: TablePremiumCover) => {
     const number = c.policyNumber ?? documents.get(c.source?.documentId ?? "")?.policyNumber;
-    return (c.source?.documentId ?? "") + "|" + (number ? numberKey(number) : "p:" + productKey(c.product));
+    // With no number printed, a document's covers cannot be told apart from a plan and its riders: one entry per document
+    // (TE pr163 R1b). Numbers tell a combined schedule's policies apart (Critic R300 H2).
+    return (c.source?.documentId ?? "") + "|" + (number ? numberKey(number) : "");
   };
-  const withPremium = new Set(covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended).map(policyOf));
-  const out: TableLeftOut[] = [], done = new Set<string>();
+  const numberOf = (c: TablePremiumCover) => c.policyNumber ?? documents.get(c.source?.documentId ?? "")?.policyNumber ?? null;
+  const oneProduct = (a: string | null | undefined, b: string | null | undefined) => (!!productKey(a) && productKey(a) === productKey(b)) || maySameProduct(a, b);
+  const read = covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended);
+  // A read premium is its policy's when a number ties them; with no number, only the cover whose product it is (TE pr163 R3).
+  const premiumRead = (c: TablePremiumCover) => read.some((r) => policyOf(r) === policyOf(c) && (numberOf(c) != null || r === c || oneProduct(r.product, c.product)));
+  const groups = new Map<string, { cover: TablePremiumCover; doc: TablePremiumDocument; old: boolean }[]>();
   for (const c of covers) {
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
-    if (!documentId || !doc || done.has(policyOf(c)) || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
-    if (withPremium.has(policyOf(c)) || namedDocumentIds.has(documentId)) continue;
+    if (!documentId || !doc || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
+    if (premiumRead(c) || namedDocumentIds.has(documentId)) continue;
     // Only a proven end (c.ended, doc.lapsedOrEnded, above) drops a policy. A printed period that has run out, an old start with
     // no end (whole life), or a page with an ending word ("will be terminated if ...") may still be a held policy: named, with
     // its document perhaps out of date (TE pr163 N6-N8, Critic R301 H3).
     const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
     const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
-    const old = doc.endedPages?.includes(c.source.page) || (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS);
-    done.add(policyOf(c));
+    const old = !!doc.endedPages?.includes(c.source.page) || (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS);
+    const key = policyOf(c);
+    groups.set(key, [...(groups.get(key) ?? []), { cover: c, doc, old }]);
+  }
+  const out: TableLeftOut[] = [];
+  for (const group of groups.values()) {
+    // A rider whose own term ran out is not the policy's name when a current cover of it is listed (TE pr163 R5).
+    const { cover: c, doc, old } = group.find((g) => !g.old) ?? group[0];
+    const documentId = c.source.documentId;
     const hint = { number: c.policyNumber ?? doc.policyNumber ?? null, product: c.product, insurer: doc.insurer };
-    // The same document is the same policy unless both print numbers that differ (a combined schedule's other policy).
+    // The same document is the same policy unless both print numbers that differ (a combined schedule's other policy). With no number
+    // on the document, a record naming no product, or the same product, is; another plan's premium on it may be this one's (TE pr163 R3).
     const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
-      if (i.policy_id === documentId && !(c.policyNumber && i.policy_number && !samePolicyNumber(c.policyNumber, i.policy_number) && numberKey(c.policyNumber) !== numberKey(i.policy_number))) return "same";
+      if (i.policy_id === documentId) {
+        const number = hint.number;
+        if (number && i.policy_number) { if (samePolicyNumber(number, i.policy_number) || numberKey(number) === numberKey(i.policy_number)) return "same"; }
+        else return number || !i.product_name?.trim() || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
+      }
       const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
       return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
     };
