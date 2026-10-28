@@ -25,7 +25,10 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
    * for): a cover this new may still be inside a waiting period. */
   coverSince?: string | null;
   /** The row's own conditions are always on its card (a total limit's printed sentence: totalLimitRows). */
-  scopeOnCard?: boolean };
+  scopeOnCard?: boolean;
+  /** The row is a premium the household pays, as its cover line prints it (coverRows: the premium, its parts, the first
+   * year's premium). Set only there: a row made any other way is never a premium here. */
+  premium?: true };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string }[]; labels: string[];
@@ -34,7 +37,10 @@ export type RowReport = { dropped: { why: string; text: string; notFit?: boolean
   /** Each "<benefit> also depends on this: <condition>" point, with the condition's own words and the rows whose cards it
    * is said for; and each row's card as given (its label and person). Read by dropConditionsOnCards. */
   conditionPoints?: { text: string; condition: string; rows: string[] }[];
-  cards?: Record<string, { text: string; person: string | null }> };
+  cards?: Record<string, { text: string; person: string | null }>;
+  /** The labels given only for premium rows (ChatRow.premium): an answer whose every amount is one of these gives no benefit
+   * amount (noteNarrowedPages). */
+  premiumLabels?: string[] };
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -53,7 +59,10 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   const add = (r: TableRow) => {
     const docIndex = index.get(r.source.documentId);
     if (docIndex == null) return;
-    rows.push({ ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null });
+    const row: ChatRow = { ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null };
+    // Only a premium line coverRows made is a premium; a row copied from one (a rate, an intensive-care row) is not.
+    if (PREMIUM_LINES.has(r)) row.premium = true; else delete row.premium;
+    rows.push(row);
   };
   for (const p of table.people) for (const r of p.rows) add(r);
   // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
@@ -523,6 +532,8 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
  * the first policy year's premium is different when its page says so. */
 const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}${c.premiumNote ? ` (${c.premiumNote})` : ""}`;
 
+/** The premium rows coverRows made (the premium, its parts, the first year's premium), by identity. */
+const PREMIUM_LINES = new WeakSet<TableRow>();
 /** A cover's own printed figures as rows: its sum insured (as of the date printed with it) and its premium. A sum insured
  * the household corrected is not printed anywhere, so that row has no amount (the Coverage page shows the correction). */
 function coverRows(c: PersonCover, person: string): TableRow[] {
@@ -535,16 +546,17 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
     out.push(row(`Sum insured${c.asOf ? `, dated ${c.asOf}` : ""}`, corrected ? { kind: "none", why: "corrected by you on the Coverage page" }
       : { kind: "printed", amount: c.sumInsured, currency: c.currency, unit: "lump_sum" }, c.source));
   }
+  const charged = (r: TableRow) => { PREMIUM_LINES.add(r); return r; };
   if (c.premium != null)
-    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+    out.push(charged(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source)));
   // The first policy year's premium its page prints (release-set A6), named as that page names it.
   // The premium's parts its schedule line prints (the benefit's own premium and an extra such as "Health Extra": overnight
   // run 23 Oct, N088, N092), named as parts of the premium, never as premiums of their own.
   for (const part of c.premium != null ? c.premiumParts ?? [] : [])
-    out.push(row(`${part.label == null ? `Premium for ${noNumbers(c.cover) || c.cover}` : `${part.label}${/premium/i.test(part.label) ? "" : " (premium)"}`}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (part of the ${c.premiumLabel || "Premium"}${c.premiumNote ? "; the first policy year's premium is different" : ""})`,
-      { kind: "printed", amount: part.amount, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, part.source));
+    out.push(charged(row(`${part.label == null ? `Premium for ${noNumbers(c.cover) || c.cover}` : `${part.label}${/premium/i.test(part.label) ? "" : " (premium)"}`}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (part of the ${c.premiumLabel || "Premium"}${c.premiumNote ? "; the first policy year's premium is different" : ""})`,
+      { kind: "printed", amount: part.amount, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, part.source)));
   if (c.premium != null && c.firstYearPremium != null && c.firstYearSource)
-    out.push(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource));
+    out.push(charged(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource)));
   return out;
 }
 
@@ -583,10 +595,14 @@ export function pagesToSend(rows: ChatRow[], household: Household): Set<string> 
 }
 
 /** Said on every answer that gives an amount while the chat was sent only some pages (Critic R113-1): a fixed server
- * note, whatever the model wrote. No figure in it. */
+ * note, whatever the model wrote. No figure in it. An answer whose every amount is a premium row's own card (a premium is
+ * charged, never claimed) has nothing to claim and goes without it; any other amount, or one the server cannot tie to a
+ * premium row, keeps it. */
 export const NARROWED_PAGES_NOTE = "Waiting periods, exclusions and other conditions can be printed on pages not used for this answer. Check the full document, or ask the insurer, before you claim.";
-export function noteNarrowedPages<T extends { id: string; kind: string; text: string; amount?: unknown }>(statements: T[], make: (id: string, text: string) => T): T[] {
-  if (!statements.some((s) => s.amount) || statements.some((s) => s.id === "narrowed-pages")) return statements;
+export function noteNarrowedPages<T extends { id: string; kind: string; text: string; amount?: unknown }>(statements: T[], report: RowReport, make: (id: string, text: string) => T): T[] {
+  const charged = new Set(report.premiumLabels ?? []);
+  const amounts = statements.filter((s) => s.amount);
+  if (!amounts.length || amounts.every((s) => charged.has(s.text)) || statements.some((s) => s.id === "narrowed-pages")) return statements;
   return [...statements, make("narrowed-pages", NARROWED_PAGES_NOTE)];
 }
 
@@ -684,6 +700,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const byId = new Map(rows.map((r) => [r.id, r]));
   const labels = coverLabels(rows), names = benefitNames(rows);
   const statements: unknown[] = [];
+  const charges = new Set<string>(), benefits = new Set<string>();
   const given = new Set<string>();
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
@@ -831,6 +848,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
+        (r.premium ? charges : benefits).add(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
           (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
       }
@@ -841,6 +859,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   // A card left out for its copied name whose row is shown anyway (given with the same benefit from another document) is
   // not missing: no "left out an amount" for it.
   report.dropped = report.dropped.filter((d) => !d.row || !given.has(d.row));
+  // A label also given for a row that is not a premium is not a premium's.
+  report.premiumLabels = [...charges].filter((l) => !benefits.has(l));
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
