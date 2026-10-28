@@ -148,6 +148,13 @@ export function limitKind(b: { benefit: string; section?: string | null; quote?:
   return COMPENSATION_LIMIT.test(head) || !categoryOfBenefit(head) ? "combined" : "benefit_cap";
 }
 
+/** The currency the row's own figure is printed with ("Up to S$8,000, capped at US$200 per day": S$ for 8,000), never another
+ * figure's on the line; null when that figure prints none (a bare "$") or is printed twice in different currencies (TE pr157 F1). */
+function figureCurrency(excerpt: string, value: number): string | null {
+  const text = plainText(excerpt);
+  const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
+  return codes.size === 1 ? [...codes][0] : null;
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -396,7 +403,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     const currency = pays === "percent"
       ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)
-      : value == null ? null : statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
+      : value == null ? null : figureCurrency(source.excerpt, value) ?? statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
     const conditions: string[] = [], droppedConditions: string[] = [];
     for (const cond of Array.isArray(b.conditions) ? b.conditions : []) {
       const words = str(cond);
