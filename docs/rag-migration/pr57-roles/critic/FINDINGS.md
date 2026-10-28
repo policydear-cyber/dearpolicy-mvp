@@ -7683,3 +7683,30 @@ Checks on cd93f9e, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
 
 Verdict: READY.
+
+## R275: #156 at 8d5a6c7
+
+H1 is fixed: the count is taken only when exactly one count match is found.
+
+**H2 is still open (High). The single-child check is a deny-list, and plain single-child events get past it.** childrenSaid gives 2 for each of these:
+- "we have 2 kids; if one gets cancer how much in total";
+- "we have 2 kids, if Jamie is diagnosed how much in total";
+- "in total, what if the elder of our 2 kids is hospitalised";
+- "we have 2 kids, if he gets dengue how much in total";
+- "total payout for our 2 kids if the younger gets cancer".
+
+A per-child benefit paid on that one child's event is then shown doubled, which is a wrong claimable amount. This is the R241/R242 lesson again: a deny-list of phrasings leaks. Fix (allow-list): take the count only when every word of the message, after removing the count phrase, is on a small known set:
+- question and total words: how, much, what, in, total, altogether, all, both, for, would, will, does, do, it, pay, get, we, our, my, the, have, has, if;
+- the insured's own events in first person: I, me, die, dies, pass, passes, away, death, am, disabled, diagnosed (with "I").
+Any other word (a name, he, she, one, elder, younger, hospitalised…) gives no count. These still pass:
+- "how much in total if we have two kids";
+- "how much altogether for our 3 children if I die";
+- "if I pass away how much would the 2 kids get in total".
+
+**M1 is partly open (Medium).** countPays reads only `st.conditions`, which are the model's own conditions for the row it named (chat.ts:567 keeps them for the named row). If the model leaves out the row's printed cap ("total payable under this benefit shall not exceed S$8,000"), nothing sees it. Fix: also refuse when the named ChatRow's own conditions state money or a limit word. amountsFromRows can attach them, for example as a server-only field on the statement. The word check here (money, limit, total, exceed…) refuses any such wording, so it is the safe direction for a refusal and is fine as it is.
+
+Checks on 8d5a6c7, run network-blocked with model keys stripped:
+- per-child 15/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H2).
