@@ -7890,3 +7890,24 @@ READY.
 Checks on a3e93b7, run network-blocked with model keys stripped:
 - r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22, scenario 16/16, monetary-boundary 32;
 - tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R289: #160 at fa8a95e (documents filed as the wrong type)
+
+NOT READY, because of H1. I checked by running schedulePage and deterministicDocumentRole over made-up pages, on the PR and on main 5000e99, in a scratch script outside git.
+
+- **H1 (High) wordings, specimens and product summaries become personal schedules.** schedulePage's "named person" test accepts any two words after a label, and its number test accepts the label "Policy number" with no number after it. So all of these now return personal_schedule, which is a personal-authority role, so their figures count as the person's own cover:
+  - a policy wording whose "Schedule of Benefits" page has "Policy No.: as shown in your certificate" and the header row "Insured Person  Plan A  Plan B";
+  - a "SPECIMEN" "Schedule Page" with "Policy Number  XXXXXXXX" and "Life Assured  Date of Birth  Gender";
+  - a page with a blank "Policy number:" and "Policy owner signature date";
+  - a product summary whose "Schedule of Benefits" says "Policy number to be issued" and "Insured person aged 1 to 65".
+  On main all four are policy_wording. Fix, so the rule matches the shape you described:
+  - the number label must be followed on the same line by an actual number (at least 6 letters or digits, at least 4 of them digits, not all X);
+  - the name must be checked on the original-case line: the label, then ":" or a tab or 2 or more spaces, then 2–4 words that each start with a capital, none of them from a field-word set (date, birth, gender, age, aged, plan, signature, sum, assured, insured, member, class, occupation, nric, …);
+  - give no match when the document prints "specimen", "sample" or "illustration".
+  Add these four as role-test cases.
+- **M1 (Medium) an endorsement that reissues the schedule page is now filed as the schedule.** Example: a cover letter, then "SCHEDULE PAGE" with the policy number, the life insured and "Endorsement No. 3 effective 1 Oct 2026". Main says endorsement. If line 115's real-endorsement markers ("endorsement no. N" or "this endorsement") appear, keep endorsement, so that the Manulife pack's generic "Endorsement: any change to this policy" still files as the schedule.
+- What is right: the pack (letter, SCHEDULE PAGE, wording) now gives personal_schedule where main said insurer_letter, because "schedule page" is now a TITLE, so correspondenceRole steps aside. Placing the rule after the opening-endorsement rule and before the endorsement-anywhere rule is right. The sample weights (endorsement 8→3, +20 for a schedule title in the first 4 lines) are sound. Note that line 108 already files any document that prints "policy schedule" anywhere, so the new rule only adds the "schedule page" and "schedule of benefits" titles, and "schedule of benefits" is the risky one.
+
+Checks on fa8a95e, run network-blocked with model keys stripped:
+- documents:role-test 18 cases, r10 messy docs, benefit-table intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
