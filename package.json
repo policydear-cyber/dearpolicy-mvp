@@ -16,6 +16,7 @@
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
     "benefit-table:parity-test": "node --import tsx scripts/benefit-table/parity-test.ts",
     "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
+    "benefit-table:family-ended-test": "node --import tsx scripts/benefit-table/family-ended-test.ts",
     "benefit-table:per-child-test": "node --import tsx scripts/benefit-table/per-child-test.ts",
     "benefit-table:te154-test": "node --import tsx scripts/benefit-table/te-pr154-test.ts",
     "benefit-table:te157-test": "node --import tsx scripts/benefit-table/te-pr157-test.ts",
