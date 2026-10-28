@@ -7714,3 +7714,21 @@ Verdict: NOT READY (H2).
 ## R276: #155 at 08619a7
 
 Still READY. TOTAL_QUALIFIER now allows up to four words between each/every/any one/per and claim/event/accident/admission, so "for any one Critical Illness claim" is read as a per-claim cap, not a total. The N087 sentence ("for all … claims") has none of those words, so its control still gives its row. Checks: benefit-table chat, simple chat and scenario-replay pass; tsc clean; next build passes.
+
+## R277: #156 at 0e7f60e
+
+H2 is fixed with a word allow-list. All five R275 probes now give null. The positives all give the right count:
+- "how much in total if we have two kids": 2;
+- "how much altogether for our 3 children if I die": 3;
+- "if I pass away how much would the 2 kids get in total": 2;
+- "what's the total for both of my 2 kids if I'm killed in an accident": 2.
+
+M1 is fixed. amountsFromRows attaches each row's own printed conditions as server-only `rowConditions`. They are only ever used to refuse. If the model sends the field, it can only refuse more, and the row step overwrites it anyway.
+
+Optional Low: "how much in total from the child education fund for our two children" gives null because "from" is not in the set. That is conservative. Adding "from" would be harmless.
+
+Checks on 0e7f60e, run network-blocked with model keys stripped:
+- per-child 16/0, benefit-table chat 96/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
