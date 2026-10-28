@@ -8259,3 +8259,31 @@ Checks, each PR in a fresh worktree with npm ci, network-blocked with model keys
 - every PR: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107/0, chat 107/0, r5 21/21.
 - own tests: still-reading 8, plan-choice pass, found-line 11, no-guessed 8, unread-notice 12, claim-note 9, conditions-twice 8, failed-advice 6.
 - pairwise merge-trees across #164 to #173 are clean except #171 × #172 (expected).
+
+## R309 — #165 rework (19b0b5b) and #174 (387a546, stacked on #173): both READY
+
+**#165 19b0b5b: READY. R307 H1 is fixed.**
+- The source is decided from the source document's role, using an allow-list.
+- Role names match what intake stores (lib/ai/extract-policy.ts documentRole enum):
+  - "personal_schedule" and "certificate" give "policy schedule";
+  - PAYMENT_ROLES (premium_receipt, renewal_statement, annual_statement) with a payment date or period give "payment record";
+  - anything else gives the neutral caption.
+- Endorsement → neutral is right. An endorsement may change a premium, but it is neither the schedule nor a payment, so neutral never names a wrong source.
+- The ingest "Extracted current premium from personalised policy document" rows sit on a schedule document, so they now say "policy schedule". The linking.ts rows carry their certificate or schedule as the source document.
+- The LEFT JOIN goes through activePredicate("sd"), so a deleted source document makes the item neutral.
+- Low: older rows may carry the legacy role "schedule" (inventory.ts:48 still maps it), and these read neutral. That is the safe direction; add it if wanted.
+
+**#174 387a546: READY.**
+- Each chat step now matches the button the Documents page shows (#173 failedDocumentAdvice):
+  - a locked PDF says "Enter its password on the Documents page", and LockedPdf takes it in place;
+  - "service" and "unknown" with no pages say "Press 'Try reading it again'";
+  - "unknown" with pages says upload a clearer copy, which is the page's upload_another;
+  - no_text, photo, incomplete and unopenable keep their upload steps.
+- No stored text is ever printed.
+- The dropped /password/i fallback: current ingest stores only fixed strings (USER_ACTIONABLE_PROCESSING_ERRORS or POLICY_PROCESSING_FAILED_MESSAGE). An old raw row that mentions a password now gets the same generic advice the Documents page gives it (the API maps it to "Analysis stopped"). The two surfaces agree, which is better than the old "upload it again with its password", since that re-upload is refused as a duplicate.
+- read-failures.ts now says "Use Read again", which matches the ready document's button.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- both: tsc clean, next build passes, merge-tree with main clean; premium:table, simple chat 84, replay 22/22, r5 21/21 and v11:claims 5 pass.
+- own tests: source-caption pass, failed-advice 6, chat failed-document 6.
+- cross-merges of #165b and #174 with #164b, #166b, #167, #168, #169b, #170, #171, #172 and #173 are all clean.
