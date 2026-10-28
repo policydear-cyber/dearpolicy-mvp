@@ -7620,3 +7620,28 @@ Checks on a3fd531, run network-blocked with model keys stripped:
 - tsc clean, next build passes, merge-tree with main clean.
 
 Verdict: NOT READY (H1). Add the six probes above as negative controls.
+
+## R271: #156 at ebd7ed4 (per-child amounts, N023)
+
+The core is sound:
+- countPays reads the row's own printed words: one figure, then per child, then at most one most-children figure;
+- any other limit word refuses;
+- `-count` cards are kept only beside their labelled parent, with the same most and the exact multiple;
+- the not_described override needs the previous message to have asked for the benefit by name.
+
+**H1 (High, lib/simple-chat/verify.ts childrenSaid): counts are deduplicated with a Set, so groups of children with the same number collapse.**
+- "we have 2 sons and 2 daughters, how much in total" gives 2, though there are 4 children;
+- "I have 3 children from my first marriage and 3 children with my wife" gives 3, though there are 6.
+With no printed most, the card understates the total (2 × instead of 4 ×). That is a wrong claimable amount. Fix: take the number only when there is exactly one count match (`counted.length === 1`), and otherwise give none. "my two kids, both kids …" has one match, so it still works.
+
+**H2 (High): a per-child benefit paid on one child's own event is multiplied by every child.** "if one of my 2 kids gets cancer how much do we get" gives 2. countPays runs for every amount statement, whatever its event, so a "Juvenile critical illness S$10,000 per child" row would get a "For 2 children … S$20,000" card when only one child is ill. Fix (allow-list): give a count only when the message asks for a total ("in total", "altogether", "total", "combined", "both", "all") and holds no single-child words ("one of", "either", "a child", "my son", "my daughter", "one kid"). Optionally also limit it to rows whose event is the insured's own (death, disability), which is the N023 shape.
+
+**M1 (Medium): only the row and its continuation are checked for a cap.** An overall limit printed in the next sentence, or as the row's condition ("The total payable under this benefit shall not exceed S$8,000"), is outside `rule`. With "S$5,000 per child (up to 2 children)" that gives S$10,000 against an S$8,000 limit. Fix: refuse a count when any condition the statement carries states money (statesMoney) or names a total or limit word.
+
+Low: an age-bounded benefit ("my 2 kids are 23 and 26") still gets a card. The card's "if this benefit's conditions are met for each child" covers it.
+
+Checks on ebd7ed4, run network-blocked with model keys stripped:
+- per-child 13/0, benefit-table chat 96/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H1, H2). Add the probes above as negative controls.
