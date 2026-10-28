@@ -24,6 +24,8 @@ export type HouseholdDocument = {
   supersededAt: string | null;
   /** The app's reading status, e.g. "ready" or "failed". */
   processingStatus?: string | null;
+  /** The upload's safety-scan status (sql/schema.sql quarantine_status), when read: a rejected upload is never read. */
+  quarantineStatus?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
@@ -50,7 +52,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
-            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, f.display_name AS uploaded_for
+            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.quarantine_status, f.display_name AS uploaded_for
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
     [accountId]);
@@ -77,7 +79,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       insurer: text(d.insurer), productName: text(d.product_name), policyNumber: text(d.policy_number),
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
-      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
+      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
@@ -109,6 +111,16 @@ export const NOT_READABLE = "could not be read";
 export const PAGES_LEFT_OUT = "the app has read these pages; they are left out of this message only";
 /** Whether the app failed to read (or has not finished reading) this file; its text is not sent or quoted. */
 export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && doc.processingStatus !== "ready";
+/** Said of a document the app is still reading, in place of NOT_READABLE: a file uploaded a minute ago has not failed. */
+export const STILL_READING = "still being read; ask again in a minute";
+// Allow-lists: only the statuses the reading pipeline passes through on its way to "ready" (lib/rag/ingest.ts), and only
+// the scan statuses that can still go on to be read. Any other status, a failed or rejected upload, or a scan status that
+// is recorded but empty, keeps "could not be read".
+const READING_NOW = new Set(["uploaded", "queued", "extracting", "indexing"]);
+const SCAN_CAN_READ = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
+/** An unreadable document the app has not finished reading yet. Its text is not sent or quoted either. */
+export const stillReading = (doc: HouseholdDocument) => unreadable(doc) && READING_NOW.has(doc.processingStatus!) &&
+  (doc.quarantineStatus === undefined || SCAN_CAN_READ.has(doc.quarantineStatus ?? ""));
 
 /** "page 3", "pages 3 and 4", "pages 2, 3 and 4". */
 export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
@@ -127,7 +139,8 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
-    (unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) + ">";
+    (stillReading(doc) ? attr("reading_status", `${STILL_READING} (${doc.processingStatus})`)
+      : unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) + ">";
   // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
