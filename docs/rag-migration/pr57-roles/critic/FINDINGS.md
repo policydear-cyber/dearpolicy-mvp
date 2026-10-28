@@ -8198,3 +8198,30 @@ Low, accepted: a mixed entry carries one reason, as TE S10 grades it. complete s
 Checks on 7750bd3, fresh worktree with npm ci, network-blocked with model keys stripped:
 - premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
 - tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R307 — overnight batch on main b865388: #164 NOT READY, #165 NOT READY, #166 READY
+
+### #164 Documents card drops plan-type guesses (537d0ca): NOT READY (1 Medium, 2 Low)
+- The boundary is right. isToConfirm rows are the schedule seeds (lib/ledger/store.ts scheduleSeeds): PRODUCT_DEFAULTS events for a plan of that kind, all "proposed". They are guesses from the plan type, so removing them from the card follows the owner rule. "Found" (confirmed, wording or person rows) is unchanged.
+- On R32-1: changing the expectation is justified. The old assertion required the guess line that the rule now forbids.
+- **M1 — the new R32-1 assertions are vacuous.** `found` is filled only after the async /api/ledger fetch, so on first render no card has a `document-found` line. Both `not.toContainText(...)` and `toHaveCount(0)` therefore pass before the data loads, and they would still pass if the guess line came back. This is the same trap as the 27 Oct toHaveCount(0) lesson. Fix: wait for the load first (page.waitForResponse on /api/ledger, or wait for another document's found line), then assert. Assert only that the guess text is absent, so a later line stating the schedule's own cover doesn't break the test.
+- L1: tsconfig.tsbuildinfo is in the diff (about 800 KB of build churn). Drop it from the PR, because every PR that touches it conflicts.
+- L2 (suggestion): a schedule-only document now shows no found line at all. Its schedule does state a cover and sum (for example Personal Accident S$100,000). Showing that line ("Your schedule shows …") would keep a documented cover visible without guessing its benefits.
+
+### #165 Home cost caption names its source (2d2f8df): NOT READY (1 High)
+- **H1 — "payment record" is a default, not a proven kind.** premiumSourceKind gives payment_record to every item that is not fromTable. But premium_records also come from the policy schedule itself:
+  - lib/rag/ingest.ts inserts "Extracted current premium from personalised policy document" (no payment date);
+  - it inserts "Rider premium printed on the schedule of …";
+  - linking.ts inserts rows from a schedule's payment table.
+  So a household whose premiums all come from its policy schedules is told "from your payment records". That is a wrong source, against the PR's own "never a wrong source" rule. Fix (allow-list): only a record with a payment date or period from a premium_receipt, renewal_statement or annual_statement document is a payment_record. A record that the schedule itself printed is policy_schedule. Anything else gives the neutral "from your documents". Add a made-up test for each.
+- Low: test fixtures use person-shaped product names ("Lim Ah Kow Critical Shield"). They are made up, but plain product names would be clearer.
+
+### #166 Family drops an ended single trip (e260c08): READY
+- coverEnded (lib/benefit-table/assemble.ts:154) is narrow. It applies only to travel cover that is not a scheme or a rider, has both ends printed, and lasts 183 days or less, so annual plans and renewable covers never end by date. Family now matches Home's tiles (table-figures.ts:97), and a missing date never ends a cover.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- every PR: tsc clean, next build passes, merge-tree with main is clean, pairwise merge-trees (164×165, 164×166, 165×166) are clean, simple chat 84, replay 22/22.
+- #164: own test 8/0, r5:ux 14.
+- #165: own test 5/0, premium:table 16/0.
+- #166: own test 8, benefit-table 107/0, parity 10/0.
+- v11:customer-screens fails "chat: one direct answer…" on #164, and fails identically on main (not this PR's). The browser e2e was not run (no database in this container).
