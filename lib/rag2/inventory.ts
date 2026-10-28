@@ -21,7 +21,10 @@ const UNREADABLE_WHY: Record<string, string> = {
   photo: "the photo is too blurred, dark or faint to read",
   incomplete: "the PDF is incomplete (it stops part-way)",
   unopenable: "the file could not be opened",
-  scan: "no text could be read from it",
+  no_text: "no text could be read from it",
+  service: "the reading service was not available when it was read; nothing is wrong with the file",
+  reading_failed: "DearPolicy could not finish reading it",
+  unknown: "DearPolicy could not finish reading it",
 };
 
 export async function householdDocuments(accountId: string): Promise<Inventory> {
@@ -45,7 +48,7 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
   };
   const kindOf = (d: PersonDocument): InventoryDoc["kind"] => (d.confirmed ? "personal" : isGroupGuide(d) ? "reference" : "linked_unconfirmed");
   const toDoc = (d: PersonDocument): InventoryDoc => ({ policyId: d.id, name: d.name, insurer: d.insurer ?? null, filename: d.filename, role: d.role, kind: kindOf(d), readable: d.status,
-    reason: d.status === "password" ? UNREADABLE_WHY.password : d.status === "unreadable" ? UNREADABLE_WHY[d.reason ?? "scan"] ?? UNREADABLE_WHY.scan : d.status === "processing" ? "it is still being read" : null, evidence: d.status === "ready" ? titleOf(d.id) : null });
+    reason: d.status === "password" ? UNREADABLE_WHY.password : d.status === "unreadable" ? UNREADABLE_WHY[d.reason ?? "unknown"] ?? UNREADABLE_WHY.unknown : d.status === "processing" ? "it is still being read" : null, evidence: d.status === "ready" ? titleOf(d.id) : null });
   return {
     people: members.map((m) => ({ id: m.id, name: m.displayName, short: m.preferredName?.trim() || m.displayName.split(/\s+/)[0], documents: (byPerson.get(m.id) ?? []).map(toDoc) })),
     unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: documentName(r), insurer: r.insurer?.trim() || null, filename: r.original_filename, role: r.document_role, kind: "unlinked" as const,

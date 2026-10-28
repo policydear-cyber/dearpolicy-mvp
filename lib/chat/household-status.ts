@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentName, referenceRoles } from "@/lib/policies/inventory";
-import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
+import { failedDocumentAdvice, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
 
@@ -16,27 +16,38 @@ export type PersonDocument = { id: string; name: string; filename: string; role:
   /** V1.3: the insurer recorded for the document (null when none). */
   insurer?: string | null;
   status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null;
-  /** Round 10: why an unreadable upload could not be read, for the advice that fits it. */
-  reason?: "photo" | "incomplete" | "unopenable" | "scan" };
+  /** Why an unreadable upload could not be read, for the advice that fits it: the Documents page's own allow-list
+   * over the stored reasons (lib/documents/failure-advice.ts), so chat and the page give the same reason and step. */
+  reason?: UnreadableReason;
+  /** A locked PDF: whether a password was given and did not work. */
+  wrongPassword?: boolean;
+  /** For an unreadable document: the label of the button the Documents page shows for it (null: none, upload another). */
+  action?: string | null };
+export type UnreadableReason = Exclude<FailedDocumentAdvice["kind"], "password_missing" | "password_wrong">;
+
+/** A stored document row's status for chat, from the same allow-list the Documents page uses. Only the fixed stored
+ * reasons have their own wording; anything else is the plain generic one, never its own text. */
+export function personDocumentStatus(row: { processing_status: string; processing_error: string | null; page_count?: number | null }): Pick<PersonDocument, "status" | "reason" | "wrongPassword" | "action"> {
+  if (row.processing_status === "ready") return { status: "ready" };
+  if (row.processing_status !== "failed") return { status: "processing" };
+  const advice = failedDocumentAdvice(row.processing_error, { hasPages: !!row.page_count });
+  if (advice.kind === "password_missing" || advice.kind === "password_wrong") return { status: "password", ...(advice.kind === "password_wrong" ? { wrongPassword: true } : {}) };
+  return { status: "unreadable", reason: advice.kind, action: advice.nextStep === "read_again" ? advice.action : null };
+}
 
 export async function documentsByPerson(accountId: string, people: ClaimPerson[]): Promise<Map<string, PersonDocument[]>> {
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
   if (!people.length) return out;
   const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; policy_number: string | null; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
-    processing_status: string; processing_error: string | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null }>(
-    `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.policy_number,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,
+    processing_status: string; processing_error: string | null; page_count: number | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null }>(
+    `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.policy_number,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,p.page_count,
             pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
       ORDER BY p.created_at,p.id`, [accountId, people.map((p) => p.id)]);
   for (const row of r.rows) {
-    const status: PersonDocument["status"] = row.processing_status === "ready" ? "ready"
-      : row.processing_status === "failed" ? ([PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE].includes(row.processing_error ?? "") || /password/i.test(row.processing_error ?? "") ? "password" : "unreadable")
-      : "processing";
-    const error = row.processing_error ?? "";
-    const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
     out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
-      policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
+      policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...personDocumentStatus(row) });
   }
   return out;
 }
@@ -48,6 +59,18 @@ export function hasPhrase(p: ClaimPerson) { return isSelf(p) ? "You have" : pers
 export function possessive(p: ClaimPerson) { return isSelf(p) ? "your" : personName(p) + "’s"; }
 
 export function isGroupGuide(d: Pick<PersonDocument, "role" | "confirmed">) { return !d.confirmed && referenceRoles.has(d.role ?? ""); }
+
+/** A locked PDF's next step: the Documents page takes its password in place (uploading the same file again is
+ * refused, as the locked copy is already in DearPolicy). */
+const UNLOCK_FIX = "Enter its password on the Documents page";
+const passwordWhy = (d: Pick<PersonDocument, "wrongPassword">) => d.wrongPassword ? "it is password-protected and the password entered for it didn’t work" : "it is password-protected";
+/** Why a document whose reading did not finish could not be read: the reading service (nothing wrong with the file),
+ * or -- for any other reason, known or not -- the plain generic sentence, never the stored text itself. */
+const finishWhy = (d: Pick<PersonDocument, "reason">) => d.reason === "service" ? "DearPolicy’s reading service wasn’t available — nothing is wrong with the file" : "DearPolicy couldn’t finish reading it";
+/** The step the Documents page offers for it, by the label of its own button. */
+const finishFix = (d: Pick<PersonDocument, "reason" | "action">) => d.action
+  ? "Press “" + d.action + "” on the Documents page" + (d.reason === "service" ? " in a little while" : "")
+  : "If you have a clearer copy or the original file, upload it on the Documents page";
 
 /** One sentence per document this person has that DearPolicy could not use.
  * Round 10: with `said` (shared across the people of one household answer),
@@ -63,11 +86,13 @@ export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[], sa
     said.add(sentence); return own;
   };
   for (const d of docs) {
-    if (d.status === "password") lines.push(whose("“" + d.filename + "” couldn’t be read because it is password-protected.") + once("Upload it again with its password and DearPolicy will read it automatically."));
+    // A locked PDF is unlocked where it is: re-uploading the same file is refused as already in DearPolicy.
+    if (d.status === "password") lines.push(whose("“" + d.filename + "” couldn’t be read because " + passwordWhy(d) + ".") + once(UNLOCK_FIX + " and DearPolicy will read it automatically."));
     // Round 10: the advice that fits why it could not be read.
     else if (d.status === "unreadable" && d.reason === "photo") lines.push(whose("“" + d.filename + "” is a photo too blurred, dark or faint to read.") + once("Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF."));
     else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + d.filename + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
     else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + d.filename + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
+    else if (d.status === "unreadable" && d.reason && d.reason !== "no_text") lines.push(whose("“" + d.filename + "” couldn’t be read because " + finishWhy(d) + ".") + once(finishFix(d) + "."));
     else if (d.status === "unreadable") lines.push(whose("“" + d.filename + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
     else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename && !/\bapp screenshot(?: \(ending \w+\))?$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
     else if (d.status === "processing") lines.push(whose("“" + d.filename + "” is still being read.") + once("Ask again in a few minutes."));
@@ -84,10 +109,11 @@ export function noPoliciesSentence(p: ClaimPerson, docs: PersonDocument[]): stri
   if (shots.length && !unusable.length) return "No policy document is on file for " + who + " yet. " + unusableDocumentLines(p, shots).join(" ") + " Upload the policy schedule itself to confirm the cover.";
   if (unusable.length) {
     const first = unusable[0];
-    const why = first.status === "password" ? "it is password-protected" : first.status === "processing" ? "it is still being read" : first.reason === "photo" ? "the photo is too blurred or dark to read"
-      : first.reason === "incomplete" ? "the file is incomplete (cut off part-way)" : first.reason === "unopenable" ? "the file couldn’t be opened" : "DearPolicy couldn’t find readable text in it";
-    const fix = first.status === "password" ? " Upload it again with its password and ask again." : first.status === "processing" ? " Ask again in a few minutes." : first.reason === "photo" ? " Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."
-      : first.reason === "incomplete" ? " Download it again from the insurer and upload the new copy." : " Upload the original PDF or a clearer scan and ask again.";
+    const why = first.status === "password" ? passwordWhy(first) : first.status === "processing" ? "it is still being read" : first.reason === "photo" ? "the photo is too blurred or dark to read"
+      : first.reason === "incomplete" ? "the file is incomplete (cut off part-way)" : first.reason === "unopenable" ? "the file couldn’t be opened"
+      : first.reason === "no_text" ? "DearPolicy couldn’t find readable text in it" : finishWhy(first);
+    const fix = first.status === "password" ? " " + UNLOCK_FIX + " and ask again." : first.status === "processing" ? " Ask again in a few minutes." : first.reason === "photo" ? " Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."
+      : first.reason === "incomplete" ? " Download it again from the insurer and upload the new copy." : first.reason === "no_text" || first.reason === "unopenable" ? " Upload the original PDF or a clearer scan and ask again." : " " + finishFix(first) + ", then ask again.";
     const whose = isSelf(p) ? "you" : who;
     return (unusable.length === 1 ? "The only document on file for " + whose + ", “" + first.filename + "”, couldn’t be read yet because " + why + "."
       : "None of the " + unusable.length + " documents on file for " + whose + " could be read yet — for example “" + first.filename + "”, because " + why + ".") + fix

@@ -16,7 +16,8 @@ export const READ_FAILURE_REASON: Record<ReadFailureCode, string> = {
   timeout: "Reading this document took too long and was stopped.",
   reader_unavailable: "The reading service was unavailable when DearPolicy tried to read this document.",
   unreadable_reply: "DearPolicy could not make sense of what was read from this document.",
-  no_pages: "This document has no readable pages stored. Re-analyse it on the Documents page.",
+  // A document with this note is a read one, whose button on the Documents page is "Read again".
+  no_pages: "This document has no readable pages stored. Use Read again on the Documents page.",
   unknown: "DearPolicy could not finish reading this document.",
 };
 
