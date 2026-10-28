@@ -208,6 +208,9 @@ async function main() {
       ["one-word value", doc("SCHEDULE PAGE\nPolicy number: 70012345\nInsured: Beneficiary")],
       ["Schedule of Benefits is not a schedule title", doc("SCHEDULE OF BENEFITS\nPolicy No. 1234567 must be quoted on claims\nInsured Person\tWard Class A\nRoom and board\tS$300 per day")],
       ["Schedule of Benefits with a number and a name", doc("SCHEDULE OF BENEFITS\nPolicy No.: 70012345\nLife insured: Tan Mei Ling\nRoom and board\tS$300 per day")],
+      ["illustrative", doc("SCHEDULE PAGE\nFor illustrative purposes only\nPolicy number: 70012345\nLife Insured  John Doe")],
+      ["quotation", doc("POLICY SCHEDULE\nQuotation\nPolicy No.: 70012345\nLife Assured: Tan Mei Ling")],
+      ["Main Life / Not Applicable", doc("SCHEDULE PAGE\nPolicy number: 70012345\nLife Assured  Main Life\nSecond Life Assured  Not Applicable")],
       ["title below the fourth line", doc("Example Life\n8 Example Street\nwww.example.com\nClause 12\nSCHEDULE PAGE\nPolicy No.: 70012345\nLife insured: Tan Mei Ling")],
     ];
     for (const [name, pages] of notSchedules) {

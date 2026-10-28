@@ -40,7 +40,7 @@ const TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)(?:\
 
 /** The words a printed person's name is never made of: a value such as "Refer To Page 2", "To Be Advised" or "Plan Holder
  * And Spouse" names nobody. */
-const NOT_A_NAME = /\b(?:and|or|of|the|to|be|see|refer|as|per|by|for|plan|holder|spouse|member|members|employee|employees|child|children|dependants?|name|insured|assured|owner|advised|page|schedule|policy|sample|specimen|any|all|each|every|who|whose|which|payable|amount|sum|ltd|limited|pte|plc|inc|bhd|berhad|sdn|llp|llc|company|co|corporation|union|association|society|trust|bank|insurance|date|birth|gender|sex|age|aged|signature|class|occupation|nric|id|identity|number|no|smoker|status|relationship|nationality|address|premium|benefit|benefits|cover|signed)\b/i;
+const NOT_A_NAME = /\b(?:and|or|of|the|to|be|see|refer|as|per|by|for|plan|holder|spouse|member|members|employee|employees|child|children|dependants?|name|insured|assured|owner|advised|page|schedule|policy|sample|specimen|any|all|each|every|who|whose|which|payable|amount|sum|ltd|limited|pte|plc|inc|bhd|berhad|sdn|llp|llc|company|co|corporation|union|association|society|trust|bank|insurance|date|birth|gender|sex|age|aged|signature|class|occupation|nric|id|identity|number|no|smoker|status|relationship|nationality|address|premium|benefit|benefits|cover|signed|main|joint|second|life|not|applicable|confirmed|self)\b/i;
 /** A label that starts its line ("LIFE INSURED", "Policy Owner :", "Assured\t:") and the value beside it, up to the next
  * column. */
 const PERSON_CELL = /^(?:life\s+insured|life\s+assured|insured(?:\s+person)?|assured|policy\s*owner|policy\s*holder|owner|name\s+of\s+(?:the\s+)?insured)\s*(?:[:：]\s*|\t+\s*:?\s*|\s{2,})([^\t]+?)(?:\t|\s{2,}|$)/i;
@@ -72,7 +72,7 @@ export function schedulePage(pages: Pick<PdfPage, "pageNumber" | "text">[]): num
     if (ENDORSED.test(p.text)) return null;
     const lines = printedLines(p.text);
     if (!lines.slice(0, 4).some((l) => SCHEDULE_LINE.test(l))) continue;
-    if (/\b(?:specimen|sample|illustration)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
+    if (/\b(?:specimen|sample|illustrat(?:ion|ive)|dummy|quotation)\b/i.test(p.text) || /\b(?:group|master)\b(?:\s+\w+){0,2}\s+polic(?:y|ies)\b/i.test(p.text)) continue;
     const numbered = lines.some((l, i) => {
       if (!/\bpolicy\s+(?:number|no\.?)\b/i.test(l)) return false;
       const own = OWN_NUMBER.exec(l)?.[1];
