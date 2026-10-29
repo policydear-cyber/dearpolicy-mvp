@@ -70,9 +70,28 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   return "accident";
 }
 
-/** Liability to other people, in a benefit or section name: "liable", "liability" (Malay "liabiliti"), or damage or injury to other people, others or a third party. A bare "third party" is not enough: "assault
- * by a third party" is the person's own accident cover. */
-const LIABILITY = /\bliab(?:le|ility|ilities|iliti)\b|\b(?:damage|injury|injuries|death)\s+(?:caused\s+)?to\s+(?:other\s+(?:people|persons)|others|(?:a|any)\s+third[\s-]part(?:y|ies)|third[\s-]part(?:y|ies))\b|\bthird[\s-]part(?:y|ies)['’]?\s+(?:property|claims?|damage|bodily)\b/i;
+// Cover for what the person owes other people, named only by words that say so (an allow-list, Critic R355, TE pr192 F1):
+// a kind of liability cover ("Personal Liability", "public liability"), liability or harm TO others or third parties,
+// harm OF a third party ("Death of a third party"), or a third party's own loss ("Third party property damage"). The
+// insurer's own limits ("Limits of Liability", "maximum liability", "our liability is limited to", "we are not liable")
+// name no one else and are never matched; nor is the person's own cover caused BY a third party ("assault by a third party").
+const OTHERS = String.raw`(?:(?:any\s+)?other\s+(?:people|persons?)|another\s+person|others|(?:a|any|the)\s+third[\s-]part(?:y|ies)|third[\s-]part(?:y|ies)|the\s+public|pihak\s+ketiga|orang\s+lain)`;
+const LIABILITY = new RegExp([
+  String.raw`\b(?:personal|public|legal|civil|third[\s-]party|family|individual|tenant['’]?s?|occupiers?['’]?|employers?['’]?|golfers?['’]?|pet\s+owners?['’]?)\s+liabilit(?:y|ies)\b`,
+  String.raw`\bliabilit(?:y|ies)\s+(?:to|towards)\s+` + OTHERS + String.raw`\b`,
+  String.raw`\bliable\b[^.;()]{0,100}?\b(?:to|towards|of),?\s+` + OTHERS + String.raw`\b`,
+  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:caused\s+)?(?:to|of)\s+` + OTHERS + String.raw`\b`,
+  String.raw`\b(?:injured|deceased)\s+(?:third[\s-]part(?:y|ies)|other\s+(?:people|persons)|others)\b`,
+  String.raw`\b(?:total\s+and\s+permanent\s+disability|tpd|bodily\s+injury|death|hospital\w*|medical\s+expenses?)\b[^.;()]{0,40}?\bof\s+` + OTHERS + String.raw`\b`,
+  String.raw`\bthird[\s-]part(?:y|ies)['’]?\s+(?:[a-z]+\s+){0,2}?(?:property|bodily|death|injury|injuries|hospital\w*|medical|cover|liabilit(?:y|ies)|damage)\b`,
+  String.raw`\bclaims?\s+(?:made\s+)?against\s+(?:you|the\s+insured)\b`,
+  String.raw`\bliabiliti\s+(?:peribadi|awam|diri|undang-undang|pihak\s+ketiga)\b|\btanggungan\s+pihak\s+ketiga\b`,
+  String.raw`第三者|第三方责任|\bresponsabilit[ée]\s+civile\b|\bhaftpflicht\w*`,
+].join("|"), "iu");
+/** Bracketed wording that excludes something ("(excluding damage to third party property)") says what is NOT paid: it
+ * never decides that a row is liability cover. */
+const EXCLUDED_ASIDE = /\(\s*(?:excluding|excludes|except|other\s+than|not\s+including|but\s+not|no)\b[^()]*\)/giu;
+const isLiability = (text: string) => LIABILITY.test(text.replace(EXCLUDED_ASIDE, " "));
 /** A section that is accident cover as a whole: "Personal accident", or one that starts with accident words ("Accidental
  * Benefits"). A section that only mentions an accident ("Death and Accidental Death") is not. */
 const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?:benefit|section|part)\s+\w+\W+)?(?:the\s+)?${ACC}`, "i");
@@ -84,7 +103,7 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
   // to other people") pays a third party, never the person's own death, injury or hospital bill.
-  if (LIABILITY.test(benefit) || (section && LIABILITY.test(section))) return null;
+  if (isLiability(benefit) || (section && isLiability(section))) return null;
   const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
