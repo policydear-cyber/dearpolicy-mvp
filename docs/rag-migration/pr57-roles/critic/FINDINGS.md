@@ -8991,3 +8991,21 @@ All 71 earlier probes hold.
 - Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped:
   - tsc clean, next build passes, merge-tree with main 9c03ee3 clean;
   - status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R345: PR #185 head 7b458317 (documents not fully read on Home and Coverage), CHANGES
+
+- Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main 5110764a clean;
+  - policies:not-fully-read-test passes, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- Checks out:
+  - Ownership: policy_members links decide first; family_member_id is used only when a document has no links. Every subquery is scoped to the account.
+  - Deleted copies (activePredicate) and superseded copies (superseded_at IS NULL) are left out.
+  - Wording never suggests cover exists ("may be missing here", "Not found in what DearPolicy could read"). Document names go through maskShownText.
+- M1 (Medium, lost-cover direction), lib/policies/not-fully-read.ts query: only `failed`, "Read in part" and a stopped cover reading count. Documents that never finish reading without being `failed` still let "Not found" read as no cover:
+  - scan-held or blocked documents (intake status with a quarantine state outside SCAN_GOES_ON), which documentState in lib/benefit-table/service.ts shows as held, not_readable or stalled;
+  - documents stuck in intake past the dashboard `reading` window (30 minutes, app/api/dashboard/route.ts:113), which drop out of "still being read" and are counted nowhere;
+  - ready documents with no pages (not_readable);
+  - personal proof (personal_schedule or certificate) whose benefit table was never read in (table_unread) and has no BENEFIT_READ_FAILURE_KEY;
+  - misfiled packs: insurer_letter or another no-cover role with filedBeforeRoleRules true (#183). The role exclusion drops exactly the packs for which Documents offers Read again.
+  - Fix: count a document when its documentState is held, stalled, not_readable or table_unread, or when filedBeforeRoleRules is true. Reuse the service's own functions, so Home and Documents cannot disagree. Add test rows for each case.
+- Low: the `failed` and "Read in part" branches also count roles that never carry cover (receipts, letters). This over-warns, which is the safe direction. Optionally exclude NO_COVER_READING_ROLES there too, except where filedBeforeRoleRules applies.
