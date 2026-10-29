@@ -34,9 +34,9 @@ test("after the grace date: passed, never said to be lapsed or in force", () => 
   assert.equal(st.printed, "20 October 2026");
   assert.equal(st.page, 1);
   const s = statusSentence("Example Shield", st)!;
-  assert.match(s, /gave until 20 October 2026 to pay the premium of S\$212\.40 due on 20 September 2026/);
-  assert.match(s, /That date has passed/);
-  assert.match(s, /insurer can confirm whether the policy is still in force/);
+  assert.match(s, /Example Shield \(page 1\): the premium of S\$212\.40 due on 20 September 2026 had to be paid by 20 October 2026\./);
+  assert.match(s, /That date has passed and the reminder cannot show whether it was; if not, the policy can lapse/);
+  assert.match(s, /insurer can confirm whether it is still in force/);
   assert.doesNotMatch(s, /\blapsed\b|\bis in its grace period\b|\bstays in force\b|\bhas not been received\b/);
 });
 
@@ -45,7 +45,7 @@ test("after the grace date with no amount printed: no figure invented", () => {
   const st = printedStatus(pages, null, "2026-04-01");
   assert.equal(st.state, "grace_passed");
   const s = statusSentence("Example Life", st)!;
-  assert.match(s, /\(page 2\) gave until 3 March 2026 to pay an unpaid premium\./);
+  assert.match(s, /Example Life \(page 2\): an unpaid premium had to be paid by 3 March 2026\./);
   assert.doesNotMatch(s, /S\$|\d+\.\d\d/);
 });
 

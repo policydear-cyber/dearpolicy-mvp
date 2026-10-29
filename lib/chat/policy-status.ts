@@ -123,8 +123,8 @@ export function statusSentence(name: string, s: PrintedStatus): string | null {
   if (s.state === "ended") return name + " expired on " + s.printed + page + ", so it no longer covers anyone.";
   if (s.state === "grace") return name + " is in its grace period" + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted + " has not been received. " : "a premium has not been received. ")
     + "It stays in force until " + s.printed + ", and lapses if the premium is not paid by then.";
-  if (s.state === "grace_passed") return "A premium reminder for " + name + page + " gave until " + s.printed + " to pay"
-    + (s.dueAmount && s.duePrinted ? " the premium of " + s.dueAmount + " due on " + s.duePrinted : " an unpaid premium") + ". That date has passed, and the reminder cannot show whether it was paid, so the insurer can confirm whether the policy is still in force.";
+  if (s.state === "grace_passed") return name + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted : "an unpaid premium") + " had to be paid by " + s.printed
+    + ". That date has passed and the reminder cannot show whether it was; if not, the policy can lapse, so the insurer can confirm whether it is still in force.";
   return null;
 }
 
