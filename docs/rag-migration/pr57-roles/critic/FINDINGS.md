@@ -9283,3 +9283,35 @@ Each head went through the full gate: fresh worktree, npm ci, network blocked, m
 - "Personal Liability", "Injury caused to others" and "Section 3: Liability to others" correctly give null.
 - (2) limitKind (check.ts:313): LIMIT_HEAD never contains a liability word, so a head reaches the changed branch only when it names liability itself. It then reads "combined", which keeps a third party's figure off the person's own tiles. That is the right direction. On my probes the results are the same as main.
 - (3) Claims (table-benefits.ts): liability rows no longer match death, hospital, critical illness or disability claims. That is correct: they pay the third party. The H1 fix is needed here too, because a section heading of "Maximum liability" currently drops own-cover death rows from claims as well.
+
+## R356: PR #193 head 7a402893 (ID masking: any case, Documents cards, index route, duplicate error), CHANGES (one Medium); #189 head 245d7933 READY
+
+**#193**
+- Gate is green:
+  - tsc, next build, merge-tree with main all pass.
+  - identity:mask-test passes. Main also passes it.
+  - Simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- Values sent back are safe:
+  - app/policies/page.tsx only displays original_filename, product_name, processing_message and review_reason. No fetch body carries them.
+  - The other /api/policies consumers only display these fields:
+    - chat/page.tsx (the SourceList file map);
+    - operator/documents/page.tsx (labels);
+    - home-attention.tsx (docName).
+  - Detected names stay unmasked, which is correct because the page posts them back to link a person.
+- M1: routes that still return a shown name unmasked. Every app/api route that returns a product, plan or file name without maskShownText or maskIdentityText was swept.
+  - /api/ledger (app/api/ledger/route.ts) returns plan_name, quote and note raw.
+    - plan_name is often the document's file name: rows seeded before #179, which is the #187 premise. "Certificate_S1234567D" therefore shows in full on the Coverage ledger.
+    - Masking it needs the sentName pattern on PATCH, because the operator page posts planName back (see R352 #187 M1).
+  - /api/premiums (app/api/premiums/route.ts) returns product_name and notes raw.
+  - Fix: wrap both GETs in maskShownText. On ledger PATCH, keep the stored plan_name when the value sent equals the masked stored name.
+- Low: three routes put the raw file name in a Content-Disposition header:
+  - policies/[id]/file;
+  - claims/evidence/[id]/file;
+  - reviewer documents.
+  The household (or an assigned reviewer) is downloading the file itself, which contains the number, so this is optional. Masking the header name would keep browser download lists clean.
+- The case-insensitive NRIC shape is fine. A lower-case "s1234567d" in a file name is now masked, and the mask still requires the 7-digit body with non-alphanumeric bounds.
+
+**#189 245d7933: READY**
+- The R352 finding is fixed: groupHeading moved to lib/policies/group-heading.ts and now has a behavioural test.
+- policies:benefits-document-name-test passes.
+- Suites, tsc, next build and merge-tree are green.
