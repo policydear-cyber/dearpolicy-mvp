@@ -8925,3 +8925,21 @@ Hospital-cash, travel and per-day plans are exactly the schedules whose figures 
   - Add this row as a negative.
 - What holds: "Payment Mode: GIRO" with Hospital cash S$200 gives the model's personal_schedule. GIRO with a rider sum assured S$50,000 gives personal_schedule.
 - Checks: I did not re-run the gate on this delta; 13486209 was green. I will run it on the head that closes M1/M2.
+
+## R340 — #184 6b43e47c (gate green) and 24a40097: CHANGES (1 Medium; part of it came from my R338 wording)
+
+- On 6b43e47c, R339 M2 is fixed and all 71 probes keep their roles. The full gate passed: tsc clean, next build passes, merge-tree clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- 24a40097 also keeps all 71 probes.
+- **M1. The payment-line words let benefit amounts through on a notes page.** My R338 suggestion ("amount due/payable", "total") was too loose, and 24a40097 widened it further with "paid" and "payable". Each row is a reinstatement letter, then page 2 titled "IMPORTANT NOTES". Main gave personal_schedule for all three (with the model role):
+
+  | Page 2 line | 6b43e47c | 24a40097 |
+  |---|---|---|
+  | "Amount payable on death : S$200,000" (and TPD) | other | other |
+  | "Total payable on death⇥S$250,000" | other | other |
+  | "Paid on diagnosis of a critical illness : S$50,000" | personal_schedule | other |
+
+  - Fix: make PAYMENT_LINE an allow-list of what the household pays. A line counts only if it names a premium, fee, charge, interest, arrears, "amount due" or "outstanding" (with "minimum payment" and "total amount due/payable" allowed only alongside one of those).
+  - Bare "Amount", "total", "payable" and "paid" never count on their own.
+  - Add to NOT_PAYMENT_LINE: death, diagnosis, illness, TPD, disab\w*, hospital\w*, accident, claim, surgery, maturity.
+  - Add the three rows above as negatives. Keep TE's "Your premium will be S$95.00", "Interest of S$3.20 is charged…" and "Total amount payable: S$176.40" (on a slip) as positives.
+- I will run the gate again on the head that closes M1.
