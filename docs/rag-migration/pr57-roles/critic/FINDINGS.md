@@ -9121,3 +9121,22 @@ All 71 earlier probes hold.
 ### Fixture change (cover-conditions-stress.ts)
 - It only adds printed quotes that state the stored cap ("The most we will pay under Living Care is S$350,000 / S$1,000 in total."). The assertions are unchanged.
 - This is legitimate: under the new rule the fixture needs a sentence that prints the cap, and the asserted totals are the same.
+
+## R350: PR #189 head dcac9c7f (Benefits page uses readable document names), CHANGES (one Medium)
+
+- The full gate is green:
+  - tsc, next build and merge-tree with main 5110764a pass;
+  - the PR's own test passes;
+  - simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- These check out:
+  - Masking: the GET is still wrapped in maskShownText. documentName masks an ID in the file name before making it readable, and shows only the last 4 digits of a policy number.
+  - The PATCH round-trip uses sentName for the benefit name only. documentName is never sent back, so nothing is matched on it server-side.
+  - Search on /schedule now matches the readable name, which is what the person sees.
+  - The /schedule groups are keyed by `doc:<policyId>` when there is no plan name, so two "Insurer policy wording" documents stay separate.
+- M1: app/operator/benefits/page.tsx:217 still groups by `benefit.productName ?? benefit.documentName`.
+  - On main, that key was the unique file name.
+  - Now two documents with the same readable name and no number (for example "Example policy wording") merge into one heading on the operator page, mixing their benefits.
+  - Fix: use the same `doc:<policyId>` key there, and show productName ?? documentName as the heading.
+- Low: amount-alternatives options from two same-named documents carry identical documentName labels. They are told apart only by page, and are sorted by name then page.
+  - This is display only, and the options keep policyId.
+  - Optional: add the page or the policy number ending.
