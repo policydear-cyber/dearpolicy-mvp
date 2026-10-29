@@ -159,12 +159,16 @@ const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?
 // footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
 const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
 const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d|\breceived\s+from\b[^.]{0,80}\bthe\s+sum\s+of\b|\backnowledge\s+receipt\s+of\b|\bthank\s+you\s+for\s+your\s+payment\s+of\b/i;
-// A payment undone anywhere in the document undoes the receipt (TE #184 R23).
-const UNDONE = /\b(?:dishono(?:u)?red|reversed|returned|bounced|rejected|unsuccessful|refunded)\b/i;
+// A payment undone undoes the receipt (TE #184 R23): only a sentence that says this payment was undone, never a
+// standard footnote ("Cheques returned unpaid will incur a charge", "If your cheque is dishonoured", "Premiums are not
+// refunded if you cancel") (TE #184 R24-R27).
+const UNDONE_EVENT = /\b(?:this|your|the)\s+(?:payment|cheque|premium|giro\s+deduction|transaction)\b(?:[^.]|\.\d){0,80}?\b(?:was|has\s+been|have\s+been|were)\s+(?:reversed|dishono(?:u)?red|returned|bounced|rejected|refunded|unsuccessful|cancelled)\b/i;
+const CONDITIONAL = /\b(?:if|will|would|may|might|are\s+not|is\s+not|incurs?|charges?|fees?|unless|any)\b/i;
+const undone = (text: string) => text.split(/\n|(?<=[.!?])\s+/).some((l) => UNDONE_EVENT.test(l) && !CONDITIONAL.test(l));
 const positiveAmount = (l: string) => [...l.matchAll(new RegExp(PAID_AMOUNT.source, "gi"))].some((m) => Number(m[0].replace(/[^\d.]/g, "")) > 0);
 const NOT_PAID = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if|upon)\s+(?:paid|payment|received)\b|\b(?:to\s+be|must\s+be|should\s+be|is\s+to\s+be)\s+paid\b|\bdishono(?:u)?red\b|\b(?:returned|reversed|bounced|rejected|unsuccessful)\b/i;
 const recordsPayment = (text: string) => {
-  if (UNDONE.test(text)) return false;
+  if (undone(text)) return false;
   const lines = text.split("\n");
   const sentences = text.split(/\n|(?<=[.!?])\s+/);
   if (sentences.some((l) => positiveAmount(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
@@ -202,13 +206,16 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   return noticeLetter(text) && STATUS_EVENT.test(text);
 }
 
-/** The money figures (a currency amount, or 1,000 or more written with separators) and the long numbers (policy and
- * certificate numbers) a page prints, as plain digits. */
+/** What a later page could add of a policy's own: a money figure of 1,000 or more (a sum assured or a benefit amount;
+ * a fee, a charge or a monthly premium is smaller) and a number printed as a policy or certificate number. A payment
+ * slip's bank account, biller code or form number is neither (TE #184 MP1-MP5). */
 function figuresOf(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
-    out.push(String(Number((m[1] ?? m[2]).replace(/,/g, ""))));
-  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) if (!/^(?:19|20)\d{2}$/.test(m[0])) out.push(m[0].toUpperCase());
+  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi)) {
+    const value = Number((m[1] ?? m[2]).replace(/,/g, ""));
+    if (value >= 1000) out.push(String(value));
+  }
+  for (const m of text.matchAll(/\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi)) out.push(m[1].toUpperCase());
   return out;
 }
 
@@ -230,10 +237,10 @@ export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "ren
   const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
   // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
   // only promises one.
-  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text) || UNDONE.test(text)))) return "premium_receipt";
+  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text) || undone(text)))) return "premium_receipt";
   if (title && LAPSE_OR_DUE.test(title)) return "other";
   if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
-  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || ((NOT_PAID.test(text) || UNDONE.test(text)) && !recordsPayment(text))) return "other";
+  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || ((NOT_PAID.test(text) || undone(text)) && !recordsPayment(text))) return "other";
   if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
   return RECEIPT_WORDS.test(text) ? "premium_receipt" : "other";
 }

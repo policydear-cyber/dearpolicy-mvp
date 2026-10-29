@@ -188,3 +188,13 @@ test("Critic R335: a later page that adds a figure or number of its own is no pa
   const reminder = { text: "PREMIUM REMINDER\nPolicy Number 77001234\nPremium S$88.20 was due on 1 March 2026. See your policy schedule." };
   assert.equal(statusNotice([reminder, { text: "PAYMENT SLIP\nPolicy Number 77001234\nAmount S$88.20\nPay by GIRO or PayNow." }]), true);
 });
+
+test("TE round 8: standard receipt footnotes about cheques, GIRO and refunds do not undo a recorded payment", async () => {
+  const { deterministicDocumentRole } = await load();
+  const receipt = (body: string) => deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nReceived with thanks S$88.20.\n" + body + "\nSee your policy schedule."), null);
+  for (const footnote of ["Cheques returned unpaid will incur a charge of S$20.", "If your cheque is dishonoured, a charge of S$30 applies.", "Premiums are not refunded if you cancel after 30 days.", "Payments made by GIRO that are rejected by the bank will be charged RM 10."])
+    assert.equal(receipt(footnote), "premium_receipt", footnote);
+  assert.notEqual(receipt("Your payment of S$88.20 was dishonoured by your bank on 3 March 2026."), "premium_receipt");
+  // A bilingual notice title beside the policy's particulars is still a title (TE S4).
+  assert.equal(deterministicDocumentRole(pages("NOTIS PERINGATAN PREMIUM / PREMIUM REMINDER\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: RM 250,000\nPremium RM 180.00 was due on 1 March 2026."), "personal_schedule"), "other");
+});
