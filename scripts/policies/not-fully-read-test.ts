@@ -52,13 +52,15 @@ test("only a person's failed, partly read or cover-stopped documents count, and 
   const { notFullyRead, notFullyReadNote } = await import("@/lib/policies/not-fully-read");
   const ada = await notFullyRead(ACCOUNT, ADA);
   assert.equal(ada.count, 5, JSON.stringify(ada));
+  assert.equal(ada.ids.length, 5);
+  assert.equal(new Set(ada.ids).size, 5, "one id per document, so Home names a document once");
   assert.ok(ada.names.includes("Example Saver Plan") && ada.names.includes("Example Shield") && ada.names.includes("Example Travel"), JSON.stringify(ada.names));
   assert.equal((await notFullyRead(ACCOUNT, BEN)).count, 1);
   assert.equal((await notFullyRead(OTHER, ADA)).count, 0, "never another household's documents");
   assert.equal((await notFullyRead(ACCOUNT, ZOE)).count, 0);
 
-  assert.equal(notFullyReadNote({ count: 0, names: [] }, "Ada"), null);
-  assert.equal(notFullyReadNote({ count: 1, names: ["x"] }, "Ben", true), "One of Ben’s documents was not fully read.");
+  assert.equal(notFullyReadNote({ count: 0 }, "Ada"), null);
+  assert.equal(notFullyReadNote({ count: 1 }, "Ben", true), "One of Ben’s documents was not fully read.");
   assert.equal(notFullyReadNote(ada, "Ada", true), "5 of Ada’s documents were not fully read.");
   assert.match(notFullyReadNote(ada, "Ada") ?? "", /^5 of Ada’s documents were not fully read, so cover in them may be missing here\. Documents shows which/);
   await db.close();
