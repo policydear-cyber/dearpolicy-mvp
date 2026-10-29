@@ -123,7 +123,7 @@ test("an unsure cap or an unsure plan total hides the figures above it", async (
   const own = [item("Ada · Death Benefit", "Example Protector", 500000), item("Ada · TPD", "Example Protector", 500000), item("Ada · Intensive Care Unit (ICU) Benefit", "Example Shield", 100000)];
   applyCoverConditions({ items: own, facts: {} as never, conditions: [
     cond({ kind: "sub_limit", productName: "Example Protector", amount: 5000, quote: "Funeral expenses benefit is limited to S$5,000" }),
-    cond({ kind: "sub_limit", amount: 500, quote: "Ambulance fees up to S$500 per incident" }),
+    cond({ kind: "sub_limit", productName: "Example Protector", amount: 500, quote: "Ambulance fees up to S$500 per incident" }),
     cond({ kind: "sub_limit", productName: "Example Shield", amount: 25000, quote: "ICU Benefit: up to S$25,000" })] });
   assert.deepEqual(own.map((i) => i.calculatedAmount), [500000, 500000, 25000]);
   // An unplaced limit for one kind of benefit hides only that kind (TE #188 H2).
@@ -155,6 +155,15 @@ test("a limit clears a benefit only when its sentence names a benefit of another
     ["Hospital cash", "Except for the death benefit, all benefits are capped at S$5,000."],
     ["Death", "Except for the death benefit, all benefits are capped at S$5,000."],
     ["Hospital cash", "Limit per claim under Section 2: S$5,000"], ["Example Plan", "Maximum benefit payable under this policy is S$5,000."],
+    // A broad medical benefit holds its parts, and an umbrella holds its members (Critic R362 H1, TE #188 r4 F1).
+    ["Accidental Medical Reimbursement", "Hospital charges are limited to S$5,000"], ["Medical Expenses", "Hospitalisation is limited to S$5,000"],
+    ["Medical Expenses", "Outpatient treatment is limited to S$5,000"], ["Medical Expenses", "Clinic visits are limited to S$5,000"],
+    ["Medical Expenses", "Surgery is limited to S$5,000"], ["Medical Expenses", "ICU charges are limited to S$5,000"],
+    ["Overseas Medical Expenses", "In-patient treatment is limited to S$5,000"], ["Overseas Medical Expenses", "Ambulance charges are limited to S$5,000"],
+    ["Accidental Medical Reimbursement", "Dental treatment is limited to S$5,000"], ["Hospitalisation", "Medical expenses are limited to S$5,000"],
+    ["Outpatient", "Medical bills are limited to S$5,000"], ["Hospitalisation", "Maternity complications are limited to S$5,000"],
+    ["Hospital cash", "ICU cash benefit is limited to S$5,000"], ["Dental", "Outpatient benefits are limited to S$5,000"],
+    ["Ambulance", "Medical expenses are limited to S$5,000 per trip"], ["Surgery", "Overseas medical expenses are limited to S$5,000"],
   ] as [string, string][]) {
     const got = one(title, 8000, quote, 5000);
     assert.ok(got === 5000 || got === undefined, `${title}: ${quote} -> ${got}`);
@@ -164,6 +173,12 @@ test("a limit clears a benefit only when its sentence names a benefit of another
   assert.equal(one("Hospital cash", 8000, "Hospital room and board is limited to S$5,000.", 5000), 8000);
   assert.equal(one("Death", 500000, "Dental treatment is limited to S$500 per year.", 500), 500000);
   assert.equal(one("Death Benefit", 500000, "Funeral expenses benefit is limited to S$5,000", 5000), 500000);
+  assert.equal(one("Critical Illness", 500000, "Death benefit is limited to S$5,000", 5000), 500000);
+  assert.equal(one("Death", 500000, "TPD benefit is limited to S$5,000", 5000), 500000);
+  assert.equal(one("Death", 500000, "Physiotherapy is limited to S$1,000 per year", 1000), 500000);
+  assert.equal(one("Total Permanent Disability", 500000, "Psychiatric treatment is limited to S$1,000", 1000), 500000);
+  assert.equal(one("Critical Illness", 500000, "TCM treatment is limited to S$1,000", 1000), 500000);
+  assert.equal(one("Kematian", 500000, "Manfaat pengebumian terhad kepada RM5,000", 5000), 500000);
   // Counts are never money caps (TE #188 F3).
   assert.equal(one("Physiotherapy", 1200, "Maximum number of visits per year: 10", 10, "Physiotherapy"), 1200);
   assert.equal(one("Travel medical", 5000, "Maximum period of cover (days): 90", 90, "Travel medical"), 5000);
