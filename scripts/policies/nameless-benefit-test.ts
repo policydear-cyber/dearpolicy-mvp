@@ -1,6 +1,6 @@
 /**
  * A table cell read as a benefit of its own ("273,411", "nd", "(a)", "2027", "only", "and Merdeka") names nothing: it
- * must not be shown on the Benefits page, kept as a rule chat can cite, or stored at intake. Real benefit names, however
+ * must not be shown on the Benefits page, or kept as a rule chat can cite (rows stay stored, so a wrong call is undone by a code fix). Real benefit names, however
  * they are numbered, abbreviated or punctuated, are kept. Made-up names in the shapes read documents print. No
  * database, no network, no model.
  */
@@ -14,6 +14,8 @@ const NAMELESS = [
   "", "  ", "273,411", "52,157", "2027", "2030", "3rd", "nd", "th", "(a)", "(b)", "(iv)", "N/A", "N/A N/A", "S$5,000", "50%", "-",
   "only", "and Merdeka", "or", "percent (20%) of the surface of the Life", "of the Life Assured", "up to S$100",
   "Cash payouts provide 2026 you flexibility to", "Benefits payable in respect of", "Cover for the",
+  "SGD 5,000", "USD 300.00", "MYR 448.23", "GBP 150", "RM 20", "Nil", "NIL", "Not applicable", "TBA",
+  "dan Merdeka", "atau", "untuk setiap hari",
 ];
 const NAMED = [
   "Death Benefit", "Critical Illness Benefit", "Hospital Cash Benefit*", "Day surgery", "Hip", "ICU", "Class C",
@@ -24,6 +26,9 @@ const NAMED = [
   "Cover for sports equipment in the event of damage or theft, including", "If you need to return home earlier than planned",
   "Total and Permanent Disablement2due to Accident", "TOTAL DISABILITY ACC - MAX 2213S", "eShield Benefit", "2nd Medical Opinion", "24-hour Assistance",
   "Overall limit^", "Not covered", "Repatriation of mortal remains", "Loss of use of one hand and one foot", "Kidney dialysis",
+  // Other scripts, short forms, and joining words that are part of a hyphenated word (Critic R347, TE #186).
+  "危疾保障", "身故", "死亡保険金", "입원", "ประกัน", "Décès", "CI", "TI", "PA", "GP", "ER", "CT", "DB", "OT", "TB", "A&E", "TI/CI", "CI 1",
+  "in-hospital doctor's visit", "up-front cash", "per day hospital cash", "in-patient treatment", "on-call doctor", "Room & Board",
 ];
 
 test("a name that names nothing is not a benefit; every real benefit name is kept", async () => {

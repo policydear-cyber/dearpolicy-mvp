@@ -1053,16 +1053,22 @@ export function looksLikeCoverageLine(benefitName:string){
  * illustration's projected values ("273,411"), a header's ordinal suffixes ("nd", "3rd"), a list marker ("(a)"), a
  * year from a payout-by-year table ("2027" paying "S$717"), "N/A", and the tail of a wrapped line ("only" up to S$100,
  * "and Merdeka" S$448.23, "percent (20%) of the surface of the Life"). Shown, they are headings on the Benefits page and
- * amounts chat can cite for a benefit nobody can identify. The row's name must carry a word: once list markers, figures,
- * ordinals, money and "N/A" are taken out, a word of three letters or more is left. A name that begins with a
- * lower-case joining word, or stops on one, is a piece of a sentence. Only words a benefit name never begins or ends
- * with are listed, so a real benefit is never hidden by a word it happens to use ("Haemophilia A", "eShield"). */
-const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|per|percent|plus|less|including|which|that|if|as|from|up|nd|rd|st|th)\b/;
-const JOINING_END=/\b(?:and|or|of|the|to|for|with|by|a|an)\s*$/;
+ * amounts chat can cite for a benefit nobody can identify. Used when rows are read back, never at intake: a row this
+ * hides is still stored, so a name it wrongly hides comes back when the rule is corrected.
+ * When unsure, the name is kept. It is kept when it carries a letter run of three or more ("Décès"), two in a script other than Latin ("身故",
+ * "입원"), or a capitalised short form of two or more letters ("CI", "A&E", "TI/CI"), once list markers, figures,
+ * ordinals, money and empty-cell words are taken out. A name is a piece of a sentence only when a lower-case joining
+ * word is followed (or preceded) by a space, so "in-patient treatment" and "up-front cash" are kept. */
+const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|plus|less|including|which|that|if|as|from|up|dan|atau|untuk|termasuk|nd|rd|st|th)(?:\s|$)/u;
+const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
+const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|-+|—)$/i;
+const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
 export function namesNoBenefit(benefitName:string){
   const name=(benefitName??"").trim();
-  const words=name.replace(/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:S\$|US\$|RM|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/gi," ");
-  if(!/[A-Za-z]{3}/.test(words.replace(/\b(?:nd|rd|st|th)\b/gi," ")))return true;
+  if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
+  const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
+  const hasWord=/\p{L}{3}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
+  if(!hasWord)return true;
   return JOINING_START.test(name)||JOINING_END.test(name);
 }
 /** Every rule read from these documents. The order is total (benefit name, then page, then id): rows that share a
@@ -1095,7 +1101,7 @@ export async function replaceBenefitCatalog(accountId:string,policyId:string,ben
   await query("DELETE FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NULL",[accountId,policyId]);
   for(const benefit of benefits){
     if(kept.has(benefitKey(benefit.benefitName)))continue;
-    if(looksLikeCoverageLine(benefit.benefitName)||namesNoBenefit(benefit.benefitName))continue;
+    if(looksLikeCoverageLine(benefit.benefitName))continue;
     const inserted=await query<{id:string}>(
       "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,requires) VALUES($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18::text[]) RETURNING id",
       [accountId,policyId,benefit.productName,benefit.benefitName,benefit.traits,benefit.formulaKind,
