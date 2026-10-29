@@ -9258,3 +9258,28 @@ Each head went through the full gate: fresh worktree, npm ci, network blocked, m
   - `page.page` (the page object whose text is the evidence).
   - None passes another page.
 - Order: the new branch comes after the SGD document rule, so a Singapore-dollar pack resolves exactly as on main.
+
+## R355: PR #192 head 96588d0c (liability rows are not the person's own cover), CHANGES (one High)
+
+- The full gate is green: tsc, next build, merge-tree with main, coverage:table-test 104/104, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+### H1: the bare word "liability" in a section heading drops the person's own cover (lost cover)
+- The LIABILITY test runs on the section as well as the benefit name. Schedules often head their own-benefit tables with the insurer's limit of liability. Run through the PR's own categoryOfBenefit:
+  - ("Accidental death", "Maximum Liability per Insured Person") gives null.
+  - ("Accidental death", "Schedule of Benefits and Limits of Liability") gives null.
+  - ("Death", "Our liability") gives null.
+  - ("Hospital cash", "Limit of Liability (S$)") gives null.
+  - ("Medical expenses", "Company's maximum liability") gives null.
+  - ("Total and permanent disability", "Benefits and liabilities") gives null.
+  - "Accidental death - maximum liability" as a benefit name gives null.
+- Every one of these is the person's own cover, and each would leave its Home tile and claim match empty.
+- Fix: use an allow-list of liability-cover phrases, not the bare word:
+  - match "personal liability", "public liability", "third party liability", "legal liability", "liability to others / third parties", "liable for ... to other people", and the existing damage/injury/death to others or third parties;
+  - never match "limit(s) of liability", "maximum / total / overall liability", "our / the company's / insurer's liability", or "benefits and liabilities";
+  - add the seven rows above to the test as own cover that must keep its category.
+
+### Checks out
+- Assault and third-party cases stay own cover: "Accidental death (third party assault)" stays Personal Accident and "Death caused by a third party" stays Death.
+- "Personal Liability", "Injury caused to others" and "Section 3: Liability to others" correctly give null.
+- (2) limitKind (check.ts:313): LIMIT_HEAD never contains a liability word, so a head reaches the changed branch only when it names liability itself. It then reads "combined", which keeps a third party's figure off the person's own tiles. That is the right direction. On my probes the results are the same as main.
+- (3) Claims (table-benefits.ts): liability rows no longer match death, hospital, critical illness or disability claims. That is correct: they pay the third party. The H1 fix is needed here too, because a section heading of "Maximum liability" currently drops own-cover death rows from claims as well.
