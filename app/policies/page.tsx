@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { customerError, customerMessage } from "@/components/customer-text";
+import { customerError } from "@/components/customer-text";
+import { failedDocumentAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
@@ -482,11 +483,15 @@ export default function PoliciesPage() {
             if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
-          {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
-            ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
-            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span>{policy.page_count
-              ? <><small>If you have a clearer copy or the original file, upload that, then delete this one.</small><div className="row-error-actions"><button type="button" className="mini-button" onClick={chooseAnother}>Upload a clearer copy</button></div></>
-              : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
+          {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}
+          {!processing && policy.processing_error && (() => {
+            const advice = failedDocumentAdvice(policy.processing_error, { hasPages: !!policy.page_count });
+            if (advice.nextStep === "unlock") return <LockedPdf policy={policy} wrong={advice.kind === "password_wrong"} onUnlock={(password) => unlock(policy, password)} />;
+            return <div className="row-error processing-error" data-testid="document-unreadable" data-failure={advice.kind}><strong>This document could not be read</strong><span>{advice.reason}</span><small>{advice.hint}</small>
+              <div className="row-error-actions">{advice.nextStep === "upload_another"
+                ? <button type="button" className="mini-button" onClick={chooseAnother}>{advice.action}</button>
+                : <button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : advice.action}</button>}</div></div>;
+          })()}
 
           {/* Its numbers and the actions on it come last. */}
           <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => { if (confirmRereadId === policy.id) { setConfirmRereadId(null); void retryReading(policy); } else setConfirmRereadId(policy.id); }}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? "Confirm read again" : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">Coverage for this document is unavailable for a minute while it&rsquo;s read again.</small></>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
@@ -507,20 +512,10 @@ function PreviewLink({ policy }: { policy: Pick<Policy, "id" | "original_filenam
     aria-label={`${word ? "Download" : "Preview"} ${documentName(policy)}`}>{word ? "Download" : "Preview"}</a>;
 }
 
-/** The stored reason a document could not be read, in household words. The
- * stored messages name the operator's "Re-analyse" button; the household's
- * card offers "Try reading it again" instead. */
-function unreadableReason(error: string | null): string {
-  return customerMessage(error, "Its benefits and amounts are not available for answers.")
-    .replace(/;?\s*use Re-analyse to try again\.?/i, ".")
-    .replace(/\.\.$/, ".");
-}
-
 /** A locked PDF already in the library: enter its password here and it is
  * read again -- no delete, no re-upload. Says plainly whether a password
  * was missing or did not work. */
-function LockedPdf({ policy, onUnlock }: { policy: Policy; onUnlock: (password: string) => Promise<void> }) {
-  const wrong = /incorrect|did not work|didn.t work|wrong/i.test(policy.processing_error ?? "");
+function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean; onUnlock: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
