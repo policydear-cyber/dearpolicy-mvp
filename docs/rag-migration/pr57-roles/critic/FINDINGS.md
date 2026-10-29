@@ -9068,3 +9068,56 @@ All 71 earlier probes hold.
 - "eShield" from eShield.pdf becomes "e Shield", because prettifyFilename splits the camel case. The printed name gets worse.
 - "Travel Care", "Group Term Life", "ICU", "Home" and "PRUShield" stay as they are, and a plan a person typed is kept.
 - Low: when the base name matches the file name but documentName would only re-prettify the same words, keep the stored plan. That is, replace only when the name is a machine file name, or when the document has a product name.
+
+## R349: PR #188 head ef2841f6 (printedCap: a stored cap bites only where its sentence prints it), CHANGES
+
+- Gate (fresh worktree, npm ci, network-blocked, model keys stripped):
+  - Own test passes. Simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+  - tsc clean, next build passes, merge-tree with main 5110764a clean.
+- On main, every stored cap bites, which cuts too much. With this PR, a cap that fails the check stops biting, so the full figure shows. That is a claimable amount set too high, which is the worst-bug class. The unsure case must not show the uncapped figure.
+- All results below come from running the PR's printedCap and applyCoverConditions.
+
+### H1 (High): real printed caps that no longer bite, so the figure shows uncapped
+- No currency printed on the figure: "Maximum per policy year 50,000" and "Benefit limit: 5,000 per disability". Table-style schedules often put the currency in a column header.
+- Cap words that are missing:
+  - "50% of the sum insured or S$5,000, whichever is lower"
+  - "The lower of S$5,000 or actual expenses"
+  - "Restricted to S$5,000 per policy year"
+  - "Had maksimum RM10,000 setahun" (Malay "maksimum")
+  - "最高赔偿 S$10,000"
+- Currencies missing: ¥, ₹, PHP, Rp.
+- Fractions written in words: "up to fifty percent of the sum insured" and "limited to half of the Sum Assured".
+- A per-day figure with a day cap: "S$500 per day, up to 30 days", stored as S$15,000.
+- These still bite: S$1.5 million, SGD 1,500,000.00, NT$, $20k, 33.33%, "25 %", "Sub-limit S$5,000", "Annual Limit S$5000", "S$ 5,000".
+
+### H2 (High): a sub-limit that names its benefit in the quote stops biting
+- namesTheBenefit compares only condition.productName (the cover the condition governs, per the CoverCondition doc) with the item title. It never reads the quote.
+- Example: "Hospital Cash is limited to S$5,000 per policy year." with productName "Example Shield" (the cover), or with null (document-wide).
+  - The Hospital Cash item stays at S$20,000.
+  - The caveat says it "is shown as printed", but the shown figure is above the printed cap.
+- With productName null, every sub_limit now becomes a caveat.
+- Fix:
+  - Treat the cap as naming the benefit when the quote names the item's benefit (the words after " · ").
+  - When it is unclear which benefit is capped and the figure is above the cap, show no figure for that item ("limited by the policy; see page N"), never the full amount.
+
+### H3 (High): a minimum, threshold, excess or sum insured still bites
+- "subject to" and "exceeding" are cap words, and the stored figure only has to appear somewhere in the sentence. These all bite as caps:
+  - "subject to a minimum withdrawal amount of S$1,000". This is the PR's own motivating case, reworded, and it still cuts S$100,000 to S$1,000.
+  - "subject to a minimum of S$1,000"
+  - "minimum S$1,000, maximum S$100,000" (the stored S$1,000 bites)
+  - "Claims exceeding S$1,000 require original receipts"
+  - "For bills exceeding S$2,000 we pay 80%"
+  - "An excess of S$100 applies, subject to the terms below"
+  - "The deductible of S$500 is subject to change"
+  - "Sum Assured S$50,000, subject to the terms of this policy"
+  - "Co-payment of S$200 up to the limit"
+  - "premium of S$3,000 per year, payable up to age 65"
+- Fix:
+  - Bind the cap word to the stored figure, in the same clause and next to it ("maximum of S$X", "up to S$X", "S$X maximum", "limit: S$X").
+  - Drop bare "subject to" and "exceeding" as cap words.
+  - Any of these words in that clause blocks the cap: minimum, at least, exceed(ing)/above/over/more than as a threshold, excess, deductible, co-payment, premium, sum insured/assured.
+  - Use an allow-list of cap phrasings next to the figure, not a sentence-wide cap word.
+
+### Fixture change (cover-conditions-stress.ts)
+- It only adds printed quotes that state the stored cap ("The most we will pay under Living Care is S$350,000 / S$1,000 in total."). The assertions are unchanged.
+- This is legitimate: under the new rule the fixture needs a sentence that prints the cap, and the asserted totals are the same.
