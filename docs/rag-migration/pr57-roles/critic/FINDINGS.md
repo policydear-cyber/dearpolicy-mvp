@@ -8835,3 +8835,24 @@ All 38 earlier probes now hold. R332 H1 (attached/enclosed) and M1 are fixed. I 
   - The PR's own notices still hold: the titled lapse notice that prints life assured and sum assured has a NOTICE_TITLE_LINE, and the reinstated letter has no sum row.
   - Add the five rows above as negatives.
 - Checks: I did not re-run the full gate on this head (the change is limited to the messy.ts wording). The ed94eacd gate was green; I will run the gate on the next head.
+
+## R335 — #184 11e25b21: CHANGES (1 High, narrow)
+
+- R334 is fixed. All five R334 rows (attached/enclosed variants, and no schedule mention) are personal_schedule again. All 38 earlier probes hold.
+  - N9 (an untitled lapse letter printing its own particulars) keeps today's role. That is the accepted default-safe limit.
+- **H1. The content guard only recognises one layout.** policyParticulars needs a `PERSON_CELL` label, the value beside it, and a sum line with one of a few words. I used a reinstatement letter ("… Please refer to your policy schedule.") followed by a page 2 with the policy's particulars in another common layout. Main gave personal_schedule for all four of these; the PR gives "other":
+
+  | Page 2 (made-up) | Why the guard misses it |
+  |---|---|
+  | "Policy No : 77001234 / Insured Name : Ravi Kumar / Basic Sum Assured : S$200,000" | "Insured Name" is not a PERSON_CELL label |
+  | "Policy Number⇥77001234 / Life Assured⇥Ravi Kumar / Coverage⇥S$200,000" | "Coverage" is not a sum word |
+  | header row "Policy Number⇥Life Assured⇥Sum Assured", then a values row | values sit under the labels, not beside them |
+  | "Benefit⇥Amount / Death⇥S$200,000 / TPD⇥S$200,000" | a benefit table, not a sum line |
+
+  - Fix (structural, default-safe): **a later page may not add a new money figure or a new policy number.** A notice's later pages (payment slip, terms, a translation) repeat page 1's premium and number. A schedule adds its sum assured and benefit amounts.
+    - Compute the set of money figures (currency or a number of 1,000 or more with separators) and policy numbers on page 1.
+    - If any later page prints one that is not in that set, the document is not a notice.
+    - This replaces the shape recognition for later pages. Keep policyParticulars for page 1.
+  - Add the four rows above as negatives.
+- Low (not blocking): on page 1, an untitled reinstatement letter that embeds its particulars in a layout the guard misses ("Insured Name", a column table) becomes other. Main filed it as personal_schedule by keyword. The real schedule usually comes separately, so this rarely loses cover.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
