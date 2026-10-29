@@ -23,7 +23,9 @@ import { loadPolicyInventory, normalizedIdentifier } from "@/lib/policies/invent
 import type { ClaimPerson } from "@/lib/claims/person";
 
 export type PremiumRecordRow = { id: string; policy_id: string | null; family_member_id: string | null; insurer: string | null; product_name: string | null; policy_number: string | null;
-  amount: string; currency: string | null; frequency: string | null; payment_date: string | null; period_start: string | null; period_end?: string | null; created_at: string; notes?: string | null };
+  amount: string; currency: string | null; frequency: string | null; payment_date: string | null; period_start: string | null; period_end?: string | null; created_at: string; notes?: string | null;
+  /** The document_role of the current document the record was read from (null: unknown, or that document is no longer current). */
+  source_role?: string | null };
 export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amount: number; currency: string; shared: boolean;
   /** Round 16: the record states its currency (false: `currency` is only this summary's display default, never a fact to total or show). */
   currencyStated: boolean;
@@ -313,8 +315,8 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
 }
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
-    `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes
-       FROM premium_records pr
+    `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role
+       FROM premium_records pr LEFT JOIN policies sd ON sd.id=pr.source_document_id AND sd.account_id=pr.account_id AND ${activePredicate("sd")}
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
   let fromTable: PremiumItem[] = [], tableLeftOut: TableLeftOut[] = [];
