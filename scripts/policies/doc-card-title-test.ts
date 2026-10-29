@@ -63,6 +63,9 @@ test("Coverage page prints no raw file name", () => {
 test("Coverage route names each document with the shared rule", () => {
   assert.match(coverageRoute, /from "@\/lib\/policies\/document-name"/);
   for (const r of [/ownership_name:documentCardTitle\(/, /reference_name:documentCardTitle\(/, /document_name:documentCardTitle\(/, /document:name\(r\.source\.documentId,r\.source\.document\)/]) assert.match(coverageRoute, r);
+  // Each name carries its own document's number, so two policies of one insurer and kind stay apart (TE P179 r2 mutant).
+  assert.match(coverageRoute, /ownership_name:documentCardTitle\(\{[^}]*policy_number:owner\.policy_number\}\)/);
+  assert.match(coverageRoute, /reference_name:documentCardTitle\(\{[^}]*policy_number:ref\.policy_number\}\)/);
   assert.doesNotMatch(coverageRoute, /document:r\.source\.document\b/);
   assert.doesNotMatch(coverageRoute, /(ownership|reference)_filename:/);
 });
