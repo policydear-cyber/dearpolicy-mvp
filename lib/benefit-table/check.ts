@@ -223,14 +223,90 @@ const COMPENSATION_LIMIT = /^\s*(?:the\s+)?limits?\s+of\s+compensation\b/i;
 export const LIMITS_HEADING = /\blimits?\s+of\s+compensation\b/i;
 const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
 const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
-export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null }): boolean {
+/** A row named as a limit (NAMED_LIMIT) is a limit across policies when its sentence mentions any policy other than this
+ * one ("this and other policies", "any other policy", "all our policies", "policies we have issued", "the same life"), or
+ * several benefits together: that limit is not what this policy pays, and an unsure mention gives no amount, never a
+ * wrong one (TE pr180). "Any policy year" and "other policy years" are periods, not policies. Plans count only as other
+ * holdings ("this plan and any other plans", "plans you hold", "plans with us"): a schedule's "same for all plans" or
+ * "(all plans)" says its plan columns print the same, not that the limit is shared (Critic R320 H1). */
+const OTHER_POLICIES = new RegExp([
+  String.raw`\b(?:other|another)\s+(?:of\s+(?:our|your|the)\s+)?(?:polic(?:y|ies)|contracts?)\b(?!\s+(?:years?|periods?|anniversar\w*|months?)\b)`,
+  String.raw`\b(?:all|any|every|across)\s+(?:of\s+)?(?:(?:our|your|the|its|such)\s+)?(?:policies|contracts)\b`,
+  String.raw`\bpolicies\s+(?:that\s+|which\s+)?we\s+(?:have\s+)?(?:issued?|underwrit\w*)\b`,
+  String.raw`\bsame\s+life\b`,
+  String.raw`\b(?:this|the)\s+(?:policy|plan)\s+and\s+(?:any\s+|all\s+)?(?:(?:of\s+)?(?:our|your|the)\s+)?other\s+plans?\b`,
+  String.raw`\bplans?\s+(?:that\s+|which\s+)?(?:you|we)\s+(?:have\s+)?(?:hold|held|have|issued?|underwrit\w*)\b`,
+  String.raw`\bplans?\s+(?:you\s+hold\s+)?with\s+us\b`,
+  String.raw`\b(?:all|any|every)\s+(?:of\s+)?your\s+(?:other\s+)?plans\b`,
+  String.raw`\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b`,
+].join("|"), "i");
+/** Wording that says the limit is this plan's own even though other plans are named ("applies separately to this plan and
+ * any other plans you hold", "not shared with any other policies", "claims under other policies do not reduce it"): an
+ * allow-list, so the row stays this plan's limit. */
+const OWN_LIMIT = /\b(?:appl(?:y|ies|ied)|counted|calculated|assessed)\s+separately\b|\bseparately\s+(?:to|for|under|from)\b|\bnot\s+shared\b|\bdo(?:es)?\s+not\s+(?:reduce|count\s+towards?|affect)\b/i;
+/** A row named only as a limit: at most ten words, the last of them "limit", "limits", "cap" or "caps" ("TI/CI limit", "TI
+ * benefits limit within the TI/CI limit", "TI/CI cap"). Not "Sub-limit", and not a name that goes on past the word
+ * ("Limit of indemnity"), and not a benefit's name that says it is capped. */
+const NAMED_LIMIT = (head: string) => { const w = head.trim().split(/\s+/); return w.length <= 10 && /^(?:limits?|caps?)$/i.test(w[w.length - 1] ?? "")
+  // A benefit's name that says it is capped ("Critical Illness Benefit limited to the same life cap") is that benefit; a
+  // limit's name that says it sits under another ("TI benefits limit subject to the TI/CI limit") is still a limit.
+  && !/\b(?:limited|capped|subject)\b/i.test(head.replace(/^.*?\b(?:limits?|caps?)\s+subject\s+to\b/i, "")); };
+/** A sentence that opens by pointing at the one before it ("Of this amount, the TI benefits cannot be more than
+ * S$1,000,000.", "Out of this limit", "Within the above total"): its scope is that sentence's. */
+const POINTS_BACK = /^\s*(?:of|out\s+of|within)\s+(?:this|that|the\s+above|the\s+said)\s+(?:amount|limit|total|sum)\b/i;
+/** A sentence's end: a full stop before a space, or a blank line. Not the stop of "i.e.", "e.g.", "etc.", "No." and
+ * the like, and not a semicolon, which runs a sentence on (TE pr180 A4, A5). */
+const SENTENCE_STOP = /(?<![A-Za-z]\.[A-Za-z])(?<!\b(?:etc|no|nos|vs|approx|incl|cf|ref|art|cl|para|pg|pp))\.(?=\s)|\n\s*\n/gi;
+/** Page text read as one line: a word split by its line's end ("poli-\ncies") is joined (TE pr180 A9). */
+const asLine = (t: string) => t.replace(/([A-Za-z])-[ \t]*\n[ \t]*([a-z])/g, "$1$2").replace(/\s+/g, " ").trim();
+/** A line a sentence may be read across: printed text with no table cell and no figure of its own (a row, a heading
+ * with a figure, another benefit's amount are never crossed: Critic R318 H1). */
+const CROSSABLE = (line: string) => !!line.trim() && !line.includes("\t") && !/\d/.test(line);
+/** A line that carries on the sentence of the line above: the line above does not end one, and either this line starts
+ * in lower case or the line above stops on a word no sentence or heading ends on ("issued by\nKestrel Mutual Life",
+ * "on the same life for\nTI and CI claims": TE pr180 A18, A19). */
+const CONTINUES = (above: string, line: string) => !/[.!?:]\s*$/.test(above)
+  && (/^\s*[a-z(]/.test(line) || /\b(?:by|for|of|on|in|to|with|under|from|at|and|or|the|a|an|any|all|other|our|your|its|their|which|that|than|is|are|be)\s*$/.test(above));
+/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. It is read
+ * only on the quote's own lines and the lines its sentence runs over (each in lower case after one that does not end, no
+ * table cell, no figure): a heading, a table row or another clause beside the quote is never its sentence. */
+export function quoteSentence(pageText: string, start: number, end: number): string {
+  const lines: { from: number; text: string }[] = [];
+  for (let at = 0; at <= pageText.length;) { const e = pageText.indexOf("\n", at); const to = e < 0 ? pageText.length : e; lines.push({ from: at, text: pageText.slice(at, to) }); at = to + 1; }
+  const lineOf = (pos: number) => { let k = 0; while (k + 1 < lines.length && lines[k + 1].from <= pos) k++; return k; };
+  let first = lineOf(start), last = lineOf(Math.max(start, end - 1));
+  const own = lines.slice(first, last + 1).some((l) => l.text.includes("\t"));
+  if (!own) {
+    while (first > 0 && CONTINUES(lines[first - 1].text, lines[first].text) && CROSSABLE(lines[first - 1].text)) first--;
+    while (last + 1 < lines.length && CONTINUES(lines[last].text, lines[last + 1].text) && CROSSABLE(lines[last + 1].text)) last++;
+  }
+  const blockFrom = lines[first].from, block = pageText.slice(blockFrom, lines[last].from + lines[last].text.length);
+  const qs = start - blockFrom, qe = Math.min(block.length, end - blockFrom);
+  const before = block.slice(0, qs), after = block.slice(qe);
+  const starts = [...before.matchAll(SENTENCE_STOP)].map((m) => m.index! + m[0].length);
+  const from = starts.length ? starts[starts.length - 1] : 0;
+  const tail = [...(after.replace(/\s+$/, "") + " ").matchAll(SENTENCE_STOP)][0];
+  const sentence = asLine(before.slice(from) + block.slice(qs, qe) + after.slice(0, tail ? tail.index! + 1 : after.length));
+  if (!POINTS_BACK.test(sentence) || starts.length < 1) return sentence;
+  const prior = asLine(before.slice(starts.length > 1 ? starts[starts.length - 2] : 0, from));
+  return `${prior} ${sentence}`;
+}
+export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null; sentence?: string | null }): boolean {
   return limitKind(b) === "combined";
 }
 /** "combined": a limit on several benefits together (above). "benefit_cap": limit wording whose head also names one
  * benefit ("Total amount payable for death: S$500,000 for all plans"): the row is that benefit, and its cap is said with
  * it as a condition (Critic R253 L1). null: neither. */
-export function limitKind(b: { benefit: string; section?: string | null; quote?: string | null }): "combined" | "benefit_cap" | null {
+export function limitKind(b: { benefit: string; section?: string | null; quote?: string | null; sentence?: string | null }): "combined" | "benefit_cap" | null {
   const head = b.benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
+  // A row named only as a limit whose own sentence on the page (or name, or quote) caps several policies on one life ("The
+  // most we will pay ... for the policy and other policies ... is S$2,000,000 (the TI/CI limit)") is that limit, never what
+  // the policy pays (audit of 1912d73: such a row showed "up to S$2,000,000" as a terminal illness card). Its figure is
+  // the limit itself, so it is combined even when it names one benefit.
+  if (!LIMIT_HEAD.test(head) && NAMED_LIMIT(head)) {
+    const text = asLine([b.benefit, b.quote ?? "", b.sentence ?? ""].join("\n"));
+    return !OWN_LIMIT.test(text) && OTHER_POLICIES.test(text) ? "combined" : null;
+  }
   if (!LIMIT_HEAD.test(head) || !COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"))) return null;
   // "Limits of compensation" names only the limit, whatever benefit follows it; other limit wording that names a benefit
   // ("Total amount payable for death") is that benefit.
@@ -564,7 +640,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // that states none keeps the reading's day when it is printed.
     const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
-    const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt });
+    const at = placed.get(source);
+    const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
