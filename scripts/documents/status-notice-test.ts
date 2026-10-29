@@ -96,3 +96,22 @@ test("Critic R330: a schedule or certificate named any way but a known reference
   for (const title of ["NOTICE OF POLICY LAPSE", "Reminder: Premium Overdue", "PAYMENT ACKNOWLEDGEMENT"])
     assert.notEqual(deterministicDocumentRole(pages(title + "\nPolicy Number 77001234\nLife Assured: Ravi Kumar\nSee your policy schedule."), "personal_schedule"), "personal_schedule", title);
 });
+
+test("Critic R331 / TE round 2: terms a schedule prints are not events; receipts that record a payment stay receipts", async () => {
+  const { deterministicDocumentRole } = await load();
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const body = "\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000";
+  // Schedules and letters that print grace-period and reinstatement terms are not notices.
+  for (const doc of [
+    ["Dear Policyholder\nEXAMPLE TERM - YOUR SCHEDULE" + body + "\nReinstatement: a lapsed policy may be reinstated within 2 years\nThank you for choosing Example Life"],
+    ["Dear Mr Kumar\nWe are pleased to send your policy details." + body + "\nGrace period: 30 days\nThank you"],
+    [letter("Welcome to Example Life. A grace period of 30 days applies to each premium.") + body],
+    ["Example Life\nENDORSEMENT NO. 3\nDear Mr Kumar\nThe grace period is extended to 60 days." + body + "\nYours sincerely\nExample Life"],
+  ]) assert.equal(statusNotice(doc.map((text) => ({ text }))), false, doc[0].slice(0, 50));
+  // A receipt for a reinstatement payment, or for a premium paid within the grace period, records that payment.
+  assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nWe have received S$99.00 for the reinstatement of your policy. Keep this with your policy schedule."), "personal_schedule"), "premium_receipt");
+  assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nPremium S$99.00 received within the grace period. See your policy schedule."), null), "premium_receipt");
+  // A renewal notice that prints its grace period is still a renewal notice; an overdue one is not.
+  assert.equal(deterministicDocumentRole(pages(letter("RENEWAL NOTICE\nPolicy Number 77001234\nYour renewal premium is S$99.00. A 30-day grace period applies. Your policy schedule is unchanged.")), null), "renewal_statement");
+  assert.equal(deterministicDocumentRole(pages(letter("RENEWAL NOTICE\nPolicy Number 77001234\nYour renewal premium of S$99.00 has not been received. Refer to your policy schedule.")), null), "other");
+});

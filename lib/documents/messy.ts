@@ -125,18 +125,24 @@ const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|cus
 // unchanged", "Policy schedule: no change"). Allow-list (Critic R330 H1): any other mention ("REVISED POLICY SCHEDULE",
 // "Policy Schedule No. 2", "your updated policy schedule is enclosed", "serves as your certificate") means the document
 // may carry the schedule itself, and it keeps the old rules.
-const DOC_NAME = String.raw`(?:policy schedule|certificate of insurance)`;
+const DOC_NAME = String.raw`(?:policy schedule|schedule|certificate of insurance)`;
 const REFERENCE_PHRASES = [
   new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|in|under|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b`, "gi"),
   new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)\b`, "gi"),
   /\bpolicy\s+schedule\s*:\s*no\s+change\b/gi,
 ];
-const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|^\s*schedule\s*$/im;
+const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as|your schedule)\b|^\s*schedule\s*$/im;
 const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
-const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|grace period|overdue|terminated|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
+// What happened to this policy, never a term a schedule prints ("Grace period: 30 days", "a lapsed policy may be
+// reinstated within 2 years") (Critic R331 H1): a letter without a notice title needs one of these.
+const STATUS_EVENT = /\b(?:has|have|had)\s+(?:now\s+)?(?:lapsed|been\s+(?:reinstated|terminated|cancelled))\b|\blapsed\s+on\b|\bwas\s+(?:reinstated|terminated)\b|\breinstated\s+with\s+effect\b|\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwas\s+due\s+on\b|\bis\s+(?:now\s+)?(?:in|within)\s+(?:the|its)\s+(?:\d+-day\s+)?grace\s+period\b|\bgrace\s+period\s+(?:ends|will\s+end|expires)\b|\boverdue\b|\bwe\s+have\s+received\s+(?:your\s+)?(?:premium|payment)\b/i;
 // What happened to the policy outweighs the payment words a notice also prints ("the renewal premium was not received",
 // "an official receipt will be sent once paid"): such a notice is never payment evidence (TE #184).
-const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|grace period|reminder|overdue|terminat\w+|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
+// Grace-period wording alone does not demote a renewal notice: many print theirs (TE #184 R1).
+const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|reminder|overdue|terminat\w+|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
+// A receipt that only promises one ("will be sent once paid") records no payment.
+const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?:sent|issued)\b|\bonce\s+(?:paid|payment)\b|\bupon\s+payment\b/i;
+const RECEIPT_WORDS = /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i;
 const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
   && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b|\bcomputer[- ]generated (?:letter|notice)\b/im.test(text);
 
@@ -152,17 +158,23 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   if (DOCUMENT_ITSELF.test(REFERENCE_PHRASES.reduce((t, re) => t.replace(re, " "), text))) return false;
   if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
   if (printedLines(pages[0].text).slice(0, 12).some((l) => NOTICE_TITLE_LINE.test(l))) return true;
-  return noticeLetter(text) && STATUS_NOTICE.test(text);
+  return noticeLetter(text) && STATUS_EVENT.test(text);
 }
 
-/** The role a status notice keeps, decided by its head first (Critic R330 M2): a lapse, reminder, grace, termination or
- * reinstatement notice is a notice ("other"), whatever payment words it prints; otherwise a renewal notice or a receipt. */
+/** The role a status notice keeps, decided by its title first (Critic R330 M2): a receipt that records a payment is a
+ * receipt; a lapse, reminder, termination or reinstatement notice is a notice ("other"), whatever payment words it prints;
+ * a renewal notice is a renewal statement unless it says the premium is overdue or was not received. */
 export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "renewal_statement" | "premium_receipt" {
-  const kind = (t: string) => LAPSE_OR_DUE.test(t) ? "other" as const
-    : /\brenewal (?:notice|statement|premium)\b/i.test(t) ? "renewal_statement" as const
-    : /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i.test(t) ? "premium_receipt" as const : null;
-  const head = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
-  return kind(head) ?? (LAPSE_OR_DUE.test(pages.map((p) => p.text).join("\n")) ? "other" : kind(pages.map((p) => p.text).join("\n"))) ?? "other";
+  const text = pages.map((p) => printedLines(p.text).join("\n")).join("\n");
+  const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
+  // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
+  // only promises one.
+  if (RECEIPT_WORDS.test(title) && !NO_PAYMENT_YET.test(text)) return "premium_receipt";
+  if (title && LAPSE_OR_DUE.test(title)) return "other";
+  if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
+  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text)) return "other";
+  if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
+  return RECEIPT_WORDS.test(text) ? "premium_receipt" : "other";
 }
 
 // ---------------------------------------------------------------------------
