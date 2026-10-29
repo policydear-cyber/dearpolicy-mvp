@@ -43,12 +43,17 @@ for (const width of [375, 1280]) test(`Preview opens the file at ${width}px`, as
 
   const word = page.locator(".document-card", { hasText: "Benefits table.docx" });
   await expect(word.getByRole("link", { name: /^Download/ })).toHaveAttribute("href", "/api/policies/11111111-0000-4000-8000-000000000002/file");
-  await expect(word.locator(".document-file")).toHaveCount(0);
+  // A file name a person chose is the title, made readable; the file name itself stays as the small line.
+  await expect(word.locator(".document-title strong")).toHaveText("Benefits table");
+  await expect(word.locator(".document-file")).toHaveText("Benefits table.docx");
 
   // A long file name used as the title wraps inside its card instead of widening a phone screen.
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 
   const scanning = page.locator(".document-card", { hasText: "scan_0007.pdf" });
   await expect(scanning).toBeVisible();
+  // A machine-made file name is never the title, even while the file is still being scanned: what it is instead.
+  await expect(scanning.locator(".document-title strong")).toHaveText("Certificate");
+  await expect(scanning.locator(".document-file")).toHaveText("scan_0007.pdf");
   await expect(scanning.getByRole("link", { name: /Preview|Download/ })).toHaveCount(0);
 });

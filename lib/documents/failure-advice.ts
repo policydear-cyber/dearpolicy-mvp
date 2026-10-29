@@ -66,3 +66,47 @@ export function failedDocumentAdvice(error: string | null | undefined, { hasPage
     ? { kind: "unknown", reason: DOCUMENT_READING_FAILED_MESSAGE, hint: UPLOAD_HINT, nextStep: "upload_another", action: "Upload a clearer copy" }
     : { kind: "unknown", reason: DOCUMENT_READING_FAILED_MESSAGE, hint: READ_AGAIN_HINT, nextStep: "read_again", action: READ_AGAIN };
 }
+
+/** The same advice, as chat says it: why (a clause about "it", to follow "couldn’t be read because") and the one next
+ * step, naming the Documents page. Built from failedDocumentAdvice, so chat and the Documents page always agree on the
+ * kind, and on the button a step names (its own `action` label). Fixed strings only: no stored text, file name, amount
+ * or date is ever put in them. An unknown reason gets the generic wording, as on the page. */
+export type FailedDocumentChatAdvice = { kind: FailedDocumentAdvice["kind"]; why: string; step: string };
+
+const PHOTO_RETAKE = "lay the page flat in good light with no shadow across it, hold the phone steady and straight above the page, and keep the whole page in the frame";
+const CHAT_WHY: Record<FailedDocumentAdvice["kind"], string> = {
+  password_missing: "it is password-protected and was uploaded without its password",
+  password_wrong: "it is password-protected and the password entered for it didn’t work",
+  no_text: "DearPolicy found no readable text in it",
+  unopenable: "the file couldn’t be opened — it may be damaged",
+  incomplete: "the file is incomplete — it stops part-way, as happens when a download or copy is cut off",
+  photo: "it is a photo too blurred, dark or faint to read",
+  service: "DearPolicy’s reading service wasn’t available — nothing is wrong with the file",
+  limit: "reading was paused when the monthly reading limit was reached — nothing is wrong with the file",
+  reading_failed: "DearPolicy couldn’t finish reading it",
+  unknown: "DearPolicy couldn’t finish reading it",
+};
+/** The step for a document the Documents page offers another copy for, by kind. */
+const CHAT_UPLOAD_STEP: Partial<Record<FailedDocumentAdvice["kind"], string>> = {
+  no_text: SAME_FILE + " Upload the original PDF from the insurer, or a clearer scan, on the Documents page, then delete the old one.",
+  unopenable: SAME_FILE + " Upload the original file on the Documents page (or ask the insurer for a fresh copy), then delete the old one.",
+  incomplete: "Download it again from the insurer’s email or website (or ask the insurer for a fresh copy), upload the new copy on the Documents page, then delete the old one.",
+  photo: "Take it again — " + PHOTO_RETAKE + " — then upload the new photo on the Documents page and delete the old one. A PDF from the insurer is even better.",
+  unknown: "If you have a clearer copy or the original file, upload it on the Documents page, then delete the old one.",
+};
+
+export function failedDocumentChatAdvice(error: string | null | undefined, { hasPages }: { hasPages: boolean }): FailedDocumentChatAdvice {
+  const advice = failedDocumentAdvice(error, { hasPages });
+  const why = CHAT_WHY[advice.kind];
+  const press = "Press “" + advice.action + "” on the Documents page";
+  const step = advice.kind === "password_missing"
+    ? "Enter its password on the Documents page and DearPolicy will read it — the insurer’s covering email or letter usually says what it is — or ask the insurer for an unlocked copy."
+    : advice.kind === "password_wrong"
+      ? "Check the password (passwords are case-sensitive) and enter it again on the Documents page, or ask the insurer for an unlocked copy."
+      : advice.nextStep === "read_again"
+        ? advice.kind === "service" ? press + " in a little while."
+          : advice.kind === "limit" ? press + " after the limit resets " + READING_LIMIT_RESETS + ". There is no need to upload it again."
+          : press + ". If it still can’t be read, delete it and upload a clearer copy or the original file."
+        : CHAT_UPLOAD_STEP[advice.kind] ?? CHAT_UPLOAD_STEP.unknown!;
+  return { kind: advice.kind, why, step };
+}
