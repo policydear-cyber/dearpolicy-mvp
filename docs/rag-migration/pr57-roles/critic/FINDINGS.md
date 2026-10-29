@@ -9140,3 +9140,40 @@ All 71 earlier probes hold.
 - Low: amount-alternatives options from two same-named documents carry identical documentName labels. They are told apart only by page, and are sorted by name then page.
   - This is display only, and the options keep policyId.
   - Optional: add the page or the policy number ending.
+
+## R351: PR #190 head 01e92a53 (plan-table rows give no figure), CHANGES
+
+- Full gate is green:
+  - tsc, next build, merge-tree with main 5110764a;
+  - the PR's own test;
+  - simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+### H1 (High): a held row comes back as an uncapped percentage
+- repairStoredRules (benefit-catalog.ts:737) runs ruleFromQuote after resolveStoredRules. A row the new hold has set to `none` is then read again from its quote.
+- Results from the PR's own repairStoredRules:
+  - "Medical expenses up to 10% of sum insured, max S$5,000 S$10,000". Main gives fixed 5000. The PR gives **sum_insured 0.1, with no cap**, and the plan note still attached. With a S$500,000 sum insured, chat would show S$50,000 against a printed maximum of S$5,000 or S$10,000.
+  - "Accidental death 100% of the sum insured S$50,000 S$100,000 S$200,000" now gives sum_insured 1.
+- In every one of these cases the Benefits page says "no amount is used", while chat uses the percentage.
+- Fix:
+  - skip ruleFromQuote for rows carrying PLAN_COLUMNS_NOTE, or apply the hold after ruleFromQuote;
+  - add both quotes above to the test.
+
+### Low: single-plan rows held (default-safe, but the wording is wrong)
+- These all trip the check:
+  - "Hospital Cash (per day / maximum) S$100 S$5,000"
+  - "Per life / per family S$50,000 S$100,000"
+  - "S$1,000,000 US$750,000" (two currencies)
+  - "Deductible S$500 S$1,000 (ward A / B1)"
+- Holding them is the safe direction, but the page says "a different amount for each plan", which is untrue for per-day/maximum or two currencies.
+- Optional:
+  - do not count cells in different currencies as plan columns;
+  - phrase the note as "prints more than one figure".
+
+### Low: plan tables it misses (no regression; main does the same)
+- It misses bare figures with the currency in the header ("5,000 10,000 15,000"), percentage columns ("25% 50% 100%"), and currencies outside the list (¥, ₹).
+
+### Checks out
+- Tier interplay: tiered and reviewed rows are skipped.
+- Stored data is unchanged, because this runs only on read.
+- Callers handle `none` as no figure.
+- The ledger behaves the same way.
