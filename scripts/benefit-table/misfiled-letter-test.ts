@@ -48,3 +48,19 @@ test("Read again is offered only where it can run: not while reading, not on a h
   assert.equal(documentState(ready("insurer_letter", 4, true), true), "read");
   assert.equal(documentState(ready("insurer_letter", 0, true), false), "no_table");
 });
+
+test("letters, notices, bills, notes and screenshots that mention a schedule are not packs (Critic R327 H1)", async () => {
+  const { filedBeforeRoleRules } = await load();
+  const signed = (body: string) => pages("Dear Mr Kumar\n" + body + "\nYours sincerely\nCustomer Service");
+  const cases: [string, { page: number; text: string }[]][] = [
+    ["insurer_letter", signed("NOTICE OF LAPSE\nPolicy Number: 77001234\nYour policy lapsed on 1 March 2026. Please refer to your policy schedule.\nLife Assured: Ravi Kumar")],
+    ["insurer_letter", signed("We have updated your address.\nPolicy schedule and policy number 77001234 are unchanged.\nInsured: Ravi Kumar\nPremium S$99.00")],
+    ["insurer_letter", signed("PREMIUM REMINDER\nPolicy No. 77001234\nAs shown in your policy schedule, premium S$99.00 was due on 1 March 2026.\nGrace period ends 31 March 2026")],
+    ["insurer_letter", signed("Your policy has been reinstated with effect from 6 January 2026.\nPolicy schedule: no change. Policy Number 77001234\nLife Assured: Ravi Kumar")],
+    ["claim_decision", signed("Claim number CL-2026-0042\nPlease send the documents listed. Policy schedule ref: policy number 77001234.\nInsured: Ravi Kumar")],
+    ["personal_notes", pages("My notes\nCheck policy schedule for policy number 77001234\nInsured: Ravi Kumar\nPremium S$99.00")],
+    ["app_screenshot", pages("09:41\t87%\nMy Policies\nView policy schedule\nPolicy number 77001234\nIn force\nInsured: Ravi Kumar")],
+    ["medical_bill", pages("TAX INVOICE\nBill No. 55-1234\nPatient: Ravi Kumar\nAdmission 1 March 2026\nAs per policy schedule, policy number 77001234\nAmount payable S$1,200.00")],
+  ];
+  for (const [role, doc] of cases) assert.equal(filedBeforeRoleRules(role, doc), false, role + ": " + doc[0].text.slice(0, 60));
+});
