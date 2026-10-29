@@ -76,13 +76,18 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
 // insurer's own limits ("Limits of Liability", "maximum liability", "our liability is limited to", "we are not liable")
 // name no one else and are never matched; nor is the person's own cover caused BY a third party ("assault by a third party").
 const OTHERS = String.raw`(?:(?:any\s+)?other\s+(?:people|persons?)|another\s+person|others|(?:a|any|the)\s+third[\s-]part(?:y|ies)|third[\s-]part(?:y|ies)|members?\s+of\s+the\s+public|someone\s+else|anyone\s+else|`
-  // "any person" is someone else unless the row says it is the insured ("any person covered under this policy").
-  + String.raw`any\s+(?:other\s+)?persons?(?!\s+(?:insured|covered|named|listed|who\s+is\s+(?:insured|covered)))|(?:a\s+)?visitors?\s+to\s+your\s+home|(?:a\s+)?passers?[\s-]by|pihak\s+ketiga|orang\s+lain)`;
+  + String.raw`(?:a\s+)?visitors?\s+to\s+your\s+home|(?:a\s+)?passers?[\s-]by|pihak\s+ketiga|orang\s+lain)`;
+/** "Any person" is someone else only in a liability frame: liability or compensation to them, or harm done TO them
+ * ("injury to any person"). "Death of any person in your family" or "aged 18 to 65" is the insured's own cover (Critic
+ * R360 M1). */
+const TO_ANYONE = String.raw`(?:` + OTHERS + String.raw`|any\s+persons?)`;
 const LIABILITY = new RegExp([
   String.raw`\b(?:personal|public|legal|civil|third[\s-]party|family|individual|tenant['’]?s?|occupiers?['’]?|employers?['’]?|golfers?['’]?|pet\s+owners?['’]?)\s+liabilit(?:y|ies)\b`,
-  String.raw`\bliabilit(?:y|ies|i)\s+(?:to|towards|terhadap)\s+` + OTHERS + String.raw`\b`,
-  String.raw`\bliable\b[^.;()]{0,100}?\b(?:to|towards|of),?\s+` + OTHERS + String.raw`\b`,
-  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:(?:caused|you\s+cause)\s+)?(?:to|of)\s+` + OTHERS + String.raw`\b`,
+  String.raw`\bliabilit(?:y|ies|i)\s+(?:to|towards|terhadap)\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\bliable\b[^.;()]{0,100}?\b(?:to|towards|of),?\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\bcompensation\b[^.;()]{0,80}?\b(?:to|for|of)\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:(?:caused|you\s+cause)\s+)?to\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:(?:caused|you\s+cause)\s+)?of\s+` + OTHERS + String.raw`\b`,
   String.raw`\b(?:injured|deceased)\s+(?:third[\s-]part(?:y|ies)|other\s+(?:people|persons)|others)\b`,
   String.raw`\b(?:total\s+and\s+permanent\s+disability|tpd|bodily\s+injury|death|hospital\w*|medical\s+expenses?)\b[^.;()]{0,40}?\bof\s+` + OTHERS + String.raw`\b`,
   String.raw`\bthird[\s-]part(?:y|ies)['’]?\s+(?:(?!(?:or|and)\b)[a-z]+\s+){0,2}?(?:property|bodily|death|injury|injuries|hospital\w*|medical|cover|liabilit(?:y|ies)|damage)\b`,
@@ -98,7 +103,9 @@ const EXCLUDED_ASIDE = /[(\[]\s*(?:excluding|excludes|except|other\s+than|not\s+
 const EXCLUDED_TAIL = /\b(?:excluding|except(?:\s+for)?|other\s+than|not\s+payable\s+(?:if|when|where)|not\s+covered\s+(?:if|when|where))\b.*$|\s[-–—]\s[^-–—]*\b(?:is|are)\s+(?:excluded|not\s+covered)\b.*$/isu;
 /** A section headed only "Liability" ("Section 4: Liability", "Your liability", "Liabilities"), with no limit word. */
 const LIABILITY_SECTION = /^\W*(?:(?:section|part|benefit)\s+\w+\W+)?(?:your\s+|personal\s+)?liabilit(?:y|ies)\W*$/iu;
-const isLiability = (text: string) => LIABILITY.test(text.replace(EXCLUDED_ASIDE, " ").replace(EXCLUDED_TAIL, " "));
+/** "Death of a person other than the insured" names someone else; its "other than" is no exclusion (TE pr192 r3 note 2). */
+const OTHER_THAN_INSURED = /\b(?:death|injury|injuries|disability|loss|damage)\s+(?:of|to)\s+(?:a|any)\s+persons?\s+other\s+than\s+(?:the\s+|you|yourself)(?:insured|life\s+assured|policy\s?holder|policy\s?owner|covered\s+person)?/iu;
+const isLiability = (text: string) => OTHER_THAN_INSURED.test(text) || LIABILITY.test(text.replace(EXCLUDED_ASIDE, " ").replace(EXCLUDED_TAIL, " "));
 /** A section that is accident cover as a whole: "Personal accident", or one that starts with accident words ("Accidental
  * Benefits"). A section that only mentions an accident ("Death and Accidental Death") is not. */
 const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?:benefit|section|part)\s+\w+\W+)?(?:the\s+)?${ACC}`, "i");

@@ -70,6 +70,11 @@ test("the insurer's own limits of liability are no liability cover: the person's
     ["Accidental death [excluding injury to others]", null, "Personal Accident"],
     ["Accidental death, not payable if you are liable to others", null, "Personal Accident"],
     ["Death of any person covered under this policy", null, "Death"],
+    // "Any person" outside a liability frame is the insured (Critic R360 M1, TE pr192 r3 note 1).
+    ["Death of any person in your family", null, "Death"], ["Death of any person who is a Life Assured", null, "Death"],
+    ["Death of any person aged 18 to 65", null, "Death"], ["Accidental death of any person travelling with you", null, "Personal Accident"],
+    ["Death of any person to whom this certificate applies", null, "Death"], ["Accidental death of any person on the plan", null, "Personal Accident"],
+    ["Total and permanent disability of any person under 65", null, "Total Permanent Disability"], ["Death benefit of any person aged 18 to 70", null, "Death"],
   ];
   for (const [b, section, want] of own) assert.equal(categoryOfBenefit(b, section), want, b + " / " + section);
 });
@@ -82,7 +87,7 @@ test("liability worded many ways is never the person's own cover (TE pr192 F3)",
     "Death of someone else", "Bodily injury you cause to other people", "Death of a visitor to your home", "Liabiliti terhadap pihak ketiga",
     "Tanggung jawab hukum", "Trách nhiệm dân sự",
     "If you are legally liable for the accidental death of, or injury to, another person", "Accidental death of any other person caused by you",
-    "Third party daily hospital cash"]) assert.equal(categoryOfBenefit(b), null, b);
+    "Third party daily hospital cash", "Death of a person other than the insured", "Injury to any person other than you"]) assert.equal(categoryOfBenefit(b), null, b);
   assert.equal(categoryOfBenefit("Death", "Third Party Cover"), null);
   for (const section of ["Section 4: Liability", "Your liability", "Liabilities"]) assert.equal(categoryOfBenefit("Death", section), null, section);
 });
