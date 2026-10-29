@@ -8524,3 +8524,34 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - The new static checks in doc-card-title fail on 65b74d4's page and route, and pass now (42/42).
 - **Merge note:** this conflicts with #181 (ab8f1de) in app/api/coverage/route.ts, on the `return NextResponse.json(...)` line and the payload. Whichever merges second must keep both: the new names inside the payload, and `maskShownText(payload)` around it. Combined, the new names are masked too, which is what #181 wants. #180 merges cleanly with it.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R320 — #180 3556689: R318 H1 fixed, one narrower High left; #181 31a40e5: READY
+
+**#180 3556689: NOT READY yet.**
+- R318 H1 is fixed. All four layouts give no "combined" now, and they are checkReading tests. quoteSentence stays on the quote's own lines and crosses only figure-free, tab-free lines that carry on in lower case or "(". R318 L1 is fixed too: "every other policy" now counts.
+- **H1. A plan-tier note on the row's own line makes a per-policy limit "combined".**
+  - In a one-policy schedule, "all plans" means each plan column prints the same figure. It does not mean a cap shared across policies. COMBINED_SCOPE's `(all|across) plans` still counts it as scope on the NAMED_LIMIT path.
+  - Made-up probe through the PR's quoteSentence + limitKind (space-aligned rows, no tabs):
+
+    | Page | Result | Right answer |
+    |---|---|---|
+    | "Annual limit       S$150,000" then "(same for all plans)" | combined | per policy |
+    | "Overseas medical limit    S$500,000" then "(applies to all plans shown)" | combined | per policy |
+    | "Annual limit (all plans) S$150,000" in a Plan A / Plan B table | combined | per policy |
+
+  - The row then leaves the event cards (chat.ts:257), so a documented amount is hidden.
+  - Fix: on the NAMED_LIMIT path, plan wording alone is not scope. Count it only when it names other holdings ("plans you hold", "plans with us", "plans we issue", "this plan and …") or uses policies/contracts or "same life". Add the three rows as negative tests.
+- Low L1: "Accident medical limit S$5,000" then "per accident, reduced by any amount paid under other policies" gives combined. No amount is shown, which is the safe side. But chat.ts:726 then says it is "the most paid for several benefits together", which is not what the page says. Consider the OWN_LIMIT-style allow-list for "reduced by … other policies".
+- Kept: "not payable for any policy year" stays null, and the TI/CI and CI positive controls stay combined.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 57/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 31a40e5: READY.**
+- **M1 fixed on both sides.**
+  - The schedule page no longer sends benefitName.
+  - The PATCH keeps the stored name when the sent name equals the stored name's masked copy (`sentName`). That also covers the operator page, which sends its draft. A name the person actually typed is stored as sent.
+- **M2 fixed.**
+  - /api/dashboard and /api/policies/[id] GET are wrapped in maskShownText.
+  - Home sends back only {policyId, familyMemberId, declared} (link-person). The document review panels only display the data.
+  - The correction form starts empty and sends the field the person types, so nothing masked is sent back. policy_key and other *_id/*_key fields are left as stored.
+- Merge note from R319 stands: #179 conflicts with this PR in app/api/coverage/route.ts. Keep maskShownText around the new payload.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
