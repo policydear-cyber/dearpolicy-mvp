@@ -225,7 +225,8 @@ const HAS_MONEY = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3}
 const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
 const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
 const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
-const PAYMENT_LINE = /^\s*amount\b|\b(?:amount\s+(?:due|payable|owing)|total|fees?|charges?|outstanding|minimum)\b/i;
+const PAYMENT_LINE = /^\s*amount\b|\b(?:amount\s+(?:due|payable|owing)|total|fees?|charge[sd]?|outstanding|minimum|premiums?|interest|late|payable|paid)\b/i;
+const NOT_PAYMENT_LINE = /\b(?:benefits?|riders?|cash|sum|cover(?:age|ed)?|waiver|assured|insured|units?|plan)\b/i;
 const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
 /** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
  * of notes, with no person cell and no cover line; or a page with neither a money figure nor a person cell. Any other
@@ -239,11 +240,11 @@ function noticePage(text: string, own: Set<string>): boolean {
   // Another policy's number is another policy's page.
   if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
   const titled = /\b(?:payment\s+slip|remittance\s+advice|how\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow|important\s+notes?|notes|terms\s+and\s+conditions)\b/i.test(lines.slice(0, 4).join("\n"));
-  // On a payment or notes page a money figure page 1 lacks may only be a sum to pay or a fee ("Total amount payable",
-  // "A charge of S$20 applies"); a figure on any other line ("Hospital cash  S$200", "Critical Illness Rider  S$50,000")
-  // may be cover (Critic R338).
+  // On a payment or notes page a money figure page 1 lacks may only be a premium, a sum to pay or a fee ("Total amount
+  // payable", "A charge of S$20 applies", "Your premium will be S$95.00"); a figure on any other line ("Hospital cash
+  // S$200", "Critical Illness Rider  S$50,000", "Premium waiver benefit") may be cover (Critic R338, TE round 13).
   if (titled && !person && !lines.some((l) => COVER_LINE.test(l))
-    && lines.every((l) => PAYMENT_LINE.test(l) || moneyOf(l).every((f) => own.has(f)))) return true;
+    && lines.every((l) => (PAYMENT_LINE.test(l) && !NOT_PAYMENT_LINE.test(l)) || moneyOf(l).every((f) => own.has(f)))) return true;
   // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
   // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
   // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).

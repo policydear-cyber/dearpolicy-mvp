@@ -242,5 +242,11 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nPayment Mode : GIRO\nPlan : Example Hospital Income\nUnits : 5",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
   // A sum to pay that page 1 does not print stays part of the notice.
-  assert.equal(statusNotice([reminder, { text: "PAYMENT SLIP\nPolicy Number: KL-77001234\nTotal amount payable: S$176.40\nPay by PayNow" }]), true);
+  for (const page2 of [
+    "PAYMENT SLIP\nPolicy Number: KL-77001234\nTotal amount payable: S$176.40\nPay by PayNow",
+    // TE round 13: a new premium or a late-payment charge is no cover figure.
+    "Important notes\nYour premium will be S$95.00 from 1 January 2027.",
+    "Important notes\nInterest of S$3.20 is charged on premiums paid late.",
+  ]) assert.equal(statusNotice([reminder, { text: page2 }]), true, page2.slice(0, 40));
+  assert.equal(statusNotice([reminder, { text: "Important notes\nPremium waiver benefit: S$5,000" }]), false);
 });
