@@ -8802,3 +8802,16 @@ Probe: 38 made-up documents (R330 + R331 + 6 new) through deterministicDocumentR
   - "Dear Mr Kumar / Thank you for buying … / POLICY DETAILS / number / life assured / sum assured / Grace period : 30 days / Thank you" gives other.
   - Fix: on the letter path, count only status sentences, never label/value rows. Examples: "has lapsed", "lapsed on", "is overdue", "was not received", "has been reinstated|terminated", "grace period ends|will end|expires". Also block "schedule" outside the reference phrases unless it is in "payment schedule" / "premium schedule". Today only a bare SCHEDULE line blocks, and "YOUR SCHEDULE" passes.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R333 — #184 ed94eacd: CHANGES (1 High, carried from R332)
+
+I re-ran all 38 probes.
+- R332 M1 is fixed. The "YOUR SCHEDULE" page with a reinstatement clause and the "POLICY DETAILS" page with "Grace period : 30 days" now keep the model's role.
+- R332 H1 part (b) is fixed. "changes in your policy schedule are as follows" gives personal_schedule.
+- A premium reminder that says "as per your payment schedule" is still a notice.
+- Every R330 and R331 case holds.
+- **H1 (R332 (a), still open):** two cases still become "other". Main gave personal_schedule for both:
+  - "Your policy has been reinstated. Please **see the policy schedule attached**." with page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured".
+  - "Please **refer to the policy schedule enclosed**." with the same page 2.
+  - Fix: a reference phrase must end its sentence, or go on only with an allow-listed tail ("for details", "for more information"). Followed by attached, enclosed, below, overleaf, herewith, as follows, following or "is/are … issued/updated/revised", it does not count.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
