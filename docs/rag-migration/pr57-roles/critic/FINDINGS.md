@@ -8619,3 +8619,19 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - r8 markdown detector: "**Total**" at line start or after a space is still caught. Only stars inside or after an ID mask are skipped. "-**x**" with no space is missed, which is rare.
   - r10 policyFirst 62 applies only to first (non-steady) policy turns. Steady stays 60.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main (9c03ee3) clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R325 — #182 2e2bf942: READY (R324 H1, H2, M1, L1 fixed)
+
+- **H1 fixed.** `supersedePassedGrace` runs right after applyReinstatements, before the keep-list, statusDocs and the suffix pass read statusOf. A passed reminder becomes "unknown" in either case:
+  - another document of the same policy (same number, or same product for the same people) is dated after the grace date;
+  - a payment or period start after the grace date is on the reminder or on another document of the policy.
+
+  The extra premium query runs only when some document is grace_passed, and r10 still holds.
+- **H2 fixed.** Probe through the PR's printedStatus:
+  - My worked-example wording page, and "If the premium of S$100 is not paid, the grace period ends on 31 March 2025", both give unknown.
+  - A real reminder gives grace_passed in all three forms: with a due date and amount; with only "was due on"; and with an unrelated "Example: pay by GIRO" line.
+- **M1 fixed.** The workflow takes the latest grace date outside worked-example sentences.
+- **L1 fixed.** outdated() returns false only for "grace" again.
+- Low L1 (accepted direction): two policies of the same product for the same person with different policy numbers count as "the same policy". A later document of one hides the other's passed-grace warning (probe: P-111 and P-222 "Term Plus" gives unknown). That matches the #152 lesson that renewals can re-number one policy, and the cost is a missing warning, not a wrong state. Noting it only.
+- Low L2: the workflow's latest date is taken across every page in `from`. When the question names no plan, that can be another policy's reminder. This is unchanged in kind from before.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
