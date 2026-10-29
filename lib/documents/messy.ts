@@ -96,7 +96,7 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
   const head = printedLines(pages[0]?.text ?? "").slice(0, 12);
   const headText = head.join("\n");
   const titled = TITLE.test(headText);
-  const letter = /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|customer|policy\s?holder|valued)\b|^\s*dear\s+[A-Z][\p{L}'’-]+/imu.test(first) && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(first);
+  const letter = isLetter(first);
   // A decision on a claim: its claim number and what was decided.
   if (/\bclaim (?:number|no\.?|reference|ref\.?)\b/i.test(first)
     && /\b(?:unable to (?:admit|accept|pay)|regret|not (?:payable|admissible|covered)|declin(?:e|ed|ing)\b|reject(?:ed|ion)?\b|repudiat\w+|amount payable|we are pleased to|has been (?:approved|admitted|settled|paid))/i.test(first)
@@ -116,6 +116,30 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
   // Any other letter -- unless it is a notice the policy's own status rests on (renewal, premium due, lapse, receipt).
   if (letter && !titled && !enclosesDocument && !/\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapsed|grace period|reinstate\w*|official receipt|premium receipt|certificate)\b/i.test(first)) return "insurer_letter";
   return null;
+}
+
+const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|customer|policy\s?holder|valued)\b|^\s*dear\s+[A-Z][\p{L}'’-]+/imu.test(text)
+  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(text);
+// A title line that names its plan ("POLICY SCHEDULE - Example Critical Illness"), never a sentence ("Policy schedule: no change.").
+const NAMED_TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)\\s*[-–—]\\s*[^.:;]{1,60}$", "i");
+const NOTICE_TITLE_LINE = /^(?:notice of (?:lapse|reinstatement|renewal)|(?:policy )?lapse notice|premium (?:reminder|notice|due notice)|grace period (?:reminder|notice)|renewal notice|reinstatement notice|official receipt|premium receipt|payment receipt)(?:\s*[-–—:]\s*[^.;]{0,60})?$/i;
+const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|grace period|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
+
+/** A short letter about the policy's status (a lapse notice, a premium reminder, a reinstatement, a renewal notice, a
+ * receipt) that only mentions the policy schedule ("please refer to your policy schedule"): it is not the schedule. It
+ * is titled as a notice on a line of its own, or it is a letter that says what happened to the policy near its top.
+ * Default-safe: a document of more than three pages, one with any line that is a document title on its own (a policy
+ * schedule, a certificate, a renewal certificate) or one holding a policy's own schedule page is never one. */
+export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
+  if (!pages.length || pages.length > 3) return false;
+  const lines = pages.flatMap((p) => printedLines(p.text));
+  if (lines.some((l) => TITLE_LINE.test(l) || NAMED_TITLE_LINE.test(l))) return false;
+  if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
+  const head = printedLines(pages[0].text).slice(0, 12);
+  // Titled as a notice on a line of its own ("NOTICE OF LAPSE", "Premium Reminder - Example Life"), or a letter that
+  // says what happened to the policy near its top.
+  if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
+  return isLetter(lines.join("\n")) && STATUS_NOTICE.test(head.join("\n"));
 }
 
 // ---------------------------------------------------------------------------

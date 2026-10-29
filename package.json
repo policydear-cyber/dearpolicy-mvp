@@ -183,6 +183,7 @@
     "r9:redteam-test": "node --import tsx scripts/r9-redteam-regressions.ts",
     "r10:messy-docs-test": "node --import tsx scripts/r10-messy-docs-regressions.ts",
     "documents:role-test": "node --import tsx scripts/document-role-regressions.ts",
+    "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
     "r10:perf-test": "node --import tsx scripts/r10-perf-regressions.ts",
     "r11:blind-test": "node --import tsx scripts/r11-blind-test.ts",
     "r7:chat-robustness-test": "node --import tsx scripts/r7-chat-robustness-regressions.ts",
