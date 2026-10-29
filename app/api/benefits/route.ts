@@ -11,6 +11,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
+import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
@@ -130,7 +131,9 @@ export async function GET(request:NextRequest){
       // A schedule term ("As charged", a deductible, a policy-year limit) is
       // read exactly as printed: nothing is unreadable and nothing to confirm.
       const term=isScheduleTerm(row.row_kind);
-      const attention=term?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
+      // A row of a plan table with one figure per plan: nothing is unreadable, the plan is simply not known (scale-limit.ts).
+      const planColumns=stub.conditions.includes(PLAN_COLUMNS_NOTE);
+      const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
         return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
@@ -149,7 +152,7 @@ export async function GET(request:NextRequest){
         // The column of a multi-column table: the plan tier or person class.
         tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
-        conditions:stub.conditions,
+        conditions:stub.conditions,planColumns,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and

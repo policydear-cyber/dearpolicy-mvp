@@ -21,6 +21,8 @@ type Benefit={
   currency:string|null;factKey:string|null;offsetDays:number|null;maximumDays:number|null;
   pays:string;sourcePage:number|null;quote:string;conditions:string[];
   needsConfirmation:boolean;attention:"confirm"|"unreadable"|null;
+  /** A row of a table that prints one figure per plan, with the household's plan not known: no figure is used. */
+  planColumns?:boolean;
   calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
   documentName:string;insurer:string|null;owners:string[];
   /** Two documents print different amounts for this benefit: drawn as one either/or block, never a total. */
@@ -32,6 +34,7 @@ type Member={id:string;display_name:string;relationship:string};
 /** What the page can say about an amount: established (with the document's
  * own wording), or honestly not established. */
 function paysLine(b:Benefit):{text:string;established:boolean}{
+  if(b.planColumns)return {text:"The document prints a different amount for each plan, and which plan is yours is not shown, so no amount is used for it.",established:false};
   if(b.attention==="unreadable")return {text:`The amount on ${b.sourcePage?`page ${b.sourcePage}`:"the page"} could not be read.`,established:false};
   if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. The amount has not been verified against the page yet, so it is not used in answers.",established:false};
   if(b.formulaKind==="none")return {text:b.pays||"As stated in the document.",established:true};

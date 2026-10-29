@@ -252,6 +252,32 @@ function holdUnresolvedPercentagesAlongsideAScale(benefits:CatalogBenefit[]):Cat
   });
 }
 export function resolveStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return holdNonMonotonicBands(holdUnresolvedPercentagesAlongsideAScale(
-    corroborateInferredRules(applyImpliedScaleLimit(benefits))));
+  return holdPlanColumnFigures(holdNonMonotonicBands(holdUnresolvedPercentagesAlongsideAScale(
+    corroborateInferredRules(applyImpliedScaleLimit(benefits)))));
+}
+
+/** A row of a table that prints one figure per plan ("If you need to return home early  S$5,000  S$10,000  S$15,000",
+ * "Reinstatement fees  Not Applicable  S$1,000  S$1,500"), stored with no plan of its own, holds whichever column the
+ * reader took, usually the first. Which plan the household holds is not known from the row, so no figure is taken from
+ * it: the row is shown with the policy's words. The Coverage ledger
+ * already seeds such rows without a figure (lib/ledger/store.ts); chat and the Benefits page now agree with it. A row
+ * read for one plan (tier set), or one a person has corrected, is kept as it is. */
+export const PLAN_COLUMNS_NOTE="The document prints a different figure for each plan, and which plan is yours is not shown here, so DearPolicy does not take a figure from it.";
+// A cell of a plan table: an amount with its currency printed, or a plan that does not have the benefit.
+const PLAN_CELL=String.raw`(?:(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?|[Nn]ot\s+(?:[Cc]overed|[Aa]pplicable)|N\/A)`;
+const PLAN_ROW=new RegExp(`${PLAN_CELL}(?:\\s+${PLAN_CELL})+`,"g");
+/** Whether a row's quote prints two or more plan cells side by side that do not all say the same figure. A row whose
+ * columns all print one figure ("$3,540 $3,540 $3,540") pays that figure whichever plan is held. */
+export function figuresDifferByPlan(quote:string|null|undefined):boolean{
+  for(const run of String(quote??"").match(PLAN_ROW)??[]){
+    const cells=run.match(new RegExp(PLAN_CELL,"g"))??[];
+    const values=new Set(cells.map(c=>/\d/.test(c)?c.replace(/[^\d.]/g,"").replace(/\.0+$/,""):"none"));
+    if(cells.length>1&&values.size>1)return true;
+  }
+  return false;
+}
+export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{
+  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&benefit.formulaKind!=="none"&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
+    ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}
+    :benefit);
 }
