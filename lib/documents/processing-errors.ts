@@ -47,6 +47,11 @@ export const DOCUMENT_READ_IN_PART_MESSAGE =
  * is scheduled after a temporary failure. */
 export const DOCUMENT_READING_RETRY_MESSAGE =
   "DearPolicy is still reading this document and will finish automatically.";
+/** Reading stopped because the household reached its monthly limit for model use (lib/ai/ledger.ts
+ * assertUnderSpendCap, which counts this calendar month's use). Nothing is wrong with the file. A fixed string:
+ * no amount, plan or owner is ever put in it. */
+export const READING_LIMIT_REACHED_MESSAGE =
+  "Reading paused: the monthly reading limit was reached, so the insured people, benefits and amounts in this document are not available yet. Nothing is wrong with the file.";
 
 export const USER_ACTIONABLE_PROCESSING_ERRORS: ReadonlySet<string> = new Set([
   PDF_PASSWORD_REQUIRED_MESSAGE,
@@ -57,6 +62,7 @@ export const USER_ACTIONABLE_PROCESSING_ERRORS: ReadonlySet<string> = new Set([
   INCOMPLETE_PDF_MESSAGE,
   DOCUMENT_READING_FAILED_MESSAGE,
   DOCUMENT_READING_SERVICE_MESSAGE,
+  READING_LIMIT_REACHED_MESSAGE,
 ]);
 
 /** Pages of an otherwise readable document that could not be read. One
@@ -99,4 +105,16 @@ export function isQuotaOrSpendStop(error: unknown): boolean {
   return name === "ProviderQuotaExhausted" || name === "SpendCapReached"
     || (error instanceof Error && error.constructor?.name === "SpendCapReached")
     || /insufficient_quota|quota|billing|spend.?cap|SpendCapReached/i.test(message);
+}
+
+/** The fixed household-readable reason stored for a reading that stopped on a quota or spend stop
+ * (isQuotaOrSpendStop), or null for any other failure. The household's own monthly limit (lib/ai/ledger.ts
+ * SpendCapReached) is the monthly-limit reason; an exhausted model-provider quota or billing stop is DearPolicy's
+ * reading service being unavailable, not the file. Decided by the error's class name only, never its text. */
+export function quotaStopReason(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const name = error.name || error.constructor?.name;
+  if (name === "SpendCapReached" || error.constructor?.name === "SpendCapReached") return READING_LIMIT_REACHED_MESSAGE;
+  if (name === "ProviderQuotaExhausted" || error.constructor?.name === "ProviderQuotaExhausted") return DOCUMENT_READING_SERVICE_MESSAGE;
+  return null;
 }

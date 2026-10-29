@@ -78,6 +78,17 @@ async function main() {
     }
   });
 
+  await test("a reading stopped at the monthly limit says so, says when to read it again, and never asks for a clearer copy", async () => {
+    const errors = await import("@/lib/documents/processing-errors");
+    assert.ok(errors.READING_LIMIT_REACHED_MESSAGE, "a fixed reason for the monthly limit");
+    for (const pageCount of [null, 4]) {
+      const { lines, none, docs } = await said([{ status: "failed", error: errors.READING_LIMIT_REACHED_MESSAGE, pageCount }]);
+      assert.equal(docs[0].reason, "limit");
+      assert.equal(lines, "“example-1.pdf” couldn’t be read because reading was paused when the monthly reading limit was reached — nothing is wrong with the file. Press “Try reading it again” on the Documents page after the limit resets at the start of next month.");
+      for (const text of [lines, none]) assert.doesNotMatch(text, /clearer|original|readable text|couldn’t finish|in a little while|\$\s?\d|\b1 Nov/i, text);
+    }
+  });
+
   await test("an unknown failure (the API's stand-in, a raw error, none) gets the plain generic wording, never its own text or a wrong reason", async () => {
     for (const error of [POLICY_PROCESSING_STOPPED_MESSAGE, "Error: connect ECONNREFUSED 10.0.0.1:5432 at /var/task/worker.js", "password service timeout", null, DOCUMENT_READING_FAILED_MESSAGE]) {
       for (const pageCount of [null, 3]) {

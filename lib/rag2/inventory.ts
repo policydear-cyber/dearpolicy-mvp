@@ -23,6 +23,7 @@ const UNREADABLE_WHY: Record<string, string> = {
   unopenable: "the file could not be opened",
   no_text: "no text could be read from it",
   service: "the reading service was not available when it was read; nothing is wrong with the file",
+  limit: "reading was paused when the monthly reading limit was reached; nothing is wrong with the file",
   reading_failed: "DearPolicy could not finish reading it",
   unknown: "DearPolicy could not finish reading it",
 };

@@ -8,6 +8,11 @@
  * and a reading-service failure whose one later re-read had already failed still said "It will try again
  * automatically; there is nothing you need to do", though nothing was scheduled.
  *
+ * Cap advice: a reading stopped by the household's monthly limit (lib/ai/ledger.ts SpendCapReached) was stored as the
+ * generic "could not finish reading", so the card offered "Try reading it again" now -- which stops at the same limit --
+ * and, once read before, "Upload a clearer copy", though nothing is wrong with the file. Ingest now stores a fixed
+ * limit reason (quotaStopReason), and the advice says when reading again can work.
+ *
  * Made-up error strings and states only; no database, no model.
  */
 import assert from "node:assert/strict";
@@ -50,6 +55,40 @@ async function main() {
       assert.equal(a.nextStep, "read_again");
       assert.doesNotMatch(a.reason + " " + a.hint, /automatically|nothing you need to do/i);
       assert.match(a.reason, /Nothing is wrong with the file/);
+    }
+  });
+
+  await test("a reading stopped at the monthly limit is stored as its own fixed reason, by error class only", async () => {
+    const errors = await import("@/lib/documents/processing-errors");
+    const { SpendCapReached } = await import("@/lib/ai/ledger");
+    const { ProviderQuotaExhausted } = await import("@/lib/ai/providers");
+    assert.equal(typeof errors.quotaStopReason, "function", "ingest has a fixed reason for a quota or spend stop");
+    const cap = new SpendCapReached("This household has reached its model-spend limit for the month ($9.99). Example text.");
+    assert.equal(errors.quotaStopReason(cap), errors.READING_LIMIT_REACHED_MESSAGE);
+    assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(errors.READING_LIMIT_REACHED_MESSAGE), "the API lets the fixed reason through");
+    assert.doesNotMatch(errors.READING_LIMIT_REACHED_MESSAGE, /\$|\d|plan|upgrade|owner/i, "no amount, date, plan or owner in the stored reason");
+    // DearPolicy's own provider quota is its reading service being unavailable, not the household's limit or the file.
+    assert.equal(errors.quotaStopReason(new ProviderQuotaExhausted(429)), DOCUMENT_READING_SERVICE_MESSAGE);
+    // Negative controls: any other failure keeps its existing stored reason (null here), whatever its text says.
+    for (const other of [new Error("insufficient_quota: spend cap"), new Error("Model provider quota exhausted (429)"), new errors.TemporaryProcessingError("OCR failed: timeout"),
+      new errors.UserActionableProcessingError(PDF_PASSWORD_REQUIRED_MESSAGE), "SpendCapReached", null, undefined])
+      assert.equal(errors.quotaStopReason(other), null, String(other));
+    const ingest = readFileSync(path.resolve("lib/rag/ingest.ts"), "utf8");
+    assert.match(ingest, /: error instanceof TemporaryProcessingError \? DOCUMENT_READING_SERVICE_MESSAGE : quotaStopReason\(error\) \?\? DOCUMENT_READING_FAILED_MESSAGE;/,
+      "the failed-document write stores the fixed limit reason");
+  });
+
+  await test("the monthly-limit reason says reading paused, when to read again, and never asks for another copy", async () => {
+    const errors = await import("@/lib/documents/processing-errors");
+    for (const state of both) {
+      const a = failedDocumentAdvice(errors.READING_LIMIT_REACHED_MESSAGE, state);
+      assert.equal(a.kind, "limit", `hasPages=${state.hasPages}`);
+      assert.match(a.reason, /^Reading paused: the monthly reading limit was reached/);
+      assert.match(a.reason, /Nothing is wrong with the file/);
+      assert.equal(a.nextStep, "read_again");
+      assert.equal(a.action, "Try reading it again");
+      assert.match(a.hint, /resets at the start of next month; press Try reading it again after that/);
+      assert.doesNotMatch(a.reason + " " + a.hint + " " + a.action, /clearer|another copy|original file|automatically|\$|\d/i);
     }
   });
 
