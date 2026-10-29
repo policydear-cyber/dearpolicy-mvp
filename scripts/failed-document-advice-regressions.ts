@@ -133,6 +133,49 @@ async function main() {
     assert.doesNotMatch(page, /unreadableReason\(/, "the stored text is never passed through as the reason");
   });
 
+  // ---- The chat form of the same advice (failedDocumentChatAdvice): what chat says, from the same allow-list.
+  await test("chat advice: every kind gets the page's own kind, a reason and a next step in fixed words", async () => {
+    const fa = await import("@/lib/documents/failure-advice");
+    assert.equal(typeof fa.failedDocumentChatAdvice, "function", "a chat form of the Documents page's advice");
+    const errors = await import("@/lib/documents/processing-errors");
+    const { ProviderQuotaExhausted } = await import("@/lib/ai/providers");
+    const stored: [string | null, string][] = [
+      [PDF_PASSWORD_REQUIRED_MESSAGE, "password_missing"], [PDF_PASSWORD_INCORRECT_MESSAGE, "password_wrong"], [UNREADABLE_DOCUMENT_MESSAGE, "no_text"],
+      [UNOPENABLE_DOCUMENT_MESSAGE, "unopenable"], [INCOMPLETE_PDF_MESSAGE, "incomplete"], [UNREADABLE_PHOTO_MESSAGE, "photo"],
+      [DOCUMENT_READING_SERVICE_MESSAGE, "service"], [errors.quotaStopReason(new ProviderQuotaExhausted(429)), "service"],
+      [errors.READING_LIMIT_REACHED_MESSAGE, "limit"], [DOCUMENT_READING_FAILED_MESSAGE, "reading_failed"],
+      [POLICY_PROCESSING_STOPPED_MESSAGE, "unknown"], ["Error: 429 insufficient_quota at /var/task/worker.js (Example Insurance, S$1,234)", "unknown"], ["password", "unknown"], [null, "unknown"],
+    ];
+    for (const [error, kind] of stored) for (const state of both) {
+      const page = failedDocumentAdvice(error, state), chat = fa.failedDocumentChatAdvice(error, state);
+      assert.equal(chat.kind, kind, String(error));
+      assert.equal(chat.kind, page.kind, String(error));
+      assert.ok(chat.why && chat.step, String(error));
+      const said = chat.why + " " + chat.step;
+      // Fixed words only: never the stored text, an amount, a path or the provider's words.
+      if (error && kind === "unknown") assert.ok(!said.includes(error), String(error));
+      assert.doesNotMatch(said, /\$|\d|insufficient|quota|worker|Example Insurance|Analysis stopped|Re-?analy|try again automatically/i, String(error));
+      // The step is the page's own: its button by name for read_again, never "Try reading it again" otherwise.
+      if (page.nextStep === "read_again") assert.ok(chat.step.includes("“" + page.action + "” on the Documents page"), said);
+      else assert.doesNotMatch(chat.step, /Try reading it again/, said);
+      // A locked PDF is unlocked in place on the Documents page: uploading the same file again is refused.
+      if (page.nextStep === "unlock") {
+        assert.match(chat.step, /enter it again on the Documents page|Enter its password on the Documents page/, said);
+        assert.doesNotMatch(said, /upload(?:ed)? it again|re-?upload/i, said);
+      }
+      // Only "no readable text" asks for a clearer scan; a service stop (a provider quota too), the limit, a password
+      // or an unknown reason never mentions a scan.
+      if (kind === "no_text") assert.match(said, /clearer scan/);
+      else assert.doesNotMatch(said, /\bscan/i, said);
+      if (kind === "service" || kind === "limit") assert.match(chat.why, /nothing is wrong with the file/);
+      if (kind === "service") assert.match(chat.why, /reading service wasn’t available/);
+      if (kind === "limit") assert.match(chat.step, new RegExp("after the limit resets " + fa.READING_LIMIT_RESETS));
+    }
+    // An unknown reason read before is offered another copy, as on the page; read never, "Try reading it again".
+    assert.match(fa.failedDocumentChatAdvice("anything", reread).step, /^If you have a clearer copy or the original file, upload it on the Documents page/);
+    assert.match(fa.failedDocumentChatAdvice("anything", first).step, /^Press “Try reading it again” on the Documents page\./);
+  });
+
   console.log(`failed-document advice regressions passed: ${cases} cases`);
 }
 

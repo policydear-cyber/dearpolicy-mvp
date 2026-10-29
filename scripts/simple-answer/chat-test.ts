@@ -721,7 +721,9 @@ async function main() {
       st({ kind: "fact", text: "D1 pays a lot on death.", document: "D1" }),
     ]);
     assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), [
-      "output_2026.pdf could not be read (status: failed), so nothing in it was used. It is not linked to anyone in DearPolicy; it can be linked on the Documents page. It was uploaded for Lim Ah Kow.",
+      // A failed file also gets the Documents page's reason and next step (lib/documents/failure-advice.ts); its stored
+      // reason is not in this made-up household, so the generic advice.
+      "output_2026.pdf could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file. It is not linked to anyone in DearPolicy; it can be linked on the Documents page. It was uploaded for Lim Ah Kow.",
       "Of your 6 uploaded files, 5 were read and 1 could not be read (output_2026.pdf).",
     ]);
     assert.equal(report.dropped.length, 1);

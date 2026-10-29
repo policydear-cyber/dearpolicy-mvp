@@ -25,7 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
-import { documentId, offersTryAgain, onHold, onHoldWords, pageList, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
+import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
@@ -218,7 +218,9 @@ type Bill = { text: string; currencyResolved: boolean; bill: string; within: boo
 type Count = { value: number; text: string; currencyResolved: boolean; count: number; payable: number; most: number | null; unit: string; rule: string };
 type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
   /** A point about one file, or one person's files, stated from the library's record (libraryFact, libraryList). */
-  libraryDoc?: number; libraryPerson?: string };
+  libraryDoc?: number; libraryPerson?: string;
+  /** The library's count of files (libraryCount). */
+  libraryCount?: boolean };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -1293,7 +1295,7 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const named = label === d.name ? d.name : `${label} (${d.name})`;
   const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
     : onHold(d) ? `${named} is ${onHoldWords(d)}${d.holdLabel ? ` (${d.holdLabel})` : ""}, so nothing in it is used yet.`
-    : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}`
+    : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}${failedWhy(d)}`
     : d.uncheckedPages?.length || d.partCheckedPages?.length ? `${named} was read in part:${d.uncheckedPages?.length ? ` ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
       // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
@@ -1301,6 +1303,9 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
   return `${read}${linked}${uploadedApart(d) ? ` It was uploaded for ${baseName(d.uploadedFor!)}.` : ""}`;
 }
+/** Why a failed document could not be read and what to do, as the Documents page says it (lib/documents/failure-advice.ts):
+ * fixed words only, never the stored reason. Empty for any other document. */
+const failedWhy = (d: HouseholdDocument) => { const f = failureAdvice(d); return f ? ` ${sentence(f.why)}. ${f.step}` : ""; };
 /** Who a file was uploaded for, when that is news: someone it is not linked to. Said of a file linked to the same person,
  * it only repeats the line before it (live 7e6d50e, E1). */
 const uploadedApart = (d: HouseholdDocument) => !!d.uploadedFor && !d.linkedPeople.some((p) => baseName(p) === baseName(d.uploadedFor!));
@@ -1343,7 +1348,8 @@ function libraryList(household: Household, person: string): string {
   return `${person} has ${docs.length} document${docs.length === 1 ? "" : "s"} linked in DearPolicy: ${docs.map(named).join("; ")}.`;
 }
 
-function libraryCount(household: Household): string {
+/** `told`: the files whose own point (libraryFact) is in the same answer; their reason and next step are said there, not again here. */
+function libraryCount(household: Household, told: ReadonlySet<number> = new Set()): string {
   const reading = household.documents.filter(stillReading), held = household.documents.filter(onHold);
   const bad = household.documents.filter((d) => unreadable(d) && !stillReading(d) && !onHold(d));
   const n = household.documents.length, read = n - reading.length - held.length - bad.length;
@@ -1352,7 +1358,12 @@ function libraryCount(household: Household): string {
   const parts = [reading.length ? `${reading.length} ${reading.length === 1 ? "is" : "are"} still being read (${reading.map((d) => d.name).join(", ")})` : null,
     held.length ? `${held.length} ${held.length === 1 ? "is" : "are"} ${heldWords} (${held.map((d) => d.name).join(", ")})` : null,
     bad.length ? `${bad.length} could not be read (${bad.map((d) => d.name).join(", ")})` : null].filter(Boolean);
-  return `Of your ${n} uploaded files, ${read} ${read === 1 ? "was" : "were"} read${parts.length ? `${parts.length > 1 ? `, ${parts.slice(0, -1).join(", ")} and ` : " and "}${parts.at(-1)}` : ""}.`;
+  // Each failed file's reason and next step, said once for the files that share them (the same kind of failure).
+  const why = new Map<string, string[]>();
+  for (const d of bad) { const f = told.has(household.documents.indexOf(d)) ? null : failureAdvice(d); if (f) { const key = `${f.why}\u0000${f.step}`; why.set(key, [...(why.get(key) ?? []), d.name]); } }
+  const reasons = [...why].map(([key, names]) => { const [w, step] = key.split("\u0000");
+    return names.length === 1 ? ` ${names[0]}: ${sentence(w)}. ${step}` : ` ${names.slice(0, -1).join(", ")} and ${names.at(-1)}: for each, ${w}. ${step}`; });
+  return `Of your ${n} uploaded files, ${read} ${read === 1 ? "was" : "were"} read${parts.length ? `${parts.length > 1 ? `, ${parts.slice(0, -1).join(", ")} and ` : " and "}${parts.at(-1)}` : ""}.${reasons.join("")}`;
 }
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
@@ -1530,7 +1541,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         }
         // A point about several files at once ("The other documents (D1, D2, ...) were read") is stated as the library's count.
         if (di < 0 && /\bD\d+\b/.test(st.text) && ABOUT_FILE.test(st.text)) {
-          if (!aboutFiles.has(-1)) { aboutFiles.add(-1); checked.push({ s: { ...st, text: libraryCount(household), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
+          if (!aboutFiles.has(-1)) { aboutFiles.add(-1); checked.push({ s: { ...st, text: libraryCount(household), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null, libraryCount: true }); }
           continue;
         }
         report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue;
@@ -1543,6 +1554,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   // For a question about the documents, the points about single files become one list per set of people, wherever the
   // first of them stood (libraryGroups).
   const filePoints = checked.filter((c) => c.libraryDoc != null);
+  // A failed file's reason and next step are said once: in its own point when the answer has one, else in the count.
+  for (const c of checked) if (c.libraryCount) c.s = { ...c.s, text: libraryCount(household, new Set(filePoints.map((f) => f.libraryDoc!))) };
   if (aboutLibrary(written[0] ?? "") && filePoints.length) {
     const listed = new Set(checked.flatMap((c) => (c.libraryPerson ? [c.libraryPerson] : [])));
     const texts = libraryGroups(household, filePoints.map((c) => household.documents[c.libraryDoc!]), listed);
