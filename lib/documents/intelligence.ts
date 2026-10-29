@@ -1,6 +1,6 @@
 import type { PdfPage } from "@/lib/documents/pdf";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
-import { NON_COVER_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
+import { NON_COVER_ROLES, correspondenceRole, schedulePage, statusNotice, statusNoticeRole } from "@/lib/documents/messy";
 
 export const PERSONAL_AUTHORITY_ROLES = new Set([
   "personal_schedule",
@@ -91,6 +91,9 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const correspondence = correspondenceRole(pages);
   if (correspondence) return correspondence;
   const text = fullText(pages).toLowerCase();
+  // A lapse notice, premium reminder, reinstatement, renewal notice or receipt that says "refer to your policy schedule"
+  // or "keep with your certificate of insurance" is that notice, never the schedule or certificate it mentions.
+  if (statusNotice(pages)) return statusNoticeRole(pages);
   if (/product summaries|product summary/.test(text) && /refer to your certificate of insurance/.test(text)) return "product_summary" as const;
   // Part 2 of a group certificate ("Highlights of Cover") is the scheme's generic terms for every member: without Part 1's
   // particulars of the insured it is a benefits guide, even though it says "certificate of insurance" and "insured person".

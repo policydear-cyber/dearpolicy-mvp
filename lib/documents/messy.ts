@@ -96,7 +96,7 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
   const head = printedLines(pages[0]?.text ?? "").slice(0, 12);
   const headText = head.join("\n");
   const titled = TITLE.test(headText);
-  const letter = /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|customer|policy\s?holder|valued)\b|^\s*dear\s+[A-Z][\p{L}'’-]+/imu.test(first) && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(first);
+  const letter = isLetter(first);
   // A decision on a claim: its claim number and what was decided.
   if (/\bclaim (?:number|no\.?|reference|ref\.?)\b/i.test(first)
     && /\b(?:unable to (?:admit|accept|pay)|regret|not (?:payable|admissible|covered)|declin(?:e|ed|ing)\b|reject(?:ed|ion)?\b|repudiat\w+|amount payable|we are pleased to|has been (?:approved|admitted|settled|paid))/i.test(first)
@@ -116,6 +116,207 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
   // Any other letter -- unless it is a notice the policy's own status rests on (renewal, premium due, lapse, receipt).
   if (letter && !titled && !enclosesDocument && !/\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapsed|grace period|reinstate\w*|official receipt|premium receipt|certificate)\b/i.test(first)) return "insurer_letter";
   return null;
+}
+
+const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|customer|policy\s?holder|valued)\b|^\s*dear\s+[A-Z][\p{L}'’-]+/imu.test(text)
+  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(text);
+// The only ways a status notice may name a schedule or certificate: as a reference to the one the household already
+// holds ("please refer to your policy schedule", "keep this with your certificate of insurance", "your policy schedule is
+// unchanged", "Policy schedule: no change"). Allow-list (Critic R330 H1): any other mention ("REVISED POLICY SCHEDULE",
+// "Policy Schedule No. 2", "your updated policy schedule is enclosed", "serves as your certificate") means the document
+// may carry the schedule itself, and it keeps the old rules.
+const DOC_NAME = String.raw`(?:policy schedule|schedule|certificate of insurance)`;
+// A reference ends its sentence (at . ! ? or the end of the text, never at a wrapped line, ";" or ",": TE #184 round 5), or
+// ends with a known tail: "see your policy schedule attached", "refer to the policy
+// schedule enclosed" and "the changes in your policy schedule are as follows" point at an enclosed schedule (Critic R332 H1).
+const REFERENCE_END = String.raw`(?:\s+(?:for\s+(?:full\s+|more\s+)?(?:details|information)|for\s+the\s+(?:benefits|cover)(?:\s+that\s+(?:has|have)\s+ended)?|(?:has\s+)?ended(?:\s+on\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?))?(?=\s*(?:[.!?]|$))`;
+const REFERENCE_PHRASES = [
+  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b` + REFERENCE_END, "gi"),
+  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)` + REFERENCE_END, "gi"),
+  new RegExp(String.raw`\bpolicy\s+schedule\s*:\s*no\s+change` + REFERENCE_END, "gi"),
+  // An opening clause: "As shown in your policy schedule, premium S$99.00 was due on 1 March 2026."
+  new RegExp(String.raw`\bas\s+(?:shown|stated|set\s+out)\s+in\s+(?:your|the)\s+` + DOC_NAME + String.raw`\s*,`, "gi"),
+  // "The cover in your policy schedule ended on 1 March 2026."
+  new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gi"),
+];
+const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
+const NOTICE_TITLE = String.raw`^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)`;
+const NOTICE_TITLE_LINE = new RegExp(NOTICE_TITLE + String.raw`(?:\s*[-–—:/]\s*[^.;]{0,60})?$`, "i");
+// Beside a page of policy particulars only a bare title, or one followed by a policy number or a date, is a title: a
+// field line ("Premium Reminder - by email and SMS") is not (TE #184 S11). A bilingual title ("NOTIS PERINGATAN PREMIUM /
+// PREMIUM REMINDER") is a title.
+const NOTICE_TITLE_STRICT = new RegExp(NOTICE_TITLE + String.raw`(?:\s*[-–—:/]\s*(?:` + NOTICE_TITLE.slice(1) + "|" + String.raw`(?:policy\s+(?:no\.?|number)\s*:?\s*)?[A-Z0-9-]*\d{4}[A-Z0-9-]*|\d{1,2}[\s/-]\w+[\s/-]\d{2,4}))?$`, "i");
+// What happened to this policy, never a term a schedule prints ("Grace period: 30 days", "a lapsed policy may be
+// reinstated within 2 years") (Critic R331 H1): a letter without a notice title needs one of these.
+const STATUS_EVENT = /\b(?:has|have|had)\s+(?:now\s+)?(?:lapsed|been\s+(?:reinstated|terminated|cancelled))\b|\blapsed\s+on\b|\bwas\s+(?:reinstated|terminated)\b|\breinstated\s+with\s+effect\b|\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwas\s+due\s+on\b|\bis\s+(?:now\s+)?(?:in|within)\s+(?:the|its)\s+(?:\d+-day\s+)?grace\s+period\b|\bgrace\s+period\s+(?:ends|will\s+end|expires)\b|\boverdue\b|\bwe\s+have\s+received\s+(?:your\s+)?(?:premium|payment)\b/i;
+// What happened to the policy outweighs the payment words a notice also prints ("the renewal premium was not received",
+// "an official receipt will be sent once paid"): such a notice is never payment evidence (TE #184).
+// Grace-period wording alone does not demote a renewal notice: many print theirs (TE #184 R1).
+const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|reminder|overdue|terminat\w+|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
+// A receipt that only promises one ("will be sent once paid") records no payment.
+const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?:sent|issued)\b|\bonce\s+(?:paid|payment)\b|\bupon\s+payment\b/i;
+// A sentence that records a payment: "Received with thanks S$88.20", "Amount received: RM 180.00", "S$99.00 received". A
+// footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
+// Lines and sentences; "No." and "Ref." are abbreviations, not sentence ends ("Your cheque no. 004512 ... was returned").
+const SENTENCE_BREAK = /\n|(?<=[.!?])(?<!\b(?:[Nn][Oo]|[Rr]ef|[Aa]cc|[Aa]\/[Cc])\.)\s+/;
+const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
+const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d|\breceived\s+from\b[^.]{0,80}\bthe\s+sum\s+of\b|\backnowledge\s+receipt\s+of\b|\bthank\s+you\s+for\s+your\s+payment\s+of\b/i;
+// A payment undone undoes the receipt (TE #184 R23): only a sentence that says this payment was undone, never a
+// standard footnote ("Cheques returned unpaid will incur a charge", "If your cheque is dishonoured", "Premiums are not
+// refunded if you cancel") (TE #184 R24-R27).
+const UNDONE_EVENT = /\b(?:this|your|the)\s+(?:payment|cheque|premium|giro\s+deduction|transaction)\b(?:[^.]|\.(?=\s?\d)){0,80}?\b(?:was|has\s+been|have\s+been|were)\s+(?:reversed|dishono(?:u)?red|returned|bounced|rejected|refunded|unsuccessful|cancelled)\b/i;
+const CONDITIONAL = /\b(?:if|will|would|may|might|are\s+not|is\s+not|incurs?|charges?|fees?|unless|any)\b/i;
+const undone = (text: string) => text.split(SENTENCE_BREAK).some((l) => UNDONE_EVENT.test(l) && !CONDITIONAL.test(l));
+const positiveAmount = (l: string) => [...l.matchAll(new RegExp(PAID_AMOUNT.source, "gi"))].some((m) => Number(m[0].replace(/[^\d.]/g, "")) > 0);
+const NOT_PAID = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if|upon)\s+(?:paid|payment|received)\b|\b(?:to\s+be|must\s+be|should\s+be|is\s+to\s+be)\s+paid\b|\bdishono(?:u)?red\b|\b(?:returned|reversed|bounced|rejected|unsuccessful)\b/i;
+const recordsPayment = (text: string) => {
+  if (undone(text)) return false;
+  const lines = text.split("\n");
+  const sentences = text.split(SENTENCE_BREAK);
+  if (sentences.some((l) => positiveAmount(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
+  // "Amount Received" above "S$88.20" (a label-above-value layout: TE #184 R14).
+  return lines.some((l, i) => /^\s*(?:amount|premium|payment)\s+(?:received|paid)\s*:?\s*$/i.test(l) && positiveAmount(lines[i + 1] ?? "")) && !NOT_PAID.test(text.replace(/premiums?\s+not\s+received\s+by\s+the\s+due\s+date[^.]*\./gi, " "));
+};
+const RECEIPT_WORDS = /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i;
+const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
+  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b|\bcomputer[- ]generated (?:letter|notice)\b/im.test(text);
+
+/** A short notice about the policy's status (a lapse notice, a premium reminder, a reinstatement, a renewal notice, a
+ * receipt) that only refers to the policy schedule ("please refer to your policy schedule"): it is not the schedule. It
+ * is titled as a notice on a line of its own near its top, or it is a letter that says what happened to the policy.
+ * Default-safe: a document of more than three pages, one that names a schedule, certificate, wording or endorsement in
+ * any way other than a known reference phrase, or one holding a policy's own schedule page is never one. */
+export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
+  if (!pages.length || pages.length > 3) return false;
+  const lines = pages.flatMap((p) => printedLines(p.text));
+  const text = lines.join("\n");
+  if (DOCUMENT_ITSELF.test(REFERENCE_PHRASES.reduce((t, re) => t.replace(re, " "), text))) return false;
+  if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
+  // What the pages carry decides before any wording (Critic R334): a later page with a policy's own particulars is an
+  // enclosed schedule, whatever the letter calls it, and on page 1 only a notice title outweighs them.
+  if (pages.slice(1).some((p) => policyParticulars(p.text))) return false;
+  // Whatever its layout ("Insured Name", "Coverage", a header row, a benefit table), a later page that adds a money figure
+  // or a number page 1 does not print carries something of its own, unless it is a payment or notes page (Critic R335, R337).
+  const own = new Set(figuresOf(pages[0].text));
+  if (!pages.slice(1).every((p) => noticePage(p.text, own))) return false;
+  const head = printedLines(pages[0].text).slice(0, 12);
+  if (policyParticulars(pages[0].text)) return head.some((l) => NOTICE_TITLE_STRICT.test(l));
+  if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
+  // A letter without a notice title that sends something with it ("attached", "enclosed", "overleaf") may send the schedule.
+  if (/\benclos\w*|\battach\w*|\boverleaf\b|\bherewith\b|\bfollows?\b|\bbelow\b/i.test(text)) return false;
+  return noticeLetter(text) && STATUS_EVENT.test(text);
+}
+
+/** Every money figure (any currency amount, "200K") and every number or reference of five or more characters that holds
+ * four digits in a row ("123-456789-0", "KL-55012345"); a bare four-digit year or hotline prefix is not one. */
+function figuresOf(text: string): string[] {
+  const out = moneyOf(text);
+  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) out.push(m[0].toUpperCase());
+  return out;
+}
+/** Every money figure a page prints, as a plain number ("S$200K" and "S$200,000" are both "200000"). */
+function moneyOf(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
+    out.push(String(Number((m[1] ?? m[3]).replace(/,/g, "")) * (m[2] ? 1000 : 1)));
+  return out;
+}
+const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units?|per\s+day|daily|plan)\b/i;
+const HAS_MONEY = /(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
+const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
+const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
+const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?|coverage|cover|ward)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
+// A row label followed by a pointer to the schedule, not a value: "please refer to …", "see your policy schedule". Only
+// addressing words: a cover row may open with any verb ("Is payable on accidental death only", "Covers you for …")
+// (Critic R342-R343, TE rounds 20-21).
+const ROW_SENTENCE = /^(?:please|kindly|see|refer|as\s+(?:shown|stated|set\s+out)\s+in)\b/i;
+const PAY_TITLE = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow)\b/i;
+// What the household pays: a premium, a fee or charge, interest, arrears or an amount due (Critic R340). A slip's own
+// "Amount:" or "Total amount payable:" line counts only on a payment page; a bare total, payable or paid never does.
+const PAYMENT_LINE = /\b(?:premiums?|fees?|charge[sd]?|interest|arrears|amount\s+(?:due|owing)|outstanding)\b/i;
+const SLIP_AMOUNT = /^\s*(?:(?:total\s+)?amount(?:\s+(?:due|payable))?|total(?:\s+(?:due|payable))?)\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})/i;
+// A premium row ("Rider premium: S$12.50", "Basic premium  S$75.70") is what the household pays, whatever it pays for.
+const PREMIUM_ROW = /^\s*(?:(?!(?:waiver|benefits?|sum|cover(?:age)?|assured|insured)\b)[\w-]+\s+){0,3}premiums?\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})\s*(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d/i;
+// What a policy pays out, never what the household pays ("Amount payable on death", "Paid on diagnosis").
+const PAYOUT_WORDS = /\b(?:death|die[sd]?|diagnos\w*|illness|tpd|disab\w*|hospital\w*|accident\w*|claims?|surgery|surgical|maturity|matures?|payout)\b/i;
+// "The premium for your rider will be S$12.50": the figure is the premium itself (TE round 14).
+const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d/i;
+const NOT_PAYMENT_LINE = /\b(?:benefits?|riders?|cash|sum|cover(?:age|ed)?|waiver|assured|insured|units?|plan)\b/i;
+const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
+/** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
+ * of notes, with no person cell and no cover line; or a page with neither a money figure nor a person cell. Any other
+ * later page that adds a figure or number of its own, whatever its size, may be the schedule. */
+function noticePage(text: string, own: Set<string>): boolean {
+  const lines = printedLines(text);
+  // A person label anywhere, a header row included ("Policy Number  Life Assured  Sum Assured").
+  const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
+  // A plan, units, rider, benefit, coverage or ward row with a value is a schedule's own field, whatever else the page
+  // holds, digits or not ("Coverage : As charged", "Rider : Example Critical Illness Rider") (Critic R339 M2, R341). Only
+  // a premium row, a label followed by a sentence ("Benefits: please refer to your policy schedule"), or a payment
+  // page naming the plan it collects for ("Plan: Harbour Term 20", no count and no new money) is no such row (TE 14-16).
+  const paymentPage = lines.some((l) => PAYMENT_MARK.test(l) && !PAYMENT_FIELD.test(l));
+  // On a payment page a rider row whose figure, with the page's premium rows, adds up to the total to pay is that rider's
+  // premium ("Basic premium: S$75.70", "Rider: CI Booster  S$12.50", "Total: S$88.20") (TE round 19).
+  const cents = (f: string) => Math.round(Number(f) * 100);
+  const premiumCents = lines.filter((l) => PREMIUM_ROW.test(l)).flatMap(moneyOf).reduce((a, f) => a + cents(f), 0);
+  const totals = new Set([...own, ...lines.filter((l) => SLIP_AMOUNT.test(l)).flatMap(moneyOf)].map(cents));
+  const riderPremium = (l: string) => paymentPage && /^\s*riders?\b/i.test(l) && moneyOf(l).length === 1
+    && totals.has(premiumCents + cents(moneyOf(l)[0]));
+  const payTitled = PAY_TITLE.test(lines.slice(0, 4).filter((l) => !PAYMENT_FIELD.test(l)).join("\n"));
+  if (lines.some((l) => {
+    const row = SCHEDULE_ROW.exec(l);
+    if (!row || PREMIUM_ROW.test(l) || riderPremium(l)) return false;
+    const value = l.slice(row[0].length).trim();
+    if (!value || ROW_SENTENCE.test(value)) return false;
+    if ((payTitled || paymentPage) && /^\s*plan\b/i.test(row[0]) && !/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)
+      && moneyOf(value).every((f) => own.has(f))) return false;
+    return true;
+  })) return false;
+  // Another policy's number is another policy's page.
+  if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
+  const titled = /\b(?:payment\s+slip|remittance\s+advice|how\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow|important\s+notes?|notes|terms\s+and\s+conditions)\b/i.test(lines.slice(0, 4).join("\n"));
+  // On a payment or notes page a money figure page 1 lacks may only be a premium, a sum to pay or a fee ("Total amount
+  // payable", "A charge of S$20 applies", "Your premium will be S$95.00"); a figure on any other line ("Hospital cash
+  // S$200", "Critical Illness Rider  S$50,000", "Premium waiver benefit") may be cover (Critic R338, TE round 13).
+  if (titled && !person && !lines.some((l) => COVER_LINE.test(l))
+    && lines.every((l) => moneyOf(l).every((f) => own.has(f)) || (!PAYOUT_WORDS.test(l)
+      && ((!NOT_PAYMENT_LINE.test(l) && (PAYMENT_LINE.test(l) || (paymentPage && SLIP_AMOUNT.test(l)))) || PREMIUM_FIGURE.test(l) || PREMIUM_ROW.test(l) || riderPremium(l))))) return true;
+  // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
+  // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
+  // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).
+  // A "Payment Mode : GIRO" field is a schedule's too; only instruction lines mark a payment page (Critic R339 M2).
+  if (paymentPage
+    && !lines.some((l) => /\b(?:insured|assured)\b/i.test(l) && (PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person)\b/i.test(l)))
+    && !lines.some((l) => COVER_LINE.test(l) && !PAYMENT_MARK.test(l) && figuresOf(l).some((f) => !own.has(f)))
+    && moneyOf(text).every((f) => own.has(f))) return true;
+  if (!person && !HAS_MONEY.test(text) && figuresOf(text).every((f) => own.has(f))) return true;
+  return figuresOf(text).every((f) => own.has(f));
+}
+
+/** A page that prints a policy's own particulars: its policy number, a person's name in a person cell ("Life Assured:
+ * Ravi Kumar") and a sum assured, sum insured or benefit figure. */
+function policyParticulars(text: string): boolean {
+  const lines = printedLines(text);
+  const numbered = lines.some((l) => /\bpolicy\s+(?:number|no\.?)\s*[:#.]?\s*[A-Z0-9-]*\d{4}/i.test(l));
+  const named = lines.some((l) => { const v = PERSON_CELL.exec(l)?.[1]?.trim(); return !!v && nameShaped(v) && !NOT_A_NAME.test(v); });
+  const sum = lines.some((l) => /\b(?:sum\s+(?:assured|insured)|benefit\s+amount|death\s+benefit|amount\s+(?:assured|insured|of\s+cover)|cover(?:age)?\s+amount)\b[^\n]*\d/i.test(l));
+  return numbered && named && sum;
+}
+
+/** The role a status notice keeps, decided by its title first (Critic R330 M2): a receipt that records a payment is a
+ * receipt; a lapse, reminder, termination or reinstatement notice is a notice ("other"), whatever payment words it prints;
+ * a renewal notice is a renewal statement unless it says the premium is overdue or was not received. */
+export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "renewal_statement" | "premium_receipt" {
+  const text = pages.map((p) => printedLines(p.text).join("\n")).join("\n");
+  const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
+  // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
+  // only promises one.
+  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text) || undone(text)))) return "premium_receipt";
+  if (title && LAPSE_OR_DUE.test(title)) return "other";
+  if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
+  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || ((NOT_PAID.test(text) || undone(text)) && !recordsPayment(text))) return "other";
+  if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
+  return RECEIPT_WORDS.test(text) ? "premium_receipt" : "other";
 }
 
 // ---------------------------------------------------------------------------
