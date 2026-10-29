@@ -121,38 +121,86 @@ function usableCeiling(value:number|null|undefined){
   const amount=usable(value);
   return amount!=null&&amount>0?amount:null;
 }
-/** A cap's figure, only where its own sentence prints it as a cap: a word that caps ("maximum", "up to", "limit", "not
- * exceed", "no more than", "subject to"), and the stored figure among the money (or, for a share of the sum insured, the
- * percentages) that sentence prints. Anything else is stated, never applied. Stored conditions showed why: "the amount
- * withdrawn is at least S$1,000" (a minimum) and "a maximum of 6 claims" (a count) were caps of S$1,000 and S$6 that cut
- * a S$100,000 death benefit and a Special Benefit; "Up to S$500 per incident" was stored as S$500,000. */
-const CAP_WORD=/\b(?:max(?:imum)?|most|up\s+to|limit(?:s|ed)?|caps?|capped|ceiling|subject\s+to|not\s+exceed|exceeding|(?:not|no)\b[^.;]{0,30}\bmore\s+than)\b/i;
-const CAP_MONEY=/(?:S\$|US\$|A\$|HK\$|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s*(\d[\d,]*(?:\.\d+)?)\s*(million|mil|m|k|thousand)?\b/gi;
-function printedFigures(quote:string){
-  const out:number[]=[];
-  for(const m of quote.matchAll(CAP_MONEY)){
-    const base=Number(m[1].replace(/,/g,""));if(!Number.isFinite(base))continue;
-    const unit=(m[2]??"").toLowerCase();
-    out.push(base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1));
+/** What a stored cap's own sentence says about its figure. "cap": the sentence prints the stored figure right after a
+ * phrase that caps it ("a maximum of S$5,000", "limited to RM10,000", "up to fifty percent of the Sum Assured",
+ * "Benefit limit: 5,000", or the figure followed by "maximum" / "whichever is lower"), with no minimum, excess,
+ * deductible, co-payment or premium word just before the figure. "not_cap": the sentence prints the figure as something
+ * else: a minimum or threshold ("at least S$1,000", "bills exceeding S$2,000"), an excess, a premium, or a count ("a
+ * maximum of 6 claims"). "unsure": anything else (no quote, a figure the sentence does not print, a cap phrase not
+ * listed here). An unsure cap is never applied and never ignored: a figure above it is not shown (evaluateCondition),
+ * because a wrong cap understates a claim and a missed one overstates it. Stored conditions showed why: "the amount
+ * withdrawn is at least S$1,000" and "a maximum of 6 claims" were caps of S$1,000 and S$6 that cut a S$100,000 death
+ * benefit and a Special Benefit; "Up to S$500 per incident" was stored as S$500,000. */
+export type CapReading={kind:"cap";amount:number}|{kind:"not_cap"}|{kind:"unsure"};
+const CAP_PHRASE=String.raw`(?:max(?:imum|\.)?|up\s+to|limit(?:ed)?(?:\s+to)?|capped\s+at|cap|ceiling|restricted\s+to|not\s+exceed|cannot\s+exceed|no\s+more\s+than|not\s+more\s+than|pay\s+more\s+than|the\s+lower\s+of|the\s+lesser\s+of|had(?:\s+maksimum)?|maksimum|tidak\s+melebihi|sehingga|最高(?:赔偿)?|上限)`;
+/** A cap phrase, then up to a few plain words ("per policy year", "of the", "amount of"), then the figure. */
+const CAP_BEFORE=new RegExp(CAP_PHRASE+String.raw`(?:\s+(?:of|is|an?|the|amount|benefit|sum|per|policy|year|any|one|each|disability|claim|lifetime|in|total|aggregate|keseluruhan|pelan|daripada|bagi|setiap|tahun|polisi)){0,6}\s*[:\-–]?\s*$`,"iu");
+/** "The most we will pay for TI claims on the same life is S$1.0 million." */
+const MOST_WE_PAY=/\bmost\s+(?:we|the\s+company|the\s+insurer|the\s+plan)\s+(?:will|shall|would|can)\s+pay\b[^.;\n]{0,60}\bis\s*$/iu;
+const CAP_AFTER=/^\s*(?:\(?max(?:imum|\.)?\)?|in\s+(?:total|aggregate)\b|,?\s*whichever\s+is\s+(?:the\s+)?(?:lower|less|lesser))/iu;
+/** Words that make the figure next to them something other than a cap. */
+const NOT_CAP_BEFORE=/(?:\bmin(?:imum|\.)?|\bat\s+least|\bthreshold|(?<!(?:not|cannot|never|n['’]t)\s)\bexceed(?:s|ing)?|(?<!no\s)\babove|(?<!not\s)\bover|\bexcess|\bdeductible|\bco-?(?:payment|pay|insurance)|\bpremiums?|\bsum\s+(?:insured|assured))\b[^.;\n]{0,25}$/iu;
+const COUNT_AFTER=/^\s*(?:claims?|visits?|times|sessions?|treatments?|consultations?|days?|nights?|weeks?|months?|years?|people|persons|children|trips?|occurrences?)\b/iu;
+const CURRENCY=String.raw`(?:S\$|US\$|A\$|HK\$|NZ\$|£|€|¥|₹|\$|(?<![\p{L}])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|NZD|JPY|CNY|RMB|INR|Rs\.?|PHP|IDR|Rp\.?|THB)\s?)`;
+const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(\d[\d,]*(?:\.\d+)?)\s*(million|mil|m|k|thousand)?(?![\d\p{L}])`,"giu");
+const WORD_FRACTIONS:Record<string,number>={half:0.5,"one half":0.5,"a half":0.5,quarter:0.25,"one quarter":0.25,"a quarter":0.25,"one third":1/3,"a third":1/3,"two thirds":2/3,"three quarters":0.75};
+const TENS:Record<string,number>={ten:10,twenty:20,"twenty-five":25,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,"seventy-five":75,eighty:80,ninety:90,"one hundred":100,hundred:100};
+/** Each figure a sentence prints, with where it is. A share is a fraction (50% = 0.5). */
+function figuresIn(sentence:string,share:boolean){
+  const out:{value:number;start:number;end:number;money:boolean}[]=[];
+  if(share){
+    for(const m of sentence.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent\b)/giu))out.push({value:Number(m[1])/100,start:m.index!,end:m.index!+m[0].length,money:false});
+    for(const m of sentence.matchAll(/\b(ten|twenty(?:-five)?|thirty|forty|fifty|sixty|seventy(?:-five)?|eighty|ninety|one hundred|hundred)\s*(?:per\s?cent|%)/giu))
+      out.push({value:TENS[m[1].toLowerCase()]/100,start:m.index!,end:m.index!+m[0].length,money:false});
+    for(const m of sentence.matchAll(/\b(one half|a half|half|one quarter|a quarter|quarter|one third|a third|two thirds|three quarters)\b/giu))
+      out.push({value:WORD_FRACTIONS[m[1].toLowerCase()],start:m.index!,end:m.index!+m[0].length,money:false});
+    return out;
+  }
+  for(const m of sentence.matchAll(FIGURE)){
+    const base=Number(m[2].replace(/,/g,""));if(!Number.isFinite(base))continue;
+    const unit=(m[3]??"").toLowerCase();
+    out.push({value:base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1),start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
   }
   return out;
 }
-export function printedCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):number|null{
+export function capReading(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):CapReading{
   const amount=usableCeiling(condition.amount);
-  const quote=condition.quote??"";
-  if(amount==null||!CAP_WORD.test(quote))return null;
-  if(condition.amountBasis==="sum_insured_fraction")
-    return [...quote.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)/gi)].some(m=>Math.abs(Number(m[1])-amount*100)<1e-6)?amount:null;
-  return printedFigures(quote).some(f=>Math.abs(f-amount)<0.005)?amount:null;
+  const quote=(condition.quote??"").trim();
+  if(amount==null||!quote)return {kind:"unsure"};
+  const share=condition.amountBasis==="sum_insured_fraction";
+  let notCap=false;
+  for(const sentence of quote.split(/(?<!\d)[.;](?!\d)|\n/u)){
+    for(const f of figuresIn(sentence,share)){
+      if(Math.abs(f.value-amount)>(share?1e-6:0.005))continue;
+      const before=sentence.slice(Math.max(0,f.start-80),f.start),after=sentence.slice(f.end);
+      if(!share&&COUNT_AFTER.test(after)){notCap=true;continue;}
+      if(NOT_CAP_BEFORE.test(before)){notCap=true;continue;}
+      // A bare figure (no currency) is a cap only when a cap phrase names it right before it.
+      if(CAP_BEFORE.test(before)||MOST_WE_PAY.test(before)||((f.money||share)&&CAP_AFTER.test(after)))return {kind:"cap",amount};
+    }
+  }
+  return notCap?{kind:"not_cap"}:{kind:"unsure"};
 }
-/** Whether a sub-limit names the benefit itself, not only the plan the benefit is under. "Double Critical Cover: subject
- * to a limit of S$25,000" caps one of that plan's benefits; which one the sentence does not say, so it never cuts the
- * plan's main payout. */
+/** The cap's figure when its sentence prints it as a cap, otherwise null (see capReading). */
+export function printedCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):number|null{
+  const r=capReading(condition);
+  return r.kind==="cap"?r.amount:null;
+}
+/** The benefit an answer's item is for: its title after the plan ("Ada · Example Protector — Death" is "death"). */
+function benefitOf(item:ClaimItem){
+  const title=(item.title??"").toLowerCase();
+  const cut=Math.max(title.lastIndexOf(" — "),title.lastIndexOf(" · "));
+  return cut<0?title:title.slice(cut+3);
+}
+const phrase=(text:string)=>" "+text.toLowerCase().replace(/\bbenefits?\b/g," ").replace(/[^\p{L}\p{N}]+/gu," ").trim()+" ";
+/** Whether a sub-limit is for this benefit itself, not only for the plan the benefit is under: its own sentence names the
+ * benefit ("Hospital Cash is limited to S$5,000"), or the cover it is stored under is the benefit's own name. "Double
+ * Critical Cover: subject to a limit of S$25,000" caps one of that plan's benefits; which one the sentence does not say. */
 function namesTheBenefit(condition:CoverCondition,item:ClaimItem){
-  if(!condition.productName)return false;
-  const named=condition.productName.toLowerCase().trim(),title=(item.title??"").toLowerCase();
-  const benefit=title.includes(" · ")?title.slice(title.lastIndexOf(" · ")+3):title;
-  return !!benefit&&(benefit.includes(named)||named.includes(benefit));
+  const benefit=phrase(benefitOf(item));
+  if(benefit.trim().length<3)return false;
+  if(phrase(condition.quote??"").includes(benefit))return true;
+  return !!condition.productName&&phrase(condition.productName)===benefit;
 }
 /** The same, for a period: a policy states whole days. */
 function usableDays(value:number|null|undefined){
@@ -196,6 +244,8 @@ export type ConditionOutcome=
   |{kind:"clear"}
   |{kind:"caveat";text:string;weight:number}
   |{kind:"reduce";to:number;text:string}
+  /** A figure that may be above a limit DearPolicy cannot place: it is not shown, so it can never overstate a claim. */
+  |{kind:"withhold";text:string}
   |{kind:"blocked";text:string};
 
 /** Does a reported fact name the excluded cause outright?
@@ -343,14 +393,17 @@ export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:
     }
     case "sub_limit":{
       const current=item.calculatedAmount;
-      const stated=printedCap(raw);
-      if(current==null||stated==null)return {kind:"clear"};
-      const ceiling=condition.amountBasis==="sum_insured_fraction"&&item.coverAmount!=null
-        ?Math.min(stated*item.coverAmount,item.coverAmount):stated;
-      if(current<=ceiling)return {kind:"clear"};
-      if(!namesTheBenefit(raw,item))
-        return {kind:"caveat",weight:6,text:"the policy limits a benefit under "+(raw.productName??"this cover")+" to "+money(ceiling,item.currency)
-          +", and does not say it is "+item.title+", so "+item.title+" is shown as printed."+quoteTail};
+      const read=capReading(raw);
+      const stated=usableCeiling(condition.amount);
+      if(current==null||stated==null||read.kind==="not_cap")return {kind:"clear"};
+      const ceiling=condition.amountBasis==="sum_insured_fraction"
+        ?(item.coverAmount!=null?Math.min(stated*item.coverAmount,item.coverAmount):null):stated;
+      if(ceiling!=null&&current<=ceiling)return {kind:"clear"};
+      const limit=ceiling!=null?money(ceiling,item.currency):"a share of the sum insured";
+      // A limit that may be this benefit's: the figure above it is not shown, and never shown uncapped.
+      if(read.kind==="unsure"||ceiling==null||!namesTheBenefit(raw,item))
+        return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
+          +" that may apply to "+item.title+", so no amount is shown for it."+quoteTail};
       return {kind:"reduce",to:ceiling,text:item.title+" was reduced from "+money(current,item.currency)
         +" to "+money(ceiling,item.currency)+", which is the most this benefit pays"};
     }
@@ -407,11 +460,18 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   };
   const blocked:{title:string;reason:string}[]=[];
   const items=args.items;
+  const withhold=(item:ClaimItem,text:string)=>{
+    delete item.calculatedAmount;
+    item.amountText=null;
+    item.conditions=[...new Set([...(item.conditions??[]),text])];
+    say(text,7);
+  };
   for(const item of items){
     for(const condition of conditionsForItem(item,args.conditions)){
       const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,today});
       if(outcome.kind==="clear")continue;
       if(outcome.kind==="caveat"){say(outcome.text,outcome.weight);continue;}
+      if(outcome.kind==="withhold"){withhold(item,outcome.text);continue;}
       if(outcome.kind==="reduce"){
         item.calculatedAmount=outcome.to;
         item.amountText=money(outcome.to,item.currency);
@@ -433,12 +493,22 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   // survivors together.
   for(const condition of args.conditions){
     if(condition.kind!=="aggregate_cap")continue;
-    const ceiling=printedCap(condition);
-    if(ceiling==null)continue;
+    const read=capReading(condition);
+    const stated=usableCeiling(condition.amount);
+    if(stated==null||read.kind==="not_cap")continue;
     const inCover=items.filter(item=>item.calculatedAmount!=null
       &&(!condition.productName||(item.coverLabel??"").toLowerCase().includes(condition.productName.toLowerCase())));
+    // A share of the sum insured caps the cover at that share of its one sum insured; with no single sum it is unplaced.
+    const sums=[...new Set(inCover.map(item=>item.coverAmount))];
+    const ceiling=condition.amountBasis==="sum_insured_fraction"?(sums.length===1&&sums[0]!=null?stated*sums[0]:null):stated;
     const total=inCover.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
-    if(total<=ceiling)continue;
+    if(ceiling!=null&&total<=ceiling)continue;
+    if(read.kind==="unsure"||ceiling==null){
+      const text=(condition.productName??"this cover")+" states an overall limit"+(ceiling!=null?" of "+money(ceiling):"")
+        +" that DearPolicy could not confirm against its page, so no amounts are shown for it.";
+      for(const item of inCover)withhold(item,text);
+      continue;
+    }
     // Reduce from the largest figure down, and keep going until the total
     // fits. Reducing only the largest left the answer still over the cap
     // whenever one benefit could not absorb the whole excess -- and asking the
@@ -483,10 +553,10 @@ export function describeCondition(condition:CoverCondition){
     case "time_bar_from_inception":
       return cover+"does not pay for "+CAUSE_WORDS[condition.cause??"other"]+" in the first "+(usableDays(condition.days)??"(unstated number of)")+" days of the cover"+carve;
     case "aggregate_cap":case "sub_limit":{
-      // A sentence that caps nothing (a minimum, a count) is shown as the policy words it.
-      if((condition.quote??"").trim()&&!CAP_WORD.test(condition.quote))return cover+condition.quote.trim().slice(0,120);
-      const cap=printedCap(condition);
-      const figure=cap==null?"a stated maximum":condition.amountBasis==="sum_insured_fraction"?Math.round(cap*10000)/100+"% of the sum insured":money(cap);
+      const read=capReading(condition);
+      // A sentence that caps nothing (a minimum, a count), or one DearPolicy cannot place, is shown as the policy words it.
+      if(read.kind!=="cap")return (condition.quote??"").trim()?cover+(condition.quote??"").trim().slice(0,160):cover+"a stated maximum";
+      const figure=condition.amountBasis==="sum_insured_fraction"?Math.round(read.amount*10000)/100+"% of the sum insured":money(read.amount);
       return condition.kind==="aggregate_cap"?cover+"pays no more than "+figure+" in total":cover+"this benefit is capped at "+figure;
     }
     case "terminates_on_full_payment":
@@ -504,5 +574,7 @@ export function describeCondition(condition:CoverCondition){
 /** Whether this condition can change a figure, or only ever be stated beside
  * one. Shown on the screen so a person can see which is which. */
 export function conditionEffect(condition:CoverCondition){
+  // A minimum or a count stored as a cap is stated beside the amount, never applied to it.
+  if((condition.kind==="sub_limit"||condition.kind==="aggregate_cap")&&capReading(condition).kind==="not_cap")return "stated beside the amount";
   return conditionIsDecidable(condition.kind)?"changes the amount":"stated beside the amount";
 }

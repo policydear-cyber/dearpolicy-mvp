@@ -2,7 +2,8 @@
  * A stored "cap" cuts an answer's figure only where its own sentence prints it as a cap of that figure. Shapes from read
  * documents: a minimum ("the amount withdrawn is at least S$1,000") stored as a S$1,000 cap cut a S$100,000 death
  * benefit; a count ("a maximum of 6 claims") cut a benefit to S$6; "Up to S$500 per incident" was stored as S$500,000;
- * a plan's "subject to a limit of S$25,000" (for one of its benefits) cut the plan's main payout. Made-up policies, no
+ * a plan's "subject to a limit of S$25,000" (for one of its benefits) cut the plan's main payout. A limit that cannot be
+ * placed never leaves the full figure showing either: the figure above it is not shown (Critic R349, TE #188). Made-up policies, no
  * database, no network, no model.
  */
 import assert from "node:assert/strict";
@@ -40,7 +41,7 @@ test("printedCap: a figure the sentence prints as a cap, in any market's money",
   assert.equal(cap(0.5, "up to 20% of the Sum Assured", "sum_insured_fraction"), null);
 });
 
-test("a minimum, a count or an unprinted figure never cuts a payout; a plan-wide limit is a caveat", async () => {
+test("a minimum or a count never cuts a payout; a plan-wide limit hides the figure above it", async () => {
   const { applyCoverConditions, describeCondition } = await import("@/lib/insurance/cover-conditions");
   const conditions = [
     cond({ kind: "sub_limit", productName: "Example Lifetime Protector", amount: 1000, quote: "the amount withdrawn is at least S$1,000" }),
@@ -49,10 +50,11 @@ test("a minimum, a count or an unprinted figure never cuts a payout; a plan-wide
   ];
   const items = [item("Death Benefit", "Example Lifetime Protector", 100000), item("Bonus Benefit", "Example CI Plan", 20000), item("Ada · Critical Illness", "Example Critical Cover", 100000)];
   const result = applyCoverConditions({ items, conditions, facts: {} as never });
-  assert.deepEqual(items.map((i) => i.calculatedAmount), [100000, 20000, 100000]);
-  assert.ok(result.qualifiers.some((q) => /limits a benefit under Example Critical Cover to S\$25,000/.test(q)), JSON.stringify(result.qualifiers));
+  assert.deepEqual(items.map((i) => i.calculatedAmount), [100000, 20000, undefined]);
+  assert.equal(items[2].amountText, null, "a limit the sentence does not tie to this benefit hides its figure, never shows S$100,000");
+  assert.ok(result.qualifiers.some((q) => /limit of S\$25,000 under Example Critical Cover that may apply/.test(q)), JSON.stringify(result.qualifiers));
   assert.equal(describeCondition(conditions[0]), "Example Lifetime Protector: the amount withdrawn is at least S$1,000");
-  assert.equal(describeCondition(conditions[1]), "Bonus Benefit: pays no more than a stated maximum in total");
+  assert.equal(describeCondition(conditions[1]), "Bonus Benefit: a maximum of 6 claims is allowed under this benefit");
 });
 
 test("a printed cap of the benefit itself still cuts it, and a printed plan total still holds", async () => {
@@ -65,4 +67,46 @@ test("a printed cap of the benefit itself still cuts it, and a printed plan tota
   applyCoverConditions({ items: plan, facts: {} as never, conditions: [
     cond({ kind: "aggregate_cap", productName: "Example CI Plan", amount: 320000, quote: "The most we will pay under this plan is S$320,000." })] });
   assert.equal((plan[0].calculatedAmount ?? 0) + (plan[1].calculatedAmount ?? 0), 320000);
+});
+
+test("caps in every market's wording, and the words that make a figure something else", async () => {
+  const { capReading } = await import("@/lib/insurance/cover-conditions");
+  const read = (amount: number, quote: string, amountBasis: CoverCondition["amountBasis"] = "fixed") => capReading({ amount, quote, amountBasis }).kind;
+  for (const [amount, quote, basis] of [
+    [50000, "Maximum per policy year 50,000"], [5000, "Benefit limit: 5,000 per disability"], [5000, "Pays the actual cost or S$5,000, whichever is lower"],
+    [5000, "The lower of S$5,000 or the actual expenses"], [5000, "Restricted to S$5,000"], [10000, "Had maksimum RM10,000"],
+    [20000, "tidak melebihi RM 20,000"], [10000, "最高赔偿 S$10,000"], [100000, "Up to ¥100,000 per year"], [50000, "Up to ₹50,000"],
+    [2500, "We won't pay more than £2,500"], [2500, "Claims cannot exceed £2,500"], [50000, "Had keseluruhan pelan RM50,000"],
+    [0.5, "up to fifty percent of the Sum Assured", "sum_insured_fraction"], [0.5, "limited to half of the Sum Assured", "sum_insured_fraction"],
+    [0.2, "maksimum 20% daripada Jumlah Diinsuranskan", "sum_insured_fraction"],
+  ] as [number, string, CoverCondition["amountBasis"]?][]) assert.equal(read(amount, quote, basis), "cap", quote);
+  for (const [amount, quote] of [
+    [1000, "subject to a minimum withdrawal amount of S$1,000"], [1000, "minimum S$1,000, maximum S$100,000"], [1000, "Claims exceeding S$1,000 require receipts"],
+    [2000, "For bills exceeding S$2,000 we pay 80%"], [100, "subject to an excess of £100"], [50000, "Sum Assured S$50,000, subject to the terms"],
+    [200, "Co-payment of S$200 up to the limit"], [3000, "premium S$3,000 up to age 65"], [1000, "a minimum claim of S$1,000; benefits up to S$50,000"],
+    [1000, "at least S$1,000 and at most S$5,000"],
+  ] as [number, string][]) assert.equal(read(amount, quote), "not_cap", quote);
+  // A day rate times a day count is not printed as the stored total.
+  assert.equal(read(15000, "S$500 per day, up to 30 days"), "unsure");
+});
+
+test("an unsure cap or an unsure plan total hides the figures above it", async () => {
+  const { applyCoverConditions, conditionEffect } = await import("@/lib/insurance/cover-conditions");
+  // Named in its own sentence, under no cover: it cuts. Stored with no quote: the figure above it is hidden.
+  const cash = [item("Ada · Hospital Cash", "Example Shield", 20000), item("Ada · Hospital Cash", "Example Shield", 20000)];
+  applyCoverConditions({ items: [cash[0]], facts: {} as never, conditions: [cond({ kind: "sub_limit", amount: 5000, quote: "Hospital Cash is limited to S$5,000 per policy year." })] });
+  assert.equal(cash[0].calculatedAmount, 5000);
+  applyCoverConditions({ items: [cash[1]], facts: {} as never, conditions: [cond({ kind: "sub_limit", amount: 5000, quote: "" })] });
+  assert.equal(cash[1].calculatedAmount, undefined);
+  // "Death" is not "Death Benefit Plus", and the item's plan name is not the benefit.
+  const death = [item("Ada · Example Protector — Death", "", 100000)];
+  applyCoverConditions({ items: death, facts: {} as never, conditions: [cond({ kind: "sub_limit", productName: "Death Benefit Plus", amount: 25000, quote: "Double Cover: subject to a limit of S$25,000" })] });
+  assert.equal(death[0].calculatedAmount, undefined);
+  // A plan total as a share of the sum insured is that share of the one sum insured, never S$0.50.
+  const plan = [item("Ada · Special Benefit", "Example CI Plan", 100000), item("Ada · Critical Illness", "Example CI Plan", 100000)];
+  applyCoverConditions({ items: plan, facts: {} as never, conditions: [
+    cond({ kind: "aggregate_cap", productName: "Example CI Plan", amount: 1.5, amountBasis: "sum_insured_fraction", quote: "up to 150% of the Sum Assured in total" })] });
+  assert.equal((plan[0].calculatedAmount ?? 0) + (plan[1].calculatedAmount ?? 0), 150000);
+  // A minimum stored as a cap is stated beside the amount, not "changes the amount".
+  assert.equal(conditionEffect(cond({ kind: "sub_limit", amount: 1000, quote: "subject to a minimum of S$1,000" })), "stated beside the amount");
 });
