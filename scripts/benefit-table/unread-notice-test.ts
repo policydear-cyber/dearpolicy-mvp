@@ -2,9 +2,11 @@
  * a document is "waiting" only while DearPolicy is genuinely reading it: a live intake job backs it (lib/rag/live-job.ts,
  * the Documents page's own rule), never a guess from the row's times. In intake with no live job (the job died, its lease
  * lapsed, or nothing claimed it) it is "stalled": never "still being read", and pointed to Try again on the Documents page. A receipt or letter (which intake never reads
- * into the table), or a document whose table reading was never stored, is never described as unread and never sent to
+ * into the table), or a reference document whose table reading was never stored, is never described as unread and never sent to
  * Read again (which re-reads and re-links every section, at a model cost); it is said not to be shown on this page (never "no
- * benefits": it may have some), and can still be asked about in chat. A document the app could not read keeps its "could not be read" notice. In-memory rows, and one real-database check of real background_jobs rows (one transaction, rolled back); made-up
+ * benefits": it may have some), and can still be asked about in chat. A schedule or certificate (the household's own proof
+ * of cover) whose reading was never stored is "table_unread": its benefits couldn't be read for Coverage yet, and Read
+ * again, which reads it into the table, is named (scripts/benefit-table/coverage-recovery-test.ts). A document the app could not read keeps its "could not be read" notice. In-memory rows, and one real-database check of real background_jobs rows (one transaction, rolled back); made-up
  * names, no model.
  *   DATABASE_URL=... npm run benefit-table:unread-notice-test */
 import { randomUUID } from "node:crypto";
@@ -96,9 +98,10 @@ async function main() {
     assert.equal(state.blank, "not_readable");
   });
   await test("a ready document with no stored reading and no live job is never waiting, whatever its times say", () => {
-    assert.equal(state.legacy, "no_table");
-    assert.equal(state.touched, "no_table", "linking a person to an old unread document does not make it 'being read'");
-    assert.equal(state.future, "no_table", "a completion time in the future does not keep it 'being read'");
+    // These are schedules (the household's own proof of cover): not waiting, and not left without a way forward either.
+    assert.equal(state.legacy, "table_unread");
+    assert.equal(state.touched, "table_unread", "linking a person to an old unread document does not make it 'being read'");
+    assert.equal(state.future, "table_unread", "a completion time in the future does not keep it 'being read'");
   });
   await test("a document in intake whose job is not live is stalled, never waiting (the Documents page offers Try again)", () => {
     assert.equal(state["dead-intake"], "stalled");
@@ -121,7 +124,7 @@ async function main() {
     assert.ok(ds, "documentState is exported");
     const doc = (live: boolean, o: Record<string, unknown> = {}) => ({ status: "ready", pages: 2, live, file: { document_role: "personal_schedule", quarantine: "scan_clean" }, ...o });
     assert.equal(ds(doc(true), false), "waiting");
-    assert.equal(ds(doc(false), false), "no_table");
+    assert.equal(ds(doc(false), false), "table_unread", "a schedule whose reading was not stored, with no job: Read again reads it in");
     assert.equal(ds(doc(true), true), "read");
     assert.equal(ds(doc(false), true), "read");
     // Z2: a receipt is never waiting, even while its intake job is still running.
@@ -156,7 +159,7 @@ async function main() {
         ["dead.pdf", "indexing", null, "status='dead_letter'", "stalled"],
         ["no-job.pdf", "queued", null, null, "stalled"],
         ["ready-table-read.pdf", "ready", "personal_schedule", "status='processing', lease_expires_at=now()+interval '5 minutes'", "waiting"],
-        ["ready-done.pdf", "ready", "personal_schedule", "status='succeeded', completed_at=now()", "no_table"],
+        ["ready-done.pdf", "ready", "personal_schedule", "status='succeeded', completed_at=now()", "table_unread"],
         ["ready-receipt.pdf", "ready", "premium_receipt", "status='processing', lease_expires_at=now()+interval '5 minutes'", "no_table"],
       ];
       for (const [file, status, role, job] of cases) {
@@ -195,11 +198,13 @@ async function main() {
   const text = html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;|’/g, "'").replace(/\s+/g, " ");
 
   await test("the page never tells the household to Read again a document that will never give rows", () => {
-    assert.ok(!/Read again/i.test(text), text);
+    // Read again is named once, for the schedules only (table_unread); never beside a receipt, letter or summary.
+    assert.equal(text.match(/Read again/gi)?.length, 1, text);
+    assert.match(text, /3 documents' benefits couldn't be read for Coverage yet\. Example Term Life, Example Dental Plan, Example Travel Plan\. You can use Read again on the Documents page ?\./);
     assert.ok(!/not been read/i.test(text), text);
   });
   await test("a document with no table is said not to be shown here (never 'no benefits'), by its readable name", () => {
-    assert.match(text, /Example Shield receipt, Letter from Example Insurance, Example Insurance product summary \(ending 4821\), Example Term Life, Example Dental Plan, Example Travel Plan aren't shown on this page\. You can still ask about them in chat\./);
+    assert.match(text, /Example Shield receipt, Letter from Example Insurance, Example Insurance product summary \(ending 4821\) aren't shown on this page\. You can still ask about them in chat\./);
     assert.ok(!/no benefits/i.test(text), "missing information never reads as no benefits");
     assert.ok(!/0b6f3c1e/.test(text), "never the made-up file name");
   });

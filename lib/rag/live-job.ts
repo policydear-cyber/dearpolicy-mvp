@@ -19,3 +19,11 @@ export const livePolicyJob = (j: string, minutes: string) =>
 export const policyJobLive = (p: string) =>
   `EXISTS (SELECT 1 FROM background_jobs bj WHERE bj.job_type='${POLICY_PROCESSING_JOB_TYPE}' AND bj.idempotency_key IN (${p}.id::text, ${p}.id::text || ':retry-read')
      AND ${livePolicyJob("bj", String(UNCLAIMED_STALL_MINUTES))})`;
+/** The automatic malware-scan retry (lib/scanning/retry.ts SCAN_RETRY_JOB_TYPE; keys `policy_document:<id>:scan-retry:<N>`). */
+export const SCAN_RETRY_JOB_TYPE = "document_scan_retry";
+/** SQL: true when the policy row (alias `p`) has a live automatic malware-scan retry, by the same livePolicyJob rule. A
+ * document on hold for its scan waits on this job, not on an intake job, and Try again refuses it until the scan is clean
+ * (app/api/policies/reprocess/route.ts). Only server constants are written into the text. */
+export const scanJobLive = (p: string) =>
+  `EXISTS (SELECT 1 FROM background_jobs sj WHERE sj.job_type='${SCAN_RETRY_JOB_TYPE}' AND sj.idempotency_key LIKE 'policy_document:' || ${p}.id::text || ':scan-retry:%'
+     AND ${livePolicyJob("sj", String(UNCLAIMED_STALL_MINUTES))})`;

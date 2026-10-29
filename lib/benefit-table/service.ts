@@ -10,7 +10,8 @@ import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { policyJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
+import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
@@ -42,14 +43,15 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
 /** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
  * and for telling whether the table will ever read it. */
 export type DocumentFile = { original_filename: string; product_name: string | null; insurer: string | null; document_role: string | null;
-  policy_number: string | null; quarantine: string | null };
-/** `live`: a live intake job is reading the document now (lib/rag/live-job.ts, the Documents page's own rule). */
-type HouseholdDoc = SourceDoc & { status: string; live: boolean; file: DocumentFile };
+  policy_number: string | null; quarantine: string | null; scan_detail?: string | null };
+/** `live`: a live intake job is reading the document now (lib/rag/live-job.ts, the Documents page's own rule).
+ * `scanLive`: a live automatic malware-scan retry is checking it (lib/rag/live-job.ts scanJobLive). */
+type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string): Promise<HouseholdDoc[]> {
-  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status,
-      ${policyJobLive("policies")} AS reading_live FROM policies
+  const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status, scan_result_detail,
+      ${policyJobLive("policies")} AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
@@ -57,10 +59,10 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
   const pages = await db("SELECT policy_id, page_number, text FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked' ORDER BY policy_id, page_number",
     [accountId, docs.map((d) => String(d.id))]);
   return docs.map((d) => ({
-    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true,
+    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true, scanLive: d.scan_live === true,
     pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
-      policy_number: text(d.policy_number), quarantine: text(d.quarantine_status) },
+      policy_number: text(d.policy_number), quarantine: text(d.quarantine_status), scan_detail: text(d.scan_result_detail) },
   }));
 }
 const text = (v: unknown) => (v == null ? null : String(v));
@@ -70,7 +72,12 @@ const IN_INTAKE = new Set(["uploaded", "queued", "extracting", "indexing"]);
 /** Upload scan states from which intake goes on (allow-list): a rejected or blank upload stays "queued" for good and is
  * not being read. */
 const SCAN_GOES_ON = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
-export type DocumentState = "read" | "waiting" | "stalled" | "no_table" | "not_readable";
+/** Personal proof of cover (allow-list): a schedule or certificate naming the household's own cover. Intake reads it into
+ * the table, so a reading that was not stored can be made again; every other role keeps "no_table". */
+const PERSONAL_PROOF_ROLES = new Set(["personal_schedule", "certificate"]);
+/** Scan states Read again accepts (app/api/policies/reprocess/route.ts); any other is refused there. */
+const READ_AGAIN_SCAN = new Set(["scan_clean", "not_scanned_prototype"]);
+export type DocumentState = "read" | "waiting" | "stalled" | "held" | "table_unread" | "no_table" | "not_readable";
 
 /** Where a document stands in the table. "waiting" only while it is genuinely being read: a live intake job is reading it
  * (lib/rag/live-job.ts, the rule the Documents page uses), whether still in intake or ready and being read into the table
@@ -79,14 +86,34 @@ export type DocumentState = "read" | "waiting" | "stalled" | "no_table" | "not_r
  * never reads into the table), and a ready document whose reading was not stored and that no job is reading, are
  * "no_table": nothing will read them by itself, so they are never shown as unread or sent to Read again (nor as having no
  * benefits: it may have some). A document the app could not read (failed, or an upload the scan rejected) stays
- * "not_readable". */
-export function documentState(d: { status: string; pages: number; live: boolean; file: Pick<DocumentFile, "document_role" | "quarantine"> }, hasReading: boolean): DocumentState {
-  if (IN_INTAKE.has(d.status)) return !SCAN_GOES_ON.has(d.file.quarantine ?? "") ? "not_readable" : d.live === true ? "waiting" : "stalled";
+ * "not_readable".
+ * An upload on hold for its malware scan (uploaded/quarantined/scan_pending, the Documents page's hold) waits on the scan,
+ * not on an intake job: "waiting" while a live intake job or automatic scan retry is checking it, otherwise "held" (as the
+ * Documents page shows it: on hold, no Try again, which the reprocess route refuses until the scan is clean). Never
+ * "stalled".
+ * A ready schedule or certificate (PERSONAL_PROOF_ROLES) with pages, no stored reading and no live job is "table_unread":
+ * the household's own proof of cover, whose benefits were not read in; Read again on the Documents page (which reads it
+ * into the table) is offered only when its scan state lets Read again run. */
+export function documentState(d: { status: string; pages: number; live: boolean; scanLive?: boolean; file: Pick<DocumentFile, "document_role" | "quarantine"> }, hasReading: boolean): DocumentState {
+  const quarantine = d.file.quarantine ?? "";
+  if (IN_INTAKE.has(d.status)) {
+    if (!SCAN_GOES_ON.has(quarantine)) return "not_readable";
+    if (d.live === true) return "waiting";
+    if (isPolicyQuarantineHeld({ quarantine_status: quarantine, scan_result_detail: null })) return d.scanLive === true ? "waiting" : "held";
+    return "stalled";
+  }
   if (d.status !== "ready") return "not_readable";
   if (hasReading) return "read";
   if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) return "no_table";
   if (!d.pages) return "not_readable";
-  return d.live === true ? "waiting" : "no_table";
+  if (d.live === true) return "waiting";
+  return PERSONAL_PROOF_ROLES.has(d.file.document_role ?? "") && READ_AGAIN_SCAN.has(quarantine) ? "table_unread" : "no_table";
+}
+
+/** Why a "held" document is on hold, in the Documents page's own words (lib/policies/quarantine/ui.ts, fixed strings,
+ * never the stored scanner text). None in the prototype mode, where the page uses no malware-scan language. */
+export function holdReason(file: Pick<DocumentFile, "quarantine" | "scan_detail">, prototype: boolean): string | null {
+  return prototype ? null : policyQuarantineLabel({ quarantine_status: file.quarantine ?? "", scan_result_detail: file.scan_detail ?? null });
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
@@ -137,7 +164,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations,
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, file: d.file }, stored.has(d.id)), file: d.file })) };
+    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, scanLive: d.scanLive, file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */

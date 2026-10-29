@@ -14,7 +14,7 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
 type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
-export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"stalled"|"no_table"|"not_readable"}[];
+export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"stalled"|"held"|"table_unread"|"no_table"|"not_readable";hold?:string|null}[];
   unmatchedCovers:Other[];illustrationCovers:Other[];
   unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[]};
 
@@ -89,7 +89,13 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
   const waiting=data.documents.filter(d=>d.state==="waiting"),unreadable=data.documents.filter(d=>d.state==="not_readable"),
     noTable=data.documents.filter(d=>d.state==="no_table"),
     // In intake, but no job is reading it: the Documents page calls it stalled and offers Try again. Never "still being read".
-    stalled=data.documents.filter(d=>d.state==="stalled");
+    stalled=data.documents.filter(d=>d.state==="stalled"),
+    // On hold for its malware scan with no scan running: the Documents page shows the hold and offers no Try again (the
+    // reprocess route refuses until the scan is clean), so neither does this page. Never "still being read".
+    held=data.documents.filter(d=>d.state==="held"),
+    // The household's own schedule or certificate whose benefits were not read in: Read again on the Documents page reads
+    // it into this page.
+    tableUnread=data.documents.filter(d=>d.state==="table_unread");
   const people=data.people.filter(p=>p.covers.length);
   return <div className="page cov">
     <header className="page-header"><div>
@@ -101,6 +107,10 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
       <span>{waiting.map(d=>d.name).join(", ")}. {waiting.length===1?"Its benefits show":"Their benefits show"} here when DearPolicy has finished.</span></div></div>:null}
     {stalled.length?<div className="unread-documents stalled" role="status"><div><strong>{stalled.length===1?"One document hasn’t":`${stalled.length} documents haven’t`} finished reading.</strong>
       <span>{stalled.map(d=>d.name).join(", ")}. You can try again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
+    {held.length?<div className="unread-documents" role="status" data-testid="table-held"><div><strong>{held.length===1?"One document is on hold and hasn’t":`${held.length} documents are on hold and haven’t`} been read yet.</strong>
+      <span>{held.map(d=>d.hold?`${d.name} (${d.hold})`:d.name).join(", ")}. The <Link className="text-link" href="/policies">Documents page</Link> shows {held.length===1?"its":"their"} status.</span></div></div>:null}
+    {tableUnread.length?<div className="unread-documents stalled" role="status" data-testid="table-unread"><div><strong>{tableUnread.length===1?"One document’s benefits couldn’t":`${tableUnread.length} documents’ benefits couldn’t`} be read for Coverage yet.</strong>
+      <span>{tableUnread.map(d=>d.name).join(", ")}. You can use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
     {noTable.length?<p className="muted" data-testid="table-not-shown">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"isn’t shown on this page. You can still ask about it in chat.":"aren’t shown on this page. You can still ask about them in chat."}</p>:null}
     {!people.length?<div className="empty-card">No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you.</div>:null}
