@@ -102,7 +102,7 @@ export default function OperatorCoverageRowsPage(){
     if(draft.sumBasis.trim()!==""&&sumBasisText===""){setError("Enter a number for the sum basis, or leave it blank.");return;}
     const amount=amountText===""?null:Number(amountText);
     const sumBasis=sumBasisText===""?null:Number(sumBasisText);
-    await patch(editing.id,{paysKind:draft.paysKind,amount:draft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount,sumBasis,eventType:draft.eventType,planName:draft.planName,status:"confirmed"});
+    await patch(editing.id,{paysKind:draft.paysKind,amount:draft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount,sumBasis,eventType:draft.eventType,...(draft.planName!==editing.planName?{planName:draft.planName}:{}),status:"confirmed"});
     setEditing(null);setDraft(null);
   };
   const add=async()=>{

@@ -21,6 +21,7 @@ import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,typ
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
@@ -76,7 +77,16 @@ export function readablePlanName(planName:string,origin:string,doc:Row["doc"]):s
   const fromFile=!!file&&(sameName(base,file)||sameName(base,prettifyFilename(file))||sameName(base,file.replace(/\.[a-zA-Z0-9]{1,5}$/,"")));
   // A short name a person gave the file ("eShield.pdf") reads better as typed than split into words.
   const reads=!doc.product_name&&!isMachineFilename(file.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&base.length<16;
-  return fromFile&&!reads?documentName({...doc,original_filename:file})+rest:planName;
+  if(fromFile&&reads)return base.replace(/_+/g," ").replace(/\s+/g," ").trim()+rest; // "my_shield_plan" reads "my shield plan" (TE pr187 b)
+  return fromFile?documentName({...doc,original_filename:file})+rest:planName;
+}
+/** The plan an edit sends back. The page shows the readable, masked plan (readablePlanName, maskShownText) and sends it
+ * with every edit: that name is no new name, so it gives undefined and the stored plan, which keys the row and its answers,
+ * is kept (Critic R352 M1). Any other name is the household's own. */
+export function sentPlanName(sent:string|undefined,row:Pick<LedgerRow,"planName"|"shownPlanName">):string|undefined{
+  const even=(v:string)=>v.replace(/\s+/g," ").trim(),shown=row.shownPlanName??row.planName;
+  if(sent!==undefined&&shown!==row.planName&&(even(sent)===even(shown)||even(sent)===even(maskIdentityText(shown))))return undefined;
+  return sentName(sent,row.planName);
 }
 function toRow(r:Row):LedgerRow{
   return {id:r.id,familyMemberId:r.family_member_id,policyId:r.policy_id,planName:r.plan_name,shownPlanName:readablePlanName(r.plan_name,r.origin,r.doc),insurer:r.insurer,

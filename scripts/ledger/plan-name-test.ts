@@ -36,6 +36,23 @@ test("readablePlanName replaces only a plan taken from the file name", async () 
   assert.equal(readablePlanName("G007500 · Death", "schedule", doc("IMG_2041.jpg")), "G007500 · Death");
   assert.equal(readablePlanName("eShield", "wording", doc("eShield.pdf", { insurer: "Example Life" })), "eShield");
   assert.equal(readablePlanName("Travel_cover_2026", "wording", doc("Travel_cover_2026.pdf", { product_name: "Example Voyager Plus" })), "Example Voyager Plus");
+  // A short name with underscores reads with spaces (TE pr187 b).
+  assert.equal(readablePlanName("my_shield_plan", "wording", doc("my_shield_plan.pdf")), "my shield plan");
+});
+
+test("an edit that sends back the shown plan keeps the stored plan (Critic R352 M1)", async () => {
+  const { sentPlanName } = await import("@/lib/ledger/store");
+  const row = { planName: "Output 202609281146157", shownPlanName: "Example Life certificate" };
+  assert.equal(sentPlanName("Example Life certificate", row), undefined);
+  assert.equal(sentPlanName(" Example Life  certificate ", row), undefined);
+  assert.equal(sentPlanName(undefined, row), undefined);
+  assert.equal(sentPlanName("Example Life Term Plan", row), "Example Life Term Plan");
+  // A shown name with an ID number masked is the same name.
+  assert.equal(sentPlanName("cert S****567D", { planName: "cert_S1234567D", shownPlanName: "cert S1234567D" }), undefined);
+  assert.equal(sentPlanName("S****567D", { planName: "S1234567D", shownPlanName: "S1234567D" }), undefined);
+  // The page has the edit send planName only when it changed.
+  const page = (await import("node:fs")).readFileSync("app/operator/coverage/page.tsx", "utf8");
+  assert.match(page, /\.\.\.\(draft\.planName!==editing\.planName\?\{planName:draft\.planName\}:\{\}\)/);
 });
 
 test("the Coverage ledger loads stored rows with the readable plan", async () => {

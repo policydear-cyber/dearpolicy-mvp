@@ -6,9 +6,10 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
-import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedgerRow,refreshLedgerOnOpen,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
+import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedgerRow,refreshLedgerOnOpen,seedLedger,sentPlanName,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
+import { maskShownText } from "@/lib/chat/identity-numbers";
 import { ledgerReadDocuments,ledgerReadUnderway,ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 
 export const runtime="nodejs";
@@ -21,10 +22,12 @@ export const ROUTE_AUTH = "household-member" as const;
 function family(accountId:string){
   return query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
 }
+/** A row as the page shows it, with ID numbers masked as on every other screen (a short plan a person named after a file
+ * can carry one: TE pr187 a). Row ids are kept. */
 function shape(row:LedgerRow,people:ClaimPerson[]){
-  return {...row,planName:row.shownPlanName??row.planName,eventLabel:EVENTS[row.eventType]?.label??row.eventType,pays:describePays(row),
+  return maskShownText({...row,planName:row.shownPlanName??row.planName,eventLabel:EVENTS[row.eventType]?.label??row.eventType,pays:describePays(row),
     ownerName:people.find(p=>p.id===row.familyMemberId)?.display_name??"Unknown",
-    hasFigure:row.paysKind!=="stated"&&row.amount!=null&&!(row.paysKind==="percent_of_sum"&&row.sumBasis==null)};
+    hasFigure:row.paysKind!=="stated"&&row.amount!=null&&!(row.paysKind==="percent_of_sum"&&row.sumBasis==null)});
 }
 
 export async function GET(request:NextRequest){
@@ -76,6 +79,9 @@ export async function PATCH(request:NextRequest){
     if(!existing)return NextResponse.json({error:"Row not found"},{status:404});
     // A person who edits a figure has read their policy: an edit is a
     // confirmation unless they say otherwise.
+    // The page shows a readable (and masked) plan name and sends it back with every edit: the name it was shown is no new
+    // name, so the stored plan, which keys the row and its answers, is kept (Critic R352 M1).
+    body.planName=sentPlanName(body.planName,existing);
     const edits=body.amount!==undefined||body.paysKind!==undefined||body.eventType!==undefined||body.sumBasis!==undefined||body.detail!==undefined||body.planName!==undefined;
     const patch={...body,id:undefined,eventType:body.eventType as EventType|undefined,paysKind:body.paysKind as PaysKind|undefined,
       status:body.status??(edits?"confirmed" as const:undefined)};
