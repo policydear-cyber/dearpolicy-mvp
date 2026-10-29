@@ -126,13 +126,22 @@ test("Critic R332: a reference that points at an enclosed schedule is no referen
     [letter("Your policy has been reinstated. Your revised schedule follows."), details],
   ]) assert.equal(statusNotice(doc.map((text) => ({ text }))), false, doc[0].slice(14, 80));
   // References that end their sentence, and payment schedules, still let a notice through.
-  assert.equal(statusNotice([{ text: letter("Your policy has lapsed on 1 March 2026. Please refer to your policy schedule for details. Your premium schedule is attached.") }]), true);
+  assert.equal(statusNotice([{ text: letter("Your policy has lapsed on 1 March 2026. Please refer to your policy schedule for details. Your premium schedule stays monthly.") }]), true);
 });
 
-test("TE round 3: a lapse letter whose status sentence sits below a long address header", async () => {
+test("Critic R334: a letter whose page prints the policy's own particulars keeps today's rules unless titled as a notice", async () => {
   const { deterministicDocumentRole } = await load();
   const header = "Mr Ravi Kumar\nBlock 1\nExample Road\n#01-01\nSingapore 100001\n3 March 2026\nOur ref: EX/LAP/1\nYour ref: -\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\n";
-  assert.equal(deterministicDocumentRole(pages(header + letter("We write about your policy.\nYour policy has lapsed on 1 March 2026. Please refer to your policy schedule.")), "personal_schedule"), "other");
+  // Untitled, with a policy number, a named life assured and a sum assured on its page: default-safe, today's rules decide.
+  assert.equal(deterministicDocumentRole(pages(header + letter("We write about your policy.\nYour policy has lapsed on 1 March 2026. Please refer to your policy schedule.")), "personal_schedule"), "personal_schedule");
+  // Titled as a notice, it is one.
+  assert.equal(deterministicDocumentRole(pages("NOTICE OF LAPSE\n" + header + letter("Your policy has lapsed on 1 March 2026. Please refer to your policy schedule.")), "personal_schedule"), "other");
+  // A reinstatement letter followed by a page of policy particulars is a pack, whatever the letter says about it.
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const details = "YOUR POLICY DETAILS\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nPlan: Example Term\nSum Assured: S$200,000";
+  for (const body of ["Please see the policy schedule, which is attached.", "Please refer to the policy schedule; it is enclosed with this letter.", "Please refer to your policy schedule\n(attached).",
+    "We enclose your updated details overleaf. Please refer to your policy schedule.", "", "Please refer to your policy schedule\nenclosed with this letter.", "Please refer to your policy schedule; a copy is enclosed.", "Please see your policy schedule, attached for reference."])
+    assert.equal(statusNotice([{ text: letter("Your policy has been reinstated with effect from 1 November 2026. " + body) }, { text: details }]), false, body || "no mention");
 });
 
 test("TE round 4: a receipt that records a payment stays one whatever its footnotes promise; a promise-only form does not", async () => {
@@ -142,4 +151,12 @@ test("TE round 4: a receipt that records a payment stays one whatever its footno
   assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nAmount due S$88.20\nAn official receipt will be issued once paid. See your policy schedule."), null), "other");
   // An untitled letter saying the premium is overdue is a status notice, never cover.
   assert.equal(deterministicDocumentRole(pages(letter("Policy Number 77001234\nYour premium of S$88.20 is overdue. Please refer to your policy schedule.\nLife Assured: Ravi Kumar")), "personal_schedule"), "other");
+});
+
+test("TE round 5: only a sentence that records a payment keeps a receipt", async () => {
+  const { deterministicDocumentRole } = await load();
+  const receipt = (body: string) => deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\n" + body + "\nSee your policy schedule."), null);
+  assert.notEqual(receipt("Premium of S$88.20 must be paid by 1 March 2026. A receipt will be issued once payment is received."), "premium_receipt");
+  assert.notEqual(receipt("The payment of S$88.20 received on 1 March 2026 was dishonoured by your bank."), "premium_receipt");
+  assert.equal(receipt("Amount Received\nS$88.20\nA copy of this receipt will be sent to your registered email."), "premium_receipt");
 });

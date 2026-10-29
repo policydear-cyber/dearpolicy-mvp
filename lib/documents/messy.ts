@@ -126,15 +126,18 @@ const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|cus
 // "Policy Schedule No. 2", "your updated policy schedule is enclosed", "serves as your certificate") means the document
 // may carry the schedule itself, and it keeps the old rules.
 const DOC_NAME = String.raw`(?:policy schedule|schedule|certificate of insurance)`;
-// A reference ends its sentence, or ends with a known tail: "see your policy schedule attached", "refer to the policy
+// A reference ends its sentence (at . ! ? or the end of the text, never at a wrapped line, ";" or ",": TE #184 round 5), or
+// ends with a known tail: "see your policy schedule attached", "refer to the policy
 // schedule enclosed" and "the changes in your policy schedule are as follows" point at an enclosed schedule (Critic R332 H1).
-const REFERENCE_END = String.raw`(?:\s+(?:for\s+(?:full\s+|more\s+)?(?:details|information)|for\s+the\s+(?:benefits|cover)(?:\s+that\s+(?:has|have)\s+ended)?|(?:has\s+)?ended(?:\s+on\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?))?(?=\s*(?:[.;!,]|$))`;
+const REFERENCE_END = String.raw`(?:\s+(?:for\s+(?:full\s+|more\s+)?(?:details|information)|for\s+the\s+(?:benefits|cover)(?:\s+that\s+(?:has|have)\s+ended)?|(?:has\s+)?ended(?:\s+on\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?))?(?=\s*(?:[.!?]|$))`;
 const REFERENCE_PHRASES = [
-  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b` + REFERENCE_END, "gim"),
-  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)` + REFERENCE_END, "gim"),
-  new RegExp(String.raw`\bpolicy\s+schedule\s*:\s*no\s+change` + REFERENCE_END, "gim"),
+  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b` + REFERENCE_END, "gi"),
+  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)` + REFERENCE_END, "gi"),
+  new RegExp(String.raw`\bpolicy\s+schedule\s*:\s*no\s+change` + REFERENCE_END, "gi"),
+  // An opening clause: "As shown in your policy schedule, premium S$99.00 was due on 1 March 2026."
+  new RegExp(String.raw`\bas\s+(?:shown|stated|set\s+out)\s+in\s+(?:your|the)\s+` + DOC_NAME + String.raw`\s*,`, "gi"),
   // "The cover in your policy schedule ended on 1 March 2026."
-  new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gim"),
+  new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gi"),
 ];
 const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
 const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
@@ -150,7 +153,15 @@ const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?
 // A sentence that records a payment: "Received with thanks S$88.20", "Amount received: RM 180.00", "S$99.00 received". A
 // footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
 const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
-const recordsPayment = (text: string) => text.split(/\n|(?<=[.!?])\s+/).some((l) => PAID_AMOUNT.test(l) && /\b(?:received|paid)\b/i.test(l) && !/\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if)\s+(?:paid|received)\b|\bto\s+be\s+paid\b/i.test(l));
+const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d/i;
+const NOT_PAID = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if|upon)\s+(?:paid|payment|received)\b|\b(?:to\s+be|must\s+be|should\s+be|is\s+to\s+be)\s+paid\b|\bdishono(?:u)?red\b|\b(?:returned|reversed|bounced|rejected|unsuccessful)\b/i;
+const recordsPayment = (text: string) => {
+  const lines = text.split("\n");
+  const sentences = text.split(/\n|(?<=[.!?])\s+/);
+  if (sentences.some((l) => PAID_AMOUNT.test(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
+  // "Amount Received" above "S$88.20" (a label-above-value layout: TE #184 R14).
+  return lines.some((l, i) => /^\s*(?:amount|premium|payment)\s+(?:received|paid)\s*:?\s*$/i.test(l) && PAID_AMOUNT.test(lines[i + 1] ?? "")) && !NOT_PAID.test(text.replace(/premiums?\s+not\s+received\s+by\s+the\s+due\s+date[^.]*\./gi, " "));
+};
 const RECEIPT_WORDS = /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i;
 const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
   && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b|\bcomputer[- ]generated (?:letter|notice)\b/im.test(text);
@@ -166,8 +177,24 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   const text = lines.join("\n");
   if (DOCUMENT_ITSELF.test(REFERENCE_PHRASES.reduce((t, re) => t.replace(re, " "), text))) return false;
   if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
+  // What the pages carry decides before any wording (Critic R334): a later page with a policy's own particulars is an
+  // enclosed schedule, whatever the letter calls it, and on page 1 only a notice title outweighs them.
+  if (pages.slice(1).some((p) => policyParticulars(p.text))) return false;
   if (printedLines(pages[0].text).slice(0, 12).some((l) => NOTICE_TITLE_LINE.test(l))) return true;
+  if (policyParticulars(pages[0].text)) return false;
+  // A letter without a notice title that sends something with it ("attached", "enclosed", "overleaf") may send the schedule.
+  if (/\benclos\w*|\battach\w*|\boverleaf\b|\bherewith\b|\bfollows?\b|\bbelow\b/i.test(text)) return false;
   return noticeLetter(text) && STATUS_EVENT.test(text);
+}
+
+/** A page that prints a policy's own particulars: its policy number, a person's name in a person cell ("Life Assured:
+ * Ravi Kumar") and a sum assured, sum insured or benefit figure. */
+function policyParticulars(text: string): boolean {
+  const lines = printedLines(text);
+  const numbered = lines.some((l) => /\bpolicy\s+(?:number|no\.?)\s*[:#.]?\s*[A-Z0-9-]*\d{4}/i.test(l));
+  const named = lines.some((l) => { const v = PERSON_CELL.exec(l)?.[1]?.trim(); return !!v && nameShaped(v) && !NOT_A_NAME.test(v); });
+  const sum = lines.some((l) => /\b(?:sum\s+(?:assured|insured)|benefit\s+amount|death\s+benefit|amount\s+(?:assured|insured|of\s+cover)|cover(?:age)?\s+amount)\b[^\n]*\d/i.test(l));
+  return numbered && named && sum;
 }
 
 /** The role a status notice keeps, decided by its title first (Critic R330 M2): a receipt that records a payment is a
