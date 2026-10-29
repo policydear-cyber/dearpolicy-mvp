@@ -8433,3 +8433,23 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - #175: retry-read 12/12;
 - #177: failed-advice 8, chat failed-document 7, processing-failure-storage 7, premium table and v11 claims 5 all pass;
 - cross-merges: #177 is clean with #164 to #176 (the current heads), and #175 is clean with #167, #170, #171, #172 and #176.
+
+## R315 — #178 (592ea6a): READY
+
+- **No stored text or digits reach the household or the model.**
+  - `failedDocumentChatAdvice` decides the kind with the exact-string allow-list in failedDocumentAdvice. `why` and `step` are fixed strings looked up by kind, plus the page's fixed button label and READING_LIMIT_RESETS, none of which has digits.
+  - library.ts keeps only the advice: processing_error is mapped and goes no further.
+  - In document-questions, the raw `d.error` is gone from uploadsAnswer, and so is the `/password/i` substring guess. A stored reason it does not recognise gets the generic advice.
+- **No-repeat between the fact and count lines works.**
+  - `told` uses the same household.documents indices as `libraryDoc`, so a failed file whose own point is in the answer has its reason only there.
+  - libraryGroups still gives a failed file its full libraryFact (it is never readInFull), so grouping never drops the reason.
+  - Files that fail the same way share one "for each" line.
+- **The two changed expectations are stronger, not weaker.**
+  - Both are still exact deepEqual checks with text added after the old wording.
+  - APP-5 now also pins that the count line does not repeat the fact's reason.
+  - The still-reading control pins the reason given in the count when no file point is present.
+- **The prompt rule is safe:** it only tells the model to repeat two server-written attributes and to add no other reason or step.
+  - Low L1: the parenthetical "never suggest a clearer scan unless its why_not_read says no readable text was found" pulls against the generic next_step, which itself says "upload a clearer copy or the original file" for reading_failed and unknown. A model could drop half of a step written by the server. Suggested wording: "never add a reason or step that the why_not_read and next_step do not say".
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+  - tsc clean, next build passes, merge-tree with main (1912d73) clean;
+  - chat failed-document 11, failed-advice 9, still-reading 21/21, offline 17, processing-failure-storage 7, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
