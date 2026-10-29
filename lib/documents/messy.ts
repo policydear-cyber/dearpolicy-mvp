@@ -122,24 +122,41 @@ const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|cus
   && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(text);
 // A title line that names its plan ("POLICY SCHEDULE - Example Critical Illness"), never a sentence ("Policy schedule: no change.").
 const NAMED_TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)\\s*[-–—]\\s*[^.:;]{1,60}$", "i");
-const NOTICE_TITLE_LINE = /^(?:notice of (?:lapse|reinstatement|renewal)|(?:policy )?lapse notice|premium (?:reminder|notice|due notice)|grace period (?:reminder|notice)|renewal notice|reinstatement notice|official receipt|premium receipt|payment receipt)(?:\s*[-–—:]\s*[^.;]{0,60})?$/i;
-const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|grace period|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
+// A later page that opens with a schedule or certificate title, whatever words surround it ("YOUR POLICY SCHEDULE",
+// "Policy Schedule: Harbour Term", "POLICY SCHEDULE / JADUAL POLISI", "Harbour Term Policy Schedule"), is an enclosure (TE #184).
+const ENCLOSED_TITLE = /\b(?:policy schedule|schedule of insurance|schedule page|jadual polisi|certificate of (?:group )?insurance|renewal certificate|certificate of renewal|policy certificate)\b/i;
+const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:lapse|reinstatement|renewal)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
+const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|has lapsed|grace period|overdue|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
+// What happened to the policy outweighs the payment words a notice also prints ("the renewal premium was not received",
+// "an official receipt will be sent once paid"): such a notice is never payment evidence (TE #184).
+const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|grace period|reminder|overdue|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
+const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
+  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b/im.test(text);
 
-/** A short letter about the policy's status (a lapse notice, a premium reminder, a reinstatement, a renewal notice, a
+/** A short notice about the policy's status (a lapse notice, a premium reminder, a reinstatement, a renewal notice, a
  * receipt) that only mentions the policy schedule ("please refer to your policy schedule"): it is not the schedule. It
- * is titled as a notice on a line of its own, or it is a letter that says what happened to the policy near its top.
- * Default-safe: a document of more than three pages, one with any line that is a document title on its own (a policy
- * schedule, a certificate, a renewal certificate) or one holding a policy's own schedule page is never one. */
+ * is titled as a notice on a line of its own near its top, or it is a letter that says what happened to the policy.
+ * Default-safe: a document of more than three pages, one with any line that is a document title on its own, a later page
+ * that opens with a schedule or certificate title, or one holding a policy's own schedule page is never one. */
 export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   if (!pages.length || pages.length > 3) return false;
   const lines = pages.flatMap((p) => printedLines(p.text));
   if (lines.some((l) => TITLE_LINE.test(l) || NAMED_TITLE_LINE.test(l))) return false;
+  if (pages.slice(1).some((p) => printedLines(p.text).slice(0, 4).some((l) => ENCLOSED_TITLE.test(l)))) return false;
   if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
-  const head = printedLines(pages[0].text).slice(0, 12);
-  // Titled as a notice on a line of its own ("NOTICE OF LAPSE", "Premium Reminder - Example Life"), or a letter that
-  // says what happened to the policy near its top.
-  if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
-  return isLetter(lines.join("\n")) && STATUS_NOTICE.test(head.join("\n"));
+  if (printedLines(pages[0].text).slice(0, 12).some((l) => NOTICE_TITLE_LINE.test(l))) return true;
+  const text = lines.join("\n");
+  return noticeLetter(text) && STATUS_NOTICE.test(text);
+}
+
+/** The role a status notice keeps: a lapse, reminder, grace or reinstatement notice is a notice ("other"), whatever
+ * payment words it prints; otherwise a renewal notice or a receipt. */
+export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "renewal_statement" | "premium_receipt" {
+  const text = pages.map((p) => printedLines(p.text).join("\n")).join("\n");
+  if (LAPSE_OR_DUE.test(text)) return "other";
+  if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
+  if (/\b(?:premium|official|payment) receipt\b/i.test(text)) return "premium_receipt";
+  return "other";
 }
 
 // ---------------------------------------------------------------------------

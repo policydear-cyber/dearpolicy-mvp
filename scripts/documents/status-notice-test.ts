@@ -15,11 +15,11 @@ type Pages = Parameters<Awaited<ReturnType<typeof load>>["deterministicDocumentR
 const pages = (...texts: string[]) => texts.map((text, i) => ({ pageNumber: i + 1, text, extractionMethod: "text", legibility: "good" })) as unknown as Pages;
 const letter = (body: string) => "Dear Mr Kumar\n" + body + "\nYours sincerely\nCustomer Service";
 
-const NOTICES: [string, string, string | null][] = [
-  ["lapse", letter("NOTICE OF LAPSE\nPolicy Number: 77001234\nYour policy lapsed on 1 March 2026. Please refer to your policy schedule.\nLife Assured: Ravi Kumar\nSum Assured: S$200,000"), null],
-  ["reminder", letter("PREMIUM REMINDER\nPolicy No. 77001234\nAs shown in your policy schedule, premium S$99.00 was due on 1 March 2026.\nGrace period ends 31 March 2026"), null],
-  ["reinstated", letter("Your policy has been reinstated with effect from 6 January 2026.\nPolicy schedule: no change. Policy Number 77001234\nLife Assured: Ravi Kumar"), null],
-  ["certificate mention", letter("PREMIUM REMINDER\nPolicy No. 77001234\nPlease keep this with your certificate of insurance.\nInsured person: Ravi Kumar"), null],
+const NOTICES: [string, string, string][] = [
+  ["lapse", letter("NOTICE OF LAPSE\nPolicy Number: 77001234\nYour policy lapsed on 1 March 2026. Please refer to your policy schedule.\nLife Assured: Ravi Kumar\nSum Assured: S$200,000"), "other"],
+  ["reminder", letter("PREMIUM REMINDER\nPolicy No. 77001234\nAs shown in your policy schedule, premium S$99.00 was due on 1 March 2026.\nGrace period ends 31 March 2026"), "other"],
+  ["reinstated", letter("Your policy has been reinstated with effect from 6 January 2026.\nPolicy schedule: no change. Policy Number 77001234\nLife Assured: Ravi Kumar"), "other"],
+  ["certificate mention", letter("PREMIUM REMINDER\nPolicy No. 77001234\nPlease keep this with your certificate of insurance.\nInsured person: Ravi Kumar"), "other"],
   ["renewal", letter("RENEWAL NOTICE\nPolicy Number 77001234\nYour renewal premium is S$99.00. Your policy schedule is unchanged."), "renewal_statement"],
   ["receipt", letter("OFFICIAL RECEIPT\nPolicy Number 77001234\nWe received S$99.00. Please keep this with your policy schedule."), "premium_receipt"],
 ];
@@ -27,11 +27,9 @@ const NOTICES: [string, string, string | null][] = [
 test("a status notice that mentions the policy schedule is never filed as the schedule", async () => {
   const { deterministicDocumentRole } = await load();
   for (const [name, text, role] of NOTICES) {
-    assert.equal(deterministicDocumentRole(pages(text), null), role, name);
-    // A model reading "personal_schedule", "certificate" or "insurer_letter" for it gives "other" (a notice chat still sees).
-    for (const model of ["personal_schedule", "certificate", "endorsement", "insurer_letter"] as const)
-      assert.equal(deterministicDocumentRole(pages(text), model), role ?? "other", name + " / model " + model);
-    assert.equal(deterministicDocumentRole(pages(text), "renewal_statement"), role ?? "renewal_statement", name + " / model renewal_statement");
+    // Whatever the model read ("other" is a notice chat still sees, never cover).
+    for (const model of [null, "personal_schedule", "certificate", "endorsement", "insurer_letter", "renewal_statement"] as const)
+      assert.equal(deterministicDocumentRole(pages(text), model), role, name + " / model " + model);
   }
 });
 
@@ -57,4 +55,21 @@ test("a notice titled on its own line is a notice even without a letter's greeti
   assert.equal(deterministicDocumentRole(pages("Premium Reminder - Example Life\nPolicy No. 77001234\nSee your policy schedule. Premium S$99.00 due 1 March 2026.\nInsured: Ravi Kumar"), "certificate"), "other");
   // A sentence that starts with the words is not a title ("Premium notice: we will send ..." is still checked as a letter).
   assert.equal(deterministicDocumentRole(pages("Example Life Ltd\nPolicy Schedule\nPremium notice will be sent yearly.\nPolicy Number : 77001234\nLife Assured : Ravi Kumar"), null), "personal_schedule");
+});
+
+test("TE #184: enclosed schedules under any title keep the pack; lapse wording beats payment words; MY and UK letters", async () => {
+  const { deterministicDocumentRole } = await load();
+  const reinstated = letter("Your policy has been reinstated. Your updated policy schedule is enclosed.");
+  const sched = (title: string) => title + "\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\nGrace period: 30 days";
+  for (const title of ["POLICY SCHEDULE / JADUAL POLISI", "YOUR POLICY SCHEDULE", "Policy Schedule: Example Term", "Example Term Policy Schedule"])
+    assert.equal(deterministicDocumentRole(pages(reinstated, sched(title)), "personal_schedule"), "personal_schedule", title);
+  assert.equal(deterministicDocumentRole(pages(reinstated, "CERTIFICATE OF INSURANCE\nPolicy Number: 77001234\nInsured Person: Ravi Kumar\nSum Assured: S$100,000"), null), "certificate");
+  // A lapse notice that mentions the unpaid renewal premium, and a reminder that promises a receipt, are not payment records.
+  assert.equal(deterministicDocumentRole(pages(letter("NOTICE OF LAPSE\nPolicy Number: 77001234\nAs the renewal premium of S$99.00 was not received, your policy lapsed. Refer to your policy schedule.")), null), "other");
+  assert.equal(deterministicDocumentRole(pages(letter("PREMIUM REMINDER\nPolicy Number: 77001234\nAn official receipt will be sent once paid. See your policy schedule.")), null), "other");
+  // Malaysian and UK letter shapes, and notice titles with a word in front.
+  assert.equal(deterministicDocumentRole(pages("Tuan/Puan,\nYour policy has lapsed.\nPolicy Number: 77001234\nPlease refer to your policy schedule.\nYang benar,\nExample Takaful"), "personal_schedule"), "other");
+  assert.equal(deterministicDocumentRole(pages("Dear Mr Kumar\nYour policy has lapsed.\nPolicy Number: 77001234\nYour policy schedule no longer applies.\nMany thanks\nExample Mutual"), "personal_schedule"), "other");
+  for (const title of ["NOTIS PERINGATAN PREMIUM / PREMIUM REMINDER", "Lapse Notification", "Overdue Premium Notice", "Final Premium Reminder", "Reinstatement of your policy"])
+    assert.equal(deterministicDocumentRole(pages("Example Life\n" + title + "\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSee your policy schedule."), "personal_schedule"), "other", title);
 });
