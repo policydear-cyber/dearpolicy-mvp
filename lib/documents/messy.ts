@@ -140,7 +140,12 @@ const REFERENCE_PHRASES = [
   new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gi"),
 ];
 const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
-const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
+const NOTICE_TITLE = String.raw`^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)`;
+const NOTICE_TITLE_LINE = new RegExp(NOTICE_TITLE + String.raw`(?:\s*[-–—:/]\s*[^.;]{0,60})?$`, "i");
+// Beside a page of policy particulars only a bare title, or one followed by a policy number or a date, is a title: a
+// field line ("Premium Reminder - by email and SMS") is not (TE #184 S11). A bilingual title ("NOTIS PERINGATAN PREMIUM /
+// PREMIUM REMINDER") is a title.
+const NOTICE_TITLE_STRICT = new RegExp(NOTICE_TITLE + String.raw`(?:\s*[-–—:/]\s*(?:` + NOTICE_TITLE.slice(1) + "|" + String.raw`(?:policy\s+(?:no\.?|number)\s*:?\s*)?[A-Z0-9-]*\d{4}[A-Z0-9-]*|\d{1,2}[\s/-]\w+[\s/-]\d{2,4}))?$`, "i");
 // What happened to this policy, never a term a schedule prints ("Grace period: 30 days", "a lapsed policy may be
 // reinstated within 2 years") (Critic R331 H1): a letter without a notice title needs one of these.
 const STATUS_EVENT = /\b(?:has|have|had)\s+(?:now\s+)?(?:lapsed|been\s+(?:reinstated|terminated|cancelled))\b|\blapsed\s+on\b|\bwas\s+(?:reinstated|terminated)\b|\breinstated\s+with\s+effect\b|\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwas\s+due\s+on\b|\bis\s+(?:now\s+)?(?:in|within)\s+(?:the|its)\s+(?:\d+-day\s+)?grace\s+period\b|\bgrace\s+period\s+(?:ends|will\s+end|expires)\b|\boverdue\b|\bwe\s+have\s+received\s+(?:your\s+)?(?:premium|payment)\b/i;
@@ -153,14 +158,18 @@ const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?
 // A sentence that records a payment: "Received with thanks S$88.20", "Amount received: RM 180.00", "S$99.00 received". A
 // footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
 const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
-const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d/i;
+const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d|\breceived\s+from\b[^.]{0,80}\bthe\s+sum\s+of\b|\backnowledge\s+receipt\s+of\b|\bthank\s+you\s+for\s+your\s+payment\s+of\b/i;
+// A payment undone anywhere in the document undoes the receipt (TE #184 R23).
+const UNDONE = /\b(?:dishono(?:u)?red|reversed|returned|bounced|rejected|unsuccessful|refunded)\b/i;
+const positiveAmount = (l: string) => [...l.matchAll(new RegExp(PAID_AMOUNT.source, "gi"))].some((m) => Number(m[0].replace(/[^\d.]/g, "")) > 0);
 const NOT_PAID = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if|upon)\s+(?:paid|payment|received)\b|\b(?:to\s+be|must\s+be|should\s+be|is\s+to\s+be)\s+paid\b|\bdishono(?:u)?red\b|\b(?:returned|reversed|bounced|rejected|unsuccessful)\b/i;
 const recordsPayment = (text: string) => {
+  if (UNDONE.test(text)) return false;
   const lines = text.split("\n");
   const sentences = text.split(/\n|(?<=[.!?])\s+/);
-  if (sentences.some((l) => PAID_AMOUNT.test(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
+  if (sentences.some((l) => positiveAmount(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
   // "Amount Received" above "S$88.20" (a label-above-value layout: TE #184 R14).
-  return lines.some((l, i) => /^\s*(?:amount|premium|payment)\s+(?:received|paid)\s*:?\s*$/i.test(l) && PAID_AMOUNT.test(lines[i + 1] ?? "")) && !NOT_PAID.test(text.replace(/premiums?\s+not\s+received\s+by\s+the\s+due\s+date[^.]*\./gi, " "));
+  return lines.some((l, i) => /^\s*(?:amount|premium|payment)\s+(?:received|paid)\s*:?\s*$/i.test(l) && positiveAmount(lines[i + 1] ?? "")) && !NOT_PAID.test(text.replace(/premiums?\s+not\s+received\s+by\s+the\s+due\s+date[^.]*\./gi, " "));
 };
 const RECEIPT_WORDS = /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i;
 const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
@@ -180,8 +189,9 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   // What the pages carry decides before any wording (Critic R334): a later page with a policy's own particulars is an
   // enclosed schedule, whatever the letter calls it, and on page 1 only a notice title outweighs them.
   if (pages.slice(1).some((p) => policyParticulars(p.text))) return false;
-  if (printedLines(pages[0].text).slice(0, 12).some((l) => NOTICE_TITLE_LINE.test(l))) return true;
-  if (policyParticulars(pages[0].text)) return false;
+  const head = printedLines(pages[0].text).slice(0, 12);
+  if (policyParticulars(pages[0].text)) return head.some((l) => NOTICE_TITLE_STRICT.test(l));
+  if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
   // A letter without a notice title that sends something with it ("attached", "enclosed", "overleaf") may send the schedule.
   if (/\benclos\w*|\battach\w*|\boverleaf\b|\bherewith\b|\bfollows?\b|\bbelow\b/i.test(text)) return false;
   return noticeLetter(text) && STATUS_EVENT.test(text);
@@ -205,10 +215,10 @@ export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "ren
   const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
   // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
   // only promises one.
-  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text)))) return "premium_receipt";
+  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text) || UNDONE.test(text)))) return "premium_receipt";
   if (title && LAPSE_OR_DUE.test(title)) return "other";
   if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
-  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || (NOT_PAID.test(text) && !recordsPayment(text))) return "other";
+  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || ((NOT_PAID.test(text) || UNDONE.test(text)) && !recordsPayment(text))) return "other";
   if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
   return RECEIPT_WORDS.test(text) ? "premium_receipt" : "other";
 }

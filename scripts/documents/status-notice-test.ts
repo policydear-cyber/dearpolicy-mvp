@@ -160,3 +160,17 @@ test("TE round 5: only a sentence that records a payment keeps a receipt", async
   assert.notEqual(receipt("The payment of S$88.20 received on 1 March 2026 was dishonoured by your bank."), "premium_receipt");
   assert.equal(receipt("Amount Received\nS$88.20\nA copy of this receipt will be sent to your registered email."), "premium_receipt");
 });
+
+test("TE round 7: more receipt wordings; zero or reversed payments; a field line is no title beside particulars", async () => {
+  const { deterministicDocumentRole } = await load();
+  const receipt = (title: string, body: string) => deterministicDocumentRole(pages(title + "\nPolicy Number 77001234\n" + body + "\nA copy of this receipt will be sent to your registered email.\nSee your policy schedule."), null);
+  assert.equal(receipt("OFFICIAL RECEIPT", "Received from Ravi Kumar the sum of S$88.20 being premium for March 2026."), "premium_receipt");
+  assert.equal(receipt("PAYMENT ACKNOWLEDGEMENT", "We acknowledge receipt of S$88.20 for your premium."), "premium_receipt");
+  assert.equal(receipt("OFFICIAL RECEIPT", "Thank you for your payment of £45.20 on 1 March 2026."), "premium_receipt");
+  assert.notEqual(receipt("OFFICIAL RECEIPT", "Amount Received: S$0.00\nAmount Due: S$88.20\nAn official receipt will be issued once paid."), "premium_receipt");
+  assert.notEqual(receipt("OFFICIAL RECEIPT", "Amount Received: S$88.20\nThis payment was reversed on 3 March 2026."), "premium_receipt");
+  // "Premium Reminder - by email and SMS" is a field on a page of the policy's particulars, not a notice title.
+  assert.equal(deterministicDocumentRole(pages("POLICY DETAILS\nPolicy Number: 77001234\nInsured Person: Ravi Kumar\nSum Insured: S$200,000\nPremium Reminder - by email and SMS"), "personal_schedule"), "personal_schedule");
+  // A bare notice title, or one followed by its policy number, still outweighs the particulars.
+  assert.equal(deterministicDocumentRole(pages("NOTICE OF LAPSE - 77001234\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\nYour policy lapsed on 1 March 2026."), "personal_schedule"), "other");
+});
