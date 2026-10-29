@@ -233,4 +233,12 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     "Please detach and return with your payment\nPolicy Number: KL-77001234\nAmount: S$88.20\nTotal Permanent Disability\tS$150,000",
     "Ways to pay\nBank account: 123-456789-0\nPlan Harbour Term 20 year cover 2046",
   ]) assert.equal(statusNotice([reminder, { text: page2 }]), false, page2.slice(0, 40));
+  // Critic R338: a notes or terms page that adds a cover figure without a cover word is part of a pack.
+  const reinstated = { text: letter("Your policy has been reinstated with effect from 1 November 2026. Please refer to your policy schedule.") };
+  for (const page2 of [
+    "IMPORTANT NOTES\nHospital cash\tS$200\nICU\tS$400",
+    "TERMS AND CONDITIONS\nRider\tAmount\nCritical Illness Rider\tS$50,000",
+  ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
+  // A sum to pay that page 1 does not print stays part of the notice.
+  assert.equal(statusNotice([reminder, { text: "PAYMENT SLIP\nPolicy Number: KL-77001234\nTotal amount payable: S$176.40\nPay by PayNow" }]), true);
 });
