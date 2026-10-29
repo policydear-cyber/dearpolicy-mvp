@@ -241,8 +241,9 @@ const OWN_LIMIT = /\b(?:appl(?:y|ies|ied)|counted|calculated|assessed)\s+separat
  * benefits limit within the TI/CI limit", "TI/CI cap"). Not "Sub-limit", and not a name that goes on past the word
  * ("Limit of indemnity"), and not a benefit's name that says it is capped. */
 const NAMED_LIMIT = (head: string) => { const w = head.trim().split(/\s+/); return w.length <= 10 && /^(?:limits?|caps?)$/i.test(w[w.length - 1] ?? "")
-  // A benefit's name that says it is capped ("Critical Illness Benefit limited to the same life cap") is that benefit.
-  && !/\b(?:limited|capped|subject)\b/i.test(head); };
+  // A benefit's name that says it is capped ("Critical Illness Benefit limited to the same life cap") is that benefit; a
+  // limit's name that says it sits under another ("TI benefits limit subject to the TI/CI limit") is still a limit.
+  && !/\b(?:limited|capped|subject)\b/i.test(head.replace(/^.*?\b(?:limits?|caps?)\s+subject\s+to\b/i, "")); };
 /** A sentence that opens by pointing at the one before it ("Of this amount, the TI benefits cannot be more than
  * S$1,000,000.", "Out of this limit", "Within the above total"): its scope is that sentence's. */
 const POINTS_BACK = /^\s*(?:of|out\s+of|within)\s+(?:this|that|the\s+above|the\s+said)\s+(?:amount|limit|total|sum)\b/i;
@@ -251,14 +252,31 @@ const POINTS_BACK = /^\s*(?:of|out\s+of|within)\s+(?:this|that|the\s+above|the\s
 const SENTENCE_STOP = /(?<![A-Za-z]\.[A-Za-z])(?<!\b(?:etc|no|nos|vs|approx|incl|cf|ref|art|cl|para|pg|pp))\.(?=\s)|\n\s*\n/gi;
 /** Page text read as one line: a word split by its line's end ("poli-\ncies") is joined (TE pr180 A9). */
 const asLine = (t: string) => t.replace(/([A-Za-z])-[ \t]*\n[ \t]*([a-z])/g, "$1$2").replace(/\s+/g, " ").trim();
-/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. Neither reaches
- * past 600 characters from the quote. */
+/** A line a sentence may be read across: printed text with no table cell and no figure of its own (a row, a heading
+ * with a figure, another benefit's amount are never crossed: Critic R318 H1). */
+const CROSSABLE = (line: string) => !!line.trim() && !line.includes("\t") && !/\d/.test(line);
+/** A line that carries on the sentence of the line above: it starts in lower case, and the line above does not end one. */
+const CONTINUES = (above: string, line: string) => /^\s*[a-z(]/.test(line) && !/[.!?:]\s*$/.test(above);
+/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. It is read
+ * only on the quote's own lines and the lines its sentence runs over (each in lower case after one that does not end, no
+ * table cell, no figure): a heading, a table row or another clause beside the quote is never its sentence. */
 export function quoteSentence(pageText: string, start: number, end: number): string {
-  const before = pageText.slice(Math.max(0, start - 600), start), after = pageText.slice(end, end + 600);
+  const lines: { from: number; text: string }[] = [];
+  for (let at = 0; at <= pageText.length;) { const e = pageText.indexOf("\n", at); const to = e < 0 ? pageText.length : e; lines.push({ from: at, text: pageText.slice(at, to) }); at = to + 1; }
+  const lineOf = (pos: number) => { let k = 0; while (k + 1 < lines.length && lines[k + 1].from <= pos) k++; return k; };
+  let first = lineOf(start), last = lineOf(Math.max(start, end - 1));
+  const own = lines.slice(first, last + 1).some((l) => l.text.includes("\t"));
+  if (!own) {
+    while (first > 0 && CONTINUES(lines[first - 1].text, lines[first].text) && CROSSABLE(lines[first - 1].text)) first--;
+    while (last + 1 < lines.length && CONTINUES(lines[last].text, lines[last + 1].text) && CROSSABLE(lines[last + 1].text)) last++;
+  }
+  const blockFrom = lines[first].from, block = pageText.slice(blockFrom, lines[last].from + lines[last].text.length);
+  const qs = start - blockFrom, qe = Math.min(block.length, end - blockFrom);
+  const before = block.slice(0, qs), after = block.slice(qe);
   const starts = [...before.matchAll(SENTENCE_STOP)].map((m) => m.index! + m[0].length);
   const from = starts.length ? starts[starts.length - 1] : 0;
   const tail = [...(after.replace(/\s+$/, "") + " ").matchAll(SENTENCE_STOP)][0];
-  const sentence = asLine(before.slice(from) + pageText.slice(start, end) + after.slice(0, tail ? tail.index! + 1 : after.length));
+  const sentence = asLine(before.slice(from) + block.slice(qs, qe) + after.slice(0, tail ? tail.index! + 1 : after.length));
   if (!POINTS_BACK.test(sentence) || starts.length < 1) return sentence;
   const prior = asLine(before.slice(starts.length > 1 ? starts[starts.length - 2] : 0, from));
   return `${prior} ${sentence}`;

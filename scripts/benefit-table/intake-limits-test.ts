@@ -93,6 +93,8 @@ for (const { m, sign } of MARKETS) {
       ["TI benefits limit", `The most we will pay for this policy and all other policies is ${sign}2,000,000. Out of this amount, the TI benefits cannot be more than ${sign}1,000,000.`],
       ["TI/CI limit", `The most we will pay across all our policies on the life insured is ${sign}2,000,000 (the TI/CI limit).`],
       ["TI/CI cap", `The most we will pay for this policy and any other policy on the life insured is ${sign}2,000,000 (the TI/CI cap).`],
+      // TE pr180 A14: a limit's name that says it sits under another limit is still a limit.
+      ["TI benefits limit subject to the TI/CI limit", `The most we will pay for this policy and all other policies on the same life is ${sign}2,000,000. Of this amount, the TI benefits cannot be more than ${sign}1,000,000.`],
     ] as const) assert.equal(combinedLimit({ benefit, section: null, ...s(sentence) }), true, `${benefit}: ${sentence}`);
   });
   test(`${m}: a row named as a limit with no scope across policies, or not named as a limit, is not a combined limit`, () => {
@@ -122,6 +124,19 @@ for (const { m, sign } of MARKETS) {
     const rd = checkReading({ id: ID, name: "Plan.pdf", readable: true, pages: [{ page: 3, text }] }, reading("personal_proof", "Example Plan", [], [
       b({ benefit: "Annual limit", pays: "up_to", value: 1000, page: 3, quote: `is ${sign}1,000 (the annual limit)` })]));
     assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [false], JSON.stringify(rd.dropped));
+  });
+  test(`${m}: a scope printed on a heading or another table row is not a limit's own sentence (Critic R318 H1)`, () => {
+    for (const [i, [benefit, value, text, quote]] of ([
+      ["Overseas medical expenses limit", 500000, `Benefits below apply to all plans\nOverseas medical expenses limit\t${sign}500,000\t${sign}1,000,000`, `Overseas medical expenses limit\t${sign}500,000`],
+      ["Annual limit", 1000, `These benefits are the same across all plans\nAnnual limit\t${sign}1,000`, `Annual limit\t${sign}1,000`],
+      ["Personal accident limit", 100000, `Personal accident limit\t${sign}100,000\nWe will not pay where any other policies covering the same loss have paid.`, `Personal accident limit\t${sign}100,000`],
+      ["Hospital cash limit", 5000, `FREE LOOK\nThis policy and any other plans you hold with us may be cancelled within 14 days\nHospital cash limit\t${sign}5,000`, `Hospital cash limit\t${sign}5,000`],
+    ] as const).entries()) {
+      const ID = `aaaaaaaa-0000-0000-0000-00000000c0b${i}`;
+      const rd = checkReading({ id: ID, name: "Plan.pdf", readable: true, pages: [{ page: 2, text }] }, reading("personal_proof", "Example Plan", [], [
+        b({ benefit, pays: "up_to", value, page: 2, quote })]));
+      assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [false], `${benefit}: ${JSON.stringify(rd.dropped)}`);
+    }
   });
   test(`${m}: a scope split by a line's end ("poli-\\ncies") is still read`, () => {
     const ID = "aaaaaaaa-0000-0000-0000-00000000c0ab";
