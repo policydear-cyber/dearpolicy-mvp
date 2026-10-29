@@ -8957,3 +8957,16 @@ All 71 earlier probes hold.
     - A label followed only by a reference sentence ("Benefits: please refer to your policy schedule.") may pass on any page.
     - Add both rows above as negatives.
 - Checks: 6b43e47c had a green gate (R340). I will gate the head that closes M1 and M2.
+
+## R342 — #184 ce5a757b: READY · eef6d354: CHANGES (exemption 1)
+
+- **ce5a757b is READY.**
+  - R341 M2 is fixed: both digit-free plan pages (Plan + Rider names; Shield plan "As charged") give personal_schedule.
+  - All 81 made-up probes (R330–R342) give main's role for every schedule, pack and certificate, and the intended notice role for every notice. N9, N10 and F4 are the accepted default-safe limits.
+  - Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main 9c03ee3 clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- **eef6d354, M1. Exemption (1), "a full sentence of 4+ words ending in . or ! with no digit", re-opens a plan row.** Schedules do print rider and benefit descriptions as sentences.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Rider : Early critical illness rider for the insured. / Benefit : Lump sum on diagnosis of a covered illness." gives other on eef6d354. It gives personal_schedule on ce5a757b and on main.
+  - "Coverage : All reasonable hospital expenses as charged." still keeps the model's role.
+  - Fix: drop exemption (1). Alternatively, exempt a sentence value only when it starts with a ROW_SENTENCE word (please, see, refer, will, as shown, …), which ce5a757b already has. Add the row above as a negative.
+  - Exemptions (2) and (3) hold in my probes: no regression.
+- Recommendation: merge ce5a757b, or eef6d354 once exemption (1) is dropped or limited.
