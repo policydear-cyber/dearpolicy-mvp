@@ -209,14 +209,20 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
 
 /** Every money figure (any currency amount, "200K") and every number of four or more digits a page prints. */
 function figuresOf(text: string): string[] {
+  const out = moneyOf(text);
+  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) out.push(m[0].toUpperCase());
+  return out;
+}
+/** Every money figure a page prints, as a plain number ("S$200K" and "S$200,000" are both "200000"). */
+function moneyOf(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
     out.push(String(Number((m[1] ?? m[3]).replace(/,/g, "")) * (m[2] ? 1000 : 1)));
-  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) out.push(m[0].toUpperCase());
   return out;
 }
 const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units?|per\s+day|daily|plan)\b/i;
 const HAS_MONEY = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
+const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
 const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
 /** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
  * of notes, with no person cell and no cover line; or a page with neither a money figure nor a person cell. Any other
@@ -229,6 +235,13 @@ function noticePage(text: string, own: Set<string>): boolean {
   if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
   const titled = /\b(?:payment\s+slip|remittance\s+advice|how\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow|important\s+notes?|notes|terms\s+and\s+conditions)\b/i.test(lines.slice(0, 4).join("\n"));
   if (titled && !person && !lines.some((l) => COVER_LINE.test(l))) return true;
+  // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
+  // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
+  // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).
+  if (PAYMENT_MARK.test(text)
+    && !lines.some((l) => /\b(?:insured|assured)\b/i.test(l) && (PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person)\b/i.test(l)))
+    && !lines.some((l) => COVER_LINE.test(l) && !PAYMENT_MARK.test(l) && figuresOf(l).some((f) => !own.has(f)))
+    && moneyOf(text).every((f) => own.has(f))) return true;
   if (!person && !HAS_MONEY.test(text) && figuresOf(text).every((f) => own.has(f))) return true;
   return figuresOf(text).every((f) => own.has(f));
 }

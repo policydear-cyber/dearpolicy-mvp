@@ -216,3 +216,21 @@ test("Critic R337: small sums on a later page still make it a pack; payment and 
     "GIRO APPLICATION FORM\nForm No. GF-20231\nBank code: 7171\nPolicy Number: 77001234",
   ]) assert.equal(statusNotice([lapse, { text: page2 }]), true, page2.slice(0, 40));
 });
+
+test("TE round 11: payment pages in any layout stay part of a notice; an insured person or a new sum still makes a pack", async () => {
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const reminder = { text: "Example Life Ltd\nPREMIUM REMINDER\nPolicy Number: KL-77001234\nPremium S$88.20 was due on 1 March 2026. See your policy schedule.\nSum Assured: S$200,000" };
+  for (const page2 of [
+    "Please detach and return with your payment\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
+    "Ways to pay\nTo keep your cover in force, pay by bank transfer to account 123-456789-0.\nAmount: S$88.20",
+    "How to pay\nPolicyholder: please quote biller code 10045678 when paying S$88.20 by AXS.",
+    "PAYMENT SLIP\nPolicy Owner: Ravi Kumar\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
+    // The same sum assured written another way ("S$200K") is page 1's figure.
+    "Notes\nYour sum assured of S$200K is unchanged.",
+  ]) assert.equal(statusNotice([reminder, { text: page2 }]), true, page2.slice(0, 40));
+  for (const page2 of [
+    "Payment by GIRO\nLife Assured: Ravi Kumar\nBank account: 123-456789-0\nAmount: S$88.20",
+    "Please detach and return with your payment\nPolicy Number: KL-77001234\nAmount: S$88.20\nTotal Permanent Disability\tS$150,000",
+    "Ways to pay\nBank account: 123-456789-0\nPlan Harbour Term 20 year cover 2046",
+  ]) assert.equal(statusNotice([reminder, { text: page2 }]), false, page2.slice(0, 40));
+});
