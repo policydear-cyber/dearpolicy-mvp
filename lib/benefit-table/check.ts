@@ -223,14 +223,45 @@ const COMPENSATION_LIMIT = /^\s*(?:the\s+)?limits?\s+of\s+compensation\b/i;
 export const LIMITS_HEADING = /\blimits?\s+of\s+compensation\b/i;
 const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
 const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
-export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null }): boolean {
+/** Scope across policies that a limit's own sentence may print instead of "all policies" ("for the policy and other
+ * policies we issue on the life insured", "under this plan and any other plans", "covering the same life"). Used only for a row named as a limit
+ * (NAMED_LIMIT below). */
+const OTHER_POLICIES = /\b(?:this|the|your)\s+(?:policy|plan|contract)\s+and\s+(?:any\s+|all\s+)?(?:other|similar)\s+(?:policies|plans|contracts)\b|\b(?:any|all)\s+other\s+(?:policies|plans|contracts)\b|\bcovering\s+the\s+same\s+life\b/i;
+/** A row named only as a limit: at most six words, the last of them "limit" or "limits" ("TI/CI limit", "TI benefits
+ * limit within TI/CI limit"). Not "Sub-limit", and not a name that goes on past the word ("Limit of indemnity"). */
+const NAMED_LIMIT = (head: string) => { const w = head.trim().split(/\s+/); return w.length <= 6 && /^limits?$/i.test(w[w.length - 1] ?? ""); };
+/** A sentence that opens by pointing at the one before it ("Of this amount, the TI benefits cannot be more than
+ * S$1,000,000."): its scope is that sentence's. */
+const POINTS_BACK = /^\s*(?:of|within)\s+(?:this|that|the\s+above)\s+(?:amount|limit|total)\b/i;
+/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. Sentences end
+ * at ". " or ";", or at a blank line; neither reaches past 600 characters from the quote. */
+export function quoteSentence(pageText: string, start: number, end: number): string {
+  const before = pageText.slice(Math.max(0, start - 600), start), after = pageText.slice(end, end + 600);
+  const stop = /[.;](?=\s)|\n\s*\n/g;
+  const starts = [...before.matchAll(stop)].map((m) => m.index! + m[0].length);
+  const from = starts.length ? starts[starts.length - 1] : 0;
+  const tail = stop.exec(after.replace(/\s+$/, "") + " ");
+  const sentence = (before.slice(from) + pageText.slice(start, end) + after.slice(0, tail ? tail.index + 1 : after.length)).replace(/\s+/g, " ").trim();
+  if (!POINTS_BACK.test(sentence) || starts.length < 1) return sentence;
+  const prior = before.slice(starts.length > 1 ? starts[starts.length - 2] : 0, from).replace(/\s+/g, " ").trim();
+  return `${prior} ${sentence}`;
+}
+export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null; sentence?: string | null }): boolean {
   return limitKind(b) === "combined";
 }
 /** "combined": a limit on several benefits together (above). "benefit_cap": limit wording whose head also names one
  * benefit ("Total amount payable for death: S$500,000 for all plans"): the row is that benefit, and its cap is said with
  * it as a condition (Critic R253 L1). null: neither. */
-export function limitKind(b: { benefit: string; section?: string | null; quote?: string | null }): "combined" | "benefit_cap" | null {
+export function limitKind(b: { benefit: string; section?: string | null; quote?: string | null; sentence?: string | null }): "combined" | "benefit_cap" | null {
   const head = b.benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
+  // A row named only as a limit whose own sentence on the page (or name, or quote) caps several policies on one life ("The
+  // most we will pay ... for the policy and other policies ... is S$2,000,000 (the TI/CI limit)") is that limit, never what
+  // the policy pays (audit of 1912d73: such a row showed "up to S$2,000,000" as a terminal illness card). Its figure is
+  // the limit itself, so it is combined even when it names one benefit.
+  if (!LIMIT_HEAD.test(head) && NAMED_LIMIT(head)) {
+    const text = [b.benefit, b.quote ?? "", b.sentence ?? ""].join("\n");
+    return COMBINED_SCOPE.test(text) || OTHER_POLICIES.test(text) ? "combined" : null;
+  }
   if (!LIMIT_HEAD.test(head) || !COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"))) return null;
   // "Limits of compensation" names only the limit, whatever benefit follows it; other limit wording that names a benefit
   // ("Total amount payable for death") is that benefit.
@@ -564,7 +595,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // that states none keeps the reading's day when it is printed.
     const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
-    const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt });
+    const at = placed.get(source);
+    const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
