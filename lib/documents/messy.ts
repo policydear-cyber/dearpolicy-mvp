@@ -217,12 +217,12 @@ function figuresOf(text: string): string[] {
 /** Every money figure a page prints, as a plain number ("S$200K" and "S$200,000" are both "200000"). */
 function moneyOf(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
+  for (const m of text.matchAll(/(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
     out.push(String(Number((m[1] ?? m[3]).replace(/,/g, "")) * (m[2] ? 1000 : 1)));
   return out;
 }
 const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units?|per\s+day|daily|plan)\b/i;
-const HAS_MONEY = /(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
+const HAS_MONEY = /(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
 const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
 const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
 const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
@@ -231,11 +231,11 @@ const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}
 const PAYMENT_LINE = /\b(?:premiums?|fees?|charge[sd]?|interest|arrears|amount\s+(?:due|owing)|outstanding)\b/i;
 const SLIP_AMOUNT = /^\s*(?:(?:total\s+)?amount(?:\s+(?:due|payable))?|total(?:\s+(?:due|payable))?)\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})/i;
 // A premium row ("Rider premium: S$12.50", "Basic premium  S$75.70") is what the household pays, whatever it pays for.
-const PREMIUM_ROW = /^\s*(?:(?!(?:waiver|benefits?|sum|cover(?:age)?|assured|insured)\b)[\w-]+\s+){0,3}premiums?\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})\s*(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
+const PREMIUM_ROW = /^\s*(?:(?!(?:waiver|benefits?|sum|cover(?:age)?|assured|insured)\b)[\w-]+\s+){0,3}premiums?\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})\s*(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d/i;
 // What a policy pays out, never what the household pays ("Amount payable on death", "Paid on diagnosis").
 const PAYOUT_WORDS = /\b(?:death|die[sd]?|diagnos\w*|illness|tpd|disab\w*|hospital\w*|accident\w*|claims?|surgery|surgical|maturity|matures?|payout)\b/i;
 // "The premium for your rider will be S$12.50": the figure is the premium itself (TE round 14).
-const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
+const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d/i;
 const NOT_PAYMENT_LINE = /\b(?:benefits?|riders?|cash|sum|cover(?:age|ed)?|waiver|assured|insured|units?|plan)\b/i;
 const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
 /** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page

@@ -244,6 +244,10 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     "IMPORTANT NOTES\nAmount payable on death : S$200,000",
     "IMPORTANT NOTES\nTotal payable on death\tS$250,000",
     "IMPORTANT NOTES\nPaid on diagnosis of a critical illness : S$50,000",
+    // A currency stuck to a word or a figure is still money; only the letters of a word ("Term 20") are not RM.
+    "IMPORTANT NOTES\nHospital cash TotalS$500",
+    "IMPORTANT NOTES\nHospital cash RM500",
+    "IMPORTANT NOTES\nHospital cash (SGD 500)",
     // Critic R339 M2: a units-only schedule page that prints its payment mode.
     "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nPayment Mode : GIRO\nPlan : Example Hospital Income\nUnits : 5",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
