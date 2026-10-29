@@ -54,6 +54,14 @@ test("each market's identity number shape is masked, keeping what the certificat
   assert.equal(maskIdentityText("xs1234567dy"), "xs1234567dy");
   assert.equal(maskIdentityText("policy s12345678"), "policy s12345678");
   assert.equal(maskIdentityText("a1234567b.pdf"), "a1234567b.pdf");
+  // Hong Kong IDs in any case, and a label joined to its number by "_" (TE pr193 G1, G2).
+  assert.equal(maskIdentityText("hkid_a123456(7).png"), "hkid_a***456(7).png");
+  assert.equal(maskIdentityText("mykad_850101145678.jpg"), "mykad_********5678.jpg");
+  assert.equal(maskIdentityText("nino_qq123456c.pdf"), "nino_*****456c.pdf");
+  assert.equal(maskIdentityText("photo_id_20261029.jpg"), "photo_id_20261029.jpg");
+  assert.equal(maskIdentityText("member_id_12345678.pdf"), "member_id_12345678.pdf");
+  assert.equal(maskIdentityText("Group policy no. 851231-00-1234"), "Group policy no. 851231-00-1234");
+  assert.equal(maskIdentityText("MyKad 850101-14-5678"), "MyKad ******-**-5678");
   // Printed in groups, and Malaysian labels (Critic R262 L1).
   assert.equal(maskIdentityText("NI number QQ 12 34 56 C"), "NI number ** ** *4 56 C");
   assert.equal(maskIdentityText("No. K/P 850101145678"), "No. K/P ********5678");

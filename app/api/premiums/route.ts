@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { maskShownText } from "@/lib/chat/identity-numbers";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -18,7 +19,8 @@ export async function GET(request: NextRequest) {
         [ctx.householdId],
       ),
     );
-    return NextResponse.json({ records: result.rows });
+    // Product names and notes are shown: ID numbers in them are masked, as on every other screen.
+    return NextResponse.json(maskShownText({ records: result.rows }));
   } catch (error) {
     return routeErrorResponse(error);
   }
