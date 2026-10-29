@@ -8674,3 +8674,20 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - documentState branches are correct as written. misfiled + no pages gives no_table, live gives waiting, a scan state that cannot be read again gives no_table, otherwise table_unread. A document with a stored reading stays "read" (misfiled is computed only when there is none).
 - Cost is fine: filedBeforeRoleRules on a 70-page pack takes about 1 ms (20 runs in 19 ms). It runs only for NON_COVER documents without a reading, on pages load() already holds.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R328 — #183 c58261ef: R327 H1 fixed; one Medium (paid Read again that changes nothing)
+
+- R327 H1 is fixed. filedBeforeRoleRules now uses only schedulePage. The lapse-notice probe gives misfiled false, and the real pack (cover letter, then POLICY SCHEDULE on page 3) gives true.
+- **M1. Some flagged documents are re-filed as the same letter by the re-read, so Read again stays offered and each click is another paid read.**
+  - schedulePage scans every page. correspondenceRole, which the re-read runs first through deterministicDocumentRole, looks past a cover letter only for an enclosed title on pages 2-6 (`pages.slice(1, 6)`). Its claim_decision, medical_bill, screenshot and notes branches return before that check.
+  - Made-up probe through the PR's filedBeforeRoleRules plus today's deterministicDocumentRole:
+
+    | Document | misfiled | role after re-read |
+    |---|---|---|
+    | pack, schedule on page 3 | true | personal_schedule ✓ |
+    | pack, long cover letter, schedule on page 8 | true | insurer_letter (stays table_unread) |
+    | claim decision letter with an enclosed schedule page | true | claim_decision (stays table_unread) |
+
+  - Fix: flag misfiled only when today's rules would re-file it: `schedulePage(pages) != null && correspondenceRole(pages) == null`. Equivalently, `deterministicDocumentRole(pages, null) === "personal_schedule"` together with schedulePage. Add the two rows above as negatives.
+- Not this PR's (noting for later): a fresh lapse notice that says "refer to your policy schedule" plus a policy number is filed as personal_schedule by deterministicDocumentRole. correspondenceRole keeps status notices out of insurer_letter, and the keyword fallback then fires. Worth a separate look.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
