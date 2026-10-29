@@ -1910,7 +1910,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   if (fullList) withoutListedLimitCards(details, limits);
   // A quoted line giving the end of a grace period that has already run out says so where it is quoted.
   for (const [docId, st] of statusOf) if (st.state === "grace_passed" && st.printed)
-    for (let i = 0; i < details.length; i++) if (details[i].startsWith(docName(docId) + " — “") && details[i].includes(st.printed) && /\bgrace period\b/i.test(details[i]))
+    for (let i = 0; i < details.length; i++) if (details[i].startsWith(docName(docId) + " — “") && (details[i].includes(st.printed) || !!st.datePrinted && details[i].includes(st.datePrinted)) && /\bgrace period\b/i.test(details[i]))
       details[i] = details[i].replace(/\(page (\d+)\)\.$/, "(page $1; that grace period has ended).");
   // Gate R17: every line's figures are bound to the passage each fact was verified in (its own page, version, person
   // and row), and the lines that quote a page are cited to that page (resolved on it at save time).

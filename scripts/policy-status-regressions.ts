@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { printedStatus, statusSentence, supersedePassedGrace, type PrintedStatus } from "@/lib/chat/policy-status";
+import { graceEndDates, printedStatus, statusSentence, supersedePassedGrace, type PrintedStatus } from "@/lib/chat/policy-status";
 
 const REMINDER = [{ page: 1, text: [
   "PREMIUM REMINDER",
@@ -95,4 +95,42 @@ test("an older document, another person's plan or another policy does not overri
   keeps([doc("rem"), doc("theirs", { policy_number: null, owners: new Set(["p2"]), date: "2026-11-01" })]);
   keeps([doc("rem")], new Map([["rem", "2026-09-20"]]));
   keeps([doc("rem"), doc("other", { policy_number: "ZZ-1", product_name: "Other Plan" })], new Map([["other", "2026-10-25"]]));
+});
+
+const notice = (graceLine: string, extra: string[] = []) => [{ page: 1, text: ["PREMIUM REMINDER", "Premium due date: 20 September 2026", ...extra, graceLine].join("\n") }];
+
+test("grace end dates as notices print them (TE F4)", () => {
+  for (const line of ["Grace period end date: 20 October 2026", "Grace period ends 20/10/2026", "Grace period ends 20 Oct 2026", "Grace period ends on 20th October 2026",
+    "Your policy stays in force during the 30-day grace period, which ends on 20 October 2026", "A grace period of 30 days, ending 20 October 2026, applies",
+    "The grace period expires on 20 October 2026", "Grace period: 20.10.2026", "Grace period until 20 Oct. 2026"]) {
+    const st = printedStatus(notice(line), null, "2026-10-29");
+    assert.equal(st.state, "grace_passed", line);
+    assert.equal(st.date, "2026-10-20", line);
+    assert.equal(st.printed, "20 October 2026", line);
+  }
+  // Wrapped onto the next line.
+  assert.equal(printedStatus([{ page: 1, text: "Premium due date: 20 September 2026\nYour grace period ends on\n20 October 2026." }], null, "2026-10-29").date, "2026-10-20");
+  // The date as printed is kept for finding the quoted line.
+  assert.equal(printedStatus(notice("Grace period ends 20/10/2026"), null, "2026-10-29").datePrinted, "20/10/2026");
+  // Not a grace end: a start date, a length only, an impossible date.
+  assert.deepEqual(graceEndDates("The grace period of 30 days from 20 September 2026 applies."), []);
+  assert.deepEqual(graceEndDates("A grace period of 30 days applies."), []);
+  assert.deepEqual(graceEndDates("Grace period ends 31/13/2026"), []);
+});
+
+test("the unpaid amount is the premium line's own figure, never another figure on the page (TE F2)", () => {
+  const withNeighbours = notice("Grace period ends 20 October 2026", ["Annual limit S$150,000 per policy year", "Premium waiver benefit S$50,000", "Monthly premium S$212.40"]);
+  const st = printedStatus(withNeighbours, null, "2026-10-29");
+  assert.equal(st.dueAmount, "S$212.40");
+  assert.match(statusSentence("Example Shield", st)!, /the premium of S\$212\.40 due on 20 September 2026/);
+  // Only neighbours with figures: no amount, said as "an unpaid premium".
+  const noPremiumLine = printedStatus(notice("Grace period ends 20 October 2026", ["Annual limit S$150,000 per policy year", "Premium waiver benefit S$50,000"]), null, "2026-10-29");
+  assert.equal(noPremiumLine.dueAmount, null);
+  const s = statusSentence("Example Shield", noPremiumLine)!;
+  assert.match(s, /an unpaid premium had to be paid by 20 October 2026/);
+  assert.doesNotMatch(s, /150,000|50,000/);
+  for (const line of ["Amount due: S$86.40", "Outstanding premium S$86.40 (incl. GST)", "Annual premium S$1,188.00"])
+    assert.ok(printedStatus(notice("Grace period ends 20 October 2026", [line]), null, "2026-10-29").dueAmount, line);
+  for (const line of ["Premium waiver benefit S$50,000", "Annual limit S$150,000", "Premium paid to date S$2,400.00", "Sum assured S$200,000 premium S$99.00"])
+    assert.equal(printedStatus(notice("Grace period ends 20 October 2026", [line]), null, "2026-10-29").dueAmount, null, line);
 });

@@ -127,7 +127,7 @@ import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
-import { HYPOTHETICAL as WORKED_EXAMPLE,inactiveDocuments,inactiveList,todayIso } from "./policy-status";
+import { graceEndDates,inactiveDocuments,inactiveList,todayIso } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
@@ -1465,11 +1465,12 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
       // "if I pay on 15 Oct, ok?": compared with the grace period end the documents print.
       const day=text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)\b(?:\s+(20\d\d))?/i);
       // The latest grace date a reminder prints (an older reminder, or a wording's worked example, is not the one that counts).
-      const graceEnd=from.flatMap(p=>[...p.text.matchAll(/grace period ends?\D{0,12}(\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December) 20\d\d)/gi)]
-          .filter(m=>!WORKED_EXAMPLE.test(p.text.slice(0,(m.index??0)+m[0].length).split(/[.!?](?:\s|$)/).at(-1)??"")).map(m=>m[1]))
-        .sort((a,b)=>(typedDate(b)?.iso??"").localeCompare(typedDate(a)?.iso??""))[0];
+      const graceIso=from.flatMap(p=>graceEndDates(p.text).map(g=>g.iso)).sort().at(-1);
+      const graceEnd=graceIso?longDateOf(graceIso):undefined;
       if(day&&graceEnd){
-        const typed=typedDate(day[0]+(day[3]?"":" "+graceEnd.slice(-4)));
+        // A day typed without a year is the one nearest the grace date ("5 January" after a grace period that ended in December).
+        const typed=day[3]?typedDate(day[0]):[-1,0,1].map(k=>typedDate(day[0]+" "+(Number(graceEnd.slice(-4))+k))).filter((t):t is NonNullable<typeof t>=>!!t)
+          .sort((a,b)=>Math.abs(Date.parse(a.iso)-Date.parse(graceIso!))-Math.abs(Date.parse(b.iso)-Date.parse(graceIso!)))[0];
         const said=(iso:string)=>day[3]?longDateOf(iso):longDateOf(iso).replace(/ \d{4}$/,"");
         const end=typedDate(graceEnd);
         if(typed&&end){
