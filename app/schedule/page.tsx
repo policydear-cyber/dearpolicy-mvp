@@ -151,7 +151,7 @@ export default function BenefitsPage(){
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
-          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{rows[0].productName??rows[0].documentName}</h2></div>
+          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
             <small>{rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
@@ -217,4 +217,14 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
     </div>
     {error&&<small role="alert" className="row-error">{error}</small>}
   </div>;
+}
+
+type Named={productName:string|null;documentName:string};
+/** A group's heading. Two documents can print the same readable name ("Insurer policy wording"): those are told apart as "1 of 2". */
+function groupHeading(groups:[string,Named[]][],key:string){
+  const name=(rows:Named[])=>rows[0].productName??rows[0].documentName;
+  const own=groups.find(([k])=>k===key)?.[1];
+  if(!own)return key;
+  const same=groups.filter(([,rows])=>name(rows)===name(own));
+  return same.length>1?name(own)+" ("+(same.findIndex(([k])=>k===key)+1)+" of "+same.length+")":name(own);
 }
