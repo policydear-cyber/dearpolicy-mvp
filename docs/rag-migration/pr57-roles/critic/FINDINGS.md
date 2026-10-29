@@ -9345,3 +9345,47 @@ All four heads passed the full gate: fresh worktree, npm ci, network blocked, mo
 - The R351 H1 fix is in place: repairStoredRules skips ruleFromQuote for held rows and for unheld plan-column quotes. Both of my quotes are in the test.
 - The R351 Low is fixed: two currencies, or a whole sum paired with a cents figure, are not plan columns.
 - The new rule that three or more bare thousands figures are plan columns can only hold a figure back, which is the safe direction.
+
+## R358: #188 b41f14a9, CHANGES
+
+The R353 H1 fix is in place. All 8 R353 quotes and every R349 cap now read as cap, and thresholds, ages, excesses and counts read as not_cap. "maksimum Rp100.000.000" and "subject to S$5,000 per policy year" read as unsure, so the figure is withheld (safe). Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+### H1: a sub-limit worded differently from the benefit's name is ignored, and the uncapped figure is shown
+- Where: lib/insurance/cover-conditions.ts:240, in limitIsFor (`return subject.every(w=>own.has(w))?"this":"other"`). Its "other" result makes the sub_limit case return clear.
+- What happens: "other" is the fallback whenever any content word in the sentence is missing from the benefit's title. The test is a deny-list by omission, so any synonym, plural or partial wording drops a real cap.
+- Probe: evaluateCondition, sub_limit, with no productName and an item at S$200,000. Main 9c03ee3 reduces all of these. This PR returns clear, so S$200,000 is shown:
+  - "Hospital stay is limited to S$5,000 per policy year" for "Hospitalisation"
+  - "Hospital stays are limited to S$5,000" for "Hospitalisation"
+  - "Intensive care is limited to S$25,000" for "ICU Benefit"
+  - "ICU stays: up to S$25,000" for "Intensive Care Unit Benefit"
+  - "Hospital income is limited to S$5,000" for "Daily Hospital Cash"
+  - "Medical reimbursement is limited to S$5,000" for "Medical Expenses"
+  - "Medical expenses are limited to S$5,000" for "Accidental Medical Reimbursement"
+  - "Cancer drug treatment is limited to S$25,000" for "Outpatient Cancer Treatment"
+  - "Room and board is limited to S$500 per day" for "Hospitalisation"
+  - "Pre-hospital treatment is limited to S$5,000" for "Hospitalisation"
+- Only "Funeral expenses benefit is limited to S$5,000" for "Accidental Death" is a correct clear.
+- Severity: this is a wrong claimable amount (overstated by up to 40 times), and it regresses main.
+- Fix: return "other" only on positive proof. One option is that the subject maps through one closed category lexicon (e.g. categoryOfBenefit in lib/coverage/table-figures.ts) to a known category different from the item's category, and the item's own category is known. Every other case returns "unknown", which withholds the figure. Keep the funeral case and add the 10 wordings above to printed-cap-test: the first 8 should reduce or withhold, and "Room and board" and "Pre-hospital" should withhold, never clear.
+
+## R359: #191 01ea0975, CHANGES
+
+Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass. Your asked-for risk is real: the new sign alternatives are used in both the field test and the other-currency scan.
+
+### M1: a bare "RM" anywhere on the page now cancels a declared SGD or USD currency
+- Where: lib/simple-chat/verify.ts:169 (MYR name `(?<![A-Za-z])RM(?![A-Za-z])`). The problem is how line 189 uses it: the other-currency scan runs `new RegExp(name,"i")` over the whole page.
+- What happens: on a page whose field declares SGD or USD, any stand-alone "RM" or "rm" in prose now returns null. Examples are "Relationship Manager (RM)", "your RM will call you", "Form RM-2" and "1 rm". Main returns the declared code.
+- Probe (main vs PR):
+  - "Currency : Singapore Dollar / Please contact your RM for help": SGD vs null
+  - "Relationship Manager (RM): Ada Tan" under the same field: SGD vs null
+  - "Policy Currency	SGD / Form RM-2 Claim form": SGD vs null
+  - "Currency : US Dollar / Premiums may be paid by RM bank transfer": USD vs null
+  - "Currency: USD / PERMANENT DISABILITY FORM RM-12": USD vs null
+- tableCurrency (line 196) goes through the same scan, so "(S$)" tables on such pages lose their currency too.
+- Effect: currencyOf falls back to an unresolved "$", so bare-figure amounts on SGD pages lose their confirmed currency. A documented amount is held back. It is not a wrong figure, but it is a regression on the main market. "RM" is very common in Singapore bank and insurer letters ("Relationship Manager").
+- Fix: split the list. Signs (S$, US$, bare RM) belong only in the field/value patterns. The other-currency scan should keep using names and codes only. The line 189 regex already catches other-currency figures (`RM\s?\d`, `US\$`, and S$ for non-SGD pages). Add the five probes above to chat-test as declared.
+
+### Low (old, unchanged): "Currency : US$" alone gives null
+- `/US\$/` at line 189 rejects a page whose own declared currency is USD written as US$. The same happens on main, and it fails safe. The fix is to skip the sign of the declared code in that scan.
+
+The rest is fine: "Mata wang: Ringgit Malaysia (MYR)" and "Mata Wang	: RM" give MYR; "Singapore Dollar (S$)" gives SGD; "Currency : RM / S$", "Currency : FORM" and "Currency: S$ 5,000" give null.
