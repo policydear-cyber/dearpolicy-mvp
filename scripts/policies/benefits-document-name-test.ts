@@ -20,7 +20,17 @@ test("/api/benefits names documents with documentName, for benefits and for cond
 test("the Benefits page keeps one group per document when documents share a name", () => {
   const page = readFileSync("app/schedule/page.tsx", "utf8");
   assert.match(page, /const key=benefit\.productName\?\?"doc:"\+benefit\.policyId/);
-  assert.match(page, /<h2>\{rows\[0\]\.productName\?\?rows\[0\]\.documentName\}<\/h2>/);
+  for (const p of [page, readFileSync("app/operator/benefits/page.tsx", "utf8")]) assert.match(p, /<h2>\{groupHeading\(groups,product\)\}<\/h2>/);
+});
+
+test("two documents with the same name are headed 1 of 2 and 2 of 2; a unique name carries no number", async () => {
+  const { groupHeading } = await import("@/lib/policies/group-heading");
+  type Named = { productName: string | null; documentName: string };
+  const wording: Named[] = [{ productName: null, documentName: "Example Life policy wording" }];
+  const groups: [string, Named[]][] = [["doc:a", wording], ["doc:b", wording], ["Example Shield", [{ productName: "Example Shield", documentName: "x" }]]];
+  assert.equal(groupHeading(groups, "doc:a"), "Example Life policy wording (1 of 2)");
+  assert.equal(groupHeading(groups, "doc:b"), "Example Life policy wording (2 of 2)");
+  assert.equal(groupHeading(groups, "Example Shield"), "Example Shield");
 });
 
 test("the names it gives", async () => {

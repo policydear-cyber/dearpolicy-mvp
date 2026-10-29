@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
@@ -219,12 +220,3 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
   </div>;
 }
 
-type Named={productName:string|null;documentName:string};
-/** A group's heading. Two documents can print the same readable name ("Insurer policy wording"): those are told apart as "1 of 2". */
-function groupHeading(groups:[string,Named[]][],key:string){
-  const name=(rows:Named[])=>rows[0].productName??rows[0].documentName;
-  const own=groups.find(([k])=>k===key)?.[1];
-  if(!own)return key;
-  const same=groups.filter(([,rows])=>name(rows)===name(own));
-  return same.length>1?name(own)+" ("+(same.findIndex(([k])=>k===key)+1)+" of "+same.length+")":name(own);
-}
