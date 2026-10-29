@@ -9476,3 +9476,14 @@ Gate on both heads: own tests, five suites, tsc, next build and merge with main 
 - Correctly null on both: "Death of or bodily injury to any person" (a classic liability row) and "Death of a person other than the insured".
 - Fix: in TO_ANYONE, keep "any person" as someone else unless an own-cover marker follows directly. Use a closed list of markers (insured, insured person, covered, named, listed, in your family, on the plan, under this policy, who is insured/covered). The default stays liability, so the markers are affirmative proof of own cover and this is not a deny-list. Add the 3 rows above as own categories.
 - Low (old, same on main): "Accidental injury to any person insured" and "Loss of limbs or injury to any person named in the schedule" are null on main too.
+
+## R364: #188 a407258b, READY
+- The R362 H1 fix is in place. "other" now comes only from the closed separate-money pairs (life family beside any other family; cash beside hospital).
+- All 12 R362 rows withhold, and so do bonesetter and maternity.
+- All R358 rows reduce or withhold. Funeral vs Death, CI vs Death, TPD vs Death and Hospital cash vs Room and board stay clear. Physiotherapy vs Hospitalisation and ICU cash vs Daily Hospital Cash withhold.
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- The WeakMap memos are keyed by the condition object, and I found no code that changes a condition's quote or amount after reading it.
+- Low (old, same on main; the figure is understated, never overstated):
+  - "Early critical illness benefit is limited to S$50,000" reduces a "Critical Illness" item to S$50,000, because the benefit-name substring check comes first.
+  - "Death benefit for children under 5 is limited to S$50,000" reduces an adult's Death item.
+  - A possible follow-up: run the substring check only when the sentence has no extra kind words (early or intermediate) and no person scope (children, juvenile, under age N).
