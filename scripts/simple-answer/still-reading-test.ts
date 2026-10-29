@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import assert from "node:assert/strict";
-import { readHousehold, renderLibrary, stillReading, type Household, type HouseholdDocument } from "../../lib/simple-chat/library";
+import { offersTryAgain, readHousehold, renderLibrary, stalledReading, stillReading, type Household, type HouseholdDocument } from "../../lib/simple-chat/library";
 import { libraryFact, libraryGroups, verifyAnswer } from "../../lib/simple-chat/verify";
 import { SIMPLE_SYSTEM_PROMPT, type ModelStatement } from "../../lib/simple-chat/prompt";
 
@@ -219,6 +219,168 @@ async function main() {
       await client.query("ROLLBACK").catch(() => undefined);
       await client.end();
     }
+  });
+
+  // An upload on hold for its malware scan (uploaded/quarantined/scan_pending, the Documents page's hold,
+  // lib/policies/quarantine/ui.ts) waits on its scan, not on an intake job: being read while a live intake job or automatic
+  // scan retry (lib/rag/live-job.ts scanJobLive) is checking it, otherwise on hold. Never stalled, never offered Try again
+  // (app/api/policies/reprocess/route.ts refuses it until the scan is clean).
+  const held = (n: number, name: string, extra: Partial<HouseholdDocument>) =>
+    doc(n, name, { processingStatus: "queued", quarantineStatus: "scan_pending", readingLive: false, scanLive: false, holdLabel: "Waiting for malware scan", ...extra });
+  const SCAN_HOUSE: Household = { ...HOUSE, documents: [
+    HOUSE.documents[0],
+    held(2, "scan-retry-live.pdf", { scanLive: true }),
+    held(3, "held.pdf", {}),
+    held(4, "held-uploaded.pdf", { processingStatus: "uploaded", quarantineStatus: "uploaded", holdLabel: "Waiting to start malware scan" }),
+    held(5, "held-quarantined.pdf", { quarantineStatus: "quarantined", holdLabel: "Waiting to start malware scan" }),
+    held(6, "held-prototype.pdf", { holdLabel: null }),
+    // Controls: a clean upload with no live intake job is stalled and offered Try again, a scan retry or not.
+    doc(7, "clean-stalled.pdf", { processingStatus: "queued", quarantineStatus: "scan_clean", readingLive: false, scanLive: false }),
+    doc(8, "clean-stalled-scanjob.pdf", { processingStatus: "extracting", quarantineStatus: "scan_clean", readingLive: false, scanLive: true }),
+    doc(9, "rejected-scanjob.pdf", { processingStatus: "queued", quarantineStatus: "scan_rejected", readingLive: false, scanLive: true }),
+  ] };
+  const scanDoc = (name: string) => SCAN_HOUSE.documents.find((d) => d.name === name)!;
+  const HELD = ["held.pdf", "held-uploaded.pdf", "held-quarantined.pdf", "held-prototype.pdf"];
+
+  await check("scan hold: a held upload with a live scan retry is still being read", () => {
+    const d = scanDoc("scan-retry-live.pdf");
+    assert.equal(stillReading(d), true);
+    assert.equal(offersTryAgain(d), false);
+    assert.match(tagOf(renderLibrary(SCAN_HOUSE), "scan-retry-live.pdf"), /reading_status="still being read/);
+    assert.match(libraryFact(SCAN_HOUSE, d), /^scan-retry-live\.pdf is still being read, so nothing in it is used yet; ask again in a minute\./);
+  });
+
+  await check("scan hold: a held upload with no live job is on hold for its scan, not stalled, no Try again", () => {
+    const lib = renderLibrary(SCAN_HOUSE);
+    for (const name of HELD) {
+      const d = scanDoc(name), tag = tagOf(lib, name), fact = libraryFact(SCAN_HOUSE, d);
+      assert.equal(stillReading(d), false, name);
+      assert.equal(stalledReading(d), false, name);
+      assert.equal(offersTryAgain(d), false, name);
+      assert.match(tag, /reading_status="on hold/, name);
+      assert.doesNotMatch(tag, /could not be read|still being read/, name);
+      assert.match(tag, /<no_readable_text\/>/, name);
+      assert.ok(!tag.includes(SECRET), name);
+      assert.match(fact, new RegExp(`^${name.replace(/\./g, "\\.")} is on hold`), name);
+      assert.doesNotMatch(fact, /could not be read|still being read|tried again|Try again/i, name);
+    }
+    assert.match(tagOf(lib, "held.pdf"), /reading_status="on hold for its scan, so it is not being read yet \(Waiting for malware scan\)"/);
+    assert.match(libraryFact(SCAN_HOUSE, scanDoc("held.pdf")), /^held\.pdf is on hold for its scan \(Waiting for malware scan\), so nothing in it is used yet\./);
+  });
+
+  await check("scan hold: prototype mode says on hold with no malware wording", () => {
+    const tag = tagOf(renderLibrary(SCAN_HOUSE), "held-prototype.pdf"), fact = libraryFact(SCAN_HOUSE, scanDoc("held-prototype.pdf"));
+    assert.match(tag, /reading_status="on hold, so it is not being read yet"/);
+    assert.match(fact, /^held-prototype\.pdf is on hold, so nothing in it is used yet\./);
+    for (const t of [tag, fact]) assert.doesNotMatch(t, /malware|scan/i);
+  });
+
+  await check("scan hold: the server's count names held uploads apart from stalled and failed ones", () => {
+    const st = (text: string): ModelStatement => ({ kind: "fact", text, person: null, document: null, quote: null, amount: null, alternativeGroup: null, percentOf: null, conditions: [] });
+    const { answer } = verifyAnswer(SCAN_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D2) were read.")] });
+    const texts = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
+    assert.ok(texts.includes("Of your 9 uploaded files, 1 was read, 1 is still being read (scan-retry-live.pdf), 4 are on hold for their scan (held.pdf, held-uploaded.pdf, held-quarantined.pdf, held-prototype.pdf) and 3 could not be read (clean-stalled.pdf, clean-stalled-scanjob.pdf, rejected-scanjob.pdf)."), texts.join("\n"));
+  });
+
+  await check("scan hold controls: a clean stalled upload still offers Try again, a scan retry or not; a rejected one does not", () => {
+    for (const name of ["clean-stalled.pdf", "clean-stalled-scanjob.pdf"]) {
+      const d = scanDoc(name);
+      assert.equal(stillReading(d), false, name);
+      assert.equal(offersTryAgain(d), true, name);
+      assert.match(tagOf(renderLibrary(SCAN_HOUSE), name), /reading_status="could not be read \((queued|extracting)\)"/, name);
+      assert.match(libraryFact(SCAN_HOUSE, d), /could not be read \(status: (queued|extracting)\), so nothing in it was used\. It can be tried again on the Documents page\./, name);
+    }
+    const r = scanDoc("rejected-scanjob.pdf");
+    assert.equal(stillReading(r), false);
+    assert.equal(offersTryAgain(r), false);
+    assert.match(libraryFact(SCAN_HOUSE, r), /could not be read \(status: queued\)/);
+  });
+
+  await check("scan hold: the stored scanner text never reaches the library or the server's points; only the Documents page's fixed words", async () => {
+    const acct = HOUSE.accountId, RAW = "VT analysis id u-9f3e engines 3/70 poll budget exhausted";
+    const row = (id: string, file: string, q: string, detail: string | null) => ({ account_id: acct, id, original_filename: file, processing_status: "queued",
+      quarantine_status: q, scan_result_detail: detail, created_at: "2026-10-28", reading_live: false, scan_live: false });
+    const run = async (sql: string) => {
+      if (/FROM family_members WHERE/.test(sql)) return [{ account_id: acct, display_name: "Lim Ah Kow", preferred_name: null, relationship: "self" }];
+      if (/FROM policies p/.test(sql)) return [row("cccccccc-0000-4000-8000-00000000000c", "raw.pdf", "scan_pending", RAW),
+        row("cccccccc-0000-4000-8000-00000000000d", "none.pdf", "scan_pending", "No malware-scanning adapter is configured in this environment."),
+        row("cccccccc-0000-4000-8000-00000000000e", "incomplete.pdf", "scan_pending", "The malware scan did not complete. The document stays on hold until it is scanned successfully.")];
+      return [];
+    };
+    for (const prototype of [false, true]) {
+      const h = await readHousehold(acct, run, "", prototype);
+      const lib = renderLibrary(h), out = [lib, ...h.documents.map((d) => libraryFact(h, d)), JSON.stringify(h)].join("\n");
+      assert.ok(!out.includes(RAW), "raw scanner text leaked");
+      assert.doesNotMatch(out, /u-9f3e|engines|poll budget|adapter is configured|stays on hold until/);
+      for (const name of ["raw.pdf", "none.pdf", "incomplete.pdf"]) assert.match(tagOf(lib, name), /reading_status="on hold/, name);
+      if (prototype) assert.doesNotMatch(out, /malware/i);
+      else {
+        // Unknown stored text is no category: the plain hold label, as the Documents page shows it.
+        assert.match(tagOf(lib, "raw.pdf"), /\(Waiting for malware scan\)"/);
+        assert.match(tagOf(lib, "incomplete.pdf"), /\(On hold: malware scan did not complete\)"/);
+        assert.match(tagOf(lib, "none.pdf"), /\(On hold: malware scanning unavailable\)/);
+      }
+    }
+  });
+
+  await check("household read against a real database: a held upload is being read only with its own live scan retry", async () => {
+    const url = process.env.DATABASE_URL;
+    assert.ok(url, "DATABASE_URL is needed: this check reads real background_jobs rows");
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      const acct = randomUUID(), member = randomUUID();
+      await client.query("INSERT INTO accounts(id,name) VALUES($1,'Lim household (test)')", [acct]);
+      await client.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Lim Ah Kow','self')", [member, acct]);
+      const add = async (file: string, quarantine: string) => {
+        const id = randomUUID();
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status)
+          VALUES($1,$2,$3,$4,$5,'queued',$6)`, [id, acct, member, file, `test/${id}`, quarantine]);
+        return id;
+      };
+      const job = async (key: string, set: string) => {
+        await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'document_scan_retry',$2,'{}'::jsonb)", [acct, key]);
+        await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='document_scan_retry' AND idempotency_key=$1`, [key]);
+      };
+      const live = await add("held-retry-live.pdf", "scan_pending");
+      await job(`policy_document:${live}:scan-retry:1`, "status='queued', available_at=now()+interval '5 minutes'");
+      await add("held-no-retry.pdf", "scan_pending");
+      const dead = await add("held-retry-dead.pdf", "scan_pending");
+      await job(`policy_document:${dead}:scan-retry:1`, "status='dead_letter'");
+      // Another document's live retry does not make this one being read.
+      await add("held-other-retry.pdf", "quarantined");
+      const other = await add("other-clean.pdf", "scan_clean");
+      await job(`policy_document:${other}:scan-retry:2`, "status='queued', available_at=now()");
+      // Control: a clean upload with no intake job is stalled and offered Try again (other-clean.pdf too: a scan retry is
+      // not an intake job).
+      await add("clean-no-job.pdf", "scan_clean");
+
+      const h = await readHousehold(acct, async (sql, params) => (await client.query(sql, params)).rows);
+      const lib = renderLibrary(h), d = (file: string) => h.documents.find((x) => x.name === file)!;
+      assert.equal(d("held-retry-live.pdf").scanLive, true);
+      assert.equal(stillReading(d("held-retry-live.pdf")), true);
+      assert.match(tagOf(lib, "held-retry-live.pdf"), /reading_status="still being read/);
+      for (const file of ["held-no-retry.pdf", "held-retry-dead.pdf", "held-other-retry.pdf"]) {
+        assert.equal(d(file).scanLive, false, file);
+        assert.equal(stillReading(d(file)), false, file);
+        assert.equal(offersTryAgain(d(file)), false, file);
+        assert.match(tagOf(lib, file), /reading_status="on hold/, file);
+        assert.doesNotMatch(libraryFact(h, d(file)), /tried again|could not be read/, file);
+      }
+      for (const file of ["clean-no-job.pdf", "other-clean.pdf"]) {
+        assert.equal(stillReading(d(file)), false, file);
+        assert.equal(offersTryAgain(d(file)), true, file);
+        assert.match(libraryFact(h, d(file)), /It can be tried again on the Documents page\./, file);
+      }
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      await client.end();
+    }
+  });
+
+  await check("prompt: a document on hold is said to be on hold, not unreadable", () => {
+    assert.match(SIMPLE_SYSTEM_PROMPT, /starts "on hold"/);
   });
 
   await check("prompt: a document still being read is said to be still being read", () => {

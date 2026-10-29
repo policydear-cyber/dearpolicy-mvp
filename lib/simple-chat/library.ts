@@ -5,7 +5,8 @@
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
 import { uncheckedText } from "@/lib/documents/layout-check";
-import { policyJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
+import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
@@ -29,6 +30,11 @@ export type HouseholdDocument = {
   quarantineStatus?: string | null;
   /** Whether a live intake job is reading it now (lib/rag/live-job.ts, the Documents page's rule), when read. */
   readingLive?: boolean;
+  /** Whether a live automatic malware-scan retry is checking it (lib/rag/live-job.ts scanJobLive), when read. */
+  scanLive?: boolean;
+  /** Why an upload on hold for its scan is on hold, in the Documents page's own fixed words (lib/policies/quarantine/ui.ts
+   * policyQuarantineLabel), never the stored scanner text; null in the prototype mode, which uses no malware-scan wording. */
+  holdLabel?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
@@ -49,14 +55,14 @@ const text = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOStri
 /** Builds a Household from four account-scoped reads. `run` is injected so tests can supply a fake database.
  * `notExcluded` is lib/policies/member-exclusions' clause for (pm.account_id, pm.policy_id, pm.family_member_id), so a
  * person the household removed from a document is not listed as linked to it. */
-export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = ""): Promise<Household> {
+export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = "", prototype = false): Promise<Household> {
   const members = await run(
     "SELECT account_id, display_name, preferred_name, relationship FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at",
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
             p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.quarantine_status, f.display_name AS uploaded_for,
-            ${policyJobLive("p")} AS reading_live
+            ${policyJobLive("p")} AS reading_live, ${scanJobLive("p")} AS scan_live, p.scan_result_detail
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
     [accountId]);
@@ -84,6 +90,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status), readingLive: d.reading_live === true,
+      scanLive: d.scan_live === true, holdLabel: holdLabel(text(d.quarantine_status), text(d.scan_result_detail), prototype),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
@@ -93,12 +100,21 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   };
 }
 
+/** The Documents page's label for an upload on hold for its scan, mapped from the stored scanner text onto its fixed
+ * words (as lib/benefit-table/service.ts holdReason does); the stored text itself is never kept. Null when the upload is not
+ * on hold, and in the prototype mode, where no malware-scan wording is used. */
+function holdLabel(quarantine: string | null, scanDetail: string | null, prototype: boolean): string | null {
+  if (prototype || !isPolicyQuarantineHeld({ quarantine_status: quarantine ?? "", scan_result_detail: null })) return null;
+  return policyQuarantineLabel({ quarantine_status: quarantine ?? "", scan_result_detail: scanDetail });
+}
+
 /** The signed-in household's library, read through the app's database pool. */
 export async function loadHousehold(accountId: string): Promise<Household> {
   const { query } = await import("@/lib/db/client");
   const { notExcludedClause } = await import("@/lib/policies/member-exclusions");
   const notExcluded = await notExcludedClause("pm.account_id", "pm.policy_id", "pm.family_member_id");
-  return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded);
+  const { malwareScanningIntentionallyDisabled } = await import("@/lib/scanning/adapter");
+  return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded, malwareScanningIntentionallyDisabled());
 }
 
 /** Uploaded text is data: < and > are escaped so a page cannot close or open a document tag (R36-4). */
@@ -124,12 +140,23 @@ const READING_NOW = new Set(["uploaded", "queued", "extracting", "indexing"]);
 const SCAN_CAN_READ = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
 const inProgress = (doc: HouseholdDocument) => unreadable(doc) && READING_NOW.has(doc.processingStatus!) &&
   (doc.quarantineStatus === undefined || SCAN_CAN_READ.has(doc.quarantineStatus ?? ""));
+/** An upload on hold for its malware scan (uploaded, quarantined or scan_pending: the Documents page's hold,
+ * lib/policies/quarantine/ui.ts). It waits on its scan, not on an intake job. */
+const scanHeld = (doc: HouseholdDocument) => isPolicyQuarantineHeld({ quarantine_status: doc.quarantineStatus ?? "", scan_result_detail: null });
 /** An unreadable document the app is reading right now: in progress, with a live intake job (the Documents page's rule,
- * lib/rag/live-job.ts). Its text is not sent or quoted either. */
-export const stillReading = (doc: HouseholdDocument) => inProgress(doc) && doc.readingLive === true;
+ * lib/rag/live-job.ts), or on hold for its scan with a live automatic scan retry checking it (scanJobLive). Its text is
+ * not sent or quoted either. */
+export const stillReading = (doc: HouseholdDocument) => inProgress(doc) && (doc.readingLive === true || (scanHeld(doc) && doc.scanLive === true));
+/** In progress and on hold for its scan, with no job checking it: the Documents page shows it on hold and offers no Try
+ * again (app/api/policies/reprocess/route.ts refuses it until the scan is clean). Never "stalled", never "could not be
+ * read". */
+export const onHold = (doc: HouseholdDocument) => inProgress(doc) && scanHeld(doc) && !stillReading(doc);
+/** Said of a document on hold, in place of NOT_READABLE: "on hold for its scan", or in the prototype mode (holdLabel
+ * null) only "on hold", with no malware-scan wording. */
+export const onHoldWords = (doc: HouseholdDocument) => doc.holdLabel === null ? "on hold" : "on hold for its scan";
 /** In progress, but no job is reading it (its job died, its lease lapsed, or nothing claimed it): the Documents page
  * calls it stalled and offers Try again. It keeps "could not be read", never "still being read". */
-export const stalledReading = (doc: HouseholdDocument) => inProgress(doc) && doc.readingLive !== true;
+export const stalledReading = (doc: HouseholdDocument) => inProgress(doc) && !stillReading(doc) && !onHold(doc);
 /** A stalled document in a status the Documents page offers Try again for (app/api/policies/route.ts, inFlightIds). */
 export const offersTryAgain = (doc: HouseholdDocument) => stalledReading(doc) && ["queued", "extracting", "indexing"].includes(doc.processingStatus!);
 
@@ -151,6 +178,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
     (stillReading(doc) ? attr("reading_status", `${STILL_READING} (${doc.processingStatus})`)
+      : onHold(doc) ? attr("reading_status", `${onHoldWords(doc)}, so it is not being read yet${doc.holdLabel ? ` (${doc.holdLabel})` : ""}`)
       : unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) + ">";
   // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
