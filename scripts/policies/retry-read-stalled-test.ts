@@ -38,6 +38,7 @@ const DOCS = {
   readInPart: id(7),    // ready, read in part; re-read due in 20 minutes
   claimedQueued: id(8), // queued; own job dead; re-read claimed by a worker (live lease)
   claimedReady: id(9),  // ready, read in part; re-read claimed by a worker (live lease)
+  heldScan: "f4000000-0000-4000-8000-000000000010", // uploaded an hour ago, on hold for its scan; no job
 };
 
 async function main() {
@@ -77,10 +78,10 @@ async function main() {
     await db.query(`INSERT INTO accounts(id,name) VALUES ($1,'Example Household'),($2,'Household') ON CONFLICT (id) DO NOTHING`, [HOUSEHOLD, USER_ID]);
     await db.query(`INSERT INTO household_members(household_id,user_id,role) VALUES ($1,$2,'owner')`, [HOUSEHOLD, USER_ID]);
     await db.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES ($1,$2,'Lim Ah Kow','self')`, [MEMBER, HOUSEHOLD]);
-    const policy = (pid: string, status: string, stage: string, ageMinutes: number) => db.query(
+    const policy = (pid: string, status: string, stage: string, ageMinutes: number, quarantine = "scan_clean") => db.query(
       `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,insurer,processing_status,processing_stage,quarantine_status,updated_at)
-       VALUES ($1,$2,$3,$4,$5,'Example Insurance',$6,$7,'scan_clean',now() - make_interval(mins => $8))`,
-      [pid, HOUSEHOLD, MEMBER, `example-${pid.slice(-1)}.pdf`, `${HOUSEHOLD}/${pid}.pdf`, status, stage, ageMinutes]);
+       VALUES ($1,$2,$3,$4,$5,'Example Insurance',$6,$7,$9,now() - make_interval(mins => $8))`,
+      [pid, HOUSEHOLD, MEMBER, `example-${pid.slice(-2)}.pdf`, `${HOUSEHOLD}/${pid}.pdf`, status, stage, ageMinutes, quarantine]);
     // A 'processing' job is one a worker holds: its lease runs for 5 more minutes.
     const job = (key: string, status: string, dueMinutes: number) => db.query(
       `INSERT INTO background_jobs(account_id,job_type,idempotency_key,status,attempt_count,payload,available_at,lease_owner,lease_expires_at)
@@ -111,6 +112,7 @@ async function main() {
     await policy(DOCS.claimedReady, "ready", "complete", 60);
     await job(DOCS.claimedReady, "succeeded", -70);
     await job(DOCS.claimedReady + ":retry-read", "processing", -5);
+    await policy(DOCS.heldScan, "queued", "queued", 60, "scan_pending");
 
     const { ACTIVE_HOUSEHOLD_COOKIE } = await import("@/lib/auth/request-context");
     const { GET } = await import("@/app/api/policies/route");
@@ -191,6 +193,11 @@ async function main() {
       assert.equal((await jobs(DOCS.claimedReady)).own, "succeeded");
       const p = await db.query<{ processing_status: string }>(`SELECT processing_status FROM policies WHERE id=$1`, [DOCS.claimedReady]);
       assert.equal(p.rows[0].processing_status, "ready");
+    });
+    await check("a document on hold for its malware scan is not stalled (no Try again the route would refuse)", async () => {
+      assert.equal(stalled(DOCS.heldScan), false);
+      assert.equal(await tryAgain(DOCS.heldScan), 409);
+      assert.equal((await jobs(DOCS.heldScan)).own, null);
     });
     await check("existing: a live intake job is not stalled and Try again is refused", async () => {
       assert.equal(stalled(DOCS.liveOwnJob), false);

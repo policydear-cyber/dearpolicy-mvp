@@ -105,6 +105,8 @@ export async function GET(request: NextRequest) {
     // The one later re-read intake schedules after a reading-service failure
     // (key `<id>:retry-read`, lib/rag/ingest.ts) backs the document too: while
     // it waits, the document is not stalled and Try again is not offered (TE).
+    // A document on hold for its malware scan is never stalled either: it waits on its scan, the Scanning notice says so,
+    // and Try again could not start it (the reprocess route refuses until the scan is clean; Critic R312).
     const inFlightIds = policies.filter((p) => ["queued", "extracting", "indexing"].includes(p.processing_status)).map((p) => p.id);
     const stalledIds = new Set<string>();
     if (inFlightIds.length) {
@@ -112,6 +114,7 @@ export async function GET(request: NextRequest) {
         `SELECT p.id FROM policies p
           WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND ${activePredicate("p")}
             AND p.updated_at < now() - interval '2 minutes'
+            AND p.quarantine_status IN ('scan_clean','not_scanned_prototype')
             AND NOT EXISTS (SELECT 1 FROM background_jobs j
                   WHERE j.job_type=$3 AND j.idempotency_key IN (p.id::text, p.id::text || ':retry-read')
                     AND ${livePolicyJob("j", "$4")})`,
