@@ -82,6 +82,18 @@ export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfNam
  * proposed. Only a confirmed row, the policy wording or the household's own entry says something is covered. */
 export const isToConfirm = (row: KindRow) => !!row.status && row.status !== "confirmed" && row.origin !== "wording" && row.origin !== "person";
 
+/** What each document was found to pay for (Documents page): Coverage row labels by document. Only what the documents
+ * establish is listed: a row only a plan type suggests (isToConfirm) and a rejected row are never listed, because a
+ * plan type or reference wording is not proof of cover. */
+export function documentFoundLabels(rows: (KindRow & { policyId: string | null; eventLabel: string })[]): Record<string, string[]> {
+  const byDoc: Record<string, string[]> = {};
+  for (const r of rows) {
+    if (!r.policyId || r.status === "rejected" || isToConfirm(r)) continue;
+    if (!(byDoc[r.policyId] ??= []).includes(r.eventLabel)) byDoc[r.policyId].push(r.eventLabel);
+  }
+  return byDoc;
+}
+
 /** A main kind that is missing but has a narrower, related benefit under another kind: not listed as missing. */
 const RELATED: { kind: string; event: string; note: string; guessNote: string }[] = [
   { kind: "death", event: "accidental_death", note: "For death, only accidental death was found (under Accidents and injuries).",

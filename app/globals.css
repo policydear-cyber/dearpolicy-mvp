@@ -872,7 +872,6 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .coverage-kinds a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--brand-tint); color: var(--brand-ink); font-size: var(--fs-sm); font-weight: 600; text-decoration: none; }
 .coverage-kinds li.to-confirm a { background: transparent; border: 1px dashed var(--line-strong); color: var(--ink-2); }
 .coverage-unconfirmed { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--warn-text); }
-.document-to-confirm { color: var(--ink-2); }
 .coverage-gaps { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .coverage-gaps b { color: var(--ink); }
 .coverage-kind { scroll-margin-top: 16px; }

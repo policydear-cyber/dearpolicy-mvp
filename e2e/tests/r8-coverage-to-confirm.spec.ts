@@ -87,9 +87,14 @@ test("R32-1: Family and Documents mark unconfirmed cover", async ({ page }) => {
   await page.goto("/family");
   await expect(page.locator(".profile-card").filter({ hasText: "Alex Tan" })).toContainText("Accidents and injuries (to confirm)");
   await page.goto("/policies");
-  const pa = page.locator(".document-card").filter({ hasText: "Group PA" }).getByTestId("document-found");
-  await expect(pa).toContainText("Plans like this usually include");
-  await expect(pa).not.toContainText(/^Found/);
+  // Changed 28 Oct (owner rule: a plan type is not proof of cover): the Documents card no longer prints a
+  // plan-type guess ("Plans like this usually include ..."); a document with only guessed rows shows no found line.
+  // The original assertion expected the guess line; see the PR body for the reason.
+  // Wait until the ledger rows have reached the page (the confirmed life plan's found line shows), so the two
+  // negative checks below can't pass before /api/ledger returns (Critic R307 M1).
+  await expect(page.locator(".document-card").filter({ hasText: "Family Shield" }).getByTestId("document-found")).toContainText("Death");
+  await expect(page.locator(".document-card").filter({ hasText: "Group PA" })).not.toContainText("Plans like this usually include");
+  await expect(page.locator(".document-card").filter({ hasText: "Group PA" }).getByTestId("document-found")).toHaveCount(0);
 });
 
 test("R32-4: signing out clears the device-only 'Not in my family' answers", async ({ page }) => {
