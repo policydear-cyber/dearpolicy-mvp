@@ -1,6 +1,6 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
-import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
@@ -1075,8 +1075,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       void recordErrorEvent({ name: "rag.policy_ingest.retry_scheduled", correlationId: resolveCorrelationId(undefined), householdRef: pseudonymizeId(args.accountId), resourceRef: pseudonymizeId(args.policyId), error });
       throw error;
     }
+    // A household's monthly limit (or the provider's quota) stopped reading: a fixed reason that says so, not
+    // "could not finish reading", whose advice (read again now, or upload a clearer copy) cannot help.
     const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message
-      : error instanceof TemporaryProcessingError ? DOCUMENT_READING_SERVICE_MESSAGE : DOCUMENT_READING_FAILED_MESSAGE;
+      : error instanceof TemporaryProcessingError ? DOCUMENT_READING_SERVICE_MESSAGE : quotaStopReason(error) ?? DOCUMENT_READING_FAILED_MESSAGE;
     await query(
       `UPDATE policies SET processing_status='failed',processing_stage='failed',processing_message='Analysis stopped',processing_error=$1,
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,

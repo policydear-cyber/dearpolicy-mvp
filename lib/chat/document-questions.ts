@@ -28,6 +28,7 @@ import type { ChatAnswer, ChatCitation } from "@/types";
 import type { ConversationState } from "./types";
 import { NON_COVER_ROLES, ROLE_WORDS, flagUnclearFigures, printedLines, type CorrespondenceRole } from "@/lib/documents/messy";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
+import { failedDocumentAdvice, READING_LIMIT_RESETS } from "@/lib/documents/failure-advice";
 import { householdPersonFromWords } from "./person-words";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
@@ -65,7 +66,7 @@ async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { 
 // ---------------------------------------------------------------------------
 // What could not be used, and why
 // ---------------------------------------------------------------------------
-type Unusable = "password" | "incomplete" | "unopenable" | "photo" | "scan" | "processing" | "handwriting";
+type Unusable = "password" | "incomplete" | "unopenable" | "photo" | "limit" | "scan" | "processing" | "handwriting";
 function unusableKind(d: Doc): Unusable | null {
   if (d.status === "failed") {
     const e = d.error ?? "";
@@ -73,6 +74,7 @@ function unusableKind(d: Doc): Unusable | null {
     if (e === INCOMPLETE_PDF_MESSAGE) return "incomplete";
     if (e === UNOPENABLE_DOCUMENT_MESSAGE) return "unopenable";
     if (e === UNREADABLE_PHOTO_MESSAGE) return "photo";
+    if (failedDocumentAdvice(e, { hasPages: false }).kind === "limit") return "limit";
     return "scan";
   }
   if (d.status !== "ready") return "processing";
@@ -86,6 +88,7 @@ function unusableLine(d: Doc, kind: Unusable, readable?: string[]): string {
     case "incomplete": return q(d.file) + " is incomplete — the file stops part-way, as happens when a download or copy is cut off — so it couldn’t be opened at all. Download it again from the insurer’s email or website (or ask the insurer for a fresh copy) and upload the new file.";
     case "unopenable": return q(d.file) + " couldn’t be opened — the file looks damaged. Upload the original file again, or ask the insurer for a fresh copy.";
     case "photo": return q(d.file) + " is a photo too blurred, dark or faint to read, so nothing in it is available. Take it again: " + PHOTO_TIPS + ". A PDF from the insurer is even better.";
+    case "limit": return q(d.file) + " couldn’t be read yet — reading was paused when the monthly reading limit was reached. Nothing is wrong with the file. Press “Try reading it again” on the Documents page after the limit resets " + READING_LIMIT_RESETS + ".";
     case "scan": return q(d.file) + " couldn’t be read — DearPolicy found no readable text in it. The original PDF from the insurer, or a clearer scan, would let DearPolicy read it.";
     case "processing": return q(d.file) + " is still being read. Ask again in a few minutes.";
     case "handwriting": return q(d.file) + " is handwritten, and DearPolicy could read only parts of it, so it is kept as your own notes and nothing in it is used as a policy fact."

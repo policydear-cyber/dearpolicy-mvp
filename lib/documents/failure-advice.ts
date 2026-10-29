@@ -1,5 +1,5 @@
 import {
-  DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE,
+  DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, INCOMPLETE_PDF_MESSAGE, READING_LIMIT_REACHED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE,
   PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE,
 } from "@/lib/documents/processing-errors";
 
@@ -15,7 +15,7 @@ import {
  * Pure and dependency-free apart from the fixed strings, so the client page can import it. */
 export type FailedDocumentNextStep = "unlock" | "read_again" | "upload_another";
 export type FailedDocumentAdvice = {
-  kind: "password_missing" | "password_wrong" | "no_text" | "unopenable" | "incomplete" | "photo" | "service" | "reading_failed" | "unknown";
+  kind: "password_missing" | "password_wrong" | "no_text" | "unopenable" | "incomplete" | "photo" | "service" | "limit" | "reading_failed" | "unknown";
   /** One or two sentences: why it could not be read. */
   reason: string;
   /** What to do, said under the reason. */
@@ -28,6 +28,9 @@ export type FailedDocumentAdvice = {
 const READ_AGAIN = "Try reading it again";
 const READ_AGAIN_HINT = "Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.";
 const UPLOAD_HINT = "If you have a clearer copy or the original file, upload that, then delete this one.";
+/** When the monthly reading limit resets, from lib/ai/ledger.ts (the cap counts use since the start of the month). */
+export const READING_LIMIT_RESETS = "at the start of next month";
+const READING_LIMIT_HINT = "The limit resets " + READING_LIMIT_RESETS + "; press Try reading it again after that. There is no need to upload it again.";
 const SAME_FILE = "Reading the same file again won’t change this.";
 
 export const READING_SERVICE_STOPPED_REASON =
@@ -48,6 +51,9 @@ const KNOWN = new Map<string, Omit<FailedDocumentAdvice, "reason"> & { reason?: 
   // stored "it will try again automatically" would never come true here.
   [DOCUMENT_READING_SERVICE_MESSAGE]: { kind: "service", nextStep: "read_again", action: READ_AGAIN, reason: READING_SERVICE_STOPPED_REASON,
     hint: "Try reading it again in a little while." },
+  // The household's monthly limit stopped reading. Reading again works only once the limit resets (it counts the
+  // calendar month's use, lib/ai/ledger.ts), so the step says when; nothing is wrong with the file, so never another copy.
+  [READING_LIMIT_REACHED_MESSAGE]: { kind: "limit", nextStep: "read_again", action: READ_AGAIN, hint: READING_LIMIT_HINT },
   [DOCUMENT_READING_FAILED_MESSAGE]: { kind: "reading_failed", nextStep: "read_again", action: READ_AGAIN, hint: READ_AGAIN_HINT },
 }));
 

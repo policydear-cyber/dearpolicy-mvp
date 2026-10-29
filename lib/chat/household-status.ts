@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentName, referenceRoles } from "@/lib/policies/inventory";
-import { failedDocumentAdvice, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
+import { failedDocumentAdvice, READING_LIMIT_RESETS, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
 
@@ -64,12 +64,13 @@ export function isGroupGuide(d: Pick<PersonDocument, "role" | "confirmed">) { re
  * refused, as the locked copy is already in DearPolicy). */
 const UNLOCK_FIX = "Enter its password on the Documents page";
 const passwordWhy = (d: Pick<PersonDocument, "wrongPassword">) => d.wrongPassword ? "it is password-protected and the password entered for it didn’t work" : "it is password-protected";
-/** Why a document whose reading did not finish could not be read: the reading service (nothing wrong with the file),
- * or -- for any other reason, known or not -- the plain generic sentence, never the stored text itself. */
-const finishWhy = (d: Pick<PersonDocument, "reason">) => d.reason === "service" ? "DearPolicy’s reading service wasn’t available — nothing is wrong with the file" : "DearPolicy couldn’t finish reading it";
+/** Why a document whose reading did not finish could not be read: the reading service or the monthly reading limit
+ * (nothing wrong with the file), or -- for any other reason, known or not -- the plain generic sentence, never the stored text itself. */
+const finishWhy = (d: Pick<PersonDocument, "reason">) => d.reason === "service" ? "DearPolicy’s reading service wasn’t available — nothing is wrong with the file"
+  : d.reason === "limit" ? "reading was paused when the monthly reading limit was reached — nothing is wrong with the file" : "DearPolicy couldn’t finish reading it";
 /** The step the Documents page offers for it, by the label of its own button. */
 const finishFix = (d: Pick<PersonDocument, "reason" | "action">) => d.action
-  ? "Press “" + d.action + "” on the Documents page" + (d.reason === "service" ? " in a little while" : "")
+  ? "Press “" + d.action + "” on the Documents page" + (d.reason === "service" ? " in a little while" : d.reason === "limit" ? " after the limit resets " + READING_LIMIT_RESETS : "")
   : "If you have a clearer copy or the original file, upload it on the Documents page";
 
 /** One sentence per document this person has that DearPolicy could not use.
