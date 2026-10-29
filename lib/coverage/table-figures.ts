@@ -70,6 +70,9 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   return "accident";
 }
 
+/** Liability to other people, in a benefit or section name: "liable", "liability" (Malay "liabiliti"), or damage or injury to other people, others or a third party. A bare "third party" is not enough: "assault
+ * by a third party" is the person's own accident cover. */
+const LIABILITY = /\bliab(?:le|ility|ilities|iliti)\b|\b(?:damage|injury|injuries|death)\s+(?:caused\s+)?to\s+(?:other\s+(?:people|persons)|others|(?:a|any)\s+third[\s-]part(?:y|ies)|third[\s-]part(?:y|ies))\b|\bthird[\s-]part(?:y|ies)['’]?\s+(?:property|claims?|damage|bodily)\b/i;
 /** A section that is accident cover as a whole: "Personal accident", or one that starts with accident words ("Accidental
  * Benefits"). A section that only mentions an accident ("Death and Accidental Death") is not. */
 const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?:benefit|section|part)\s+\w+\W+)?(?:the\s+)?${ACC}`, "i");
@@ -79,6 +82,9 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * whatever its own name says: a travel policy's "Total and permanent disability" under "Personal accident" pays only on an
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
+  // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
+  // to other people") pays a third party, never the person's own death, injury or hospital bill.
+  if (LIABILITY.test(benefit) || (section && LIABILITY.test(section))) return null;
   const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"

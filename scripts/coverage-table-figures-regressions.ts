@@ -33,6 +33,18 @@ test("benefit names in three markets go to their category", () => {
   assert.equal(categoryOfBenefit("Funeral expenses"), null);
 });
 
+test("cover for what the person owes others is never their own accident, death or hospital cover", () => {
+  for (const b of ["If you are liable for accidental death, injury or damage to other people, items or property", "Personal Liability",
+    "Legal liability to third parties for accidental bodily injury or death", "Death or injury to a third party", "Third party property damage",
+    "Liabiliti Peribadi / Personal Liability", "Public liability (accidental death or injury to others)"]) assert.equal(categoryOfBenefit(b), null, b);
+  assert.equal(categoryOfBenefit("Accidental death", "Section 6 - Personal Liability"), null);
+  // Not liability: the person's own cover, whoever caused it.
+  assert.equal(categoryOfBenefit("Accidental death due to assault by a third party"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Accidental Death"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Hospital cash for injury caused by a third party"), "Hospital Cash");
+  assert.deepEqual(categoryRows("Personal Accident", [row("Accidental Death"), row("If you are liable for accidental death, injury or damage to other people")]).map((r) => r.benefit), ["Accidental Death"]);
+});
+
 test("an illness the name excludes is not a cause it pays; injury is accident; an accident uplift keeps the Death tile (TE P144-6, Critic R227)", () => {
   for (const b of ["Accidental Death (death from illness or disease is not covered)", "Death due to Injury", "Accidental Death - not payable for sickness",
     "Accidental TPD (sickness excluded)", "TPD due to Injury", "Kematian akibat Kemalangan / Death due to Injury"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
