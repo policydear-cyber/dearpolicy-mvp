@@ -9434,3 +9434,28 @@ Gate on all three heads: own tests, five suites, tsc, next build and merge with 
 - Still null, as they should be: "RM / S$", "FORM", "S$ 5,000", and a US$ field above an S$ figure.
 - Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass.
 - Low (old, same on main): "Currency: USD" above "Currency of rider: RM" gives USD. A bare RM with no figure after it is no longer a signal, and the rider line is not a field. One option is to treat any further "currency ... : <sign or name>" line as a second declaration.
+
+## R362: #188 336527b2, CHANGES
+- All 10 R358 quotes now reduce or withhold, and Funeral vs Accidental Death stays clear.
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+### H1: "a different family" is treated as proof of separate money, but the medical family contains hospital, outpatient, surgery and the others
+- Where: lib/insurance/cover-conditions.ts, KINDS/limitIsFor (`every(f=>!families.has(f))?"other"`).
+- The problem: a broad medical-expenses benefit is in family "medical", and its parts (hospital, in-patient, outpatient, clinic, surgery, ICU, ambulance, dental, maternity) are all in other families. So a sub-limit on a part is called "other" and the full figure is shown.
+- The reverse also happens: a "Medical expenses/bills are limited to" sentence is ignored for a Hospitalisation or Outpatient item.
+- Probe: evaluateCondition, sub_limit, productName null, item at S$200,000. All of these return clear:
+  - "Hospital charges are limited to S$5,000" for Accidental Medical Reimbursement
+  - "Hospitalisation is limited to S$5,000" for Medical Expenses
+  - "Outpatient treatment is limited to S$500" for Medical Expenses
+  - "Clinic visits are limited to S$500" for Medical Expenses
+  - "Surgery is limited to S$5,000" for Medical Expenses
+  - "ICU charges are limited to S$5,000" for Medical Expenses
+  - "In-patient treatment is limited to S$50,000" for Overseas Medical Expenses
+  - "Ambulance charges are limited to S$5,000" for Overseas Medical Expenses
+  - "Dental treatment is limited to S$500" for Accidental Medical Reimbursement
+  - "Medical expenses are limited to S$5,000" for Hospitalisation
+  - "Medical bills are limited to S$500" for Outpatient
+  - "Maternity complications are limited to S$5,000" for Hospitalisation
+- Main reduces every one of these (R358 baseline). The PR shows S$200,000, so this is a wrong claimable amount.
+- Fix: deciding "other" from family difference is still a deny-list. Use a closed allow-list of family pairs known to pay separate money, for example funeral|death, cash|hospital (TE U10/U19), and ci|death|tpd with each other. Every other pair, and anything involving medical, gives "unknown", which withholds. Apply the same pair list on the unplaced-aggregate path, and add the 12 rows above to printed-cap-test as withhold.
+- These look right: "Hospital cash" vs "Room and board" gives clear (TE U10), and "Death" vs "Critical illness" and "TPD" vs "Death" give clear.
