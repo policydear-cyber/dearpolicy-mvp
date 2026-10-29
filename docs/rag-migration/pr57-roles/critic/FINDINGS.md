@@ -9459,3 +9459,20 @@ Gate on all three heads: own tests, five suites, tsc, next build and merge with 
 - Main reduces every one of these (R358 baseline). The PR shows S$200,000, so this is a wrong claimable amount.
 - Fix: deciding "other" from family difference is still a deny-list. Use a closed allow-list of family pairs known to pay separate money, for example funeral|death, cash|hospital (TE U10/U19), and ci|death|tpd with each other. Every other pair, and anything involving medical, gives "unknown", which withholds. Apply the same pair list on the unplaced-aggregate path, and add the 12 rows above to printed-cap-test as withhold.
 - These look right: "Hospital cash" vs "Room and board" gives clear (TE U10), and "Death" vs "Critical illness" and "TPD" vs "Death" give clear.
+
+## R363: #193 fc8111fb READY; #192 45812e15 CHANGES
+Gate on both heads: own tests, five suites, tsc, next build and merge with main all pass.
+
+### #193 READY
+- All 8 R360 leads are masked again, and so are "Ada Tan", "member_" and "Receipt for Ada Tan,".
+- Kept as written, which is correct: "Group policy no. 851231-00-1234" and "Policy No: 850101-14-5678".
+
+### #192 M1: the "any person" hole moved to "injury TO any person" (own cover hidden, regression)
+- Where: lib/coverage/table-figures.ts. TO_ANYONE adds a bare `any\s+persons?` to the "harm TO" and "compensation" paths. Those paths previously used OTHERS, and the r3 lookahead for insured/covered/named was removed.
+- All of these are own PA cover. Main returns Personal Accident or Death; the PR returns null:
+  - "Death or bodily injury to any person covered under this policy" (main PA)
+  - "Death or injury to any person in your family" (main PA)
+  - "Compensation for death of any person insured" (main Death)
+- Correctly null on both: "Death of or bodily injury to any person" (a classic liability row) and "Death of a person other than the insured".
+- Fix: in TO_ANYONE, keep "any person" as someone else unless an own-cover marker follows directly. Use a closed list of markers (insured, insured person, covered, named, listed, in your family, on the plan, under this policy, who is insured/covered). The default stays liability, so the markers are affirmative proof of own cover and this is not a deny-list. Add the 3 rows above as own categories.
+- Low (old, same on main): "Accidental injury to any person insured" and "Loss of limbs or injury to any person named in the schedule" are null on main too.
