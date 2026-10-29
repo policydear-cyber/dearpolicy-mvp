@@ -8647,3 +8647,30 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - supersedePassedGrace now treats two different policy numbers as two policies, and the reminder's own premium rows never count. My R325 L1 probe now keeps the warning (grace_passed). I accept the reasoning: the cost is one honest "cannot show whether it was paid" line.
 - Low L1: numeric dates are read day first only. A US-printed "05/06/2026" (6 May) reads as 5 June, and "10/20/2026" gives no date, which is safe. This matters only for markets that print month first.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R327 — #183 (891805a5) misfiled policy pack: NOT READY (one High)
+
+- **H1. Almost any stored letter, bill, note or screenshot that mentions "policy schedule" is flagged as misfiled.**
+  - `filedBeforeRoleRules` takes any personal-proof result from `deterministicDocumentRole(pages, null)`. That includes the late keyword fallback `/policy schedule|schedule of insurance/` plus policy number/premium/insured.
+  - correspondenceRole does not stop these:
+    - TITLE matches "policy schedule" anywhere in the first 12 lines, so a letter that only mentions it counts as "titled".
+    - Status notices (lapsed, grace period, reinstate, certificate) are kept out of insurer_letter on purpose.
+  - Made-up probe through the PR's filedBeforeRoleRules, each stored as its NON_COVER role. All nine give `personal_schedule`, misfiled = true:
+
+    | Stored as | Page text (made up) |
+    |---|---|
+    | insurer_letter | lapse notice: "Policy number L1234567 … has lapsed … refer to your policy schedule" |
+    | insurer_letter | address change: "Your policy schedule and certificate are unchanged" |
+    | insurer_letter | premium reminder: "grace period ends … Your policy schedule remains valid" |
+    | insurer_letter | reinstatement letter: "keep this letter with your policy schedule" |
+    | claim_decision | claim documents request: "Your policy schedule shows the insured is covered" |
+    | personal_notes | typed notes: "AIA policy schedule - policy number L1234567, premium S$100" |
+    | app_screenshot | "My Policies / View policy schedule / Policy number …" |
+    | medical_bill | "TAX INVOICE / Patient … / As per policy schedule, deductible applies" |
+    | insurer_letter | the real case: cover letter, then a "POLICY SCHEDULE" page (correct) |
+
+  - Effect: each shows on Coverage as table_unread with Read again. A paid re-read runs the same rules, so it re-files the letter as a personal schedule, which is personal proof of cover. From then on chat and the table treat a lapse notice, claim letter, bill or notes as the policy, and their premium or claim figures can be read in as benefits. That is the wrong-amount / wrong-proof class, plus a paid read.
+  - Fix: flag misfiled only by the rule this PR is about, a later page that is the enclosed document. Use `schedulePage(pages) != null`, or a page after the first whose own opening line is a TITLE_LINE (schedule or certificate) and which prints its own policy number. Never use the keyword fallback. Add the eight letters above as negative tests and keep the pack as the positive.
+- documentState branches are correct as written. misfiled + no pages gives no_table, live gives waiting, a scan state that cannot be read again gives no_table, otherwise table_unread. A document with a stored reading stays "read" (misfiled is computed only when there is none).
+- Cost is fine: filedBeforeRoleRules on a 70-page pack takes about 1 ms (20 runs in 19 ms). It runs only for NON_COVER documents without a reading, on pages load() already holds.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
