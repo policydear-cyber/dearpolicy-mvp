@@ -9009,3 +9009,16 @@ All 71 earlier probes hold.
   - misfiled packs: insurer_letter or another no-cover role with filedBeforeRoleRules true (#183). The role exclusion drops exactly the packs for which Documents offers Read again.
   - Fix: count a document when its documentState is held, stalled, not_readable or table_unread, or when filedBeforeRoleRules is true. Reuse the service's own functions, so Home and Documents cannot disagree. Add test rows for each case.
 - Low: the `failed` and "Read in part" branches also count roles that never carry cover (receipts, letters). This over-warns, which is the safe direction. Optionally exclude NO_COVER_READING_ROLES there too, except where filedBeforeRoleRules applies.
+
+## R346: PR #185 head 6d40c652 (reminder wording, named once), CHANGES (R345 M1 still open)
+
+- Full gate is green: tsc, next build, merge-tree with main 5110764a, own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- The delta is fine:
+  - The new reminder uses the Documents page's own words (app/policies/page.tsx:470), so it claims nothing Documents does not already say.
+  - Its count is per person, which matches the quality count it replaces (q, dashboard/route.ts:143).
+  - A document already named as not fully read is not named twice; ids are distinct (tested).
+- R345 M1 is unchanged and still blocks: held, stalled, not_readable and table_unread documents, and misfiled packs (filedBeforeRoleRules), are still not counted, so "Not found" can still read as no cover.
+- Low (new, existing pattern): the unconfirmed query, like q, has two gaps:
+  - it joins policy_members only, so a document owned by family_member_id with no links is never counted, which differs from notFullyRead's ownership rule;
+  - it has no `superseded_at IS NULL`.
+  Optional: reuse the same owner and superseded predicate as notFullyRead.
