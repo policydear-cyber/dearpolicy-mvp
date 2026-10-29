@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
@@ -67,11 +68,11 @@ class StoppedWaiting extends Error{}
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
 type Library={total:number;reading:number;failed:{id:string;name:string}[]};
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
-type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;processing_status?:string;quarantine_status?:string};
+type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
     reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
-    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:p.product_name||p.original_filename||"Untitled document"}))};
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number})}))};
 }
 
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
