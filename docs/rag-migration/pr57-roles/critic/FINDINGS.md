@@ -9022,3 +9022,24 @@ All 71 earlier probes hold.
   - it joins policy_members only, so a document owned by family_member_id with no links is never counted, which differs from notFullyRead's ownership rule;
   - it has no `superseded_at IS NULL`.
   Optional: reuse the same owner and superseded predicate as notFullyRead.
+
+## R347: PR #186 head dd6e7393 (namesNoBenefit drops nameless benefit rows), CHANGES
+
+- Full gate is green:
+  - tsc, next build, and merge-tree with main 5110764a pass.
+  - The PR's own nameless-benefit test passes.
+  - Other suites: simple chat 84, replay 22/22, benefit-table 107/107 and chat 107, r5 21/21.
+- The rule runs at intake (replaceBenefitCatalog). A row it drops is never stored, so a false hit is lost cover that only a paid re-read could bring back. Real names it hides, run through the PR's own function:
+  - H1 (High, any market): names written in a non-Latin script or with accents. Examples: "危疾保障", "身故", "死亡保険金", "입원", "ประกัน", "Décès". The "word of three letters" test is `[A-Za-z]{3}`, so a Chinese, Japanese, Korean or Thai schedule loses every benefit row.
+  - H2 (High, common Singapore, Malaysia and UK shapes): two-letter and symbol acronyms. Examples: "CI", "TI", "PA", "GP", "ER", "CT", "DB", "A&E", "TI/CI", "CI 1". Each of these is printed as a cover name with its own sum.
+  - M1: a lower-case name that starts with a joining word joined by a hyphen. Examples: "in-hospital doctor's visit", "up-front cash", "per day hospital cash". The `\b` after the word matches at the hyphen.
+- These pass correctly: ICU, Hip, eShield, "Death Benefit:", TPD, ECI, LTC, X-ray, "Haemophilia A", "Plan A", "Stage 1", "Day surgery (a)", "Option A or B". The PR's own examples are all dropped as intended.
+- None of the 730 benefit names in the repo's fixtures and tests is wrongly hidden. Only fragments are ("2.", "...", "A", "X", "1:").
+- Fix, default-safe:
+  - Test for any letter in any script (`\p{L}`, with the u flag), not `[A-Za-z]{3}`.
+  - Keep any name that holds an all-capitals token of two or more letters, including tokens joined by & or /.
+  - The start and end word rules should fire only when a space follows the joining word (or comes before it, for the end rule), never a hyphen.
+  - For the unsure case, keep the row (it shows as a heading), because dropping it at intake cannot be undone.
+  - Add every name above to the test as names that must stay.
+- Low: a "2027" row from a payout-by-year table is a real dated amount (a scheduled payout), not noise. Hiding it is acceptable only because its name cannot tell a reader which benefit it belongs to. Better would be to hold it under its table's benefit, as a follow-up.
+- Amounts: none of the dropped fragments carries a limit that another row reads by name, so hiding them does not lift another benefit's figure. That is the safe direction for amounts. The risk is lost rows (H1, H2), not a wrong figure.
