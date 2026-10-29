@@ -228,6 +228,7 @@ const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|t
 const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?|coverage|cover|ward)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
 // A row label followed by a sentence, not a value: "please refer to …", "will cease if …", "see your policy schedule".
 const ROW_SENTENCE = /^(?:please|kindly|see|refer|will|shall|may|are|is|as\s+(?:shown|stated|set\s+out)|cease[sd]?|apply|applies|continue[sd]?|remain[s]?)\b/i;
+const SENTENCE_WORD = /^(?:you|your|we|our|these|this|they|it|its|will|shall|is|are|was|were|has|have|continues?|ends?|ceases?|stops?|lapses?|remains?|applies|apply|please|refer|see)[.,]?$/i;
 const PAY_TITLE = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow)\b/i;
 // What the household pays: a premium, a fee or charge, interest, arrears or an amount due (Critic R340). A slip's own
 // "Amount:" or "Total amount payable:" line counts only on a payment page; a bare total, payable or paid never does.
@@ -266,8 +267,10 @@ function noticePage(text: string, own: Set<string>): boolean {
     if (!row || PREMIUM_ROW.test(l) || riderPremium(l)) return false;
     const value = l.slice(row[0].length).trim();
     if (!value || ROW_SENTENCE.test(value)) return false;
-    // A full sentence with no figure ("Your cover continues during the grace period.").
-    if (!/\d/.test(value) && /[.!]$/.test(value) && value.split(/\s+/).length >= 4) return false;
+    // A sentence with no figure ("Your cover continues during the grace period.", "These end if the policy lapses."): a
+    // pronoun or verb in its first three words. A noun phrase ending in a full stop ("Room and board at the actual
+    // cost.") stays a row (TE round 20).
+    if (!/\d/.test(value) && value.split(/\s+/).slice(0, 3).some((w) => SENTENCE_WORD.test(w))) return false;
     if ((payTitled || paymentPage) && /^\s*plan\b/i.test(row[0]) && !/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)
       && moneyOf(value).every((f) => own.has(f))) return false;
     return true;

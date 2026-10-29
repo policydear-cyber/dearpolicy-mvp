@@ -255,6 +255,8 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     // Critic R341: schedule rows without a figure.
     "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nPayment Mode : GIRO\nPlan : Example Hospital Income Plan B\nRider : Example Critical Illness Rider",
     "POLICY DETAILS\nPolicy Owner\nPlan : Example Shield Plan A\nWard class : B1\nCoverage : As charged",
+    // TE round 20: schedule rows that end in a full stop are still rows.
+    "POLICY DETAILS\nCoverage: Hospital and surgical expenses as charged.\nBenefit: Room and board at the actual cost.",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
   // A sum to pay that page 1 does not print stays part of the notice.
   for (const page2 of [
