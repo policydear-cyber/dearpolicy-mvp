@@ -52,6 +52,20 @@ test("page keeps the file name as the secondary line", () => assert.match(page, 
 // Chat's note about a document that couldn't be read names it as the Documents card does (Critic R316 L1).
 const chatPage = readFileSync(join(root, "app/chat/page.tsx"), "utf8");
 test("chat names a failed document with the shared rule", () => { assert.match(chatPage, /from "@\/lib\/policies\/document-name"/); assert.match(chatPage, /name:documentCardTitle\(/); assert.doesNotMatch(chatPage, /p\.product_name\|\|p\.original_filename/); });
+// Coverage names every document the same way (TE P179 F1): plan proof, wording, supporting-wording card and table source.
+const coveragePage = readFileSync(join(root, "app/coverage/page.tsx"), "utf8");
+const coverageRoute = readFileSync(join(root, "app/api/coverage/route.ts"), "utf8");
+test("Coverage page prints no raw file name", () => {
+  for (const raw of [/\{x\.ownership_filename\}/, /\{x\.reference_filename\}/, /\?\?x\.original_filename\}/]) assert.doesNotMatch(coveragePage, raw);
+  assert.match(coveragePage, /confirmed by <b>\{x\.ownership_name\}<\/b>; this benefit is described in <b>\{x\.reference_name\}<\/b>/);
+  assert.match(coveragePage, /<strong>\{x\.product_name\?\?x\.document_name\}<\/strong>/);
+});
+test("Coverage route names each document with the shared rule", () => {
+  assert.match(coverageRoute, /from "@\/lib\/policies\/document-name"/);
+  for (const r of [/ownership_name:documentCardTitle\(/, /reference_name:documentCardTitle\(/, /document_name:documentCardTitle\(/, /document:name\(r\.source\.documentId,r\.source\.document\)/]) assert.match(coverageRoute, r);
+  assert.doesNotMatch(coverageRoute, /document:r\.source\.document\b/);
+  assert.doesNotMatch(coverageRoute, /(ownership|reference)_filename:/);
+});
 test("shared naming module is pure (no imports)", () => assert.doesNotMatch(shared, /^\s*import\s/m));
 test("GET /api/policies selects insurer, document_role, policy_number", () => { for (const c of ["p.insurer", "p.document_role", "p.policy_number"]) assert.ok(route.includes(c), c); });
 
