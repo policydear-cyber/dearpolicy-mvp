@@ -166,3 +166,21 @@ test("the Coverage, benefit table and benefit schedule routes send only masked t
     assert.match(get, /NextResponse\.json\(maskShownText\(/, file);
   }
 });
+
+test("a masked name a screen sends back never replaces the stored name; a name the household typed does", async () => {
+  const { maskShownText, sentName } = await load();
+  const stored = "Personal accident - Lim Ah Kow S1234567D";
+  const shown = maskShownText({ benefitName: stored }).benefitName;
+  assert.notEqual(shown, stored);
+  assert.equal(sentName(shown, stored), undefined, "the masked copy is not saved over the stored name");
+  assert.equal(sentName(stored, stored), stored);
+  assert.equal(sentName("Accident cover", stored), "Accident cover");
+  assert.equal(sentName(undefined, stored), undefined);
+  // A name with no ID number is the same masked or not: sent back unchanged, it is kept as sent.
+  assert.equal(sentName("Hospital cash", "Hospital cash"), "Hospital cash");
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync("app/api/benefits/route.ts", "utf8");
+  const patch = src.slice(src.indexOf("export async function PATCH"));
+  assert.match(patch, /body\.benefitName=sentName\(body\.benefitName,existing\.rows\[0\]\.benefit_name\)/);
+  assert.ok(patch.indexOf("sentName(") < patch.indexOf("UPDATE policy_benefits"), "the name is decided before anything is written");
+});
