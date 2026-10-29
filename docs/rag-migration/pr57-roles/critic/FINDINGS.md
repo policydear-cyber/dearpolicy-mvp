@@ -8475,3 +8475,43 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - The new static check in doc-card-title fails without the change; it now passes 40/40.
 - v11:customer-screens still fails only the check it fails on main (`/nextSteps\[0\]/` on the chat page, 10 others pass); this change doesn't affect it.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R318 — #180 (359f670) NOT READY; #181 (ab8f1de) one fix needed
+
+**#180: NOT READY. One High: it hides real per-policy benefits.**
+- **H1. A per-policy row named "… limit" becomes "combined" from a neighbouring table line or an unrelated clause.**
+  - Cause: `quoteSentence` (lib/benefit-table/check.ts) ends a sentence only at ". ", ";" or a blank line, and reaches up to 600 characters each side. A schedule table has none of those between its rows, so the "sentence" is most of the page. `limitKind` then tests COMBINED_SCOPE / OTHER_POLICIES against that whole span.
+  - Effect: a combined row is skipped from event cards (chat.ts:257) and described as "the most paid for several benefits together, not what this event pays" (chat.ts:726). The household loses a documented amount.
+  - Made-up page probe, run through the PR's own `checkReading`:
+
+    | Row | Text elsewhere on the page | PR result | Right answer |
+    |---|---|---|---|
+    | Overseas medical expenses limit | "Benefits below apply to all plans" (table heading) | combined | per policy |
+    | Annual limit | "These benefits are the same across all plans" | combined | per policy |
+    | Personal accident limit | other-insurance clause "any other policies covering the same loss" | combined | per policy |
+    | Hospital cash limit | free-look text "This policy and any other plans you hold with us …" | combined | per policy |
+    | TI/CI limit | "this policy and other policies we issue on the life insured" | combined | combined ✓ |
+    | CI limit | "… under all policies" | combined | combined ✓ |
+
+  - Fix: bound the sentence to the quote's own line, plus continuation lines only when the line plainly runs on mid-sentence (no figure, lower-case start). Never cross a line that holds another figure or another row name. Require the scope phrase in the same sentence as the figure or the limit name. Add the four rows above as negative tests and keep "Of this amount" as the only way to pull in the sentence before.
+- Low L1, phrasings it still misses (the row stays per policy, so no hidden benefit, but the TI/CI cap still shows as one policy's amount):
+  - "under this policy and every other policy on the life insured is S$2,000,000" then a "TI/CI limit S$2,000,000" row gives null in the probe. "every other policy" is not in the list.
+  - "on the life insured/assured" without "same"; "in respect of the life insured"; "aggregate of all policies".
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main (1912d73) clean; benefit-table intake 48/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181: one Medium to fix; masking is otherwise correct.**
+- **M1. Saving an amount writes the masked benefit name over the stored one.**
+  - app/schedule/page.tsx:199 (UnreadableAmount save) always sends `benefitName: benefit.benefitName`, and app/operator/benefits/page.tsx:167 sends `draft.benefitName` (filled from the shown row). Both now come from the masked GET. app/api/benefits/route.ts:249 stores it with `benefit_name=coalesce($3,benefit_name)`.
+  - So any benefit or product code in the shape of an ID (the NRIC/FIN shape matches a code like "G1234567A", and a labelled "ID No. …" in a name) is stored as "G****567A" the first time the household saves an amount. That permanently changes their stored row.
+  - Fix: schedule page omits benefitName (the coalesce keeps the stored one); the operator page sends benefitName only when the person changed the field. Add a test that a PATCH built from a masked GET row leaves benefit_name unchanged.
+- **Nothing else sent back or compared is changed.**
+  - Row ids, coverKey, section.key, factKey, personId and policy/document ids all match IDENTIFIER_FIELD and are left as stored.
+  - formulaKind and currency are enum words with no ID shape.
+  - The Coverage report POST sends only {personId, message}.
+  - The browser never rebuilds a cover key from product/cover/plan. The ledger page groups /api/benefits owners by name only for its own display.
+- **M2. Other routes still return stored text unmasked** (decide whether they are "the document viewer" the module comment exempts, and write that in the PR so the next audit does not re-flag them):
+  - app/api/policies/[id]/route.ts GET: `coverages[].evidence_text` is the same evidence quote /api/coverage now masks. Also `extracted.documentNotes`, `detectedPeople` and `policyNumber`.
+  - app/api/dashboard/route.ts (Home): document names in the premium note, missing list and unclaimed list come from documentName/prettifyFilename. A file named "Certificate_S1234567D.pdf" shows as "Certificate S1234567D" on Home, while chat masks the same file name (TE pr153 F1).
+  - Not checked in depth: the claims evidence routes (bill text the household uploaded for a claim).
+- Probe on the PR code: `maskShownText({benefitName:"Plan G1234567A hospital benefit", factKey:"S1234567D"})` gives "Plan G****567A hospital benefit" and leaves factKey as is.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
