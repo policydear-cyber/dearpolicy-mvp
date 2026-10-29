@@ -9,7 +9,8 @@ import { assembleTable, coversOf, sectionsOf, type BenefitTable, type Confirmati
 import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
-import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
+import { NON_COVER_ROLES, NO_COVER_READING_ROLES } from "@/lib/documents/messy";
+import { deterministicDocumentRole } from "@/lib/documents/intelligence";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
@@ -93,8 +94,10 @@ export type DocumentState = "read" | "waiting" | "stalled" | "held" | "table_unr
  * "stalled".
  * A ready schedule or certificate (PERSONAL_PROOF_ROLES) with pages, no stored reading and no live job is "table_unread":
  * the household's own proof of cover, whose benefits were not read in; Read again on the Documents page (which reads it
- * into the table) is offered only when its scan state lets Read again run. */
-export function documentState(d: { status: string; pages: number; live: boolean; scanLive?: boolean; file: Pick<DocumentFile, "document_role" | "quarantine"> }, hasReading: boolean): DocumentState {
+ * into the table) is offered only when its scan state lets Read again run. So is a document filed as a letter, bill or
+ * note (`misfiled`, see filedBeforeRoleRules) that today's role rules read as the household's own schedule or certificate:
+ * it was filed before those rules, so its cover was never read. */
+export function documentState(d: { status: string; pages: number; live: boolean; scanLive?: boolean; misfiled?: boolean; file: Pick<DocumentFile, "document_role" | "quarantine"> }, hasReading: boolean): DocumentState {
   const quarantine = d.file.quarantine ?? "";
   if (IN_INTAKE.has(d.status)) {
     if (!SCAN_GOES_ON.has(quarantine)) return "not_readable";
@@ -104,10 +107,23 @@ export function documentState(d: { status: string; pages: number; live: boolean;
   }
   if (d.status !== "ready") return "not_readable";
   if (hasReading) return "read";
-  if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) return "no_table";
+  if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) {
+    if (!d.misfiled || !d.pages) return "no_table";
+    if (d.live === true) return "waiting";
+    return READ_AGAIN_SCAN.has(quarantine) ? "table_unread" : "no_table";
+  }
   if (!d.pages) return "not_readable";
   if (d.live === true) return "waiting";
   return PERSONAL_PROOF_ROLES.has(d.file.document_role ?? "") && READ_AGAIN_SCAN.has(quarantine) ? "table_unread" : "no_table";
+}
+
+/** A document stored as a letter, bill, screenshot or note whose own pages today's role rules read as a personal schedule
+ * or certificate: a policy pack whose cover letter came first, filed before the rules that look past the letter
+ * (lib/documents/messy.ts correspondenceRole). Its cover was never read, and chat leaves letters out, so it needs reading
+ * again. Payment roles (receipts, statements) are never re-filed this way. */
+export function filedBeforeRoleRules(role: string | null, pages: { page: number; text: string }[]): boolean {
+  if (!NON_COVER_ROLES.has(role ?? "") || !pages.length) return false;
+  return PERSONAL_PROOF_ROLES.has(deterministicDocumentRole(pages.map((p) => ({ pageNumber: p.page, text: p.text })), null) ?? "");
 }
 
 /** Why a "held" document is on hold, in the Documents page's own words (lib/policies/quarantine/ui.ts, fixed strings,
@@ -164,7 +180,8 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations,
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, scanLive: d.scanLive, file: d.file }, stored.has(d.id)), file: d.file })) };
+    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, scanLive: d.scanLive,
+      misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
