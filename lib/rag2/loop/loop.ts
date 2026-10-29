@@ -1251,7 +1251,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""), askScopes.get(id) ?? null)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
-      // V1.2: the household speaks about this person in the third person ("Wei Ming broke his leg"): the question names
+      // V1.2: the household speaks about this person in the third person ("Alex broke his leg"): the question names
       // them, never "your leg" / "your admission" (that would be about the person typing).
       const subjName = input.people.find((p) => p.id === subject)?.name ?? "";
       const short = /\(([^)]+)\)\s*$/.exec(subjName)?.[1] ?? subjName.split(/\s+/)[0] ?? "";

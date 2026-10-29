@@ -628,7 +628,7 @@ const LONGEST_WAIT_DAYS = 365;
  * waiting period is never shown as payable (stress run 23 Oct, S023). A list cover (critical illnesses, listed injuries)
  * whose cover started within a year, for an event, with no waiting period said, is hidden too: it was not checked. */
 function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number, household: Household): string | null {
-  // Only for an event: a cover listed with no event asked about ("what is Wei Ming covered for") is not a payment.
+  // Only for an event: a cover listed with no event asked about ("what is Alex covered for") is not a payment.
   if (raw.eventFit !== "on_list" && raw.eventFit !== "any_event") return null;
   const w = raw.waiting as { applies?: unknown; days?: unknown; from?: unknown } | null | undefined;
   if (w && typeof w === "object") {
@@ -1365,10 +1365,10 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };
 }
 
-/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Wei Ming, not
- * Mei Ling", "only Wei Ming has it", "Wei Ming's alone") while the answer's cards, or that person's own table rows for the
+/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Alex, not
+ * Jamie", "only Alex has it", "Alex's alone") while the answer's cards, or that person's own table rows for the
  * same benefit, show they have it (live run 22 Oct, C5). Such a sentence is a wrong-person statement even without an
- * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Mei Ling is not covered by
+ * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Jamie is not covered by
  * the travel policy") is kept. */
 export const PERSON_OVERRULED = "a sentence said a person does not have a cover their own rows show";
 const NOT_COVER_WORD = new Set(["benefit"]);
@@ -1386,7 +1386,7 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
   const carded = rows.filter((r) => cards.some((c) => c.text === rowLabel(r, coverLabels(rows), benefitNames(rows)) && labelled.has(c.text)));
   const rowText = (r: ChatRow) => [r.product, r.cover, r.plan, r.benefit].join(" ").toLowerCase();
   // Y is shut out of a cover the answer itself shows is Y's: a card of Y's, or Y's own row for a carded benefit, of the
-  // kind the sentence names. A card of Y's for another cover says nothing about it ("Only Wei Ming has the Term Life
+  // kind the sentence names. A card of Y's for another cover says nothing about it ("Only Alex has the Term Life
   // policy" beside her accident card, while her term life is a group policy, TE #104 S4).
   // The product and cover names' own words ("savemore", "shield"), so a sentence naming a policy is held to that policy.
   const GENERIC = new Set(["group", "scheme", "plan", "cover", "policy", "benefit", "benefits", "insurance", "with"]);
@@ -1399,7 +1399,7 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
     if (!kinds.length && cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
     return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && named(o) && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
   };
-  // Only ownership or exclusivity is read ("belongs to Wei Ming, not Mei Ling", "Wei Ming's alone", "only Wei Ming has it"). A
+  // Only ownership or exclusivity is read ("belongs to Alex, not Jamie", "Alex's alone", "only Alex has it"). A
   // sentence that gives a reason or a condition ("Tan does not get the ambulance benefit, because no ambulance was used") is
   // never left out (Critic R131-1).
   const REASON = /\b(?:because|unless|if|until|since|without|provided|as\s+long\s+as|only\s+when|so\s+long\s+as|due\s+to)\b/i;

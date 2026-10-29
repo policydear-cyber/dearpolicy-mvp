@@ -1339,7 +1339,7 @@ export function libraryGroups(household: Household, docs: HouseholdDocument[], l
 }
 
 /** A person's documents, as the library records them, in the server's words: for a question about the documents, a point
- * the model wrote about whose files are whose ("Wei Ming has 8 documents linked: ...") has no page to quote (stress run
+ * the model wrote about whose files are whose ("Alex has 8 documents linked: ...") has no page to quote (stress run
  * 23 Oct, S070: "here is each adult's list" with nothing listed). */
 function libraryList(household: Household, person: string): string {
   const docs = household.documents.filter((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person));
@@ -1368,8 +1368,8 @@ function libraryCount(household: Household, told: ReadonlySet<number> = new Set(
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
-/** The household members a sentence names, by the words of each one's name that no other member's name has ("Wei Ming",
- * "Mei Ling"). */
+/** The household members a sentence names, by the words of each one's name that no other member's name has ("Alex",
+ * "Jamie"). */
 export function membersNamedIn(household: Household, text: string): string[] {
   const people = household.members.map((m) => baseName(m.name));
   const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
@@ -1394,7 +1394,7 @@ function docNames(d: HouseholdDocument): string[] {
 /** "The insurer decides which premium applies", "Singlife decides if they differ", "the one to rely on": said of premiums, never
  * of a printed rule such as a premium waiver ("waived if the insurer determines you are disabled", Critic R131-3). */
 const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?)\s+(?:which|what)\b|\b(?:decides?|will\s+decide|determines?)\s+(?:if|whether)\s+(?:they|the\s+\w+(?:\s+\w+)?)\s+(?:differ|appl(?:y|ies))\b|\bwhich\s+(?:premium|figure|amount|one)\s+applies\b|\bto\s+rely\s+on\b/i.test(x);
-/** "Two are linked to both Wei Ming and Mei Ling", "3 of them are linked to Wei Ming only": a count of the documents linked
+/** "Two are linked to both Alex and Jamie", "3 of them are linked to Alex only": a count of the documents linked
  * to the people it names (live run 23 Oct, E1). */
 const LINKED_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:(?:of\s+(?:them|these|those)|(?:uploaded\s+)?(?:documents?|files?))\s+)?(?:are|is|were|was)\s+linked\s+(only\s+)?to\s+(?:both\s+)?([^.;,]*)`, "i");
 /** Who the documents are linked to, counted from the library's record, in the server's words. */
@@ -1525,7 +1525,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
         // is stated from the library's own record of that file instead, in the server's words (release-set E2, E3).
         const di = Number.isFinite(preferred) ? (preferred as number) : -1;
-        // When the question is about the documents themselves ("show me Mei Ling's documents"), any unquoted point about one
+        // When the question is about the documents themselves ("show me Jamie's documents"), any unquoted point about one
         // file is said the same way (release-set E4).
         if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || aboutLibrary(written[0] ?? ""))) {
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null, libraryDoc: di }); }

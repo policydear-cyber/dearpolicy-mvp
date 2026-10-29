@@ -47,6 +47,7 @@ delete process.env.R10_METER;
 const BUDGET = {
   direct: 25,          // greetings, thanks: answered in code
   policy: 60,          // a policy question for one person
+  policyFirst: 62,     // the same question the first time: + the cited pages' text (cached 10 min) + one per-process column probe
   family: 125,         // a whole-household question (scales with people, not documents)
   claim: 80,           // a claim interview or what-if turn
   modelCallsSteady: 2, // a repeated (steady-state) turn
@@ -180,7 +181,8 @@ async function main() {
   const assertBudgets = (phase: string, rows: Map<string, TurnMeter>, steady: boolean) => {
     for (const [key, m] of rows) {
       const kind = kindOf(key) as keyof typeof BUDGET;
-      check(m.queries <= BUDGET[kind], `${phase}: "${key}" ran ${m.queries} queries (budget ${BUDGET[kind]})`);
+      const limit = kind === "policy" && !steady ? BUDGET.policyFirst : BUDGET[kind];
+      check(m.queries <= limit, `${phase}: "${key}" ran ${m.queries} queries (budget ${limit})`);
       check(m.modelCalls <= (steady ? BUDGET.modelCallsSteady : BUDGET.modelCallsFirst), `${phase}: "${key}" made ${m.modelCalls} model calls ${JSON.stringify(m.byOperation)} (budget ${steady ? BUDGET.modelCallsSteady : BUDGET.modelCallsFirst})`);
       check(m.maxPromptChars <= BUDGET.promptChars, `${phase}: "${key}" sent a ${m.maxPromptChars}-character prompt (budget ${BUDGET.promptChars})`);
       check(!steady || (m.byOperation["benefit_extraction"] ?? 0) === 0, `${phase}: "${key}" re-read documents into the ledger on a repeated turn (${m.byOperation["benefit_extraction"]} calls)`);

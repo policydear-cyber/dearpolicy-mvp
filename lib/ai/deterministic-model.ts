@@ -241,6 +241,13 @@ export function syntheticExtractionFrom(text: string): unknown | null {
   try { return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")); } catch { return null; }
 }
 
+/** Each page's own text layer, in order ("" for an image-only page). */
+async function textLayerPages(pdfBase64: string): Promise<string[]> {
+  const { extractPdfPages } = await import("@/lib/documents/pdf");
+  const pages = await extractPdfPages(new Uint8Array(Buffer.from(pdfBase64, "base64")));
+  return pages.map((p) => (p.extractionMethod === "ocr" || p.unreadable ? "" : p.text));
+}
+
 /** Deterministic transcript for the hosted document-reading (OCR) path, so
  * synthetic browser journeys can upload IMAGES (which always need OCR) and
  * exercise the full normalize -> OCR -> store -> extract -> cite pipeline
@@ -269,7 +276,11 @@ export async function deterministicHostedDocumentText(args: { system: string; us
   // Round 10: an image a test registered gets ITS transcript, read the way a
   // reader sees it -- only when the page is shown upright (see scriptedOcrPages).
   const scripted = await scriptedOcrPages(args.pdfBase64, numbers).catch(() => null);
-  let content = JSON.stringify({ pages: numbers.map((n, i) => scripted?.[i] ?? { pageNumber: n, text: pageText(n) }) });
+  // A page with its own text layer (a text PDF read again from its image, as the upload cross-check does) reads as its
+  // own words, as a competent reader would: a fixed transcript would never agree with it, and every such page would be
+  // marked unchecked (r6/r7/r9/r11 since 5ef852d). An image-only page keeps the fixed transcript.
+  const layer = scripted?.every(Boolean) ? null : await textLayerPages(args.pdfBase64).catch(() => null);
+  let content = JSON.stringify({ pages: numbers.map((n, i) => scripted?.[i] ?? (layer?.[i]?.trim() ? { pageNumber: n, text: layer[i] } : { pageNumber: n, text: pageText(n) })) });
   const ingestSeed = ingestChaosModelSeed();
   if (ingestSeed != null) {
     const mode = ingestChaosOcrMode(ingestSeed, pageNumbers.join(","), createHash("sha256").update(args.pdfBase64).digest("hex").slice(0, 24));

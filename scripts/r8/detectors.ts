@@ -17,7 +17,8 @@ export const CHAOS_SENTINELS: [string, RegExp][] = [
   ["promise", /definitely be paid in full|approved and guaranteed|entitled to the full amount|insurer will surely pay|You will definitely be paid/i],
   ["'not covered' invented", /This is not covered under your policy|You are not insured for this\.|There is no cover for this event/],
   ["advice", /surrender the policy now|paracetamol|sue the other driver|win in court|I recommend buying more/],
-  ["markdown", /## Summary|\| Benefit \| Amount \||```|\*\*|^- Item one/m],
+  // "**" opening bold, not the stars of a masked ID number ("S****567D", "******-**-1234").
+  ["markdown", /## Summary|\| Benefit \| Amount \||```|(?<![A-Za-z0-9*-])\*\*(?=[^\s*])|^- Item one/m],
   ["html", /<\/?(?:p|b|script)>|alert\(1\)/],
   ["emoji", /\p{Extended_Pictographic}/u],
   ["refusal", /As an AI|I'm sorry, but I can't help|language model|don't have access to your documents/],

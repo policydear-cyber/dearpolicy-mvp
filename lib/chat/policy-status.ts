@@ -4,6 +4,7 @@
  *
  *   lapsed    "Your policy lapsed on 17 March 2026"            (a lapse notice)
  *   grace     "Grace period ends 20 October 2026"               (a premium reminder)
+ *   grace_passed  the same reminder after that date: it cannot say whether the premium was paid
  *   ended     the period of insurance printed has run out       (an old certificate)
  *   in_force  the period printed runs past today                (a current schedule)
  *   unknown   nothing printed says either way
@@ -11,16 +12,20 @@
  * Every state carries the page and line that says it, so an answer can cite it.
  */
 export type PrintedStatus = {
-  state: "lapsed" | "grace" | "ended" | "in_force" | "reinstated" | "unknown";
+  state: "lapsed" | "grace" | "grace_passed" | "ended" | "in_force" | "reinstated" | "unknown";
   /** ISO date the status turns on (lapse date, end of grace, end of period). */
   date: string | null;
-  /** The date as the document prints it ("17 March 2026"). */
+  /** The date as the document prints it ("17 March 2026"); grace dates are said in this long form. */
   printed: string | null;
+  /** grace, grace_passed: the end date exactly as the line prints it ("20/10/2026"). */
+  datePrinted?: string | null;
   page: number | null;
   line: string | null;
-  /** grace: the premium that is unpaid and when it fell due, as printed. */
+  /** grace, grace_passed: the premium that is unpaid and when it fell due, as printed. */
   dueAmount?: string | null;
   duePrinted?: string | null;
+  /** grace, grace_passed: ISO date the unpaid premium fell due. */
+  dueDate?: string | null;
   /** reinstated: the lapse the reinstatement ended, as the earlier document printed it. */
   lapsedPrinted?: string | null;
   /** reinstated: the document that says so (another document of the same policy). */
@@ -48,6 +53,16 @@ function sentenceAt(pages: Page[], page: number, re: RegExp) {
   return text.slice(start, end < 0 ? undefined : end + 1).trim();
 }
 
+/** The period start a document prints ("Period of insurance 1 June 2025 to 31 May 2027" gives 1 June 2025). */
+export function printedPeriodStart(pages: Page[]): string | null {
+  for (const x of lines(pages)) {
+    if (!/\b(?:period of insurance|policy term|period of cover|cover period|insurance period)\b/i.test(x.l)) continue;
+    const m = x.l.match(new RegExp(DATE + "\\s+(?:to|until|till|-|–)\\s+" + DATE, "i"));
+    if (m) return isoOf(m[1], m[2], m[3]);
+  }
+  return null;
+}
+
 /** The period end a document prints ("Period of insurance 1 June 2025 to 31 May 2027", "Policy term …", "Maturity date …"). */
 export function printedPeriodEnd(pages: Page[]): { iso: string; printed: string; page: number; line: string } | null {
   for (const x of lines(pages)) {
@@ -58,6 +73,47 @@ export function printedPeriodEnd(pages: Page[]): { iso: string; printed: string;
   return null;
 }
 
+const MON = "Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?";
+/** A date as notices print it: "20 October 2026", "20th Oct 2026", "20/10/2026" (day first, as in SG, MY and the UK). */
+const ANY_DATE = "(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(" + MON + ")\\.?,?\\s+(\\d{4})|(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4}))";
+function isoOfAny(m: RegExpMatchArray, at: number): string | null {
+  const iso = isoParts(m, at);
+  // A day the month does not have ("31/02/2026") is no date.
+  return iso && new Date(iso + "T00:00:00Z").toISOString().slice(0, 10) === iso ? iso : null;
+}
+function isoParts(m: RegExpMatchArray, at: number): string | null {
+  if (m[at]) {
+    const mon = MONTHS.findIndex((x) => x.startsWith(m[at + 1].toLowerCase().slice(0, 3)));
+    const d = Number(m[at]);
+    return mon >= 0 && d >= 1 && d <= 31 ? m[at + 2] + "-" + String(mon + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0") : null;
+  }
+  const d = Number(m[at + 3]), mo = Number(m[at + 4]);
+  return d >= 1 && d <= 31 && mo >= 1 && mo <= 12 ? m[at + 5] + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0") : null;
+}
+/** Every date a text gives as the end of a grace period ("Grace period ends 20 October 2026", "Grace period end date:
+ * 20/10/2026", "a grace period of 30 days, ending 20 Oct 2026", "the grace period, which expires on …"), in order,
+ * with the date as printed. A worked example's sentence ("For example, if your premium is due on …") gives none. */
+export function graceEndDates(text: string): { iso: string; printed: string; index: number }[] {
+  const re = new RegExp("\\bgrace period\\b(?:[^.\\n]{0,60}?\\b(?:ends?|ending|end date|expires?|expiring|until|till)\\b(?:\\s+on)?)?[\\s:,]+" + ANY_DATE, "gi");
+  const out: { iso: string; printed: string; index: number }[] = [];
+  for (const m of text.matchAll(re)) {
+    const sentence = text.slice(0, m.index! + m[0].length).split(/[.!?](?:\s|$)/).at(-1) ?? "";
+    if (HYPOTHETICAL.test(sentence)) continue;
+    // A printed range ("Grace period: 20/09/2026 - 20/10/2026") ends at its second date.
+    const range = text.slice(m.index! + m[0].length).match(new RegExp("^\\s*(?:-|–|to|until|till)\\s*" + ANY_DATE, "i"));
+    const iso = range ? isoOfAny(range, 1) : isoOfAny(m, 1);
+    const printed = range ? range[0].slice(range[0].search(new RegExp(ANY_DATE, "i"))) : m[0].slice(m[0].search(new RegExp(ANY_DATE, "i")));
+    if (iso) out.push({ iso, printed, index: m.index! });
+  }
+  return out;
+}
+
+/** Wording that describes a case rather than this policy's own premium. */
+/** A line that is only a premium label and its amount: "Monthly premium S$212.40", "Amount due: S$86.40 (incl. GST)". */
+const PREMIUM_LINE = /^(?:(?:monthly|annual|yearly|quarterly|half[- ]yearly|modal|outstanding|unpaid|total|overdue)\s+)?(?:premium(?:\s+(?:due|amount|payable|outstanding|unpaid))?|amount\s+(?:due|payable|outstanding))\s*:?\s*(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?[\d,]+(?:\.\d{1,2})?\s*(?:\([^)]*\))?\s*$/i;
+// "If your premium is not paid, your grace period ends on …" is a notice's own wording; "if your premium is due on 1 March" is a case.
+export const HYPOTHETICAL = /\b(?:for example|for instance|e\.g\.|example|illustrat\w*|suppose|assum\w*|if (?:your|the|a) (?:premium|payment|instalment) (?:is|was|falls) due\b)/i;
+
 export function printedStatus(pages: Page[], expiryIso: string | null, today: string): PrintedStatus {
   const all = lines(pages);
   // A lapse the document states.
@@ -67,15 +123,23 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
   }
   // A grace period the document states, with the date it ends.
   for (const x of all) {
-    const m = x.l.match(new RegExp("\\bgrace period(?: ends?| ending)?(?:\\s+on)?[:\\s]+" + DATE, "i")) ?? x.l.match(new RegExp("\\bgrace period[^.]*\\bends? on\\s+" + DATE, "i"));
-    if (!m) continue;
-    const iso = isoOf(m[1], m[2], m[3]);
-    const due = all.find((y) => y.page === x.page && /\b(?:premium due date|due date|due on)\b/i.test(y.l) && new RegExp(DATE).test(y.l));
-    const dueM = due?.l.match(new RegExp(DATE));
-    const amount = all.find((y) => y.page === x.page && /\b(?:monthly|annual|amount due|premium)\b/i.test(y.l) && /S\$\s?[\d,]+(?:\.\d+)?/.test(y.l))?.l.match(/S\$\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
-    // A grace period that has already run out says nothing about payment since: it is not "in force".
-    return { state: iso >= today ? "grace" : "unknown", date: iso, printed: m[1] + " " + m[2] + " " + m[3], page: x.page, line: x.l,
-      dueAmount: amount, duePrinted: dueM ? dueM[1] + " " + dueM[2] + " " + dueM[3] : null };
+    if (!/\bgrace period\b/i.test(x.l)) continue;
+    // The line itself, or wrapped onto the next line of the same page; the line it wraps from may not be a worked example.
+    const next = all.find((y) => y.page === x.page && y.i === x.i + 1)?.l ?? "";
+    const before = all.find((y) => y.page === x.page && y.i === x.i - 1)?.l ?? "";
+    const g = graceEndDates(x.l)[0] ?? graceEndDates(x.l + " " + next)[0];
+    if (!g || HYPOTHETICAL.test(before) && !/[.!?:]\s*$/.test(before)) continue;
+    const iso = g.iso;
+    const dueLine = all.find((y) => y.page === x.page && /\b(?:premium due date|due date|due on)\b/i.test(y.l) && new RegExp(ANY_DATE, "i").test(y.l) && !HYPOTHETICAL.test(y.l));
+    const dueM = dueLine?.l.match(new RegExp(ANY_DATE, "i")), dueIso = dueM ? isoOfAny(dueM, 1) : null;
+    // The amount said as unpaid is the figure on the premium line itself ("Monthly premium S$212.40", "Amount due: S$86.40"),
+    // never another figure on a line that mentions a premium ("Premium waiver benefit S$50,000", "Annual limit S$150,000").
+    const amount = all.find((y) => y.page === x.page && PREMIUM_LINE.test(y.l))?.l.match(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
+    // A reminder prints what is due: a grace date with no due date and no amount due beside it is not one.
+    if (!dueIso && !amount && !all.some((y) => y.page === x.page && /\b(?:amount due|premium (?:due|outstanding|unpaid)|outstanding premium|unpaid premium)\b/i.test(y.l) && /\d/.test(y.l) && !HYPOTHETICAL.test(y.l))) continue;
+    // A grace period that has already run out says nothing about payment since: neither "in force" nor "lapsed".
+    return { state: iso >= today ? "grace" : "grace_passed", date: iso, printed: longDate(iso), datePrinted: g.printed, page: x.page, line: x.l,
+      dueAmount: amount, duePrinted: dueIso ? longDate(dueIso) : null, dueDate: dueIso };
   }
   const end = printedPeriodEnd(pages);
   const endIso = end?.iso ?? expiryIso?.slice(0, 10) ?? null;
@@ -114,6 +178,33 @@ export function applyReinstatements(statusOf: Map<string, PrintedStatus>, docs: 
   return statusOf;
 }
 
+const CURRENT_EVIDENCE = new Set(["personal_schedule", "certificate", "renewal_statement", "annual_statement", "premium_receipt"]);
+/** A reminder whose grace date has passed says nothing once a later document of the same policy (same policy number,
+ * or same product for the same people) or a payment after that date is on file: a renewal schedule or a receipt is
+ * the later word, so the reminder reads as "unknown" again and never overrides it. */
+export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
+  docs: { id: string; policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null; role?: string | null }[], latestPaid: Map<string, string | null>) {
+  const num = (x: string | null) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const product = (x: string | null) => (x ?? "").trim().toLowerCase();
+  for (const d of docs) {
+    const st = statusOf.get(d.id);
+    if (st?.state !== "grace_passed" || !st.date) continue;
+    // Same printed number; or the same product for the same people when one of the two prints no number (two different
+    // numbers are two policies).
+    const same = docs.filter((o) => o.id !== d.id && (num(d.policy_number) && num(o.policy_number) === num(d.policy_number)
+      || (!num(d.policy_number) || !num(o.policy_number)) && !!product(d.product_name) && product(o.product_name) === product(d.product_name) && [...o.owners].some((x) => d.owners.has(x))));
+    // A later document: one that speaks for this person's cover being current (a schedule, certificate, renewal,
+    // statement or receipt; never a wording or product summary), dated after the grace date. A payment recorded from another document of the policy (a receipt):
+    // on or after the date the premium fell due, so one inside the grace period counts. The reminder's own premium rows
+    // are the premium it asks for, never a payment.
+    const later = (iso: string | null | undefined) => (iso ?? "").slice(0, 10) > st.date!;
+    const paid = (iso: string | null | undefined) => !!iso && iso.slice(0, 10) >= (st.dueDate ?? st.date!);
+    if (same.some((o) => CURRENT_EVIDENCE.has(o.role ?? "") && later(o.date) || paid(latestPaid.get(o.id))))
+      statusOf.set(d.id, { state: "unknown", date: null, printed: null, page: null, line: null });
+  }
+  return statusOf;
+}
+
 /** One plain sentence about a policy that no longer covers anyone, or is in its grace period. */
 export function statusSentence(name: string, s: PrintedStatus): string | null {
   const page = s.page != null ? " (page " + s.page + ")" : "";
@@ -122,6 +213,8 @@ export function statusSentence(name: string, s: PrintedStatus): string | null {
   if (s.state === "ended") return name + " expired on " + s.printed + page + ", so it no longer covers anyone.";
   if (s.state === "grace") return name + " is in its grace period" + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted + " has not been received. " : "a premium has not been received. ")
     + "It stays in force until " + s.printed + ", and lapses if the premium is not paid by then.";
+  if (s.state === "grace_passed") return name + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted : "an unpaid premium") + " had to be paid by " + s.printed
+    + ". That date has passed and the reminder cannot show whether it was; if not, the policy can lapse, so the insurer can confirm whether it is still in force.";
   return null;
 }
 

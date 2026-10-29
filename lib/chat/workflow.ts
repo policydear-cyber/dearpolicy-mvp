@@ -127,7 +127,7 @@ import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
-import { inactiveDocuments,inactiveList } from "./policy-status";
+import { graceEndDates,inactiveDocuments,inactiveList,todayIso } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
@@ -159,7 +159,7 @@ export type ChatContext={
   /** The policy question of the chat this message came from, when it moved to
    * another person's chat ("What is Wei Jie's life cover?" -> "and his wife?"). */
   carriedTopic?:{intent:"policy_question"|"portfolio";activeQuery:string};
-  /** "Actually it was Kai Ting, not Mei Ling": the claim just described moves to
+  /** "Actually it was Kai Ting, not Jamie": the claim just described moves to
    * the person the household corrected it to, with the facts already given. */
   carriedClaim?:{activeClaimQuery:string;facts:ConversationState["subjects"][string];scenarios:NonNullable<ConversationState["scenarios"]>[string]};
   /** The event is about someone outside the household ("my colleague Ravi died"). */
@@ -809,7 +809,7 @@ export function catalogueCoverageAnswer(args:{question:string;people:ClaimPerson
 function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
 /** Round 12: "show me the full list", "all of them", "the rest": every line of the answer just given. */
 const FULL_LIST_FOLLOW_UP=/^\s*(?:(?:ok(?:ay)?|yes|sure|please|pls)[,!.\s]+)?(?:(?:can you |could you |pls |please )?(?:show|give|list|tell|send)(?: me| us)?(?: the)? (?:full list|whole list|full details|all(?: of)?(?: them| it| the lines| the rest)?|everything|the rest|the other lines|the other \d+(?: lines)?|more)|(?:the )?full list|all of (?:them|it)|the rest)\b/i;
-/** "Upload the latest premium receipt or renewal notice for Mei Ling’s TravelSafe Annual Family to confirm it is still in force." */
+/** "Upload the latest premium receipt or renewal notice for Jamie’s TravelSafe Annual Family to confirm it is still in force." */
 /** Round 12: a next step must fit the question. "Upload the latest receipt" is about a policy the answer relies
  * on: when no benefit was found, a policy the answer does not even name needs no receipt to answer it. */
 function staleContractsForAnswer(contracts:PolicyContract[],answer:ChatAnswer){
@@ -882,7 +882,7 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
   const topics=coverageTopics(question);
   if(topics.length)return topics.map(t=>t.label).join(" or ");
   // The person is who, not what: their names never become part of the topic
-  // ("When is Mei Ling's policy due" once came back as "When is Mei the policy").
+  // ("When is Jamie Lee's policy due" once came back as "When is Jamie the policy").
   let named=question;
   for(const person of people)for(const name of [person.display_name,person.preferred_name??""].filter(n=>n.trim().length>=2).sort((a,b)=>b.length-a.length))
     named=named.replace(new RegExp("\\b"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?:['’]s)?\\b","gi")," ");
@@ -1464,13 +1464,21 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
       const lines=documentLines(from,/\b(?:grace period|laps\w*|overdue|not (?:been )?received|reinstat\w*|unpaid|due date)\b/i,4);
       // "if I pay on 15 Oct, ok?": compared with the grace period end the documents print.
       const day=text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)\b(?:\s+(20\d\d))?/i);
-      const graceEnd=from.map(p=>p.text.match(/grace period ends?\D{0,12}(\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December) 20\d\d)/i)?.[1]).find(Boolean);
+      // The latest grace date a reminder prints (an older reminder, or a wording's worked example, is not the one that counts).
+      const graceIso=from.flatMap(p=>graceEndDates(p.text).map(g=>g.iso)).sort().at(-1);
+      const graceEnd=graceIso?longDateOf(graceIso):undefined;
       if(day&&graceEnd){
-        const typed=typedDate(day[0]+(day[3]?"":" "+graceEnd.slice(-4)));
+        // A day typed without a year is the one nearest the grace date ("5 January" after a grace period that ended in December).
+        const typed=day[3]?typedDate(day[0]):[-1,0,1].map(k=>typedDate(day[0]+" "+(Number(graceEnd.slice(-4))+k))).filter((t):t is NonNullable<typeof t>=>!!t)
+          .sort((a,b)=>Math.abs(Date.parse(a.iso)-Date.parse(graceIso!))-Math.abs(Date.parse(b.iso)-Date.parse(graceIso!)))[0];
         const said=(iso:string)=>day[3]?longDateOf(iso):longDateOf(iso).replace(/ \d{4}$/,"");
         const end=typedDate(graceEnd);
         if(typed&&end){
           const within=typed.iso<=end.iso;
+          // A grace period that has already run out: what the date meant, never that the policy is (or is not) still in force.
+          if(end.iso<todayIso())return {summary:within?"The grace period in "+whose+" documents ended on "+graceEnd+". A premium paid on "+said(typed.iso)+" was within it; the insurer can confirm it was received and that the policy is still in force."
+            :said(typed.iso)+" is after the grace period, which ended on "+graceEnd+". If the premium was not received by then, the policy can lapse; the insurer can say whether it is still in force or can be reinstated.",
+            details:lines.map(l=>l.line),nextSteps:[],citations:lines.map(l=>l.citation)};
           return {summary:within?"Paying on "+said(typed.iso)+" is within the grace period, which ends on "+graceEnd+" — the policy stays in force if the insurer receives the premium by then."
             :said(typed.iso)+" is after the grace period ends on "+graceEnd+". If the premium isn’t received by "+graceEnd+", the policy can lapse; the insurer can say whether it can still be reinstated after that.",
             details:lines.map(l=>l.line),nextSteps:[],citations:lines.map(l=>l.citation)};
@@ -2217,7 +2225,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       }));
       answer.policyReview=reviews;
       const staleContracts=contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent");
-      // "If Wei Ming dies in an accident, how much is the payout?" names the
+      // "If Alex dies in an accident, how much is the payout?" names the
       // whole portfolio and gets labelled as an inventory question. It is a
       // what-if about a payout, and the inventory table is not an answer to it.
       const askedNow=state.activeQuery??request.question;
