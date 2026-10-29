@@ -123,7 +123,8 @@ export function documentState(d: { status: string; pages: number; live: boolean;
  * number and a named person on that page), never a keyword: a lapse notice, a claim letter or a bill that mentions "your
  * policy schedule" stays what it is (Critic R327 H1). Payment roles (receipts, statements) are never re-filed this way. */
 export function filedBeforeRoleRules(role: string | null, pages: { page: number; text: string }[]): boolean {
-  if (!NON_COVER_ROLES.has(role ?? "") || !pages.length) return false;
+  // A screenshot is never a pack, whatever its later screens show.
+  if (!NON_COVER_ROLES.has(role ?? "") || role === "app_screenshot" || !pages.length) return false;
   // The schedule page follows the cover (never the first page): what was filed is the letter around it.
   const first = Math.min(...pages.map((p) => p.page));
   const at = schedulePage(pages.map((p) => ({ pageNumber: p.page, text: p.text })));
