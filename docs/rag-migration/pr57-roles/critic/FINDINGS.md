@@ -8970,3 +8970,13 @@ All 71 earlier probes hold.
   - Fix: drop exemption (1). Alternatively, exempt a sentence value only when it starts with a ROW_SENTENCE word (please, see, refer, will, as shown, …), which ce5a757b already has. Add the row above as a negative.
   - Exemptions (2) and (3) hold in my probes: no regression.
 - Recommendation: merge ce5a757b, or eef6d354 once exemption (1) is dropped or limited.
+
+## R343 — #184 d8f441d3: CHANGES (narrowed exemption still reopens a rider row); ce5a757b remains READY
+
+- All 83 earlier probes hold on d8f441d3, including R342's rider/benefit sentence row.
+- **M1.** The SENTENCE_WORD exemption (a pronoun or verb in the first three words) still lets a schedule row through.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Rider : Covers you for early critical illness." gives other on d8f441d3. It keeps the model's personal_schedule on ce5a757b and on main.
+  - "Benefit : We pay a lump sum…" and "Coverage : It covers your hospital bills as charged." still keep the model's role.
+  - This is the third wording-based exemption on this row (eef6d354, d8f441d3). Each one leaks a rider or benefit description.
+  - Fix: keep only ce5a757b's ROW_SENTENCE starters (please, see, refer, will, as shown, …). Those are reference or instruction phrasings, not descriptions of cover. Add Q3 as a negative.
+- Recommendation unchanged: **ship ce5a757b**, which is gated green with 81 probes. Alternatively, ship a later head that removes the SENTENCE_WORD exemption; I will re-gate it.
