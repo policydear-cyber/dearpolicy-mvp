@@ -169,6 +169,7 @@ test("the Coverage, benefit table, benefit schedule, Home and document review ro
 
 test("a masked name a screen sends back never replaces the stored name; a name the household typed does", async () => {
   const { maskShownText, sentName } = await load();
+  const { readFileSync } = await import("node:fs");
   const stored = "Personal accident - Lim Ah Kow S1234567D";
   const shown = maskShownText({ benefitName: stored }).benefitName;
   assert.notEqual(shown, stored);
@@ -178,7 +179,13 @@ test("a masked name a screen sends back never replaces the stored name; a name t
   assert.equal(sentName(undefined, stored), undefined);
   // A name with no ID number is the same masked or not: sent back unchanged, it is kept as sent.
   assert.equal(sentName("Hospital cash", "Hospital cash"), "Hospital cash");
-  const { readFileSync } = await import("node:fs");
+  // A screen trims what it sends, and a stored name from PDF text can end in a space or hold a line break (TE pr181 r2).
+  const spaced = "Personal accident  - Lim Ah Kow S1234567D \n";
+  assert.equal(sentName(maskShownText({ benefitName: spaced }).benefitName.trim(), spaced), undefined, "a trimmed masked copy is not saved");
+  assert.equal(sentName("Hospital cash", "Hospital cash "), "Hospital cash", "a name with no ID, trimmed, is kept as sent");
+  // The Schedule's amount save sends no name, so the masked copy it shows is never sent back.
+  const schedule = readFileSync("app/schedule/page.tsx", "utf8");
+  for (const call of schedule.match(/JSON\.stringify\(\{id:benefit\.id[^\n]*/g) ?? []) assert.doesNotMatch(call, /benefitName/, call);
   const src = readFileSync("app/api/benefits/route.ts", "utf8");
   const patch = src.slice(src.indexOf("export async function PATCH"));
   assert.match(patch, /body\.benefitName=sentName\(body\.benefitName,existing\.rows\[0\]\.benefit_name\)/);

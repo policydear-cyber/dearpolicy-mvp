@@ -89,7 +89,9 @@ export function maskShownText<T>(value: T): T {
 }
 
 /** A name a screen sends back: the masked copy of the stored name it was shown (maskShownText) is no new name, so it
- * gives undefined and the stored name is kept; any other name is the household's own, kept as sent (TE pr181 F1). */
+ * gives undefined and the stored name is kept; any other name is the household's own, kept as sent (TE pr181 F1). The
+ * copy is compared with spacing evened out, since a screen trims what it sends and PDF text often ends in a space. */
 export function sentName(sent: string | undefined, stored: string): string | undefined {
-  return sent != null && sent !== stored && sent === maskIdentityText(stored) ? undefined : sent;
+  const even = (s: string) => s.replace(/\s+/g, " ").trim();
+  return sent != null && sent !== stored && even(sent) === even(maskIdentityText(stored)) && even(sent) !== even(stored) ? undefined : sent;
 }
