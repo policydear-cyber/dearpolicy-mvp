@@ -8453,3 +8453,18 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
   - tsc clean, next build passes, merge-tree with main (1912d73) clean;
   - chat failed-document 11, failed-advice 9, still-reading 21/21, offline 17, processing-failure-storage 7, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R316 — #179 (4e77a19) READY; #178 f59ae63 fixes R315 L1
+
+**#178 f59ae63:** the prompt rule now reads "never add a reason or step that its why_not_read and next_step do not say", and the clearer-scan parenthetical is gone. Only the prompt line changed (1 file, 1 line), so R315 stands: READY.
+
+**#179: READY.**
+- **The move is byte-identical.** prettifyFilename, MACHINE_WORD, UUID, isMachineFilename, insurerShortName, documentKind, documentName and normalizedIdentifier, cut out of main's inventory.ts and out of document-name.ts and compared with diff, are identical. inventory.ts re-exports them, so every sentence caller is unchanged: te159 106/106 with 0 fetches, and r5 21/21.
+- **Client components import only the pure module.** document-name.ts has no imports at all. No "use client" file imports lib/policies/inventory.
+- **The same name on the page and in sentences:** `documentCardTitle` is `documentName` with a null file name turned into "". The Documents card, the Preview label and the notices, Coverage's confirmed-cover title, and the benefit-table route (documentName(d.file)) all use the one rule. /api/policies already selects insurer, document_role and policy_number for it.
+- Low L1: the chat page's own library note (app/chat/page.tsx, `failed: … name: p.product_name || p.original_filename`) still shows a raw file name, so a failed document can carry a different name there than on its Documents card. documentCardTitle is client-safe and would fit there.
+- Not this PR's: v11:customer-screens-test fails the same check, "chat: one direct answer…", as on main (seen since #164; this PR doesn't touch app/chat). I didn't run the r8-document-preview e2e (no browser or app stack in the gate); its expectation change ("Benefits table.docx" titled "Benefits table") is what prettifyFilename gives.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main clean;
+  - doc-card-title 39, te159 106, premium table, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
+  - #178 × #179 merges clean.
