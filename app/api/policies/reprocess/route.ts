@@ -6,7 +6,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
-import { recoverExpiredLeases } from "@/lib/jobs/queue";
+import { cancelJob, recoverExpiredLeases } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -72,9 +72,10 @@ export async function POST(request: NextRequest) {
     let stalled = false;
     if (["queued", "extracting", "indexing"].includes(policy.processing_status)) {
       // A queued job nothing has claimed for UNCLAIMED_STALL_MINUTES is not live either: nothing is running it, and
-      // Try again starts it (25 Oct: a document sat queued for a day behind another).
+      // Try again starts it (25 Oct: a document sat queued for a day behind another). The later re-read intake schedules
+      // after a reading-service failure (`<id>:retry-read`) backs it too: while it waits, a second read is never started.
       const live = await query(
-        `SELECT 1 FROM background_jobs j WHERE j.job_type=$1 AND j.idempotency_key=$2 AND ${livePolicyJob("j", "$3")}`,
+        `SELECT 1 FROM background_jobs j WHERE j.job_type=$1 AND j.idempotency_key IN ($2, $2 || ':retry-read') AND ${livePolicyJob("j", "$3")}`,
         [POLICY_PROCESSING_JOB_TYPE, body.policyId, UNCLAIMED_STALL_MINUTES],
       );
       const stalledByAge = Date.now() - new Date(policy.updated_at).getTime() > 2 * 60_000;
@@ -93,6 +94,14 @@ export async function POST(request: NextRequest) {
       [body.policyId, ctx.householdId, stalled],
     );
     if (!requeued.rowCount) throw new AlreadyProcessing();
+    // This read replaces any later re-read still waiting to be claimed (one overdue and unclaimed, or one scheduled for a
+    // document read in part), so a worker never reads the document a second time after it (TE). Should this read meet a
+    // reading-service failure, intake schedules the re-read again.
+    const waitingReread = await query<{ id: string }>(
+      `SELECT id FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2 AND status IN ('queued','failed_retryable')`,
+      [POLICY_PROCESSING_JOB_TYPE, body.policyId + ":retry-read"],
+    );
+    for (const job of waitingReread.rows) await cancelJob(pool, { jobId: job.id });
 
     // A deliberate re-read of a finished (or failed) document starts from a
     // clean slate; a stalled document keeps its checkpoints so the new run
