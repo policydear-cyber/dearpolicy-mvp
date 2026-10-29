@@ -168,6 +168,7 @@
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",
     "documents:failed-advice-test": "node --import tsx scripts/failed-document-advice-regressions.ts",
+    "chat:failed-document-test": "node --import tsx scripts/chat-failed-document-regressions.ts",
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",
     "policies:plan-choice-test": "node --import tsx scripts/plan-choice-regressions.ts",
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
