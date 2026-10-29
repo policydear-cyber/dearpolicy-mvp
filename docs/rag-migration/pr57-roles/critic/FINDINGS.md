@@ -8894,3 +8894,17 @@ Hospital-cash, travel and per-day plans are exactly the schedules whose figures 
   - Add the four rows above as negatives, and keep TE's slip mirrors as positives.
 - No other change: the other 49 probes are as on 009827c7.
 - I did not run the full gate on this head, because the fix will change messy.ts again. The 009827c7 gate was green.
+
+## R338 — #184 13486209: CHANGES (1 Medium, small)
+
+- R337 is fixed. All four small-sum rows (hospital-cash table, units per day, "200000", "SGD 200K") are personal_schedule again.
+- A lapse notice with a slip carrying "Biller code 123456" and the same S$99 stays "other".
+- All 60 earlier probes match 009827c7. The only exception is F4 ("200 000", a space separator), the Low accepted in R336.
+- **M1. A "notes" or "terms" title lets a later page add new cover figures.** Clause (i) exempts a page whose first 4 lines carry a notes or terms title, as long as it has no person label and no cover word. "Hospital cash" and "Rider" are not cover words, so these two pages hide new benefit figures. Each starts with a reinstatement letter. Main gave personal_schedule for both (with the model role):
+  - page 2: "IMPORTANT NOTES / Hospital cash⇥S$200 / ICU⇥S$400" gives other;
+  - page 2: "TERMS AND CONDITIONS / Rider⇥Amount / Critical Illness Rider⇥S$50,000" gives other.
+  - Fix:
+    - Under (i), a notes or terms page may add **no** money figure that page 1 lacks. Biller codes, account numbers and form numbers are not money, so TE's slips still pass.
+    - A payment page may add a money figure only on a line with a payment word ("amount due/payable", "total", "fee", "charge", "outstanding", "minimum").
+    - Add the two rows above as negatives.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
