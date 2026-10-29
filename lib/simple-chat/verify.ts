@@ -165,18 +165,21 @@ export function documentCurrency(doc: HouseholdDocument): string | null {
  * 5,000.00" under a "Currency : Singapore Dollar" field, with no sign on any figure): a currency field ("Currency : SGD",
  * "Policy Currency	Singapore Dollars", or a schedule's ": Singapore Dollar" value beside its "Currency" label) or "All
  * amounts are in Singapore dollars". Null when the page declares none, or more than one (a list of currency options). */
-// A name, its code or its sign ("Singapore Dollar (SGD)", "S$", "Ringgit Malaysia", "RM": TE pr191 F1, F2).
-const CURRENCY_NAMES: [string, string][] = [["SGD", String.raw`singapore\s+dollars?|SGD|(?<![A-Za-z])S\$`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD|US\$`], ["MYR", String.raw`ringgit(?:\s+malaysia)?|MYR|(?<![A-Za-z])RM(?![A-Za-z])`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
+// A name or its code, and the sign a declaration may print as its value ("Singapore Dollar (SGD)", "S$", "Ringgit
+// Malaysia", "RM": TE pr191 F1, F2). The sign counts only as a declared value: a bare "RM" in prose ("Please contact your
+// RM", "Form RM-2") names no currency (Critic R359 M1).
+const CURRENCY_NAMES: [string, string, string?][] = [["SGD", String.raw`singapore\s+dollars?|SGD`, String.raw`(?<![A-Za-z])S\$`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD`, String.raw`US\$`], ["MYR", String.raw`ringgit(?:\s+malaysia)?|MYR`, String.raw`(?<![A-Za-z])RM(?![A-Za-z])`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
+const OTHER_SIGNS: Record<string, RegExp> = { USD: /US\$/, HKD: /HK\$/, AUD: /(?<![A-Z])A\$/, MYR: /RM\s?\d/, EUR: /€/, GBP: /£/, JPY: /¥/, SGD: /(?<![A-Z])S\$/ };
 export function pageCurrency(pageText: string): string | null {
   const t = pageText ?? "";
   const said = new Set<string>();
-  for (const [code, name] of CURRENCY_NAMES) {
+  for (const [code, name, sign] of CURRENCY_NAMES) {
     // The name may carry its code or sign in brackets: "Singapore Dollar (SGD)", "Ringgit Malaysia (RM)".
-    const named = String.raw`(?:${name})(?:[ ]*\((?:[A-Z]{2,3}|[A-Z]{0,2}\$)\))?`;
-    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency|mata\s+wang)[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
+    const named = String.raw`(?:${name}${sign ? `|${sign}` : ""})(?:[ ]*\((?:[A-Z]{2,3}|[A-Z]{0,2}\$)\))?`;
+    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency|mata\s+wang)(?:\s+(?:polisi|kontrak))?[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
     const value = new RegExp(String.raw`^[ \t]*:[ \t]*${named}[ ]*$`, "im");
     const all = new RegExp(String.raw`\ball\s+amounts\s+(?:are|quoted\s+are|shown\s+are)\s+in\s+(?:${name})\b`, "i");
-    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency|mata\s+wang)[ ]*(?:\t|$)/im.test(t))) said.add(code);
+    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency|mata\s+wang(?:\s+(?:polisi|kontrak))?)[ ]*(?:\t|$)/im.test(t))) said.add(code);
     // A page listing the currencies a policy can be in ("Six currency options are available: SGD, USD, ...") declares none.
     if (new RegExp(String.raw`currency\s+options|currencies\s+are\s+available`, "i").test(t)) return null;
   }
@@ -186,7 +189,9 @@ export function pageCurrency(pageText: string): string | null {
   // (a row "(in US$)"): the page does not settle a figure's currency (R59-5).
   if (/\bunless\s+(?:otherwise\s+)?(?:stated|specified|shown|indicated)\b/i.test(t)) return null;
   if (moneyFiguresIn(t).some((f) => f.currency !== "$" && f.currency !== code)) return null;
-  if (CURRENCY_NAMES.some(([other, name]) => other !== code && new RegExp(String.raw`(?:${name})`, "i").test(t)) || /US\$|HK\$|(?<![A-Z])A\$|RM\s?\d|€|£|¥/.test(t) || (code !== "SGD" && /(?<![A-Z])S\$/.test(t))) return null;
+  if (CURRENCY_NAMES.some(([other, name]) => other !== code && new RegExp(String.raw`(?:${name})`, "i").test(t))) return null;
+  // Another currency's sign anywhere on the page; the declared currency's own sign is its figures ("Currency : US$").
+  if (Object.entries(OTHER_SIGNS).some(([other, re]) => other !== code && re.test(t))) return null;
   return code;
 }
 /** The currency a table's own heading prints on a line of its own ("(S$)", "(SGD$)", "(SGD)") above the quoted figure, on
