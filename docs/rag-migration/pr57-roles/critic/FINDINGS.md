@@ -9487,3 +9487,7 @@ Gate on both heads: own tests, five suites, tsc, next build and merge with main 
   - "Early critical illness benefit is limited to S$50,000" reduces a "Critical Illness" item to S$50,000, because the benefit-name substring check comes first.
   - "Death benefit for children under 5 is limited to S$50,000" reduces an adult's Death item.
   - A possible follow-up: run the substring check only when the sentence has no extra kind words (early or intermediate) and no person scope (children, juvenile, under age N).
+
+## R365: #192 d5a3c4cb READY; #188 92552e9f READY
+- #192: the R363 M1 fix is in place. "any person" followed by a closed list of insured markers is own cover again, as in all 3 R363 rows and all 7 R360 rows. "Death of or bodily injury to any person" and "Death of a person other than the insured" stay null. Gate: coverage:table-test 106/0, five suites, tsc, next build and merge with main all pass. Low (old, same on main): "Accidental injury to any person insured" and "injury to any person named in the schedule" give null.
+- #188 92552e9f: one line moves cancer treatment from family ci to family medical. An inpatient or medical bill beside a cancer-drug limit now withholds, and CI and Death items still clear. Gate: own test, five suites, tsc, next build and merge with main all pass.
