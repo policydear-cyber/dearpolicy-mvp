@@ -8582,3 +8582,15 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - In the merge with #179, app/api/coverage/route.ts keeps `maskShownText(payload)` around the new document_name, ownership_name, reference_name and the table's documentCardTitle names.
 - Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
 - #180 × #181 merge clean.
+
+## R323 — #181 46c1a88 (TE F2, file-name IDs): READY; #180 2baec1b unchanged, R322 READY stands
+
+- documentName masks the raw file name before prettifyFilename splits it. identity-numbers.ts has no imports itself, so document-name.ts stays safe to use in client code, and next build passes.
+- Probe through the PR's documentName:
+  - "Certificate_S7712345D.pdf" gives "Certificate S****345 D".
+  - "Cert-S7712345D-2026.pdf" gives "Cert S****345 D 2026".
+  - "MyKad 800101-14-5678 card.pdf" gives "My Kad ****** ** 5678 card".
+  - No full number is left. The split "345 D" reads a little oddly but shows nothing more.
+- Low L1 (not a regression): the Documents card (app/policies/page.tsx:448) still prints the raw `original_filename` under the title whenever the two differ, from the unmasked /api/policies. The full ID in a file name stays visible there, as before this PR. That fits the "document viewer is the household's own" exemption only if it is meant; otherwise mask that line too.
+- Low L2: two different IDs that share their last four characters ("S7712345D" and "T9912345D") mask to names that differ only in the first letter. If the letter matches too, the names are identical, and documentName names are used to group and match documents. This is rare (it needs the same last 3 digits and check letter); noting it only.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21. #180 × #181 merge clean.
