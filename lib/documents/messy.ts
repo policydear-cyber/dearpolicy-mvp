@@ -250,15 +250,25 @@ function noticePage(text: string, own: Set<string>): boolean {
   const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
   // A plan, units, rider, benefit, coverage or ward row with a value is a schedule's own field, whatever else the page
   // holds, digits or not ("Coverage : As charged", "Rider : Example Critical Illness Rider") (Critic R339 M2, R341). Only
-  // a premium row, a label followed by a sentence ("Benefits: please refer to your policy schedule"), or a payment-titled
+  // a premium row, a label followed by a sentence ("Benefits: please refer to your policy schedule"), or a payment
   // page naming the plan it collects for ("Plan: Harbour Term 20", no count and no new money) is no such row (TE 14-16).
+  const paymentPage = lines.some((l) => PAYMENT_MARK.test(l) && !PAYMENT_FIELD.test(l));
+  // On a payment page a rider row whose figure, with the page's premium rows, adds up to the total to pay is that rider's
+  // premium ("Basic premium: S$75.70", "Rider: CI Booster  S$12.50", "Total: S$88.20") (TE round 19).
+  const cents = (f: string) => Math.round(Number(f) * 100);
+  const premiumCents = lines.filter((l) => PREMIUM_ROW.test(l)).flatMap(moneyOf).reduce((a, f) => a + cents(f), 0);
+  const totals = new Set([...own, ...lines.filter((l) => SLIP_AMOUNT.test(l)).flatMap(moneyOf)].map(cents));
+  const riderPremium = (l: string) => paymentPage && /^\s*riders?\b/i.test(l) && moneyOf(l).length === 1
+    && totals.has(premiumCents + cents(moneyOf(l)[0]));
   const payTitled = PAY_TITLE.test(lines.slice(0, 4).filter((l) => !PAYMENT_FIELD.test(l)).join("\n"));
   if (lines.some((l) => {
     const row = SCHEDULE_ROW.exec(l);
-    if (!row || PREMIUM_ROW.test(l)) return false;
+    if (!row || PREMIUM_ROW.test(l) || riderPremium(l)) return false;
     const value = l.slice(row[0].length).trim();
     if (!value || ROW_SENTENCE.test(value)) return false;
-    if (payTitled && /^\s*plan\b/i.test(row[0]) && !/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)
+    // A full sentence with no figure ("Your cover continues during the grace period.").
+    if (!/\d/.test(value) && /[.!]$/.test(value) && value.split(/\s+/).length >= 4) return false;
+    if ((payTitled || paymentPage) && /^\s*plan\b/i.test(row[0]) && !/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)
       && moneyOf(value).every((f) => own.has(f))) return false;
     return true;
   })) return false;
@@ -268,10 +278,9 @@ function noticePage(text: string, own: Set<string>): boolean {
   // On a payment or notes page a money figure page 1 lacks may only be a premium, a sum to pay or a fee ("Total amount
   // payable", "A charge of S$20 applies", "Your premium will be S$95.00"); a figure on any other line ("Hospital cash
   // S$200", "Critical Illness Rider  S$50,000", "Premium waiver benefit") may be cover (Critic R338, TE round 13).
-  const paymentPage = lines.some((l) => PAYMENT_MARK.test(l) && !PAYMENT_FIELD.test(l));
   if (titled && !person && !lines.some((l) => COVER_LINE.test(l))
     && lines.every((l) => moneyOf(l).every((f) => own.has(f)) || (!PAYOUT_WORDS.test(l)
-      && ((!NOT_PAYMENT_LINE.test(l) && (PAYMENT_LINE.test(l) || (paymentPage && SLIP_AMOUNT.test(l)))) || PREMIUM_FIGURE.test(l) || PREMIUM_ROW.test(l))))) return true;
+      && ((!NOT_PAYMENT_LINE.test(l) && (PAYMENT_LINE.test(l) || (paymentPage && SLIP_AMOUNT.test(l)))) || PREMIUM_FIGURE.test(l) || PREMIUM_ROW.test(l) || riderPremium(l))))) return true;
   // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
   // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
   // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).
