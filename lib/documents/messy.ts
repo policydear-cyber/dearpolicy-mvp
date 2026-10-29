@@ -157,20 +157,22 @@ const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|reminder|overdue|terminat\w+|rein
 const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?:sent|issued)\b|\bonce\s+(?:paid|payment)\b|\bupon\s+payment\b/i;
 // A sentence that records a payment: "Received with thanks S$88.20", "Amount received: RM 180.00", "S$99.00 received". A
 // footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
+// Lines and sentences; "No." and "Ref." are abbreviations, not sentence ends ("Your cheque no. 004512 ... was returned").
+const SENTENCE_BREAK = /\n|(?<=[.!?])(?<!\b(?:[Nn][Oo]|[Rr]ef|[Aa]cc|[Aa]\/[Cc])\.)\s+/;
 const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
 const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d|\breceived\s+from\b[^.]{0,80}\bthe\s+sum\s+of\b|\backnowledge\s+receipt\s+of\b|\bthank\s+you\s+for\s+your\s+payment\s+of\b/i;
 // A payment undone undoes the receipt (TE #184 R23): only a sentence that says this payment was undone, never a
 // standard footnote ("Cheques returned unpaid will incur a charge", "If your cheque is dishonoured", "Premiums are not
 // refunded if you cancel") (TE #184 R24-R27).
-const UNDONE_EVENT = /\b(?:this|your|the)\s+(?:payment|cheque|premium|giro\s+deduction|transaction)\b(?:[^.]|\.\d){0,80}?\b(?:was|has\s+been|have\s+been|were)\s+(?:reversed|dishono(?:u)?red|returned|bounced|rejected|refunded|unsuccessful|cancelled)\b/i;
+const UNDONE_EVENT = /\b(?:this|your|the)\s+(?:payment|cheque|premium|giro\s+deduction|transaction)\b(?:[^.]|\.(?=\s?\d)){0,80}?\b(?:was|has\s+been|have\s+been|were)\s+(?:reversed|dishono(?:u)?red|returned|bounced|rejected|refunded|unsuccessful|cancelled)\b/i;
 const CONDITIONAL = /\b(?:if|will|would|may|might|are\s+not|is\s+not|incurs?|charges?|fees?|unless|any)\b/i;
-const undone = (text: string) => text.split(/\n|(?<=[.!?])\s+/).some((l) => UNDONE_EVENT.test(l) && !CONDITIONAL.test(l));
+const undone = (text: string) => text.split(SENTENCE_BREAK).some((l) => UNDONE_EVENT.test(l) && !CONDITIONAL.test(l));
 const positiveAmount = (l: string) => [...l.matchAll(new RegExp(PAID_AMOUNT.source, "gi"))].some((m) => Number(m[0].replace(/[^\d.]/g, "")) > 0);
 const NOT_PAID = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if|upon)\s+(?:paid|payment|received)\b|\b(?:to\s+be|must\s+be|should\s+be|is\s+to\s+be)\s+paid\b|\bdishono(?:u)?red\b|\b(?:returned|reversed|bounced|rejected|unsuccessful)\b/i;
 const recordsPayment = (text: string) => {
   if (undone(text)) return false;
   const lines = text.split("\n");
-  const sentences = text.split(/\n|(?<=[.!?])\s+/);
+  const sentences = text.split(SENTENCE_BREAK);
   if (sentences.some((l) => positiveAmount(l) && PAID_PHRASE.test(l) && !NOT_PAID.test(l))) return true;
   // "Amount Received" above "S$88.20" (a label-above-value layout: TE #184 R14).
   return lines.some((l, i) => /^\s*(?:amount|premium|payment)\s+(?:received|paid)\s*:?\s*$/i.test(l) && positiveAmount(lines[i + 1] ?? "")) && !NOT_PAID.test(text.replace(/premiums?\s+not\s+received\s+by\s+the\s+due\s+date[^.]*\./gi, " "));
@@ -194,10 +196,9 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   // enclosed schedule, whatever the letter calls it, and on page 1 only a notice title outweighs them.
   if (pages.slice(1).some((p) => policyParticulars(p.text))) return false;
   // Whatever its layout ("Insured Name", "Coverage", a header row, a benefit table), a later page that adds a money figure
-  // or a number page 1 does not print carries something of its own: a notice's later pages (a payment slip, its terms, a
-  // translation) only repeat page 1's premium and policy number (Critic R335).
+  // or a number page 1 does not print carries something of its own, unless it is a payment or notes page (Critic R335, R337).
   const own = new Set(figuresOf(pages[0].text));
-  if (pages.slice(1).some((p) => figuresOf(p.text).some((f) => !own.has(f)))) return false;
+  if (!pages.slice(1).every((p) => noticePage(p.text, own))) return false;
   const head = printedLines(pages[0].text).slice(0, 12);
   if (policyParticulars(pages[0].text)) return head.some((l) => NOTICE_TITLE_STRICT.test(l));
   if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
@@ -206,17 +207,30 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   return noticeLetter(text) && STATUS_EVENT.test(text);
 }
 
-/** What a later page could add of a policy's own: a money figure of 1,000 or more (a sum assured or a benefit amount;
- * a fee, a charge or a monthly premium is smaller) and a number printed as a policy or certificate number. A payment
- * slip's bank account, biller code or form number is neither (TE #184 MP1-MP5). */
+/** Every money figure (any currency amount, "200K") and every number of four or more digits a page prints. */
 function figuresOf(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi)) {
-    const value = Number((m[1] ?? m[2]).replace(/,/g, ""));
-    if (value >= 1000) out.push(String(value));
-  }
-  for (const m of text.matchAll(/\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi)) out.push(m[1].toUpperCase());
+  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
+    out.push(String(Number((m[1] ?? m[3]).replace(/,/g, "")) * (m[2] ? 1000 : 1)));
+  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) out.push(m[0].toUpperCase());
   return out;
+}
+const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units?|per\s+day|daily|plan)\b/i;
+const HAS_MONEY = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
+const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
+/** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
+ * of notes, with no person cell and no cover line; or a page with neither a money figure nor a person cell. Any other
+ * later page that adds a figure or number of its own, whatever its size, may be the schedule. */
+function noticePage(text: string, own: Set<string>): boolean {
+  const lines = printedLines(text);
+  // A person label anywhere, a header row included ("Policy Number  Life Assured  Sum Assured").
+  const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
+  // Another policy's number is another policy's page.
+  if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
+  const titled = /\b(?:payment\s+slip|remittance\s+advice|how\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow|important\s+notes?|notes|terms\s+and\s+conditions)\b/i.test(lines.slice(0, 4).join("\n"));
+  if (titled && !person && !lines.some((l) => COVER_LINE.test(l))) return true;
+  if (!person && !HAS_MONEY.test(text) && figuresOf(text).every((f) => own.has(f))) return true;
+  return figuresOf(text).every((f) => own.has(f));
 }
 
 /** A page that prints a policy's own particulars: its policy number, a person's name in a person cell ("Life Assured:

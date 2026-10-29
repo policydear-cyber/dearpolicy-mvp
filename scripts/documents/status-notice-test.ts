@@ -198,3 +198,21 @@ test("TE round 8: standard receipt footnotes about cheques, GIRO and refunds do 
   // A bilingual notice title beside the policy's particulars is still a title (TE S4).
   assert.equal(deterministicDocumentRole(pages("NOTIS PERINGATAN PREMIUM / PREMIUM REMINDER\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: RM 250,000\nPremium RM 180.00 was due on 1 March 2026."), "personal_schedule"), "other");
 });
+
+test("Critic R337: small sums on a later page still make it a pack; payment and notes pages stay part of a notice", async () => {
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const reinstated = { text: letter("Your policy has been reinstated with effect from 1 November 2026. Please refer to your policy schedule.") };
+  for (const page2 of [
+    "Insured Name : Ravi Kumar\nBenefit\tAmount\nHospital cash\tS$200\nICU\tS$400",
+    "Insured Name : Ravi Kumar\nPlan : Example Hospital Income\nUnits : 5\nBenefit per unit per day : S$50",
+    "Insured Name : Ravi Kumar\nSum Assured (SGD) : 200000",
+    "Insured Name : Ravi Kumar\nCoverage : SGD 200K",
+  ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 60));
+  const lapse = { text: "LAPSE NOTICE\nPolicy Number: 77001234\nYour policy lapsed on 1 March 2026 as the premium of S$88.20 was not paid. Please refer to your policy schedule." };
+  for (const page2 of [
+    "PAYMENT SLIP\nPolicy Number: 77001234\nAmount: S$88.20\nPay by bank transfer to account 123-456789-0\nBiller code: 10045678",
+    "Important notes\nA charge of S$20 applies to dishonoured cheques.\nCall our hotline 1800 123 4567 for help.",
+    "How to pay\nSort code: 12-34-56\nAccount number: 12345678\nAmount: £45.20",
+    "GIRO APPLICATION FORM\nForm No. GF-20231\nBank code: 7171\nPolicy Number: 77001234",
+  ]) assert.equal(statusNotice([lapse, { text: page2 }]), true, page2.slice(0, 40));
+});
