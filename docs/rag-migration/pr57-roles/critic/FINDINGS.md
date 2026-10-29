@@ -8569,3 +8569,16 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 **#181 254374d: READY.**
 - sentName now evens out spacing before comparing. A trimmed masked copy keeps the stored name. A name that differs from the stored one only in spacing, with no ID in it, is stored as sent, which is harmless.
 - Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R322 — #180 2baec1b and #181 53294a2 (both merged with main 44a815e): READY
+
+**#180 2baec1b (fix 4329932): READY.**
+- R320 H1 is fixed. On the NAMED_LIMIT path, plans now count only as other holdings ("this plan and any other plans", "plans you hold / we issued", "plans with us", "all your plans"). COMBINED_SCOPE no longer applies there.
+- My probe gives no combined for all three plan-tier layouts, nor for R318's four layouts. The positive controls stay combined: TI/CI "other policies we issue on the life insured", CI "under all policies", and "every other policy on the life insured".
+- R320 L1 is accepted as declined. Hiding the figure follows the #147 rule. The chat.ts:726 caption is a separate, smaller issue.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 60/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 53294a2: READY.**
+- In the merge with #179, app/api/coverage/route.ts keeps `maskShownText(payload)` around the new document_name, ownership_name, reference_name and the table's documentCardTitle names.
+- Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- #180 × #181 merge clean.
