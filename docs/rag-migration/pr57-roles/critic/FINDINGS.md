@@ -8388,3 +8388,21 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - all three: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
 - own tests: still-reading 17/17, unread-notice 15/15 on both #170 and #176, coverage-recovery 11/11;
 - merges: main + #167 + #176 merges clean; #167 and #176 are each clean with #170, #171, #172 and #175.
+
+## R313 — #175 (5e4716a): READY; R311 M1 is fixed
+
+- In one transaction, in this order:
+  1. cancel waiting re-reads with a conditional UPDATE;
+  2. refuse with 409 if a job for the id or `:retry-read` is 'processing' with a live lease;
+  3. requeue the policy, refusing with 409 if no row changes;
+  4. write the audit rows, then COMMIT.
+- Telemetry is sent only after the commit, and a rollback cancels nothing.
+- The race is closed under READ COMMITTED:
+  - If a claim committed first, the cancel UPDATE finds 'processing' and changes nothing, and the next statement sees the claim and returns 409.
+  - If a claim is in flight, the cancel waits on the row lock, re-checks the row, and step 2 sees the claim.
+  - If the cancel locks the row first, the claim's `FOR UPDATE SKIP LOCKED` (queue.ts:257) skips it. After a commit the row is cancelled, and claims need `NOT cancel_requested`. After a rollback the row is claimable again, so the reader is never lost.
+- New behaviour on a ready document: Re-analyse now gets 409 while its intake job is still reading it into the table (ingest.ts:1000 runs after 'ready'). That is right: it is still being read, and Coverage shows it as waiting by the same live-job rule.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+  - tsc clean, next build passes, merge-tree with main clean;
+  - retry-read 10/10, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
+  - clean with #167 9434ae1, #170 8b01f74, #176 032e543, #171 and #172.
