@@ -159,6 +159,7 @@
     "r5:answer-test": "node --import tsx scripts/r5-answer-regressions.ts",
     "policies:te159-test": "node --import tsx scripts/policies/te-pr159-test.ts",
     "documents:no-guessed-cover-test": "node --import tsx scripts/documents/no-guessed-cover-test.ts",
+    "documents:found-line-table-test": "node --import tsx scripts/documents/found-line-table-test.ts",
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",

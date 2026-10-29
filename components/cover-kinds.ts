@@ -75,6 +75,35 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
+/** What each document was found to pay for (Documents page), for a household on the benefit table: the kinds of cover
+ * (kindsOfTable, the rules Family uses) of the table rows read from that document, and of the covers printed in it. A
+ * cover printed in a document also takes the person's rows of that same cover read from another document (a schedule
+ * whose benefits were read from the separate wording: TE W1), matched by cover key, else product and cover name. Its
+ * Coverage rows are no longer read or refreshed, so they are never used for it. A document with no table row or cover is
+ * not listed: nothing is shown for it. */
+type DocRow = TableKindRow & { coverKey?: string | null; source?: { documentId?: string | null } | null };
+type DocCover = TableKindCover & { coverKey?: string | null; source?: { documentId?: string | null } | null };
+export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[] }[]): Record<string, string[]> {
+  const rows = new Map<string, Set<DocRow>>(), covers = new Map<string, TableKindCover[]>();
+  const keyOf = (x: { coverKey?: string | null; product: string; cover: string }) => x.coverKey || `${x.product}\u0000${x.cover}`;
+  for (const p of people) {
+    for (const r of p.rows ?? []) { const id = r.source?.documentId; if (id) (rows.get(id) ?? rows.set(id, new Set()).get(id)!).add(r); }
+    for (const c of p.covers ?? []) {
+      const id = c.source?.documentId;
+      if (!id) continue;
+      (covers.get(id) ?? covers.set(id, []).get(id)!).push(c);
+      const own = rows.get(id) ?? rows.set(id, new Set()).get(id)!;
+      for (const r of p.rows ?? []) if (keyOf(r) === keyOf(c)) own.add(r);
+    }
+  }
+  const out: Record<string, string[]> = {};
+  for (const id of new Set([...rows.keys(), ...covers.keys()])) {
+    const kinds = kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? []);
+    if (kinds.length) out[id] = kinds;
+  }
+  return out;
+}
+
 /** The parts of a Coverage row (GET /api/ledger) these helpers read. */
 export type KindRow = { eventType: string; eventLabel?: string | null; detail?: string | null; origin?: string; status?: string };
 export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfName(`${row.eventLabel ?? ""} ${row.detail ?? ""}`) : coverKindOf(row.eventType);
