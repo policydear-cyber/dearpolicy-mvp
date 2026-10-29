@@ -120,43 +120,49 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
 
 const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|customer|policy\s?holder|valued)\b|^\s*dear\s+[A-Z][\p{L}'’-]+/imu.test(text)
   && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b/im.test(text);
-// A title line that names its plan ("POLICY SCHEDULE - Example Critical Illness"), never a sentence ("Policy schedule: no change.").
-const NAMED_TITLE_LINE = new RegExp("^(?:" + TITLE.source + "|\\bschedule page\\b)\\s*[-–—]\\s*[^.:;]{1,60}$", "i");
-// A later page that opens with a schedule or certificate title, whatever words surround it ("YOUR POLICY SCHEDULE",
-// "Policy Schedule: Harbour Term", "POLICY SCHEDULE / JADUAL POLISI", "Harbour Term Policy Schedule"), is an enclosure (TE #184).
-const ENCLOSED_TITLE = /\b(?:policy schedule|schedule of insurance|schedule page|jadual polisi|certificate of (?:group )?insurance|renewal certificate|certificate of renewal|policy certificate)\b/i;
-const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:lapse|reinstatement|renewal)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
-const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|has lapsed|grace period|overdue|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
+// The only ways a status notice may name a schedule or certificate: as a reference to the one the household already
+// holds ("please refer to your policy schedule", "keep this with your certificate of insurance", "your policy schedule is
+// unchanged", "Policy schedule: no change"). Allow-list (Critic R330 H1): any other mention ("REVISED POLICY SCHEDULE",
+// "Policy Schedule No. 2", "your updated policy schedule is enclosed", "serves as your certificate") means the document
+// may carry the schedule itself, and it keeps the old rules.
+const DOC_NAME = String.raw`(?:policy schedule|certificate of insurance)`;
+const REFERENCE_PHRASES = [
+  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|in|under|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b`, "gi"),
+  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)\b`, "gi"),
+  /\bpolicy\s+schedule\s*:\s*no\s+change\b/gi,
+];
+const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|^\s*schedule\s*$/im;
+const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
+const STATUS_NOTICE = /\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapse notice|lapsed|grace period|overdue|terminated|reinstate\w*|official receipt|premium receipt|payment receipt)\b/i;
 // What happened to the policy outweighs the payment words a notice also prints ("the renewal premium was not received",
 // "an official receipt will be sent once paid"): such a notice is never payment evidence (TE #184).
-const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|grace period|reminder|overdue|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
+const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|grace period|reminder|overdue|terminat\w+|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
 const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
-  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b/im.test(text);
+  && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b|\bcomputer[- ]generated (?:letter|notice)\b/im.test(text);
 
 /** A short notice about the policy's status (a lapse notice, a premium reminder, a reinstatement, a renewal notice, a
- * receipt) that only mentions the policy schedule ("please refer to your policy schedule"): it is not the schedule. It
+ * receipt) that only refers to the policy schedule ("please refer to your policy schedule"): it is not the schedule. It
  * is titled as a notice on a line of its own near its top, or it is a letter that says what happened to the policy.
- * Default-safe: a document of more than three pages, one with any line that is a document title on its own, a later page
- * that opens with a schedule or certificate title, or one holding a policy's own schedule page is never one. */
+ * Default-safe: a document of more than three pages, one that names a schedule, certificate, wording or endorsement in
+ * any way other than a known reference phrase, or one holding a policy's own schedule page is never one. */
 export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   if (!pages.length || pages.length > 3) return false;
   const lines = pages.flatMap((p) => printedLines(p.text));
-  if (lines.some((l) => TITLE_LINE.test(l) || NAMED_TITLE_LINE.test(l))) return false;
-  if (pages.slice(1).some((p) => printedLines(p.text).slice(0, 4).some((l) => ENCLOSED_TITLE.test(l)))) return false;
+  const text = lines.join("\n");
+  if (DOCUMENT_ITSELF.test(REFERENCE_PHRASES.reduce((t, re) => t.replace(re, " "), text))) return false;
   if (schedulePage(pages.map((p, i) => ({ pageNumber: i + 1, text: p.text }))) != null) return false;
   if (printedLines(pages[0].text).slice(0, 12).some((l) => NOTICE_TITLE_LINE.test(l))) return true;
-  const text = lines.join("\n");
   return noticeLetter(text) && STATUS_NOTICE.test(text);
 }
 
-/** The role a status notice keeps: a lapse, reminder, grace or reinstatement notice is a notice ("other"), whatever
- * payment words it prints; otherwise a renewal notice or a receipt. */
+/** The role a status notice keeps, decided by its head first (Critic R330 M2): a lapse, reminder, grace, termination or
+ * reinstatement notice is a notice ("other"), whatever payment words it prints; otherwise a renewal notice or a receipt. */
 export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "renewal_statement" | "premium_receipt" {
-  const text = pages.map((p) => printedLines(p.text).join("\n")).join("\n");
-  if (LAPSE_OR_DUE.test(text)) return "other";
-  if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
-  if (/\b(?:premium|official|payment) receipt\b/i.test(text)) return "premium_receipt";
-  return "other";
+  const kind = (t: string) => LAPSE_OR_DUE.test(t) ? "other" as const
+    : /\brenewal (?:notice|statement|premium)\b/i.test(t) ? "renewal_statement" as const
+    : /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i.test(t) ? "premium_receipt" as const : null;
+  const head = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
+  return kind(head) ?? (LAPSE_OR_DUE.test(pages.map((p) => p.text).join("\n")) ? "other" : kind(pages.map((p) => p.text).join("\n"))) ?? "other";
 }
 
 // ---------------------------------------------------------------------------

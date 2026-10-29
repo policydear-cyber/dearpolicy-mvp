@@ -73,3 +73,26 @@ test("TE #184: enclosed schedules under any title keep the pack; lapse wording b
   for (const title of ["NOTIS PERINGATAN PREMIUM / PREMIUM REMINDER", "Lapse Notification", "Overdue Premium Notice", "Final Premium Reminder", "Reinstatement of your policy"])
     assert.equal(deterministicDocumentRole(pages("Example Life\n" + title + "\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSee your policy schedule."), "personal_schedule"), "other", title);
 });
+
+test("Critic R330: a schedule or certificate named any way but a known reference keeps the old rules", async () => {
+  const { deterministicDocumentRole } = await load();
+  const reinstated = letter("Your policy has been reinstated with effect from 6 January 2026.");
+  const body = "\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000";
+  for (const title of ["REVISED POLICY SCHEDULE", "Policy Schedule (Revised)", "POLICY SCHEDULE Page 1 of 1", "Example Life Assurance Policy Schedule", "POLICY SCHEDULE:"])
+    assert.equal(deterministicDocumentRole(pages(reinstated, title + body), "personal_schedule"), "personal_schedule", title);
+  assert.equal(deterministicDocumentRole(pages(reinstated, "Example Life\nPolicy Services\nBlock 1\nExample Road\n1 March 2026\nPolicy Schedule No. 2" + body), "personal_schedule"), "personal_schedule", "title at line 6");
+  assert.equal(deterministicDocumentRole(pages(letter("Welcome! Please note the 30-day grace period for premiums.") + "\nYour Policy Schedule" + body), "personal_schedule"), "personal_schedule", "welcome letter");
+  // A renewal notice that is also the certificate, a reinstatement that is an endorsement, and a receipt with a bare
+  // "SCHEDULE" page never take the notice path: the old rules decide them, as on main.
+  const { statusNotice } = await import("@/lib/documents/messy");
+  for (const doc of [
+    [letter("RENEWAL NOTICE\nRENEWAL CERTIFICATE NO. 2026-77\nInsured: Ravi Kumar\nPolicy Number 77001234")],
+    [letter("RENEWAL NOTICE\nThis notice serves as your certificate of insurance.\nInsured: Ravi Kumar\nPolicy Number 77001234")],
+    ["Notice of Reinstatement - Endorsement\nPolicy Number 77001234\nLife Assured: Ravi Kumar\nRevised Sum Assured: S$150,000"],
+    ["OFFICIAL RECEIPT\nPolicy Number 77001234\nS$99.00 received", "SCHEDULE" + body],
+  ]) assert.equal(statusNotice(doc.map((text) => ({ text }))), false, doc[0].slice(0, 50));
+  // The kind comes from the notice's own title first.
+  assert.equal(deterministicDocumentRole(pages("NOTICE OF LAPSE\nPolicy Number 77001234\nThe renewal premium was not received. Refer to your policy schedule."), null), "other");
+  for (const title of ["NOTICE OF POLICY LAPSE", "Reminder: Premium Overdue", "PAYMENT ACKNOWLEDGEMENT"])
+    assert.notEqual(deterministicDocumentRole(pages(title + "\nPolicy Number 77001234\nLife Assured: Ravi Kumar\nSee your policy schedule."), "personal_schedule"), "personal_schedule", title);
+});
