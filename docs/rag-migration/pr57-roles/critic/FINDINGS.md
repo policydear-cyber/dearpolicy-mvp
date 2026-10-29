@@ -8856,3 +8856,20 @@ All 38 earlier probes now hold. R332 H1 (attached/enclosed) and M1 are fixed. I 
   - Add the four rows above as negatives.
 - Low (not blocking): on page 1, an untitled reinstatement letter that embeds its particulars in a layout the guard misses ("Insured Name", a column table) becomes other. Main filed it as personal_schedule by keyword. The real schedule usually comes separately, so this rarely loses cover.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R336 — #184 009827c7: READY
+
+- R335 H1 is fixed. The four layouts now give personal_schedule, the same as main:
+  - "Insured Name" with "Basic Sum Assured";
+  - "Coverage⇥S$200,000";
+  - a header row with the values on the next row;
+  - a Death/TPD benefit table.
+- The figure rule works as designed:
+  - A later page that prints a money figure or long number missing from page 1 means the document is not a notice.
+  - A lapse notice whose page 2 is a payment slip, repeating S$99.00 and the policy number, stays a notice ("other"). Main filed it as personal_schedule.
+- The full probe set, 53 made-up documents (R330–R336), run on main and on the PR:
+  - Every schedule, pack and certificate keeps main's role.
+  - Every titled or event-stated notice is "other", "renewal_statement" or "premium_receipt" as intended.
+  - Accepted default-safe limits, unchanged from main: N9 (an untitled letter printing its own particulars) and N10 ("keep with" without "this").
+- Low, not blocking: thousands separated by a space ("Sum Assured : 200 000") are not read as a figure, so that one page-2 layout still becomes "other". SG, MY and UK print commas, so this is rare. It can be added to figuresOf later.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
