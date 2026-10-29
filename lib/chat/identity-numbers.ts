@@ -69,3 +69,21 @@ export function maskIdentityNumbers<T>(value: T): T {
   };
   return walk(value) as T;
 }
+
+/** A field that names a row rather than saying anything ("id", "policy_id", "coverKey", "documentIds"): sent back to the
+ * server as is (a link's section and cover keys, a row's id), so never changed. */
+const IDENTIFIER_FIELD = /^(?:id|key)s?$|_(?:id|key)s?$|(?:Id|Key)s?$/;
+/** What a summary screen sends to the browser (Coverage, the benefit table, the benefit schedule), masked as a chat answer
+ * is: every quote, excerpt, condition and name, through objects and arrays. Fields that identify a row are left exactly as
+ * they are. Returns a masked copy; the value passed in is not changed. */
+export function maskShownText<T>(value: T): T {
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return maskIdentityText(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object" && !(v instanceof Date)) {
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, IDENTIFIER_FIELD.test(k) ? x : walk(x)]));
+    }
+    return v;
+  };
+  return walk(value) as T;
+}

@@ -11,6 +11,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
+import { maskShownText } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -195,7 +196,8 @@ export async function GET(request:NextRequest){
           sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
       });
     }catch{/* A document whose conditions have not been read yet simply has none to show. */}
-    return NextResponse.json({
+    // ID numbers in quotes are masked as chat masks them; ids are left as stored.
+    return NextResponse.json(maskShownText({
       benefits,
       conditions,
       summary:{
@@ -209,7 +211,7 @@ export async function GET(request:NextRequest){
         documents:new Set(benefits.map(b=>b.policyId)).size,
         unclaimed:benefits.filter(b=>!b.owners.length).length,
       },
-    });
+    }));
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});

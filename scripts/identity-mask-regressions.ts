@@ -124,3 +124,45 @@ test("an answer saved before masking is masked when reopened, and the stored val
   noFullId(JSON.stringify(sanitizeStoredAnswer({ note: "S1234567D" })));
   assert.deepEqual(maskIdentityNumbers({ n: 5, s: "S1234567D" }), { n: 5, s: "S****567D" });
 });
+
+// Summary screens (Coverage, the benefit table, the benefit schedule) send stored quotes to the browser: a travel summary's
+// cover line prints each traveller's ID number beside their name (audit of 1912d73), so those routes mask as chat does.
+test("a summary screen's quotes are masked in every market; ids and keys stay exactly as stored", async () => {
+  const { maskShownText } = await load();
+  const { assembleTable, coverKeyOf, sectionKeyOf } = await import("@/lib/benefit-table/assemble");
+  const { checkReading } = await import("@/lib/benefit-table/check");
+  for (const id of ["S1234567D", "850101-14-5678", "A123456(7)"]) {
+    const DOC = "bbbbbbbb-0000-4000-8000-000000000002";
+    const pages = [{ page: 1, text: `TRAVEL INSURANCE SUMMARY\nInsured persons\tID number\tPre-existing\nLim Ah Kow\t${id}\tNo\nPersonal accident\tS$300,000` }];
+    const reading = { document: { kind: "personal_proof", product: "Travel insurance summary", insurer: "Example General", namedPeople: ["Lim Ah Kow"], plan: "Business", periodFrom: null, periodTo: null },
+      covers: [{ person: "Lim Ah Kow", product: "Travel insurance summary", cover: "Single Trip", plan: "Business", sumInsured: null, asOf: null, page: 1, quote: `Lim Ah Kow\t${id}\tNo` }],
+      benefits: [{ section: null, column: null, benefit: "Personal accident", pays: "amount", value: 300000, percentOf: null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: "Personal accident\tS$300,000" }] };
+    const r = checkReading({ id: DOC, name: "Travel.pdf", readable: true, pages, people: ["Lim Ah Kow"] }, reading);
+    const cover = coverKeyOf({ product: "Travel insurance summary", cover: "Single Trip", plan: "Business" });
+    const table = assembleTable([r], [{ id: "p1", display_name: "Lim Ah Kow" }], [{ section: sectionKeyOf(DOC, { section: null, column: null }), cover, why: "x" }]);
+    const before = JSON.stringify(table);
+    assert.ok(before.includes(id), "the made-up ID number is in the assembled table, as a stored travel summary's is");
+    const shown = maskShownText(table);
+    noFullId(JSON.stringify(shown));
+    assert.equal(JSON.stringify(table), before, "the value passed in is not changed");
+    // Every id and key the browser sends back is exactly the stored one.
+    const keys = (v: unknown, out: string[] = []): string[] => { if (Array.isArray(v)) v.forEach((x) => keys(x, out)); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { if (/^(?:id|key)s?$|_(?:id|key)s?$|(?:Id|Key)s?$/.test(k)) out.push(`${k}=${JSON.stringify(x)}`); keys(x, out); } return out; };
+    assert.deepEqual(keys(shown), keys(table));
+    assert.ok(keys(table).length > 3);
+  }
+  // A field that identifies a row is never rewritten, even when it holds an ID's shape; the words beside it are masked.
+  assert.deepEqual(maskShownText({ id: "S1234567D", policy_id: "S1234567D", coverKey: "x S1234567D", documentIds: ["S1234567D"], quote: "S1234567D", rows: [{ excerpt: "NRIC S1234567D", n: 3, ok: true, none: null }] }),
+    { id: "S1234567D", policy_id: "S1234567D", coverKey: "x S1234567D", documentIds: ["S1234567D"], quote: "S****567D", rows: [{ excerpt: "NRIC S****567D", n: 3, ok: true, none: null }] });
+});
+
+test("the Coverage, benefit table and benefit schedule routes send only masked text", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const file of ["app/api/coverage/route.ts", "app/api/benefit-table/route.ts", "app/api/benefits/route.ts"]) {
+    const src = readFileSync(file, "utf8");
+    const get = src.slice(src.indexOf("export async function GET"), src.indexOf("export async function", src.indexOf("export async function GET") + 10) >>> 0 || undefined);
+    // Each successful GET response is masked; only error bodies, which print no stored text, are not.
+    const plain = [...get.matchAll(/NextResponse\.json\((?!maskShownText\()([^)]{0,80})/g)].map((m) => m[1]).filter((a) => !/^\{\s*(?:error|enabled:false|benefits:\[\],summary)/.test(a));
+    assert.deepEqual(plain, [], `${file} sends unmasked text`);
+    assert.match(get, /NextResponse\.json\(maskShownText\(/, file);
+  }
+});
