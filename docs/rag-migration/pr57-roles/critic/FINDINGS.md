@@ -8363,3 +8363,28 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - both: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
 - own tests: retry-read 8/8, unread-notice 15/15;
 - cross-merges: #175 is clean with #167, #170, #171, #172 and #176; #176 is clean with #170, #171 and #172, and conflicts with #167 (L1).
+
+## R312 — #167 (9434ae1), #170 (8b01f74), #176 (032e543): all READY; R311 L1 is fixed
+
+**#167 9434ae1, the scan-hold rule in chat: READY.**
+- **The rule:**
+  - A held upload (the page's HOLD_STATUSES) counts as still being read only while a scan-retry job is live.
+  - Otherwise `onHold` applies. It is never stalled and never "could not be read", and it offers no Try again: `offersTryAgain` needs `stalledReading`, which now excludes onHold.
+  - A cleared upload with only a scan job is still stalled (tested).
+- **No scanner text reaches the model:** `holdLabel` maps the stored scan text onto policyQuarantineLabel's fixed strings, and is null in prototype mode. The prompt gets only "on hold for its scan, so it is not being read yet (<fixed label>)".
+- **The prompt sentence is safe:**
+  - It adds no route by which the document's text could come in (the document still sends `<no_readable_text/>`).
+  - It forbids both "could not be read" and "still being read".
+  - It tells the model to follow reading_status, which the server writes.
+- **The count wording is correct for 1, 2 and 3 groups:** " and A"; ", A and B"; ", A, B and C". The test pins the three-group sentence (line 282).
+  - The test's mixed-mode file reads "for their scan", which cannot happen in one deployment.
+- Note, not this PR's (R310 L2 on the page): after 2 minutes the Documents page's stalled rule still offers Try again for a held upload with no live intake job, and the reprocess route then refuses it with a 409. Chat and Coverage now say "on hold", which is the truthful side. The page could reuse the same hold check.
+
+**#170 8b01f74 and #176 032e543: READY.**
+- live-job.ts is now byte-identical across #167, #170 and #176, so R311 L1 is fixed.
+- R311 L2 and L3 on #176 stand as Lows.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+- all three: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: still-reading 17/17, unread-notice 15/15 on both #170 and #176, coverage-recovery 11/11;
+- merges: main + #167 + #176 merges clean; #167 and #176 are each clean with #170, #171, #172 and #175.
