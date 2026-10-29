@@ -205,10 +205,10 @@ export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "ren
   const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
   // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
   // only promises one.
-  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !NO_PAYMENT_YET.test(text))) return "premium_receipt";
+  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !(NO_PAYMENT_YET.test(text) || NOT_PAID.test(text)))) return "premium_receipt";
   if (title && LAPSE_OR_DUE.test(title)) return "other";
   if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
-  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text)) return "other";
+  if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text) || (NOT_PAID.test(text) && !recordsPayment(text))) return "other";
   if (/\brenewal (?:notice|statement|premium)\b/i.test(text)) return "renewal_statement";
   return RECEIPT_WORDS.test(text) ? "premium_receipt" : "other";
 }
