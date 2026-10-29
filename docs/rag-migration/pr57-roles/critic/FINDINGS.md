@@ -8741,3 +8741,39 @@ Probe: 27 made-up documents through deterministicDocumentRole on main 9c03ee3 an
 
 - What already holds: an exact "POLICY SCHEDULE" page 2 stays personal_schedule; "Policy Schedule – Plan (Revised 2026)" stays personal_schedule; a combined schedule and receipt titled "POLICY SCHEDULE AND RECEIPT" stays personal_schedule; "Dear Policyowner / Policy Owner" letters are caught; and a 4-page pack never counts as a notice.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice 3/3, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R331 — #184 fb1a776e: CHANGES (1 High, 1 Medium, 1 Low)
+
+The same 27 R330 probes plus 5 new ones, through deterministicDocumentRole on main 9c03ee3 and on the PR, with the model role null and with "personal_schedule".
+
+- Fixed from R330:
+  - The reinstatement packs with "REVISED POLICY SCHEDULE", "(Revised)", "Page 1 of 1", "Example Life Assurance Policy Schedule" and "POLICY SCHEDULE:" on page 2 are personal_schedule again.
+  - A lapse notice with "renewal premium" wording now gives other (M2).
+  - N1, N2, N4, N7, N8 and N9 are now caught.
+- **H1 (narrower, still open). A schedule whose title is not an exact line, and not in a later page's first 4 lines, still loses its cover.** Status words now count anywhere in a letter of 3 pages or fewer ("grace period", "overdue", "reinstate…"), and a sign-off may be just "Thank you". Schedules print exactly these words as terms, so this path got wider. Each of these was personal_schedule on main (with the model's role) and is other on the PR:
+
+  | Document (made-up) | Main | PR |
+  |---|---|---|
+  | 1 page: "Dear Mr Kumar, we are pleased to enclose your policy details below", then "Your Policy Schedule", number, life assured, sum assured, "Grace period : 30 days", "Thank you" | personal_schedule | other |
+  | 2 pages: cover letter, then page 2 with a 4-line letterhead (name, address, phone, registration number) before "Policy Schedule (Page 1)", with a grace period row | personal_schedule | other |
+  | 2 pages: same, "Policy Schedule No. 2" at line 6 of page 2 | personal_schedule | other |
+  | 1 page: "Dear Policyholder / EXAMPLE TERM - YOUR SCHEDULE / number / life assured / sum assured / Reinstatement: a lapsed policy may be reinstated within 2 years / Thank you for choosing Example Life" | model role kept | other |
+  | welcome letter mentioning the grace period, "Your Policy Schedule" below it on page 1 | personal_schedule | other |
+
+  - A letterhead of four or more lines is normal, so the fixed `slice(0, 4)` window on later pages is the weak point.
+  - Fix (R330's allow-list): a document is a notice only if every TITLE / ENCLOSED_TITLE occurrence on every page, at any line, sits inside a known reference phrase ("refer to / see / keep this with / as shown in your policy schedule|certificate…", "… is unchanged / remains valid", "policy schedule: no change"). Any other occurrence means it is not a notice.
+  - Second guard worth adding: a page with a policy-number cell AND a person cell (PERSON_CELL, name-shaped) AND a sum assured / sum insured figure row is a schedule page. In that case only an explicit notice title on page 1 (NOTICE_TITLE_LINE) may still make it a notice. A bare letter plus a status word may not.
+  - Add the five rows above as negatives.
+- **M1 (open from R330). A renewal certificate or a certificate on page 1 becomes renewal_statement or other, so its cover is never read.**
+  - "RENEWAL NOTICE / RENEWAL CERTIFICATE NO. 2027-0099 / insured / sum insured" gives renewal_statement. Main gave certificate.
+  - "RENEWAL NOTICE … this notice serves as your certificate of insurance upon payment" gives renewal_statement. Main gave certificate.
+  - "Premium Notice / Certificate of Insurance No. 55667788 / insured person / sum insured" gives other. Main gave certificate.
+  - "Notice of Reinstatement - Endorsement" with a revised sum assured gives other. Main gave personal_schedule; the right role is endorsement.
+  - ENCLOSED_TITLE is checked only on later pages. The H1 allow-list, applied to page 1 too, fixes all of these. A title line containing "endorsement" should also block.
+- **L1 (still missed, no regression):**
+  - "NOTICE OF POLICY LAPSE" (NOTICE_TITLE_LINE has "notice of lapse", not "notice of policy lapse");
+  - "Reminder: Premium Overdue";
+  - "PAYMENT ACKNOWLEDGEMENT";
+  - a computer-generated letter with no sign-off ("No signature is required");
+  - "OFFICIAL RECEIPT" with a bare "SCHEDULE" pack, which gives premium_receipt.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
