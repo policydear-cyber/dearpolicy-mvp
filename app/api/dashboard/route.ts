@@ -14,6 +14,7 @@ import { premiumSourceKind } from "@/lib/format/premium-source";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
+import { notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -159,10 +160,14 @@ export async function GET(request:NextRequest){
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
   if(premiumSummary.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumSummary.note,href:"/records"});
+  // A failed or partly read document of this person may hold cover the tiles cannot show: say so, never "not found" alone.
+  const notRead=await notFullyRead(accountId,active.id);
+  const notReadNote=notFullyReadNote(notRead,active.display_name,true);
+  if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
+  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});

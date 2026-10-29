@@ -9,6 +9,7 @@ import { categoryRows, wordingDescribes } from "@/lib/coverage/table-figures";
 import { rowDetail, shortFigure } from "@/lib/benefit-table/headline";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { documentCardTitle } from "@/lib/policies/document-name";
+import { notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -42,7 +43,9 @@ export async function GET(request:NextRequest){
     return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmed.rows,derived,reference:reference.rows.map((r:any)=>({...r,document_name:documentCardTitle({product_name:r.document_product,original_filename:r.original_filename,insurer:r.insurer,document_role:r.document_role,policy_number:r.policy_number})})),table:await tableRows(accountId,member,category)};
   });
   if(!payload) return NextResponse.json({error:"Family member not found"},{status:404});
+  // A failed or partly read document of this person may hold this cover: "not found" says so (see lib/policies/not-fully-read).
+  const notRead=notFullyReadNote(await notFullyRead(accountId,member),payload.member.name);
   // ID numbers in quotes, excerpts and evidence are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText(payload));
+  return NextResponse.json(maskShownText({...payload,notFullyRead:notRead}));
  }catch(error){return routeErrorResponse(error);}
 }
