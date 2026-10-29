@@ -34,6 +34,10 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
 export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
   days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]>;
+  /** Each "<benefit> also depends on this: <condition>" point, with the condition's own words and the rows whose cards it
+   * is said for; and each row's card as given (its label and person). Read by dropConditionsOnCards. */
+  conditionPoints?: { text: string; condition: string; rows: string[] }[];
+  cards?: Record<string, { text: string; person: string | null }>;
   /** The labels given only for premium rows (ChatRow.premium): an answer whose every amount is one of these gives no benefit
    * amount (noteNarrowedPages). */
   premiumLabels?: string[] };
@@ -686,7 +690,12 @@ function nameHead(row: ChatRow): string | null {
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
 export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = []): { json: unknown; report: RowReport } {
-  const report: RowReport = { dropped: [], labels: [], days: {} };
+  const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
+  // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
+  const pointFor = (text: string, condition: string, row: ChatRow) => {
+    const seen = report.conditionPoints!.find((p) => p.text === text && p.condition === condition);
+    if (seen) { if (!seen.rows.includes(row.id)) seen.rows.push(row.id); } else report.conditionPoints!.push({ text, condition, rows: [row.id] });
+  };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
   const labels = coverLabels(rows), names = benefitNames(rows);
@@ -771,11 +780,12 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
           if (away.has(key)) continue;
           const st: Record<string, unknown> = { kind: "fact", text, person: baseName(kept.person), document: documentId(elsewhere.at.docIndex),
             quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
-          away.set(key, st); statements.push(st); continue;
+          away.set(key, st); statements.push(st); pointFor(text, t, kept); continue;
         }
         if (shown && Array.isArray(shown.conditions)) { shown.conditions.push({ text: t, quote }); continue; }
         statements.push({ kind: "fact", text: said, person: baseName(row.person), document: documentId(row.docIndex), quote, amount: null, percentOf: null,
           conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+        pointFor(said, t, kept);
       }
       continue;
     }
@@ -797,8 +807,11 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the named row's document (Critic R131-2).
     // Said after the card they belong to, never before it (live run 23 Oct, S087: a condition line with no card above it).
     const points: Record<string, unknown>[] = [];
-    for (const c of carried) points.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
-      quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+    for (const c of carried) {
+      points.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
+        quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+      pointFor(`${names(named)} also depends on this: ${c}`, c, row);
+    }
     // The model's conditions that the given row's page does not print, but the same benefit's row in another of the
     // person's documents does (the Benefit Summary's "proof of need" for the Product Summary's mobility aid row,
     // release-set H7), are points of their own quoting that document. Each must apply to that row there (conditionApplies:
@@ -808,6 +821,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (carried.includes(c.text)) continue;
       const text = `${names(row)} also depends on this: ${c.text}`, key = `${text}|${c.at.docIndex}`;
       const seen = away.get(key);
+      pointFor(text, c.text, row);
       if (seen) { if (seen.person !== baseName(row.person)) seen.person = null; continue; }
       const st: Record<string, unknown> = { kind: "fact", text, person: baseName(row.person), document: documentId(c.at.docIndex),
         quote: c.quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
@@ -833,6 +847,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (st) st.rowConditions = r.conditions;
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
+        report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         (r.premium ? charges : benefits).add(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
           (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
@@ -1261,6 +1276,30 @@ export function nameStatesMoney(name: string, role: "benefit" | "product" | "pla
     if (role === "benefit" || m[0].replace(/\.\d+$/, "").length >= 5) return true;
   }
   return false;
+}
+
+/** A condition's words as compared between a card and a point: case, spacing and closing punctuation aside, nothing else. */
+const conditionWords = (x: string) => x.toLowerCase().replace(/\s+/g, " ").replace(/[\s.;,:]+$/, "").trim();
+/** Each "<benefit> also depends on this: <condition>" point whose condition, word for word, every card it is said for
+ * already shows among its own conditions, is left out: the checks can keep a condition on the card (by moving the card to
+ * the line of the document that prints it) that the row step had said apart, and the household would read it twice (live
+ * run 25 Oct). A point is kept while any card it belongs to is not shown or does not show those same words: a condition is
+ * never lost. */
+export function dropConditionsOnCards<T extends { kind: string; text: string; amount?: unknown; personName?: string | null; conditions?: string[] }>(statements: T[], report: RowReport): T[] {
+  const points = report.conditionPoints ?? [], cards = report.cards ?? {};
+  if (!points.length) return statements;
+  return statements.filter((s) => {
+    if (s.amount || s.kind !== "fact") return true;
+    const point = points.find((p) => p.text === s.text);
+    if (!point) return true;
+    const want = conditionWords(point.condition);
+    return !point.rows.every((id) => {
+      const card = cards[id];
+      if (!card) return false;
+      const shown = statements.filter((x) => x.amount && x.text === card.text && (x.personName ?? null) === card.person);
+      return shown.length > 0 && shown.every((x) => (x.conditions ?? []).some((c) => conditionWords(c) === want));
+    });
+  });
 }
 
 /** Applied to the checked answer: an amount whose statement is not exactly one of the server's labels lost its label to
