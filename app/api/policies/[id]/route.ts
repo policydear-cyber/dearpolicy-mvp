@@ -5,6 +5,7 @@ import { userFacingScanResultDetail, POLICY_PROCESSING_STOPPED_MESSAGE } from "@
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { maskShownText } from "@/lib/chat/identity-numbers";
 import {
   DeletionValidationError,
   finishPolicyDeletion,
@@ -214,7 +215,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     for (const row of corrections.rows) {
       if (!(row.field_name in correctedFields) && typeof row.corrected_value === "string") correctedFields[row.field_name] = row.corrected_value;
     }
-    return NextResponse.json({
+    // ID numbers in quotes, notes and names are masked as chat masks them; ids are left as stored. The page text and
+    // the document itself are not changed.
+    return NextResponse.json(maskShownText({
       document: {
         id: p.id, originalFilename: p.original_filename,
         insurer: correctedFields.insurer ?? p.insurer, productName: correctedFields.product_name ?? p.product_name,
@@ -246,7 +249,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         premium: (extracted.premium as { amount: number | null; currency: string | null; frequency: string | null } | undefined) ?? null,
       },
       corrections: corrections.rows,
-    });
+    }));
   } catch (error) {
     return routeErrorResponse(error);
   }

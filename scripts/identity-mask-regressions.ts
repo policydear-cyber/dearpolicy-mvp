@@ -155,13 +155,13 @@ test("a summary screen's quotes are masked in every market; ids and keys stay ex
     { id: "S1234567D", policy_id: "S1234567D", coverKey: "x S1234567D", documentIds: ["S1234567D"], quote: "S****567D", rows: [{ excerpt: "NRIC S****567D", n: 3, ok: true, none: null }] });
 });
 
-test("the Coverage, benefit table and benefit schedule routes send only masked text", async () => {
+test("the Coverage, benefit table, benefit schedule, Home and document review routes send only masked text", async () => {
   const { readFileSync } = await import("node:fs");
-  for (const file of ["app/api/coverage/route.ts", "app/api/benefit-table/route.ts", "app/api/benefits/route.ts"]) {
+  for (const file of ["app/api/coverage/route.ts", "app/api/benefit-table/route.ts", "app/api/benefits/route.ts", "app/api/dashboard/route.ts", "app/api/policies/[id]/route.ts"]) {
     const src = readFileSync(file, "utf8");
     const get = src.slice(src.indexOf("export async function GET"), src.indexOf("export async function", src.indexOf("export async function GET") + 10) >>> 0 || undefined);
     // Each successful GET response is masked; only error bodies, which print no stored text, are not.
-    const plain = [...get.matchAll(/NextResponse\.json\((?!maskShownText\()([^)]{0,80})/g)].map((m) => m[1]).filter((a) => !/^\{\s*(?:error|enabled:false|benefits:\[\],summary)/.test(a));
+    const plain = [...get.matchAll(/NextResponse\.json\((?!maskShownText\()([^)]{0,80})/g)].map((m) => m[1]).filter((a) => !/^\{\s*(?:error|enabled:false|benefits:\[\],summary|family:\[\],activeMember:null)/.test(a));
     assert.deepEqual(plain, [], `${file} sends unmasked text`);
     assert.match(get, /NextResponse\.json\(maskShownText\(/, file);
   }
