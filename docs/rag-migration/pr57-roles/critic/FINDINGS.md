@@ -9315,3 +9315,33 @@ Each head went through the full gate: fresh worktree, npm ci, network blocked, m
 - The R352 finding is fixed: groupHeading moved to lib/policies/group-heading.ts and now has a behavioural test.
 - policies:benefits-document-name-test passes.
 - Suites, tsc, next build and merge-tree are green.
+
+## R357: re-review #192 f7c8c4c7, #187 5cb8522e, #186 b5f45439, #190 021cf00b: all READY
+
+All four heads passed the full gate: fresh worktree, npm ci, network blocked, model keys stripped. On every head the own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21, tsc, next build and merge-tree with main all passed.
+
+### #192 f7c8c4c7: READY (one Low)
+- coverage:table-test passes 106/106.
+- The seven R355 rows now keep their own category: "Maximum Liability per Insured Person", "Limits of Liability", "Our liability", "Limit of Liability (S$)", "Benefits and liabilities", and "Accidental death - maximum liability" (medical expenses gives null, the same as main).
+- The liability rows still give null: Personal Liability, liability to third parties, third-party property damage, death of a third party, claims made against you, Liabiliti peribadi, 第三方责任, Responsabilité civile.
+- Low: three own-cover shapes now give null where main gives a category:
+  - "Accidental death including third party cover": the third-party branch accepts "cover".
+  - A section phrased as a sentence: "We are not liable for any loss of others" (loss of others).
+  - "(we are liable to you, not to others)": the bracket is not an exclusion word.
+  - These are rare wordings. Optional fix: drop "cover" from the third-party branch, and apply EXCLUDED_ASIDE-style handling to "not liable" sentences.
+
+### #187 5cb8522e: READY
+- The R352 M1 fix is in place:
+  - The operator page sends planName only when it changed.
+  - sentPlanName keeps the stored plan when the sent name is the one shown or its masked form, so keys and answers stay on the stored plan.
+- /api/ledger rows now go through maskShownText (this also closes the ledger half of R356 #193 M1).
+
+### #186 b5f45439: READY
+- A single Han character now counts as a word ("癌" is kept).
+- "As charged" counts as an empty cell, and "sahaja" counts as a joining word.
+- The same filter now also runs at read time in group-cover.ts and fact-finding-chat.ts.
+
+### #190 021cf00b: READY
+- The R351 H1 fix is in place: repairStoredRules skips ruleFromQuote for held rows and for unheld plan-column quotes. Both of my quotes are in the test.
+- The R351 Low is fixed: two currencies, or a whole sum paired with a cents figure, are not plan columns.
+- The new rule that three or more bare thousands figures are plan columns can only hold a figure back, which is the safe direction.
