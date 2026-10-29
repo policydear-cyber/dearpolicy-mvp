@@ -189,12 +189,27 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   // What the pages carry decides before any wording (Critic R334): a later page with a policy's own particulars is an
   // enclosed schedule, whatever the letter calls it, and on page 1 only a notice title outweighs them.
   if (pages.slice(1).some((p) => policyParticulars(p.text))) return false;
+  // Whatever its layout ("Insured Name", "Coverage", a header row, a benefit table), a later page that adds a money figure
+  // or a number page 1 does not print carries something of its own: a notice's later pages (a payment slip, its terms, a
+  // translation) only repeat page 1's premium and policy number (Critic R335).
+  const own = new Set(figuresOf(pages[0].text));
+  if (pages.slice(1).some((p) => figuresOf(p.text).some((f) => !own.has(f)))) return false;
   const head = printedLines(pages[0].text).slice(0, 12);
   if (policyParticulars(pages[0].text)) return head.some((l) => NOTICE_TITLE_STRICT.test(l));
   if (head.some((l) => NOTICE_TITLE_LINE.test(l))) return true;
   // A letter without a notice title that sends something with it ("attached", "enclosed", "overleaf") may send the schedule.
   if (/\benclos\w*|\battach\w*|\boverleaf\b|\bherewith\b|\bfollows?\b|\bbelow\b/i.test(text)) return false;
   return noticeLetter(text) && STATUS_EVENT.test(text);
+}
+
+/** The money figures (a currency amount, or 1,000 or more written with separators) and the long numbers (policy and
+ * certificate numbers) a page prints, as plain digits. */
+function figuresOf(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
+    out.push(String(Number((m[1] ?? m[2]).replace(/,/g, ""))));
+  for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) if (!/^(?:19|20)\d{2}$/.test(m[0])) out.push(m[0].toUpperCase());
+  return out;
 }
 
 /** A page that prints a policy's own particulars: its policy number, a person's name in a person cell ("Life Assured:

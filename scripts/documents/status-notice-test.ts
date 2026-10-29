@@ -174,3 +174,17 @@ test("TE round 7: more receipt wordings; zero or reversed payments; a field line
   // A bare notice title, or one followed by its policy number, still outweighs the particulars.
   assert.equal(deterministicDocumentRole(pages("NOTICE OF LAPSE - 77001234\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\nYour policy lapsed on 1 March 2026."), "personal_schedule"), "other");
 });
+
+test("Critic R335: a later page that adds a figure or number of its own is no part of a notice, whatever its layout", async () => {
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const reinstated = { text: letter("Your policy has been reinstated with effect from 1 November 2026. Please refer to your policy schedule.") };
+  for (const page2 of [
+    "Policy No : 77001234\nInsured Name : Ravi Kumar\nBasic Sum Assured : S$200,000",
+    "Policy Number\t77001234\nLife Assured\tRavi Kumar\nCoverage\tS$200,000",
+    "Policy Number\tLife Assured\tSum Assured\n77001234\tRavi Kumar\t200,000",
+    "Benefit\tAmount\nDeath\tS$200,000\nTPD\tS$200,000",
+  ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
+  // A payment slip that repeats page 1's premium and policy number is still part of the notice.
+  const reminder = { text: "PREMIUM REMINDER\nPolicy Number 77001234\nPremium S$88.20 was due on 1 March 2026. See your policy schedule." };
+  assert.equal(statusNotice([reminder, { text: "PAYMENT SLIP\nPolicy Number 77001234\nAmount S$88.20\nPay by GIRO or PayNow." }]), true);
+});
