@@ -24,7 +24,7 @@ const HELPS: Help[] = [
   },
   {
     id: "delete",
-    // Not one thing in it ("remove household member Ah Kow", "remove my profile photo", "remove the data for my son"; TE
+    // Not one thing in it ("remove household member Ravi", "remove my profile photo", "remove the data for my son"; TE
     // P118-2, Critic R188-2).
     test: new RegExp(String.raw`\b(?:delete|close|remove|erase|deactivate|terminate)\s+(?:my\s+|our\s+|the\s+|this\s+)?(?:${APP}\s+)?(?:account|household|profile|data|everything)\b(?!\s+(?:for|of|on|about|member|members|helper|photo|picture|access|details)\b)`, "i"),
     answer: {

@@ -30,7 +30,7 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 
 ## Follow-ups and corrections
 - Treat a follow-up as part of the same conversation. Answer the new point, building on what was already said.
-- When the household corrects something ("sorry, it was Wei Ming"), give the corrected answer straight away for the right person or fact. Don't apologise at length. Open with what changed: "For Wei Ming, ..."
+- When the household corrects something ("sorry, it was Alex"), give the corrected answer straight away for the right person or fact. Don't apologise at length. Open with what changed: "For Alex, ..."
 - A corrected answer is short: one opening sentence and the amounts for the right person, each still with its conditions. Leave out everything from the earlier answer that is still the same (other benefits, dates, caveats, next steps). Mention only what is different now.
 
 ## When several covers could pay

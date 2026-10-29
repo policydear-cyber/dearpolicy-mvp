@@ -159,7 +159,7 @@ export type ChatContext={
   /** The policy question of the chat this message came from, when it moved to
    * another person's chat ("What is Wei Jie's life cover?" -> "and his wife?"). */
   carriedTopic?:{intent:"policy_question"|"portfolio";activeQuery:string};
-  /** "Actually it was Kai Ting, not Mei Ling": the claim just described moves to
+  /** "Actually it was Kai Ting, not Jamie": the claim just described moves to
    * the person the household corrected it to, with the facts already given. */
   carriedClaim?:{activeClaimQuery:string;facts:ConversationState["subjects"][string];scenarios:NonNullable<ConversationState["scenarios"]>[string]};
   /** The event is about someone outside the household ("my colleague Ravi died"). */
@@ -809,7 +809,7 @@ export function catalogueCoverageAnswer(args:{question:string;people:ClaimPerson
 function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
 /** Round 12: "show me the full list", "all of them", "the rest": every line of the answer just given. */
 const FULL_LIST_FOLLOW_UP=/^\s*(?:(?:ok(?:ay)?|yes|sure|please|pls)[,!.\s]+)?(?:(?:can you |could you |pls |please )?(?:show|give|list|tell|send)(?: me| us)?(?: the)? (?:full list|whole list|full details|all(?: of)?(?: them| it| the lines| the rest)?|everything|the rest|the other lines|the other \d+(?: lines)?|more)|(?:the )?full list|all of (?:them|it)|the rest)\b/i;
-/** "Upload the latest premium receipt or renewal notice for Mei Ling’s TravelSafe Annual Family to confirm it is still in force." */
+/** "Upload the latest premium receipt or renewal notice for Jamie’s TravelSafe Annual Family to confirm it is still in force." */
 /** Round 12: a next step must fit the question. "Upload the latest receipt" is about a policy the answer relies
  * on: when no benefit was found, a policy the answer does not even name needs no receipt to answer it. */
 function staleContractsForAnswer(contracts:PolicyContract[],answer:ChatAnswer){
@@ -882,7 +882,7 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
   const topics=coverageTopics(question);
   if(topics.length)return topics.map(t=>t.label).join(" or ");
   // The person is who, not what: their names never become part of the topic
-  // ("When is Mei Ling's policy due" once came back as "When is Mei the policy").
+  // ("When is Jamie Lee's policy due" once came back as "When is Jamie the policy").
   let named=question;
   for(const person of people)for(const name of [person.display_name,person.preferred_name??""].filter(n=>n.trim().length>=2).sort((a,b)=>b.length-a.length))
     named=named.replace(new RegExp("\\b"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?:['’]s)?\\b","gi")," ");
@@ -2217,7 +2217,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       }));
       answer.policyReview=reviews;
       const staleContracts=contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent");
-      // "If Wei Ming dies in an accident, how much is the payout?" names the
+      // "If Alex dies in an accident, how much is the payout?" names the
       // whole portfolio and gets labelled as an inventory question. It is a
       // what-if about a payout, and the inventory table is not an answer to it.
       const askedNow=state.activeQuery??request.question;

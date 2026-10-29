@@ -279,7 +279,7 @@ export async function deterministicHostedDocumentText(args: { system: string; us
   // A page with its own text layer (a text PDF read again from its image, as the upload cross-check does) reads as its
   // own words, as a competent reader would: a fixed transcript would never agree with it, and every such page would be
   // marked unchecked (r6/r7/r9/r11 since 5ef852d). An image-only page keeps the fixed transcript.
-  const layer = scripted ? null : await textLayerPages(args.pdfBase64).catch(() => null);
+  const layer = scripted?.every(Boolean) ? null : await textLayerPages(args.pdfBase64).catch(() => null);
   let content = JSON.stringify({ pages: numbers.map((n, i) => scripted?.[i] ?? (layer?.[i]?.trim() ? { pageNumber: n, text: layer[i] } : { pageNumber: n, text: pageText(n) })) });
   const ingestSeed = ingestChaosModelSeed();
   if (ingestSeed != null) {

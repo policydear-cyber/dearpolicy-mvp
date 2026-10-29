@@ -346,7 +346,7 @@ export type TableSelection =
 const GENERIC = new Set(["benefit", "limit", "amount", "cover", "sum", "payable", "max", "maximum", "plan", "per", "of", "which", "the", "value", "much", "how"]);
 const tokMatch = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b.slice(0, 5)) && b.startsWith(a.slice(0, 5))) && (a.startsWith(b) || b.startsWith(a)));
 /** Words that only say "the amount it is insured for": a roster row (one insured person per row, under the
- * product's heading -- "GROUP PERSONAL ACCIDENT" / "Lim Wei Ming   S$600,000") prints exactly that amount. */
+ * product's heading -- "GROUP PERSONAL ACCIDENT" / "Alex Chen   S$600,000") prints exactly that amount. */
 const SUM_WORDS = new Set(["insured", "assured", "cover", "covered", "coverage", "benefit", "amount", "sum"]);
 function benefitScore(benefit: string, t: Table, r: Row, rosterContext: string | null = null): number {
   const roster = rosterContext != null;
