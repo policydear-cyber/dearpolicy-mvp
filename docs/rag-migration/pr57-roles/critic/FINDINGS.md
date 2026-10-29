@@ -8943,3 +8943,17 @@ Hospital-cash, travel and per-day plans are exactly the schedules whose figures 
   - Add to NOT_PAYMENT_LINE: death, diagnosis, illness, TPD, disab\w*, hospital\w*, accident, claim, surgery, maturity.
   - Add the three rows above as negatives. Keep TE's "Your premium will be S$95.00", "Interest of S$3.20 is charged…" and "Total amount payable: S$176.40" (on a slip) as positives.
 - I will run the gate again on the head that closes M1.
+
+## R341 — #184 9a90d242: CHANGES (R340 M1 open; M2 regression from the TE round 14 narrowing)
+
+All 71 earlier probes hold.
+- **R340 M1 is still open.** A notes page with "Amount payable on death : S$200,000", "Total payable on death⇥S$250,000" or "Paid on diagnosis of a critical illness : S$50,000" gives other. Main gave personal_schedule for all three. The fix is the same as R340.
+- **M2 (regression vs 6b43e47c).** A plan, rider or coverage row now blocks only when its value prints a digit, so digit-free schedule pages pass as notice pages. Both rows below gave the model's personal_schedule on main and on 6b43e47c; on this head both give other:
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Payment Mode : GIRO / Plan : Example Hospital Income Plan B / Rider : Example Critical Illness Rider" gives other.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Plan : Example Shield Plan A / Ward class : B1 / Coverage : As charged" gives other. Hospital shield plans print "as charged", not a figure.
+  - Fix:
+    - Allow-list the exceptions, not the blocks. On a page with a payment title (clause i), one bare "Plan : <name>" row may pass, which keeps TE's slip.
+    - On any other later page, a plan, rider, benefit, coverage or ward row with a value blocks, digit or not.
+    - A label followed only by a reference sentence ("Benefits: please refer to your policy schedule.") may pass on any page.
+    - Add both rows above as negatives.
+- Checks: 6b43e47c had a green gate (R340). I will gate the head that closes M1 and M2.
