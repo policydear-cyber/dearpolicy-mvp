@@ -8815,3 +8815,23 @@ I re-ran all 38 probes.
   - "Please **refer to the policy schedule enclosed**." with the same page 2.
   - Fix: a reference phrase must end its sentence, or go on only with an allow-listed tail ("for details", "for more information"). Followed by attached, enclosed, below, overleaf, herewith, as follows, following or "is/are … issued/updated/revised", it does not count.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R334 — #184 e7aa70be: CHANGES (1 High, structural)
+
+All 38 earlier probes now hold. R332 H1 (attached/enclosed) and M1 are fixed. I added 5 new probes. Main gave personal_schedule, or kept the model's role, for all five; the PR gives "other" for all five:
+
+| Made-up pack: reinstatement letter, then page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured" | PR |
+|---|---|
+| "Please see the policy schedule, which is attached." | other |
+| "Please refer to the policy schedule; it is enclosed with this letter." | other |
+| "Please refer to your policy schedule" with "(attached)." on the next line | other |
+| "We enclose your updated details overleaf. Please refer to your policy schedule." | other |
+| "Your policy has been reinstated with effect from 1 Nov 2026." with no schedule mention at all | other (main kept the model's role) |
+
+- **H1. Phrase-level rules keep leaking. This is round 4 of wording fixes.** The last row shows the root cause: the decision reads the wording and ignores what the pages carry. A page with a schedule's content (number, person, sum assured) and no schedule word passes. Per the lessons log (#142/#144, #147), settle this structurally:
+  - (a) **Content guard.** A page after page 1 that holds a policy-number cell, a name-shaped person cell (PERSON_CELL / nameShaped) and a sum assured / sum insured / benefit figure row is an enclosed schedule, so the document is not a notice. On page 1, the same block lets the notice path stand only with an explicit NOTICE_TITLE_LINE in the head, never on the letter-plus-status-event path.
+  - (b) **Enclosure guard.** Without a notice title, any enclosure word (enclose\w*, attached, overleaf, herewith, "follows", "below") blocks the letter path.
+  - Keep the reference-phrase allow-list. With (a) and (b) in place, it no longer has to catch every way of saying "enclosed".
+  - The PR's own notices still hold: the titled lapse notice that prints life assured and sum assured has a NOTICE_TITLE_LINE, and the reinstated letter has no sum row.
+  - Add the five rows above as negatives.
+- Checks: I did not re-run the full gate on this head (the change is limited to the messy.ts wording). The ed94eacd gate was green; I will run the gate on the next head.
