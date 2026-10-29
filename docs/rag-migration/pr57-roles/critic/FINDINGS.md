@@ -8777,3 +8777,28 @@ The same 27 R330 probes plus 5 new ones, through deterministicDocumentRole on ma
   - a computer-generated letter with no sign-off ("No signature is required");
   - "OFFICIAL RECEIPT" with a bare "SCHEDULE" pack, which gives premium_receipt.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R332 — #184 bfc1f41f: CHANGES (1 High, 1 Medium)
+
+Probe: 38 made-up documents (R330 + R331 + 6 new) through deterministicDocumentRole on main and on the PR.
+
+- What is fixed:
+  - All 15 R330 schedule and pack cases now keep their main role.
+  - B1–B3 now keep their main role.
+  - Both renewal certificates, "Certificate of Insurance No." and the receipt with a bare SCHEDULE give certificate or personal_schedule.
+  - The reinstatement endorsement now gives personal_schedule, the same as main (still not endorsement; low priority).
+  - All the R330/R331 missed notices are caught except "PAYMENT ACKNOWLEDGEMENT … keep with your policy schedule". That one stays personal_schedule, which is acceptable because "keep with" lacks "this".
+- **H1. The reference-phrase allow-list strips phrases that point at an enclosed schedule.** After stripping, nothing blocks, so a pack carrying its own schedule becomes "other". Main gave personal_schedule for all three:
+  - "Your policy has been reinstated. Please **see the policy schedule attached**." with page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured" gives other.
+  - "Please **refer to the policy schedule enclosed**." with the same page 2 gives other.
+  - 1 page: "Following reinstatement, the changes **in your policy schedule** are as follows: Sum Assured : S$150,000 …" gives other.
+  - Fix:
+    - (a) A reference phrase counts only when its sentence ends there, or goes on with an allow-listed tail ("for details", "for more information", "for your cover", "for full details").
+    - Anything after it such as attached, enclosed, below, overleaf, herewith, as follows, following or "is/are … issued/updated/revised/amended" means it is not a reference.
+    - (b) Drop "in" and "under" from the verbs. "in your policy schedule" introduces changes as often as it refers.
+    - Add the three rows above as negatives.
+- **M1. With no notice title, a status word used as a term row makes a schedule-like page a notice.** "Grace period : 30 days" or "Reinstatement: a lapsed policy may be reinstated within 2 years" counts as a status word, and "Dear …" plus "Thank you" counts as a letter. Main kept the model's personal_schedule for both:
+  - "Dear Policyholder / EXAMPLE TERM - YOUR SCHEDULE / number / life assured / sum assured / Reinstatement: … / Thank you for choosing …" gives other.
+  - "Dear Mr Kumar / Thank you for buying … / POLICY DETAILS / number / life assured / sum assured / Grace period : 30 days / Thank you" gives other.
+  - Fix: on the letter path, count only status sentences, never label/value rows. Examples: "has lapsed", "lapsed on", "is overdue", "was not received", "has been reinstated|terminated", "grace period ends|will end|expires". Also block "schedule" outside the reference phrases unless it is in "payment schedule" / "premium schedule". Today only a bare SCHEDULE line blocks, and "YOUR SCHEDULE" passes.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
