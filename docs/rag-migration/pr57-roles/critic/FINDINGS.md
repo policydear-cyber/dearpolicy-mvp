@@ -9389,3 +9389,48 @@ Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass
 - `/US\$/` at line 189 rejects a page whose own declared currency is USD written as US$. The same happens on main, and it fails safe. The fix is to skip the sign of the declared code in that scan.
 
 The rest is fine: "Mata wang: Ringgit Malaysia (MYR)" and "Mata Wang	: RM" give MYR; "Singapore Dollar (S$)" gives SGD; "Currency : RM / S$", "Currency : FORM" and "Currency: S$ 5,000" give null.
+
+## R360: #193 1d271892 CHANGES; #192 52689bbc CHANGES; #190 1f2f0a06 READY
+Gate on all three heads: own tests, five suites, tsc, next build and merge with main all pass.
+
+### #193 H1: a full MyKad number is printed when a role word sits up to 12 characters before it (regression)
+- Where: lib/chat/identity-numbers.ts, the MYKAD replace. It exempts a number whose preceding 30 characters match `\b(policy|member|group|plan|certificate|account|claim|receipt|...)\b[^\d\n]{0,12}$`.
+- That test is about nearby words, not about a label for this number, so a person's MyKad after a name or a role word is shown in full. Main 9c03ee3 masks every one of these; the PR prints all digits:
+  - "Member: Ada Tan 850101-14-5678"
+  - "Member	ADA TAN	850101-14-5678" (a group-schedule row)
+  - "Policy owner 850101-14-5678"
+  - "Certificate holder: 850101-14-5678"
+  - "Claim for Ada 850101-14-5678"
+  - "Plan A insured 850101-14-5678"
+  - "Account holder Ada 850101-14-5678"
+  - "Member ID 850101-14-5678"
+- "Policy owner IC: ..." is still masked, but only because LABELLED catches the IC label.
+- Fix: drop the exemption. Masking a MyKad-shaped policy number costs nothing; printing an ID number breaks a standing rule. If it must stay, exempt only when a number label is directly before the number (`(?:policy|group\s+policy|certificate)\s+(?:no\.?|number|#)\s*[:.]?\s*$`), and add the 8 probes above as masked.
+- Other checks look right: HK IDs in any case; "_" labels ("member_" gives a masked number, "hkid_a***456(7)"); "pan_"/"id_" stay unmasked through BARE_SHORT. A Low over-mask: "Policy_ID_No_12345678" gives ****5678, because NOT_A_PERSON looks behind for spaces, not "_". It is harmless.
+
+### #192 M1: "any person" counts as someone else, so own cover is hidden (lost cover, regression)
+- Where: lib/coverage/table-figures.ts, OTHERS, the `any\s+(?:other\s+)?persons?(?!\s+(?:insured|covered|named|listed|who\s+is\s+...))` part. It is used by "death/TPD/hospital ... of OTHERS".
+- The negative lookahead is a deny-list of the wordings that mean the insured. Every other wording becomes liability and gets null. Main vs PR:
+  - "Death of any person in your family": Death vs null
+  - "Death of any person who is a Life Assured": Death vs null
+  - "Death of any person aged 18 to 65": Death vs null
+  - "Accidental death of any person travelling with you": PA vs null
+  - "Death of any person to whom this certificate applies": Death vs null
+  - "Accidental death of any person on the plan": PA vs null
+  - "Total and permanent disability of any person under 65": TPD vs null
+- Fix: "any (other) person" names someone else only in a liability frame: "liable/liability/compensation ... any person", or "injury/damage/death ... to any person" (TE's "Death of or bodily injury to any person" uses "to"). Drop it from the generic "of OTHERS" path. Add the 7 rows above as their own categories.
+- The rest of r3 checks out: EXCLUDED_TAIL, the [ ] asides, LIABILITY_SECTION only for a bare "Liability" heading, and the Malay, Indonesian and Vietnamese terms.
+
+### #190 READY
+- The `daily`/`each` units and the `Excluded`/`Not available` cells can only hold a figure back.
+- The sum-and-premium pair (a second figure under 5% of the first, two cells only) is narrow.
+- Low: a two-plan row whose columns really are 20 or more times apart ("Accidental death S$500,000 S$20,000", adult vs child) would now be read as one figure. This needs adjacent cells with no labels, so it is rare.
+
+### #191 1f1ad895: see R361
+
+## R361: #191 1f1ad895, READY
+- The R359 M1 fix is in place. A sign now counts only as a declared value. On SGD and USD pages, all five RM-in-prose probes plus "1 rm" and "Your RM will call you" give the declared code.
+- The R359 Low is fixed: "Currency : US$" gives USD.
+- Still null, as they should be: "RM / S$", "FORM", "S$ 5,000", and a US$ field above an S$ figure.
+- Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass.
+- Low (old, same on main): "Currency: USD" above "Currency of rider: RM" gives USD. A bare RM with no figure after it is no longer a signal, and the rider line is not a field. One option is to treat any further "currency ... : <sign or name>" line as a second declaration.
