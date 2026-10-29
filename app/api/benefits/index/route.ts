@@ -8,6 +8,7 @@ import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
 import { BENEFIT_READ_FAILURE_KEY,READ_FAILURE_REASON,noteReadFailure,readFailureNotes } from "@/lib/policies/read-failures";
+import { maskIdentityText,maskShownText } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -72,8 +73,9 @@ export async function GET(request:NextRequest){
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     const all=new URL(request.url).searchParams.get("all")==="1";
     const unread=await unreadDocuments(accountId);
-    return NextResponse.json({unread,documents:await readingStates(accountId,unread),...(all?{all:await allDocuments(accountId)}:{}),
-      reader:readingModelLabel()});
+    // Document names are shown: ID numbers in them are masked, as on every other screen (row ids are kept).
+    return NextResponse.json(maskShownText({unread,documents:await readingStates(accountId,unread),...(all?{all:await allDocuments(accountId)}:{}),
+      reader:readingModelLabel()}));
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not check which documents still need reading"},{status:500});
@@ -125,7 +127,7 @@ export async function POST(request:NextRequest){
       conditions=await catalogueConditions({accountId,policyId:target.id,productName:target.product_name,pages});
     }catch{/* conditions are additive; a failure never blocks the rules */}
     const remaining=(await unreadDocuments(accountId)).length;
-    return NextResponse.json({policyId:target.id,name:target.name,stored,conditions,remaining,done:remaining===0});
+    return NextResponse.json({policyId:target.id,name:maskIdentityText(target.name),stored,conditions,remaining,done:remaining===0});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
     const authResponse=routeErrorResponse(error);

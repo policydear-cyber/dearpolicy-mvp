@@ -17,8 +17,9 @@
 // Bounded by any non-alphanumeric, not \b: a file name joins an ID with "_" ("Certificate_S1234567D.pdf"), and "_" is a
 // word character, so \b would leave it whole (TE pr153 F1).
 const SHAPES: [RegExp, string][] = [
-  // Singapore NRIC / FIN.
-  [/(?<![A-Za-z0-9])([STFGM])\d{4}(\d{3}[A-Z])(?![A-Za-z0-9])/g, "$1****$2"],
+  // Singapore NRIC / FIN, in any letter case: a file name is often lower case ("cert_s1234567d.pdf"), and no policy
+  // number takes the shape in either case.
+  [/(?<![A-Za-z0-9])([STFGM])\d{4}(\d{3}[A-Z])(?![A-Za-z0-9])/gi, "$1****$2"],
   // Hong Kong identity card, with its bracketed check digit.
   [/(?<![A-Za-z0-9])([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/g, "$1***$2($3)"],
 ];

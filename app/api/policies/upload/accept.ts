@@ -21,6 +21,7 @@ import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
 import { pool } from "@/lib/db/client";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { maskIdentityText } from "@/lib/chat/identity-numbers";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -64,7 +65,7 @@ export function uploadErrorResponse(error: unknown, request: NextRequest): NextR
   const reject = () => void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
   if (error instanceof NoFamilyMember) { reject(); return NextResponse.json({ error: "Create at least one family profile before uploading documents." }, { status: 400 }); }
   if (error instanceof FamilyMemberNotFound) { reject(); return NextResponse.json({ error: "Family member not found." }, { status: 404 }); }
-  if (error instanceof DuplicateDocument) { reject(); return NextResponse.json({ error: `This exact document is already in DearPolicy as ${error.filename}.` }, { status: 409 }); }
+  if (error instanceof DuplicateDocument) { reject(); return NextResponse.json({ error: `This exact document is already in DearPolicy as ${maskIdentityText(error.filename)}.` }, { status: 409 }); }
   return null;
 }
 
