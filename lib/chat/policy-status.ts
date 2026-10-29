@@ -178,11 +178,12 @@ export function applyReinstatements(statusOf: Map<string, PrintedStatus>, docs: 
   return statusOf;
 }
 
+const CURRENT_EVIDENCE = new Set(["personal_schedule", "certificate", "renewal_statement", "annual_statement", "premium_receipt"]);
 /** A reminder whose grace date has passed says nothing once a later document of the same policy (same policy number,
  * or same product for the same people) or a payment after that date is on file: a renewal schedule or a receipt is
  * the later word, so the reminder reads as "unknown" again and never overrides it. */
 export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
-  docs: { id: string; policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null }[], latestPaid: Map<string, string | null>) {
+  docs: { id: string; policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null; role?: string | null }[], latestPaid: Map<string, string | null>) {
   const num = (x: string | null) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const product = (x: string | null) => (x ?? "").trim().toLowerCase();
   for (const d of docs) {
@@ -192,12 +193,13 @@ export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
     // numbers are two policies).
     const same = docs.filter((o) => o.id !== d.id && (num(d.policy_number) && num(o.policy_number) === num(d.policy_number)
       || (!num(d.policy_number) || !num(o.policy_number)) && !!product(d.product_name) && product(o.product_name) === product(d.product_name) && [...o.owners].some((x) => d.owners.has(x))));
-    // A later document: dated after the grace date. A payment recorded from another document of the policy (a receipt):
+    // A later document: one that speaks for this person's cover being current (a schedule, certificate, renewal,
+    // statement or receipt; never a wording or product summary), dated after the grace date. A payment recorded from another document of the policy (a receipt):
     // on or after the date the premium fell due, so one inside the grace period counts. The reminder's own premium rows
     // are the premium it asks for, never a payment.
     const later = (iso: string | null | undefined) => (iso ?? "").slice(0, 10) > st.date!;
     const paid = (iso: string | null | undefined) => !!iso && iso.slice(0, 10) >= (st.dueDate ?? st.date!);
-    if (same.some((o) => later(o.date) || paid(latestPaid.get(o.id))))
+    if (same.some((o) => CURRENT_EVIDENCE.has(o.role ?? "") && later(o.date) || paid(latestPaid.get(o.id))))
       statusOf.set(d.id, { state: "unknown", date: null, printed: null, page: null, line: null });
   }
   return statusOf;

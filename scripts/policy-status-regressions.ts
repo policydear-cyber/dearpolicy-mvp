@@ -71,8 +71,8 @@ test("a wording's worked example is not a reminder (Critic R324 H2)", () => {
   assert.equal(printedStatus([{ page: 1, text: "Amount due RM 86.40\nGrace period ends 20 October 2026" }], null, "2026-10-29").state, "grace_passed");
 });
 
-const doc = (id: string, over: Partial<{ policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null }> = {}) =>
-  ({ id, policy_number: "HC-0042-7781", product_name: "Example Shield", owners: new Set(["p1"]), date: "2026-09-25", ...over });
+const doc = (id: string, over: Partial<{ policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null; role: string | null }> = {}) =>
+  ({ id, policy_number: "HC-0042-7781", product_name: "Example Shield", owners: new Set(["p1"]), date: "2026-09-25", role: "personal_schedule" as string | null, ...over });
 const passedOf = () => new Map<string, PrintedStatus>([["rem", printedStatus(REMINDER, null, "2026-10-29")]]);
 
 test("a later renewal or receipt of the same policy wins over a passed reminder (Critic R324 H1)", () => {
@@ -168,4 +168,11 @@ test("TE R3: a printed range ends at its second date; impossible days are no dat
   assert.deepEqual(graceEndDates("Grace period ends 31/02/2026"), []);
   assert.deepEqual(graceEndDates("Grace period ends 30 February 2026"), []);
   assert.equal(graceEndDates("Grace period ends 29/02/2028")[0]?.iso, "2028-02-29");
+});
+
+test("TE R4: a newer wording or product summary says nothing about payment", () => {
+  for (const role of ["policy_wording", "product_summary", "brochure", null])
+    assert.equal(supersedePassedGrace(passedOf(), [doc("rem"), doc("w", { policy_number: null, role, date: "2026-10-27" })], new Map()).get("rem")!.state, "grace_passed", String(role));
+  for (const role of ["certificate", "renewal_statement", "premium_receipt"])
+    assert.equal(supersedePassedGrace(passedOf(), [doc("rem"), doc("s", { role, date: "2026-10-27" })], new Map()).get("rem")!.state, "unknown", role);
 });
