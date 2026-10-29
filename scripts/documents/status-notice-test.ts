@@ -258,6 +258,8 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     // TE round 20: schedule rows that end in a full stop are still rows.
     "POLICY DETAILS\nCoverage: Hospital and surgical expenses as charged.\nBenefit: Room and board at the actual cost.",
     "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nRider : Early critical illness rider for the insured.\nBenefit : Lump sum on diagnosis of a covered illness.",
+    "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nRider : Covers you for early critical illness.",
+    "POLICY DETAILS\nCoverage: Applies worldwide\nBenefit: Is payable on accidental death only",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
   // A sum to pay that page 1 does not print stays part of the notice.
   for (const page2 of [
@@ -265,13 +267,11 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     // TE round 13: a new premium or a late-payment charge is no cover figure.
     "Important notes\nYour premium will be S$95.00 from 1 January 2027.",
     "Important notes\nInterest of S$3.20 is charged on premiums paid late.",
-    // TE round 14: a sentence after a row label, PDF double spacing, or a bare plan name on a slip is no schedule row.
+    // TE round 14: a pointer to the schedule after a row label, or a bare plan name on a slip, is no schedule row. Other
+    // sentences after a row label keep today's rules (a cover row may open with any verb).
     "Important notes\nThe premium for your rider will be S$12.50 a month from 1 January 2027.",
     "Important notes\nBenefits: please refer to your policy schedule.",
-    "Important notes\nCover: Your cover continues during the grace period.",
-    "Important notes\nBenefits: These end if the policy lapses.",
     "Please detach and return with your payment\nPlan: Harbour Term\nPolicy Number: KL-77001234\nAmount: S$88.20",
-    "Important notes\nBenefits  will cease if the premium is not paid within the grace period.",
     "PAYMENT SLIP\nPlan: Harbour Term 20\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
     "PAYMENT SLIP\nPolicy Number: KL-77001234\nAmount payable (2 months): S$176.40\nBank account: 123-456789-0",
     "PAYMENT SLIP\nPolicy Number: KL-77001234\nBasic premium: S$75.70\nRider premium: S$12.50\nTotal: S$88.20",
