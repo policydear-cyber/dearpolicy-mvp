@@ -64,3 +64,17 @@ test("letters, notices, bills, notes and screenshots that mention a schedule are
   ];
   for (const [role, doc] of cases) assert.equal(filedBeforeRoleRules(role, doc), false, role + ": " + doc[0].text.slice(0, 60));
 });
+
+test("TE R1 on #183: the schedule page must follow the cover, and only correspondence roles are ever misfiled", async () => {
+  const { filedBeforeRoleRules, documentState } = await load();
+  // A one-page document whose own first page is a schedule-shaped page is not a pack around a letter.
+  assert.equal(filedBeforeRoleRules("insurer_letter", pages(SCHEDULE)), false);
+  assert.equal(filedBeforeRoleRules("app_screenshot", pages(SCHEDULE, "My Policies")), false);
+  // Notes headed "Policy Schedule (my notes)", a subject line "Re: Your Policy Schedule - Policy No. …", MY and UK letters.
+  assert.equal(filedBeforeRoleRules("personal_notes", pages("Notes", "Policy Schedule (my notes)\nPolicy Number : 77001234\nLife Assured : Ravi Kumar")), false);
+  assert.equal(filedBeforeRoleRules("insurer_letter", pages("Dear Mr Kumar", "Re: Your Policy Schedule - Policy No. 77001234\nLife Assured : Ravi Kumar\nYours sincerely")), false);
+  // True packs in other markets are still caught.
+  assert.equal(filedBeforeRoleRules("insurer_letter", pages("Tuan/Puan,\nPolisi anda telah sedia.\nYang benar", SCHEDULE.replace("200,000.00", "RM 200,000.00"))), true);
+  // documentState never offers a receipt or statement, whatever a caller passes.
+  for (const role of ["premium_receipt", "renewal_statement", "annual_statement"]) assert.equal(documentState(ready(role, 4, true), false), "no_table", role);
+});

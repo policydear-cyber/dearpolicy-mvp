@@ -107,7 +107,7 @@ export function documentState(d: { status: string; pages: number; live: boolean;
   if (d.status !== "ready") return "not_readable";
   if (hasReading) return "read";
   if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) {
-    if (!d.misfiled || !d.pages) return "no_table";
+    if (!d.misfiled || !d.pages || !NON_COVER_ROLES.has(d.file.document_role ?? "")) return "no_table";
     if (d.live === true) return "waiting";
     return READ_AGAIN_SCAN.has(quarantine) ? "table_unread" : "no_table";
   }
@@ -124,7 +124,10 @@ export function documentState(d: { status: string; pages: number; live: boolean;
  * policy schedule" stays what it is (Critic R327 H1). Payment roles (receipts, statements) are never re-filed this way. */
 export function filedBeforeRoleRules(role: string | null, pages: { page: number; text: string }[]): boolean {
   if (!NON_COVER_ROLES.has(role ?? "") || !pages.length) return false;
-  return schedulePage(pages.map((p) => ({ pageNumber: p.page, text: p.text }))) != null;
+  // The schedule page follows the cover (never the first page): what was filed is the letter around it.
+  const first = Math.min(...pages.map((p) => p.page));
+  const at = schedulePage(pages.map((p) => ({ pageNumber: p.page, text: p.text })));
+  return at != null && at > first;
 }
 
 /** Why a "held" document is on hold, in the Documents page's own words (lib/policies/quarantine/ui.ts, fixed strings,
