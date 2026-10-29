@@ -8909,7 +8909,7 @@ Hospital-cash, travel and per-day plans are exactly the schedules whose figures 
     - Add the two rows above as negatives.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
 
-## R339 — #184 0ca0f549: CHANGES (R338 M1 still open, plus one Medium from the delta)
+## R339 — #184 0ca0f549: CHANGES (R338 M1 still open, plus one Medium missed in R338)
 
 - All 65 earlier probes match 13486209.
 - **R338 M1 is still open.**
@@ -8917,9 +8917,9 @@ Hospital-cash, travel and per-day plans are exactly the schedules whose figures 
   - page 2 "TERMS AND CONDITIONS / … Critical Illness Rider⇥S$50,000" still gives other.
   - Main gave personal_schedule for both.
   - Same fix as R338: a notes or terms page may add no money figure that page 1 lacks.
-- **M2 (new in the delta). A payment marker anywhere on the page now exempts a schedule page that has no money figures.**
-  - Schedules print "Payment Mode : GIRO" as a field, and "Policy Owner" is now allowed on such pages.
-  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Payment Mode : GIRO / Plan : Example Hospital Income / Units : 5" gives other. Main and 13486209 kept the model's role.
+- **M2 (already in 13486209; I missed it in R338). A schedule page with no money figures is exempted.**
+  - This comes through clause (ii) and the new payment-mark path. Schedules print "Payment Mode : GIRO" as a field, and "Policy Owner" does not count as a person label.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Payment Mode : GIRO / Plan : Example Hospital Income / Units : 5" gives other. Main kept the model's role. 13486209 gave other too.
   - Fix: count PAYMENT_MARK only on a payment-instruction line (detach, "how/ways to pay", "cheques payable to", "bank account no.", "biller code", "pay via PayNow/AXS"), never on a "Payment Mode/Method/Frequency : …" field row.
   - Also, a page with a Plan, Units, Rider or Benefit row is never a payment page.
   - Add this row as a negative.
