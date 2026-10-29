@@ -8873,3 +8873,24 @@ All 38 earlier probes now hold. R332 H1 (attached/enclosed) and M1 are fixed. I 
   - Accepted default-safe limits, unchanged from main: N9 (an untitled letter printing its own particulars) and N10 ("keep with" without "this").
 - Low, not blocking: thousands separated by a space ("Sum Assured : 200 000") are not read as a figure, so that one page-2 layout still becomes "other". SG, MY and UK print commas, so this is rare. It can be added to figuresOf later.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R337 — #184 c74df928: CHANGES (1 High, regression from 009827c7)
+
+The rule from R336 has been narrowed: a later page now counts as adding something only if it prints a new money figure of 1,000 or more, or a new labelled policy/certificate/contract number. That narrowing reopens lost cover. Each row is a reinstatement letter ("Your policy 77001234 has been reinstated… refer to your policy schedule") followed by a page 2. All rows were personal_schedule on main and on 009827c7; the "c74df928" column is this head:
+
+| Page 2 (made-up) | c74df928 |
+|---|---|
+| "Insured Name : Ravi Kumar / Benefit⇥Amount / Hospital cash⇥S$200 / ICU⇥S$400" | other |
+| "Insured Name / Plan : Example Hospital Income / Units : 5 / Benefit per unit per day : S$50" | other |
+| "Insured Name / Sum Assured (SGD) : 200000" (no separator) | other |
+| "Insured Name / Coverage : SGD 200K" | other |
+
+Hospital-cash, travel and per-day plans are exactly the schedules whose figures are under 1,000. The 1,000 floor is a deny-list built from the shape of a payment slip.
+
+- Fix (allow-list the harmless page, not the harmless figure):
+  - A later page is part of the notice only if (i) it is a payment page, with a title line such as "PAYMENT SLIP", "REMITTANCE ADVICE", "HOW TO PAY", "PAYMENT INSTRUCTIONS", "GIRO" or "PayNow" in its first 4 lines and no PERSON_CELL / name line; or (ii) it prints no money figure and no person cell at all.
+  - Any other later page with a money figure or a number that page 1 lacks blocks the notice, at any size. That brings back the 009827c7 figure rule for non-slip pages, including bare 5+ digit numbers and "K" amounts.
+  - TE's payment-slip mirrors then pass under (i).
+  - Add the four rows above as negatives, and keep TE's slip mirrors as positives.
+- No other change: the other 49 probes are as on 009827c7.
+- I did not run the full gate on this head, because the fix will change messy.ts again. The 009827c7 gate was green.
