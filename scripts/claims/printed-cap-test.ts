@@ -133,3 +133,53 @@ test("an unsure cap or an unsure plan total hides the figures above it", async (
   // A minimum stored as a cap is stated beside the amount, not "changes the amount".
   assert.equal(conditionEffect(cond({ kind: "sub_limit", amount: 1000, quote: "subject to a minimum of S$1,000" })), "stated beside the amount");
 });
+
+test("a limit clears a benefit only when its sentence names a benefit of another kind; anything else hides the figure", async () => {
+  const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
+  const one = (title: string, amount: number, quote: string, cap: number, productName: string | null = null) => {
+    const it = [item("Ada · " + title, "Example Plan", amount)];
+    applyCoverConditions({ items: it, facts: {} as never, conditions: [cond({ kind: "sub_limit", productName, amount: cap, quote })] });
+    return it[0].calculatedAmount;
+  };
+  // Synonyms, plurals, acronyms and wider scopes never clear a cap: it cuts or the figure is hidden (Critic R358 H1, TE #188 F1).
+  for (const [title, quote] of [
+    ["Hospitalisation", "Hospital stay is limited to S$5,000 per policy year"], ["Hospitalisation", "Hospital stays are limited to S$5,000"],
+    ["ICU Benefit", "Intensive care is limited to S$5,000"], ["Intensive Care Unit Benefit", "ICU stays: up to S$5,000"],
+    ["Daily Hospital Cash", "Hospital income is limited to S$5,000"], ["Medical Expenses", "Medical reimbursement is limited to S$5,000"],
+    ["Accidental Medical Reimbursement", "Medical expenses are limited to S$5,000"], ["Outpatient Cancer Treatment", "Cancer drug treatment is limited to S$5,000"],
+    ["Hospitalisation", "Room and board is limited to S$5,000 per day"], ["Hospitalisation", "Pre-hospital treatment is limited to S$5,000"],
+    ["Hospital cash", "Daily hospital income (including ICU) is limited to S$5,000"], ["Total Permanent Disability", "TPD benefit is limited to S$5,000"],
+    ["Critical Illness", "CI claims are capped at S$5,000"], ["Accidental death", "Death due to accident: maximum S$5,000"],
+    ["Elaun tunai hospital", "Had maksimum elaun hospital harian RM 5,000"], ["Outpatient cancer treatment", "Outpatient cancer treatments are limited to S$5,000 per year."],
+    ["Hospital cash", "Notwithstanding the above, benefits under this section are limited to S$5,000."],
+    ["Hospital cash", "Except for the death benefit, all benefits are capped at S$5,000."],
+    ["Death", "Except for the death benefit, all benefits are capped at S$5,000."],
+    ["Hospital cash", "Limit per claim under Section 2: S$5,000"], ["Example Plan", "Maximum benefit payable under this policy is S$5,000."],
+  ] as [string, string][]) {
+    const got = one(title, 8000, quote, 5000);
+    assert.ok(got === 5000 || got === undefined, `${title}: ${quote} -> ${got}`);
+  }
+  // A limit for another kind of benefit leaves this one as it is.
+  assert.equal(one("Hospital cash", 8000, "Room and board benefit is limited to S$5,000.", 5000), 8000);
+  assert.equal(one("Hospital cash", 8000, "Hospital room and board is limited to S$5,000.", 5000), 8000);
+  assert.equal(one("Death", 500000, "Dental treatment is limited to S$500 per year.", 500), 500000);
+  assert.equal(one("Death Benefit", 500000, "Funeral expenses benefit is limited to S$5,000", 5000), 500000);
+  // Counts are never money caps (TE #188 F3).
+  assert.equal(one("Physiotherapy", 1200, "Maximum number of visits per year: 10", 10, "Physiotherapy"), 1200);
+  assert.equal(one("Travel medical", 5000, "Maximum period of cover (days): 90", 90, "Travel medical"), 5000);
+  assert.notEqual(one("Hospital cash", 3000, "Maximum hospital stay: 30", 30, "Hospital cash"), 30);
+});
+
+test("an unplaced plan total hides every benefit it may cover", async () => {
+  const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
+  const run = (quote: string) => {
+    const it = [item("Ada · Room and board", "Example Shield", 100000), item("Ada · Surgical fees", "Example Shield", 100000), item("Ada · Death", "Example Shield", 300000)];
+    applyCoverConditions({ items: it, facts: {} as never, conditions: [cond({ kind: "aggregate_cap", amount: 150000, quote })] });
+    return it.map((i) => i.calculatedAmount);
+  };
+  // TE #188 F4: a hospital limit hides the hospital rows and leaves the death benefit; one for all benefits, or one that
+  // names no kind, hides all of them.
+  assert.deepEqual(run("The overall annual limit for inpatient benefits is shown in the Schedule"), [undefined, undefined, 300000]);
+  assert.deepEqual(run("The limit described in Section 3 applies to all benefits"), [undefined, undefined, undefined]);
+  assert.deepEqual(run("An annual limit applies, as shown in the Schedule"), [undefined, undefined, undefined]);
+});

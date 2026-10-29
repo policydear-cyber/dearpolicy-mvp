@@ -140,12 +140,14 @@ const MOST_WE_PAY=/\bmost\s+(?:we|the\s+company|the\s+insurer|the\s+plan)(?:['�
 const CAP_AFTER=/^\s*(?:\(?max(?:imum|\.)?\)?(?![^.;\n]{0,8}\d)|in\s+(?:total|aggregate)\b|,?\s*whichever\s+is\s+(?:the\s+)?(?:lower|less|lesser))/iu;
 /** Words that make the figure next to them something other than a cap: a minimum, a threshold ("more than", "under"),
  * an excess, a premium, a sum insured, or an age ("up to age 65", "maximum entry age of 70", TE #188 H3). */
-const NOT_CAP_WORD=String.raw`(?:\bmin(?:imum|\.)?|\bat\s+least|\bthreshold|(?<!(?:not|cannot|never|n['’]t)\s)\bexceed(?:s|ing)?|(?<!no\s)\babove|(?<!not\s)\bover|(?<!(?:no|not|never|n['’]t)\s)\bmore\s+than|\bless\s+than|\bunder|\bbelow|\bage[ds]?|\bexcess|\bdeductible|\bco-?(?:payment|pay|insurance)|\bpremiums?|(?<!max(?:imum|\.)?\s)\bsum\s+(?:insured|assured))\b`;
+const NOT_CAP_WORD=String.raw`(?:\bmin(?:imum|\.)?|\bat\s+least|\bthreshold|(?<!(?:not|cannot|never|n['’]t)\s)\bexceed(?:s|ing)?|(?<!no\s)\babove|(?<!not\s)\bover|(?<!(?:no|not|never|n['’]t)\s)\bmore\s+than|\bless\s+than|\b(?:under|below)(?=\s+(?:the\s+)?(?:age\b|ages\b|\d|S\$|US\$|RM|\$|£|€|¥|₹|SGD|USD|MYR|GBP|EUR)|\s*$)|\bage[ds]?|\bexcess|\bdeductible|\bco-?(?:payment|pay|insurance)|\bpremiums?|(?<!max(?:imum|\.)?\s)\bsum\s+(?:insured|assured))\b`;
 const NOT_CAP_BEFORE=new RegExp(NOT_CAP_WORD+String.raw`[^.;\n]{0,25}$`,"iu");
 const NOT_CAP_ANY=new RegExp(NOT_CAP_WORD,"giu");
 /** A label that is a cap, ending in a colon right before the figure ("Maximum Sum Assured for Accidental Death:",
  * "Sub-limit for outpatient cancer treatment:"), words only. */
 const CAP_LABEL=new RegExp(CAP_PHRASE+String.raw`(?:\s+[\p{L}’'&/()-]+){0,7}\s*:\s*$`,"iu");
+const AMOUNT_LABEL=/\b(?:amount|sum|benefit|payout|pay(?:able|ment)?|reimburse\w*|cost|fees?|expenses?|charges?|limit)\b/iu;
+const COUNT_LABEL=/(?<!\bper\s+(?:policy\s+|calendar\s+)?)\b(?:number|no\.|period|days?|nights?|weeks?|months?|years?|visits?|times|stays?|age|sessions?|count)\b/iu;
 const COUNT_AFTER=/^\s*(?:claims?|visits?|times|sessions?|treatments?|consultations?|days?|nights?|weeks?|months?|years?|people|persons|children|trips?|occurrences?)\b/iu;
 const CURRENCY=String.raw`(?:S\$|US\$|A\$|HK\$|NZ\$|£|€|¥|₹|\$|(?<![\p{L}])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|NZD|JPY|CNY|RMB|INR|Rs\.?|PHP|IDR|Rp\.?|THB)\s?)`;
 const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(\d[\d,]*(?:\.\d+)?)\s*(million|mil|m|k|thousand)?(?![\d\p{L}])`,"giu");
@@ -185,7 +187,9 @@ export function capReading(condition:Pick<CoverCondition,"amount"|"amountBasis"|
       // when a cap phrase names it right before it.
       if(CAP_BEFORE.test(before)||MOST_WE_PAY.test(before)||((f.money||share)&&CAP_AFTER.test(after)))return {kind:"cap",amount};
       const label=before.match(CAP_LABEL);
-      if(label){
+      // A label caps money only when the figure prints its currency or the label names an amount; "Maximum number of
+      // visits per year: 10" and "Maximum hospital stay: 30" are counts (TE #188 F3).
+      if(label&&(f.money||share||(AMOUNT_LABEL.test(label[0])&&!COUNT_LABEL.test(label[0])))){
         const from=before.length-label[0].length;
         if(![...before.matchAll(NOT_CAP_ANY)].some(m=>m.index!>from))return {kind:"cap",amount};
       }
@@ -222,21 +226,71 @@ function limitSubject(condition:CoverCondition):string[]{
   const plan=new Set(contentWords(condition.productName??""));
   return contentWords(at<0?quote:quote.slice(0,at)).filter(w=>!plan.has(w));
 }
-/** Whom a sub-limit is for (TE #188 H1, M2). "this": its sentence names the benefit ("Hospital Cash is limited to
- * S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit"), or the cover it is stored under is the
- * benefit's own name. "other": its sentence names something else ("Funeral expenses benefit is limited to S$5,000" is no
- * limit on the death benefit). "unknown": it names nothing ("Double Critical Cover: subject to a limit of S$25,000"). */
+/** Benefit kinds a limit's sentence or a benefit's name can name, each in a family of kinds that share money (an ICU
+ * limit may be part of a hospital stay's; a funeral benefit is never part of a death benefit). Earlier kinds are read
+ * first and their words are then set aside ("daily hospital income" is hospital cash, not also a hospital stay). Hospital
+ * cash is a daily income of its own, never part of a hospital bill's room-and-board or ICU limit (TE #188 U10, U19), but
+ * a limit on hospital benefits as a whole may be on it too (U23). */
+const KINDS:[string,string,RegExp][]=[
+  ["funeral","funeral",/\b(?:funeral|burial|cremation|last\s+expenses?)\b/giu],
+  ["ambulance","ambulance",/\bambulance\b/giu],
+  ["dental","dental",/\bdental\b/giu],
+  ["optical","optical",/\b(?:optical|spectacles|eyeglasses)\b/giu],
+  ["maternity","maternity",/\b(?:maternity|pregnan\w*|childbirth)\b/giu],
+  ["cancer treatment","ci",/\bcancer\s+(?:drug\s+)?(?:treatments?|drugs?)\b|\bchemo\w*|\bradiotherapy\b/giu],
+  ["early ci","ci",/\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness(?:es)?|ci)\b/giu],
+  ["ci","ci",/\bcritical\s+illness(?:es)?\b|\bci\b|\bdread\s+diseases?\b/giu],
+  ["tpd","tpd",/\btpd\b|\btotal\s+(?:and|&)\s+permanent\s+disab\w*|\bpermanent\s+total\s+disab\w*/giu],
+  ["accidental death","death",/\baccident\w*\s+death\b|\bdeath\s+(?:due\s+to|by|from|caused\s+by)\s+(?:an?\s+)?accident\w*/giu],
+  ["death","death",/\bdeath\b|\bkematian\b/giu],
+  ["hospital cash","cash",/\b(?:hospital(?:isation|ization)?|daily)\s+(?:cash|income|allowance)\b|\belaun(?:\s+tunai)?\s+hospital(?:\s+harian)?\b|\bhospital\s+income\b/giu],
+  ["icu","hospital",/\b(?:hospital\s+)?(?:icu|intensive\s+care(?:\s+unit)?)\b/giu],
+  ["room and board","hospital",/\b(?:hospital\s+)?(?:room\s+(?:and|&)\s+board|ward)\b/giu],
+  ["surgery","hospital",/\bsurg\w*/giu],
+  ["pre or post hospital","hospital",/\b(?:pre|post)[\s-]*hospital\w*/giu],
+  ["hospital stay","hospital cash",/\bhospital(?:isation|ization|s)?\b|\bin-?\s?patients?\b/giu],
+  ["outpatient","outpatient",/\bout-?\s?patients?\b|\bclinic\b/giu],
+  ["medical expenses","medical",/\bmedical\s+(?:expenses?|reimbursements?|costs?|bills?)\b/giu],
+];
+function kindsIn(text:string){
+  let rest=" "+text.toLowerCase()+" ";
+  const kinds=new Map<string,string[]>();
+  for(const [kind,families,re] of KINDS){
+    if(!rest.match(re))continue;
+    kinds.set(kind,families.split(" "));
+    rest=rest.replace(re," ");
+  }
+  return kinds;
+}
+/** Words that make a limit cover more than what its sentence names: "all benefits", "under this section", "except for". */
+const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|overall|combined|together|aggregate|semua)\b/iu;
+/** The same for a plan total, whose sentence says "overall" or "in total" anyway. */
+const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
+const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
+/** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
+ * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
+ * and Permanent Disability"), or the cover it is stored under is the benefit's own name. "other" only on proof: the
+ * sentence names benefit kinds of a different family from every kind the benefit's own name has ("Funeral expenses
+ * benefit is limited to S$5,000" is no limit on the death benefit). Anything else is "unknown", and the figure above the
+ * limit is not shown: a sentence that names nothing, a part of a plan ("Double Cover: subject to a limit"), a wider scope
+ * ("all benefits", "this section"), a related kind ("Room and board" for "Hospitalisation"), or words no kind knows. */
 function limitIsFor(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
+  const head=limitHead(condition);
   const benefit=phrase(benefitOf(item));
-  if(benefit.trim().length>=3&&phrase(condition.quote??"").includes(benefit))return "this";
   if(condition.productName&&phrase(condition.productName)===benefit)return "this";
+  if(LIMIT_SCOPE.test(head))return "unknown";
+  if(benefit.trim().length>=3&&phrase(condition.quote??"").includes(benefit))return "this";
   const subject=limitSubject(condition);
   // A sentence that names a part of the plan ("Double Cover: subject to a limit") names a cover, whose benefits it does
   // not say: unknown, as with no name at all.
-  const head=(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
   if(!subject.length||/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head))return "unknown";
   const own=new Set([...contentWords(benefitOf(item)),...[...benefitOf(item).matchAll(/\(([\p{L}]{2,6})\)/gu)].map(m=>m[1].toLowerCase())]);
-  return subject.every(w=>own.has(w))?"this":"other";
+  if(subject.every(w=>own.has(w)))return "this";
+  const said=kindsIn(head),mine=kindsIn(benefitOf(item));
+  if(!said.size||!mine.size)return "unknown";
+  if(said.size===mine.size&&[...said.keys()].every(k=>mine.has(k)))return "this";
+  const families=new Set([...mine.values()].flat());
+  return [...said.values()].flat().every(f=>!families.has(f))?"other":"unknown";
 }
 /** The same, for a period: a policy states whole days. */
 function usableDays(value:number|null|undefined){
@@ -498,9 +552,12 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   };
   const blocked:{title:string;reason:string}[]=[];
   const items=args.items;
+  // The figure each item printed before any condition: a benefit ruled out still shows it (below), even when a limit
+  // first withheld it, since a ruled-out benefit counts towards nothing.
+  const printed=new Map(args.items.map(item=>[item,item.amountText]));
   const withhold=(item:ClaimItem,text:string)=>{
     delete item.calculatedAmount;
-    item.amountText=null;
+    if(item.status!=="not_applicable")item.amountText=null;
     item.conditions=[...new Set([...(item.conditions??[]),text])];
     say(text,7);
   };
@@ -522,6 +579,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
       // it stops doing is counting towards a total they might rely on.
       blocked.push({title:item.title,reason:outcome.text});
       item.status="not_applicable";
+      item.amountText??=printed.get(item)??null;
       item.reason=outcome.text;
       item.conditions=[...new Set([...(item.conditions??[]),outcome.text])];
       delete item.calculatedAmount;
@@ -542,10 +600,13 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
     const total=inCover.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
     if(ceiling!=null&&total<=ceiling)continue;
     if(read.kind==="unsure"||ceiling==null){
-      // A limit not tied to a cover by name hides only the benefits its sentence names ("The annual limit for hospital
-      // benefits is shown in the Schedule": hospital rows, never the death benefit, TE #188 H2).
-      const subject=condition.productName?[]:limitSubject(condition);
-      const named=subject.length?inCover.filter(item=>contentWords(benefitOf(item)).some(w=>subject.includes(w))):inCover;
+      // Only a benefit of another family than every kind the sentence names is left showing ("The annual limit for
+      // hospital benefits is shown in the Schedule" leaves the death benefit, TE #188 H2); a limit for all benefits, or one
+      // that names no kind, hides every figure in the cover (TE #188 F4).
+      const head=condition.productName?"":limitHead(condition);
+      const said=kindsIn(head);
+      const named=condition.productName||!said.size||AGGREGATE_SCOPE.test(head)?inCover
+        :inCover.filter(item=>{const mine=kindsIn(benefitOf(item));const families=[...said.values()].flat();return !mine.size||[...mine.values()].flat().some(f=>families.includes(f));});
       const text=(condition.productName??"this cover")+" states an overall limit"+(ceiling!=null?" of "+money(ceiling):"")
         +" that DearPolicy could not confirm against its page, so no amounts are shown for it.";
       for(const item of named)withhold(item,text);
