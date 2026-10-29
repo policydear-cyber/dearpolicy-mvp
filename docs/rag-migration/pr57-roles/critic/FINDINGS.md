@@ -9177,3 +9177,39 @@ All 71 earlier probes hold.
 - Stored data is unchanged, because this runs only on read.
 - Callers handle `none` as no figure.
 - The ledger behaves the same way.
+
+## R352: re-review of #185 a5d76e2b, #186 754ff5b1, #187 ff37a7d4, #189 9697b16b
+
+Each head went through the full gate: fresh worktree, npm ci, network blocked, model keys stripped. On all four, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21, tsc, next build and merge-tree with main passed.
+
+### #185 a5d76e2b: READY
+- R345 M1 is fixed:
+  - intake stuck for more than 30 minutes, or with a scan state outside SCAN_GOES_ON, now counts (the same rule as documentState, where a null quarantine counts as not_readable);
+  - ready documents with no pages now count;
+  - the table states stalled, held, not_readable and table_unread now count, and table_unread bypasses the role rule, so misfiled packs count.
+- The R345 Low is fixed: receipts and letters are excluded on every branch.
+- The R346 Low is fixed: the unconfirmed reminder now uses OWNED_BY_MEMBER and `superseded_at IS NULL`.
+- Ids from the table are still filtered by account, owner and active state in SQL, so the change has no effect on any other household.
+- The own test passes.
+
+### #186 754ff5b1: READY (one Low)
+- R347 H1, H2 and M1 are fixed. All 50 names in my keep list survive, and every fragment in my drop list is dropped.
+- The filter now runs on read only, so a wrongly hidden row stays stored and comes back once the rule is corrected.
+- Low: a single-character CJK name such as "癌" (cancer) is still hidden. Fix: treat any one `\p{Script=Han}` character as a word.
+- "Cash for" and "Benefit for" are dropped as fragments, which is acceptable.
+- The own test passes.
+
+### #187 ff37a7d4: CHANGES (one Medium)
+- R348 H1 and M1 are fixed for answers. Stored planName drives coverKey and the travel filter, and shownPlanName is used only in the /api/ledger shape. The eShield case is kept as typed.
+- M1: app/operator/coverage/page.tsx:105 pre-fills its edit draft with the shown planName and always sends `planName` in the PATCH.
+  - Any amount or status edit therefore writes the readable name into plan_name.
+  - After an operator edits both of two machine-named policies from the same insurer, both store "Example Life certificate", and H1 comes back from stored data.
+  - Fix: send planName only when the operator changed it, or have PATCH keep the stored plan when the sent name equals readablePlanName of the stored row (the sentName pattern).
+- The own test passes.
+
+### #189 9697b16b: CHANGES (own test red)
+- `policies:benefits-document-name-test` fails at scripts/policies/benefits-document-name-test.ts:23. It still expects `<h2>{rows[0].productName??rows[0].documentName}</h2>`, but the page now renders `groupHeading(groups,product)`.
+- The code delta is fine:
+  - the operator page groups by doc:policyId;
+  - "(n of m)" tells same-named headings apart on both pages.
+- Update the assertion. A behavioural check of groupHeading would be better than a source regex.
