@@ -8310,3 +8310,56 @@ Checks, network-blocked with model keys stripped:
 - all three heads: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
 - own tests: still-reading 9, unread-notice 15, claim-note 9, conditions-twice 8;
 - cross-merges with #164b, #165b, #166b, #168, #169b, #171, #173 and #174 are all clean, and #172b with #167b and #170b is clean too.
+
+## R311 — #175 (98a3dc1) NOT READY (one Medium); #176 (c8757f2, stacked on #170) READY
+
+**#175: NOT READY.**
+
+**M1 — cancelling a waiting re-read does not stop one a worker has already claimed, so two paid reads can run at once.**
+- In app/api/policies/reprocess/route.ts:98-104, the SELECT picks only queued and failed_retryable `:retry-read` jobs, and the cancel runs after the policy UPDATE.
+  - If a drain claims the re-read between that SELECT and `cancelJob`, `cancelJob` takes its cooperative branch (lib/jobs/queue.ts:417): it sets `cancel_requested` and nothing else.
+  - Policy processing never reads `cancel_requested`. heartbeatJob's WHERE clause has no such check (queue.ts:281-288), processors.ts:80 throws its returned row away, and ingest.ts never checks it.
+  - So the claimed re-read runs to the end alongside the new read.
+- The same thing happens without any race when a document has been read in part. Its status is "ready" and its `:retry-read` is running.
+  - Re-analyse skips the in-flight branch, so it never asks whether a job is live, and the SELECT ignores 'processing'.
+  - A second read starts next to the running one. That is double spend, and whichever finishes last writes the status.
+  - A deferred run that hits a service failure cannot reschedule (deferredRetry), so it writes 'failed'. That can land after the new read has set 'ready'.
+- Fix: in one transaction, before the policy UPDATE:
+  1. `UPDATE background_jobs SET status='cancelled', cancel_requested=true WHERE job_type=$1 AND idempotency_key=$2||':retry-read' AND status IN ('queued','failed_retryable')`, which is the same check-and-set as cancelJob;
+  2. if any policy_processing job for the id or `id:retry-read` is 'processing' with a live lease, whatever the document's status, roll back and return 409;
+  3. run the policy UPDATE; if no row changes, roll back and return 409;
+  4. commit, then write the audit and event rows.
+- Why this closes it: the claim is a check-and-set on status. After step 1 a re-read is either cancelled, and can no longer be claimed, or already processing, and step 2 catches it. Because the cancel commits only together with the requeue, a refused request can never cancel the only reader.
+- Add test cases for a claimed re-read (processing with a live lease) on both an in-flight and a ready document: expect 409 and the re-read untouched.
+
+**The builder's other questions:**
+- Does any path leave a document with no reader? Not a dead end today:
+  - if the after-response enqueue fails, or `cancelJob` throws (a 500 after the UPDATE), the document sits queued with no live job;
+  - after 2 minutes it is stalled, and Try again is offered.
+  - Keep that property when restructuring for M1.
+- The 409 "This document is already being analysed." is acceptable. The page hides Try again in that state, so only a stale page reaches it.
+  - Optional: when only a waiting re-read backs the document, say "DearPolicy will try reading it again shortly."
+- The IN rule matches #167 and #170 (979e228 and df5a8ee). The stalled rule on the page and the guard agree.
+
+**#176: READY.**
+- **A, scan hold:**
+  - `isPolicyQuarantineHeld` (uploaded, quarantined, scan_pending) with a live intake or scan-retry job gives waiting; with neither it gives held. It is never stalled, and no Try again is offered (the reprocess route refuses it).
+  - The held reason uses the page's fixed labels, never the scanner's text, and is null in prototype mode.
+  - The scan-retry key matches `scanRetryKey("policy_document", id, N)` (lib/scanning/retry.ts:61, store.ts:200), and the type is tested against retry.ts.
+  - The LIKE is safe: a UUID has no `%` or `_`.
+- **B, table_unread:**
+  - The allow-list `personal_schedule` and `certificate` matches what intake stores. The legacy role "schedule" stays no_table, which is the safe direction.
+  - It applies only when reprocess would accept the scan state.
+  - Read again is the right step. Intake's readIntoBenefitTable (ingest.ts:1000) is the only writer of benefit_readings, and nothing retries a failed table read.
+- **The 5 changed expectations are not weaker.**
+  - Each still asserts "not waiting" for the time-based cases (legacy, touched, future, ready-done); only the label for a schedule moved from no_table to table_unread.
+  - The receipt, letter and summary controls are unchanged, and "Read again" is asserted exactly once and only beside the schedules.
+  - The new negative controls in coverage-recovery cover NO_COVER roles, a quarantine of uploaded, pages 0, failed, and a scan job on a cleared document.
+- L1: live-job.ts is an add/add conflict with #167 (merge-tree #176 × #167 979e228 = 1). Put the same file, including scanJobLive, on #167, or merge main into #176 after #167 lands.
+- L2: if a table read fails the same way every time (the "reading did not finish" stop), every paid Read again leaves the banner unchanged, because nothing records a failed table read. The 20-an-hour limit bounds it. Consider recording the failed attempt and, after one failed Read again, showing neutral wording.
+- L3, minor: `scanJobLive` cannot use the idempotency index under a non-C collation, but the scan for each document is small at today's volume.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database built with db:setup plus benefit-table.sql:
+- both: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: retry-read 8/8, unread-notice 15/15;
+- cross-merges: #175 is clean with #167, #170, #171, #172 and #176; #176 is clean with #170, #171 and #172, and conflicts with #167 (L1).
