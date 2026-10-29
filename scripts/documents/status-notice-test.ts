@@ -134,3 +134,12 @@ test("TE round 3: a lapse letter whose status sentence sits below a long address
   const header = "Mr Ravi Kumar\nBlock 1\nExample Road\n#01-01\nSingapore 100001\n3 March 2026\nOur ref: EX/LAP/1\nYour ref: -\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\n";
   assert.equal(deterministicDocumentRole(pages(header + letter("We write about your policy.\nYour policy has lapsed on 1 March 2026. Please refer to your policy schedule.")), "personal_schedule"), "other");
 });
+
+test("TE round 4: a receipt that records a payment stays one whatever its footnotes promise; a promise-only form does not", async () => {
+  const { deterministicDocumentRole } = await load();
+  assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nReceived with thanks S$88.20 for the premium due 1 March 2026.\nA copy of this receipt will be sent to your registered email.\nSee your policy schedule."), null), "premium_receipt");
+  assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nReceived with thanks S$88.20. Premiums not received by the due date may cause the policy to lapse. See your policy schedule."), null), "premium_receipt");
+  assert.equal(deterministicDocumentRole(pages("OFFICIAL RECEIPT\nPolicy Number 77001234\nAmount due S$88.20\nAn official receipt will be issued once paid. See your policy schedule."), null), "other");
+  // An untitled letter saying the premium is overdue is a status notice, never cover.
+  assert.equal(deterministicDocumentRole(pages(letter("Policy Number 77001234\nYour premium of S$88.20 is overdue. Please refer to your policy schedule.\nLife Assured: Ravi Kumar")), "personal_schedule"), "other");
+});

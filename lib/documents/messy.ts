@@ -147,6 +147,10 @@ const STATUS_EVENT = /\b(?:has|have|had)\s+(?:now\s+)?(?:lapsed|been\s+(?:reinst
 const LAPSE_OR_DUE = /\b(?:laps(?:e|ed|es|ing)|reminder|overdue|terminat\w+|reinstat\w*|luput|peringatan|not (?:been )?(?:received|paid))\b/i;
 // A receipt that only promises one ("will be sent once paid") records no payment.
 const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?:sent|issued)\b|\bonce\s+(?:paid|payment)\b|\bupon\s+payment\b/i;
+// A sentence that records a payment: "Received with thanks S$88.20", "Amount received: RM 180.00", "S$99.00 received". A
+// footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
+const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
+const recordsPayment = (text: string) => text.split(/\n|(?<=[.!?])\s+/).some((l) => PAID_AMOUNT.test(l) && /\b(?:received|paid)\b/i.test(l) && !/\bnot\s+(?:been\s+)?(?:received|paid)\b|\b(?:once|when|if)\s+(?:paid|received)\b|\bto\s+be\s+paid\b/i.test(l));
 const RECEIPT_WORDS = /\b(?:(?:premium|official|payment) receipt|payment acknowledge?ment)\b/i;
 const noticeLetter = (text: string) => /^\s*dear\s+\S|^\s*tuan\s*\/\s*puan\b/im.test(text)
   && /\byours (?:sincerely|faithfully|truly)\b|^\s*(?:best |kind |warm )?regards\b|^\s*(?:many thanks|thank you|sincerely|yang benar|yang ikhlas)\b|\bcomputer[- ]generated (?:letter|notice)\b/im.test(text);
@@ -174,7 +178,7 @@ export function statusNoticeRole(pages: Pick<PdfPage, "text">[]): "other" | "ren
   const title = printedLines(pages[0]?.text ?? "").slice(0, 12).filter((l) => NOTICE_TITLE_LINE.test(l)).join("\n");
   // A receipt titled as one records a payment (for a reinstatement, or within the grace period: TE #184 R2/R3) unless it
   // only promises one.
-  if (RECEIPT_WORDS.test(title) && !NO_PAYMENT_YET.test(text)) return "premium_receipt";
+  if (RECEIPT_WORDS.test(title) && (recordsPayment(text) || !NO_PAYMENT_YET.test(text))) return "premium_receipt";
   if (title && LAPSE_OR_DUE.test(title)) return "other";
   if (/\brenewal notice\b/i.test(title)) return LAPSE_OR_DUE.test(text) ? "other" : "renewal_statement";
   if (LAPSE_OR_DUE.test(text) || NO_PAYMENT_YET.test(text)) return "other";
