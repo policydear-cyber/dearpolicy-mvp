@@ -138,6 +138,18 @@ for (const { m, sign } of MARKETS) {
       assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [false], `${benefit}: ${JSON.stringify(rd.dropped)}`);
     }
   });
+  test(`${m}: a ";", an "i.e." or an "Out of this amount" keeps the limit's sentence whole on the page (TE pr180 r2 mutants)`, () => {
+    for (const [i, [benefit, value, text, quote]] of ([
+      ["TI/CI limit", 2000000, `TERMINAL ILLNESS\nThe most we will pay is ${sign}2,000,000 (the TI/CI limit); this includes all other policies on the life insured.`, `is ${sign}2,000,000 (the TI/CI limit)`],
+      ["TI/CI limit", 2000000, `TERMINAL ILLNESS\nThe most we will pay is ${sign}2,000,000 (i.e. the TI/CI limit) for this policy and all other policies.`, `is ${sign}2,000,000`],
+      ["TI benefits limit", 1000000, `TERMINAL ILLNESS\nThe most we will pay for this policy and all other policies is ${sign}2,000,000. Out of this amount, the TI benefits cannot be more than ${sign}1,000,000.`, `the TI benefits cannot be more than ${sign}1,000,000`],
+    ] as const).entries()) {
+      const ID = `aaaaaaaa-0000-0000-0000-00000000c0c${i}`;
+      const rd = checkReading({ id: ID, name: "Term plan.pdf", readable: true, pages: [{ page: 2, text }] }, reading("personal_proof", "Example Term", [], [
+        b({ benefit, pays: "up_to", value, page: 2, quote })]));
+      assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [true], `${benefit} ${i}: ${JSON.stringify(rd.dropped)}`);
+    }
+  });
   test(`${m}: a scope split by a line's end ("poli-\\ncies") is still read`, () => {
     const ID = "aaaaaaaa-0000-0000-0000-00000000c0ab";
     const text = `TERMINAL ILLNESS\nThe most we will pay for this policy and all other poli-\ncies we have issued on the life insured is ${sign}2,000,000 (the TI/CI limit).`;
