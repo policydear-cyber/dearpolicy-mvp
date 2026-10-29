@@ -10,6 +10,7 @@ import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
+import { documentCardTitle } from "@/lib/policies/document-name";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -61,9 +62,11 @@ const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
 const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-/** What a household calls a document: its product, else its file name, never blank. */
-function documentName(policy: Pick<Policy, "product_name" | "original_filename">) {
-  return policy.product_name?.trim() || policy.original_filename?.trim() || "Untitled document";
+type Named = Pick<Policy, "product_name" | "original_filename" | "insurer" | "document_role" | "policy_number">;
+/** What a household calls a document: the same name sentences give it (lib/policies/document-name.ts) -- its product,
+ * else a readable file name a person chose, else insurer and kind ("Singlife policy wording"), never a made-up file name. */
+function documentName(policy: Named) {
+  return documentCardTitle(policy);
 }
 function roleLabel(role: string | null) { const t = (role ?? "document").replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1); }
 /** "a, b and 2 more": what a document was found to pay for, in a line. */
@@ -506,7 +509,7 @@ export default function PoliciesPage() {
 /** Opens the stored file itself, so a person can see which document this is when its file name says nothing. The
  * server checks the household and the security scan on every open (app/api/policies/[id]/file); it is offered only once
  * the scan has cleared the file, as the server requires. A Word file can't be shown in a browser, so it downloads. */
-function PreviewLink({ policy }: { policy: Pick<Policy, "id" | "original_filename" | "product_name"> }) {
+function PreviewLink({ policy }: { policy: Named & Pick<Policy, "id"> }) {
   const word = /\.docx$/i.test(policy.original_filename ?? "");
   return <a className="mini-button" href={`/api/policies/${policy.id}/file`} target="_blank" rel="noopener noreferrer"
     aria-label={`${word ? "Download" : "Preview"} ${documentName(policy)}`}>{word ? "Download" : "Preview"}</a>;
