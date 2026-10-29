@@ -8555,3 +8555,17 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - The correction form starts empty and sends the field the person types, so nothing masked is sent back. policy_key and other *_id/*_key fields are left as stored.
 - Merge note from R319 stands: #179 conflicts with this PR in app/api/coverage/route.ts. Keep maskShownText around the new payload.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R321 — #180 e291470: R320 H1 still open; #181 254374d: READY
+
+**#180 e291470: NOT READY, for R320 H1 only.**
+- The new CONTINUES joins a line whose line above ends on a lower-case function word. It does not reopen R318 H1: the four layouts stay null, and rows, figures and tabs are still never crossed.
+- R320 H1 is unchanged on this head. "Annual limit       S$150,000" then "(same for all plans)", "… (applies to all plans shown)" and "Annual limit (all plans) S$150,000" still give combined.
+- New probes:
+  - A heading "… under all policies issued by" just above a "TI/CI limit S$2,000,000" row joins and gives combined. That is correct for that wording, and rare.
+  - "The figures below are the same for all" above "Annual limit S$150,000" joins and gives null.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 60/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 254374d: READY.**
+- sentName now evens out spacing before comparing. A trimmed masked copy keeps the stored name. A name that differs from the stored one only in spacing, with no ID in it, is stored as sent, which is harmless.
+- Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
