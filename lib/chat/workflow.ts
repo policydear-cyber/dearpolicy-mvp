@@ -127,7 +127,7 @@ import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
-import { inactiveDocuments,inactiveList } from "./policy-status";
+import { inactiveDocuments,inactiveList,todayIso } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
@@ -1471,6 +1471,10 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
         const end=typedDate(graceEnd);
         if(typed&&end){
           const within=typed.iso<=end.iso;
+          // A grace period that has already run out: what the date meant, never that the policy is (or is not) still in force.
+          if(end.iso<todayIso())return {summary:within?"The grace period in "+whose+" documents ended on "+graceEnd+". A premium paid on "+said(typed.iso)+" was within it; the insurer can confirm it was received and that the policy is still in force."
+            :said(typed.iso)+" is after the grace period, which ended on "+graceEnd+". If the premium was not received by then, the policy can lapse; the insurer can say whether it is still in force or can be reinstated.",
+            details:lines.map(l=>l.line),nextSteps:[],citations:lines.map(l=>l.citation)};
           return {summary:within?"Paying on "+said(typed.iso)+" is within the grace period, which ends on "+graceEnd+" — the policy stays in force if the insurer receives the premium by then."
             :said(typed.iso)+" is after the grace period ends on "+graceEnd+". If the premium isn’t received by "+graceEnd+", the policy can lapse; the insurer can say whether it can still be reinstated after that.",
             details:lines.map(l=>l.line),nextSteps:[],citations:lines.map(l=>l.citation)};
