@@ -165,15 +165,18 @@ export function documentCurrency(doc: HouseholdDocument): string | null {
  * 5,000.00" under a "Currency : Singapore Dollar" field, with no sign on any figure): a currency field ("Currency : SGD",
  * "Policy Currency	Singapore Dollars", or a schedule's ": Singapore Dollar" value beside its "Currency" label) or "All
  * amounts are in Singapore dollars". Null when the page declares none, or more than one (a list of currency options). */
-const CURRENCY_NAMES: [string, string][] = [["SGD", String.raw`singapore\s+dollars?|SGD`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD`], ["MYR", String.raw`ringgit|MYR`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
+// A name, its code or its sign ("Singapore Dollar (SGD)", "S$", "Ringgit Malaysia", "RM": TE pr191 F1, F2).
+const CURRENCY_NAMES: [string, string][] = [["SGD", String.raw`singapore\s+dollars?|SGD|(?<![A-Za-z])S\$`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD|US\$`], ["MYR", String.raw`ringgit(?:\s+malaysia)?|MYR|(?<![A-Za-z])RM(?![A-Za-z])`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
 export function pageCurrency(pageText: string): string | null {
   const t = pageText ?? "";
   const said = new Set<string>();
   for (const [code, name] of CURRENCY_NAMES) {
-    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?currency[ \t]*:?[ \t]*(?:${name})[ ]*(?:\t|$)`, "im");
-    const value = new RegExp(String.raw`^[ \t]*:[ \t]*(?:${name})[ ]*$`, "im");
+    // The name may carry its code or sign in brackets: "Singapore Dollar (SGD)", "Ringgit Malaysia (RM)".
+    const named = String.raw`(?:${name})(?:[ ]*\((?:[A-Z]{2,3}|[A-Z]{0,2}\$)\))?`;
+    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency|mata\s+wang)[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
+    const value = new RegExp(String.raw`^[ \t]*:[ \t]*${named}[ ]*$`, "im");
     const all = new RegExp(String.raw`\ball\s+amounts\s+(?:are|quoted\s+are|shown\s+are)\s+in\s+(?:${name})\b`, "i");
-    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*currency[ ]*(?:\t|$)/im.test(t))) said.add(code);
+    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency|mata\s+wang)[ ]*(?:\t|$)/im.test(t))) said.add(code);
     // A page listing the currencies a policy can be in ("Six currency options are available: SGD, USD, ...") declares none.
     if (new RegExp(String.raw`currency\s+options|currencies\s+are\s+available`, "i").test(t)) return null;
   }

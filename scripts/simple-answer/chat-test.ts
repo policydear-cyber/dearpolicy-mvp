@@ -231,6 +231,11 @@ async function main() {
     const schedule = "Insured Amount\t:\t$100,000.00\tCurrency\t:\tSingapore Dollar\nDeath Benefit\t$100,000.00";
     assert.deepEqual(ask(pack(schedule)), [["S$100,000", true]]);
     assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "US Dollars"))), [["US$100,000", true]]);
+    // The usual Malaysian and bracketed wordings, and a sign as the value (TE pr191 F1, F2).
+    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Currency\t:\tRinggit Malaysia"))), [["RM100,000", true]]);
+    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Mata wang\t:\tRinggit Malaysia"))), [["RM100,000", true]]);
+    assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "Singapore Dollar (SGD)"))), [["S$100,000", true]]);
+    assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "S$"))), [["S$100,000", true]]);
     // The page itself names another currency, or says "unless stated otherwise", or declares none: the "$" stays unresolved.
     assert.deepEqual(ask(pack(schedule + "\nRider premium\tUS$20.00")), [["$100,000", false]]);
     assert.deepEqual(ask(pack(schedule + "\nAll amounts are in Singapore dollars unless stated otherwise")), [["$100,000", false]]);
