@@ -115,3 +115,22 @@ test("Critic R331 / TE round 2: terms a schedule prints are not events; receipts
   assert.equal(deterministicDocumentRole(pages(letter("RENEWAL NOTICE\nPolicy Number 77001234\nYour renewal premium is S$99.00. A 30-day grace period applies. Your policy schedule is unchanged.")), null), "renewal_statement");
   assert.equal(deterministicDocumentRole(pages(letter("RENEWAL NOTICE\nPolicy Number 77001234\nYour renewal premium of S$99.00 has not been received. Refer to your policy schedule.")), null), "other");
 });
+
+test("Critic R332: a reference that points at an enclosed schedule is no reference; any other schedule mention blocks", async () => {
+  const { statusNotice } = await import("@/lib/documents/messy");
+  const details = "YOUR POLICY DETAILS\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nPlan: Example Term\nSum Assured: S$200,000";
+  for (const doc of [
+    [letter("Your policy has been reinstated. Please see the policy schedule attached."), details],
+    [letter("Your policy has been reinstated. Please refer to the policy schedule enclosed."), details],
+    [letter("Following reinstatement, the changes in your policy schedule are as follows:\nSum Assured : S$150,000")],
+    [letter("Your policy has been reinstated. Your revised schedule follows."), details],
+  ]) assert.equal(statusNotice(doc.map((text) => ({ text }))), false, doc[0].slice(14, 80));
+  // References that end their sentence, and payment schedules, still let a notice through.
+  assert.equal(statusNotice([{ text: letter("Your policy has lapsed on 1 March 2026. Please refer to your policy schedule for details. Your premium schedule is attached.") }]), true);
+});
+
+test("TE round 3: a lapse letter whose status sentence sits below a long address header", async () => {
+  const { deterministicDocumentRole } = await load();
+  const header = "Mr Ravi Kumar\nBlock 1\nExample Road\n#01-01\nSingapore 100001\n3 March 2026\nOur ref: EX/LAP/1\nYour ref: -\nPolicy Number: 77001234\nLife Assured: Ravi Kumar\nSum Assured: S$200,000\n";
+  assert.equal(deterministicDocumentRole(pages(header + letter("We write about your policy.\nYour policy has lapsed on 1 March 2026. Please refer to your policy schedule.")), "personal_schedule"), "other");
+});

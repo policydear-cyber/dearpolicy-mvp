@@ -126,12 +126,17 @@ const isLetter = (text: string) => /^\s*dear\s+(?:mr|mrs|ms|mdm|madam|dr|sir|cus
 // "Policy Schedule No. 2", "your updated policy schedule is enclosed", "serves as your certificate") means the document
 // may carry the schedule itself, and it keeps the old rules.
 const DOC_NAME = String.raw`(?:policy schedule|schedule|certificate of insurance)`;
+// A reference ends its sentence, or ends with a known tail: "see your policy schedule attached", "refer to the policy
+// schedule enclosed" and "the changes in your policy schedule are as follows" point at an enclosed schedule (Critic R332 H1).
+const REFERENCE_END = String.raw`(?:\s+(?:for\s+(?:full\s+|more\s+)?(?:details|information)|for\s+the\s+(?:benefits|cover)(?:\s+that\s+(?:has|have)\s+ended)?|(?:has\s+)?ended(?:\s+on\s+\d{1,2}\s+[A-Za-z]+\s+\d{4})?))?(?=\s*(?:[.;!,]|$))`;
 const REFERENCE_PHRASES = [
-  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|in|under|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b`, "gi"),
-  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)\b`, "gi"),
-  /\bpolicy\s+schedule\s*:\s*no\s+change\b/gi,
+  new RegExp(String.raw`\b(?:refer(?:ring)?\s+to|keep\s+(?:this|it)\s+(?:together\s+)?with|as\s+(?:shown|stated|set\s+out)\s+in|see|check)\s+(?:your|the)\s+(?:existing\s+|current\s+)?` + DOC_NAME + String.raw`\b` + REFERENCE_END, "gim"),
+  new RegExp(String.raw`\b(?:your|the)\s+` + DOC_NAME + String.raw`\s+(?:is\s+unchanged|remains\s+(?:valid|the\s+same|unchanged)|stays\s+the\s+same|no\s+longer\s+applies|is\s+no\s+longer\s+valid)` + REFERENCE_END, "gim"),
+  new RegExp(String.raw`\bpolicy\s+schedule\s*:\s*no\s+change` + REFERENCE_END, "gim"),
+  // "The cover in your policy schedule ended on 1 March 2026."
+  new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gim"),
 ];
-const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as|your schedule)\b|^\s*schedule\s*$/im;
+const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
 const NOTICE_TITLE_LINE = /^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)(?:\s*[-–—:/]\s*[^.;]{0,60})?$/i;
 // What happened to this policy, never a term a schedule prints ("Grace period: 30 days", "a lapsed policy may be
 // reinstated within 2 years") (Critic R331 H1): a letter without a notice title needs one of these.
