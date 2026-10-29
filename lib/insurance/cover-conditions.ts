@@ -245,7 +245,7 @@ const KINDS:[string,string,RegExp][]=[
   ["dental","dental",/\bdental\b/giu],
   ["optical","optical",/\b(?:optical|spectacles|eyeglasses)\b/giu],
   ["maternity","maternity",/\b(?:maternity|pregnan\w*|childbirth)\b/giu],
-  ["cancer treatment","ci",/\bcancer\s+(?:drug\s+)?(?:treatments?|drugs?)\b|\bchemo\w*|\bradiotherapy\b/giu],
+  ["cancer treatment","medical",/\bcancer\s+(?:drug\s+)?(?:treatments?|drugs?)\b|\bchemo\w*|\bradiotherapy\b/giu],
   ["early ci","ci",/\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness(?:es)?|ci)\b/giu],
   ["ci","ci",/\bcritical\s+illness(?:es)?\b|\bci\b|\bdread\s+diseases?\b/giu],
   ["tpd","tpd",/\btpd\b|\btotal\s+(?:(?:and|&)\s+)?permanent\s+disab\w*|\bpermanent\s+total\s+disab\w*/giu],

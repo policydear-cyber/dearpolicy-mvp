@@ -179,6 +179,9 @@ test("a limit clears a benefit only when its sentence names a benefit of another
   assert.equal(one("Total Permanent Disability", 500000, "Psychiatric treatment is limited to S$1,000", 1000), 500000);
   assert.equal(one("Critical Illness", 500000, "TCM treatment is limited to S$1,000", 1000), 500000);
   assert.equal(one("Kematian", 500000, "Manfaat pengebumian terhad kepada RM5,000", 5000), 500000);
+  // A cancer drug limit is a medical bill's limit: it may cap an inpatient bill, never a death or CI lump sum (TE #188 W16).
+  assert.notEqual(one("Inpatient hospital treatment", 30000, "Cancer drug treatment is limited to S$3,000 per month", 3000), 30000);
+  assert.equal(one("Critical Illness", 500000, "Cancer drug treatment is limited to S$3,000 per month", 3000), 500000);
   // Counts are never money caps (TE #188 F3).
   assert.equal(one("Physiotherapy", 1200, "Maximum number of visits per year: 10", 10, "Physiotherapy"), 1200);
   assert.equal(one("Travel medical", 5000, "Maximum period of cover (days): 90", 90, "Travel medical"), 5000);
