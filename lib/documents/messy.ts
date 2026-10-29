@@ -207,7 +207,8 @@ export function statusNotice(pages: Pick<PdfPage, "text">[]): boolean {
   return noticeLetter(text) && STATUS_EVENT.test(text);
 }
 
-/** Every money figure (any currency amount, "200K") and every number of four or more digits a page prints. */
+/** Every money figure (any currency amount, "200K") and every number or reference of five or more characters that holds
+ * four digits in a row ("123-456789-0", "KL-55012345"); a bare four-digit year or hotline prefix is not one. */
 function figuresOf(text: string): string[] {
   const out = moneyOf(text);
   for (const m of text.matchAll(/\b[A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/gi)) out.push(m[0].toUpperCase());
@@ -216,18 +217,25 @@ function figuresOf(text: string): string[] {
 /** Every money figure a page prints, as a plain number ("S$200K" and "S$200,000" are both "200000"). */
 function moneyOf(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
+  for (const m of text.matchAll(/(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?(\d[\d,]*(?:\.\d{1,2})?)\s*(k\b)?|\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/gi))
     out.push(String(Number((m[1] ?? m[3]).replace(/,/g, "")) * (m[2] ? 1000 : 1)));
   return out;
 }
 const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units?|per\s+day|daily|plan)\b/i;
-const HAS_MONEY = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
+const HAS_MONEY = /(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
 const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
 const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
 const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
-const PAYMENT_LINE = /^\s*amount\b|\b(?:amount\s+(?:due|payable|owing)|total|fees?|charge[sd]?|outstanding|minimum|premiums?|interest|late|payable|paid)\b/i;
+// What the household pays: a premium, a fee or charge, interest, arrears or an amount due (Critic R340). A slip's own
+// "Amount:" or "Total amount payable:" line counts only on a payment page; a bare total, payable or paid never does.
+const PAYMENT_LINE = /\b(?:premiums?|fees?|charge[sd]?|interest|arrears|amount\s+(?:due|owing)|outstanding)\b/i;
+const SLIP_AMOUNT = /^\s*(?:(?:total\s+)?amount(?:\s+(?:due|payable))?|total(?:\s+(?:due|payable))?)\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})/i;
+// A premium row ("Rider premium: S$12.50", "Basic premium  S$75.70") is what the household pays, whatever it pays for.
+const PREMIUM_ROW = /^\s*(?:(?!(?:waiver|benefits?|sum|cover(?:age)?|assured|insured)\b)[\w-]+\s+){0,3}premiums?\s*(?:\([^)]{0,30}\)\s*)?(?:[:：]|\t|\s{2,})\s*(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
+// What a policy pays out, never what the household pays ("Amount payable on death", "Paid on diagnosis").
+const PAYOUT_WORDS = /\b(?:death|die[sd]?|diagnos\w*|illness|tpd|disab\w*|hospital\w*|accident\w*|claims?|surgery|surgical|maturity|matures?|payout)\b/i;
 // "The premium for your rider will be S$12.50": the figure is the premium itself (TE round 14).
-const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
+const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?<![A-Za-z])(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
 const NOT_PAYMENT_LINE = /\b(?:benefits?|riders?|cash|sum|cover(?:age|ed)?|waiver|assured|insured|units?|plan)\b/i;
 const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
 /** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
@@ -237,16 +245,17 @@ function noticePage(text: string, own: Set<string>): boolean {
   const lines = printedLines(text);
   // A person label anywhere, a header row included ("Policy Number  Life Assured  Sum Assured").
   const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
-  // A plan, units, rider or benefit row that prints a figure ("Units : 5", "Rider: CI Booster  S$50,000") is a
-  // schedule's own field, whatever else the page holds, unless its only figures are page 1's money (Critic R339 M2). A
-  // sentence ("Benefits: please refer to your policy schedule") or a bare plan name is no such row (TE round 14).
+  // A plan, units, rider or benefit row that prints a count ("Units : 5", "30 days") or a money figure page 1 lacks
+  // ("Rider: CI Booster  S$50,000") is a schedule's own field, whatever else the page holds (Critic R339 M2). A sentence
+  // ("Benefits: please refer to your policy schedule"), a plan's name or a premium row is no such row (TE rounds 14-15).
   if (lines.some((l) => {
     const row = SCHEDULE_ROW.exec(l);
-    if (!row) return false;
+    if (!row || PREMIUM_ROW.test(l)) return false;
     const value = l.slice(row[0].length);
-    if (!/\d/.test(value)) return false;
-    const money = moneyOf(value);
-    return !money.length || money.some((f) => !own.has(f));
+    // A count of units, days or a percentage is the plan's own figure; a number in a plan's name ("Harbour Term 20") is not.
+    if (/^\s*units?\b/i.test(row[0]) && /\d/.test(value)) return true;
+    if (/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)) return true;
+    return moneyOf(value).some((f) => !own.has(f));
   })) return false;
   // Another policy's number is another policy's page.
   if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
@@ -254,13 +263,15 @@ function noticePage(text: string, own: Set<string>): boolean {
   // On a payment or notes page a money figure page 1 lacks may only be a premium, a sum to pay or a fee ("Total amount
   // payable", "A charge of S$20 applies", "Your premium will be S$95.00"); a figure on any other line ("Hospital cash
   // S$200", "Critical Illness Rider  S$50,000", "Premium waiver benefit") may be cover (Critic R338, TE round 13).
+  const paymentPage = lines.some((l) => PAYMENT_MARK.test(l) && !PAYMENT_FIELD.test(l));
   if (titled && !person && !lines.some((l) => COVER_LINE.test(l))
-    && lines.every((l) => (PAYMENT_LINE.test(l) && !NOT_PAYMENT_LINE.test(l)) || PREMIUM_FIGURE.test(l) || moneyOf(l).every((f) => own.has(f)))) return true;
+    && lines.every((l) => moneyOf(l).every((f) => own.has(f)) || (!PAYOUT_WORDS.test(l)
+      && ((!NOT_PAYMENT_LINE.test(l) && (PAYMENT_LINE.test(l) || (paymentPage && SLIP_AMOUNT.test(l)))) || PREMIUM_FIGURE.test(l) || PREMIUM_ROW.test(l))))) return true;
   // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
   // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
   // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).
   // A "Payment Mode : GIRO" field is a schedule's too; only instruction lines mark a payment page (Critic R339 M2).
-  if (lines.some((l) => PAYMENT_MARK.test(l) && !PAYMENT_FIELD.test(l))
+  if (paymentPage
     && !lines.some((l) => /\b(?:insured|assured)\b/i.test(l) && (PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person)\b/i.test(l)))
     && !lines.some((l) => COVER_LINE.test(l) && !PAYMENT_MARK.test(l) && figuresOf(l).some((f) => !own.has(f)))
     && moneyOf(text).every((f) => own.has(f))) return true;

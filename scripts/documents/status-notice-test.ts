@@ -231,13 +231,19 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
   for (const page2 of [
     "Payment by GIRO\nLife Assured: Ravi Kumar\nBank account: 123-456789-0\nAmount: S$88.20",
     "Please detach and return with your payment\nPolicy Number: KL-77001234\nAmount: S$88.20\nTotal Permanent Disability\tS$150,000",
-    "Ways to pay\nBank account: 123-456789-0\nPlan Harbour Term 20 year cover 2046",
+    "Ways to pay\nBank account: 123-456789-0\nCover reference CV-44718 for Plan Harbour Term",
+    "PAYMENT SLIP\nPolicy Number: KL-77001234\nAmount: S$88.20\nBenefit period : 30 days",
+    "PAYMENT SLIP\nPolicy Number: KL-77001234\nAmount: S$88.20\nRider waiver premium benefit : S$5,000",
   ]) assert.equal(statusNotice([reminder, { text: page2 }]), false, page2.slice(0, 40));
   // Critic R338: a notes or terms page that adds a cover figure without a cover word is part of a pack.
   const reinstated = { text: letter("Your policy has been reinstated with effect from 1 November 2026. Please refer to your policy schedule.") };
   for (const page2 of [
     "IMPORTANT NOTES\nHospital cash\tS$200\nICU\tS$400",
     "TERMS AND CONDITIONS\nRider\tAmount\nCritical Illness Rider\tS$50,000",
+    // Critic R340: what a policy pays out is no payment line.
+    "IMPORTANT NOTES\nAmount payable on death : S$200,000",
+    "IMPORTANT NOTES\nTotal payable on death\tS$250,000",
+    "IMPORTANT NOTES\nPaid on diagnosis of a critical illness : S$50,000",
     // Critic R339 M2: a units-only schedule page that prints its payment mode.
     "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nPayment Mode : GIRO\nPlan : Example Hospital Income\nUnits : 5",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
@@ -251,7 +257,9 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     "Important notes\nThe premium for your rider will be S$12.50 a month from 1 January 2027.",
     "Important notes\nBenefits: please refer to your policy schedule.",
     "Important notes\nBenefits  will cease if the premium is not paid within the grace period.",
-    "PAYMENT SLIP\nPlan: Harbour Term\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
+    "PAYMENT SLIP\nPlan: Harbour Term 20\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
+    "PAYMENT SLIP\nPolicy Number: KL-77001234\nAmount payable (2 months): S$176.40\nBank account: 123-456789-0",
+    "PAYMENT SLIP\nPolicy Number: KL-77001234\nBasic premium: S$75.70\nRider premium: S$12.50\nTotal: S$88.20",
   ]) assert.equal(statusNotice([reminder, { text: page2 }]), true, page2.slice(0, 40));
   for (const page2 of ["Important notes\nPremium waiver benefit: S$5,000", "Important notes\nThe premium waiver sum is S$5,000"])
     assert.equal(statusNotice([reminder, { text: page2 }]), false, page2);
