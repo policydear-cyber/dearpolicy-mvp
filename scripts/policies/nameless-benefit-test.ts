@@ -15,7 +15,7 @@ const NAMELESS = [
   "only", "and Merdeka", "or", "percent (20%) of the surface of the Life", "of the Life Assured", "up to S$100",
   "Cash payouts provide 2026 you flexibility to", "Benefits payable in respect of", "Cover for the",
   "SGD 5,000", "USD 300.00", "MYR 448.23", "GBP 150", "RM 20", "Nil", "NIL", "Not applicable", "TBA",
-  "dan Merdeka", "atau", "untuk setiap hari",
+  "dan Merdeka", "atau", "untuk setiap hari", "As charged", "As Charged.", "sahaja",
 ];
 const NAMED = [
   "Death Benefit", "Critical Illness Benefit", "Hospital Cash Benefit*", "Day surgery", "Hip", "ICU", "Class C",
@@ -29,6 +29,8 @@ const NAMED = [
   // Other scripts, short forms, and joining words that are part of a hyphenated word (Critic R347, TE #186).
   "危疾保障", "身故", "死亡保険金", "입원", "ประกัน", "Décès", "CI", "TI", "PA", "GP", "ER", "CT", "DB", "OT", "TB", "A&E", "TI/CI", "CI 1",
   "in-hospital doctor's visit", "up-front cash", "per day hospital cash", "in-patient treatment", "on-call doctor", "Room & Board",
+  // One Han character is a word (Critic R352): "癌" is cancer.
+  "癌", "癌 S$50,000",
 ];
 
 test("a name that names nothing is not a benefit; every real benefit name is kept", async () => {

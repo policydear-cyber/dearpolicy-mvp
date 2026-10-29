@@ -1059,15 +1059,15 @@ export function looksLikeCoverageLine(benefitName:string){
  * "입원"), or a capitalised short form of two or more letters ("CI", "A&E", "TI/CI"), once list markers, figures,
  * ordinals, money and empty-cell words are taken out. A name is a piece of a sentence only when a lower-case joining
  * word is followed (or preceded) by a space, so "in-patient treatment" and "up-front cash" are kept. */
-const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|plus|less|including|which|that|if|as|from|up|dan|atau|untuk|termasuk|nd|rd|st|th)(?:\s|$)/u;
+const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|plus|less|including|which|that|if|as|from|up|dan|atau|untuk|termasuk|sahaja|nd|rd|st|th)(?:\s|$)/u;
 const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
-const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|-+|—)$/i;
+const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|as charged|-+|—)$/i;
 const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
 export function namesNoBenefit(benefitName:string){
   const name=(benefitName??"").trim();
   if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
   const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
-  const hasWord=/\p{L}{3}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
+  const hasWord=/\p{L}{3}/u.test(words)||/\p{Script=Han}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
   if(!hasWord)return true;
   return JOINING_START.test(name)||JOINING_END.test(name);
 }
