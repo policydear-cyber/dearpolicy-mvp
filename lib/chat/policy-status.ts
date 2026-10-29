@@ -59,6 +59,9 @@ export function printedPeriodEnd(pages: Page[]): { iso: string; printed: string;
   return null;
 }
 
+/** Wording that describes a case rather than this policy's own premium. */
+export const HYPOTHETICAL = /\b(?:for example|for instance|e\.g\.|example|illustrat\w*|suppose|assum\w*|if (?:your|the|a) (?:premium|payment|instalment))\b/i;
+
 export function printedStatus(pages: Page[], expiryIso: string | null, today: string): PrintedStatus {
   const all = lines(pages);
   // A lapse the document states.
@@ -70,10 +73,16 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
   for (const x of all) {
     const m = x.l.match(new RegExp("\\bgrace period(?: ends?| ending)?(?:\\s+on)?[:\\s]+" + DATE, "i")) ?? x.l.match(new RegExp("\\bgrace period[^.]*\\bends? on\\s+" + DATE, "i"));
     if (!m) continue;
+    // A wording's worked example ("For example, if your premium is due on 1 March, the grace period ends on 31 March")
+    // is no notice: neither its line nor the line it wraps from may be hypothetical.
+    const before = all.find((y) => y.page === x.page && y.i === x.i - 1)?.l ?? "";
+    if (HYPOTHETICAL.test(x.l) || HYPOTHETICAL.test(before) && !/[.!?:]\s*$/.test(before)) continue;
     const iso = isoOf(m[1], m[2], m[3]);
-    const due = all.find((y) => y.page === x.page && /\b(?:premium due date|due date|due on)\b/i.test(y.l) && new RegExp(DATE).test(y.l));
+    const due = all.find((y) => y.page === x.page && /\b(?:premium due date|due date|due on)\b/i.test(y.l) && new RegExp(DATE).test(y.l) && !HYPOTHETICAL.test(y.l));
     const dueM = due?.l.match(new RegExp(DATE));
-    const amount = all.find((y) => y.page === x.page && /\b(?:monthly|annual|amount due|premium)\b/i.test(y.l) && /S\$\s?[\d,]+(?:\.\d+)?/.test(y.l))?.l.match(/S\$\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
+    const amount = all.find((y) => y.page === x.page && /\b(?:monthly|annual|amount due|premium)\b/i.test(y.l) && /S\$\s?[\d,]+(?:\.\d+)?/.test(y.l) && !HYPOTHETICAL.test(y.l))?.l.match(/S\$\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
+    // A reminder prints what is due: a grace date with no due date and no amount due beside it is not one.
+    if (!due && !amount && !all.some((y) => y.page === x.page && /\b(?:amount due|premium (?:due|outstanding|unpaid)|outstanding premium|unpaid premium)\b/i.test(y.l) && /\d/.test(y.l) && !HYPOTHETICAL.test(y.l))) continue;
     // A grace period that has already run out says nothing about payment since: neither "in force" nor "lapsed".
     return { state: iso >= today ? "grace" : "grace_passed", date: iso, printed: m[1] + " " + m[2] + " " + m[3], page: x.page, line: x.l,
       dueAmount: amount, duePrinted: dueM ? dueM[1] + " " + dueM[2] + " " + dueM[3] : null };
@@ -111,6 +120,25 @@ export function applyReinstatements(statusOf: Map<string, PrintedStatus>, docs: 
       if (["unknown", "in_force"].includes(statusOf.get(o.id)?.state ?? "unknown")) statusOf.set(o.id, reinstated);
       break;
     }
+  }
+  return statusOf;
+}
+
+/** A reminder whose grace date has passed says nothing once a later document of the same policy (same policy number,
+ * or same product for the same people) or a payment after that date is on file: a renewal schedule or a receipt is
+ * the later word, so the reminder reads as "unknown" again and never overrides it. */
+export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
+  docs: { id: string; policy_number: string | null; product_name: string | null; owners: Set<string>; date: string | null }[], latestPaid: Map<string, string | null>) {
+  const num = (x: string | null) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const product = (x: string | null) => (x ?? "").trim().toLowerCase();
+  for (const d of docs) {
+    const st = statusOf.get(d.id);
+    if (st?.state !== "grace_passed" || !st.date) continue;
+    const same = docs.filter((o) => o.id !== d.id && (num(d.policy_number) && num(o.policy_number) === num(d.policy_number)
+      || !!product(d.product_name) && product(o.product_name) === product(d.product_name) && [...o.owners].some((x) => d.owners.has(x))));
+    const after = (iso: string | null | undefined) => (iso ?? "").slice(0, 10) > st.date!;
+    if (same.some((o) => after(o.date)) || [d, ...same].some((o) => after(latestPaid.get(o.id))))
+      statusOf.set(d.id, { state: "unknown", date: null, printed: null, page: null, line: null });
   }
   return statusOf;
 }

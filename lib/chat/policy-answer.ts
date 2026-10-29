@@ -30,7 +30,7 @@ import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
-import { applyReinstatements, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
+import { applyReinstatements, supersedePassedGrace, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
 // ---------------------------------------------------------------------------
 // Topics
@@ -767,6 +767,16 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const statusOf = new Map<string, PrintedStatus>([...docs.keys()].map((id) => [id, printedStatus(pagesByDoc.get(id) ?? [], docs.get(id)?.renewal_or_expiry_date ?? null, today)]));
   // Round 7 (port): a lapse a later document of the same policy says was reinstated is not its status now.
   applyReinstatements(statusOf, [...docs.values()].map((d) => ({ id: d.id, policy_number: d.policy_number ?? null })), (id) => pagesByDoc.get(id) ?? []);
+  // A reminder whose grace date has passed says nothing once a later document or payment of the same policy is on file.
+  if ([...statusOf.values()].some((st) => st.state === "grace_passed")) {
+    const paid = await query<{ policy_id: string; latest: string | null }>(
+      `SELECT coalesce(source_document_id,policy_id)::text AS policy_id,max(coalesce(payment_date,period_start))::text AS latest
+         FROM premium_records WHERE account_id=$1 AND coalesce(source_document_id,policy_id)::text=ANY($2::text[]) GROUP BY 1`, [args.accountId, [...docs.keys()]])
+      .catch(() => ({ rows: [] as { policy_id: string; latest: string | null }[] }));
+    supersedePassedGrace(statusOf, [...docs.values()].map((d) => ({ id: d.id, policy_number: d.policy_number, product_name: d.product_name,
+      owners: speaksFor.get(d.id) ?? new Set<string>(), date: d.document_date ?? d.effective_date })), new Map(paid.rows.map((r) => [r.policy_id, r.latest])));
+  }
+
   const inactive = (id: string) => ["lapsed", "ended"].includes(statusOf.get(id)?.state ?? "");
   const paymentOnly = (id: string) => PAYMENT_ONLY.test(docs.get(id)?.document_role ?? "");
   const tables = new Map([...pagesByDoc].map(([docId, pages]) => [docId, valueTables(pages)]));
@@ -1553,7 +1563,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     // A grace-period reminder is itself the latest word on the policy; a
     // policy whose printed period (two years or less) runs past today is the current one.
     const st = statusOf.get(policyId);
-    if (st?.state === "grace" || st?.state === "grace_passed") return false;
+    if (st?.state === "grace") return false;
     const period = printedPeriodEnd(pagesByDoc.get(policyId) ?? []);
     const begins = d.effective_date?.slice(0, 10) ?? null;
     if (st?.state === "in_force" && period && begins && begins <= today && daysBetween(begins, period.iso) <= 800) return false;
