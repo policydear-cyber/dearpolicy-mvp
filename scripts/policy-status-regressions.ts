@@ -159,3 +159,13 @@ test("TE R2 G5: an undated renewal is dated by the period it prints", () => {
   assert.equal(printedPeriodStart([{ page: 1, text: "RENEWAL SCHEDULE\nPeriod of insurance 19 October 2026 to 18 October 2027" }]), "2026-10-19");
   assert.equal(printedPeriodStart([{ page: 1, text: "Schedule of benefits" }]), null);
 });
+
+test("TE R3: a printed range ends at its second date; impossible days are no date", () => {
+  for (const line of ["Grace period: 20/09/2026 - 20/10/2026", "Grace period 20 September 2026 to 20 October 2026"]) {
+    assert.equal(printedStatus(notice(line), null, "2026-10-01").state, "grace", line);
+    assert.equal(printedStatus(notice(line), null, "2026-10-01").date, "2026-10-20", line);
+  }
+  assert.deepEqual(graceEndDates("Grace period ends 31/02/2026"), []);
+  assert.deepEqual(graceEndDates("Grace period ends 30 February 2026"), []);
+  assert.equal(graceEndDates("Grace period ends 29/02/2028")[0]?.iso, "2028-02-29");
+});

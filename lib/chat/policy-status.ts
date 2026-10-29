@@ -77,6 +77,11 @@ const MON = "Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Au
 /** A date as notices print it: "20 October 2026", "20th Oct 2026", "20/10/2026" (day first, as in SG, MY and the UK). */
 const ANY_DATE = "(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(" + MON + ")\\.?,?\\s+(\\d{4})|(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4}))";
 function isoOfAny(m: RegExpMatchArray, at: number): string | null {
+  const iso = isoParts(m, at);
+  // A day the month does not have ("31/02/2026") is no date.
+  return iso && new Date(iso + "T00:00:00Z").toISOString().slice(0, 10) === iso ? iso : null;
+}
+function isoParts(m: RegExpMatchArray, at: number): string | null {
   if (m[at]) {
     const mon = MONTHS.findIndex((x) => x.startsWith(m[at + 1].toLowerCase().slice(0, 3)));
     const d = Number(m[at]);
@@ -94,8 +99,11 @@ export function graceEndDates(text: string): { iso: string; printed: string; ind
   for (const m of text.matchAll(re)) {
     const sentence = text.slice(0, m.index! + m[0].length).split(/[.!?](?:\s|$)/).at(-1) ?? "";
     if (HYPOTHETICAL.test(sentence)) continue;
-    const iso = isoOfAny(m, 1);
-    if (iso) out.push({ iso, printed: m[0].slice(m[0].search(new RegExp(ANY_DATE, "i"))), index: m.index! });
+    // A printed range ("Grace period: 20/09/2026 - 20/10/2026") ends at its second date.
+    const range = text.slice(m.index! + m[0].length).match(new RegExp("^\\s*(?:-|–|to|until|till)\\s*" + ANY_DATE, "i"));
+    const iso = range ? isoOfAny(range, 1) : isoOfAny(m, 1);
+    const printed = range ? range[0].slice(range[0].search(new RegExp(ANY_DATE, "i"))) : m[0].slice(m[0].search(new RegExp(ANY_DATE, "i")));
+    if (iso) out.push({ iso, printed, index: m.index! });
   }
   return out;
 }
