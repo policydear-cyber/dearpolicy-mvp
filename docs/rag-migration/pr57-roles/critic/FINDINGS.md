@@ -8515,3 +8515,12 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - Not checked in depth: the claims evidence routes (bill text the household uploaded for a claim).
 - Probe on the PR code: `maskShownText({benefitName:"Plan G1234567A hospital benefit", factKey:"S1234567D"})` gives "Plan G****567A hospital benefit" and leaves factKey as is.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R319 — #179 5efb99d (Coverage document names, TE P179 F1): READY
+
+- All four places on the Coverage page now use `documentCardTitle`: the plan-proof sentence, the wording sentence, the Supporting wording card title and the table's "Source ·" line. The page has no raw `original_filename` left in its output; it appears only in types, and the confirmed card already used documentName.
+- The table line looks the document up in the `documents` that tableFor already returns, so there is no new query. Its `file` carries insurer, role and policy number. A row whose document is missing falls back to its stored name through the same rule, so a machine-made name still reads as a kind of document.
+- The reference and owned queries add only `p.policy_number` / `p.document_role` columns of the same joined row; no filter changed.
+- The new static checks in doc-card-title fail on 65b74d4's page and route, and pass now (42/42).
+- **Merge note:** this conflicts with #181 (ab8f1de) in app/api/coverage/route.ts, on the `return NextResponse.json(...)` line and the payload. Whichever merges second must keep both: the new names inside the payload, and `maskShownText(payload)` around it. Combined, the new names are masked too, which is what #181 wants. #180 merges cleanly with it.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
