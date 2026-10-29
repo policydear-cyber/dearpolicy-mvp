@@ -11,7 +11,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
 
 const row = (id: string, quote: string, value: number, o: { tier?: string | null; reviewedAt?: string | null } = {}) => ({
-  id, policyId: "p1", productName: "Example Travel", benefitName: "Benefit " + id, traits: ["other"] as never[], formulaKind: "fixed" as never,
+  id, policyId: "p1", productName: "Example Travel", benefitName: "Travel benefit " + id.toUpperCase() + " cover", traits: ["other"] as never[], formulaKind: "fixed" as never,
   formulaValue: value, currency: "SGD", factKey: null, offsetDays: null, maximumDays: null, sourcePage: 5, quote, conditions: [] as string[],
   requirements: [] as never[], needsReview: false, basisInferred: false, needsConfirmation: false, reviewedAt: o.reviewedAt ?? null, tier: o.tier ?? null,
 });
