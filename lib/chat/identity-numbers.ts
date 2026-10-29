@@ -47,10 +47,12 @@ function maskValue(value: string) {
 export function maskIdentityText(text: string): string {
   let out = text;
   for (const [re, to] of SHAPES) out = out.replace(re, to);
-  // A number the text labels as a policy's or a member's ("Group policy no. 851231-00-1234") is that number, never a MyKad.
+  // Only a number labelled right before it as a policy's or certificate's own number ("Group policy no. 851231-00-1234")
+  // is kept. A person's words near it ("Member: Ada Tan", "Certificate holder", "Member ID") never are, since an
+  // over-masked policy number is harmless and a shown MyKad is not (Critic R360 H1, TE pr193 F1).
   out = out.replace(MYKAD, (all, _yy: string, mm: string, dd: string, last: string, at: number, whole: string) =>
     Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31
-      && !/\b(?:policy|member|membership|group|plan|certificate|scheme|account|claim|reference|invoice|receipt)\b[^\d\n]{0,12}$/i.test(whole.slice(Math.max(0, at - 30), at))
+      && !/\b(?:policy|certificate|reference|invoice|receipt)[ \t]*(?:no\.?|number|#)[ \t]*[:.]?[ \t]*$/i.test(whole.slice(Math.max(0, at - 30), at))
       ? "******-**-" + last : all);
   return out.replace(LABELLED, (all, label: string, value: string) => {
     const digits = value.replace(/\D/g, "").length;

@@ -61,6 +61,9 @@ test("each market's identity number shape is masked, keeping what the certificat
   assert.equal(maskIdentityText("photo_id_20261029.jpg"), "photo_id_20261029.jpg");
   assert.equal(maskIdentityText("member_id_12345678.pdf"), "member_id_12345678.pdf");
   assert.equal(maskIdentityText("Group policy no. 851231-00-1234"), "Group policy no. 851231-00-1234");
+  // A person's words near the number are no policy label: the MyKad is masked (Critic R360 H1, TE pr193 F1).
+  for (const lead of ["Member: Ada Tan ", "Member\tADA TAN\t", "Policy owner ", "Certificate holder: ", "Claim for Ada ", "Plan A insured ",
+    "Account holder Ada ", "Member ID ", "Member ID: ", "Scheme member IC "]) assert.equal(maskIdentityText(lead + "850101-14-5678"), lead + "******-**-5678", lead);
   assert.equal(maskIdentityText("MyKad 850101-14-5678"), "MyKad ******-**-5678");
   // Printed in groups, and Malaysian labels (Critic R262 L1).
   assert.equal(maskIdentityText("NI number QQ 12 34 56 C"), "NI number ** ** *4 56 C");
