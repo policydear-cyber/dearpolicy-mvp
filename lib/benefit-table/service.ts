@@ -71,7 +71,7 @@ const text = (v: unknown) => (v == null ? null : String(v));
 const IN_INTAKE = new Set(["uploaded", "queued", "extracting", "indexing"]);
 /** Upload scan states from which intake goes on (allow-list): a rejected or blank upload stays "queued" for good and is
  * not being read. */
-const SCAN_GOES_ON = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
+export const SCAN_GOES_ON = new Set(["uploaded", "quarantined", "scan_pending", "scan_clean", "not_scanned_prototype"]);
 /** Personal proof of cover (allow-list): a schedule or certificate naming the household's own cover. Intake reads it into
  * the table, so a reading that was not stored can be made again; every other role keeps "no_table". */
 const PERSONAL_PROOF_ROLES = new Set(["personal_schedule", "certificate"]);
