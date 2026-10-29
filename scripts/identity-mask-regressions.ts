@@ -191,3 +191,15 @@ test("a masked name a screen sends back never replaces the stored name; a name t
   assert.match(patch, /body\.benefitName=sentName\(body\.benefitName,existing\.rows\[0\]\.benefit_name\)/);
   assert.ok(patch.indexOf("sentName(") < patch.indexOf("UPDATE policy_benefits"), "the name is decided before anything is written");
 });
+
+test("a document named by its file name never shows an ID number the file name holds, in any market", async () => {
+  const { documentName, documentCardTitle } = await import("@/lib/policies/document-name");
+  // Made readable, "Certificate_S7712345D.pdf" became "Certificate S7712345 D", a shape no mask knows (TE pr181 F2).
+  for (const [file, id] of [["Certificate_S7712345D.pdf", "7712345"], ["cert-G4455667K.pdf", "4455667"], ["Travel 870412-10-5566.pdf", "870412"], ["Ada Okafor S7712345D wording.pdf", "7712345"]] as const) {
+    for (const name of [documentName({ product_name: null, original_filename: file }), documentCardTitle({ product_name: null, original_filename: file })]) {
+      assert.ok(!name.replace(/\s+/g, "").includes(id), `${file} -> ${name}`);
+    }
+  }
+  // A name with no ID number reads as before.
+  assert.equal(documentName({ product_name: null, original_filename: "my_ci_plan_2026.pdf" }), "My Ci Plan 2026");
+});

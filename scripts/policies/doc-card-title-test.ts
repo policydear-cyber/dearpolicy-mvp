@@ -69,7 +69,14 @@ test("Coverage route names each document with the shared rule", () => {
   assert.doesNotMatch(coverageRoute, /document:r\.source\.document\b/);
   assert.doesNotMatch(coverageRoute, /(ownership|reference)_filename:/);
 });
-test("shared naming module is pure (no imports)", () => assert.doesNotMatch(shared, /^\s*import\s/m));
+// It may import only modules that import nothing themselves (the ID mask, TE pr181 F2), so it stays pure for client screens.
+test("shared naming module is pure (imports only modules with no imports)", () => {
+  for (const [, from] of shared.matchAll(/^\s*import\s[^;]*?from\s+"([^"]+)"/gm)) {
+    assert.match(from, /^@\/lib\//, from);
+    assert.doesNotMatch(readFileSync(join(root, from.slice(2) + ".ts"), "utf8"), /^\s*import\s/m, from);
+  }
+  assert.doesNotMatch(shared.replace(/^\s*import\s[^;]*?from\s+"@\/lib\/[^"]+";?/gm, ""), /^\s*import\s/m);
+});
 test("GET /api/policies selects insurer, document_role, policy_number", () => { for (const c of ["p.insurer", "p.document_role", "p.policy_number"]) assert.ok(route.includes(c), c); });
 
 console.log(`doc-card-title: ${passed} passed, ${failures.length} failed`);
