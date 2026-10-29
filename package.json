@@ -13,6 +13,7 @@
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
     "benefit-table:unread-notice-test": "node --import tsx scripts/benefit-table/unread-notice-test.ts",
+    "benefit-table:coverage-recovery-test": "node --import tsx scripts/benefit-table/coverage-recovery-test.ts",
     "benefit-table:chat-test": "node --import tsx scripts/benefit-table/chat-test.ts",
     "benefit-table:conditions-twice-test": "node --import tsx scripts/benefit-table/conditions-twice-test.ts",
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
