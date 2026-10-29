@@ -90,15 +90,17 @@ export async function POST(request: NextRequest) {
     // One transaction (Critic R311 M1): a waiting re-read is cancelled, a read a worker already holds refuses the request,
     // and the requeue happens, all or none. A claimed re-read cannot be stopped (cancelJob only asks a running read to stop,
     // and intake never checks), so it must refuse rather than start a second paid read beside it; and a refused request
-    // never cancels the only reader. This read replaces any re-read still waiting; should it meet a reading-service
-    // failure, intake schedules the re-read again.
+    // never cancels the only reader. This read replaces any re-read still waiting, or whose worker died (a lapsed lease:
+    // left alone, the lease recovery below would make it claimable again beside this read; TE R3). Should this read meet
+    // a reading-service failure, intake schedules the re-read again.
     const cancelled: BackgroundJobRow[] = [];
     const tx = await pool.connect();
     try {
       await tx.query("BEGIN");
       const waiting = await tx.query<BackgroundJobRow>(
-        `UPDATE background_jobs SET status='cancelled', cancel_requested=true, updated_at=now()
-         WHERE job_type=$1 AND idempotency_key=$2 AND status IN ('queued','failed_retryable') RETURNING *`,
+        `UPDATE background_jobs SET status='cancelled', cancel_requested=true, lease_owner=NULL, lease_expires_at=NULL, updated_at=now()
+         WHERE job_type=$1 AND idempotency_key=$2
+           AND (status IN ('queued','failed_retryable') OR (status='processing' AND lease_expires_at <= now())) RETURNING *`,
         [POLICY_PROCESSING_JOB_TYPE, body.policyId + ":retry-read"],
       );
       const running = await tx.query(

@@ -39,6 +39,7 @@ const DOCS = {
   claimedQueued: id(8), // queued; own job dead; re-read claimed by a worker (live lease)
   claimedReady: id(9),  // ready, read in part; re-read claimed by a worker (live lease)
   heldScan: "f4000000-0000-4000-8000-000000000010", // uploaded an hour ago, on hold for its scan; no job
+  deadWorker: "f4000000-0000-4000-8000-000000000011", // queued; own job dead; re-read claimed but its lease lapsed
 };
 
 async function main() {
@@ -113,6 +114,9 @@ async function main() {
     await job(DOCS.claimedReady, "succeeded", -70);
     await job(DOCS.claimedReady + ":retry-read", "processing", -5);
     await policy(DOCS.heldScan, "queued", "queued", 60, "scan_pending");
+    await policy(DOCS.deadWorker, "queued", "retry_scheduled", 60);
+    await job(DOCS.deadWorker, "dead_letter", -70);
+    await job(DOCS.deadWorker + ":retry-read", "processing", -30);
 
     const { ACTIVE_HOUSEHOLD_COOKIE } = await import("@/lib/auth/request-context");
     const { GET } = await import("@/app/api/policies/route");
@@ -193,6 +197,17 @@ async function main() {
       assert.equal((await jobs(DOCS.claimedReady)).own, "succeeded");
       const p = await db.query<{ processing_status: string }>(`SELECT processing_status FROM policies WHERE id=$1`, [DOCS.claimedReady]);
       assert.equal(p.rows[0].processing_status, "ready");
+    });
+    await check("a re-read whose worker died (lapsed lease) is retired by Try again: one read, not two after lease recovery", async () => {
+      // The lease lapses just before the press: Try again on earlier documents runs lease recovery, which would otherwise
+      // have turned it into a waiting retry already (the case above: a waiting re-read refuses Try again).
+      await db.query(`UPDATE background_jobs SET lease_expires_at=now() - interval '10 minutes' WHERE idempotency_key=$1`, [DOCS.deadWorker + ":retry-read"]);
+      assert.equal(await tryAgain(DOCS.deadWorker), 202);
+      const { recoverExpiredLeases } = await import("@/lib/jobs/queue");
+      await recoverExpiredLeases(pool);
+      const after = await jobs(DOCS.deadWorker);
+      assert.equal(after.reread, "cancelled");
+      assert.equal(await pendingReads(DOCS.deadWorker), 1);
     });
     await check("a document on hold for its malware scan is not stalled (no Try again the route would refuse)", async () => {
       assert.equal(stalled(DOCS.heldScan), false);
