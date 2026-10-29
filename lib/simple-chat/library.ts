@@ -7,6 +7,7 @@
 import { uncheckedText } from "@/lib/documents/layout-check";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
+import { failedDocumentChatAdvice, type FailedDocumentChatAdvice } from "@/lib/documents/failure-advice";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
@@ -35,6 +36,9 @@ export type HouseholdDocument = {
   /** Why an upload on hold for its scan is on hold, in the Documents page's own fixed words (lib/policies/quarantine/ui.ts
    * policyQuarantineLabel), never the stored scanner text; null in the prototype mode, which uses no malware-scan wording. */
   holdLabel?: string | null;
+  /** For a document whose reading failed: why, and the one next step, in the Documents page's own fixed words
+   * (lib/documents/failure-advice.ts, an allow-list over the stored reasons), never the stored processing_error itself. */
+  failure?: FailedDocumentChatAdvice | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
@@ -61,7 +65,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
-            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.quarantine_status, f.display_name AS uploaded_for,
+            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.processing_error, p.page_count, p.quarantine_status, f.display_name AS uploaded_for,
             ${policyJobLive("p")} AS reading_live, ${scanJobLive("p")} AS scan_live, p.scan_result_detail
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
@@ -90,7 +94,10 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status), readingLive: d.reading_live === true,
-      scanLive: d.scan_live === true, holdLabel: holdLabel(text(d.quarantine_status), text(d.scan_result_detail), prototype),
+      scanLive: d.scan_live === true,
+      // Only the advice is kept: the stored reason is mapped onto fixed words here and goes no further.
+      failure: text(d.processing_status) === "failed" ? failedDocumentChatAdvice(text(d.processing_error), { hasPages: Number(d.page_count) > 0 }) : null,
+      holdLabel: holdLabel(text(d.quarantine_status), text(d.scan_result_detail), prototype),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
@@ -160,6 +167,13 @@ export const stalledReading = (doc: HouseholdDocument) => inProgress(doc) && !st
 /** A stalled document in a status the Documents page offers Try again for (app/api/policies/route.ts, inFlightIds). */
 export const offersTryAgain = (doc: HouseholdDocument) => stalledReading(doc) && ["queued", "extracting", "indexing"].includes(doc.processingStatus!);
 
+/** A document whose reading failed: why, and its next step, as the Documents page gives them. A failed document read
+ * without its stored reason (a saved household file) gets the generic advice, never a guess. Null for any other document. */
+export const failureAdvice = (doc: HouseholdDocument): FailedDocumentChatAdvice | null =>
+  doc.processingStatus === "failed" ? doc.failure ?? failedDocumentChatAdvice(null, { hasPages: false }) : null;
+/** A clause as a sentence. */
+export const sentence = (clause: string) => clause.charAt(0).toUpperCase() + clause.slice(1);
+
 /** "page 3", "pages 3 and 4", "pages 2, 3 and 4". */
 export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
 /** Said for a document with unchecked pages whichever of its pages are sent, so the answer never calls it fully read
@@ -179,7 +193,9 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
     (stillReading(doc) ? attr("reading_status", `${STILL_READING} (${doc.processingStatus})`)
       : onHold(doc) ? attr("reading_status", `${onHoldWords(doc)}, so it is not being read yet${doc.holdLabel ? ` (${doc.holdLabel})` : ""}`)
-      : unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) + ">";
+      : unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) +
+    // A failed document: the Documents page's reason and next step, so the answer gives those and no other.
+    (failureAdvice(doc) ? attr("why_not_read", failureAdvice(doc)!.why) + attr("next_step", failureAdvice(doc)!.step) : "") + ">";
   // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"

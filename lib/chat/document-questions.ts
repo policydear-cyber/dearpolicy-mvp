@@ -27,15 +27,16 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import type { ConversationState } from "./types";
 import { NON_COVER_ROLES, ROLE_WORDS, flagUnclearFigures, printedLines, type CorrespondenceRole } from "@/lib/documents/messy";
-import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
-import { failedDocumentAdvice, READING_LIMIT_RESETS } from "@/lib/documents/failure-advice";
+import { failedDocumentChatAdvice, type FailedDocumentChatAdvice } from "@/lib/documents/failure-advice";
 import { householdPersonFromWords } from "./person-words";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
 import { citeAnswerLines } from "./answer-verification";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
-type Doc = { id: string; file: string; role: string | null; status: string; error: string | null; message: string | null; product: string | null; insurer: string | null;
+type Doc = { id: string; file: string; role: string | null; status: string; message: string | null; product: string | null; insurer: string | null;
+  /** For a failed document: why and what to do, from the Documents page's allow-list (never the stored text itself). */
+  failure: FailedDocumentChatAdvice | null;
   superseded: boolean; notes: string[]; uploadedTo: string; owners: string[]; created: string };
 
 const personName = (p: ClaimPerson) => p.preferred_name?.trim() || p.display_name;
@@ -45,13 +46,14 @@ const cleanInsurer = (name: string | null) => name ? name.replace(/\s*\((?:ficti
 const q = (file: string) => "“" + file + "”";
 
 async function loadDocuments(accountId: string): Promise<Doc[]> {
-  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; message: string | null; product: string | null; insurer: string | null;
+  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; pages: number | null; message: string | null; product: string | null; insurer: string | null;
     superseded: boolean; notes: unknown; uploaded_to: string; owners: string[] | null; created: string }>(
-    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.processing_message AS message,p.product_name AS product,p.insurer,
+    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.page_count AS pages,p.processing_message AS message,p.product_name AS product,p.insurer,
             p.superseded_at IS NOT NULL AS superseded,p.extracted_json->'documentNotes' AS notes,p.family_member_id::text AS uploaded_to,
             ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id) AS owners,p.created_at::text AS created
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at,p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
-  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", role: r.role, status: r.status, error: r.error, message: r.message, product: r.product, insurer: r.insurer, superseded: !!r.superseded,
+  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", role: r.role, status: r.status, message: r.message,
+    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
 }
 async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { page: number; text: string }[]>> {
@@ -66,17 +68,16 @@ async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { 
 // ---------------------------------------------------------------------------
 // What could not be used, and why
 // ---------------------------------------------------------------------------
-type Unusable = "password" | "incomplete" | "unopenable" | "photo" | "limit" | "scan" | "processing" | "handwriting";
+type Unusable = "password" | "incomplete" | "unopenable" | "photo" | "limit" | "service" | "scan" | "failed" | "processing" | "handwriting";
+/** A failed document's kind is the Documents page's own (lib/documents/failure-advice.ts), an allow-list over the stored
+ * reasons: a reason it does not know is the generic "failed", never guessed from its words. */
+const FAILED_KIND: Record<FailedDocumentChatAdvice["kind"], Unusable> = {
+  password_missing: "password", password_wrong: "password", incomplete: "incomplete", unopenable: "unopenable", photo: "photo",
+  limit: "limit", service: "service", no_text: "scan", reading_failed: "failed", unknown: "failed",
+};
+const failureOf = (d: Doc) => d.failure ?? failedDocumentChatAdvice(null, { hasPages: false });
 function unusableKind(d: Doc): Unusable | null {
-  if (d.status === "failed") {
-    const e = d.error ?? "";
-    if (e === PDF_PASSWORD_REQUIRED_MESSAGE || e === PDF_PASSWORD_INCORRECT_MESSAGE || /password/i.test(e)) return "password";
-    if (e === INCOMPLETE_PDF_MESSAGE) return "incomplete";
-    if (e === UNOPENABLE_DOCUMENT_MESSAGE) return "unopenable";
-    if (e === UNREADABLE_PHOTO_MESSAGE) return "photo";
-    if (failedDocumentAdvice(e, { hasPages: false }).kind === "limit") return "limit";
-    return "scan";
-  }
+  if (d.status === "failed") return FAILED_KIND[failureOf(d).kind];
   if (d.status !== "ready") return "processing";
   if (d.role === "personal_notes" && /handwrit/i.test((d.message ?? "") + " " + d.notes.join(" "))) return "handwriting";
   return null;
@@ -84,15 +85,11 @@ function unusableKind(d: Doc): Unusable | null {
 const PHOTO_TIPS = "lay the page flat in good light with no shadow across it, hold the phone steady and straight above the page, keep the whole page in the frame, and check the photo is sharp before you upload it";
 function unusableLine(d: Doc, kind: Unusable, readable?: string[]): string {
   switch (kind) {
-    case "password": return q(d.file) + " is locked with a password, so DearPolicy couldn’t read it. Upload it again on the Documents page and type its password when asked — the insurer’s covering email or letter usually says what it is (often an ID number or a date of birth) — or ask the insurer for an unlocked copy.";
-    case "incomplete": return q(d.file) + " is incomplete — the file stops part-way, as happens when a download or copy is cut off — so it couldn’t be opened at all. Download it again from the insurer’s email or website (or ask the insurer for a fresh copy) and upload the new file.";
-    case "unopenable": return q(d.file) + " couldn’t be opened — the file looks damaged. Upload the original file again, or ask the insurer for a fresh copy.";
-    case "photo": return q(d.file) + " is a photo too blurred, dark or faint to read, so nothing in it is available. Take it again: " + PHOTO_TIPS + ". A PDF from the insurer is even better.";
-    case "limit": return q(d.file) + " couldn’t be read yet — reading was paused when the monthly reading limit was reached. Nothing is wrong with the file. Press “Try reading it again” on the Documents page after the limit resets " + READING_LIMIT_RESETS + ".";
-    case "scan": return q(d.file) + " couldn’t be read — DearPolicy found no readable text in it. The original PDF from the insurer, or a clearer scan, would let DearPolicy read it.";
     case "processing": return q(d.file) + " is still being read. Ask again in a few minutes.";
     case "handwriting": return q(d.file) + " is handwritten, and DearPolicy could read only parts of it, so it is kept as your own notes and nothing in it is used as a policy fact."
       + (readable?.length ? " The parts it could read: " + readable.map((l) => "“" + l + "”").join(", ") + "." : "");
+    // A failed document: why it could not be read and its next step, the Documents page's own advice for its reason.
+    default: { const f = failureOf(d); return q(d.file) + " couldn’t be read because " + f.why + ". " + f.step; }
   }
 }
 
@@ -410,7 +407,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     const extra: string[] = [];
     // A screenshot standing in for a policy document that couldn't be read: say so.
     if (roleAsked === "app_screenshot") for (const locked of docs.filter((x) => unusableKind(x) === "password" && x.owners.some((o) => d.owners.includes(o))))
-      extra.push("The policy document itself, " + q(locked.file) + ", is locked with a password — upload it again with its password and DearPolicy will read the schedule to confirm.");
+      extra.push("The policy document itself, " + q(locked.file) + ", is locked with a password — enter its password on the Documents page and DearPolicy will read the schedule to confirm.");
     return done(lead[roleAsked], [...quoted(lines), ...extra], cite(d, label + " (" + d.file + ")", lines.map((l) => l.page)), owner?.id ?? person?.id ?? null,
       { documents: { kind: "correspondence", role: roleAsked, ids: [d.id] } });
   }
@@ -524,7 +521,7 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
   const photoAsked = /\b(?:photo|picture|pic|image|snap(?:shot)?)\b/i.test(text);
   const pointed = shown.filter((d) => askedWords.some((w) => (d.file + " " + (d.product ?? "")).toLowerCase().replace(/[^a-z]+/g, " ").split(" ").some((x) => x.length >= 4 && x.startsWith(w.slice(0, 6)))) && (!photoAsked || /\.(?:jpe?g|png|heic|webp)$/i.test(d.file)));
   if (!lettersOnly && pointed.length && pointed.length <= 3 && pointed.length < shown.length && !/\bwhich\b|\bfrom\b|\blist\b|\ball\b/i.test(text)) {
-    const lines = pointed.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + "." + (d.status !== "ready" && d.error ? " " + d.error : ""));
+    const lines = pointed.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + "." + (d.status === "failed" ? " It couldn’t be read because " + failureOf(d).why + ". " + failureOf(d).step : ""));
     return done(lines[0], lines.slice(1), pointed.map((d) => d.id), ownerOf(pointed[0])?.id ?? person?.id ?? null);
   }
   const list = (lettersOnly ? shown.filter((d) => NON_COVER_ROLES.has(d.role ?? "")) : shown);

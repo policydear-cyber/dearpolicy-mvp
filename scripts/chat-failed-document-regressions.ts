@@ -31,10 +31,16 @@ const ACCOUNT = "00000000-0000-4000-8000-0000000000aa";
 const self = { id: "00000000-0000-4000-8000-000000000001", display_name: "Lim Ah Kow", preferred_name: null, relationship: "self" } as unknown as ClaimPerson;
 const spouse = { id: "00000000-0000-4000-8000-000000000002", display_name: "Tan Mei Ling", preferred_name: "Mei Ling", relationship: "spouse" } as unknown as ClaimPerson;
 
-type Row = { status: string; error: string | null; pageCount?: number | null; member?: string };
+type Row = { status: string; error: string | null; pageCount?: number | null; member?: string; file?: string };
 let rows: Row[] = [];
-// The stub answers documentsByPerson's one query with made-up rows.
-(pool as unknown as { query: (text: string, params?: unknown[]) => Promise<unknown> }).query = async () => ({
+// The stub answers documentsByPerson's one query, and the document questions' (lib/chat/document-questions.ts) document
+// and page reads, with made-up rows.
+(pool as unknown as { query: (text: string, params?: unknown[]) => Promise<unknown> }).query = async (text: string) => /FROM policy_pages/.test(text) ? { rows: [] }
+  : /processing_error AS error/.test(text) ? { rows: rows.map((r, i) => ({
+    id: "00000000-0000-4000-8000-0000000001" + String(i).padStart(2, "0"), file: r.file ?? `example-${i + 1}.pdf`, role: null, status: r.status, error: r.error,
+    pages: r.pageCount ?? null, message: null, product: null, insurer: "Example Insurance", superseded: false, notes: null, uploaded_to: r.member ?? self.id,
+    owners: [r.member ?? self.id], created: "2026-10-01 09:00:0" + i,
+  })) } : ({
   rows: rows.map((r, i) => ({
     id: "00000000-0000-4000-8000-0000000001" + String(i).padStart(2, "0"), product_name: null, insurer: "Example Insurance",
     original_filename: `example-${i + 1}.pdf`, policy_number: null, document_role: null, policy_type: null, personal_coverage_confirmed: false,
@@ -141,6 +147,73 @@ async function main() {
     const seen = new Set<string>();
     const text = [self, spouse].flatMap((p) => hs.unusableDocumentLines(p, map.get(p.id) ?? [], seen)).join(" ");
     assert.equal(text.match(/Enter its password on the Documents page/g)?.length, 1, text);
+  });
+
+  // ---- The document questions ("which documents couldn't be read?"): lib/chat/document-questions.ts. It used to say "no
+  // readable text ... a clearer scan" for a reading-service stop (a provider quota stop included) and for any reason it
+  // did not know, guessed a locked PDF from the word "password" in any stored text, and told a locked PDF to "Upload it
+  // again". It now gives the Documents page's own reason and next step (failedDocumentChatAdvice) for every kind.
+  const errors = await import("@/lib/documents/processing-errors");
+  const { ProviderQuotaExhausted } = await import("@/lib/ai/providers");
+  const { failedDocumentChatAdvice } = await import("@/lib/documents/failure-advice");
+  const dq = await import("@/lib/chat/document-questions");
+  async function asked(question: string, list: Row[]) {
+    rows = list;
+    const a = await dq.documentQuestionAnswer({ accountId: ACCOUNT, question, family: [self, spouse], current: self, state: {} as never });
+    assert.ok(a, question);
+    return [a.summary, ...a.details].join(" ");
+  }
+  const KINDS: [string | null, string][] = [
+    [PDF_PASSWORD_REQUIRED_MESSAGE, "password_missing"], [PDF_PASSWORD_INCORRECT_MESSAGE, "password_wrong"], [UNREADABLE_DOCUMENT_MESSAGE, "no_text"],
+    [UNOPENABLE_DOCUMENT_MESSAGE, "unopenable"], [INCOMPLETE_PDF_MESSAGE, "incomplete"], [UNREADABLE_PHOTO_MESSAGE, "photo"],
+    [DOCUMENT_READING_SERVICE_MESSAGE, "service"], [errors.quotaStopReason(new ProviderQuotaExhausted(429)), "service"],
+    [errors.READING_LIMIT_REACHED_MESSAGE, "limit"], [DOCUMENT_READING_FAILED_MESSAGE, "reading_failed"],
+    [POLICY_PROCESSING_STOPPED_MESSAGE, "unknown"], ["password service timeout at /var/task/worker.js", "unknown"], [null, "unknown"],
+  ];
+
+  await test("document questions: every kind of failure gets the Documents page's reason and next step", async () => {
+    for (const [error, kind] of KINDS) for (const pageCount of [null, 3]) {
+      const advice = failedDocumentChatAdvice(error, { hasPages: !!pageCount });
+      assert.equal(advice.kind, kind, String(error));
+      const text = await asked("Which documents couldn't be read?", [{ status: "failed", error, pageCount }, { status: "ready", error: null, pageCount: 2 }]);
+      assert.ok(text.includes("“example-1.pdf” couldn’t be read because " + advice.why + ". " + advice.step), `${kind}: ${text}`);
+      assert.doesNotMatch(text, /example-2\.pdf/, "a read document is not listed");
+      assert.doesNotMatch(text, /Upload it again|ECONN|worker\.js|timeout|Analysis stopped|\$\s?\d/, text);
+      // Only "no readable text" is told about a clearer scan; a service or provider-quota stop never is.
+      if (kind === "no_text") assert.match(text, /clearer scan/, text);
+      else assert.doesNotMatch(text, /readable text|\bscan/i, `${kind}: ${text}`);
+      if (kind === "service") assert.match(text, /reading service wasn’t available — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, text);
+      if (kind === "password_missing" || kind === "password_wrong") assert.match(text, /on the Documents page/, text);
+      if (kind === "unknown") assert.match(text, /DearPolicy couldn’t finish reading it/, text);
+    }
+  });
+
+  await test("document questions: a locked PDF asked about directly is told to enter its password, never to upload it again", async () => {
+    for (const error of [PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE]) {
+      const text = await asked("Why couldn't my password protected pdf be read?", [{ status: "failed", error }]);
+      assert.match(text, /password-protected/, text);
+      assert.match(text, /on the Documents page/, text);
+      assert.doesNotMatch(text, /upload(?:ed)? it again|re-?upload/i, text);
+    }
+    // A stored reason that merely contains "password" is not a locked PDF: the generic advice, never a guess.
+    const guess = await asked("Which documents couldn't be read?", [{ status: "failed", error: "password service timeout" }]);
+    assert.doesNotMatch(guess, /password/i, guess);
+    assert.match(guess, /DearPolicy couldn’t finish reading it/, guess);
+  });
+
+  await test("document questions: the list of uploads names a failed upload's reason in fixed words, never its stored text", async () => {
+    const raw = "Error: connect ECONNREFUSED 10.0.0.1:5432 at /var/task/worker.js";
+    const text = await asked("Is the kowshield file I uploaded the latest one?", [{ status: "failed", error: raw, file: "kowshield-renewal.pdf" }, { status: "ready", error: null, pageCount: 2, file: "travel.pdf" }]);
+    assert.match(text, /kowshield-renewal\.pdf/, text);
+    assert.doesNotMatch(text, /ECONN|worker\.js|5432/, text);
+    assert.ok(text.includes(failedDocumentChatAdvice(raw, { hasPages: false }).step), text);
+  });
+
+  await test("document questions: negative controls -- still being read and ready documents are unchanged", async () => {
+    const reading = await asked("Is anything still being read?", [{ status: "processing", error: null }]);
+    assert.match(reading, /“example-1\.pdf” is still being read\. Ask again in a few minutes\./, reading);
+    const none = await asked("Which documents couldn't be read?", [{ status: "ready", error: null, pageCount: 2 }]);
+    assert.match(none, /^Every document on file for your household was read/, none);
   });
 
   console.log(`chat failed-document regressions: ${cases} passed`);
