@@ -8635,3 +8635,15 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - Low L1 (accepted direction): two policies of the same product for the same person with different policy numbers count as "the same policy". A later document of one hides the other's passed-grace warning (probe: P-111 and P-222 "Term Plus" gives unknown). That matches the #152 lesson that renewals can re-number one policy, and the cost is a missing warning, not a wrong state. Noting it only.
 - Low L2: the workflow's latest date is taken across every page in `from`. When the question names no plan, that can be another policy's reminder. This is unchanged in kind from before.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R326 — #182 b7fdaf29: READY
+
+- Probe through the PR's printedStatus:
+  - A notice's "If your premium is not paid, your grace period ends on 20 October 2026" (with "Amount due: S$86.40") gives grace_passed.
+  - The worked examples give unknown.
+  - "Grace period: 20/09/2026 - 20/10/2026" ends at 20 October 2026 and keeps "20/10/2026" as printed, for the suffix pass.
+  - "Your grace period started on 20/09/2026" gives no date.
+  - A "Premium waiver benefit S$50,000" line is not taken as the amount due.
+- supersedePassedGrace now treats two different policy numbers as two policies, and the reminder's own premium rows never count. My R325 L1 probe now keeps the warning (grace_passed). I accept the reasoning: the cost is one honest "cannot show whether it was paid" line.
+- Low L1: numeric dates are read day first only. A US-printed "05/06/2026" (6 May) reads as 5 June, and "10/20/2026" gives no date, which is safe. This matters only for markets that print month first.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
