@@ -8468,3 +8468,10 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - tsc clean, next build passes, merge-tree with main clean;
   - doc-card-title 39, te159 106, premium table, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
   - #178 × #179 merges clean.
+
+## R317 — #179 65b74d4: READY; R316 L1 is fixed
+
+- app/chat/page.tsx's library note now names a failed document with `documentCardTitle`, fed the insurer, role and policy number that /api/policies already returns. It imports the pure module only.
+- The new static check in doc-card-title fails without the change; it now passes 40/40.
+- v11:customer-screens still fails only the check it fails on main (`/nextSteps\[0\]/` on the chat page, 10 others pass); this change doesn't affect it.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
