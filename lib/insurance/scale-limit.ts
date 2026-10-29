@@ -263,17 +263,32 @@ export function resolveStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
  * already seeds such rows without a figure (lib/ledger/store.ts); chat and the Benefits page now agree with it. A row
  * read for one plan (tier set), or one a person has corrected, is kept as it is. */
 export const PLAN_COLUMNS_NOTE="The document prints a different figure for each plan, and which plan is yours is not shown here, so DearPolicy does not take a figure from it.";
-// A cell of a plan table: an amount with its currency printed, or a plan that does not have the benefit.
-const PLAN_CELL=String.raw`(?:(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?|[Nn]ot\s+(?:[Cc]overed|[Aa]pplicable)|N\/A)`;
+// A cell of a plan table: an amount with its currency printed (and the unit each column repeats: "S$100 per day",
+// "RM150 sehari", TE pr190 F1), or a plan that does not have the benefit ("Not covered", "Nil", "Tidak dilindungi", F2).
+const UNIT=String.raw`(?:\s*(?:\/\s*(?:day|night|week|month|year|visit)|per\s+(?:day|night|week|month|year|visit|trip|claim|incident)|a\s+(?:day|night)|sehari|setiap\s+hari))?`;
+const MONEY_CELL=String.raw`(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?`+UNIT;
+const NONE_CELL=String.raw`(?:[Nn]ot\s+(?:[Cc]overed|[Aa]pplicable|[Ii]ncluded)|N\/A|[Nn]il|NIL|[Tt]idak\s+[Dd]ilindungi|[Tt]iada)`;
+const PLAN_CELL=`(?:${MONEY_CELL}|${NONE_CELL})`;
 const PLAN_ROW=new RegExp(`${PLAN_CELL}(?:\\s+${PLAN_CELL})+`,"g");
+// A table whose header prints the currency ("Benefits (S$)") gives bare figures: three or more side by side, each in
+// thousands ("250,000 500,000 1,000,000", TE pr190 F4). Two bare figures are as likely a code and an amount.
+const BARE_ROW=/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\s+\d{1,3}(?:,\d{3})+){2,}(?![\d.,])/g;
+const SIGN=/^(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|SGD|USD|MYR|GBP|EUR|AUD|HKD)/;
 /** Whether a row's quote prints two or more plan cells side by side that do not all say the same figure. A row whose
- * columns all print one figure ("$3,540 $3,540 $3,540") pays that figure whichever plan is held. */
+ * columns all print one figure ("$3,540 $3,540 $3,540") pays that figure whichever plan is held. Plan columns print one
+ * currency and one style: figures in different currencies ("S$1,000,000 US$750,000"), or a pair of a whole figure and one
+ * with cents ("Basic Plan S$100,000 S$1,234.56": a sum assured and its premium, TE pr190 F3), are not plans. */
 export function figuresDifferByPlan(quote:string|null|undefined):boolean{
   for(const run of String(quote??"").match(PLAN_ROW)??[]){
     const cells=run.match(new RegExp(PLAN_CELL,"g"))??[];
-    const values=new Set(cells.map(c=>/\d/.test(c)?c.replace(/[^\d.]/g,"").replace(/\.0+$/,""):"none"));
+    const money=cells.filter(c=>/\d/.test(c));
+    const signs=new Set(money.map(c=>c.trim().match(SIGN)?.[0].replace(/^SGD$/,"S$").replace(/^MYR$/,"RM").replace(/^GBP$/,"£").replace(/^USD$/,"US$")));
+    const cents=new Set(money.map(c=>/\d\.\d{2}(?!\d)/.test(c)));
+    if(signs.size>1||(money.length===2&&cells.length===2&&cents.size>1))continue;
+    const values=new Set(cells.map(c=>/\d/.test(c)?c.replace(/\s*(?:\/|per\b|a\s|sehari|setiap).*$/,"").replace(/[^\d.]/g,"").replace(/\.0+$/,""):"none"));
     if(cells.length>1&&values.size>1)return true;
   }
+  for(const run of String(quote??"").match(BARE_ROW)??[])if(new Set(run.split(/\s+/)).size>1)return true;
   return false;
 }
 export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{

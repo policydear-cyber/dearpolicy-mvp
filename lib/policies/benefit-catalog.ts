@@ -6,7 +6,7 @@ import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
-import { resolveStoredRules } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,resolveStoredRules } from "@/lib/insurance/scale-limit";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -737,6 +737,10 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)))
     .map(benefit=>{
+      // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
+      // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
+      // (Critic R351 H1).
+      if(benefit.conditions.includes(PLAN_COLUMNS_NOTE)||(!benefit.tier&&!benefit.reviewedAt&&figuresDifferByPlan(benefit.quote)))return benefit;
       const read=ruleFromQuote(benefit);
       return read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
         "DearPolicy read this rule from the sentence quoted"+onPage(benefit.sourcePage)
