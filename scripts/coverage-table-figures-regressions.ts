@@ -75,6 +75,9 @@ test("the insurer's own limits of liability are no liability cover: the person's
     ["Death of any person aged 18 to 65", null, "Death"], ["Accidental death of any person travelling with you", null, "Personal Accident"],
     ["Death of any person to whom this certificate applies", null, "Death"], ["Accidental death of any person on the plan", null, "Personal Accident"],
     ["Total and permanent disability of any person under 65", null, "Total Permanent Disability"], ["Death benefit of any person aged 18 to 70", null, "Death"],
+    ["Death or bodily injury to any person covered under this policy", null, "Personal Accident"], ["Death or injury to any person in your family", null, "Personal Accident"],
+    ["Compensation for death of any person insured", null, "Death"],
+    ["Death or injury to any person covered by this policy", null, "Personal Accident"],
   ];
   for (const [b, section, want] of own) assert.equal(categoryOfBenefit(b, section), want, b + " / " + section);
 });

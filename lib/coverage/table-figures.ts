@@ -80,7 +80,9 @@ const OTHERS = String.raw`(?:(?:any\s+)?other\s+(?:people|persons?)|another\s+pe
 /** "Any person" is someone else only in a liability frame: liability or compensation to them, or harm done TO them
  * ("injury to any person"). "Death of any person in your family" or "aged 18 to 65" is the insured's own cover (Critic
  * R360 M1). */
-const TO_ANYONE = String.raw`(?:` + OTHERS + String.raw`|any\s+persons?)`;
+// Liability by default, unless a closed list of insured markers follows ("injury to any person covered under this policy",
+// "any person in your family": Critic R363 M1, TE pr192 K40/K41).
+const TO_ANYONE = String.raw`(?:` + OTHERS + String.raw`|any\s+persons?(?!\s+(?:insured|covered|named|listed|in\s+your\s+family|on\s+the\s+plan|under\s+this\s+(?:policy|plan|certificate)|who\s+(?:is|are)\s+(?:insured|covered))\b))`;
 const LIABILITY = new RegExp([
   String.raw`\b(?:personal|public|legal|civil|third[\s-]party|family|individual|tenant['’]?s?|occupiers?['’]?|employers?['’]?|golfers?['’]?|pet\s+owners?['’]?)\s+liabilit(?:y|ies)\b`,
   String.raw`\bliabilit(?:y|ies|i)\s+(?:to|towards|terhadap)\s+` + TO_ANYONE + String.raw`\b`,
