@@ -36,6 +36,8 @@ const DOCS = {
   noJob: id(5),         // queued an hour ago; no job at all (existing case)
   fresh: id(6),         // queued a moment ago; no job yet (existing 2-minute grace)
   readInPart: id(7),    // ready, read in part; re-read due in 20 minutes
+  claimedQueued: id(8), // queued; own job dead; re-read claimed by a worker (live lease)
+  claimedReady: id(9),  // ready, read in part; re-read claimed by a worker (live lease)
 };
 
 async function main() {
@@ -79,10 +81,12 @@ async function main() {
       `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,insurer,processing_status,processing_stage,quarantine_status,updated_at)
        VALUES ($1,$2,$3,$4,$5,'Example Insurance',$6,$7,'scan_clean',now() - make_interval(mins => $8))`,
       [pid, HOUSEHOLD, MEMBER, `example-${pid.slice(-1)}.pdf`, `${HOUSEHOLD}/${pid}.pdf`, status, stage, ageMinutes]);
+    // A 'processing' job is one a worker holds: its lease runs for 5 more minutes.
     const job = (key: string, status: string, dueMinutes: number) => db.query(
-      `INSERT INTO background_jobs(account_id,job_type,idempotency_key,status,attempt_count,payload,available_at)
-       VALUES ($1,'policy_processing',$2,$3,$4,$5::jsonb,now() + make_interval(mins => $6))`,
-      [HOUSEHOLD, key, status, status === "dead_letter" ? 3 : 0,
+      `INSERT INTO background_jobs(account_id,job_type,idempotency_key,status,attempt_count,payload,available_at,lease_owner,lease_expires_at)
+       VALUES ($1,'policy_processing',$2,$3,$4,$5::jsonb,now() + make_interval(mins => $6),
+               CASE WHEN $3='processing' THEN 'worker-test' END, CASE WHEN $3='processing' THEN now() + interval '5 minutes' END)`,
+      [HOUSEHOLD, key, status, status === "dead_letter" ? 3 : status === "processing" ? 1 : 0,
         JSON.stringify({ policyId: key.split(":")[0], familyMemberId: MEMBER, storageKey: "x", deferredRetry: key.endsWith(":retry-read") }), dueMinutes]);
 
     await policy(DOCS.waiting, "queued", "retry_scheduled", 60);
@@ -101,6 +105,12 @@ async function main() {
     await policy(DOCS.readInPart, "ready", "complete", 60);
     await job(DOCS.readInPart, "succeeded", -70);
     await job(DOCS.readInPart + ":retry-read", "queued", 20);
+    await policy(DOCS.claimedQueued, "queued", "retry_scheduled", 60);
+    await job(DOCS.claimedQueued, "dead_letter", -70);
+    await job(DOCS.claimedQueued + ":retry-read", "processing", -5);
+    await policy(DOCS.claimedReady, "ready", "complete", 60);
+    await job(DOCS.claimedReady, "succeeded", -70);
+    await job(DOCS.claimedReady + ":retry-read", "processing", -5);
 
     const { ACTIVE_HOUSEHOLD_COOKIE } = await import("@/lib/auth/request-context");
     const { GET } = await import("@/app/api/policies/route");
@@ -164,6 +174,23 @@ async function main() {
       assert.equal(after.own, "queued");
       assert.equal(after.reread, "cancelled");
       assert.equal(await pendingReads(DOCS.readInPart), 1);
+    });
+    // A re-read a worker already holds cannot be stopped (intake never checks cancel_requested): Try again and Re-analyse
+    // are refused, and the refused request leaves that re-read exactly as it was (Critic R311 M1).
+    const claimed = async (pid: string) => (await db.query<{ status: string; cancel_requested: boolean }>(
+      `SELECT status,cancel_requested FROM background_jobs WHERE idempotency_key=$1`, [pid + ":retry-read"])).rows[0];
+    await check("Try again on a document whose re-read a worker holds is refused, and the re-read is untouched", async () => {
+      assert.equal(stalled(DOCS.claimedQueued), false);
+      assert.equal(await tryAgain(DOCS.claimedQueued), 409);
+      assert.deepEqual(await claimed(DOCS.claimedQueued), { status: "processing", cancel_requested: false });
+      assert.equal((await jobs(DOCS.claimedQueued)).own, "dead_letter");
+    });
+    await check("Re-analyse of a ready document whose re-read a worker holds is refused: no second paid read", async () => {
+      assert.equal(await tryAgain(DOCS.claimedReady), 409);
+      assert.deepEqual(await claimed(DOCS.claimedReady), { status: "processing", cancel_requested: false });
+      assert.equal((await jobs(DOCS.claimedReady)).own, "succeeded");
+      const p = await db.query<{ processing_status: string }>(`SELECT processing_status FROM policies WHERE id=$1`, [DOCS.claimedReady]);
+      assert.equal(p.rows[0].processing_status, "ready");
     });
     await check("existing: a live intake job is not stalled and Try again is refused", async () => {
       assert.equal(stalled(DOCS.liveOwnJob), false);

@@ -6,7 +6,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
-import { cancelJob, recoverExpiredLeases } from "@/lib/jobs/queue";
+import { appendJobAudit, recordJobEvent, recoverExpiredLeases, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -87,21 +87,43 @@ export async function POST(request: NextRequest) {
     // (browser sessions cannot update it -- sql/household-rls.sql), only
     // after the RLS-scoped authorization and clean-scan check above, and
     // only if the document is still not in flight.
-    const requeued = await query(
-      `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
-       processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
-       WHERE id=$1 AND account_id=$2 AND (processing_status NOT IN ('queued','extracting','indexing') OR $3::boolean) AND quarantine_status IN ('scan_clean','not_scanned_prototype')`,
-      [body.policyId, ctx.householdId, stalled],
-    );
-    if (!requeued.rowCount) throw new AlreadyProcessing();
-    // This read replaces any later re-read still waiting to be claimed (one overdue and unclaimed, or one scheduled for a
-    // document read in part), so a worker never reads the document a second time after it (TE). Should this read meet a
-    // reading-service failure, intake schedules the re-read again.
-    const waitingReread = await query<{ id: string }>(
-      `SELECT id FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2 AND status IN ('queued','failed_retryable')`,
-      [POLICY_PROCESSING_JOB_TYPE, body.policyId + ":retry-read"],
-    );
-    for (const job of waitingReread.rows) await cancelJob(pool, { jobId: job.id });
+    // One transaction (Critic R311 M1): a waiting re-read is cancelled, a read a worker already holds refuses the request,
+    // and the requeue happens, all or none. A claimed re-read cannot be stopped (cancelJob only asks a running read to stop,
+    // and intake never checks), so it must refuse rather than start a second paid read beside it; and a refused request
+    // never cancels the only reader. This read replaces any re-read still waiting; should it meet a reading-service
+    // failure, intake schedules the re-read again.
+    const cancelled: BackgroundJobRow[] = [];
+    const tx = await pool.connect();
+    try {
+      await tx.query("BEGIN");
+      const waiting = await tx.query<BackgroundJobRow>(
+        `UPDATE background_jobs SET status='cancelled', cancel_requested=true, updated_at=now()
+         WHERE job_type=$1 AND idempotency_key=$2 AND status IN ('queued','failed_retryable') RETURNING *`,
+        [POLICY_PROCESSING_JOB_TYPE, body.policyId + ":retry-read"],
+      );
+      const running = await tx.query(
+        `SELECT 1 FROM background_jobs WHERE job_type=$1 AND idempotency_key IN ($2, $2 || ':retry-read')
+         AND status='processing' AND lease_expires_at > now()`,
+        [POLICY_PROCESSING_JOB_TYPE, body.policyId],
+      );
+      if (running.rows.length) throw new AlreadyProcessing();
+      const requeued = await tx.query(
+        `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
+         processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
+         WHERE id=$1 AND account_id=$2 AND (processing_status NOT IN ('queued','extracting','indexing') OR $3::boolean) AND quarantine_status IN ('scan_clean','not_scanned_prototype')`,
+        [body.policyId, ctx.householdId, stalled],
+      );
+      if (!requeued.rowCount) throw new AlreadyProcessing();
+      for (const job of waiting.rows) await appendJobAudit(tx, job, "cancelled");
+      await tx.query("COMMIT");
+      cancelled.push(...waiting.rows);
+    } catch (error) {
+      await tx.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      tx.release();
+    }
+    for (const job of cancelled) await recordJobEvent(job, "job.cancelled", { status: "cancelled" });
 
     // A deliberate re-read of a finished (or failed) document starts from a
     // clean slate; a stalled document keeps its checkpoints so the new run
