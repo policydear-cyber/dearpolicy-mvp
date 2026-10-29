@@ -84,6 +84,15 @@ for (const { m, sign } of MARKETS) {
       ["TI/CI limit", `The total we pay under this plan and any other plans on the life insured is ${sign}2,000,000 (the TI/CI limit).`],
       ["CI limit", `Claims under all other policies we have issued on the same life count towards ${sign}2,000,000 (the CI limit).`],
       ["TI benefits limit within TI/CI limit", `The most we will pay for the policy and other policies on the life insured is ${sign}2,000,000 (the TI/CI limit). Of this amount, the TI benefits cannot be more than ${sign}1,000,000.`],
+      // TE pr180 A1-A10: other wordings of the same scope.
+      ["TI/CI limit", `The most we will pay under this and other policies issued on the life insured is ${sign}2,000,000 (the TI/CI limit).`],
+      ["TI/CI limit", `The most we will pay under this policy and any other policy on the life assured is ${sign}2,000,000 (the TI/CI limit).`],
+      ["TI benefits limit within the TI/CI limit", `The most we will pay for this policy and all other policies on the same life is ${sign}2,000,000 (the TI/CI limit).`],
+      ["TI/CI limit", `The most we will pay for this policy and all other policies is ${sign}2,000,000 (i.e. the TI/CI limit).`],
+      ["TI/CI limit", `The most we will pay is ${sign}2,000,000 (the TI/CI limit); this includes all other policies on the life insured.`],
+      ["TI benefits limit", `The most we will pay for this policy and all other policies is ${sign}2,000,000. Out of this amount, the TI benefits cannot be more than ${sign}1,000,000.`],
+      ["TI/CI limit", `The most we will pay across all our policies on the life insured is ${sign}2,000,000 (the TI/CI limit).`],
+      ["TI/CI cap", `The most we will pay for this policy and any other policy on the life insured is ${sign}2,000,000 (the TI/CI cap).`],
     ] as const) assert.equal(combinedLimit({ benefit, section: null, ...s(sentence) }), true, `${benefit}: ${sentence}`);
   });
   test(`${m}: a row named as a limit with no scope across policies, or not named as a limit, is not a combined limit`, () => {
@@ -99,9 +108,27 @@ for (const { m, sign } of MARKETS) {
       // The limit's sentence names no other policy: "of this amount" alone does not reach past one sentence before it.
       ["TI benefits limit", `${sign}1,000,000`, `The TI/CI limit is ${sign}2,000,000. Of this amount, the TI benefits cannot be more than ${sign}1,000,000.`],
       ["Policy limit", `${sign}100,000`, `The most we will pay under this policy is ${sign}100,000.`],
-      // More than six words is no longer only a limit's name.
-      ["Benefit payable for each claim up to the limit", `${sign}5,000`, `The most we will pay under all other policies is ${sign}5,000.`],
+      // A plan's own limit that names other plans only to say it is not shared (TE pr180 B3).
+      ["Policy year limit", `${sign}1,000`, `The policy year limit of ${sign}1,000 applies separately to this plan and any other plans you hold.`],
+      ["Annual limit", `${sign}1,000`, `This limit is not shared with any other policies.`],
+      ["Annual limit", `${sign}1,000`, `Claims under other policies do not reduce this limit of ${sign}1,000.`],
+      // Periods are not policies.
+      ["Annual limit", `${sign}1,000`, `The most we will pay in any policy year is ${sign}1,000, and unused amounts do not carry to other policy years.`],
     ] as const) assert.equal(combinedLimit({ benefit, section: null, quote, sentence }), false, `${benefit}: ${sentence}`);
+  });
+  test(`${m}: other policies named only in the next sentence are not a limit's scope`, () => {
+    const ID = "aaaaaaaa-0000-0000-0000-00000000c0ac";
+    const text = `ANNUAL LIMIT\nThe most we will pay under this policy in a year is ${sign}1,000 (the annual limit). Other policies we have issued have their own limits; see each policy.`;
+    const rd = checkReading({ id: ID, name: "Plan.pdf", readable: true, pages: [{ page: 3, text }] }, reading("personal_proof", "Example Plan", [], [
+      b({ benefit: "Annual limit", pays: "up_to", value: 1000, page: 3, quote: `is ${sign}1,000 (the annual limit)` })]));
+    assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [false], JSON.stringify(rd.dropped));
+  });
+  test(`${m}: a scope split by a line's end ("poli-\\ncies") is still read`, () => {
+    const ID = "aaaaaaaa-0000-0000-0000-00000000c0ab";
+    const text = `TERMINAL ILLNESS\nThe most we will pay for this policy and all other poli-\ncies we have issued on the life insured is ${sign}2,000,000 (the TI/CI limit).`;
+    const rd = checkReading({ id: ID, name: "Term plan.pdf", readable: true, pages: [{ page: 2, text }] }, reading("personal_proof", "Example Term", [], [
+      b({ benefit: "TI/CI limit", pays: "up_to", value: 2000000, page: 2, quote: `is ${sign}2,000,000 (the TI/CI limit)` })]));
+    assert.deepEqual(rd.benefits.map((x) => x.combinedLimit), [true], JSON.stringify(rd.dropped));
   });
   test(`${m}: checkReading finds a named limit's scope in its own sentence on the page`, () => {
     const ID = "aaaaaaaa-0000-0000-0000-00000000c0aa";

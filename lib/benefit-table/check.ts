@@ -223,27 +223,44 @@ const COMPENSATION_LIMIT = /^\s*(?:the\s+)?limits?\s+of\s+compensation\b/i;
 export const LIMITS_HEADING = /\blimits?\s+of\s+compensation\b/i;
 const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
 const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
-/** Scope across policies that a limit's own sentence may print instead of "all policies" ("for the policy and other
- * policies we issue on the life insured", "under this plan and any other plans", "covering the same life"). Used only for a row named as a limit
- * (NAMED_LIMIT below). */
-const OTHER_POLICIES = /\b(?:this|the|your)\s+(?:policy|plan|contract)\s+and\s+(?:any\s+|all\s+)?(?:other|similar)\s+(?:policies|plans|contracts)\b|\b(?:any|all)\s+other\s+(?:policies|plans|contracts)\b|\bcovering\s+the\s+same\s+life\b/i;
-/** A row named only as a limit: at most six words, the last of them "limit" or "limits" ("TI/CI limit", "TI benefits
- * limit within TI/CI limit"). Not "Sub-limit", and not a name that goes on past the word ("Limit of indemnity"). */
-const NAMED_LIMIT = (head: string) => { const w = head.trim().split(/\s+/); return w.length <= 6 && /^limits?$/i.test(w[w.length - 1] ?? ""); };
+/** A row named as a limit (NAMED_LIMIT) is a limit across policies when its sentence mentions any policy or plan other
+ * than this one ("this and other policies", "any other policy", "all our policies", "policies we have issued", "the same
+ * life"): that limit is not what this policy pays, and an unsure mention gives no amount, never a wrong one (TE pr180).
+ * "Any policy year" and "other policy years" are periods, not policies. */
+const OTHER_POLICIES = new RegExp([
+  String.raw`\b(?:other|another)\s+(?:of\s+(?:our|your|the)\s+)?(?:polic(?:y|ies)|plans?|contracts?)\b(?!\s+(?:years?|periods?|anniversar\w*|months?)\b)`,
+  String.raw`\b(?:all|any|every)\s+(?:of\s+)?(?:(?:our|your|the|its|such)\s+)?(?:policies|plans|contracts)\b`,
+  String.raw`\bpolicies\s+(?:that\s+|which\s+)?we\s+(?:have\s+)?(?:issued?|underwrit\w*)\b`,
+  String.raw`\bsame\s+life\b`,
+].join("|"), "i");
+/** Wording that says the limit is this plan's own even though other plans are named ("applies separately to this plan and
+ * any other plans you hold", "not shared with any other policies", "claims under other policies do not reduce it"): an
+ * allow-list, so the row stays this plan's limit. */
+const OWN_LIMIT = /\b(?:appl(?:y|ies|ied)|counted|calculated|assessed)\s+separately\b|\bseparately\s+(?:to|for|under|from)\b|\bnot\s+shared\b|\bdo(?:es)?\s+not\s+(?:reduce|count\s+towards?|affect)\b/i;
+/** A row named only as a limit: at most ten words, the last of them "limit", "limits", "cap" or "caps" ("TI/CI limit", "TI
+ * benefits limit within the TI/CI limit", "TI/CI cap"). Not "Sub-limit", and not a name that goes on past the word
+ * ("Limit of indemnity"), and not a benefit's name that says it is capped. */
+const NAMED_LIMIT = (head: string) => { const w = head.trim().split(/\s+/); return w.length <= 10 && /^(?:limits?|caps?)$/i.test(w[w.length - 1] ?? "")
+  // A benefit's name that says it is capped ("Critical Illness Benefit limited to the same life cap") is that benefit.
+  && !/\b(?:limited|capped|subject)\b/i.test(head); };
 /** A sentence that opens by pointing at the one before it ("Of this amount, the TI benefits cannot be more than
- * S$1,000,000."): its scope is that sentence's. */
-const POINTS_BACK = /^\s*(?:of|within)\s+(?:this|that|the\s+above)\s+(?:amount|limit|total)\b/i;
-/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. Sentences end
- * at ". " or ";", or at a blank line; neither reaches past 600 characters from the quote. */
+ * S$1,000,000.", "Out of this limit", "Within the above total"): its scope is that sentence's. */
+const POINTS_BACK = /^\s*(?:of|out\s+of|within)\s+(?:this|that|the\s+above|the\s+said)\s+(?:amount|limit|total|sum)\b/i;
+/** A sentence's end: a full stop before a space, or a blank line. Not the stop of "i.e.", "e.g.", "etc.", "No." and
+ * the like, and not a semicolon, which runs a sentence on (TE pr180 A4, A5). */
+const SENTENCE_STOP = /(?<![A-Za-z]\.[A-Za-z])(?<!\b(?:etc|no|nos|vs|approx|incl|cf|ref|art|cl|para|pg|pp))\.(?=\s)|\n\s*\n/gi;
+/** Page text read as one line: a word split by its line's end ("poli-\ncies") is joined (TE pr180 A9). */
+const asLine = (t: string) => t.replace(/([A-Za-z])-[ \t]*\n[ \t]*([a-z])/g, "$1$2").replace(/\s+/g, " ").trim();
+/** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. Neither reaches
+ * past 600 characters from the quote. */
 export function quoteSentence(pageText: string, start: number, end: number): string {
   const before = pageText.slice(Math.max(0, start - 600), start), after = pageText.slice(end, end + 600);
-  const stop = /[.;](?=\s)|\n\s*\n/g;
-  const starts = [...before.matchAll(stop)].map((m) => m.index! + m[0].length);
+  const starts = [...before.matchAll(SENTENCE_STOP)].map((m) => m.index! + m[0].length);
   const from = starts.length ? starts[starts.length - 1] : 0;
-  const tail = stop.exec(after.replace(/\s+$/, "") + " ");
-  const sentence = (before.slice(from) + pageText.slice(start, end) + after.slice(0, tail ? tail.index + 1 : after.length)).replace(/\s+/g, " ").trim();
+  const tail = [...(after.replace(/\s+$/, "") + " ").matchAll(SENTENCE_STOP)][0];
+  const sentence = asLine(before.slice(from) + pageText.slice(start, end) + after.slice(0, tail ? tail.index! + 1 : after.length));
   if (!POINTS_BACK.test(sentence) || starts.length < 1) return sentence;
-  const prior = before.slice(starts.length > 1 ? starts[starts.length - 2] : 0, from).replace(/\s+/g, " ").trim();
+  const prior = asLine(before.slice(starts.length > 1 ? starts[starts.length - 2] : 0, from));
   return `${prior} ${sentence}`;
 }
 export function combinedLimit(b: { benefit: string; section?: string | null; quote?: string | null; sentence?: string | null }): boolean {
@@ -259,8 +276,8 @@ export function limitKind(b: { benefit: string; section?: string | null; quote?:
   // the policy pays (audit of 1912d73: such a row showed "up to S$2,000,000" as a terminal illness card). Its figure is
   // the limit itself, so it is combined even when it names one benefit.
   if (!LIMIT_HEAD.test(head) && NAMED_LIMIT(head)) {
-    const text = [b.benefit, b.quote ?? "", b.sentence ?? ""].join("\n");
-    return COMBINED_SCOPE.test(text) || OTHER_POLICIES.test(text) ? "combined" : null;
+    const text = asLine([b.benefit, b.quote ?? "", b.sentence ?? ""].join("\n"));
+    return !OWN_LIMIT.test(text) && (COMBINED_SCOPE.test(text) || OTHER_POLICIES.test(text)) ? "combined" : null;
   }
   if (!LIMIT_HEAD.test(head) || !COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"))) return null;
   // "Limits of compensation" names only the limit, whatever benefit follows it; other limit wording that names a benefit
