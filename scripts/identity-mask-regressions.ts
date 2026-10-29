@@ -124,3 +124,82 @@ test("an answer saved before masking is masked when reopened, and the stored val
   noFullId(JSON.stringify(sanitizeStoredAnswer({ note: "S1234567D" })));
   assert.deepEqual(maskIdentityNumbers({ n: 5, s: "S1234567D" }), { n: 5, s: "S****567D" });
 });
+
+// Summary screens (Coverage, the benefit table, the benefit schedule) send stored quotes to the browser: a travel summary's
+// cover line prints each traveller's ID number beside their name (audit of 1912d73), so those routes mask as chat does.
+test("a summary screen's quotes are masked in every market; ids and keys stay exactly as stored", async () => {
+  const { maskShownText } = await load();
+  const { assembleTable, coverKeyOf, sectionKeyOf } = await import("@/lib/benefit-table/assemble");
+  const { checkReading } = await import("@/lib/benefit-table/check");
+  for (const id of ["S1234567D", "850101-14-5678", "A123456(7)"]) {
+    const DOC = "bbbbbbbb-0000-4000-8000-000000000002";
+    const pages = [{ page: 1, text: `TRAVEL INSURANCE SUMMARY\nInsured persons\tID number\tPre-existing\nLim Ah Kow\t${id}\tNo\nPersonal accident\tS$300,000` }];
+    const reading = { document: { kind: "personal_proof", product: "Travel insurance summary", insurer: "Example General", namedPeople: ["Lim Ah Kow"], plan: "Business", periodFrom: null, periodTo: null },
+      covers: [{ person: "Lim Ah Kow", product: "Travel insurance summary", cover: "Single Trip", plan: "Business", sumInsured: null, asOf: null, page: 1, quote: `Lim Ah Kow\t${id}\tNo` }],
+      benefits: [{ section: null, column: null, benefit: "Personal accident", pays: "amount", value: 300000, percentOf: null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: "Personal accident\tS$300,000" }] };
+    const r = checkReading({ id: DOC, name: "Travel.pdf", readable: true, pages, people: ["Lim Ah Kow"] }, reading);
+    const cover = coverKeyOf({ product: "Travel insurance summary", cover: "Single Trip", plan: "Business" });
+    const table = assembleTable([r], [{ id: "p1", display_name: "Lim Ah Kow" }], [{ section: sectionKeyOf(DOC, { section: null, column: null }), cover, why: "x" }]);
+    const before = JSON.stringify(table);
+    assert.ok(before.includes(id), "the made-up ID number is in the assembled table, as a stored travel summary's is");
+    const shown = maskShownText(table);
+    noFullId(JSON.stringify(shown));
+    assert.equal(JSON.stringify(table), before, "the value passed in is not changed");
+    // Every id and key the browser sends back is exactly the stored one.
+    const keys = (v: unknown, out: string[] = []): string[] => { if (Array.isArray(v)) v.forEach((x) => keys(x, out)); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { if (/^(?:id|key)s?$|_(?:id|key)s?$|(?:Id|Key)s?$/.test(k)) out.push(`${k}=${JSON.stringify(x)}`); keys(x, out); } return out; };
+    assert.deepEqual(keys(shown), keys(table));
+    assert.ok(keys(table).length > 3);
+  }
+  // A field that identifies a row is never rewritten, even when it holds an ID's shape; the words beside it are masked.
+  assert.deepEqual(maskShownText({ id: "S1234567D", policy_id: "S1234567D", coverKey: "x S1234567D", documentIds: ["S1234567D"], quote: "S1234567D", rows: [{ excerpt: "NRIC S1234567D", n: 3, ok: true, none: null }] }),
+    { id: "S1234567D", policy_id: "S1234567D", coverKey: "x S1234567D", documentIds: ["S1234567D"], quote: "S****567D", rows: [{ excerpt: "NRIC S****567D", n: 3, ok: true, none: null }] });
+});
+
+test("the Coverage, benefit table, benefit schedule, Home and document review routes send only masked text", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const file of ["app/api/coverage/route.ts", "app/api/benefit-table/route.ts", "app/api/benefits/route.ts", "app/api/dashboard/route.ts", "app/api/policies/[id]/route.ts"]) {
+    const src = readFileSync(file, "utf8");
+    const get = src.slice(src.indexOf("export async function GET"), src.indexOf("export async function", src.indexOf("export async function GET") + 10) >>> 0 || undefined);
+    // Each successful GET response is masked; only error bodies, which print no stored text, are not.
+    const plain = [...get.matchAll(/NextResponse\.json\((?!maskShownText\()([^)]{0,80})/g)].map((m) => m[1]).filter((a) => !/^\{\s*(?:error|enabled:false|benefits:\[\],summary|family:\[\],activeMember:null)/.test(a));
+    assert.deepEqual(plain, [], `${file} sends unmasked text`);
+    assert.match(get, /NextResponse\.json\(maskShownText\(/, file);
+  }
+});
+
+test("a masked name a screen sends back never replaces the stored name; a name the household typed does", async () => {
+  const { maskShownText, sentName } = await load();
+  const { readFileSync } = await import("node:fs");
+  const stored = "Personal accident - Lim Ah Kow S1234567D";
+  const shown = maskShownText({ benefitName: stored }).benefitName;
+  assert.notEqual(shown, stored);
+  assert.equal(sentName(shown, stored), undefined, "the masked copy is not saved over the stored name");
+  assert.equal(sentName(stored, stored), stored);
+  assert.equal(sentName("Accident cover", stored), "Accident cover");
+  assert.equal(sentName(undefined, stored), undefined);
+  // A name with no ID number is the same masked or not: sent back unchanged, it is kept as sent.
+  assert.equal(sentName("Hospital cash", "Hospital cash"), "Hospital cash");
+  // A screen trims what it sends, and a stored name from PDF text can end in a space or hold a line break (TE pr181 r2).
+  const spaced = "Personal accident  - Lim Ah Kow S1234567D \n";
+  assert.equal(sentName(maskShownText({ benefitName: spaced }).benefitName.trim(), spaced), undefined, "a trimmed masked copy is not saved");
+  assert.equal(sentName("Hospital cash", "Hospital cash "), "Hospital cash", "a name with no ID, trimmed, is kept as sent");
+  // The Schedule's amount save sends no name, so the masked copy it shows is never sent back.
+  const schedule = readFileSync("app/schedule/page.tsx", "utf8");
+  for (const call of schedule.match(/JSON\.stringify\(\{id:benefit\.id[^\n]*/g) ?? []) assert.doesNotMatch(call, /benefitName/, call);
+  const src = readFileSync("app/api/benefits/route.ts", "utf8");
+  const patch = src.slice(src.indexOf("export async function PATCH"));
+  assert.match(patch, /body\.benefitName=sentName\(body\.benefitName,existing\.rows\[0\]\.benefit_name\)/);
+  assert.ok(patch.indexOf("sentName(") < patch.indexOf("UPDATE policy_benefits"), "the name is decided before anything is written");
+});
+
+test("a document named by its file name never shows an ID number the file name holds, in any market", async () => {
+  const { documentName, documentCardTitle } = await import("@/lib/policies/document-name");
+  // Made readable, "Certificate_S7712345D.pdf" became "Certificate S7712345 D", a shape no mask knows (TE pr181 F2).
+  for (const [file, id] of [["Certificate_S7712345D.pdf", "7712345"], ["cert-G4455667K.pdf", "4455667"], ["Travel 870412-10-5566.pdf", "870412"], ["Ada Okafor S7712345D wording.pdf", "7712345"]] as const) {
+    for (const name of [documentName({ product_name: null, original_filename: file }), documentCardTitle({ product_name: null, original_filename: file })]) {
+      assert.ok(!name.replace(/\s+/g, "").includes(id), `${file} -> ${name}`);
+    }
+  }
+  // A name with no ID number reads as before.
+  assert.equal(documentName({ product_name: null, original_filename: "my_ci_plan_2026.pdf" }), "My Ci Plan 2026");
+});

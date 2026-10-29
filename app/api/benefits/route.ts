@@ -11,6 +11,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
+import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -195,7 +196,8 @@ export async function GET(request:NextRequest){
           sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
       });
     }catch{/* A document whose conditions have not been read yet simply has none to show. */}
-    return NextResponse.json({
+    // ID numbers in quotes are masked as chat masks them; ids are left as stored.
+    return NextResponse.json(maskShownText({
       benefits,
       conditions,
       summary:{
@@ -209,7 +211,7 @@ export async function GET(request:NextRequest){
         documents:new Set(benefits.map(b=>b.policyId)).size,
         unclaimed:benefits.filter(b=>!b.owners.length).length,
       },
-    });
+    }));
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});
@@ -236,8 +238,11 @@ export async function PATCH(request:NextRequest){
     const body=Patch.parse(await request.json().catch(()=>({})));
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
-    const existing=await query<{id:string}>("SELECT id FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
+    const existing=await query<{id:string;benefit_name:string}>("SELECT id,benefit_name FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
     if(!existing.rows[0])return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
+    // The GET shows names masked (maskShownText), and the Schedule pages send the name they were shown back with an
+    // amount: that masked copy of the stored name is no new name, so the stored name is kept (TE pr181 F1).
+    body.benefitName=sentName(body.benefitName,existing.rows[0].benefit_name);
     if(body.formula){
       const checked=reviewedBenefitFormula(body.formula);
       if(!checked.ok)return NextResponse.json({error:checked.error},{status:400});

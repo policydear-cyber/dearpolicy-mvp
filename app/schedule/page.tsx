@@ -196,7 +196,7 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
     setSaving(true);setError("");
     try{
       const response=await fetch("/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:benefit.id,benefitName:benefit.benefitName,formula:{kind:benefit.formulaKind,value,currency,factKey:benefit.factKey,offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays}})});
+        body:JSON.stringify({id:benefit.id,formula:{kind:benefit.formulaKind,value,currency,factKey:benefit.factKey,offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays}})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||payload.error)throw new Error(payload.error);
       setOpen(false);await onSaved(`Saved the amount for “${benefit.benefitName}”.`);

@@ -69,3 +69,29 @@ export function maskIdentityNumbers<T>(value: T): T {
   };
   return walk(value) as T;
 }
+
+/** A field that names a row rather than saying anything ("id", "policy_id", "coverKey", "documentIds"): sent back to the
+ * server as is (a link's section and cover keys, a row's id), so never changed. */
+const IDENTIFIER_FIELD = /^(?:id|key)s?$|_(?:id|key)s?$|(?:Id|Key)s?$/;
+/** What a summary screen sends to the browser (Coverage, the benefit table, the benefit schedule), masked as a chat answer
+ * is: every quote, excerpt, condition and name, through objects and arrays. Fields that identify a row are left exactly as
+ * they are. Returns a masked copy; the value passed in is not changed. */
+export function maskShownText<T>(value: T): T {
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return maskIdentityText(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object" && !(v instanceof Date)) {
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, IDENTIFIER_FIELD.test(k) ? x : walk(x)]));
+    }
+    return v;
+  };
+  return walk(value) as T;
+}
+
+/** A name a screen sends back: the masked copy of the stored name it was shown (maskShownText) is no new name, so it
+ * gives undefined and the stored name is kept; any other name is the household's own, kept as sent (TE pr181 F1). The
+ * copy is compared with spacing evened out, since a screen trims what it sends and PDF text often ends in a space. */
+export function sentName(sent: string | undefined, stored: string): string | undefined {
+  const even = (s: string) => s.replace(/\s+/g, " ").trim();
+  return sent != null && sent !== stored && even(sent) === even(maskIdentityText(stored)) && even(sent) !== even(stored) ? undefined : sent;
+}
