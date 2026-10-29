@@ -8691,3 +8691,13 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - Fix: flag misfiled only when today's rules would re-file it: `schedulePage(pages) != null && correspondenceRole(pages) == null`. Equivalently, `deterministicDocumentRole(pages, null) === "personal_schedule"` together with schedulePage. Add the two rows above as negatives.
 - Not this PR's (noting for later): a fresh lapse notice that says "refer to your policy schedule" plus a policy number is filed as personal_schedule by deterministicDocumentRole. correspondenceRole keeps status notices out of insurer_letter, and the keyword fallback then fires. Worth a separate look.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R329 — #183 d02efee3: READY
+
+- R328 M1 is fixed. filedBeforeRoleRules needs a schedule page after page 1, and `correspondenceRole(sorted pages) == null`, so Read again is offered only where today's rules file the pack as something else. Screenshots never count, and payment roles stay no_table.
+- Probe through the PR's code:
+  - The page-3 pack gives true, and the re-read files it as personal_schedule.
+  - The page-8 pack and the claim decision enclosing a schedule both give false, so no paid loop.
+  - All eight R327 letters, bills, notes and screenshots give false.
+- Cost is unchanged: about 0.5 ms per 70-page pack.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
