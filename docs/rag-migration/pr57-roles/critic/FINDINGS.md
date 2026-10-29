@@ -9043,3 +9043,28 @@ All 71 earlier probes hold.
   - Add every name above to the test as names that must stay.
 - Low: a "2027" row from a payout-by-year table is a real dated amount (a scheduled payout), not noise. Hiding it is acceptable only because its name cannot tell a reader which benefit it belongs to. Better would be to hold it under its table's benefit, as a follow-up.
 - Amounts: none of the dropped fragments carries a limit that another row reads by name, so hiding them does not lift another benefit's figure. That is the safe direction for amounts. The risk is lost rows (H1, H2), not a wrong figure.
+
+## R348: PR #187 head 31ef2bba (ledger plan name never a file name), CHANGES
+
+- Full gate is green: tsc, next build, merge-tree with main 5110764a, own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+**(1) Callers that compare planName.** The rename does not stay on screen. lib/ledger/answer.ts:224 builds each claim item's key with `coverKey({insurer, productName: row.planName, ...})`, and lib/insurance/cover-composition.ts:55 groups items by `coverKey|event|shape` as alternatives of one cover.
+
+- H1 (High: a wrong claimable total, cover lost).
+  - Setup: two separate policies from the same insurer, both machine-named, with no product name and no policy number (for example "Output 202609281146157" and "Output 202609281157000").
+  - Both now become "Example Life certificate". That gives one key, `product:example life|example life certificate`.
+  - resolveCoverOverlaps then supersedes the second S$100,000 death row, so the total halves.
+  - Proven by running the PR's own readablePlanName and resolveCoverOverlaps: superseded is `[null, "Ada · x — Death"]`. With the stored names it is `[null, null]`.
+  - Fix: rename for display only. Either add a display field, or keep coverKey (and every other comparison) on the stored plan_name or the contract id. Add a test with two such documents.
+- M1: lib/chat/workflow.ts:2622 keeps travel rows only where `/travel/i.test(row.planName)`.
+  - A row seeded with the plan "TravelInsurance" (from TravelInsurance.pdf, product "Example Journey") now reads "Example Journey", so its travel_medical rows drop out of the travel answer.
+  - The same display-only fix covers this. Otherwise match on the stored name.
+- Display only, fine: app/ledger/page.tsx:191 and app/operator/coverage/page.tsx:82 group by planName. contractOfItem (workflow.ts:983) may now match a contract by its readable name, which is the more correct result.
+- Note: the operator edit form pre-fills the shown name, so saving any edit writes the readable name into plan_name. That is acceptable.
+
+**(2) Cost.** The subquery looks up `policies.id`, the primary key, once per row. That is an index probe per row, the same shape as ACTIVE_POLICY_GUARD. It is fine on a large ledger. Optional: a LEFT JOIN reads more simply.
+
+**(3) A real plan judged to be "from the file name".** Yes, when the file is named after the plan.
+- "eShield" from eShield.pdf becomes "e Shield", because prettifyFilename splits the camel case. The printed name gets worse.
+- "Travel Care", "Group Term Life", "ICU", "Home" and "PRUShield" stay as they are, and a plan a person typed is kept.
+- Low: when the base name matches the file name but documentName would only re-prettify the same words, keep the stored plan. That is, replace only when the name is a machine file name, or when the document has a product name.
