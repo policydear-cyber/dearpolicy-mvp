@@ -9,7 +9,7 @@ import { assembleTable, coversOf, sectionsOf, type BenefitTable, type Confirmati
 import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
-import { NON_COVER_ROLES, NO_COVER_READING_ROLES, schedulePage } from "@/lib/documents/messy";
+import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
@@ -126,9 +126,12 @@ export function filedBeforeRoleRules(role: string | null, pages: { page: number;
   // A screenshot is never a pack, whatever its later screens show.
   if (!NON_COVER_ROLES.has(role ?? "") || role === "app_screenshot" || !pages.length) return false;
   // The schedule page follows the cover (never the first page): what was filed is the letter around it.
-  const first = Math.min(...pages.map((p) => p.page));
-  const at = schedulePage(pages.map((p) => ({ pageNumber: p.page, text: p.text })));
-  return at != null && at > first;
+  const sorted = [...pages].sort((a, b) => a.page - b.page);
+  const at = schedulePage(sorted.map((p) => ({ pageNumber: p.page, text: p.text })));
+  if (at == null || at <= sorted[0].page) return false;
+  // Offer Read again only where it changes something: if today's rules would file the same pages as correspondence
+  // again (a schedule past page 6, a claim decision that encloses one), every click would be another paid read (Critic R328 M1).
+  return correspondenceRole(sorted.map((p) => ({ text: p.text }))) == null;
 }
 
 /** Why a "held" document is on hold, in the Documents page's own words (lib/policies/quarantine/ui.ts, fixed strings,

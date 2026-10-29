@@ -79,3 +79,15 @@ test("TE R1 on #183: the schedule page must follow the cover, and only correspon
   // documentState never offers a receipt or statement, whatever a caller passes.
   for (const role of ["premium_receipt", "renewal_statement", "annual_statement"]) assert.equal(documentState(ready(role, 4, true), false), "no_table", role);
 });
+
+test("Critic R328 M1 on #183: only where today's rules would file it differently, so Read again is never a repeat paid read", async () => {
+  const { filedBeforeRoleRules } = await load();
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => "Important information\nSection " + (i + 1) + "\nPlease keep this letter.");
+  // The schedule on page 8: today's rules look for an enclosed document on pages 2 to 6 only, so a re-read files a letter again.
+  assert.equal(filedBeforeRoleRules("insurer_letter", pages(LETTER, SIGN_OFF, ...filler(5), SCHEDULE)), false);
+  // A claim decision that encloses a schedule page is filed as a claim decision again.
+  const DECISION = "Dear Mr Kumar\nClaim number CL-2026-0042\nWe regret that the claim is not payable under the policy.\nYours sincerely\nClaims Department";
+  assert.equal(filedBeforeRoleRules("claim_decision", pages(DECISION, SCHEDULE)), false);
+  // Pages stored out of order are judged in page order: the pack is still caught.
+  assert.equal(filedBeforeRoleRules("insurer_letter", [...PACK].reverse()), true);
+});
