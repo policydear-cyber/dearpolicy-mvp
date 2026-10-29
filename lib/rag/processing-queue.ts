@@ -2,15 +2,9 @@ import type { ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { pool } from "@/lib/db/client";
 
-export const POLICY_PROCESSING_JOB_TYPE = "policy_processing";
-/** A queued job that nothing has claimed for this long is stalled: the page offers Try again, which starts it. */
-export const UNCLAIMED_STALL_MINUTES = 10;
-/** SQL: a job row (alias `j`) that is actually backing its document: running under a live lease, waiting out a retry
- * delay, or queued for less than UNCLAIMED_STALL_MINUTES (given as the parameter `minutes`, e.g. "$4"). Anything else
- * is stalled: nothing is running it, so the page offers Try again (25 Oct: a document sat queued for a day). */
-export const livePolicyJob = (j: string, minutes: string) =>
-  `((${j}.status IN ('queued','failed_retryable') AND ${j}.available_at > now() - make_interval(mins => ${minutes}))
-     OR (${j}.status='processing' AND ${j}.lease_expires_at > now()))`;
+import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/live-job";
+// The live-job rule lives in lib/rag/live-job.ts (no database import), shared with the chat and Coverage.
+export { livePolicyJob, POLICY_PROCESSING_JOB_TYPE, policyJobLive, UNCLAIMED_STALL_MINUTES } from "@/lib/rag/live-job";
 /** Try again on a stalled document: its job, waiting out a retry delay (a lapsed lease is recovered into one), is made due
  * now, so the start that follows claims it instead of finding nothing claimable (Critic R213-1). Never a job a worker
  * holds, or one being cancelled. */

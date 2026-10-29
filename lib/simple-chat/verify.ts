@@ -25,7 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
-import { documentId, pageList, unreadable, type Household, type HouseholdDocument } from "./library";
+import { documentId, offersTryAgain, onHold, onHoldWords, pageList, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
@@ -1291,7 +1291,9 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
   const label = labelFor(household, d);
   const named = label === d.name ? d.name : `${label} (${d.name})`;
-  const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.`
+  const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
+    : onHold(d) ? `${named} is ${onHoldWords(d)}${d.holdLabel ? ` (${d.holdLabel})` : ""}, so nothing in it is used yet.`
+    : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}`
     : d.uncheckedPages?.length || d.partCheckedPages?.length ? `${named} was read in part:${d.uncheckedPages?.length ? ` ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
       // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
@@ -1342,9 +1344,15 @@ function libraryList(household: Household, person: string): string {
 }
 
 function libraryCount(household: Household): string {
-  const bad = household.documents.filter(unreadable);
-  const n = household.documents.length;
-  return `Of your ${n} uploaded files, ${n - bad.length} ${n - bad.length === 1 ? "was" : "were"} read${bad.length ? ` and ${bad.length} could not be read (${bad.map((d) => d.name).join(", ")})` : ""}.`;
+  const reading = household.documents.filter(stillReading), held = household.documents.filter(onHold);
+  const bad = household.documents.filter((d) => unreadable(d) && !stillReading(d) && !onHold(d));
+  const n = household.documents.length, read = n - reading.length - held.length - bad.length;
+  // In the prototype mode (holdLabel null) a held upload is only "on hold", with no scan wording.
+  const heldWords = held.every((d) => d.holdLabel === null) ? "on hold" : `on hold for ${held.length === 1 ? "its" : "their"} scan`;
+  const parts = [reading.length ? `${reading.length} ${reading.length === 1 ? "is" : "are"} still being read (${reading.map((d) => d.name).join(", ")})` : null,
+    held.length ? `${held.length} ${held.length === 1 ? "is" : "are"} ${heldWords} (${held.map((d) => d.name).join(", ")})` : null,
+    bad.length ? `${bad.length} could not be read (${bad.map((d) => d.name).join(", ")})` : null].filter(Boolean);
+  return `Of your ${n} uploaded files, ${read} ${read === 1 ? "was" : "were"} read${parts.length ? `${parts.length > 1 ? `, ${parts.slice(0, -1).join(", ")} and ` : " and "}${parts.at(-1)}` : ""}.`;
 }
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
