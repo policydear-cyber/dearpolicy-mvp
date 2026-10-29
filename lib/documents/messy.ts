@@ -225,7 +225,10 @@ const COVER_LINE = /\b(?:sum\s+(?:assured|insured)|benefits?|cover(?:age)?|units
 const HAS_MONEY = /(?:S\$|US\$|£|\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD))\s?\d|\b\d{1,3}(?:,\d{3})+\b/i;
 const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|detach\w*|bank\s+(?:account|transfer)|account\s+(?:no\.?|number)|sort\s+code|biller\s+code|paynow|axs|giro|cheques?\s+(?:\w+\s+){0,3}payable\s+to)(?![\w])/i;
 const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
-const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
+const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?|coverage|cover|ward)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
+// A row label followed by a sentence, not a value: "please refer to …", "will cease if …", "see your policy schedule".
+const ROW_SENTENCE = /^(?:please|kindly|see|refer|will|shall|may|are|is|as\s+(?:shown|stated|set\s+out)|cease[sd]?|apply|applies|continue[sd]?|remain[s]?)\b/i;
+const PAY_TITLE = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow)\b/i;
 // What the household pays: a premium, a fee or charge, interest, arrears or an amount due (Critic R340). A slip's own
 // "Amount:" or "Total amount payable:" line counts only on a payment page; a bare total, payable or paid never does.
 const PAYMENT_LINE = /\b(?:premiums?|fees?|charge[sd]?|interest|arrears|amount\s+(?:due|owing)|outstanding)\b/i;
@@ -245,17 +248,19 @@ function noticePage(text: string, own: Set<string>): boolean {
   const lines = printedLines(text);
   // A person label anywhere, a header row included ("Policy Number  Life Assured  Sum Assured").
   const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
-  // A plan, units, rider or benefit row that prints a count ("Units : 5", "30 days") or a money figure page 1 lacks
-  // ("Rider: CI Booster  S$50,000") is a schedule's own field, whatever else the page holds (Critic R339 M2). A sentence
-  // ("Benefits: please refer to your policy schedule"), a plan's name or a premium row is no such row (TE rounds 14-15).
+  // A plan, units, rider, benefit, coverage or ward row with a value is a schedule's own field, whatever else the page
+  // holds, digits or not ("Coverage : As charged", "Rider : Example Critical Illness Rider") (Critic R339 M2, R341). Only
+  // a premium row, a label followed by a sentence ("Benefits: please refer to your policy schedule"), or a payment-titled
+  // page naming the plan it collects for ("Plan: Harbour Term 20", no count and no new money) is no such row (TE 14-16).
+  const payTitled = PAY_TITLE.test(lines.slice(0, 4).filter((l) => !PAYMENT_FIELD.test(l)).join("\n"));
   if (lines.some((l) => {
     const row = SCHEDULE_ROW.exec(l);
     if (!row || PREMIUM_ROW.test(l)) return false;
-    const value = l.slice(row[0].length);
-    // A count of units, days or a percentage is the plan's own figure; a number in a plan's name ("Harbour Term 20") is not.
-    if (/^\s*units?\b/i.test(row[0]) && /\d/.test(value)) return true;
-    if (/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)) return true;
-    return moneyOf(value).some((f) => !own.has(f));
+    const value = l.slice(row[0].length).trim();
+    if (!value || ROW_SENTENCE.test(value)) return false;
+    if (payTitled && /^\s*plan\b/i.test(row[0]) && !/\b\d+(?:\.\d+)?\s*(?:units?|days?|%|per\s*cent|times)\b/i.test(value)
+      && moneyOf(value).every((f) => own.has(f))) return false;
+    return true;
   })) return false;
   // Another policy's number is another policy's page.
   if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
