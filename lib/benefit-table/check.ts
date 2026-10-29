@@ -223,15 +223,22 @@ const COMPENSATION_LIMIT = /^\s*(?:the\s+)?limits?\s+of\s+compensation\b/i;
 export const LIMITS_HEADING = /\blimits?\s+of\s+compensation\b/i;
 const LIMIT_HEAD = /^\s*(?:the\s+)?(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable|most\s+(?:paid|payable|we\s+(?:will\s+)?pay))\b/i;
 const COMBINED_SCOPE = /\b(?:on|for|of|under|to)\s+the\s+same\s+life\b|\b(?:all|across)\s+(?:of\s+)?(?:the\s+|your\s+|its\s+)?(?:policies|plans|contracts)\b|\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b/i;
-/** A row named as a limit (NAMED_LIMIT) is a limit across policies when its sentence mentions any policy or plan other
- * than this one ("this and other policies", "any other policy", "all our policies", "policies we have issued", "the same
- * life"): that limit is not what this policy pays, and an unsure mention gives no amount, never a wrong one (TE pr180).
- * "Any policy year" and "other policy years" are periods, not policies. */
+/** A row named as a limit (NAMED_LIMIT) is a limit across policies when its sentence mentions any policy other than this
+ * one ("this and other policies", "any other policy", "all our policies", "policies we have issued", "the same life"), or
+ * several benefits together: that limit is not what this policy pays, and an unsure mention gives no amount, never a
+ * wrong one (TE pr180). "Any policy year" and "other policy years" are periods, not policies. Plans count only as other
+ * holdings ("this plan and any other plans", "plans you hold", "plans with us"): a schedule's "same for all plans" or
+ * "(all plans)" says its plan columns print the same, not that the limit is shared (Critic R320 H1). */
 const OTHER_POLICIES = new RegExp([
-  String.raw`\b(?:other|another)\s+(?:of\s+(?:our|your|the)\s+)?(?:polic(?:y|ies)|plans?|contracts?)\b(?!\s+(?:years?|periods?|anniversar\w*|months?)\b)`,
-  String.raw`\b(?:all|any|every)\s+(?:of\s+)?(?:(?:our|your|the|its|such)\s+)?(?:policies|plans|contracts)\b`,
+  String.raw`\b(?:other|another)\s+(?:of\s+(?:our|your|the)\s+)?(?:polic(?:y|ies)|contracts?)\b(?!\s+(?:years?|periods?|anniversar\w*|months?)\b)`,
+  String.raw`\b(?:all|any|every|across)\s+(?:of\s+)?(?:(?:our|your|the|its|such)\s+)?(?:policies|contracts)\b`,
   String.raw`\bpolicies\s+(?:that\s+|which\s+)?we\s+(?:have\s+)?(?:issued?|underwrit\w*)\b`,
   String.raw`\bsame\s+life\b`,
+  String.raw`\b(?:this|the)\s+(?:policy|plan)\s+and\s+(?:any\s+|all\s+)?(?:(?:of\s+)?(?:our|your|the)\s+)?other\s+plans?\b`,
+  String.raw`\bplans?\s+(?:that\s+|which\s+)?(?:you|we)\s+(?:have\s+)?(?:hold|held|have|issued?|underwrit\w*)\b`,
+  String.raw`\bplans?\s+(?:you\s+hold\s+)?with\s+us\b`,
+  String.raw`\b(?:all|any|every)\s+(?:of\s+)?your\s+(?:other\s+)?plans\b`,
+  String.raw`\btotal\s+of\s+all\s+(?:the\s+)?benefits\b|\ball\s+(?:the\s+)?benefits\s+(?:combined|together|in\s+total|in\s+aggregate)\b`,
 ].join("|"), "i");
 /** Wording that says the limit is this plan's own even though other plans are named ("applies separately to this plan and
  * any other plans you hold", "not shared with any other policies", "claims under other policies do not reduce it"): an
@@ -298,7 +305,7 @@ export function limitKind(b: { benefit: string; section?: string | null; quote?:
   // the limit itself, so it is combined even when it names one benefit.
   if (!LIMIT_HEAD.test(head) && NAMED_LIMIT(head)) {
     const text = asLine([b.benefit, b.quote ?? "", b.sentence ?? ""].join("\n"));
-    return !OWN_LIMIT.test(text) && (COMBINED_SCOPE.test(text) || OTHER_POLICIES.test(text)) ? "combined" : null;
+    return !OWN_LIMIT.test(text) && OTHER_POLICIES.test(text) ? "combined" : null;
   }
   if (!LIMIT_HEAD.test(head) || !COMBINED_SCOPE.test([b.benefit, b.quote ?? ""].join("\n"))) return null;
   // "Limits of compensation" names only the limit, whatever benefit follows it; other limit wording that names a benefit

@@ -130,6 +130,10 @@ for (const { m, sign } of MARKETS) {
       ["Overseas medical expenses limit", 500000, `Benefits below apply to all plans\nOverseas medical expenses limit\t${sign}500,000\t${sign}1,000,000`, `Overseas medical expenses limit\t${sign}500,000`],
       ["Annual limit", 1000, `These benefits are the same across all plans\nAnnual limit\t${sign}1,000`, `Annual limit\t${sign}1,000`],
       ["Annual limit", 1000, `These benefits are the same across all plans\nAnnual limit is ${sign}1,000 a year.`, `Annual limit is ${sign}1,000 a year.`],
+      // Critic R320 H1: a schedule's note that its plan columns print the same is not a limit shared with other policies.
+      ["Annual limit", 150000, `Annual limit       ${sign}150,000\n(same for all plans)`, `Annual limit       ${sign}150,000`],
+      ["Overseas medical limit", 500000, `Overseas medical limit    ${sign}500,000\n(applies to all plans shown)`, `Overseas medical limit    ${sign}500,000`],
+      ["Annual limit", 150000, `BENEFIT    PLAN A    PLAN B\nAnnual limit (all plans) ${sign}150,000`, `Annual limit (all plans) ${sign}150,000`],
       ["Personal accident limit", 100000, `Personal accident limit\t${sign}100,000\nWe will not pay where any other policies covering the same loss have paid.`, `Personal accident limit\t${sign}100,000`],
       ["Hospital cash limit", 5000, `FREE LOOK\nThis policy and any other plans you hold with us may be cancelled within 14 days\nHospital cash limit\t${sign}5,000`, `Hospital cash limit\t${sign}5,000`],
     ] as const).entries()) {
