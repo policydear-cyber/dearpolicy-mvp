@@ -8406,3 +8406,30 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - tsc clean, next build passes, merge-tree with main clean;
   - retry-read 10/10, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
   - clean with #167 9434ae1, #170 8b01f74, #176 032e543, #171 and #172.
+
+## R314 — #175 (16fc058) READY; #177 (a580a2b, stacked on #174) READY
+
+**#175 7538b1f, the R312 note:** the page's stalled rule now needs `quarantine_status IN ('scan_clean','not_scanned_prototype')`, which is exactly the set the reprocess UPDATE accepts. A held upload is never offered a Try again that the route would refuse; a rejected one keeps its banner.
+
+**#175 16fc058, TE R3:**
+- The transaction's cancel step also retires a `:retry-read` that is 'processing' with `lease_expires_at <= now()`, and clears its lease.
+- recoverExpiredLeases therefore cannot bring it back beside the new read.
+- A job with a live lease still returns 409 (the next statement), so a worker that is alive is never pre-empted.
+- A worker whose lease lapsed but which is still running cannot complete the job (completeJob checks lease_owner). Its direct writes to the policy row are the same as on main today.
+
+**#177: READY.**
+- The reason is chosen by the error's class name only: `this.name` is set on SpendCapReached (lib/ai/ledger.ts:91) and on ProviderQuotaExhausted (providers.ts:212), so it survives minification.
+  - The stored text is a fixed string. SpendCapReached's own message carries the plan's dollar amount and never reaches the household.
+  - A provider quota stop maps to the service reason.
+- **The size check going from 8 to 9 is deliberate, not weaker.** It follows the same one-line-per-addition pattern as Round 5 and Round 10. The new string has no amount, plan or owner in it, and the exact size pin still catches any unplanned addition.
+- **Offering Try reading it again before the reset is right.**
+  - The cap is checked before every hosted call (ocr-hosted.ts:55, llm.ts:147, usage-meter.ts:173), so an early press stops at the first call without spending anything and stores the same "limit" reason. The reprocess rate limit bounds repeats.
+  - The step says when to press.
+  - "At the start of next month" matches `date_trunc('month', now())`, which runs on the database clock. For a Singapore household that is 08:00 on the 1st, close enough for the wording.
+- Chat (household-status, inventory, document-questions), the Documents page and rag2 inventory all use the same "nothing is wrong with the file" wording, and none asks for another copy.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+- both: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- #175: retry-read 12/12;
+- #177: failed-advice 8, chat failed-document 7, processing-failure-storage 7, premium table and v11 claims 5 all pass;
+- cross-merges: #177 is clean with #164 to #176 (the current heads), and #175 is clean with #167, #170, #171, #172 and #176.
