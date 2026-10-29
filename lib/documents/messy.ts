@@ -226,6 +226,8 @@ const PAYMENT_MARK = /\b(?:payment\s+slip|remittance\s+advice|(?:how|ways?)\s+to
 const PAYMENT_FIELD = /^\s*(?:payment|premium)\s+(?:mode|method|frequency|type|term)\s*(?:[:：]|\t|\s{2,})/i;
 const SCHEDULE_ROW = /^\s*(?:plan|units?|riders?|benefits?)(?:\s+[\w()/-]+){0,4}?\s*(?:[:：]|\t|\s{2,})/i;
 const PAYMENT_LINE = /^\s*amount\b|\b(?:amount\s+(?:due|payable|owing)|total|fees?|charge[sd]?|outstanding|minimum|premiums?|interest|late|payable|paid)\b/i;
+// "The premium for your rider will be S$12.50": the figure is the premium itself (TE round 14).
+const PREMIUM_FIGURE = /\bpremiums?\b(?:(?!\b(?:benefits?|sum|cover(?:age|ed)?|waiver|assured|insured)\b)[^.\d]){0,40}?\b(?:will\s+be|is|are|of|becomes?|amounts?\s+to)\s+(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD|\$)\s?\d/i;
 const NOT_PAYMENT_LINE = /\b(?:benefits?|riders?|cash|sum|cover(?:age|ed)?|waiver|assured|insured|units?|plan)\b/i;
 const POLICY_NUMBER = /\b(?:policy|certificate|contract)\s+(?:no\.?|number)\s*[:#.]?\s*([A-Z0-9][A-Z0-9-]*\d{4,}[A-Z0-9-]*)/gi;
 /** A later page a notice may carry (Critic R337): a payment page (a payment slip, how to pay, GIRO, PayNow) or a page
@@ -235,8 +237,17 @@ function noticePage(text: string, own: Set<string>): boolean {
   const lines = printedLines(text);
   // A person label anywhere, a header row included ("Policy Number  Life Assured  Sum Assured").
   const person = lines.some((l) => PERSON_CELL.test(l) || /\b(?:insured\s+name|life\s+(?:assured|insured)|insured\s+person|policy\s*(?:owner|holder))\b/i.test(l));
-  // A plan, units, rider or benefit row is a schedule's own field, whatever else the page holds (Critic R339 M2).
-  if (lines.some((l) => SCHEDULE_ROW.test(l))) return false;
+  // A plan, units, rider or benefit row that prints a figure ("Units : 5", "Rider: CI Booster  S$50,000") is a
+  // schedule's own field, whatever else the page holds, unless its only figures are page 1's money (Critic R339 M2). A
+  // sentence ("Benefits: please refer to your policy schedule") or a bare plan name is no such row (TE round 14).
+  if (lines.some((l) => {
+    const row = SCHEDULE_ROW.exec(l);
+    if (!row) return false;
+    const value = l.slice(row[0].length);
+    if (!/\d/.test(value)) return false;
+    const money = moneyOf(value);
+    return !money.length || money.some((f) => !own.has(f));
+  })) return false;
   // Another policy's number is another policy's page.
   if ([...text.matchAll(POLICY_NUMBER)].some((m) => !own.has(m[1].toUpperCase()))) return false;
   const titled = /\b(?:payment\s+slip|remittance\s+advice|how\s+to\s+pay|payment\s+(?:instructions?|methods?|options?)|giro|paynow|important\s+notes?|notes|terms\s+and\s+conditions)\b/i.test(lines.slice(0, 4).join("\n"));
@@ -244,7 +255,7 @@ function noticePage(text: string, own: Set<string>): boolean {
   // payable", "A charge of S$20 applies", "Your premium will be S$95.00"); a figure on any other line ("Hospital cash
   // S$200", "Critical Illness Rider  S$50,000", "Premium waiver benefit") may be cover (Critic R338, TE round 13).
   if (titled && !person && !lines.some((l) => COVER_LINE.test(l))
-    && lines.every((l) => (PAYMENT_LINE.test(l) && !NOT_PAYMENT_LINE.test(l)) || moneyOf(l).every((f) => own.has(f)))) return true;
+    && lines.every((l) => (PAYMENT_LINE.test(l) && !NOT_PAYMENT_LINE.test(l)) || PREMIUM_FIGURE.test(l) || moneyOf(l).every((f) => own.has(f)))) return true;
   // A payment page in any layout (a tear-off slip, "Ways to pay", biller codes, bank accounts) may add its own account
   // and reference numbers and address the payer, but no money figure of its own, no insured person and no cover line
   // holding a figure page 1 lacks, unless that line is itself a payment line (TE round 11).

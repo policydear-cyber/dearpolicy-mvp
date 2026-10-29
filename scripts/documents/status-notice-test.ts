@@ -247,6 +247,12 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
     // TE round 13: a new premium or a late-payment charge is no cover figure.
     "Important notes\nYour premium will be S$95.00 from 1 January 2027.",
     "Important notes\nInterest of S$3.20 is charged on premiums paid late.",
+    // TE round 14: a sentence after a row label, PDF double spacing, or a bare plan name on a slip is no schedule row.
+    "Important notes\nThe premium for your rider will be S$12.50 a month from 1 January 2027.",
+    "Important notes\nBenefits: please refer to your policy schedule.",
+    "Important notes\nBenefits  will cease if the premium is not paid within the grace period.",
+    "PAYMENT SLIP\nPlan: Harbour Term\nPolicy Number: KL-77001234\nAmount: S$88.20\nBank account: 123-456789-0",
   ]) assert.equal(statusNotice([reminder, { text: page2 }]), true, page2.slice(0, 40));
-  assert.equal(statusNotice([reminder, { text: "Important notes\nPremium waiver benefit: S$5,000" }]), false);
+  for (const page2 of ["Important notes\nPremium waiver benefit: S$5,000", "Important notes\nThe premium waiver sum is S$5,000"])
+    assert.equal(statusNotice([reminder, { text: page2 }]), false, page2);
 });
