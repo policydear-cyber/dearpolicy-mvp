@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { graceEndDates, printedStatus, statusSentence, supersedePassedGrace, type PrintedStatus } from "@/lib/chat/policy-status";
+import { graceEndDates, printedPeriodStart, printedStatus, statusSentence, supersedePassedGrace, type PrintedStatus } from "@/lib/chat/policy-status";
 
 const REMINDER = [{ page: 1, text: [
   "PREMIUM REMINDER",
@@ -83,7 +83,6 @@ test("a later renewal or receipt of the same policy wins over a passed reminder 
   st = supersedePassedGrace(passedOf(), [doc("rem"), doc("sched", { policy_number: null, date: "2026-10-25" })], new Map());
   assert.equal(st.get("rem")!.state, "unknown");
   // A payment recorded after the grace date, on the reminder or on another document of the policy.
-  assert.equal(supersedePassedGrace(passedOf(), [doc("rem")], new Map([["rem", "2026-10-22"]])).get("rem")!.state, "unknown");
   assert.equal(supersedePassedGrace(passedOf(), [doc("rem"), doc("rcpt", { date: "2026-01-05" })], new Map([["rcpt", "2026-10-21"]])).get("rem")!.state, "unknown");
 });
 
@@ -93,7 +92,8 @@ test("an older document, another person's plan or another policy does not overri
   keeps([doc("rem"), doc("old", { date: "2026-10-20" })]);
   keeps([doc("rem"), doc("other", { policy_number: "ZZ-1", product_name: "Other Plan", date: "2026-11-01" })]);
   keeps([doc("rem"), doc("theirs", { policy_number: null, owners: new Set(["p2"]), date: "2026-11-01" })]);
-  keeps([doc("rem")], new Map([["rem", "2026-09-20"]]));
+  keeps([doc("rem")], new Map([["rem", "2026-10-22"]])); // the reminder's own premium row is what it asks for, not a payment
+  keeps([doc("rem"), doc("rcpt", { date: "2026-01-05" })], new Map([["rcpt", "2026-09-19"]])); // paid before it fell due: an earlier premium
   keeps([doc("rem"), doc("other", { policy_number: "ZZ-1", product_name: "Other Plan" })], new Map([["other", "2026-10-25"]]));
 });
 
@@ -133,4 +133,29 @@ test("the unpaid amount is the premium line's own figure, never another figure o
     assert.ok(printedStatus(notice("Grace period ends 20 October 2026", [line]), null, "2026-10-29").dueAmount, line);
   for (const line of ["Premium waiver benefit S$50,000", "Annual limit S$150,000", "Premium paid to date S$2,400.00", "Sum assured S$200,000 premium S$99.00"])
     assert.equal(printedStatus(notice("Grace period ends 20 October 2026", [line]), null, "2026-10-29").dueAmount, null, line);
+});
+
+test("TE R2: notice wording, other currencies, two numbers, payment inside the grace period, undated renewal", () => {
+  // G1: a notice's own "If your premium is not paid" is not a worked example; "if your premium is due on" is.
+  for (const t of ["Monthly premium S$99.00\nIf your premium is not paid, your grace period ends on 20 November 2026.", "Monthly premium S$99.00\nIf the premium remains unpaid,\nthe grace period ends on 20 November 2026."]) {
+    assert.equal(printedStatus([{ page: 1, text: t }], null, "2026-11-01").state, "grace", t);
+    assert.equal(printedStatus([{ page: 1, text: t }], null, "2026-11-25").state, "grace_passed", t);
+  }
+  assert.equal(printedStatus([{ page: 1, text: "Monthly premium S$99.00\nIf your premium is due on 1 March 2025, the grace period ends on 31 March 2025." }], null, "2026-10-29").state, "unknown");
+  // G2: the same reminder in RM, £ or with "Amount payable" and no due-date line.
+  for (const line of ["Monthly premium RM 180.00", "Monthly premium £45.20", "Amount payable: S$212.40"]) {
+    const st = printedStatus([{ page: 1, text: line + "\nGrace period ends 20 October 2026" }], null, "2026-10-29");
+    assert.equal(st.state, "grace_passed", line);
+    assert.equal(st.dueAmount, line.match(/(?:RM|£|S\$)\s?[\d.]+/)![0], line);
+  }
+  // G3: same product, same person, a different printed number is another policy.
+  assert.equal(supersedePassedGrace(passedOf(), [doc("rem"), doc("kt2", { policy_number: "KT-2-0002", date: "2026-11-01" })], new Map()).get("rem")!.state, "grace_passed");
+  // G4: a receipt paid inside the grace period, or on its last day, counts.
+  for (const day of ["2026-10-02", "2026-10-20"])
+    assert.equal(supersedePassedGrace(passedOf(), [doc("rem"), doc("rcpt", { date: "2026-01-05" })], new Map([["rcpt", day]])).get("rem")!.state, "unknown", day);
+});
+
+test("TE R2 G5: an undated renewal is dated by the period it prints", () => {
+  assert.equal(printedPeriodStart([{ page: 1, text: "RENEWAL SCHEDULE\nPeriod of insurance 19 October 2026 to 18 October 2027" }]), "2026-10-19");
+  assert.equal(printedPeriodStart([{ page: 1, text: "Schedule of benefits" }]), null);
 });

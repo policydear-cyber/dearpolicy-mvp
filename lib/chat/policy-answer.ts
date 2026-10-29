@@ -30,7 +30,7 @@ import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
-import { applyReinstatements, supersedePassedGrace, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
+import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
 // ---------------------------------------------------------------------------
 // Topics
@@ -774,7 +774,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
          FROM premium_records WHERE account_id=$1 AND coalesce(source_document_id,policy_id)::text=ANY($2::text[]) GROUP BY 1`, [args.accountId, [...docs.keys()]])
       .catch(() => ({ rows: [] as { policy_id: string; latest: string | null }[] }));
     supersedePassedGrace(statusOf, [...docs.values()].map((d) => ({ id: d.id, policy_number: d.policy_number, product_name: d.product_name,
-      owners: speaksFor.get(d.id) ?? new Set<string>(), date: d.document_date ?? d.effective_date })), new Map(paid.rows.map((r) => [r.policy_id, r.latest])));
+      owners: speaksFor.get(d.id) ?? new Set<string>(), date: d.document_date ?? d.effective_date ?? printedPeriodStart(pagesByDoc.get(d.id) ?? []) })),
+      new Map(paid.rows.map((r) => [r.policy_id, r.latest])));
   }
 
   const inactive = (id: string) => ["lapsed", "ended"].includes(statusOf.get(id)?.state ?? "");

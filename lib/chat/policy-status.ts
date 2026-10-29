@@ -24,6 +24,8 @@ export type PrintedStatus = {
   /** grace, grace_passed: the premium that is unpaid and when it fell due, as printed. */
   dueAmount?: string | null;
   duePrinted?: string | null;
+  /** grace, grace_passed: ISO date the unpaid premium fell due. */
+  dueDate?: string | null;
   /** reinstated: the lapse the reinstatement ended, as the earlier document printed it. */
   lapsedPrinted?: string | null;
   /** reinstated: the document that says so (another document of the same policy). */
@@ -49,6 +51,16 @@ function sentenceAt(pages: Page[], page: number, re: RegExp) {
   if (at < 0) return null;
   const start = Math.max(text.lastIndexOf(". ", at) + 2, 0), end = text.indexOf(".", at);
   return text.slice(start, end < 0 ? undefined : end + 1).trim();
+}
+
+/** The period start a document prints ("Period of insurance 1 June 2025 to 31 May 2027" gives 1 June 2025). */
+export function printedPeriodStart(pages: Page[]): string | null {
+  for (const x of lines(pages)) {
+    if (!/\b(?:period of insurance|policy term|period of cover|cover period|insurance period)\b/i.test(x.l)) continue;
+    const m = x.l.match(new RegExp(DATE + "\\s+(?:to|until|till|-|–)\\s+" + DATE, "i"));
+    if (m) return isoOf(m[1], m[2], m[3]);
+  }
+  return null;
 }
 
 /** The period end a document prints ("Period of insurance 1 June 2025 to 31 May 2027", "Policy term …", "Maturity date …"). */
@@ -90,8 +102,9 @@ export function graceEndDates(text: string): { iso: string; printed: string; ind
 
 /** Wording that describes a case rather than this policy's own premium. */
 /** A line that is only a premium label and its amount: "Monthly premium S$212.40", "Amount due: S$86.40 (incl. GST)". */
-const PREMIUM_LINE = /^(?:(?:monthly|annual|yearly|quarterly|half[- ]yearly|modal|outstanding|unpaid|total|overdue)\s+)?(?:premium(?:\s+(?:due|amount|payable|outstanding|unpaid))?|amount\s+(?:due|payable|outstanding))\s*:?\s*S\$\s?[\d,]+(?:\.\d{1,2})?\s*(?:\([^)]*\))?\s*$/i;
-export const HYPOTHETICAL = /\b(?:for example|for instance|e\.g\.|example|illustrat\w*|suppose|assum\w*|if (?:your|the|a) (?:premium|payment|instalment))\b/i;
+const PREMIUM_LINE = /^(?:(?:monthly|annual|yearly|quarterly|half[- ]yearly|modal|outstanding|unpaid|total|overdue)\s+)?(?:premium(?:\s+(?:due|amount|payable|outstanding|unpaid))?|amount\s+(?:due|payable|outstanding))\s*:?\s*(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?[\d,]+(?:\.\d{1,2})?\s*(?:\([^)]*\))?\s*$/i;
+// "If your premium is not paid, your grace period ends on …" is a notice's own wording; "if your premium is due on 1 March" is a case.
+export const HYPOTHETICAL = /\b(?:for example|for instance|e\.g\.|example|illustrat\w*|suppose|assum\w*|if (?:your|the|a) (?:premium|payment|instalment) (?:is|was|falls) due\b)/i;
 
 export function printedStatus(pages: Page[], expiryIso: string | null, today: string): PrintedStatus {
   const all = lines(pages);
@@ -113,12 +126,12 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
     const dueM = dueLine?.l.match(new RegExp(ANY_DATE, "i")), dueIso = dueM ? isoOfAny(dueM, 1) : null;
     // The amount said as unpaid is the figure on the premium line itself ("Monthly premium S$212.40", "Amount due: S$86.40"),
     // never another figure on a line that mentions a premium ("Premium waiver benefit S$50,000", "Annual limit S$150,000").
-    const amount = all.find((y) => y.page === x.page && PREMIUM_LINE.test(y.l))?.l.match(/S\$\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
+    const amount = all.find((y) => y.page === x.page && PREMIUM_LINE.test(y.l))?.l.match(/(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
     // A reminder prints what is due: a grace date with no due date and no amount due beside it is not one.
     if (!dueIso && !amount && !all.some((y) => y.page === x.page && /\b(?:amount due|premium (?:due|outstanding|unpaid)|outstanding premium|unpaid premium)\b/i.test(y.l) && /\d/.test(y.l) && !HYPOTHETICAL.test(y.l))) continue;
     // A grace period that has already run out says nothing about payment since: neither "in force" nor "lapsed".
     return { state: iso >= today ? "grace" : "grace_passed", date: iso, printed: longDate(iso), datePrinted: g.printed, page: x.page, line: x.l,
-      dueAmount: amount, duePrinted: dueIso ? longDate(dueIso) : null };
+      dueAmount: amount, duePrinted: dueIso ? longDate(dueIso) : null, dueDate: dueIso };
   }
   const end = printedPeriodEnd(pages);
   const endIso = end?.iso ?? expiryIso?.slice(0, 10) ?? null;
@@ -167,10 +180,16 @@ export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
   for (const d of docs) {
     const st = statusOf.get(d.id);
     if (st?.state !== "grace_passed" || !st.date) continue;
+    // Same printed number; or the same product for the same people when one of the two prints no number (two different
+    // numbers are two policies).
     const same = docs.filter((o) => o.id !== d.id && (num(d.policy_number) && num(o.policy_number) === num(d.policy_number)
-      || !!product(d.product_name) && product(o.product_name) === product(d.product_name) && [...o.owners].some((x) => d.owners.has(x))));
-    const after = (iso: string | null | undefined) => (iso ?? "").slice(0, 10) > st.date!;
-    if (same.some((o) => after(o.date)) || [d, ...same].some((o) => after(latestPaid.get(o.id))))
+      || (!num(d.policy_number) || !num(o.policy_number)) && !!product(d.product_name) && product(o.product_name) === product(d.product_name) && [...o.owners].some((x) => d.owners.has(x))));
+    // A later document: dated after the grace date. A payment recorded from another document of the policy (a receipt):
+    // on or after the date the premium fell due, so one inside the grace period counts. The reminder's own premium rows
+    // are the premium it asks for, never a payment.
+    const later = (iso: string | null | undefined) => (iso ?? "").slice(0, 10) > st.date!;
+    const paid = (iso: string | null | undefined) => !!iso && iso.slice(0, 10) >= (st.dueDate ?? st.date!);
+    if (same.some((o) => later(o.date) || paid(latestPaid.get(o.id))))
       statusOf.set(d.id, { state: "unknown", date: null, printed: null, page: null, line: null });
   }
   return statusOf;
