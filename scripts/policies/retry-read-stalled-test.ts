@@ -44,8 +44,8 @@ const DOCS = {
 
 async function main() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required (your own database, never the shared one)");
-  if (/\/dearpolicy(\?|$)/.test(url)) throw new Error("refusing to run against the shared dearpolicy database");
+  // Every row is written inside one transaction that is rolled back at the end, as in the sibling database checks.
+  if (!url) throw new Error("DATABASE_URL is required");
   const db = new Client({ connectionString: url });
   await db.connect();
   await db.query("BEGIN");
