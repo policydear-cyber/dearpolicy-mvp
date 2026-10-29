@@ -8594,3 +8594,28 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
 - Low L1 (not a regression): the Documents card (app/policies/page.tsx:448) still prints the raw `original_filename` under the title whenever the two differ, from the unmasked /api/policies. The full ID in a file name stays visible there, as before this PR. That fits the "document viewer is the household's own" exemption only if it is meant; otherwise mask that line too.
 - Low L2: two different IDs that share their last four characters ("S7712345D" and "T9912345D") mask to names that differ only in the first letter. If the letter matches too, the names are identical, and documentName names are used to group and match documents. This is rare (it needs the same last 3 digits and check letter); noting it only.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21. #180 × #181 merge clean.
+
+## R324 — #182 (47b94465) grace_passed: NOT READY (two Highs, one Medium)
+
+- **H1. A stale reminder now overrides a later renewal or schedule of the same policy on "is it still in force?" questions.**
+  - lib/chat/policy-answer.ts:1241-1246: when any candidate's document is lapsed / ended / grace / **grace_passed** / reinstated, the candidate list is cut to those documents only.
+  - Before this PR, a reminder whose date had passed was "unknown" and never triggered that cut. Now an old reminder triggers it.
+  - Effect: a household with an old reminder ("grace period ends 20 October 2026") and the renewed schedule ("Period of insurance 1 November 2026 to 31 October 2027", state in_force) asks "Is my Example Shield still in force?". The schedule's lines are dropped. The answer shows only the reminder, plus the grace_passed sentence "the insurer can confirm whether it is still in force", while the document proving it is in force is on file.
+  - The same happens at statusDocs (L1680): the grace_passed sentence is added under any answer that shows the reminder, even when a later receipt or renewal of the same policy (sameContract) is shown too.
+  - Fix: a grace_passed document joins the keep-list and statusDocs only when no other document of the same contract (sameContract) is dated after its grace date, or has a premium record or period start on or after it. Otherwise treat it as superseded (state unknown, as before). Add a test with reminder + later schedule, and one with reminder + later receipt.
+- **H2. A policy wording's worked example now reads as a passed reminder.**
+  - printedStatus applies the grace regexes to every document. Probe through the PR's printedStatus: a wording page "We allow a grace period of 30 days. For example, if your premium is due on 1 March 2025, the grace period ends on 31 March 2025." gives grace_passed, and statusSentence gives "Doc (page 1): an unpaid premium had to be paid by 31 March 2025. That date has passed … the insurer can confirm whether it is still in force."
+  - Before this PR it was "unknown" and silent. Now that warning attaches to answers citing the wording. It also triggers H1's cut, and outdated() (L1555) treats the wording as never outdated.
+  - Fix: take a grace date only from a line that is not an example or hypothetical ("for example", "e.g.", "if your premium is due", "illustration"), only from a premium notice / reminder role, and only when the page also prints a due date or an amount due. Add the example as a negative test.
+- **M1. workflow.ts:1460 picks the first grace date found, not the latest reminder's.**
+  - `graceEnd = from.map(...).find(Boolean)` takes whichever page comes first. With an old reminder (grace passed) and a newer one (grace 5 November), "if I pay on 3 Nov" can be answered from the old date as "after the grace period, which ended on 20 October".
+  - The same regex also takes H2's worked example.
+  - Fix: take the latest date among reminder lines only, and say which document it comes from.
+- Low L1: outdated() now returns false for grace_passed forever. A reminder from 2024 is never marked "not confirmed current"; before this PR its age (over 15 months) did that.
+- Fine:
+  - The status line, the days count ("ended on …, N days ago") and the sentence never say "lapsed" or "in force" for grace_passed (the PR's test pins it).
+  - The suffix pass needs the same docName prefix, the printed date and "grace period" on the same detail line. A different document only picks it up if it has the same name and quotes the same grace date, which is unlikely; noting it only.
+  - The deterministic-model change is test-only (deterministicModelEnabled refuses NODE_ENV=production, Vercel and runs without E2E_RUN_ID). Chaos OCR modes still change the content after the text layer is used. v11-ingestion's mismatch checks call the comparison directly. So real cross-check failures stay testable, but an e2e that expects "unchecked" on a plain text PDF now needs a scripted page or a chaos seed.
+  - r8 markdown detector: "**Total**" at line start or after a space is still caught. Only stars inside or after an ID mask are skipped. "-**x**" with no space is missed, which is rare.
+  - r10 policyFirst 62 applies only to first (non-steady) policy turns. Steady stays 60.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main (9c03ee3) clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
