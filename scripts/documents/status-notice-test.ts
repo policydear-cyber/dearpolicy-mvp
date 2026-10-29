@@ -238,6 +238,8 @@ test("TE round 11: payment pages in any layout stay part of a notice; an insured
   for (const page2 of [
     "IMPORTANT NOTES\nHospital cash\tS$200\nICU\tS$400",
     "TERMS AND CONDITIONS\nRider\tAmount\nCritical Illness Rider\tS$50,000",
+    // Critic R339 M2: a units-only schedule page that prints its payment mode.
+    "POLICY DETAILS\nPolicy Owner : Ravi Kumar\nPayment Mode : GIRO\nPlan : Example Hospital Income\nUnits : 5",
   ]) assert.equal(statusNotice([reinstated, { text: page2 }]), false, page2.slice(0, 40));
   // A sum to pay that page 1 does not print stays part of the notice.
   assert.equal(statusNotice([reminder, { text: "PAYMENT SLIP\nPolicy Number: KL-77001234\nTotal amount payable: S$176.40\nPay by PayNow" }]), true);
