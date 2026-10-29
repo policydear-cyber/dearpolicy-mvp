@@ -120,16 +120,20 @@ const numbersIn = (text: string) => [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].ma
 
 type Currency = { sign: string; resolved: boolean };
 const SIGN: Record<string, string> = { SGD: "S$", USD: "US$", MYR: "RM", HKD: "HK$", AUD: "A$", EUR: "€", GBP: "£", JPY: "¥", "$": "$" };
-/** The currency of an amount, resolved only when the words it rests on print that currency, or when a bare "$" stands in
+/** The currency of an amount, resolved only when the words it rests on print that currency, when a bare "$" stands in
  * a document that names Singapore dollars and no other currency anywhere in it (a Singapore scheme's benefit summary
- * prints "S$" in one table and "$250" in the next). */
-function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocument): Currency {
+ * prints "S$" in one table and "$250" in the next), or when it stands on a page that declares one currency for every
+ * figure on it (pageCurrency: a policy schedule's "Insured Amount : $100,000.00  Currency : Singapore Dollar", in a long
+ * pack whose fund pages name other currencies). The benefit table reads the same page declaration (check.ts). */
+function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocument, page?: number): Currency {
   const f = moneyFiguresIn(amountText)[0];
   const printed = moneyFiguresIn(evidence).map((x) => x.currency);
   const named = /\bSGD\b|S\$|Singapore dollars?/i.test(evidence) ? "SGD" : null;
   if (f && f.currency !== "$") return { sign: SIGN[f.currency] ?? f.currency, resolved: printed.includes(f.currency) || named === f.currency };
   if (printed.includes("SGD") || (named && !printed.some((c) => c !== "$" && c !== "SGD"))) return { sign: "S$", resolved: true };
   if (doc && !printed.some((c) => c !== "$") && documentCurrency(doc) === "SGD") return { sign: "S$", resolved: true };
+  const declared = doc && page != null && !printed.some((c) => c !== "$") ? pageCurrency(doc.pages.find((p) => p.page === page)?.text ?? "") : null;
+  if (declared && SIGN[declared]) return { sign: SIGN[declared], resolved: true };
   return { sign: "$", resolved: false };
 }
 const docCurrencies = new WeakMap<HouseholdDocument, string | null>();
@@ -581,14 +585,14 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);
       if (!b.ok) return { ok: false, why: b.why, asFact: true };
-      const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex]);
+      const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex], b.base.found.page);
       const value = Math.round(b.value * pct) / 100;
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
     if (!printed) return { ok: false, why: NO_PRINTED_BASE };
     if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
-    const cur = currencyOf(printed.raw, page.text, doc);
+    const cur = currencyOf(printed.raw, page.text, doc, page.page);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
   }
@@ -630,7 +634,7 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
   const printed = moneyFiguresIn(found.excerpt).find((f) => sameValue(f.value, value))!;
-  const cur = currencyOf(printed.raw ?? raw, found.excerpt, doc);
+  const cur = currencyOf(printed.raw ?? raw, found.excerpt, doc, found.page);
   return { ok: true, amount: { value, text: upTo(found.excerpt, printed.raw ? found.excerpt.indexOf(printed.raw) : -1) + formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
 }
 /** "Up to " when the quoted words print the figure as a limit ("Up to S$500 per incident", "up to maximum of $500",
@@ -1473,7 +1477,7 @@ function basisOf(household: Household, c: Checked): string {
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
