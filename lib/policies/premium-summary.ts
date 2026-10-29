@@ -155,7 +155,7 @@ function samePolicy(a: PolicyHint, b: PolicyHint): "same" | "maybe" | "different
 }
 /** Why a table premium was left out, for the note: its document may not show what is paid now, it may be a policy whose
  * premium is already counted, two documents give it a premium, or how often or in what currency it is paid is not plain. */
-export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" };
+export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" | "unread" | "unread_old" };
 const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
@@ -230,6 +230,87 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
   return { items, leftOut: leftOut.filter((x, i) => leftOut.findIndex((y) => y.name === x.name && y.why === x.why) === i) };
 }
 
+/** This person's policies the benefit table shows from a current personal schedule or certificate, but for which no premium
+ * was read and nothing counted is theirs (28 Oct: two schedules whose premium figure could not be tied to its label were
+ * neither counted nor named, so the total looked complete). Each policy is named once: by document and policy number, so a
+ * second numbered policy on a combined schedule is named too (Critic R300 H2); with no number, once per document, as its
+ * riders cannot be told apart from other plans (TE pr163 R1b). "maybe_counted" when a counted premium may be its policy by number or product name, never by insurer alone (M1).
+ * Skipped: documents the inventory lists (`namedDocumentIds`) and policies it names as missing (`named`, L1), a policy
+ * whose premium the table read (tablePremiumItems names those), and a cover that has ended or whose page says it ended. */
+export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<PremiumItem, "policy_id" | "policy_number" | "product_name" | "amount" | "insurer">[],
+  documents: Map<string, TablePremiumDocument>, namedDocumentIds: Set<string>, today: number,
+  named: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = []): TableLeftOut[] {
+  const policyOf = (c: TablePremiumCover) => {
+    const number = c.policyNumber ?? documents.get(c.source?.documentId ?? "")?.policyNumber;
+    // With no number printed, a document's covers cannot be told apart from a plan and its riders: one entry per document
+    // (TE pr163 R1b). Numbers tell a combined schedule's policies apart (Critic R300 H2).
+    return (c.source?.documentId ?? "") + "|" + (number ? numberKey(number) : "");
+  };
+  const oneProduct = (a: string | null | undefined, b: string | null | undefined) => (!!productKey(a) && productKey(a) === productKey(b)) || maySameProduct(a, b);
+  const read = covers.filter((c) => c.premium != null && c.premium > 0 && !c.ended);
+  // A read premium is its policy's when both covers print the same number; a document's filed number says nothing about which of
+  // its plans a premium is for (Critic R303 H1). Otherwise only the cover whose product it is (TE pr163 R3).
+  const premiumRead = (c: TablePremiumCover) => read.some((r) => r === c || (r.source.documentId === c.source.documentId
+    && (c.policyNumber && r.policyNumber ? numberKey(c.policyNumber) === numberKey(r.policyNumber) : oneProduct(r.product, c.product))));
+  // How many policies a document prints its own numbers for: with more than one, a record that names neither is not tied to either (R303 M2).
+  const numbersOn = (documentId: string) => new Set(covers.filter((c) => c.source.documentId === documentId && c.policyNumber).map((c) => numberKey(c.policyNumber!))).size;
+  type Entry = { cover: TablePremiumCover; doc: TablePremiumDocument; old: boolean };
+  const groups = new Map<string, Entry[]>();
+  for (const c of covers) {
+    const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
+    if (!documentId || !doc || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
+    if (premiumRead(c) || namedDocumentIds.has(documentId)) continue;
+    // Only a proven end (c.ended, doc.lapsedOrEnded, above) drops a policy. A printed period that has run out, an old start with
+    // no end (whole life), or a page with an ending word ("will be terminated if ...") may still be a held policy: named, with
+    // its document perhaps out of date (TE pr163 N6-N8, Critic R301 H3).
+    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
+    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
+    const old = !!doc.endedPages?.includes(c.source.page) || (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS);
+    const key = policyOf(c);
+    groups.set(key, [...(groups.get(key) ?? []), { cover: c, doc, old }]);
+  }
+  // A document's products, a rider joined to the plan it is named after: with one, its filed number, or a record naming no
+  // product, is that plan's (Critic R304 H2, R305 H1).
+  const productsOn = (documentId: string) => {
+    const seen: (string | null)[] = [];
+    for (const c of covers) if (c.source.documentId === documentId && !c.ended && !seen.some((p) => oneProduct(p, c.product))) seen.push(c.product);
+    return seen.length;
+  };
+  const out: TableLeftOut[] = [];
+  for (const group of groups.values()) {
+    // One entry per policy, naming each product on it that is not another's rider by name (Critic R303 M1): plans a schedule
+    // prints with no number of their own cannot be told apart from riders. Within a product, a cover whose term ran out does not
+    // name it while a current one is listed (TE pr163 R5); another product is never dropped for being old (Critic R304 H1).
+    const products: Entry[][] = [];
+    for (const g of group) { const p = products.find((x) => oneProduct(x[0].cover.product, g.cover.product)); if (p) p.push(g); else products.push([g]); }
+    const kept: { entry: Entry; old: boolean; maybe: boolean }[] = [];
+    for (const p of products) {
+      const { cover: c, doc } = p.find((g) => !g.old) ?? p[0], old = p.every((g) => g.old);
+      const documentId = c.source.documentId;
+      const hint = { number: c.policyNumber ?? (productsOn(documentId) <= 1 ? doc.policyNumber ?? null : null), product: c.product, insurer: doc.insurer };
+      // From the same document: the same policy when the numbers agree, or with a number missing, when the record names this
+      // product or (on a document with one policy and one product at most) no product; another plan's premium on it may be this one's (R3, R303 M2).
+      const link = (i: { policy_id?: string | null; policy_number: string | null; product_name: string | null; insurer: string | null; amount?: number }) => {
+        if (i.policy_id === documentId) {
+          if (hint.number && i.policy_number) { if (samePolicyNumber(hint.number, i.policy_number) || numberKey(hint.number) === numberKey(i.policy_number)) return "same"; }
+          else return (!i.product_name?.trim() && numbersOn(documentId) <= 1 && productsOn(documentId) <= 1) || !c.product?.trim() || oneProduct(c.product, i.product_name) ? "same" : "maybe";
+        }
+        // The filed number and this product both printed on the record: this plan's, whatever else the schedule holds.
+        if (doc.policyNumber && i.policy_number && numberKey(doc.policyNumber) === numberKey(i.policy_number) && oneProduct(c.product, i.product_name)) return "same";
+        const r = samePolicy(hint, { number: i.policy_number, product: i.product_name, amounts: i.amount == null ? [] : [Number(i.amount)], insurer: i.insurer });
+        return r === "maybe" && !(hint.number && i.policy_number) && !maySameProduct(c.product, i.product_name) ? "different" : r;
+      };
+      const overlap = counted.map(link), already = named.map(link);
+      if (overlap.includes("same") || already.includes("same") || already.includes("maybe")) continue;
+      kept.push({ entry: { cover: c, doc, old }, old, maybe: overlap.includes("maybe") });
+    }
+    if (!kept.length) continue;
+    const doc = kept[0].entry.doc;
+    const name = [...new Set([...kept].sort((a, b) => Number(a.old) - Number(b.old)).map((k) => k.entry.cover.product?.trim()).filter((x): x is string => !!x))].join(" and ") || (doc.insurer ? doc.insurer + " policy" : "one policy");
+    out.push({ name, why: kept.some((k) => k.maybe) ? "maybe_counted" : kept.every((k) => k.old) ? "unread_old" : "unread" });
+  }
+  return out;
+}
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
     `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes
@@ -237,13 +318,14 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
   let fromTable: PremiumItem[] = [], tableLeftOut: TableLeftOut[] = [];
-  if (table?.covers.some((c) => c.premium != null)) {
-    const ids = [...new Set(table.covers.filter((c) => c.premium != null).map((c) => c.source.documentId))];
+  let documents = new Map<string, TablePremiumDocument>();
+  if (table?.covers.length) {
+    const ids = [...new Set(table.covers.map((c) => c.source.documentId))];
     // Only current documents: a premium from a deleted or superseded one is never counted (no row, so it is left out below).
     const docs = await query<{ id: string; insurer: string | null; policy_number: string | null; expiry: string | null }>(`SELECT p.id::text AS id,p.insurer,p.policy_number,p.renewal_or_expiry_date::text AS expiry FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL`, [accountId, ids]);
     const pages = await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`, [accountId, ids]);
     const todayIso = isoOfDay(table.today);
-    const documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
+    documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
       endedPages: pages.rows.filter((p) => p.policy_id === d.id && ENDED_WORDS.test(p.text)).map((p) => p.page_number),
       lapsedOrEnded: ["lapsed", "ended"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
@@ -254,16 +336,23 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const cashAnnual = items.some((i) => i.cashAnnual != null) ? items.reduce((sum, i) => sum + (i.cashAnnual ?? i.annual), 0) : null;
   const medisaveAnnual = items.some((i) => i.medisaveAnnual != null) ? items.reduce((sum, i) => sum + (i.medisaveAnnual ?? 0), 0) : null;
   // Which of this person's policies have no premium evidence at all.
-  let missing: string[] = [];
+  let missing: string[] = [], inventoryDocumentIds = new Set<string>();
+  let missingPolicies: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = [];
   try {
     const inventory = await loadPolicyInventory(accountId, [member]);
-    missing = inventory.contracts.filter((c) => {
+    inventoryDocumentIds = new Set(inventory.contracts.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id)));
+    const unpaid = inventory.contracts.filter((c) => {
       const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
       return !all.some((i) => (i.policy_id && ids.has(i.policy_id)) || (normalizedIdentifier(i.policy_number) && numbers.has(normalizedIdentifier(i.policy_number))));
-    }).map((c) => c.name);
+    });
+    missing = unpaid.map((c) => c.name);
+    missingPolicies = unpaid.flatMap((c) => c.documents.map((d) => ({ policy_number: d.policy_number, product_name: d.product_name ?? c.name, insurer: d.insurer })));
   } catch { missing = []; }
   missing = [...new Set(missing)];
+  // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent;
+  // when the inventory could not be read, every such policy is named rather than none (Critic R300 L2).
+  if (table) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today, missingPolicies));
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
     : null;
@@ -276,6 +365,8 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     maybe_counted: ["it may be the policy of a premium already counted, so it is not added again", "they may be policies whose premiums are already counted, so they are not added again"],
     unclear: ["its document does not say plainly how often, or in what currency, the premium is paid", "their documents do not say plainly how often, or in what currency, the premiums are paid"],
     two_documents: ["two of its documents print a premium, and which is current is not known", "two of their documents print a premium, and which is current is not known"],
+    unread: ["no premium could be read from its documents", "no premium could be read from their documents"],
+    unread_old: ["no premium could be read from its documents, which may not show the policy as it is now", "no premium could be read from their documents, which may not show the policies as they are now"],
   };
   const tableNote = (Object.keys(WHY) as TableLeftOut["why"][]).map((why) => {
     const names = [...new Set(tableLeftOut.filter((x) => x.why === why).map((x) => x.name))];
