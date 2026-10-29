@@ -118,7 +118,9 @@ async function main() {
     const st = (text: string): ModelStatement => ({ kind: "fact", text, person: null, document: null, quote: null, amount: null, alternativeGroup: null, percentOf: null, conditions: [] });
     const two: Household = { ...HOUSE, documents: [HOUSE.documents[0], HOUSE.documents[5]] };
     const { answer } = verifyAnswer(two, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D2) were read.")] });
-    assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), ["Of your 2 uploaded files, 1 was read and 1 could not be read (failed.pdf)."]);
+    assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), ["Of your 2 uploaded files, 1 was read and 1 could not be read (failed.pdf). failed.pdf: DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file."]);
+    // (The count is the only point naming failed.pdf here, so it carries the Documents page's reason and next step; the
+    // count sentence itself is unchanged.)
   });
 
   await check("benefit-table library groups use the same words", () => {
@@ -377,6 +379,121 @@ async function main() {
       await client.query("ROLLBACK").catch(() => undefined);
       await client.end();
     }
+  });
+
+  // ---- A failed document: the Documents page's reason and next step (lib/documents/failure-advice.ts), in fixed words.
+  // On 1912d73 every failed document said only "could not be read (status: failed)", whatever the reason: a reading-service
+  // or provider-quota stop, the monthly limit, a locked PDF and a blurred photo all looked the same to the household.
+  const errors = await import("../../lib/documents/processing-errors");
+  const fa = await import("../../lib/documents/failure-advice");
+  const { ProviderQuotaExhausted } = await import("../../lib/ai/providers");
+  const { POLICY_PROCESSING_STOPPED_MESSAGE } = await import("../../lib/policies/quarantine/ui");
+  const RAW = "Error: 429 insufficient_quota at /var/task/worker.js; Example Insurance S$9,999";
+  const FAILED: [string, string | null, number | null, string][] = [
+    ["locked.pdf", errors.PDF_PASSWORD_REQUIRED_MESSAGE, null, "password_missing"],
+    ["wrong-password.pdf", errors.PDF_PASSWORD_INCORRECT_MESSAGE, null, "password_wrong"],
+    ["no-text.pdf", errors.UNREADABLE_DOCUMENT_MESSAGE, null, "no_text"],
+    ["damaged.pdf", errors.UNOPENABLE_DOCUMENT_MESSAGE, null, "unopenable"],
+    ["cut-off.pdf", errors.INCOMPLETE_PDF_MESSAGE, null, "incomplete"],
+    ["blurred.jpg", errors.UNREADABLE_PHOTO_MESSAGE, null, "photo"],
+    ["service.pdf", errors.DOCUMENT_READING_SERVICE_MESSAGE, null, "service"],
+    ["provider-quota.pdf", errors.quotaStopReason(new ProviderQuotaExhausted(429)), 4, "service"],
+    ["limit.pdf", errors.READING_LIMIT_REACHED_MESSAGE, 4, "limit"],
+    ["generic.pdf", errors.DOCUMENT_READING_FAILED_MESSAGE, null, "reading_failed"],
+    ["stopped.pdf", POLICY_PROCESSING_STOPPED_MESSAGE, null, "unknown"],
+    ["raw.pdf", RAW, 3, "unknown"],
+    ["none.pdf", null, null, "unknown"],
+  ];
+  const failedRows = (acct: string) => FAILED.map(([file, error, pages], i) => ({ account_id: acct, id: `cccccccc-0000-4000-8000-0000000001${String(i).padStart(2, "0")}`,
+    original_filename: file, processing_status: "failed", processing_error: error, page_count: pages, quarantine_status: "scan_clean", created_at: "2026-10-28", reading_live: false }));
+  const failedHouse = async () => {
+    const acct = HOUSE.accountId;
+    return readHousehold(acct, async (sql: string) => /FROM family_members WHERE/.test(sql) ? [{ account_id: acct, display_name: "Lim Ah Kow", preferred_name: null, relationship: "self" }]
+      : /FROM policies p/.test(sql) ? [...failedRows(acct), { account_id: acct, id: "cccccccc-0000-4000-8000-000000000199", original_filename: "read.pdf", processing_status: "ready", quarantine_status: "scan_clean", created_at: "2026-10-28" }]
+      : []);
+  };
+  const noScan = (kind: string, text: string) => { if (kind !== "no_text") assert.doesNotMatch(text, /\bscan|readable text/i, `${kind}: ${text}`); };
+  const noRaw = (text: string) => assert.doesNotMatch(text, /insufficient|worker\.js|9,999|\$\s?\d|Analysis stopped|Re-?analy|try again automatically|This PDF is password protected|The PDF password entered/, text);
+
+  await check("failed documents (library): each tells the model the Documents page's reason and next step, never the stored text", async () => {
+    const h = await failedHouse();
+    const lib = renderLibrary(h);
+    for (const [file, error, pages, kind] of FAILED) {
+      const advice = fa.failedDocumentChatAdvice(error, { hasPages: !!pages });
+      assert.equal(advice.kind, kind, file);
+      const tag = tagOf(lib, file);
+      assert.match(tag, /reading_status="could not be read \(failed\)"/, file);
+      assert.ok(tag.includes(` why_not_read="${advice.why}"`), `${file}: ${tag}`);
+      assert.ok(tag.includes(` next_step="${advice.step}"`), `${file}: ${tag}`);
+      noRaw(tag); noScan(kind, tag.replace(/<no_readable_text\/>/, ""));
+    }
+    // The household object keeps only the advice: the stored reason itself goes no further than readHousehold.
+    assert.ok(!JSON.stringify(h).includes("insufficient_quota"), "the raw stored reason is not kept");
+    // A read document gets no failure attributes (negative control).
+    assert.doesNotMatch(tagOf(lib, "read.pdf"), /why_not_read|next_step/);
+    for (const name of [...IN_PROGRESS, ...STALLED, "odd.pdf", "rejected.pdf"]) assert.doesNotMatch(tagOf(renderLibrary(HOUSE), name), /why_not_read|next_step/, name);
+  });
+
+  await check("failed documents (server's points): each file's point and the count give the reason and next step; a service or quota stop never says scan", async () => {
+    const h = await failedHouse();
+    for (const [file, error, pages, kind] of FAILED) {
+      const advice = fa.failedDocumentChatAdvice(error, { hasPages: !!pages });
+      const fact = libraryFact(h, h.documents.find((x) => x.name === file)!);
+      assert.ok(fact.startsWith(`${file} could not be read (status: failed), so nothing in it was used. ${advice.why.charAt(0).toUpperCase()}${advice.why.slice(1)}. ${advice.step} `), `${file}: ${fact}`);
+      noRaw(fact); noScan(kind, fact);
+      if (kind === "service") assert.match(fact, /reading service wasn’t available — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, fact);
+      if (kind === "limit") assert.match(fact, /after the limit resets at the start of next month/, fact);
+      if (kind.startsWith("password")) assert.doesNotMatch(fact, /upload(?:ed)? it again|re-?upload/i, fact);
+    }
+    // The count, when it is the only point: one reason and step per kind, the files that share them together.
+    const st = (text: string): ModelStatement => ({ kind: "fact", text, person: null, document: null, quote: null, amount: null, alternativeGroup: null, percentOf: null, conditions: [] });
+    const { answer } = verifyAnswer(h, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D14) were read.")] });
+    const count = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
+    assert.equal(count.length, 1, count.join("\n"));
+    assert.ok(count[0].startsWith(`Of your 14 uploaded files, 1 was read and 13 could not be read (${FAILED.map((f) => f[0]).join(", ")}).`), count[0]);
+    assert.ok(count[0].includes(" service.pdf and provider-quota.pdf: for each, DearPolicy’s reading service wasn’t available — nothing is wrong with the file. Press “Try reading it again” on the Documents page in a little while."), count[0]);
+    assert.ok(count[0].includes(" limit.pdf: Reading was paused when the monthly reading limit was reached"), count[0]);
+    assert.ok(count[0].includes(" locked.pdf: It is password-protected and was uploaded without its password. Enter its password on the Documents page"), count[0]);
+    assert.ok(count[0].includes(" no-text.pdf: DearPolicy found no readable text in it."), count[0]);
+    assert.equal(count[0].match(/reading service wasn’t available/g)?.length, 1, "one reason for the files that share it");
+    noRaw(count[0]);
+    // With each file's own point in the answer, the count does not say the reasons a second time.
+    const both = verifyAnswer(h, { bottomLine: "", nextSteps: [], question: null, statements: [st("D7 could not be read."), st("The files (D1, D14) were read.")].map((x, i) => i === 0 ? { ...x, document: "D7" } : x) });
+    const texts = both.answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text).join("\n");
+    assert.equal(texts.match(/reading service wasn’t available/g)?.length, 2, texts);
+    assert.ok(texts.includes("service.pdf could not be read (status: failed), so nothing in it was used. DearPolicy’s reading service wasn’t available"), texts);
+  });
+
+  await check("failed documents (real database): the household read maps the stored reason to the advice", async () => {
+    const url = process.env.DATABASE_URL;
+    assert.ok(url, "DATABASE_URL is needed");
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      const acct = randomUUID(), member = randomUUID();
+      await client.query("INSERT INTO accounts(id,name) VALUES($1,'Lim household (test)')", [acct]);
+      await client.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Lim Ah Kow','self')", [member, acct]);
+      for (const [file, error, pages] of FAILED) {
+        const id = randomUUID();
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,processing_error,page_count,quarantine_status)
+          VALUES($1,$2,$3,$4,$5,'failed',$6,$7,'scan_clean')`, [id, acct, member, file, `test/${id}`, error, pages]);
+      }
+      const h = await readHousehold(acct, async (sql, params) => (await client.query(sql, params)).rows);
+      for (const [file, error, pages, kind] of FAILED) {
+        const d = h.documents.find((x) => x.name === file)!;
+        assert.deepEqual(d.failure, fa.failedDocumentChatAdvice(error, { hasPages: !!pages }), file);
+        assert.equal(d.failure!.kind, kind, file);
+      }
+      assert.ok(!JSON.stringify(h).includes("insufficient_quota"));
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      await client.end();
+    }
+  });
+
+  await check("prompt: a failed document's reason and next step are given as written", () => {
+    assert.match(SIMPLE_SYSTEM_PROMPT, /why_not_read and a next_step, give that reason and that next step as they are written/);
   });
 
   await check("prompt: a document on hold is said to be on hold, not unreadable", () => {
