@@ -9237,3 +9237,24 @@ Each head went through the full gate: fresh worktree, npm ci, network blocked, m
     - Add the eight quotes above to the test.
 - Low: "maksimum Rp100.000.000" reads as unsure (the dot used as a thousands separator), which withholds the figure. Safe.
 - Low: "Sub-limit for outpatient cancer treatment: S$25,000" reads as unsure, because "for outpatient cancer treatment" is not filler. This also withholds, so it is safe.
+
+## R354: PR #191 head 9e2f5bd2 (simple chat reads a bare "$" from the quote page's declared currency), READY
+
+- The full gate is green:
+  - tsc clean, next build passes, merge-tree with main 5110764a is clean;
+  - simple chat 85 (one new case), replay 22/22, benefit-table 107/107, r5 21/21.
+- A page declaring one currency while its "$" is another: the PR reuses the existing pageCurrency, which is already strict.
+  - It returns null when the page:
+    - names two currencies;
+    - lists currency options;
+    - says "unless stated otherwise";
+    - prints any other currency figure or name (US$, HK$, A$, RM, €, £, ¥, or S$ on a non-SGD page).
+  - The new branch also runs only when the quoted words themselves print no other currency.
+  - The benefit table makes the same call, from the same page declaration (check.ts:187).
+  - What is left is a page that declares one currency for every figure and prints a figure in another currency with no sign. That page misstates itself, and DearPolicy reads it as printed.
+- Callers: all four new call sites pass the page of the quoted words:
+  - `found.page` (plainAmount);
+  - `b.base.found.page` (percentAmount sum insured, and basisOf);
+  - `page.page` (the page object whose text is the evidence).
+  - None passes another page.
+- Order: the new branch comes after the SGD document rule, so a Singapore-dollar pack resolves exactly as on main.
