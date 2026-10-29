@@ -22,7 +22,7 @@ function family(accountId:string){
   return query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
 }
 function shape(row:LedgerRow,people:ClaimPerson[]){
-  return {...row,eventLabel:EVENTS[row.eventType]?.label??row.eventType,pays:describePays(row),
+  return {...row,planName:row.shownPlanName??row.planName,eventLabel:EVENTS[row.eventType]?.label??row.eventType,pays:describePays(row),
     ownerName:people.find(p=>p.id===row.familyMemberId)?.display_name??"Unknown",
     hasFigure:row.paysKind!=="stated"&&row.amount!=null&&!(row.paysKind==="percent_of_sum"&&row.sumBasis==null)};
 }

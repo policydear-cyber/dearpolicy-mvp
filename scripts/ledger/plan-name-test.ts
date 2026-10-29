@@ -31,6 +31,11 @@ test("readablePlanName replaces only a plan taken from the file name", async () 
   assert.equal(readablePlanName("Hospitalisation", "wording", travel), "Hospitalisation");
   assert.equal(readablePlanName("Output 202609281146157", "person", travel), "Output 202609281146157");
   assert.equal(readablePlanName("Output 202609281146157", "wording", null), "Output 202609281146157");
+  // A printed code is never the file name; a short name a person gave the file is kept as typed.
+  assert.equal(readablePlanName("XK4", "wording", doc("IMG_2041.jpg", { insurer: "Example Life" })), "XK4");
+  assert.equal(readablePlanName("G007500 · Death", "schedule", doc("IMG_2041.jpg")), "G007500 · Death");
+  assert.equal(readablePlanName("eShield", "wording", doc("eShield.pdf", { insurer: "Example Life" })), "eShield");
+  assert.equal(readablePlanName("Travel_cover_2026", "wording", doc("Travel_cover_2026.pdf", { product_name: "Example Voyager Plus" })), "Example Voyager Plus");
 });
 
 test("the Coverage ledger loads stored rows with the readable plan", async () => {
@@ -45,6 +50,8 @@ test("the Coverage ledger loads stored rows with the readable plan", async () =>
   for (const [plan, origin] of [["Output 202609281146157", "wording"], ["Hospitalisation", "wording"], ["Output 202609281146157", "person"]])
     await db.query("INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,origin,status) VALUES($1,$2,$3,$4,'other',$5,'confirmed')", [ACCOUNT, ADA, pid, plan, origin]);
   const rows = await loadLedger(ACCOUNT, [ADA]);
-  assert.deepEqual(rows.map((r) => r.planName).sort(), ["Example General endorsement", "Hospitalisation", "Output 202609281146157"]);
+  assert.deepEqual(rows.map((r) => r.shownPlanName).sort(), ["Example General endorsement", "Hospitalisation", "Output 202609281146157"]);
+  // Display only: answers, cover keys and the travel filter keep the stored plan, so two documents never merge by name.
+  assert.deepEqual(rows.map((r) => r.planName).sort(), ["Hospitalisation", "Output 202609281146157", "Output 202609281146157"]);
   await db.close();
 });

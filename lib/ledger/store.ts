@@ -29,6 +29,8 @@ export type LedgerRow={
   offsetDays:number|null;maximumDays:number|null;conditions:string[];note:string|null;
   sourcePage:number|null;quote:string|null;origin:"schedule"|"wording"|"person";inferred:boolean;
   status:"proposed"|"confirmed"|"rejected";updatedAt:string;
+  /** The plan as the page shows it (readablePlanName). Display only: answers, keys and filters use planName. */
+  shownPlanName?:string;
 };
 type Row={id:string;family_member_id:string;policy_id:string|null;plan_name:string;insurer:string|null;event_type:string;detail:string|null;cause:string|null;
   minimum_fact:string|null;minimum_value:string|number|null;pays_kind:string;amount:string|number|null;currency:string;sum_basis:string|number|null;offset_days:number|null;maximum_days:number|null;
@@ -70,11 +72,14 @@ export function readablePlanName(planName:string,origin:string,doc:Row["doc"]):s
   if(!doc||origin==="person")return planName;
   const cut=planName.indexOf(" · "),base=cut<0?planName:planName.slice(0,cut),rest=cut<0?"":planName.slice(cut);
   const file=doc.original_filename??"";
-  const fromFile=isMachineFilename(base)||(!!file&&(sameName(base,file)||sameName(base,prettifyFilename(file))||sameName(base,file.replace(/\.[a-zA-Z0-9]{1,5}$/,""))));
-  return fromFile?documentName({...doc,original_filename:file})+rest:planName;
+  // Only a plan that is the file name itself: a printed code ("XK4", "G007500") never is.
+  const fromFile=!!file&&(sameName(base,file)||sameName(base,prettifyFilename(file))||sameName(base,file.replace(/\.[a-zA-Z0-9]{1,5}$/,"")));
+  // A short name a person gave the file ("eShield.pdf") reads better as typed than split into words.
+  const reads=!doc.product_name&&!isMachineFilename(file.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&base.length<16;
+  return fromFile&&!reads?documentName({...doc,original_filename:file})+rest:planName;
 }
 function toRow(r:Row):LedgerRow{
-  return {id:r.id,familyMemberId:r.family_member_id,policyId:r.policy_id,planName:readablePlanName(r.plan_name,r.origin,r.doc),insurer:r.insurer,
+  return {id:r.id,familyMemberId:r.family_member_id,policyId:r.policy_id,planName:r.plan_name,shownPlanName:readablePlanName(r.plan_name,r.origin,r.doc),insurer:r.insurer,
     eventType:(r.event_type in EVENTS?r.event_type:"other") as EventType,detail:r.detail,cause:(r.cause==="accident"||r.cause==="illness")?r.cause:null,paysKind:r.pays_kind as PaysKind,
     amount:num(r.amount),currency:r.currency,sumBasis:num(r.sum_basis),minimumFact:r.minimum_fact,minimumValue:num(r.minimum_value),offsetDays:r.offset_days,maximumDays:r.maximum_days,
     conditions:r.conditions??[],note:r.note,sourcePage:r.source_page,quote:r.quote,origin:r.origin as LedgerRow["origin"],
