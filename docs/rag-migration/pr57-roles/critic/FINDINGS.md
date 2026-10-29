@@ -8980,3 +8980,14 @@ All 71 earlier probes hold.
   - This is the third wording-based exemption on this row (eef6d354, d8f441d3). Each one leaks a rider or benefit description.
   - Fix: keep only ce5a757b's ROW_SENTENCE starters (please, see, refer, will, as shown, …). Those are reference or instruction phrasings, not descriptions of cover. Add Q3 as a negative.
 - Recommendation unchanged: **ship ce5a757b**, which is gated green with 81 probes. Alternatively, ship a later head that removes the SENTENCE_WORD exemption; I will re-gate it.
+
+## R344 — #184 1fc8651a: READY
+
+- R343 is fixed. SENTENCE_WORD is gone, and ROW_SENTENCE now keeps only addressing words. Q3 ("Rider : Covers you for early critical illness.") gives personal_schedule again.
+- All 86 made-up probes (R330–R344) were run on main and on the PR:
+  - Every schedule, pack and certificate keeps main's role.
+  - Every titled or event-stated notice gets its intended role.
+  - Accepted default-safe limits (main's rules apply): N9, N10, F4, and the builder's MP18/MP24/MP25.
+- Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main 9c03ee3 clean;
+  - status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
