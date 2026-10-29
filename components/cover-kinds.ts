@@ -30,8 +30,8 @@ export const kindOfName = (name: string) => {
 };
 
 /** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
-export type TableKindRow = { benefit: string; pays: string; product: string; cover: string };
-export type TableKindCover = { product: string; cover: string };
+export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; coverEnded?: string | null };
+export type TableKindCover = { product: string; cover: string; ended?: string | null };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
  * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
@@ -55,7 +55,9 @@ const PREMIUM_ONLY = /^(?:(?:annual|monthly|quarterly|half[- ]yearly|yearly|sing
  * a travel policy). The cover's own name decides first; a row's benefit name adds its kind (a term life's TPD row is
  * disability cover too), never "Home and vehicle" ("Home Nursing", "Home Modification" are not home insurance). A row
  * printed as not covered, a value and a premium are no cover. A cover with no row counted (its pages not linked yet) is
- * still cover: never "Nothing found" for a person who has one (Critic R199-2). */
+ * still cover: never "Nothing found" for a person who has one (Critic R199-2). A cover that has ended (a single trip whose
+ * printed period is over: coverEnded in lib/benefit-table/assemble.ts sets `coverEnded` on its rows, `ended` on the cover)
+ * is not current cover, as on Home; a missing date never ends a cover. */
 export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
   const found = new Set<string>(), counted = new Set<string>();
   const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
@@ -63,6 +65,9 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
     // rows are all printed as not covered is no cover (TE P124-2).
     if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+    // An ended cover's rows are not counted: a current cover of the same name whose rows are not linked yet still
+    // lists (TE E9: a renewed single trip beside the one that ended).
+    if (r.coverEnded) continue;
     counted.add(`${r.product}\u0000${r.cover}`);
     if (r.pays === "not_covered") continue;
     const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
@@ -71,7 +76,7 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     if (benefit !== "other" && benefit !== "property") found.add(benefit);
     else if (!cover) found.add("other");
   }
-  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  for (const c of covers) if (!c.ended && !counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
