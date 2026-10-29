@@ -79,12 +79,23 @@ test("caps in every market's wording, and the words that make a figure something
     [2500, "We won't pay more than £2,500"], [2500, "Claims cannot exceed £2,500"], [50000, "Had keseluruhan pelan RM50,000"],
     [0.5, "up to fifty percent of the Sum Assured", "sum_insured_fraction"], [0.5, "limited to half of the Sum Assured", "sum_insured_fraction"],
     [0.2, "maksimum 20% daripada Jumlah Diinsuranskan", "sum_insured_fraction"],
+    // The cap phrase nearest the figure decides, whatever came earlier in the sentence (Critic R353).
+    [5000, "50% of the sum insured or S$5,000, whichever is lower"], [150000, "after the deductible and co-insurance, up to S$150,000 per policy year"],
+    [100000, "minimum S$1,000, maximum S$100,000"], [50000, "Maximum sum insured for this benefit is S$50,000"],
+    [500000, "Maximum Sum Assured for Accidental Death: S$500,000"], [5000, "maximum over a policy year S$5,000"],
+    [5000, "After the excess, we pay up to S$5,000"], [3000, "Premium waiver benefit up to S$3,000"],
+    // Other cap wordings (TE #188 M1).
+    [2500, "The most we'll pay is £2,500"], [2500, "Limit of cover £2,500"], [3000, "the maximum payable is €3,000"],
+    [50000, "Had keseluruhan pelan ini ialah RM50,000"], [25000, "Sub-limit for outpatient cancer treatment: S$25,000"],
   ] as [number, string, CoverCondition["amountBasis"]?][]) assert.equal(read(amount, quote, basis), "cap", quote);
   for (const [amount, quote] of [
     [1000, "subject to a minimum withdrawal amount of S$1,000"], [1000, "minimum S$1,000, maximum S$100,000"], [1000, "Claims exceeding S$1,000 require receipts"],
     [2000, "For bills exceeding S$2,000 we pay 80%"], [100, "subject to an excess of £100"], [50000, "Sum Assured S$50,000, subject to the terms"],
     [200, "Co-payment of S$200 up to the limit"], [3000, "premium S$3,000 up to age 65"], [1000, "a minimum claim of S$1,000; benefits up to S$50,000"],
     [1000, "at least S$1,000 and at most S$5,000"],
+    // Thresholds and ages (TE #188 H3).
+    [1000, "if the bill is more than S$1,000"], [1000, "must be more than £1,000"], [5000, "unless the loss is more than S$5,000"],
+    [1000, "Claims under S$1,000 are not paid"], [65, "up to age 65"], [70, "maximum entry age of 70"], [500, "for bills below S$500"],
   ] as [number, string][]) assert.equal(read(amount, quote), "not_cap", quote);
   // A day rate times a day count is not printed as the stored total.
   assert.equal(read(15000, "S$500 per day, up to 30 days"), "unsure");
@@ -107,6 +118,18 @@ test("an unsure cap or an unsure plan total hides the figures above it", async (
   applyCoverConditions({ items: plan, facts: {} as never, conditions: [
     cond({ kind: "aggregate_cap", productName: "Example CI Plan", amount: 1.5, amountBasis: "sum_insured_fraction", quote: "up to 150% of the Sum Assured in total" })] });
   assert.equal((plan[0].calculatedAmount ?? 0) + (plan[1].calculatedAmount ?? 0), 150000);
+  // A limit whose sentence names another benefit is no limit on this one; one that names a cover's part, or nothing,
+  // hides the figure; an acronym names the benefit (TE #188 H1, M2).
+  const own = [item("Ada · Death Benefit", "Example Protector", 500000), item("Ada · TPD", "Example Protector", 500000), item("Ada · Intensive Care Unit (ICU) Benefit", "Example Shield", 100000)];
+  applyCoverConditions({ items: own, facts: {} as never, conditions: [
+    cond({ kind: "sub_limit", productName: "Example Protector", amount: 5000, quote: "Funeral expenses benefit is limited to S$5,000" }),
+    cond({ kind: "sub_limit", amount: 500, quote: "Ambulance fees up to S$500 per incident" }),
+    cond({ kind: "sub_limit", productName: "Example Shield", amount: 25000, quote: "ICU Benefit: up to S$25,000" })] });
+  assert.deepEqual(own.map((i) => i.calculatedAmount), [500000, 500000, 25000]);
+  // An unplaced limit for one kind of benefit hides only that kind (TE #188 H2).
+  const term = [item("Ada · Death", "Example Term", 300000), item("Ada · Hospital Cash", "Example Term", 200000)];
+  applyCoverConditions({ items: term, facts: {} as never, conditions: [cond({ kind: "aggregate_cap", amount: 150000, quote: "The annual limit for hospital benefits is shown in the Schedule." })] });
+  assert.deepEqual(term.map((i) => i.calculatedAmount), [300000, undefined]);
   // A minimum stored as a cap is stated beside the amount, not "changes the amount".
   assert.equal(conditionEffect(cond({ kind: "sub_limit", amount: 1000, quote: "subject to a minimum of S$1,000" })), "stated beside the amount");
 });
