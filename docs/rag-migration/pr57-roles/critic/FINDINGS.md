@@ -9213,3 +9213,27 @@ Each head went through the full gate: fresh worktree, npm ci, network blocked, m
   - the operator page groups by doc:policyId;
   - "(n of m)" tells same-named headings apart on both pages.
 - Update the assertion. A behavioural check of groupHeading would be better than a source regex.
+
+## R353: PR #188 head 70526495 (capReading cap / not_cap / unsure), CHANGES (one High)
+
+- Gate is green: tsc, next build and merge-tree with main all pass, plus the own test, simple chat 84, replay 22/22, benefit-table 107/107 and r5 21/21.
+- The R349 fixes hold:
+  - H1: bare figures, missing cap words, and ¥, ₹, PHP and word fractions now read as cap.
+  - H2: a quote that names the benefit now caps it.
+  - H3: every minimum, threshold, excess, deductible, sum insured, premium and count case now reads as not_cap.
+  - "unsure" now withholds the figure, which is safe.
+- **H1 (new): `not_cap` wins over a cap phrase that sits right before the figure.** NOT_CAP_BEFORE is tested before CAP_BEFORE and looks 25 characters back. A not-cap word earlier in the sentence therefore turns a real cap into not_cap, and evaluateCondition returns clear: the cap is ignored and the full figure shows, which overstates the claim. Run through the PR's own capReading:
+  - "Pays 50% of the sum insured or S$5,000, whichever is lower" gives not_cap.
+  - "Pays 90% after the deductible and co-insurance, up to S$150,000 per policy year" gives not_cap.
+  - "minimum S$1,000, maximum S$100,000": the S$100,000 maximum gives not_cap.
+  - "Maximum sum insured for this benefit is S$50,000" and "Maximum Sum Assured for Accidental Death: S$500,000" give not_cap.
+  - "maximum over a policy year S$5,000" gives not_cap.
+  - "After the excess, we pay up to S$5,000" gives not_cap.
+  - "Premium waiver benefit up to S$3,000" gives not_cap.
+  - Fix:
+    - If CAP_BEFORE matches, meaning a cap phrase plus at most the listed filler words ends right at the figure, read it as cap.
+    - Read not_cap only when the not-cap word is nearer to the figure than any cap phrase.
+    - "whichever is lower" after the figure should also beat a "sum insured" earlier in the sentence.
+    - Add the eight quotes above to the test.
+- Low: "maksimum Rp100.000.000" reads as unsure (the dot used as a thousands separator), which withholds the figure. Safe.
+- Low: "Sub-limit for outpatient cancer treatment: S$25,000" reads as unsure, because "for outpatient cancer treatment" is not filler. This also withholds, so it is safe.
