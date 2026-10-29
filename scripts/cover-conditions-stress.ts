@@ -254,7 +254,7 @@ export function runCoverConditionsStress(){
     // what the cap allows.
     const items=[item({title:"A · One",coverLabel:"Living Care",calculatedAmount:300_000,amountText:"S$300,000"}),
       item({title:"A · Two",coverLabel:"Living Care",calculatedAmount:200_000,amountText:"S$200,000"})];
-    applyCoverConditions({items,conditions:[condition({kind:"aggregate_cap",productName:"Living Care",amount:350_000})],
+    applyCoverConditions({items,conditions:[condition({kind:"aggregate_cap",productName:"Living Care",amount:350_000,quote:"The most we will pay under Living Care is S$350,000 in total."})],
       facts:{} as SubjectFacts,coverStart:"2022-10-06",today:TODAY});
     assert.equal(totalOf(items),350_000,"the cover pays its aggregate, not less and not more");
     assert.ok(items.every(entry=>(entry.calculatedAmount??0)>=0));
@@ -265,7 +265,7 @@ export function runCoverConditionsStress(){
     // satisfied by driving one benefit past zero.
     const items=[item({coverLabel:"Living Care",calculatedAmount:1_000_000,amountText:"S$1,000,000"}),
       item({title:"A · Two",coverLabel:"Living Care",calculatedAmount:5_000,amountText:"S$5,000"})];
-    applyCoverConditions({items,conditions:[condition({kind:"aggregate_cap",productName:"Living Care",amount:1_000})],
+    applyCoverConditions({items,conditions:[condition({kind:"aggregate_cap",productName:"Living Care",amount:1_000,quote:"The most we will pay under Living Care is S$1,000 in total."})],
       facts:{} as SubjectFacts,coverStart:"2022-10-06",today:TODAY});
     assert.ok(items.every(entry=>(entry.calculatedAmount??0)>=0),"no figure may be driven below zero by a cap");
     assert.ok(totalOf(items)>=0);

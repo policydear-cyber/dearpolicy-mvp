@@ -121,6 +121,39 @@ function usableCeiling(value:number|null|undefined){
   const amount=usable(value);
   return amount!=null&&amount>0?amount:null;
 }
+/** A cap's figure, only where its own sentence prints it as a cap: a word that caps ("maximum", "up to", "limit", "not
+ * exceed", "no more than", "subject to"), and the stored figure among the money (or, for a share of the sum insured, the
+ * percentages) that sentence prints. Anything else is stated, never applied. Stored conditions showed why: "the amount
+ * withdrawn is at least S$1,000" (a minimum) and "a maximum of 6 claims" (a count) were caps of S$1,000 and S$6 that cut
+ * a S$100,000 death benefit and a Special Benefit; "Up to S$500 per incident" was stored as S$500,000. */
+const CAP_WORD=/\b(?:max(?:imum)?|most|up\s+to|limit(?:s|ed)?|caps?|capped|ceiling|subject\s+to|not\s+exceed|exceeding|(?:not|no)\b[^.;]{0,30}\bmore\s+than)\b/i;
+const CAP_MONEY=/(?:S\$|US\$|A\$|HK\$|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s*(\d[\d,]*(?:\.\d+)?)\s*(million|mil|m|k|thousand)?\b/gi;
+function printedFigures(quote:string){
+  const out:number[]=[];
+  for(const m of quote.matchAll(CAP_MONEY)){
+    const base=Number(m[1].replace(/,/g,""));if(!Number.isFinite(base))continue;
+    const unit=(m[2]??"").toLowerCase();
+    out.push(base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1));
+  }
+  return out;
+}
+export function printedCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):number|null{
+  const amount=usableCeiling(condition.amount);
+  const quote=condition.quote??"";
+  if(amount==null||!CAP_WORD.test(quote))return null;
+  if(condition.amountBasis==="sum_insured_fraction")
+    return [...quote.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)/gi)].some(m=>Math.abs(Number(m[1])-amount*100)<1e-6)?amount:null;
+  return printedFigures(quote).some(f=>Math.abs(f-amount)<0.005)?amount:null;
+}
+/** Whether a sub-limit names the benefit itself, not only the plan the benefit is under. "Double Critical Cover: subject
+ * to a limit of S$25,000" caps one of that plan's benefits; which one the sentence does not say, so it never cuts the
+ * plan's main payout. */
+function namesTheBenefit(condition:CoverCondition,item:ClaimItem){
+  if(!condition.productName)return false;
+  const named=condition.productName.toLowerCase().trim(),title=(item.title??"").toLowerCase();
+  const benefit=title.includes(" · ")?title.slice(title.lastIndexOf(" · ")+3):title;
+  return !!benefit&&(benefit.includes(named)||named.includes(benefit));
+}
 /** The same, for a period: a policy states whole days. */
 function usableDays(value:number|null|undefined){
   const days=usable(value);
@@ -310,11 +343,14 @@ export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:
     }
     case "sub_limit":{
       const current=item.calculatedAmount;
-      const stated=usableCeiling(condition.amount);
+      const stated=printedCap(raw);
       if(current==null||stated==null)return {kind:"clear"};
       const ceiling=condition.amountBasis==="sum_insured_fraction"&&item.coverAmount!=null
         ?Math.min(stated*item.coverAmount,item.coverAmount):stated;
       if(current<=ceiling)return {kind:"clear"};
+      if(!namesTheBenefit(raw,item))
+        return {kind:"caveat",weight:6,text:"the policy limits a benefit under "+(raw.productName??"this cover")+" to "+money(ceiling,item.currency)
+          +", and does not say it is "+item.title+", so "+item.title+" is shown as printed."+quoteTail};
       return {kind:"reduce",to:ceiling,text:item.title+" was reduced from "+money(current,item.currency)
         +" to "+money(ceiling,item.currency)+", which is the most this benefit pays"};
     }
@@ -397,7 +433,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   // survivors together.
   for(const condition of args.conditions){
     if(condition.kind!=="aggregate_cap")continue;
-    const ceiling=usableCeiling(condition.amount);
+    const ceiling=printedCap(condition);
     if(ceiling==null)continue;
     const inCover=items.filter(item=>item.calculatedAmount!=null
       &&(!condition.productName||(item.coverLabel??"").toLowerCase().includes(condition.productName.toLowerCase())));
@@ -446,12 +482,13 @@ export function describeCondition(condition:CoverCondition){
       return cover+"the insured must survive "+(usableDays(condition.days)??"(unstated number of)")+" days from diagnosis"+carve;
     case "time_bar_from_inception":
       return cover+"does not pay for "+CAUSE_WORDS[condition.cause??"other"]+" in the first "+(usableDays(condition.days)??"(unstated number of)")+" days of the cover"+carve;
-    case "aggregate_cap":
-      return cover+"pays no more than "+(usable(condition.amount)!=null?money(usable(condition.amount)!):"a stated maximum")+" in total";
-    case "sub_limit":
-      return cover+"this benefit is capped at "+(condition.amountBasis==="sum_insured_fraction"&&usable(condition.amount)!=null
-        ?Math.round(usable(condition.amount)!*100)+"% of the sum insured"
-        :usable(condition.amount)!=null?money(usable(condition.amount)!):"a stated maximum");
+    case "aggregate_cap":case "sub_limit":{
+      // A sentence that caps nothing (a minimum, a count) is shown as the policy words it.
+      if((condition.quote??"").trim()&&!CAP_WORD.test(condition.quote))return cover+condition.quote.trim().slice(0,120);
+      const cap=printedCap(condition);
+      const figure=cap==null?"a stated maximum":condition.amountBasis==="sum_insured_fraction"?Math.round(cap*10000)/100+"% of the sum insured":money(cap);
+      return condition.kind==="aggregate_cap"?cover+"pays no more than "+figure+" in total":cover+"this benefit is capped at "+figure;
+    }
     case "terminates_on_full_payment":
       return cover+"paying the full sum insured ends the cover";
     case "notice_period":
