@@ -8701,3 +8701,43 @@ Checks, each in a fresh worktree with npm ci, network-blocked with model keys st
   - All eight R327 letters, bills, notes and screenshots give false.
 - Cost is unchanged: about 0.5 ms per 70-page pack.
 - Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R330 — #184 658f71c8: CHANGES (1 High, 2 Medium, 1 Low)
+
+Probe: 27 made-up documents through deterministicDocumentRole on main 9c03ee3 and on the PR, with the model role null and with "personal_schedule".
+
+- **H1. Real packs with a cover letter and a schedule whose title is not an exact title line now lose their cover.** The PR's only guard for a pack is a line that is exactly a title (TITLE_LINE, or a title plus "- plan"), or a schedule page (title in its first 4 lines plus number plus name). Anything else, plus a letter with a status word in its first 12 lines, is a notice. The model's personal_schedule is then overridden to "other", and fact-check drops personalCoverageConfirmed. On main all of these were personal_schedule:
+
+  | Document (made-up) | PR role, model null / model schedule |
+  |---|---|
+  | reinstatement letter, page 2 "REVISED POLICY SCHEDULE" | null / other |
+  | reinstatement letter, page 2 "Policy Schedule (Revised)" | null / other |
+  | reinstatement letter, page 2 "POLICY SCHEDULE Page 1 of 1" | null / other |
+  | reinstatement letter, page 2 "Example Life Assurance Policy Schedule" | null / other |
+  | reinstatement letter, page 2 "POLICY SCHEDULE:" | null / other |
+  | letter, then page 2 with "Policy Schedule No. 2" at line 6 | null / other |
+  | welcome letter mentioning the 30-day grace period, "Your Policy Schedule" below it on page 1 | null / other |
+
+  Reinstatement packs are exactly where a revised schedule comes with the letter.
+  - Fix: use an allow-list, not a title-shape deny-list. A document is a notice only if **every** TITLE occurrence (policy schedule, certificate of insurance, renewal certificate, and so on) is inside a known reference phrase. Examples: "refer to your policy schedule", "keep this with your policy schedule / certificate of insurance", "as shown in your policy schedule", "see your policy schedule", "your policy schedule is unchanged / remains valid", "policy schedule: no change". Any other occurrence (a heading, "revised policy schedule", "is enclosed", "serves as your certificate", "Certificate of Insurance No.") means it is not a notice, and the old rules decide.
+  - Add the seven rows above as negatives.
+
+- **M1. A renewal notice that is also the renewal certificate becomes renewal_statement.** That is a payment role, so its cover is never read (NO_COVER_READING_ROLES). On main both were certificate.
+  - "RENEWAL NOTICE" with "RENEWAL CERTIFICATE NO. 2027-0099", insured and sum insured.
+  - "RENEWAL NOTICE … This notice serves as your certificate of insurance upon payment", with insured person, plan and period.
+  - The H1 allow-list fixes both: neither title occurrence is a reference phrase.
+  - Also, an endorsement titled "Notice of Reinstatement - Endorsement" that revises the sum assured becomes other. Main's personal_schedule was wrong too, but endorsement is the right role. A line with "endorsement" in it should block the notice path.
+
+- **M2. Whole-text keywords pick the notice's kind.** `renewal premium` anywhere sends a lapse notice to renewal_statement: "NOTICE OF LAPSE … The renewal premium was not received and your policy lapsed" gives renewal_statement. A renewal_statement is "Current account record" (authority 80) and links to the policy, so a lapse notice reads as renewal evidence.
+  - Fix: decide the kind from the notice's own title line or head. Lapse, reminder and reinstatement titles go to other; renewal notice goes to renewal_statement; receipt goes to premium_receipt. Use whole-text words only when no title line matched.
+
+- **L1. Notices still missed (no regression; they stay personal_schedule as on main):**
+  - Titles not on the list: "LAPSE NOTIFICATION", "NOTICE OF POLICY LAPSE", "Reminder: Premium Overdue", "Overdue Premium Notice", "PAYMENT ACKNOWLEDGEMENT".
+  - A termination letter ("terminated as premiums are overdue"); "terminated" and "overdue" are not status words.
+  - A letter whose lapse sentence sits below line 12.
+  - A computer-generated notice with no sign-off ("No signature is required") fails isLetter, and the model's schedule role stands.
+  - Fix: extend NOTICE_TITLE_LINE with these titles, add terminat\w*, overdue and outstanding premium to STATUS_NOTICE, and accept "computer-generated … no signature is required" as a sign-off. All of this is safe only once H1's allow-list guards real schedules.
+  - Also: a pack topped by "OFFICIAL RECEIPT" with a schedule titled just "SCHEDULE" (number, life assured, sum assured) becomes premium_receipt. A bare "SCHEDULE" title is uncommon, so this is low.
+
+- What already holds: an exact "POLICY SCHEDULE" page 2 stays personal_schedule; "Policy Schedule – Plan (Revised 2026)" stays personal_schedule; a combined schedule and receipt titled "POLICY SCHEDULE AND RECEIPT" stays personal_schedule; "Dear Policyowner / Policy Owner" letters are caught; and a 4-page pack never counts as a notice.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice 3/3, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
