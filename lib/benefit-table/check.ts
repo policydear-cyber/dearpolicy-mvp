@@ -255,8 +255,11 @@ const asLine = (t: string) => t.replace(/([A-Za-z])-[ \t]*\n[ \t]*([a-z])/g, "$1
 /** A line a sentence may be read across: printed text with no table cell and no figure of its own (a row, a heading
  * with a figure, another benefit's amount are never crossed: Critic R318 H1). */
 const CROSSABLE = (line: string) => !!line.trim() && !line.includes("\t") && !/\d/.test(line);
-/** A line that carries on the sentence of the line above: it starts in lower case, and the line above does not end one. */
-const CONTINUES = (above: string, line: string) => /^\s*[a-z(]/.test(line) && !/[.!?:]\s*$/.test(above);
+/** A line that carries on the sentence of the line above: the line above does not end one, and either this line starts
+ * in lower case or the line above stops on a word no sentence or heading ends on ("issued by\nKestrel Mutual Life",
+ * "on the same life for\nTI and CI claims": TE pr180 A18, A19). */
+const CONTINUES = (above: string, line: string) => !/[.!?:]\s*$/.test(above)
+  && (/^\s*[a-z(]/.test(line) || /\b(?:by|for|of|on|in|to|with|under|from|at|and|or|the|a|an|any|all|other|our|your|its|their|which|that|than|is|are|be)\s*$/.test(above));
 /** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. It is read
  * only on the quote's own lines and the lines its sentence runs over (each in lower case after one that does not end, no
  * table cell, no figure): a heading, a table row or another clause beside the quote is never its sentence. */

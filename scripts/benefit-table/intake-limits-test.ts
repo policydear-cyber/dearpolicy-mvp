@@ -129,6 +129,7 @@ for (const { m, sign } of MARKETS) {
     for (const [i, [benefit, value, text, quote]] of ([
       ["Overseas medical expenses limit", 500000, `Benefits below apply to all plans\nOverseas medical expenses limit\t${sign}500,000\t${sign}1,000,000`, `Overseas medical expenses limit\t${sign}500,000`],
       ["Annual limit", 1000, `These benefits are the same across all plans\nAnnual limit\t${sign}1,000`, `Annual limit\t${sign}1,000`],
+      ["Annual limit", 1000, `These benefits are the same across all plans\nAnnual limit is ${sign}1,000 a year.`, `Annual limit is ${sign}1,000 a year.`],
       ["Personal accident limit", 100000, `Personal accident limit\t${sign}100,000\nWe will not pay where any other policies covering the same loss have paid.`, `Personal accident limit\t${sign}100,000`],
       ["Hospital cash limit", 5000, `FREE LOOK\nThis policy and any other plans you hold with us may be cancelled within 14 days\nHospital cash limit\t${sign}5,000`, `Hospital cash limit\t${sign}5,000`],
     ] as const).entries()) {
@@ -143,6 +144,9 @@ for (const { m, sign } of MARKETS) {
       ["TI/CI limit", 2000000, `TERMINAL ILLNESS\nThe most we will pay is ${sign}2,000,000 (the TI/CI limit); this includes all other policies on the life insured.`, `is ${sign}2,000,000 (the TI/CI limit)`],
       ["TI/CI limit", 2000000, `TERMINAL ILLNESS\nThe most we will pay is ${sign}2,000,000 (i.e. the TI/CI limit) for this policy and all other policies.`, `is ${sign}2,000,000`],
       ["TI benefits limit", 1000000, `TERMINAL ILLNESS\nThe most we will pay for this policy and all other policies is ${sign}2,000,000. Out of this amount, the TI benefits cannot be more than ${sign}1,000,000.`, `the TI benefits cannot be more than ${sign}1,000,000`],
+      // TE pr180 A18, A19: a wrapped line that opens with a capital (an insurer's name, "TI") after a line ending mid-phrase.
+      ["TI/CI limit", 2000000, `The most we will pay under this policy and all other policies issued by\nKestrel Mutual Life on the life insured is ${sign}2,000,000 (the TI/CI limit).`, `is ${sign}2,000,000 (the TI/CI limit)`],
+      ["TI/CI limit", 2000000, `The most we will pay for this policy and all other policies on the same life for\nTI and CI claims is ${sign}2,000,000 (the TI/CI limit).`, `is ${sign}2,000,000 (the TI/CI limit)`],
     ] as const).entries()) {
       const ID = `aaaaaaaa-0000-0000-0000-00000000c0c${i}`;
       const rd = checkReading({ id: ID, name: "Term plan.pdf", readable: true, pages: [{ page: 2, text }] }, reading("personal_proof", "Example Term", [], [
