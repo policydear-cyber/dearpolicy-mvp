@@ -310,14 +310,31 @@ const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|ove
 const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
 /** Words anywhere in a limit's sentence that narrow it to some insured people ("Death benefit for children under age 5 is
  * limited to S$20,000", "for insured persons aged 70 and above", "Death benefit is limited to S$50,000 for children under
- * 5"): a person word, or an age (TE #195 F2, Critic R367 M1). A benefit whose own name does not narrow the same way may be
- * paid in full to everyone else (an adult's death benefit). */
+ * 5"): a person word, or an age tied to the people (TE #195 F2, G2; Critic R367 M1). An age that ends the cover for
+ * everyone ("cover ends at age 85", "payable up to age 99", "expires on the 85th birthday", "paid over 10 years", "aged 18
+ * to 70" as who may join) narrows nothing (TE #195 G1), and nor does a person word in a plan's name ("Senior Protect
+ * Plan"). A benefit whose own name does not narrow the same way may be paid in full to everyone else. */
+const AGE_NUMBER=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
+const PEOPLE=String.raw`(?:persons?|people|insureds?|lives?\s+(?:insured|assured)|members?|adults?|individuals?|those)`;
 const NARROWED=new RegExp([
-  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|elderly|seniors?|students?)\b`,
-  String.raw`\bage[sd]?\s+(?:of\s+)?(?:under\s+|below\s+|over\s+|above\s+|less\s+than\s+)?\d`,
-  String.raw`\b\d+\s*(?:years?\s+(?:old|of\s+age)|(?:st|nd|rd|th)\s+birthday)`,
-  String.raw`\b(?:under|below|over|above)\s+(?:the\s+)?\d+\b(?!\s*(?:%|per\s?cent|days?|nights?|weeks?|months?|hours?|times|claims?|visits?|sessions?|treatments?|km|kilomet|miles?|[,.]\d))`,
+  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|teen(?:ager)?s?|elderly|seniors?|students?)\b`,
+  // "aged 70 and above", "aged under 16", "aged five or younger"; a range only when it is a child's ("aged between 1 and 17").
+  String.raw`\baged\s+(?:under|below|over|above|less\s+than|more\s+than|${AGE_NUMBER}\s+(?:and|or)\s+(?:above|over|older|below|under|younger))\b`,
+  String.raw`\baged\s+(?:between\s+)?\d+\s*(?:to|and|-|–)\s*(?:[1-9]|1[0-7])\b(?!\s*[\d,.])`,
+  String.raw`\b(?:under|below|over|above)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
+  // An age after which a benefit changes ("after age 65") is for the older people only; "before age 65" is usually when
+  // the cover ends for everyone (TE #195 G1 W2).
+  String.raw`\b(?:after|from)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
+  String.raw`\b(?:attains?|attained|reach(?:es|ed)?|turns?)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
+  String.raw`\b(?:before|prior\s+to)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?\d+(?:st|nd|rd|th)\s+birthday`,
+  String.raw`\b\d+\s*years?\s+(?:old|of\s+age)\b`,
+  String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_NUMBER}\b`,
+  String.raw`\b${PEOPLE}\s+${AGE_NUMBER}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
+  String.raw`\b(?:berumur|umur)\s+(?:bawah|di\s+bawah|atas|lebih)\b`,
 ].join("|"),"iu");
+/** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
+const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
+const narrows=(text:string)=>NARROWED.test(text.replace(PLAN_NAMES," "));
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
@@ -331,7 +348,7 @@ function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:NARROWED.test(condition.quote??""),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??""),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
@@ -339,7 +356,7 @@ function limitRead(condition:CoverCondition){
 function limitIsFor(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
   const whose=limitIsForKind(condition,item);
   // A limit for some people only (children) is never proof for a benefit not named for them, wherever it is stored.
-  return whose==="this"&&limitRead(condition).narrow&&!NARROWED.test(benefitOf(item))?"unknown":whose;
+  return whose==="this"&&limitRead(condition).narrow&&!narrows(benefitOf(item))?"unknown":whose;
 }
 function limitIsForKind(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
   const {head,scoped,quote,subject,part}=limitRead(condition);

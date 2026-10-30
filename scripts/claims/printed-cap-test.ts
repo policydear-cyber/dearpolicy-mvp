@@ -207,6 +207,8 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Death benefit is limited to S$50,000 for children under 5"], ["Death benefit", "Death benefit for a stillborn baby is limited to S$50,000"],
     ["Death benefit", "Death benefit for insured persons under 18 is limited to S$50,000"], ["Death", "Death below 16 years of age: up to S$50,000"],
     ["Death benefit", "Death benefit before the insured's 17th birthday is limited to S$50,000"], ["Death benefit", "Death benefit caused by an accident is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons aged between 1 and 17 is limited to S$50,000"], ["Death benefit", "Death benefit for persons 70 and older is limited to S$50,000"],
+    ["Death benefit", "Death benefit for an insured aged five or younger is limited to S$50,000"], ["Death benefit", "Death benefit for teenagers is limited to S$50,000"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -224,6 +226,14 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   assert.equal(one("Hospitalisation", 80000, "Hospitalisation benefit including surgery is limited to S$50,000", 50000), 50000);
   assert.equal(one("Hospital cash", 300, "Hospital cash is payable for each day in hospital up to S$200 per day", 200, "Hospital cash"), 200);
   assert.equal(one("Death benefit", 3000000, "Death benefit, which includes the funeral expenses benefit, is limited to £2,000,000", 2000000), 2000000);
+  // An age or a plan name that ends or names the cover for everyone narrows nothing: the limit still cuts (TE #195 G1).
+  for (const [title, quote] of [
+    ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."], ["Total and permanent disability", "TPD benefit is limited to S$50,000 before age 65."],
+    ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
+    ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
+  ] as [string, string][])
+    assert.equal(one(title, 500000, quote, 50000), 50000, `${title}: ${quote}`);
   // A child or minor-surgery limit of another kind still leaves a life benefit as it is.
   assert.equal(one("Death", 500000, "Minor surgery is limited to S$500", 500), 500000);
   assert.equal(one("Death", 500000, "Hospital cash for children is limited to S$100 a day", 100), 500000);
