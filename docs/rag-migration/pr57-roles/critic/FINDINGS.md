@@ -9722,3 +9722,12 @@ R380 M1 and L1 are fixed. All 45 earlier probe rows (R373-R380) give the expecte
   - and, the same way, "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"
   Fix (default-safe): make any "under|below|over|above|aged" + bare number (no currency sign before it) an age signal, whatever noun precedes it. Set it aside only when an allow-listed unit follows (days, weeks, months, hours, km, %, times, claims, visits), so "over 30 days" and "above 50%" still pass.
 - Add these 5 rows to printed-cap-test as withhold, plus one "hospital stays over 30 days" row as reduce.
+
+## R382: #195 head 8dd81f75 (any noun + comparator + bare number is an age): READY
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R381 M1 is fixed. "lives / policyholders / anyone / customers over|above 70" withhold, and so do "aged over 70 years", "above 70 days old" and "over 70 times the premium" (safe side). "Hospital stays over 30 days" still reduces. All 44 earlier probe rows (R373-R381) give the expected result: 38 withhold, and the 6 cover-end or entry/issue rows reduce to S$500,000.
+
+Low (not blocking, no change against main):
+- L1 HELD_FOR sets aside "in force under 2 years", so "Death benefit is limited to S$50,000 if the policy has been in force under 2 years" applies the cap to every policy (main does the same). That is a policy-duration condition, not an age group, so it belongs with the duration/waiting-period handling rather than in this PR. Worth a follow-up: a cap tied to "in force under/less than N years" should withhold unless the policy's start date proves it is past N years.
