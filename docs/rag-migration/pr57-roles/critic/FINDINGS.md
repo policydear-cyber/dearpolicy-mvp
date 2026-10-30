@@ -9511,3 +9511,39 @@ No false voids:
 Low (misses, same as main, fail-open only where a second currency appears with no figure):
 - The qualified field needs ":" or a tab, so "Currency of rider RM", "Rider currency - RM" and a sign on the next line ("Currency of rider:" with "RM" below) still give SGD.
 - "Currency : Malaysian Ringgit" is not read as a declaration (it gives null, so it is safe).
+
+## R367: #195 af668241, CHANGES
+Gate: own test, five suites, tsc, next build and merge with main all pass. I compared 19 probes against main f58a289d, using evaluateCondition with a sub_limit and an item at S$200,000.
+
+Fixed (withhold now, where main reduced):
+- early CI vs CI
+- "children under 5", "juvenile", "minors"
+- "(child under age 5)"
+- accidental death stored under "Death"
+
+Kept (reduce, which is correct):
+- "Death benefit is limited to" under Life Plan or Death
+- Death vs Accidental Death
+- "Death Benefit for Children" vs a children limit
+
+No row withholds where main showed a correct figure. Every case below is old (main reduces too) and understates rather than overstates. They are still wrong amounts, and they are the lows this PR is meant to close.
+
+### M1: the narrowing check misses common age and person wordings, and anything after the figure
+These all still reduce an adult's Death figure to S$50,000:
+- "If death occurs before the insured attains age 16, the death benefit is limited to S$50,000" (the words between "before" and "age" are not allowed for)
+- "Death benefit for insured persons aged 70 and above is limited to S$50,000"
+- "Death benefit after age 65 is limited to S$50,000"
+- "For a life insured over age 75, the death benefit is limited to S$50,000"
+- "Death benefit for a stillborn baby is limited to S$5,000"
+- "Death benefit is limited to S$50,000 for children under 5" (NARROWED reads only the head before the figure)
+
+Fix: make it structural. Any age figure ("age(s)? \d+", "\d+ years? (old|of age)") or person word (child, juvenile, minor, infant, baby, stillborn, newborn, kid, elderly, senior) anywhere in the quote, when the benefit name lacks it, gives unknown. This is the R349 rule again: a qualifier that is not provably harmless blocks the figure.
+
+### M2: a limit on one part of a combined benefit caps the whole benefit
+- These reduce the whole figure:
+  - "Death or TPD" with "TPD benefit is limited to S$50,000"
+  - "Hospitalisation and Surgery" with "Surgery is limited to S$5,000"
+  - "Accidental Death and Disablement" with "Accidental death is limited to S$50,000"
+- Cause: otherKind looks only at kinds the benefit lacks, and the subject-subset step (`subject.every(w=>own.has(w))`) returns "this" when the sentence names a strict subset of the benefit's kinds.
+- Fix: when the sentence's kinds are a strict subset of the benefit's kinds (said ⊂ mine, said ≠ mine), return unknown before the subset and productName steps.
+- Add all 9 rows above to printed-cap-test as withhold.
