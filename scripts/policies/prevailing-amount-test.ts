@@ -22,12 +22,16 @@ test("a share of the prevailing or current insured amount is a sum-insured rule 
     row("m", "(a) Angioplasty", "Angioplasty: 10% of Prevailing Insured Amount, subject to a maximum of S$25,000"),
     row("l", "Carcinoma in situ", "Carcinoma in situ 20% of the current sum insured, limited to S$50,000 per life"),
     row("s", "Death", "Death: 100% of the sum insured"),
+    row("t", "Bypass", "Bypass: 100% of Prevailing Insured Amount, not exceeding S$500,000"),
+    row("u", "Bypass", "Bypass: 100% of Prevailing Insured Amount less any amount paid under (a)"),
+    row("w", "Bypass", "Bypass: 30% of the prevailing sum insured or S$25,000, whichever is lower"),
+    row("y", "Bypass", "Bypass: 100% of Prevailing Insured Amount after any payment under (a)"),
   ] as never).map((b) => [b.id, b]));
   assert.equal(out.get("b")!.formulaKind, "sum_insured"); assert.equal(out.get("b")!.formulaValue, 1);
   assert.ok(out.get("b")!.conditions.includes(PREVAILING_NOTE));
   assert.equal(out.get("c")!.formulaKind, "sum_insured"); assert.equal(out.get("c")!.formulaValue, 0.25);
   assert.ok(out.get("c")!.conditions.includes(PREVAILING_NOTE));
-  for (const id of ["a", "m", "l"]) assert.equal(out.get(id)!.formulaKind, "none", id);
+  for (const id of ["a", "m", "l", "t", "u", "w", "y"]) assert.equal(out.get(id)!.formulaKind, "none", id);
   // A plain sum insured gets no prevailing note.
   assert.equal(out.get("s")!.formulaKind, "sum_insured");
   assert.ok(!out.get("s")!.conditions.includes(PREVAILING_NOTE));

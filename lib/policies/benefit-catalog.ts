@@ -695,7 +695,8 @@ const INSURED_AMOUNT="(?:sum\\s+(?:insured|assured)|coverage\\s+amount|sum\\s+co
  * up to maximum" with the maximum cut off gives no rule), and shown with that note. */
 const PREVAILING="(?:prevailing|current)\\s+";
 const PREVAILING_AMOUNT=new RegExp("\\b"+PREVAILING+INSURED_AMOUNT);
-const CAP_WORDS=/\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:ed)?\b|\bcap(?:ped)?\b/;
+// Anything that may bound the share: a cap, a ceiling, a choice of the lower, an amount taken off, or another figure.
+const CAP_WORDS=/\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:ed|s)?\b|\bcap(?:ped|s)?\b|\bsubject\s+to\b|\bexceed\w*|\bwhichever\b|\bceiling\b|\bat\s+most\b|\bless\b|\bminus\b|\bdeduct\w*|\breduc\w*|\bafter\s+(?:any|the)\b|(?:s\$|sgd|usd|us\$|rm|£|\$)\s*\d/;
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
 const WORD_FRACTIONS=[
   {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
