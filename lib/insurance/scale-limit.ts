@@ -300,3 +300,24 @@ export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[
     ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}
     :benefit);
 }
+/** A plan-table row's own plan column, from the benefit table's checked reading of the same page: the household's plan
+ * ("The Business column matches the held Business plan") and the figure it prints there. Taken only when every reading
+ * of that page whose excerpt prints this row's cells names one column, one printed figure that is one of those cells, and
+ * no qualifier ("per family", "child"); anything else gives no figure (the row stays held, PLAN_COLUMNS_NOTE). */
+export type PlanColumnReading={documentId:string;page:number;excerpt:string;column:string|null;qualifier:string|null;
+  figure:{kind:string;amount?:number;currency?:string|null};figureText:string};
+const spaced=(text:string)=>text.replace(/\s+/g," ").trim();
+const cellAmount=(cell:string)=>Number(cell.replace(/\s*(?:\/|per\b|each\b|a\s|daily|sehari|setiap).*$/i,"").replace(/[^\d.]/g,""));
+export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null},readings:PlanColumnReading[]):{plan:string;figureText:string}|null{
+  const runs=(String(row.quote??"").match(PLAN_ROW)??[]).map(spaced);
+  if(runs.length!==1||row.sourcePage==null)return null;
+  const run=runs[0];
+  const cells=(run.match(new RegExp(PLAN_CELL,"g"))??[]).filter(c=>/\d/.test(c)).map(cellAmount);
+  const found=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage&&spaced(r.excerpt).includes(run));
+  if(!found.length)return null;
+  const picks=new Set(found.map(r=>r.column&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)
+    ?JSON.stringify([r.column.trim(),r.figure.amount,r.figure.currency??null,r.figureText]):"none"));
+  if(picks.size!==1||picks.has("none"))return null;
+  const [plan,,,figureText]=JSON.parse([...picks][0]) as [string,number,string|null,string];
+  return {plan,figureText};
+}

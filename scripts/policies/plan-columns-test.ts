@@ -67,3 +67,29 @@ test("a held row is never read again from its quote as a percentage (Critic R351
     assert.equal(b.formulaValue, null, b.id);
   }
 });
+
+test("a held row takes its plan's column only from a checked reading of the same page that names one plan", async () => {
+  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const at = { policyId: "doc1", sourcePage: 5, quote: "If you have to cancel your entire trip S$7,500 S$10,000 S$15,000" };
+  const reading = (o: Partial<{ documentId: string; page: number; excerpt: string; column: string | null; qualifier: string | null; amount: number; kind: string }> = {}) => ({
+    documentId: o.documentId ?? "doc1", page: o.page ?? 5, excerpt: o.excerpt ?? "If you have to cancel\nyour entire trip S$7,500  S$10,000  S$15,000",
+    column: o.column === undefined ? "Gold" : o.column, qualifier: o.qualifier ?? null,
+    figure: { kind: o.kind ?? "printed", amount: o.amount ?? 10000, currency: "SGD" }, figureText: "up to S$" + (o.amount ?? 10000).toLocaleString("en-SG") });
+  assert.deepEqual(planColumnFigure(at, [reading()]), { plan: "Gold", figureText: "up to S$10,000" });
+  // The same plan read twice (two people on one plan) still names one figure.
+  assert.deepEqual(planColumnFigure(at, [reading(), reading()]), { plan: "Gold", figureText: "up to S$10,000" });
+  // Anything unsure gives none: another document or page, an excerpt without the row's cells, two plans (two people on
+  // different plans), a figure that is none of the row's cells, a qualified column, no column, a figure not printed.
+  for (const [why, readings] of [
+    ["none", []], ["other document", [reading({ documentId: "doc2" })]], ["other page", [reading({ page: 6 })]],
+    ["other row", [reading({ excerpt: "If you have to postpone your trip S$500 S$1,000 S$1,500", amount: 1000 })]],
+    ["two plans", [reading(), reading({ column: "Platinum", amount: 15000 })]], ["not a cell", [reading({ amount: 12000 })]],
+    ["qualified", [reading({ qualifier: "per family" })]], ["no column", [reading({ column: null })]], ["worked out", [reading({ kind: "worked_out" })]],
+    ["one reading unsure", [reading(), reading({ column: null })]],
+  ] as [string, ReturnType<typeof reading>[]][])
+    assert.equal(planColumnFigure(at, readings), null, why);
+  // A quote with two runs of cells, or none, or no page, gives none.
+  assert.equal(planColumnFigure({ ...at, quote: at.quote + " Family S$18,750 S$25,000 S$37,500" }, [reading()]), null);
+  assert.equal(planColumnFigure({ ...at, quote: "If you have to cancel your entire trip" }, [reading()]), null);
+  assert.equal(planColumnFigure({ ...at, sourcePage: null }, [reading()]), null);
+});
