@@ -23,7 +23,9 @@ test("which quotes print a different figure per plan", async () => {
     // A unit after each column, and plans that do not have the benefit (TE pr190 F1, F2).
     "Hospital cash S$100 per day S$200 per day S$300 per day", "S$100/day S$200/day", "Elaun hospital RM150 sehari RM250 sehari", "Hotel £50 per night £100 per night",
     "Nil S$500", "Tidak dilindungi RM300", "Not Included S$1,000", "Overseas medical 250,000 500,000 1,000,000",
-    "Hospital cash S$100 daily S$200 daily", "Hotel £50 each night £100 each night", "Excluded S$500", "Not available S$1,000"])
+    "Hospital cash S$100 daily S$200 daily", "Hotel £50 each night £100 each night", "Excluded S$500", "Not available S$1,000",
+    // A larger second figure is a higher plan's column, never a sum and its premium (TE pr190 r3 D41).
+    "Emergency evacuation S$40,000 S$1,000,000", "Trip delay S$100.00 S$500", "Kos perubatan RM 2,000 RM 50,000.00"])
     assert.equal(figuresDifferByPlan(q), true, q);
   for (const q of ["Table 6 A/B/C $3,540 $3,540 $3,540", "Sports equipment S$2,000 S$2,000 S$2,000", "Proton beam therapy – Category 1 $400 per treatment",
     "S$100 per day up to S$3,000", "Death S$1,000,000", "Cash payouts provide 2026 $689", "Hospital cash S$100 S$100.00", "Pays 50% of S$10,000 after 2 years", "",
