@@ -59,4 +59,15 @@ test("two insurers' rows under one plan name keep their own groups, each unnumbe
   const w = [{ productName: null, insurer: "Example Life", policyId: "a", documentName: "Example Life policy wording" }, { productName: null, insurer: "Example Life", policyId: "b", documentName: "Example Life policy wording" }];
   const g2 = w.map((r) => [benefitGroupKey(r), [r]] as [string, typeof w]);
   assert.deepEqual(g2.map(([k]) => groupHeading(g2, k)), ["Example Life policy wording (1 of 2)", "Example Life policy wording (2 of 2)"]);
+  // With no insurer read (null or blank), two documents' "Hospitalisation" rows never share a group; one document's rows still do.
+  const n = [
+    { productName: "Hospitalisation", insurer: null, policyId: "x", documentName: "Example travel endorsement" },
+    { productName: "Hospitalisation", insurer: "", policyId: "y", documentName: "Example scheme summary" },
+    { productName: "Hospitalisation", insurer: "  ", policyId: "y", documentName: "Example scheme summary" },
+  ];
+  const m3 = new Map<string, typeof n>();
+  for (const r of n) m3.set(benefitGroupKey(r), [...(m3.get(benefitGroupKey(r)) ?? []), r]);
+  const g3 = [...m3.entries()];
+  assert.deepEqual(g3.map(([, g]) => g.map((r) => r.policyId)), [["x"], ["y", "y"]]);
+  assert.deepEqual(g3.map(([k]) => groupHeading(g3, k)), ["Hospitalisation (1 of 2)", "Hospitalisation (2 of 2)"]);
 });
