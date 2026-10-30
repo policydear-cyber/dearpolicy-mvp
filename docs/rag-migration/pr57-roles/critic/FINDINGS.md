@@ -9675,3 +9675,19 @@ Probe (adult Death, item S$900,000; scratch script, outside git):
   - M1 (R375, unchanged): "insured persons aged 65 to 99", "lives assured aged 70 to 100", "those aged 66-99", "Entry age 60 to 70", and also "insured persons aged 18 to 60" (a 65-year-old would be cut). Fix as R375 M1: strip a range only when entry/issue/joining wording introduces it AND it starts at a joining age (0-21). A bare "aged X to Y" narrows.
   - M2 (R375, cover-subject form): "The policy continues to age 70; thereafter the death benefit is limited to S$50,000", "Cover is renewable to age 85, after which the death benefit is limited to S$50,000", "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000". Fix: a COVER_ENDS frame is not stripped when the sentence has a sequence word (thereafter, then, after which, afterwards, from then on, beyond, past) or opens with "if/where/when/once ... ". Withhold instead.
 - Add these 8 rows to printed-cap-test as withhold.
+
+## R378: #195 heads a0f47cf3 and 2d56ca9e (R375/R377 fixes): CHANGES (one Medium)
+
+Gate on both heads (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. (R377 reviewed 44ea5277, which crossed with a0f47cf3.)
+
+All R375 and R377 rows now withhold. The S$500,000 rows still reduce: "cover ends at age 85", "(entry age 18 to 65)", "(issue age 0 to 65)", "Cover ends when the insured reaches age 85. Death benefit ...", "The policy matures at age 85 and ...". Elderly issue/entry bands withhold.
+
+- M1 `lib/insurance/cover-conditions.ts` condition-word check before WHOLE_COVER_AGES: it is a deny-list of sequence words, and other wordings still pass it. Adult Death, S$900,000, at 2d56ca9e:
+  - "The policy continues to age 70. Subsequently the death benefit is limited to S$50,000": reduce 50,000
+  - "Cover runs to age 85, with the death benefit limited to S$50,000 later on": reduce 50,000
+  Other wordings would pass the same way ("in later years", "in the final years", "afterward", "from that point"). Fix (structural, not more words): set a cover-end frame aside only when it comes AFTER the limit's amount in the quote ("limited to S$500,000; cover ends at age 85") or sits in parentheses. A frame before the limit leaves its age in, so the limit withholds. That gives up a few figures such as "Cover ends when ... 85. Death benefit is limited to S$500,000", which is the safe side. Keep the condition words as an extra guard.
+- Add the two rows above to printed-cap-test as withhold.
+
+## R379: #198 head 970c626e (R376 L2 applied): READY
+
+Gate (base f58a289d): coverage-premium-test 7/7, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. The bare figure now goes through `plainFigure` (en-US, 2 decimals), and the test checks that 1234.5 prints as 1,234.50.
