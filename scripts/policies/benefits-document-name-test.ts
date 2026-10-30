@@ -19,7 +19,7 @@ test("/api/benefits names documents with documentName, for benefits and for cond
 
 test("the Benefits page keeps one group per document when documents share a name", () => {
   const page = readFileSync("app/schedule/page.tsx", "utf8");
-  assert.match(page, /const key=benefit\.productName\?\?"doc:"\+benefit\.policyId/);
+  for (const p of [page, readFileSync("app/operator/benefits/page.tsx", "utf8")]) assert.match(p, /const key=benefitGroupKey\(benefit\);/);
   for (const p of [page, readFileSync("app/operator/benefits/page.tsx", "utf8")]) assert.match(p, /<h2>\{groupHeading\(groups,product\)\}<\/h2>/);
 });
 
@@ -38,4 +38,25 @@ test("the names it gives", async () => {
   assert.equal(documentName({ product_name: null, original_filename: "output_202609281146157.pdf", insurer: "Example General Pte. Ltd.", document_role: "endorsement" }), "Example General endorsement");
   assert.equal(documentName({ product_name: null, original_filename: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", insurer: "Example Life", document_role: "policy_wording" }), "Example Life policy wording");
   assert.equal(documentName({ product_name: "Example Shield", original_filename: "x.pdf" }), "Example Shield");
+});
+
+test("two insurers' rows under one plan name keep their own groups, each unnumbered; one insurer's plan keeps one group", async () => {
+  const { benefitGroupKey, groupHeading } = await import("@/lib/policies/group-heading");
+  const rows = [
+    { productName: "Hospitalisation", insurer: "Example Travel", policyId: "t1", documentName: "Example Travel endorsement" },
+    { productName: "Hospitalisation", insurer: "Example Group Life", policyId: "g1", documentName: "Example scheme summary" },
+    { productName: "Example Scheme", insurer: "Example Group Life", policyId: "g1", documentName: "Example scheme summary" },
+    { productName: "Example Scheme", insurer: "Example Group Life", policyId: "g2", documentName: "Example certificate" },
+    { productName: null, insurer: "Example Travel", policyId: "t2", documentName: "Example Travel policy wording" },
+  ];
+  const map = new Map<string, typeof rows>();
+  for (const r of rows) map.set(benefitGroupKey(r), [...(map.get(benefitGroupKey(r)) ?? []), r]);
+  const groups = [...map.entries()];
+  assert.equal(groups.length, 4);
+  assert.deepEqual(groups.map(([, g]) => g.map((r) => r.policyId)), [["t1"], ["g1"], ["g1", "g2"], ["t2"]]);
+  assert.deepEqual(groups.map(([k]) => groupHeading(groups, k)), ["Hospitalisation", "Hospitalisation", "Example Scheme", "Example Travel policy wording"]);
+  // Same name and same insurer from two documents with no plan name are still numbered.
+  const w = [{ productName: null, insurer: "Example Life", policyId: "a", documentName: "Example Life policy wording" }, { productName: null, insurer: "Example Life", policyId: "b", documentName: "Example Life policy wording" }];
+  const g2 = w.map((r) => [benefitGroupKey(r), [r]] as [string, typeof w]);
+  assert.deepEqual(g2.map(([k]) => groupHeading(g2, k)), ["Example Life policy wording (1 of 2)", "Example Life policy wording (2 of 2)"]);
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { groupHeading } from "@/lib/policies/group-heading";
+import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
@@ -121,8 +121,8 @@ export default function BenefitsPage(){
   },[benefits,search]);
   const groups=useMemo(()=>{
     const map=new Map<string,Benefit[]>();
-    // One group per plan, and one per document with no plan name: two documents can share a name ("Insurer policy wording").
-    for(const benefit of visible){const key=benefit.productName??"doc:"+benefit.policyId;map.set(key,[...(map.get(key)??[]),benefit]);}
+    // One group per plan of one insurer, and one per document with no plan name: two documents can share a name ("Insurer policy wording").
+    for(const benefit of visible){const key=benefitGroupKey(benefit);map.set(key,[...(map.get(key)??[]),benefit]);}
     return [...map.entries()];
   },[visible]);
 

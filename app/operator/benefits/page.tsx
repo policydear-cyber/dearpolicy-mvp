@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { groupHeading } from "@/lib/policies/group-heading";
+import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
 
 /** OPERATOR: benefit extraction review (moved out of the household Benefits
@@ -216,7 +216,7 @@ export default function OperatorBenefitExtractionPage(){
     const map=new Map<string,Benefit[]>();
     for(const benefit of visible){
       // One group per plan, and one per document with no plan name: two documents can share a readable name.
-      const key=benefit.productName??"doc:"+benefit.policyId;
+      const key=benefitGroupKey(benefit);
       map.set(key,[...(map.get(key)??[]),benefit]);
     }
     return [...map.entries()];
