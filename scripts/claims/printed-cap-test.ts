@@ -235,6 +235,10 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "The policy continues to age 70; thereafter the death benefit is limited to S$50,000"],
     ["Death benefit", "Cover is renewable to age 85, after which the death benefit is limited to S$50,000"],
     ["Death benefit", "Where the policy runs to age 80, the death benefit is limited to S$50,000"],
+    // A cover-end frame before the limit's figure may open the span the limit applies in (Critic R378 M1).
+    ["Death benefit", "The policy continues to age 70. Subsequently the death benefit is limited to S$50,000"],
+    ["Death benefit", "Cover runs to age 85, with the death benefit limited to S$50,000 later on"],
+    ["Death benefit", "The policy continues to age 70. From that point the death benefit is limited to S$50,000"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],

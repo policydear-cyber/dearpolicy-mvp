@@ -345,9 +345,25 @@ const WHOLE_COVER_AGES=new RegExp([
 const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|where|while|once)\b/iu;
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
-const narrows=(text:string)=>{
+/** Where a limit's own figure starts in its quote: a currency then a digit, or none. */
+const FIGURE_AT=/(?:US\$|HK\$|A\$|S\$|RM|€|£|¥|\$|\b(?:SGD|USD|MYR|GBP|HKD|AUD|EUR|JPY)\b)\s?\d/u;
+/**
+ * Whether a text names a narrower group by age. In a limit's quote a whole-cover frame is set aside only after the
+ * limit's figure ("limited to S$500,000; cover ends at age 85") or in brackets: a frame before it may open the span the
+ * limit applies in ("The policy continues to age 70. Subsequently ... limited to S$50,000"), so its age stays in
+ * (Critic R378 M1). An entry age range, and any frame in a benefit's own name, is set aside.
+ */
+const narrows=(text:string,quote=false)=>{
   const named=text.replace(PLAN_NAMES," ");
-  return AGE_SIGNAL.test(SEQUENCE.test(named)?named:named.replace(WHOLE_COVER_AGES," "));
+  if(SEQUENCE.test(named))return AGE_SIGNAL.test(named);
+  const figure=quote?named.search(FIGURE_AT):0;
+  if(figure<0)return AGE_SIGNAL.test(named);
+  return AGE_SIGNAL.test(named.replace(WHOLE_COVER_AGES,(frame:string,...rest:unknown[])=>{
+    const at=rest.find(v=>typeof v==="number") as number,before=named.slice(0,at);
+    const bracketed=(before.match(/\(/g)?.length??0)>(before.match(/\)/g)?.length??0);
+    // An entry age range says who may join, never the span a limit runs in, so it is set aside wherever it stands.
+    return at>figure||bracketed||/^(?:entry|issue|joining)\b/iu.test(frame)?" ":frame;
+  }));
 };
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
@@ -362,7 +378,7 @@ function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??""),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??"",true),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
