@@ -323,6 +323,9 @@ const AGE_SIGNAL=new RegExp([
   String.raw`\bage[sd]?\b`, String.raw`\bbirthdays?\b`, String.raw`\b(?:younger|older)\s+than\b`,
   String.raw`\b\d+\s*(?:years?|yrs?)[\s-]+(?:old|of\s+age)\b`,
   String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_N}\b`, String.raw`\b${PEOPLE}\s+${AGE_N}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
+  // Any noun ("lives over 70", "anyone over 70", "customers above 70"): a comparator and a bare number is an age unless
+  // a unit that is not one follows (Critic R381 M1).
+  String.raw`\b(?:under|below|over|above|aged)\s+${AGE_N}\b(?!\s*(?:%|percent|per\s*cent|days?|weeks?|months?|hours?|nights?|km|kilometres?|kilometers?|miles?|times?|claims?|visits?|sessions?|treatments?|kg)\b|\s*%)`,
   String.raw`\b(?:turns|reaches|attains)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}\b`, String.raw`\b(?:berumur|umur)\b`,
 ].join("|"),"iu");
 // An adult's age (18 or more): a child's age is always a group's, never the age a whole cover ends at (TE #195 J1).
@@ -354,8 +357,10 @@ const FRAME_JOIN=/^\s*(?:[,;.()]\s*)*(?:and\s+)?(?:\(\s*)?(?:the\s+|this\s+|its\
  * S$900,000 and the policy continues to age 70. Subsequently ... limited to S$50,000"), so its age stays in (Critic
  * R378 M1, R380 M1/L1). An entry age range, and any frame in a benefit's own name, is set aside.
  */
+/** How long a policy has been held ("in force under 2 years") or a sum is paid over ("paid over 10 years") is not an age. */
+const HELD_FOR=/\b(?:(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|over|above|less\s+than|more\s+than)|(?:paid|payable|spread)\s+(?:out\s+)?over)\s+\d+\s+(?:years?|months?)\b/giu;
 const narrows=(text:string,limit?:{amount:number|null})=>{
-  const named=text.replace(PLAN_NAMES," ");
+  const named=text.replace(PLAN_NAMES," ").replace(HELD_FOR," ");
   if(SEQUENCE.test(named))return AGE_SIGNAL.test(named);
   const own=limit?figuresIn(named,false).find(f=>limit.amount!=null&&Math.abs(f.value-limit.amount)<=0.005):undefined;
   return AGE_SIGNAL.test(named.replace(WHOLE_COVER_AGES,(frame:string,...rest:unknown[])=>{

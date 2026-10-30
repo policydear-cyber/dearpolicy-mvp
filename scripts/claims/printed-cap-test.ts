@@ -245,6 +245,10 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "(The policy continues to age 70.) Subsequently the death benefit is limited to S$50,000"],
     ["Death benefit", "Death benefit (cover runs to age 85; reduced in later years) is limited to S$50,000"],
     ["Death benefit", "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85"],
+    // Any noun before a comparator and an age (Critic R381 M1).
+    ["Death benefit", "Death benefit for lives over 70 is limited to S$50,000"], ["Death benefit", "Death benefit for policyholders over 70 is limited to S$50,000"],
+    ["Death benefit", "Death benefit for anyone over 70 is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 for customers above 70"],
+    ["Death benefit", "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -266,7 +270,7 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   for (const [title, quote] of [
     ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
-    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], 
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for hospital stays over 30 days."], 
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
