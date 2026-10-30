@@ -209,6 +209,9 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Death benefit before the insured's 17th birthday is limited to S$50,000"], ["Death benefit", "Death benefit caused by an accident is limited to S$50,000"],
     ["Death benefit", "Death benefit for insured persons aged between 1 and 17 is limited to S$50,000"], ["Death benefit", "Death benefit for persons 70 and older is limited to S$50,000"],
     ["Death benefit", "Death benefit for an insured aged five or younger is limited to S$50,000"], ["Death benefit", "Death benefit for teenagers is limited to S$50,000"],
+    // Default-safe: any age wording outside a whole-cover frame narrows (TE #195 r3 Y1, Y2, Y8).
+    ["Death benefit", "Death benefit for an insured aged 6 months to 5 years is limited to S$50,000"], ["Death benefit", "Death benefit between ages 1 and 17 is limited to S$50,000"],
+    ["Death benefit", "Death benefit for an insured younger than 18 is limited to S$50,000"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -232,6 +235,8 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
     ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
+    ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
+    ["Death benefit", "Death benefit is limited to S$50,000; cover starts from age 1."], ["Death benefit", "Entry age 18 to 65. Death benefit is limited to S$50,000."],
   ] as [string, string][])
     assert.equal(one(title, 500000, quote, 50000), 50000, `${title}: ${quote}`);
   // A child or minor-surgery limit of another kind still leaves a life benefit as it is.

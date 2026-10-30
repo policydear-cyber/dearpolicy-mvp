@@ -310,31 +310,36 @@ const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|ove
 const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
 /** Words anywhere in a limit's sentence that narrow it to some insured people ("Death benefit for children under age 5 is
  * limited to S$20,000", "for insured persons aged 70 and above", "Death benefit is limited to S$50,000 for children under
- * 5"): a person word, or an age tied to the people (TE #195 F2, G2; Critic R367 M1). An age that ends the cover for
- * everyone ("cover ends at age 85", "payable up to age 99", "expires on the 85th birthday", "paid over 10 years", "aged 18
- * to 70" as who may join) narrows nothing (TE #195 G1), and nor does a person word in a plan's name ("Senior Protect
- * Plan"). A benefit whose own name does not narrow the same way may be paid in full to everyone else. */
-const AGE_NUMBER=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
+ * 5"). Default-safe (TE #195 r3): any age wording or person-group word narrows, unless it sits in a frame known to apply
+ * to everyone: the age the cover ends or is renewable to ("cover ends at age 85", "payable until the insured attains age
+ * 85", "expires on the 85th birthday", "up to age 99", "before age 65"), the age it starts or may be joined at ("Entry
+ * age 18 to 65", "cover starts from age 1", "aged 18 to 70"), or a plan's own name ("Senior Protect Plan"). A wording
+ * this does not know withholds the figure and never cuts it. A benefit whose own name narrows the same way may still be
+ * cut (TE #195 F2, G1, G2; Critic R367 M1). */
+const AGE_N=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
 const PEOPLE=String.raw`(?:persons?|people|insureds?|lives?\s+(?:insured|assured)|members?|adults?|individuals?|those)`;
-const NARROWED=new RegExp([
-  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|teen(?:ager)?s?|elderly|seniors?|students?)\b`,
-  // "aged 70 and above", "aged under 16", "aged five or younger"; a range only when it is a child's ("aged between 1 and 17").
-  String.raw`\baged\s+(?:under|below|over|above|less\s+than|more\s+than|${AGE_NUMBER}\s+(?:and|or)\s+(?:above|over|older|below|under|younger))\b`,
-  String.raw`\baged\s+(?:between\s+)?\d+\s*(?:to|and|-|–)\s*(?:[1-9]|1[0-7])\b(?!\s*[\d,.])`,
-  String.raw`\b(?:under|below|over|above)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
-  // An age after which a benefit changes ("after age 65") is for the older people only; "before age 65" is usually when
-  // the cover ends for everyone (TE #195 G1 W2).
-  String.raw`\b(?:after|from)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
-  String.raw`\b(?:attains?|attained|reach(?:es|ed)?|turns?)\s+(?:the\s+)?age\s+(?:of\s+)?\d`,
-  String.raw`\b(?:before|prior\s+to)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?\d+(?:st|nd|rd|th)\s+birthday`,
-  String.raw`\b\d+\s*years?\s+(?:old|of\s+age)\b`,
-  String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_NUMBER}\b`,
-  String.raw`\b${PEOPLE}\s+${AGE_NUMBER}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
-  String.raw`\b(?:berumur|umur)\s+(?:bawah|di\s+bawah|atas|lebih)\b`,
+const AGE_SIGNAL=new RegExp([
+  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|teen(?:ager)?s?|elderly|seniors?|students?|pensioners?)\b`,
+  String.raw`\bage[sd]?\b`, String.raw`\bbirthdays?\b`, String.raw`\b(?:younger|older)\s+than\b`,
+  String.raw`\b\d+\s*(?:years?|yrs?)[\s-]+(?:old|of\s+age)\b`,
+  String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_N}\b`, String.raw`\b${PEOPLE}\s+${AGE_N}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
+  String.raw`\b(?:berumur|umur)\b`,
 ].join("|"),"iu");
+const AGE_AT=String.raw`(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}(?:st|nd|rd|th)?(?:\s+birthday)?`;
+const WHOLE_COVER_AGES=new RegExp([
+  // The age the cover ends or runs to.
+  String.raw`\b(?:ends?|ending|expires?|expiring|terminates?|ceases?|matures?|lapses?)\s+(?:at|on)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?${AGE_AT}`,
+  String.raw`\b(?:up\s+to|until|till|to|renewable\s+(?:up\s+)?to)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${AGE_N}|${AGE_N}(?:st|nd|rd|th)\s+birthday)`,
+  String.raw`\b(?:until|till|ends?\s+when|expires?\s+when|terminates?\s+when|ceases?\s+when|lapses?\s+when)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?age\s+(?:of\s+)?${AGE_N}`,
+  String.raw`\bbefore\s+age\s+(?:of\s+)?${AGE_N}`,
+  // The age it starts or may be joined at.
+  String.raw`\bentry\s+ages?\s*(?:of|is|:|from)?\s*${AGE_N}\s*(?:to|-|–|and)\s*${AGE_N}`,
+  String.raw`\b(?:starts?|begins?|commences?)\s+from\s+(?:the\s+)?age\s+(?:of\s+)?${AGE_N}`,
+  String.raw`\baged\s+(?:between\s+)?(?:1[89]|[2-9]\d)\s*(?:to|-|–|and)\s*\d{2,3}\b`,
+].join("|"),"giu");
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
-const narrows=(text:string)=>NARROWED.test(text.replace(PLAN_NAMES," "));
+const narrows=(text:string)=>AGE_SIGNAL.test(text.replace(PLAN_NAMES," ").replace(WHOLE_COVER_AGES," "));
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
