@@ -10,7 +10,9 @@ import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, ty
 type Source={documentId:string;document:string;page:number;excerpt:string};
 type Cover={personId:string;coverKey:string;product:string;cover:string;plan:string|null;riderOf:string|null;policyNumber:string|null;
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
-  source:Source;premiumSource?:Source|null};
+  source:Source;premiumSource?:Source|null;
+  /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
+  premiumCurrency?:string|null};
 type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
@@ -36,9 +38,14 @@ function benefitParts(row:Row,name:(r:Row)=>string){
   return {name:<>{name(row)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
 }
 
+/** A figure with no currency, in one fixed format so server and browser renders agree (Critic R376 L2). */
+const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2});
+
 function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
-  const premium=cover.premium!=null?`${money(cover.premium,cover.currency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
+  // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
+  const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
+  const premium=cover.premium!=null?`${premiumCode?money(cover.premium,premiumCode):`${plainFigure(Number(cover.premium))} (currency not stated)`}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
