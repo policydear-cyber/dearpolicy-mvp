@@ -68,3 +68,22 @@ test("a plan's empty cell read as the name of its row names nothing; the same wo
   }
   assert.equal(namesNoBenefit("Not covered"), false, "with no quote the name is kept, as before");
 });
+
+test("a fund's charge, a fund's asset mix and an illustration's footer are not benefits; real benefits with the same words are kept", async () => {
+  const { namesNoBenefit } = await import("@/lib/policies/benefit-catalog");
+  for (const [name, quote] of [
+    ["Example Regional Bond Fund", "Example Regional Bond Fund 0.85% (max 2.50%) p.a. of its Net Asset Value"],
+    ["Global Equity Fund", "Global Equity Fund 1.5% per annum of the fund's NAV"],
+    ["Fixed Income", "Fixed Income 65.0% 58.0% 72.0% 70.3%"], ["Equities", "Equities 35% 42%"], ["Cash", "Cash 5.0% 3.5%"],
+    ["This illustration is only valid when all pages are included.", "This illustration is only valid when all pages are included. Page 2 of 14 Reference Number: X-1"],
+    ["This illustra)on is only valid when all pages are included.", "This illustra)on is only valid when all pages are included. Page 2 of 14"],
+    ["Please read this together with your policy contract.", "Please read this together with your policy contract. Page 3 of 9"],
+  ]) assert.equal(namesNoBenefit(name, quote), true, quote);
+  for (const [name, quote] of [
+    // A benefit paid as a share of the fund, a cash benefit, a fund's own benefit, and sentences with no page count: kept.
+    ["Death Benefit", "Death Benefit: 105% of the value of units in the fund"], ["Cash", "Cash benefit S$5,000"], ["Cash", "Cash 5% of sum assured"],
+    ["Fixed Income", "Fixed Income benefit S$200 a month"], ["Monthly Income", "Monthly Income 5% 5%"],
+    ["This benefit pays a lump sum.", "This benefit pays a lump sum. S$10,000"], ["Note", "Note Page 2 of 14"],
+    ["Hospital Cash", "Hospital Cash S$100 a day, Page 2 of 14"], ["Equities", "Equities 35%"],
+  ]) assert.equal(namesNoBenefit(name, quote), false, quote);
+});

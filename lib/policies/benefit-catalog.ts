@@ -1067,9 +1067,23 @@ const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|
 const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
 const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|as charged|-+|—)$/i;
 const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
+/** A stored row whose own words show it is not a benefit at all, read from a page of an investment-linked plan or a
+ * page's footer: a fund's charge ("AIA Regional Fixed Income Fund 0.85% (max 2.50%) p.a. of its Net Asset Value"), an
+ * asset-class row of a fund's mix ("Fixed Income 65.0% 58.0% 72.0% 70.3%"), or an illustration's footer sentence with
+ * its page count ("This illustration is only valid when all pages are included. Page 2 of 14"). Each needs the quote's
+ * own shape, never the name alone. */
+const FUND_CHARGE=/\b(?:p\.\s?a\.|per\s+annum|a\s+year|yearly)\s+of\s+(?:its\s+|the\s+)?(?:fund'?s?\s+)?(?:net\s+asset\s+value|NAV)\b/i;
+const ASSET_CLASS=/^(?:fixed\s+income|equit(?:y|ies)|bonds?|cash(?:\s+and\s+(?:cash\s+)?equivalents)?|money\s+market|property|real\s+estate|alternatives?)$/i;
+const FOOTER_SENTENCE=/^(?:this|these|please|note)\b.{0,120}\.$/i;
+function readsAsNoBenefit(name:string,quote:string){
+  const n=name.replace(/\s+/g," ").trim(),q=quote.replace(/\s+/g," ").trim();
+  if(FUND_CHARGE.test(q))return true;
+  if(ASSET_CLASS.test(n)&&q.startsWith(n)&&/^(?:\s*\d{1,3}(?:\.\d+)?\s?%){2,}\s*$/.test(q.slice(n.length)))return true;
+  return FOOTER_SENTENCE.test(n)&&q.startsWith(n)&&/\bpage\s+\d+\s+of\s+\d+\b/i.test(q.slice(n.length));
+}
 export function namesNoBenefit(benefitName:string,quote?:string|null){
   const name=(benefitName??"").trim();
-  if(quote!=null&&namesOnlyAPlanCell(name,quote))return true;
+  if(quote!=null&&(namesOnlyAPlanCell(name,quote)||readsAsNoBenefit(name,quote)))return true;
   if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
   const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
   const hasWord=/\p{L}{3}/u.test(words)||/\p{Script=Han}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
