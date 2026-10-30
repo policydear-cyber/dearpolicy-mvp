@@ -689,6 +689,14 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
  * stated in the second wording was being refused for saying the same thing in
  * different words. */
 const INSURED_AMOUNT="(?:sum\\s+(?:insured|assured)|coverage\\s+amount|sum\\s+covered|insured\\s+amount)";
+/** "Prevailing Insured Amount", "current sum assured": the insured amount as it stands when the claim is made, which an
+ * earlier claim on the policy may have reduced (a critical illness plan pays 10% for angioplasty, then the rest). Read as
+ * a share of the sum insured only when the quote states no cap the rule would need ("10% of Prevailing Insured Amount,
+ * up to maximum" with the maximum cut off gives no rule), and shown with that note. */
+const PREVAILING="(?:prevailing|current)\\s+";
+const PREVAILING_AMOUNT=new RegExp("\\b"+PREVAILING+INSURED_AMOUNT);
+const CAP_WORDS=/\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:ed)?\b|\bcap(?:ped)?\b/;
+export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
 const WORD_FRACTIONS=[
   {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
   {words:"one quarter",value:0.25},{words:"three quarters",value:0.75},{words:"one fifth",value:0.2},
@@ -715,7 +723,8 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
     const read=validateCatalogFormula(input);
     return read.formulaKind==="none"?null:read;
   };
-  const percentage=text.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?"+INSURED_AMOUNT))?.[1];
+  if(PREVAILING_AMOUNT.test(text)&&CAP_WORDS.test(text))return null;
+  const percentage=text.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
   if(percentage)return propose({kind:"sum_insured",value:Number(percentage)/100,currency:benefit.currency,
     quote,factKey:null,offsetDays:null,maximumDays:null});
   const worded=WORD_FRACTIONS.find(entry=>
@@ -742,9 +751,11 @@ export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
       // (Critic R351 H1).
       if(benefit.conditions.includes(PLAN_COLUMNS_NOTE)||(!benefit.tier&&!benefit.reviewedAt&&figuresDifferByPlan(benefit.quote)))return benefit;
       const read=ruleFromQuote(benefit);
-      return read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
+      const out=read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
         "DearPolicy read this rule from the sentence quoted"+onPage(benefit.sourcePage)
         +" rather than from a table, and checked it against that sentence before using it."])]}:benefit;
+      return out.formulaKind==="sum_insured"&&PREVAILING_AMOUNT.test(normalText(out.quote??""))
+        ?{...out,conditions:[...new Set([...out.conditions,PREVAILING_NOTE])]}:out;
     });
 }
 export function validateCatalogFormula(input:{
@@ -765,7 +776,8 @@ export function validateCatalogFormula(input:{
   const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
     if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
-    const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?"+INSURED_AMOUNT))?.[1];
+    if(PREVAILING_AMOUNT.test(quote)&&CAP_WORDS.test(quote))return none;
+    const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
     const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);
     // "One twelfth of Sum Insured" is a rule stated in words. It is as provable
     // from the quote as "8.33%" would be, and refusing it left a disability
