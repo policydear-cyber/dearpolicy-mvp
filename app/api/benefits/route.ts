@@ -6,7 +6,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
-import { loadPolicyInventory } from "@/lib/policies/inventory";
+import { documentName,loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
@@ -28,7 +28,7 @@ type Row={
   formula_kind:string;formula_value:string|null;currency:string|null;fact_key:string|null;
   offset_days:number|null;maximum_days:number|null;source_page:number|null;quote:string;
   conditions:unknown;requirements:unknown;needs_review:boolean;reviewed_at:string|null;basis_inferred:boolean;
-  original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;
+  original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;document_policy_number:string|null;
   owner_names:string[]|null;tier:string|null;row_kind:string|null;
 };
 
@@ -43,7 +43,7 @@ export async function GET(request:NextRequest){
       `SELECT b.id,b.policy_id,b.product_name,b.benefit_name,b.traits,b.formula_kind,b.formula_value::text,
               b.currency,b.fact_key,b.offset_days,b.maximum_days,b.source_page,b.quote,
               b.conditions,b.requirements,b.needs_review,b.reviewed_at::text,b.basis_inferred,
-              p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,
+              p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,p.policy_number AS document_policy_number,
               owners.names AS owner_names,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind
          FROM policy_benefits b
          JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
@@ -110,7 +110,9 @@ export async function GET(request:NextRequest){
     // Either/or amounts: the same row worked out two ways for one person (a share of a fixed limit in one table, a share
     // of the sum insured in another). Sent as one group on every member row, never as one picked figure, and only when
     // every person the row is shown for gets the same options.
-    const documentNames=new Map(usableRows.map(row=>[row.policy_id,row.document_product??row.original_filename]));
+    // A document is named as Documents names it ("FWD endorsement"), never by a made-up file name ("output_2026….pdf").
+    const nameOf=(row:Row)=>documentName({product_name:row.document_product,original_filename:row.original_filename,insurer:row.insurer,document_role:row.document_role,policy_number:row.document_policy_number});
+    const documentNames=new Map(usableRows.map(row=>[row.policy_id,nameOf(row)]));
     const groupsByContract=(inventory?.contracts??[]).map(contract=>{
       const docs=new Set([...contract.documents,...contract.references].map(d=>d.id));
       return {docs,groups:amountAlternatives(contract,[...resolved.values()].filter(b=>docs.has(b.policyId)),id=>documentNames.get(id)??"Your document")};
@@ -155,7 +157,7 @@ export async function GET(request:NextRequest){
         // Read from a heading above the row rather than from the row itself, and
         // not yet confirmed. DearPolicy shows it but will not calculate from it.
         needsConfirmation,attention,
-        documentName:row.original_filename,insurer:row.insurer,documentRole:row.document_role,
+        documentName:documentNames.get(row.policy_id)??nameOf(row),insurer:row.insurer,documentRole:row.document_role,
         // A booklet nobody has claimed yet has no owner. Saying so is more
         // useful than printing an empty cell.
         owners:row.owner_names??[],
@@ -172,9 +174,10 @@ export async function GET(request:NextRequest){
       const conditionRows=await query<{id:string;policy_id:string;product_name:string|null;condition_kind:string;
         cause:string|null;condition_names:string[];days:number|null;amount:string|null;amount_basis:string|null;
         scope:string|null;carve_out:string|null;source_page:number|null;quote:string;needs_review:boolean;
-        original_filename:string}>(
+        original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;document_policy_number:string|null}>(
         `SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
-                c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename
+                c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename,
+                p.insurer,p.document_role,p.product_name AS document_product,p.policy_number AS document_policy_number
            FROM policy_cover_conditions c
            JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
           WHERE c.account_id=$1
@@ -191,7 +194,7 @@ export async function GET(request:NextRequest){
           days:row.days,amount:row.amount==null?null:Number(row.amount),
           amountBasis:row.amount_basis as CoverCondition["amountBasis"],scope:row.scope as CoverCondition["scope"],
           carveOut:row.carve_out,sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
-        return {id:row.id,policyId:row.policy_id,documentName:row.original_filename,cover:row.product_name,
+        return {id:row.id,policyId:row.policy_id,documentName:documentName({product_name:row.document_product,original_filename:row.original_filename,insurer:row.insurer,document_role:row.document_role,policy_number:row.document_policy_number}),cover:row.product_name,
           kind:row.condition_kind,description:describeCondition(condition),effect:conditionEffect(condition),
           sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
       });

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
 
 /** OPERATOR: benefit extraction review (moved out of the household Benefits
@@ -214,7 +215,8 @@ export default function OperatorBenefitExtractionPage(){
   const groups=useMemo(()=>{
     const map=new Map<string,Benefit[]>();
     for(const benefit of visible){
-      const key=benefit.productName??benefit.documentName;
+      // One group per plan, and one per document with no plan name: two documents can share a readable name.
+      const key=benefit.productName??"doc:"+benefit.policyId;
       map.set(key,[...(map.get(key)??[]),benefit]);
     }
     return [...map.entries()];
@@ -293,7 +295,7 @@ export default function OperatorBenefitExtractionPage(){
       :!visible.length?<div className="empty-card">Nothing matches that filter.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
-          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{product}</h2></div>
+          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
             <small>{rows[0].owners.length?rows[0].owners.join(" · "):"Nobody has claimed this document yet"}</small></div>
           <div className="schedule-table-scroll"><table className="schedule-table">
             <thead><tr><th>Person</th><th>Benefit</th><th>Pays</th><th>Page</th><th></th></tr></thead>
@@ -354,3 +356,4 @@ export default function OperatorBenefitExtractionPage(){
         </section>)}
   </div>;
 }
+
