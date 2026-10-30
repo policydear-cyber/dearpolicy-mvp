@@ -491,12 +491,39 @@ const TENURE_SIGNAL=new RegExp([
   String.raw`\b(?:of|from|after|since|following)\s+${POLICY_START}\b`,
   String.raw`\breinstat\w*|\breviv\w*`,
 ].join("|"),"iu");
+/**
+ * Any span of time in a limit's sentence may be how long the policy has run ("during the first 730 days", "within two
+ * years of the policy date", "until the policy has run for two years", "the contestability period"), so each one ties
+ * the limit to tenure unless its own words show it is something else (Critic R387 M1): a span counted from an event
+ * ("within 90 days of the accident", "first 3 days of hospitalisation"), how often a limit resets ("per policy year",
+ * "in any 12 months"), or a count of days paid ("up to 30 days", "30 days per policy year").
+ */
+const SPAN=new RegExp(String.raw`\b(?:\d{1,4}|${COUNT})\s+(?:(?:full|complete|consecutive|calendar|policy|contract)\s+)?(?:days?|weeks?|months?|years?)\b|\bfirst\s+(?:policy\s+)?year\b|\bcontestab|\bincontestab`,"giu");
+const SPAN_EVENT=String.raw`(?:accidents?|injur(?:y|ies)|diagnosis|discharge|admission|hospitali[sz]ation|events?|treatments?|surgery|surgeries|operations?|loss|death|incidents?|illness|onset|trips?|departure|claims?|disability|confinement|stay|journey|return|sickness|occurrence)`;
+const SPAN_FROM_EVENT=new RegExp(String.raw`^\s*(?:of|after|from|following|since|before|prior\s+to|in\s+respect\s+of)\s+(?:the\s+|a\s+|an\s+|any\s+|each\s+|such\s+)?(?:date\s+of\s+(?:the\s+)?)?(?:(?:insured|covered|hospital|first|initial|said)\s+)?${SPAN_EVENT}\b`,"iu");
+const SPAN_RESETS_BEFORE=/(?:\bper|\beach|\bevery|\bany\s+one|\bin\s+any|\bup\s+to|\bmaximum(?:\s+of)?|\bmax\.?|\bnot\s+exceeding|\bno\s+more\s+than)\s+(?:a\s+(?:maximum\s+of\s+)?)?$/iu;
+/** How long an event lasts ("stays over 3 days", "trips under 90 days") or how long premiums are paid ("paid over
+ * 10 years"): neither says how long the policy has run. */
+const SPAN_NOT_TENURE_BEFORE=/(?:\b(?:stays?|trips?|journeys?|confinements?|hospitali[sz]ations?|admissions?|disabilit(?:y|ies)|absences?|travels?)\s+(?:of\s+)?(?:over|under|above|below|exceeding|longer\s+than|shorter\s+than|less\s+than|more\s+than|lasting(?:\s+(?:over|under|more\s+than|less\s+than))?)|\b(?:premiums?\s+(?:are\s+|is\s+)?)?(?:paid|payable|spread(?:\s+out)?)\s+(?:over|for)(?:\s+a\s+(?:term|period)\s+of)?)\s+$/iu;
+/** A span counted from the policy itself ("of cover", "after the cover starts") is tenure whatever comes before it. */
+const SPAN_OF_POLICY=/^\s*(?:of\s+(?:cover(?:age)?|membership)|in\s+force|(?:of|from|after|since|following|before)\s+(?:the\s+|this\s+|your\s+)?(?:policy|cover(?:age)?|contract|plan|certificate|membership|commencement|inception|issue|start|effective|entry|enrol(?:l)?ment|date\s+of\s+(?:issue|commencement|entry)))/iu;
+const SPAN_RESETS_AFTER=/^\s*(?:per|each|in\s+any|of\s+(?:hospital\s+)?(?:stay|confinement|disability|hospitali[sz]ation|the\s+(?:trip|journey|stay)))\b/iu;
+function looseSpan(text:string){
+  for(const m of text.matchAll(SPAN)){
+    const before=text.slice(Math.max(0,m.index!-40),m.index),after=text.slice(m.index!+m[0].length,m.index!+m[0].length+80);
+    if(/^contestab|^incontestab/i.test(m[0]))return true;
+    if(SPAN_OF_POLICY.test(after))return true;
+    if(SPAN_FROM_EVENT.test(after)||SPAN_RESETS_AFTER.test(after)||SPAN_RESETS_BEFORE.test(before)||SPAN_NOT_TENURE_BEFORE.test(before))continue;
+    return true;
+  }
+  return false;
+}
 export type Tenure={when:"while"|"after";n:number;unit:"year"|"month"};
 /** The span a limit is tied to: a Tenure when one form reads it exactly, "unread" when tenure wording is there but
  * cannot be read, or null when the limit says nothing about how long the policy has run. */
 export function tenureOf(quote:string|null|undefined):Tenure|"unread"|null{
   const text=quote??"";
-  if(!TENURE_SIGNAL.test(text))return null;
+  if(!TENURE_SIGNAL.test(text)&&!looseSpan(text))return null;
   if(/\breinstat|\breviv/iu.test(text))return "unread";
   const found:Tenure[]=[];
   for(const form of TENURE_FORMS){

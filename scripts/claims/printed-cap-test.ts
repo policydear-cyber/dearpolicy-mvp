@@ -345,6 +345,17 @@ test("a limit for part of the policy's life applies only when its start date sho
   // An after-limit by anniversary applies once the start proves it.
   assert.equal(one("From the 10th policy anniversary the death benefit is limited to S$50,000.", "2010-01-01"), 50000);
   assert.equal(one("From the 10th policy anniversary the death benefit is limited to S$50,000.", "2020-01-01"), undefined);
+  // Any other span of time ties the limit to tenure unless its words show an event, a reset or a day count (Critic R387 M1).
+  for (const quote of [
+    "During the first 730 days the death benefit is limited to S$50,000.", "If the insured dies within two years after the policy starts, the death benefit is limited to S$50,000.",
+    "Death benefit is limited to S$50,000 within two years of the policy date.", "Death benefit is limited to S$50,000 within 2 years from the date the policy was issued.",
+    "In the policy's first year the death benefit is limited to S$50,000.", "Death benefit is limited to S$50,000 until the policy has run for two years.",
+    "Death benefit is limited to S$50,000 during the contestability period.",
+  ]) for (const start of ["2010-01-01", "2025-06-01", null]) assert.equal(one(quote, start), undefined, `${quote} (${start})`);
+  for (const quote of [
+    "Death benefit for expenses incurred within 90 days of the accident is limited to S$50,000.", "Death benefit is limited to S$50,000, payable for up to 30 days.",
+    "Death benefit is limited to S$50,000 for the first 3 days of hospitalisation.", "Death benefit is limited to S$50,000, 30 days per policy year.",
+  ]) assert.equal(one(quote, null), 50000, quote);
   // How often a limit resets is not how long the policy has run.
   assert.equal(one("Death benefit is limited to S$50,000 per policy year.", null), 50000);
   assert.equal(one("Death benefit is limited to S$50,000 in any one policy year, reviewed on each policy anniversary.", null), 50000);
@@ -373,5 +384,11 @@ test("a limit for part of the policy's life applies only when its start date sho
   }
   // A sum paid out over years is not how long the policy has run.
   assert.equal(tenureOf("Death benefit is limited to S$50,000, paid over 10 years."), null);
+  // How long an event lasts or premiums are paid is not tenure, unless the span is counted from the policy itself.
+  assert.equal(tenureOf("Death benefit is limited to S$50,000; premiums are payable for 10 years."), null);
+  assert.equal(tenureOf("Hospital cash up to S$3,000 for stays over 3 days."), null);
+  assert.equal(tenureOf("Medical expenses up to S$20,000 for trips under 90 days."), null);
+  for (const q of ["Limited to S$5,000, payable for 2 years from the policy start.", "Limit S$5,000; benefit payable for 2 years after the cover starts.", "Limit S$5,000 payable over 2 years of cover."])
+    assert.equal(tenureOf(q), "unread", q);
   assert.equal(one("Death benefit is limited to S$50,000.", null), 50000);
 });
