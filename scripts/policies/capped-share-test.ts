@@ -22,7 +22,12 @@ const CAPPED = ["Angioplasty: 10% of Sum Insured, up to S$25,000", "10% of the s
   "10% of the sum insured, payable to 25 000", "10% of the sum insured, payable to 25.000", "10% of the sum insured, payable to 25k",
   "10% of the sum insured, at five hundred dollars", "10% of the sum insured, twenty-five hundred dollars", "10% of the sum insured, CHF 25'000",
   "10% of the sum insured, 900 per day", "10% of the sum insured, up to the maximum shown in the Schedule",
-  "10% of the sum insured, up to the limit in the Benefit Table", "10% of the sum insured, capped at 1/40 of the Sum Insured"];
+  "10% of the sum insured, up to the limit in the Benefit Table", "10% of the sum insured, capped at 1/40 of the Sum Insured",
+  // Critic R414.
+  "10% of Sum Insured, up to S$ 25 000", "10% of Sum Insured, up to $ 500", "10% of Sum Insured, up to five hundred dollars", "10% of Sum Insured, maximum 500 per claim",
+  "10% of Sum Insured, subject to the limit shown in the Policy Schedule", "10% of Sum Insured, up to the Maximum Benefit Limit",
+  "10% of Sum Insured or the amount in the table below, whichever is lower", "10% of Sum Insured or the amount in the table below if lower",
+  "10% daripada Jumlah Diinsuranskan, tidak melebihi jumlah dalam Jadual"];
 
 test("a share whose passage prints an amount gives no rule, read or stored; a share alone still stands", async () => {
   const { repairStoredRules, validateCatalogFormula, assessCatalogBenefit, CAPPED_SHARE_NOTE } = await import("@/lib/policies/benefit-catalog");

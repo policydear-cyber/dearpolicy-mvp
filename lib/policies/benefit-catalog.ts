@@ -700,14 +700,16 @@ const WORD_FRACTIONS=[
  * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover
  * where the cap is S$25,000; Critic R407, TE pr210). Such a share is not used. Counted: a figure with a currency sign,
  * code or word; a grouped, four-digit or "k" figure; a number word for hundreds or more; a figure per day or week; a
- * fraction; and any cap word. A figure the share does not need ("within 30 days", "under age 65") is left alone, as on
+ * fraction; any cap word; a choice of the lower; and a pointer to a table or schedule, which may hold the cap. A figure the share does not need ("within 30 days", "under age 65") is left alone, as on
  * main; on the stored rows only the 6 that print a cap change. */
 const PRINTS_AN_AMOUNT=new RegExp([
-  String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd)\s*)\d`,
+  String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd))\s*\d`,
   String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
   String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
-  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower)\s+of\b`,
+  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater)\b|\b(?:table|schedule)\b`,
+  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited.
+  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
 ].join("|"),"iu");
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
