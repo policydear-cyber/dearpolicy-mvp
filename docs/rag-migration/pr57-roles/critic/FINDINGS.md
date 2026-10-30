@@ -9569,3 +9569,18 @@ Lows (the figure is understated or hidden, never overstated):
 - With firstKind (F1), "Death benefit for accidental death is limited to S$50,000" now reduces an any-cause Death item. r1 withheld it; main reduces it too. "Death benefit arising from an accident ..." also reduces, as on main. A possible follow-up: an accident word in the sentence, when the benefit name has none, gives unknown.
 - Strict-subset hides the figure when the item's own name carries an extra kind in brackets: "Accidental Death Benefit (including Funeral)" with "Accidental death benefit is limited to S$100,000" withholds.
 - NARROWED's "over/above N" clause catches figures with no currency sign ("Hospital bills over 500 are limited to S$5,000" withholds), and "disabled insured" is not a person narrowing.
+
+## R370: #197 52697b54, CHANGES
+Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+
+- No paid read: tableFor (lib/benefit-table/service.ts:196) is load plus assembleTable, which is database only. relink, the model call, is not reached, and the work runs only when a row is held and benefitTableLive is true.
+- Column: person.rows come from assembleTable, and columnProblem already refuses any column that is not the person's own cover plan. So r.column is that person's plan, not the model's guess.
+
+### M1: in the household view (no member), one person's plan is shown as "your plan" for every owner of the document
+- Where: app/api/benefits/route.ts. `for(const person of table.people)if(!member||person.id===member)`, with no member, pools every person's readings, and planColumnFigure then takes a single pick.
+- Failure: a family certificate where the employee holds Plan A and the spouse holds Plan B. Only the employee's section is linked, so only Plan A readings exist. The household Benefits page shows that row, whose owners include the spouse, as "For your Plan A plan: S$X". The spouse's figure is wrong, so this is the wrong-person case.
+- Fix: in the household view, take a pick only when every owner of the row's document has a reading with the same pick. Otherwise give null. Better still, name the person ("For Ada's Business plan").
+
+### Lows
+- The match checks only that the reading's excerpt contains the row's cell run and that its figure is one of the cells. It does not check the benefit name or the cell position. A probe with a 2-cell row "Ward S$100 S$200" and a reading of another row "Ward upgrade S$100 S$200 S$300" (Business, S$200) gives Business S$200. Suggest also requiring the reading's excerpt line to carry the row's own words before the run.
+- Currency is not compared. An RM row ("Cash RM100 RM200") with a reading whose currency is SGD shows "S$200". Require the reading's currency to match the cells' sign.
