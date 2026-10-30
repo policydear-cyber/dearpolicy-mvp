@@ -9663,3 +9663,15 @@ Gate (base f58a289d): coverage-premium-test 6/6, simple:chat 85, scenario-replay
 
 Low (not blocking):
 - L2 `components/benefit-table-coverage.tsx:45`: `Number(cover.premium).toLocaleString()` uses the viewer's locale. This is a client component, so a German browser shows "73,17" and the server render may differ (hydration warning), while `money()` pins "en-US" with 2 decimals. Fix: `toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2})`, the same as `headline.ts:109`.
+
+## R377: #195 head 44ea5277 (cover-subject frames, TE K1): CHANGES (R375 M1 open, M2 partly)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe (adult Death, item S$900,000; scratch script, outside git):
+- Now withhold (fixed): "payable up to age 65 in full; thereafter ...", "continues to age 70 and is then limited ...", "Where the plan runs to age 99, death benefit after age 70 ...", "When the cover continues past age 70 ...", "... if the policy is renewed until age 80".
+- Still kept, correctly: "cover ends at age 85" and "(entry age 18 to 65)" reduce to S$500,000. "... and is payable until the insured attains age 85" now withholds, which is the safe side.
+- Still cut to S$50,000:
+  - M1 (R375, unchanged): "insured persons aged 65 to 99", "lives assured aged 70 to 100", "those aged 66-99", "Entry age 60 to 70", and also "insured persons aged 18 to 60" (a 65-year-old would be cut). Fix as R375 M1: strip a range only when entry/issue/joining wording introduces it AND it starts at a joining age (0-21). A bare "aged X to Y" narrows.
+  - M2 (R375, cover-subject form): "The policy continues to age 70; thereafter the death benefit is limited to S$50,000", "Cover is renewable to age 85, after which the death benefit is limited to S$50,000", "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000". Fix: a COVER_ENDS frame is not stripped when the sentence has a sequence word (thereafter, then, after which, afterwards, from then on, beyond, past) or opens with "if/where/when/once ... ". Withhold instead.
+- Add these 8 rows to printed-cap-test as withhold.
