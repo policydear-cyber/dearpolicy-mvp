@@ -362,6 +362,21 @@ test("a limit for part of the policy's life applies only when its start date sho
     "Death benefit is limited to S$50,000 within 2 years from the date the policy was issued.",
     "In the policy's first year the death benefit is limited to S$50,000.", "Death benefit is limited to S$50,000 until the policy has run for two years.",
     "Death benefit is limited to S$50,000 during the contestability period.",
+    // Another date or span after the policy date or the policy's age (Critic R391 H1, TE pr202 Y1-Y18).
+    "Death benefit is limited to S$50,000 within 2 years of the date of the policy alteration.",
+    "Death benefit is limited to S$50,000 within 2 years of the date of the policy endorsement increasing the sum assured.",
+    "Death benefit is limited to S$50,000 within 2 years of the date of the policy change.",
+    "Death benefit is limited to S$50,000 within 2 years of the policy date of the latest increase.",
+    "Death benefit is limited to S$50,000 if the cover is less than 2 years old following any increase.",
+    "Death benefit is limited to S$50,000 if the policy is less than 2 years old or the rider is less than 2 years old.",
+    "Death benefit is limited to S$50,000 if the laptop covered by this plan is less than 2 years old.",
+    "Death benefit is limited to S$50,000 if any other policy is less than 2 years old.",
+    "Death benefit is limited to S$50,000 if the previous policy is less than 2 years old.",
+    "Death benefit is limited to S$50,000 within 12 months of the date of the policy owner's death.",
+    "Death benefit is limited to S$50,000 within 2 years of the date of this policy's alteration.",
+    "Death benefit is limited to S$50,000 within 2 years of the policy date of any earlier policy this one replaces.",
+    "Death benefit is limited to S$50,000 within 2 years of the policy date or within 2 years of the date the sum assured was increased.",
+    "Death benefit is limited to S$50,000 if the policy is less than 2 years old at the date of the increase.",
   ]) for (const start of ["2010-01-01", "2025-06-01", null]) assert.equal(one(quote, start), undefined, `${quote} (${start})`);
   for (const quote of [
     "Death benefit for expenses incurred within 90 days of the accident is limited to S$50,000.", "Death benefit is limited to S$50,000, payable for up to 30 days.",
