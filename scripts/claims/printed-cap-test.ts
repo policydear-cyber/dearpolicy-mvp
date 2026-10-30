@@ -270,7 +270,8 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   for (const [title, quote] of [
     ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
-    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for hospital stays over 30 days."], 
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for hospital stays over 30 days."],
+    ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for bills over 1000."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 above 3 operations a year."], 
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
