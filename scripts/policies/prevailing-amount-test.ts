@@ -46,7 +46,16 @@ test("a share of the prevailing or current insured amount is a sum-insured rule 
     assert.equal(v("Angioplasty: 10% of Prevailing Insured Amount" + tail, 0.1), "none", tail);
   assert.equal(v("Angioplasty: 10% of 50% of Prevailing Insured Amount", 0.5), "none");
   assert.equal(v("Angioplasty: 10% of 50% of Prevailing Insured Amount", 0.1), "none");
-  assert.equal(v("Major cancer: 100% of Prevailing Insured Amount (see Section 4)", 1), "sum_insured");
+  // The label and what follows carry nothing else: no comma, bracket or figure in the label, no reference after (Critic R408, TE).
+  for (const q of ["Major cancer: 100% of Prevailing Insured Amount (see Section 4)", "Angioplasty: 10% of Prevailing Insured Amount (see Maximum Limit below)",
+    "Angioplasty (subject to a maximum of twenty thousand dollars): 10% of Prevailing Insured Amount", "Angioplasty, payable once only: 10% of Prevailing Insured Amount",
+    "Angioplasty (limited to one claim) - 10% of Prevailing Insured Amount", "Angioplasty, for each child: 10% of Prevailing Insured Amount",
+    "Angioplasty (rider): 10% of Prevailing Insured Amount", "Angioplasty 2: 10% of Prevailing Insured Amount",
+    "Angioplasty: 10% of Prevailing Insured Amount, no more than 25,000 dollars", "Angioplasty: 10% of the Prevailing Insured Amount of the Basic Plan",
+    "Early cancer: 25% of current sum insured, and the remaining 75% on later diagnosis"])
+    assert.equal(v(q, q.includes("100%") ? 1 : q.includes("25%") ? 0.25 : 0.1), "none", q);
+  for (const q of ["(a) Angioplasty: 10% of Prevailing Insured Amount", "(ii) Key-hole surgery - 10% of the prevailing sum assured.", "a. Angioplasty & stents: 10% of Prevailing Insured Amount"])
+    assert.equal(v(q, 0.1), "sum_insured", q);
   const stored = repairStoredRules([row("x", "Major cancer", "100% of Prevailing Insured Amount", { formulaKind: "sum_insured", formulaValue: 1 })] as never)[0];
   assert.ok(stored.conditions.includes(PREVAILING_NOTE));
 });

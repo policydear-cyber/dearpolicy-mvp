@@ -692,13 +692,17 @@ const INSURED_AMOUNT="(?:sum\\s+(?:insured|assured)|coverage\\s+amount|sum\\s+co
 /** "Prevailing Insured Amount", "current sum assured": the insured amount as it stands when the claim is made, which an
  * earlier claim on the policy may have reduced (a critical illness plan pays 10% for angioplasty, then the rest). Read as
  * a share of the sum insured only when the quote says nothing else: a benefit label (no figure in it) and a colon or dash,
- * then exactly "N% of [the] prevailing insured amount", then at most a full stop or a bracketed "see ..." reference. Any
+ * then exactly "N% of [the] prevailing insured amount", then at most a full stop. Any
  * other word may bound the share (a cap, "once only", "for each child", "of the rider", a second share), and cap wording
  * has too many forms to list, so anything else gives no rule (TE #209: each listed cap word leaked the next one). */
 const PREVAILING="(?:prevailing|current)\\s+";
 const PREVAILING_AMOUNT=new RegExp("\\b"+PREVAILING+INSURED_AMOUNT);
-const PREVAILING_SHARE_ONLY=new RegExp("^(?:[^\\d%$£€:]*[:–—-]\\s*)?\\d+(?:\\.\\d+)?\\s*%\\s*of\\s+(?:the\\s+)?"
-  +PREVAILING+INSURED_AMOUNT+"\\s*(?:\\(see\\b[^()]*\\))?\\s*[.;]?$");
+// The label: one list marker at most ("(a)", "(ii)", "a."), then only letters, spaces, quotes, & / and hyphens -- no
+// comma, bracket or figure, which could carry a bound ("Angioplasty (subject to a maximum of ...)", "Angioplasty, payable
+// once only"). Nothing may follow the insured amount but a full stop or semicolon: a "(see ...)" reference can point to a
+// clause that caps the share (Critic R408).
+const PREVAILING_SHARE_ONLY=new RegExp("^(?:(?:\\((?:[a-z]|[ivx]+|\\d{1,2})\\)|[a-z]\\.)?\\s*[\\p{L}\\s'\"“”‘’&/-]*[:–—-]\\s*)?"
+  +"\\d+(?:\\.\\d+)?\\s*%\\s*of\\s+(?:the\\s+)?"+PREVAILING+INSURED_AMOUNT+"\\s*[.;]?$","u");
 const prevailingNotProved=(text:string)=>PREVAILING_AMOUNT.test(text)&&!PREVAILING_SHARE_ONLY.test(text);
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
 const WORD_FRACTIONS=[
