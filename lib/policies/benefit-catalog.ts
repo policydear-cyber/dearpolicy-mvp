@@ -695,6 +695,13 @@ const WORD_FRACTIONS=[
   {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
   {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
 ];
+/** A share of the sum insured whose passage also prints an amount ("10% of Sum Insured, up to S$25,000", "subject to a
+ * maximum of RM25,000", "not exceeding 25,000", "to a total of twenty-five thousand"): the amount may cap the share, and
+ * paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover where the cap is S$25,000; Critic R407).
+ * Such a share is not used: a figure with a currency sign, code or word, a figure of four digits or more, or a number word
+ * for thousands or more. Default-safe: a passage that prints a figure the share does not need gives no rule. */
+const PRINTS_AN_AMOUNT=/(?:s\$|us\$|hk\$|a\$|\$|€|£|¥|\b(?:sgd|usd|myr|rm|hkd|aud|eur|gbp)\s*)\d|\d[\d,.]*\s*(?:dollars?|ringgit|sgd|usd|myr|eur|gbp)\b|\d{1,3}(?:,\d{3})+|\d{4,}|\b(?:thousand|million|billion|lakh|ribu|juta)\b/i;
+export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *
  * "Receive 150% of your coverage amount if Total and Permanent Disability is
@@ -737,6 +744,9 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)))
     .map(benefit=>{
+      // A stored share whose passage also prints an amount is withheld when read, unless a person confirmed it.
+      if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&PRINTS_AN_AMOUNT.test(normalText(benefit.quote??"")))
+        return {...benefit,formulaKind:"none" as const,formulaValue:null,conditions:[...new Set([...benefit.conditions,CAPPED_SHARE_NOTE])]};
       // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
       // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
       // (Critic R351 H1).
@@ -755,6 +765,7 @@ export function validateCatalogFormula(input:{
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
+  if(input.kind==="sum_insured"&&PRINTS_AN_AMOUNT.test(quote))return none;
   // The currency is what the quoted clause writes. A sum-insured percentage
   // quotes none -- it is paid in the cover's own currency, which is verified
   // against the personal schedule when used. Nothing is defaulted to SGD, and
