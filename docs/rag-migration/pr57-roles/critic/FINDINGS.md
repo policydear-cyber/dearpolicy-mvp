@@ -9553,3 +9553,19 @@ Fix: make it structural. Any age figure ("age(s)? \d+", "\d+ years? (old|of age)
 - The change can only move a row from "sum and premium" (figure taken) to "plan columns" (figure held). So it can hide a figure, never show a wrong one.
 - On the question asked: a run that prints the premium before the sum ("S$1,234.56 S$100,000", from an "Annual Premium | Sum Assured" column order) is now held as plan columns, where before it was taken as a pair. Main also had a risk on such a row: it could take the first figure, the premium, as the amount. Holding it is the safer side.
 - Low: a premium-first schedule loses that row's sum assured, with the plan-columns note shown. I did not check stored rows for that order (no DB access). Labels between the cells break the run anyway.
+
+## R369: #195 e184745a, READY
+Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+R367 fixes:
+- All 9 R367 rows withhold. That covers the age and person wordings anywhere in the quote, the figure-then-"for children under 5" order, and every combined-benefit part.
+- The correct "this" cases still reduce: Death under Life Plan or Death, Death vs Accidental Death, "Death Benefit for Children", and "Hospitalisation benefit, including surgery and ICU" (TE F1).
+
+The two questions:
+- Disablement: it shares family tpd with TPD, so the two are never "separate". "Partial disability ..." for TPD withholds. "Accidental death and permanent disablement ..." for Permanent Disablement withholds. "Permanent disability ..." for Accidental Medical Expenses clears (life vs medical), which is correct.
+- Ordering: strict-subset runs before productName. So "TPD benefit is limited to S$50,000" stored under "Death or TPD" withholds. A sentence that names no kind still takes the productName "this". The ordering is right.
+
+Lows (the figure is understated or hidden, never overstated):
+- With firstKind (F1), "Death benefit for accidental death is limited to S$50,000" now reduces an any-cause Death item. r1 withheld it; main reduces it too. "Death benefit arising from an accident ..." also reduces, as on main. A possible follow-up: an accident word in the sentence, when the benefit name has none, gives unknown.
+- Strict-subset hides the figure when the item's own name carries an extra kind in brackets: "Accidental Death Benefit (including Funeral)" with "Accidental death benefit is limited to S$100,000" withholds.
+- NARROWED's "over/above N" clause catches figures with no currency sign ("Hospital bills over 500 are limited to S$5,000" withholds), and "disabled insured" is not a person narrowing.
