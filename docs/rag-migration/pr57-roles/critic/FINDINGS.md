@@ -9749,3 +9749,9 @@ All 55 earlier probe rows give the same result as at 8dd81f75. "Hospital bills o
 ## R384: #195 head cb4cb982 (confirm pass): CHANGES (R383 M1 still open)
 
 cb4cb982 adds only "the over-70s" (1 line) on top of 93f6a1fd, so the R383 gate stands. The R383 probe rows give the same results at cb4cb982: "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ..." still cut an adult's S$900,000 Death figure to S$50,000. R383 M1 and its fix are unchanged: a non-age noun allow-list after the number, ≤120, and number words to 120.
+
+## R385: #195 head 301a28cf (non-age noun allow-list, number words to 120): READY
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R383 M1 is fixed. All 9 R383 age rows withhold, including "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ...". "Hospital bills over 1000" and "Hospital stays over 30 days" reduce. The 55 earlier probe rows (R373-R382) are unchanged: 45 withhold, the 6 cover-end and entry/issue rows reduce to S$500,000, and the R382 L1 tenure rows reduce as on main (follow-up already noted).
