@@ -276,8 +276,10 @@ async function applyCoverConditionsToAnswer(accountId:string,
     // play there is no ambiguity about whose conditions govern it.
     const items=answer.claimItems.filter(item=>item.contractId===contract.id||(contracts.length===1&&!item.contractId));
     if(!items.length)continue;
+    // How long the policy has run counts from one start only when all its documents agree on it (Critic R386 L1).
+    const starts=[...new Set(contract.documents.map(d=>d.effective_date).filter((v):v is string=>!!v).map(v=>String(v).slice(0,10)))];
     const result=applyCoverConditions({items,conditions:mine,
-      facts:state.subjects[contract.ownerId]??{},coverStart:contract.effectiveDate});
+      facts:state.subjects[contract.ownerId]??{},coverStart:contract.effectiveDate,tenureStart:starts.length===1?starts[0]:null});
     qualifiers.push(...result.qualifiers);
     for(const stopped of result.blocked){
       const line=stopped.title+" is not payable on these facts: "+stopped.reason;
