@@ -442,38 +442,91 @@ function addDays(from:string,days:number){
   if(!Number.isFinite(a))return null;
   return new Date(a+days*86_400_000).toISOString().slice(0,10);
 }
-/** The date a span of whole years or months after a start ends on ("2024-03-01" + 2 years = "2026-03-01"). */
+/**
+ * The first day a span of whole years or months after a start has surely passed ("2024-03-01" + 2 years = "2026-03-01").
+ * A start on a day the end month lacks (29 Feb, 31 Jan) ends the day after the clamped date, so a span is never counted
+ * as passed a day early (TE #199 T3).
+ */
 function addPeriod(from:string,n:number,unit:"year"|"month"){
   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
   if(!m)return null;
   const months=Number(m[1])*12+Number(m[2])-1+(unit==="year"?n*12:n);
-  const y=Math.floor(months/12),mo=months%12+1,last=new Date(Date.UTC(y,mo,0)).getUTCDate();
-  return `${String(y).padStart(4,"0")}-${String(mo).padStart(2,"0")}-${String(Math.min(Number(m[3]),last)).padStart(2,"0")}`;
+  const y=Math.floor(months/12),mo=months%12+1,last=new Date(Date.UTC(y,mo,0)).getUTCDate(),day=Number(m[3]);
+  const end=`${String(y).padStart(4,"0")}-${String(mo).padStart(2,"0")}-${String(Math.min(day,last)).padStart(2,"0")}`;
+  return day>last?addDays(end,1):end;
 }
+const COUNT_WORDS:Record<string,number>={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,
+  fifteen:15,twenty:20,"twenty-four":24,thirty:30,thirty_six:36,first:1,second:2,third:3,fourth:4,fifth:5,sixth:6,seventh:7,eighth:8,
+  ninth:9,tenth:10,fifteenth:15,twentieth:20};
+const COUNT=String.raw`(?:\d{1,3}(?:st|nd|rd|th)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty(?:-four)?|thirty|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|fifteenth|twentieth)`;
+const countOf=(word:string)=>/^\d/.test(word)?Number(word.replace(/\D+$/,"")):COUNT_WORDS[word.toLowerCase()]??null;
+const SPAN_UNIT=String.raw`(?:(?:full|complete|consecutive)\s+)?(?:policy\s+|contract\s+|cover(?:age)?\s+)?(years?|months?)`;
+const POLICY_START=String.raw`(?:the\s+)?(?:(?:policy|cover(?:age)?|risk)\s+)?(?:date\s+of\s+)?(?:(?:policy|risk)\s+)?(?:issue|issuance|commencement|inception|start|effective\s+date|cover\s+start)(?:\s+date)?(?:\s+of\s+(?:the\s+)?(?:policy|cover(?:age)?))?`;
 /**
- * A limit that holds only for part of how long the policy has run: "if the policy has been in force under 2 years",
- * "within the first 3 policy years" (while), or "after the policy has been in force for over 5 years" (after). A
- * limit like this is not every policy's (Critic R382 L1).
+ * A limit that holds only for part of how long the policy has run (Critic R382 L1): "while" ("in force under 2 years",
+ * "within 24 months from the date of issue", "during the first two policy years", "before the second policy
+ * anniversary") or "after" ("in force for more than 10 years", "from the 10th policy anniversary").
  */
-const TENURE_WHILE=/\b(?:(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|less\s+than|fewer\s+than|within|not\s+more\s+than|up\s+to)|within\s+(?:the\s+)?first)\s+(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\b/iu;
-const TENURE_AFTER=/\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:over|above|more\s+than|at\s+least|longer\s+than)\s+(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\b|\bafter\s+(?:the\s+)?(?:first\s+)?(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\s+(?:of\s+cover|in\s+force|from\s+(?:the\s+)?(?:policy\s+)?(?:start|inception|commencement))/iu;
+const TENURE_FORMS:{when:"while"|"after";re:RegExp}[]=[
+  {when:"while",re:new RegExp(String.raw`\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|less\s+than|fewer\s+than|within|not\s+more\s+than|up\s+to)\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
+  {when:"while",re:new RegExp(String.raw`\b(?:within|during|in|for)\s+(?:the\s+)?first\s+(?:(${COUNT})\s+)?${SPAN_UNIT}`,"iu")},
+  {when:"while",re:new RegExp(String.raw`\b(?:within|during|in)\s+(?:the\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of|from|after|following)\s+${POLICY_START}\b`,"iu")},
+  {when:"while",re:new RegExp(String.raw`\b(?:before|prior\s+to|until)\s+(?:the\s+)?(${COUNT})\s+(?:policy\s+)?anniversary`,"iu")},
+  {when:"after",re:new RegExp(String.raw`\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:over|above|more\s+than|at\s+least|longer\s+than)\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
+  {when:"after",re:new RegExp(String.raw`\b(?:after|from|on\s+or\s+after|following)\s+(?:the\s+)?(${COUNT})\s+(?:policy\s+)?anniversary`,"iu")},
+  {when:"after",re:new RegExp(String.raw`\b(?:after|following|beyond)\s+(?:the\s+)?first\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
+  {when:"after",re:new RegExp(String.raw`\bafter\s+(?:the\s+)?(?:first\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of\s+cover|in\s+force|(?:from|of|after)\s+${POLICY_START})`,"iu")},
+];
+/**
+ * Any wording that may tie a limit to how long the policy has run. When it is there and no form above reads it exactly,
+ * the limit cannot be placed in time and no figure is shown. Default-safe: a reinstated or revived policy restarts
+ * the count, which DearPolicy cannot see, so that wording is never read (Critic R386 M1, TE #199 T1).
+ */
+const TENURE_SIGNAL=new RegExp([
+  // "per policy year", "each policy anniversary" say how often, not since when.
+  String.raw`(?<!\b(?:any|each|every|per)\s+)\b(?:${COUNT}|the\s+first)\s+(?:(?:full|complete|consecutive)\s+)?policy\s+years?\b`,
+  String.raw`(?<!\b(?:each|every|any|per|on)\s+(?:policy\s+)?)\banniversar(?:y|ies)\b`,
+  String.raw`\bin\s+force\s+(?:for|under|below|less|fewer|within|not|up|over|above|more|at|longer)\b`,
+  String.raw`\b(?:within|during|in|for|before)\s+(?:the\s+)?first\s+(?:${COUNT}\s+)?(?:(?:full|complete|consecutive|policy|contract|cover(?:age)?)\s+)*(?:years?|months?)\b`,
+  String.raw`\b(?:of|from|after|since|following)\s+${POLICY_START}\b`,
+  String.raw`\breinstat\w*|\breviv\w*`,
+].join("|"),"iu");
 export type Tenure={when:"while"|"after";n:number;unit:"year"|"month"};
-export function tenureOf(quote:string|null|undefined):Tenure|null{
+/** The span a limit is tied to: a Tenure when one form reads it exactly, "unread" when tenure wording is there but
+ * cannot be read, or null when the limit says nothing about how long the policy has run. */
+export function tenureOf(quote:string|null|undefined):Tenure|"unread"|null{
   const text=quote??"";
-  const w=TENURE_WHILE.exec(text);
-  if(w)return {when:"while",n:Number(w[1]),unit:/^month/i.test(w[2])?"month":"year"};
-  const a=TENURE_AFTER.exec(text);
-  if(a)return {when:"after",n:Number(a[1]??a[3]),unit:/^month/i.test(a[2]??a[4])?"month":"year"};
-  return null;
+  if(!TENURE_SIGNAL.test(text))return null;
+  if(/\breinstat|\breviv/iu.test(text))return "unread";
+  const found:Tenure[]=[];
+  for(const form of TENURE_FORMS){
+    const m=form.re.exec(text);
+    if(!m)continue;
+    const n=m[1]?countOf(m[1]):1;
+    if(n==null||n<=0)return "unread";
+    const unit=m[2]===undefined?"year":/^month/i.test(m[2])?"month":"year";
+    found.push({when:form.when,n,unit});
+  }
+  // Two different spans in one sentence ("first 2 years ... after the 10th anniversary") are not read.
+  const keys=new Set(found.map(t=>t.when+t.n+t.unit));
+  return found.length&&keys.size===1?found[0]:"unread";
 }
 /**
  * Whether the policy has surely run the span by the claim date. The start DearPolicy holds may be the latest renewal's,
  * not the first, so it can only show a span HAS passed, never that it has not.
  */
-function tenurePassed(tenure:Tenure,coverStart:string|null|undefined,when:string){
-  const start=coverStart?isoDate(coverStart):null;
-  const ends=start?addPeriod(start,tenure.n,tenure.unit):null;
+function tenurePassed(tenure:Tenure,start:string|null|undefined,when:string){
+  const from=start?isoDate(start):null;
+  const ends=from?addPeriod(from,tenure.n,tenure.unit):null;
   return ends!=null&&ends<=when;
+}
+/** What a tenure-tied limit does: "apply" (read it as any limit), "clear" (not in force at the claim), or "withhold". */
+function tenureEffect(quote:string|null|undefined,start:string|null|undefined,when:string):"apply"|"clear"|"withhold"{
+  const tenure=tenureOf(quote);
+  if(tenure==null)return "apply";
+  if(tenure==="unread")return "withhold";
+  const passed=tenurePassed(tenure,start,when);
+  return !passed?"withhold":tenure.when==="while"?"clear":"apply";
 }
 
 /** The date the benefit responds to, in the order the contract would read them:
@@ -534,6 +587,9 @@ type ApplyArgs={
   /** The date the cover on file starts, used for waiting periods and for the
    * time bars written as "within 12 months of the commencement date". */
   coverStart?:string|null;
+  /** The start that counts how long the policy has run, when every document of it agrees; null when they differ (a
+   * replaced or reinstated policy). Left out, the cover start is used. */
+  tenureStart?:string|null;
   /** Today, injected so the tests are not a clock. */
   today?:string;
 };
@@ -563,8 +619,8 @@ function money(amount:number,currency?:string){
 
 /** Test one condition against the facts and one figure. */
 export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:SubjectFacts;
-  coverStart?:string|null;today:string}):ConditionOutcome{
-  const {item,facts,coverStart,today}=args;
+  coverStart?:string|null;tenureStart?:string|null;today:string}):ConditionOutcome{
+  const {item,facts,coverStart,tenureStart,today}=args;
   // Nothing downstream sees a figure the policy could not have printed.
   const condition:CoverCondition={...raw,days:usableDays(raw.days),amount:usable(raw.amount)};
   const quoteTail=condition.quote?" The policy says: “"+condition.quote.trim().slice(0,160)+"”":"";
@@ -660,14 +716,11 @@ export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:
       const whose=limitIsFor(raw,item);
       if(whose==="other")return {kind:"clear"};
       // A limit for part of the policy's life applies only once DearPolicy can show which part the claim falls in.
-      const tenure=tenureOf(raw.quote);
-      if(tenure){
-        const passed=tenurePassed(tenure,coverStart,claimDate(facts)??today);
-        if(tenure.when==="while"&&passed)return {kind:"clear"};
-        if(!passed)return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
-          +" that depends on how long the policy has been in force, and DearPolicy cannot confirm that, so no amount is shown for "
-          +item.title+"."+quoteTail};
-      }
+      const span=tenureEffect(raw.quote,tenureStart===undefined?coverStart:tenureStart,claimDate(facts)??today);
+      if(span==="clear")return {kind:"clear"};
+      if(span==="withhold")return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
+        +" that depends on how long the policy has been in force, and DearPolicy cannot confirm that, so no amount is shown for "
+        +item.title+"."+quoteTail};
       if(read.kind==="unsure"||ceiling==null||whose==="unknown")
         return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
           +" that may apply to "+item.title+", so no amount is shown for it."+quoteTail};
@@ -738,7 +791,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   };
   for(const item of items){
     for(const condition of conditionsForItem(item,args.conditions)){
-      const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,today});
+      const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,tenureStart:args.tenureStart,today});
       if(outcome.kind==="clear")continue;
       if(outcome.kind==="caveat"){say(outcome.text,outcome.weight);continue;}
       if(outcome.kind==="withhold"){withhold(item,outcome.text);continue;}
@@ -769,6 +822,15 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
     if(stated==null||read.kind==="not_cap")continue;
     const inCover=items.filter(item=>item.calculatedAmount!=null
       &&(!condition.productName||(item.coverLabel??"").toLowerCase().includes(condition.productName.toLowerCase())));
+    // An overall limit for part of the policy's life, as for one benefit's (TE #199 T2).
+    const span=tenureEffect(condition.quote,args.tenureStart===undefined?args.coverStart:args.tenureStart,claimDate(args.facts)??today);
+    if(span==="clear")continue;
+    if(span==="withhold"){
+      const text=(condition.productName??"this cover")+" states an overall limit that depends on how long the policy has been in force,"
+        +" and DearPolicy cannot confirm that, so no amounts are shown for it.";
+      for(const item of inCover)if(item.calculatedAmount!=null)withhold(item,text);
+      continue;
+    }
     // A share of the sum insured caps the cover at that share of its one sum insured; with no single sum it is unplaced.
     const sums=[...new Set(inCover.map(item=>item.coverAmount))];
     const ceiling=condition.amountBasis==="sum_insured_fraction"?(sums.length===1&&sums[0]!=null?stated*sums[0]:null):stated;
