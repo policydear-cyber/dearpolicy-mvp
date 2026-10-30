@@ -9884,3 +9884,12 @@ Probe of `namesNoBenefit(name, quote)` (scratch, outside git). The four stored s
   - FOOTER_SENTENCE hides any This/Please/Note sentence that is followed by a page count. Fix: also require that the name has no figure, money or %, and no benefit word. Better still, allow-list the footer sentences themselves ("valid when all pages are included", "read together with", "not a contract", "for illustration only").
   - ASSET_CLASS: "Cash" and "Property" are also benefit words (cash benefit, property damage). Require the fund-mix context: 3 or more percentages that each look like an allocation (not 100%/200% style), or drop cash and property from the list.
   - Add the 6 rows above to nameless-benefit-test as kept.
+
+## R394: #204 head ca99ae47 (strip a trailing empty plan cell from the shown name): CHANGES (two Medium)
+
+Gate (base 4103e103): plan-cell-name-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The rule itself cannot eat a real word: it needs the quote to be exactly the name's words plus one plan-cell run that opens with the same empty-cell word.
+
+- M1 "Nothing keys on the route's benefitName" does not hold. `app/operator/benefits/page.tsx:66` seeds the edit draft from the shown `benefitName`, and `:169` PATCHes `benefitName: draft.benefitName.trim()||benefit.benefitName` on every save, including a save that only changes the amount. `app/api/benefits/route.ts:280` passes it through `sentName`, which only undoes ID masking, so the stripped name is written over the stored one. The display-only change becomes a stored change that rules and links key on. Fix: in the PATCH, treat a sent name equal to `nameWithoutPlanCell(stored, quote)` as unchanged (extend `sentName`, or compare there), and add a test. (`app/ledger/page.tsx:95` only classifies by name; dropping "Not Applicable" doesn't change its kind.)
+- M2 `lib/insurance/scale-limit.ts` nameWithoutPlanCell: the cell is stripped whatever the household's plan is. When the household holds the first plan, the one whose cell is "Not Applicable", the row then reads as a benefit they have, and planColumnFigure gives no figure (the cell is not money). Before this PR the stray words happened to tell the truth. Fix: strip only when the row's plan figure for this household is a money cell (pass `planFigure != null` to the call, or strip in the same place the plan figure is resolved). Otherwise keep the stored name.
