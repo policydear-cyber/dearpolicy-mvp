@@ -28,15 +28,25 @@ test("a name cut at 90 characters gets ')' or '…' from its own quote; a whole 
   // A whole 90-character name: the quote's end, a figure, a capital word or punctuation after it.
   const whole = "Emergency medical evacuation and repatriation of mortal remains to the country of domicile";
   assert.equal(whole.length, 90);
-  for (const q of [whole, whole + " S$1,000,000", whole + " Unlimited", whole + ": as charged", whole + " 100%"]) assert.equal(cutNameSuffix(whole, q), "", q);
+  for (const q of [whole, whole + " S$1,000,000", whole + " SGD 1,000", whole + " RM50", whole + ": as charged", whole + " 100%", whole + ".", whole + "; and"])
+    assert.equal(cutNameSuffix(whole, q), "", q);
+  // Anything else after it may be the rest of the name (Critic R404): a word in any case, a cut figure, a hyphen, an
+  // apostrophe, an ampersand, a slash, a comma, or a bracket closed and then run on.
+  for (const rest of [" Unlimited", " and shoulder", "0 years", "-related", "'s", " & elbow", "/wrist", ", hand", ".5%", " - see note"])
+    assert.equal(cutNameSuffix(whole, whole + rest), "…", rest);
+  const age = "Waiver of premium if a life assured becomes totally and permanently disabled before ages 7";
+  assert.equal(age.length, 90);
+  assert.equal(cutNameSuffix(age, age + "0 years"), "…");
+  assert.equal(cutNameSuffix(hand, hand + ") and shoulder 100%"), "…");
+  assert.equal(cutNameSuffix(hand, hand + ")"), ")");
   // A short name gets nothing; a 90-character name whose quote does not print it in one piece (its label wraps between
   // the row's figures) or that has no quote is taken as cut.
   assert.equal(cutNameSuffix("Personal liability", "Personal liability while on your trip"), "");
   assert.equal(cutNameSuffix("Personal liability while on your trip", null), "");
   assert.equal(cutNameSuffix(cap(liability), "If you are liable for accidental death, injury or damage to S$500,000 S$1,000,000"), "…");
   assert.equal(cutNameSuffix(cap(liability), null), "…");
-  // A ")" after a name with no open bracket is not added; a name with its bracket closed that runs on mid-word gets "…".
-  assert.equal(cutNameSuffix(whole, whole + ")"), "");
+  // A ")" after a name with no open bracket is never added; what follows is not known to be harmless, so "…".
+  assert.equal(cutNameSuffix(whole, whole + ")"), "…");
 });
 
 test("the Benefits pages show the suffix after the stored name, and the stored name is what they send back", () => {
