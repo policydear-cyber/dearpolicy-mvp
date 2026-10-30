@@ -9797,3 +9797,16 @@ The 10 R386 rows behave as asked. With a 2010 start: while-limits clear, after-l
   - "during the contestability period"
   Fix (default-safe, structural): treat any duration in a limit's quote (a number or number word + days|months|years, "first year", "contestab", "incontestab") as a tenure signal. Set it aside only when an allow-listed event anchor follows ("of|after|from|following the accident|injury|diagnosis|discharge|admission|event|treatment|surgery|loss|death"), or when it is the existing frequency wording ("per/any one policy year"). So "expenses incurred within 90 days of the accident" still cuts, and anything else withholds unless an exact form reads it.
 - Add the 7 rows above to printed-cap-test as withhold, and one "within 90 days of the accident" row as reduce.
+
+## R388: #199 head 7d3fa1d3 (loose durations withhold unless event-, period- or stay-anchored): READY
+
+Gate (base 28693c90): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R387 M1 is fixed. I probed 37 tenure wordings (adult Death S$900,000, limit S$50,000; start 2025-06-01, 2010-01-01 and none; scratch script, outside git):
+- With no start, every tenure wording withholds.
+- With a 2010 start, the exact while-forms clear and the after-forms cut. Loose spans with a policy anchor ("after the policy starts", "of the policy date", "from the date the policy was issued", "policy's first year", contestability, "until the policy has run for two years") withhold. Reinstatement withholds.
+- New bypass attempts withhold: "for each of the first 2 years", "in any of the first 2 policy years", "up to 2 years after inception", "maximum during the first 2 years", "within 2 years, per policy", "of the accident or of the policy start".
+- Frequency wording ("per policy year", "in any one policy year") and a plain limit still reduce, as before.
+
+Low (accepted gap, no change against main):
+- L1: "Death benefit is limited to S$50,000 for up to 2 years" reduces. This is the builder's noted gap ("payable for N years" read as a benefit-payment period), and the "up to" prefix sets it aside the same way. A contrived "within 2 years of the trip start of the policy" also reduces, because "trip" is an event anchor. Neither is a regression.
