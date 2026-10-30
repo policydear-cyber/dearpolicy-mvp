@@ -9855,3 +9855,14 @@ Correct: "of the policy date", "of the date of the policy", "while the policy is
   - End START with a closed set of followers: end of quote, punctuation, or a joining word (and, or, the, is, ...). Then "date of the policy <noun>" does not match.
   - Withhold any tenure quote that also names increase, alteration, endorsement, change, addition, rider, reinstat or reviv (extend the existing reinstatement rule to these words).
   - Add the 6 rows to printed-cap-test as withhold with a 2010 start.
+
+## R392: #203 head 8a423d18 (no-particular-currency "dollar amount" wording): READY (one Low)
+
+Gate (base 4103e103): style-test 22/0, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `documentCurrency` on a page that also prints "S$100,000" and "$120" (scratch, outside git):
+- SGD: "impose limits on the dollar amount", "paid dollar for dollar", "the dollar-amount".
+- No currency (correct): "Amounts in Hong Kong dollars", "maximum dollar amount is A$5,000", "total dollar value is HK$ 500", "in NT dollars", "the US dollar amount", "(USD)".
+The exemption removes only the phrase itself, so any other mention of a currency elsewhere still counts.
+
+- L1 `lib/simple-chat/verify.ts` NO_PARTICULAR_DOLLAR: a foreign dollar named only by a country adjective beside the exempt phrase now passes as SGD, so a bare "$" in that document reads as S$. Examples: "the dollar amount, in Australian terms", "a dollar limit of 500 Canadian", "the same dollar amounts as the Brunei plan". These are unlikely in a real schedule. A cheap close: do not apply the exemption in a sentence that also names a dollar country (Australian, Canadian, Hong Kong, Brunei, US/American, New Zealand, Taiwan, Fiji, ...).
