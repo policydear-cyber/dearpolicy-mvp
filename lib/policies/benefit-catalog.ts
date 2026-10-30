@@ -701,9 +701,19 @@ const PREVAILING_AMOUNT=new RegExp("\\b"+PREVAILING+INSURED_AMOUNT);
 // comma, bracket or figure, which could carry a bound ("Angioplasty (subject to a maximum of ...)", "Angioplasty, payable
 // once only"). Nothing may follow the insured amount but a full stop or semicolon: a "(see ...)" reference can point to a
 // clause that caps the share (Critic R408).
-const PREVAILING_SHARE_ONLY=new RegExp("^(?:(?:\\((?:[a-z]|[ivx]+|\\d{1,2})\\)|[a-z]\\.)?\\s*[\\p{L}\\s'\"“”‘’&/-]*[:–—-]\\s*)?"
+const PREVAILING_SHARE_ONLY=new RegExp("^(?:(?<label>(?:\\((?:[a-z]|[ivx]+|\\d{1,2})\\)|[a-z]\\.)?\\s*[\\p{L}\\s'\"“”‘’&/-]*?)\\s*[:–—-]\\s*)?"
   +"\\d+(?:\\.\\d+)?\\s*%\\s*of\\s+(?:the\\s+)?"+PREVAILING+INSURED_AMOUNT+"\\s*[.;]?$","u");
-const prevailingNotProved=(text:string)=>PREVAILING_AMOUNT.test(text)&&!PREVAILING_SHARE_ONLY.test(text);
+// The label must be the row's own benefit name (case, spacing, quotes and one list marker aside): a label is free text,
+// and words in it can still bound the share ("Angioplasty payable once only", "Angioplasty rider"; TE pr209). Without a
+// name to compare, only a quote with no label stands.
+const labelWords=(t:string)=>normalText(t).replace(/^(?:\((?:[a-z]|[ivx]+|\d{1,2})\)|[a-z]\.)\s*/u,"").replace(/[^\p{L}]+/gu," ").trim();
+function prevailingNotProved(text:string,benefitName?:string|null):boolean{
+  if(!PREVAILING_AMOUNT.test(text))return false;
+  const shape=text.match(PREVAILING_SHARE_ONLY);
+  if(!shape)return true;
+  const label=labelWords(shape.groups?.label??"");
+  return label!==""&&label!==labelWords(benefitName??"");
+}
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
 const WORD_FRACTIONS=[
   {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
@@ -728,10 +738,10 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
   const quote=benefit.quote??"";
   const text=normalText(quote);
   const propose=(input:Parameters<typeof validateCatalogFormula>[0])=>{
-    const read=validateCatalogFormula(input);
+    const read=validateCatalogFormula({...input,benefitName:benefit.benefitName});
     return read.formulaKind==="none"?null:read;
   };
-  if(prevailingNotProved(text))return null;
+  if(prevailingNotProved(text,benefit.benefitName))return null;
   const percentage=text.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
   if(percentage)return propose({kind:"sum_insured",value:Number(percentage)/100,currency:benefit.currency,
     quote,factKey:null,offsetDays:null,maximumDays:null});
@@ -768,7 +778,7 @@ export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
 }
 export function validateCatalogFormula(input:{
   kind:string;value:number|null;currency:string|null;quote:string;
-  factKey:string|null;offsetDays:number|null;maximumDays:number|null;coverageCurrency?:string|null;
+  factKey:string|null;offsetDays:number|null;maximumDays:number|null;coverageCurrency?:string|null;benefitName?:string|null;
 }):Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">{
   const none={formulaKind:"none" as const,formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null};
   const quote=normalText(input.quote);
@@ -784,7 +794,7 @@ export function validateCatalogFormula(input:{
   const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
     if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
-    if(prevailingNotProved(quote))return none;
+    if(prevailingNotProved(quote,input.benefitName))return none;
     const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
     const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);
     // "One twelfth of Sum Insured" is a rule stated in words. It is as provable

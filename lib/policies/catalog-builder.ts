@@ -362,7 +362,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
       if(seen.has(key))continue;seen.add(key);
       const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
-        quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays});
+        quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays,benefitName:found.name});
       // The same row already stored as printed-only: a validated rule from the
       // model replaces it; a model reading with no rule adds nothing new.
       const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|");
