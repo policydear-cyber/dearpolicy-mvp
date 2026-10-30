@@ -9707,3 +9707,18 @@ Adult Death, item S$900,000, limit amount S$50,000 (scratch probe, outside git):
   Fix: anchor to the limit's own amount (the condition's `amount` as printed in the quote), not the first currency figure. Set a frame aside only when it starts after that figure, in brackets or not. A frame before it, bracketed or not, stays in and withholds.
 - L1 (accept or close): "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85": reduce 50,000. The frame does come after the figure, but the time phrase sits in the limit's clause. A closed rule would set the frame aside only when the words between the figure and the frame are an allow-listed join (";", ".", ",", "and", "and the", "while the", or a closing bracket). With anything else in between, the frame stays in.
 - Add these 5 rows to printed-cap-test as withhold.
+
+## R381: #195 head 12a8f902 (frames anchored to the limit's own amount): CHANGES (one Medium)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R380 M1 and L1 are fixed. All 45 earlier probe rows (R373-R380) give the expected result: every narrowing row withholds, and "limited to S$500,000; cover ends at age 85", "(the policy expires on the 85th birthday)", ", and cover ends at age 85", "(entry age 18 to 65)" and "(issue age 0 to 65)" reduce to S$500,000.
+
+- M1 `lib/insurance/cover-conditions.ts` AGE_SIGNAL, `${PEOPLE}\s+(?:under|below|over|above)\s+${AGE_N}`: PEOPLE is a closed list of nouns, so a group named with any other noun does not narrow. Adult Death, S$900,000, limit S$50,000, all reduce to 50,000:
+  - "Death benefit for lives over 70 is limited to S$50,000" (bare "lives")
+  - "Death benefit for policyholders over 70 is limited to S$50,000"
+  - "Death benefit for anyone over 70 is limited to S$50,000"
+  - "Death benefit is limited to S$50,000 for customers above 70"
+  - and, the same way, "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"
+  Fix (default-safe): make any "under|below|over|above|aged" + bare number (no currency sign before it) an age signal, whatever noun precedes it. Set it aside only when an allow-listed unit follows (days, weeks, months, hours, km, %, times, claims, visits), so "over 30 days" and "above 50%" still pass.
+- Add these 5 rows to printed-cap-test as withhold, plus one "hospital stays over 30 days" row as reduce.
