@@ -311,10 +311,10 @@ const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding
 /** Words anywhere in a limit's sentence that narrow it to some insured people ("Death benefit for children under age 5 is
  * limited to S$20,000", "for insured persons aged 70 and above", "Death benefit is limited to S$50,000 for children under
  * 5"). Default-safe (TE #195 r3): any age wording or person-group word narrows, unless it sits in a frame known to apply
- * to everyone: the age the cover ends or is renewable to ("cover ends at age 85", "payable until the insured attains age
- * 85", "expires on the 85th birthday", "up to age 99", "before age 65"), the age it starts or may be joined at ("Entry
- * age 18 to 65", "cover starts from age 1", "aged 18 to 70"), or a plan's own name ("Senior Protect Plan"). A wording
- * this does not know withholds the figure and never cuts it. A benefit whose own name narrows the same way may still be
+ * to everyone: the adult age the cover itself ends or runs to ("cover ends at age 85", "payable until the insured attains
+ * age 85", "expires on the 85th birthday", "payable up to age 99"), the ages it may be joined at ("Entry age 18 to 65",
+ * "aged 18 to 70"), or a plan's own name ("Senior Protect Plan"). A wording this does not know, or a child's age in any
+ * frame, withholds the figure and never cuts it. A benefit whose own name narrows the same way may still be
  * cut (TE #195 F2, G1, G2; Critic R367 M1). */
 const AGE_N=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
 const PEOPLE=String.raw`(?:persons?|people|insureds?|lives?\s+(?:insured|assured)|members?|adults?|individuals?|those)`;
@@ -323,19 +323,19 @@ const AGE_SIGNAL=new RegExp([
   String.raw`\bage[sd]?\b`, String.raw`\bbirthdays?\b`, String.raw`\b(?:younger|older)\s+than\b`,
   String.raw`\b\d+\s*(?:years?|yrs?)[\s-]+(?:old|of\s+age)\b`,
   String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_N}\b`, String.raw`\b${PEOPLE}\s+${AGE_N}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
-  String.raw`\b(?:berumur|umur)\b`,
+  String.raw`\b(?:turns|reaches|attains)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}\b`, String.raw`\b(?:berumur|umur)\b`,
 ].join("|"),"iu");
-const AGE_AT=String.raw`(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}(?:st|nd|rd|th)?(?:\s+birthday)?`;
+// An adult's age (18 or more): a child's age is always a group's, never the age a whole cover ends at (TE #195 J1).
+const ADULT_AGE=String.raw`(?:1[89]|[2-9]\d|1\d\d)`;
+const COVER_RUNS=String.raw`(?:ends?|ending|expires?|expiring|terminates?|ceases?|matures?|lapses?|(?:is\s+)?renewable|runs|continues|(?:is\s+)?payable)`;
 const WHOLE_COVER_AGES=new RegExp([
-  // The age the cover ends or runs to.
-  String.raw`\b(?:ends?|ending|expires?|expiring|terminates?|ceases?|matures?|lapses?)\s+(?:at|on)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?${AGE_AT}`,
-  String.raw`\b(?:up\s+to|until|till|to|renewable\s+(?:up\s+)?to)\s+(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${AGE_N}|${AGE_N}(?:st|nd|rd|th)\s+birthday)`,
-  String.raw`\b(?:until|till|ends?\s+when|expires?\s+when|terminates?\s+when|ceases?\s+when|lapses?\s+when)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?age\s+(?:of\s+)?${AGE_N}`,
-  String.raw`\bbefore\s+age\s+(?:of\s+)?${AGE_N}`,
-  // The age it starts or may be joined at.
-  String.raw`\bentry\s+ages?\s*(?:of|is|:|from)?\s*${AGE_N}\s*(?:to|-|–|and)\s*${AGE_N}`,
-  String.raw`\b(?:starts?|begins?|commences?)\s+from\s+(?:the\s+)?age\s+(?:of\s+)?${AGE_N}`,
-  String.raw`\baged\s+(?:between\s+)?(?:1[89]|[2-9]\d)\s*(?:to|-|–|and)\s*\d{2,3}\b`,
+  // The age the cover itself ends or runs to: a duration verb, then the adult age (Critic R373 M1). A bare "until age 16",
+  // "up to age 5", "before age 65" or "starts from age 70" is not anchored to the cover and narrows.
+  String.raw`\b${COVER_RUNS}\s+(?:(?:at|on|until|till|up\s+to|to)\s+)(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${ADULT_AGE}\b|${ADULT_AGE}(?:st|nd|rd|th)\s+birthday)`,
+  String.raw`\b${COVER_RUNS}\s+(?:until|till|when|once)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${ADULT_AGE}\b`,
+  // The ages it may be joined at, up to a usual entry or expiry age ("Entry age 18 to 65", insured persons "aged 18 to 70").
+  String.raw`\bentry\s+ages?\s*(?:of|is|:|from)?\s*${AGE_N}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
+  String.raw`\baged\s+(?:between\s+)?${ADULT_AGE}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
 ].join("|"),"giu");
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;

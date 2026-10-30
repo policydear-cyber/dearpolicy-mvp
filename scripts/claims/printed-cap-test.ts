@@ -212,6 +212,14 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     // Default-safe: any age wording outside a whole-cover frame narrows (TE #195 r3 Y1, Y2, Y8).
     ["Death benefit", "Death benefit for an insured aged 6 months to 5 years is limited to S$50,000"], ["Death benefit", "Death benefit between ages 1 and 17 is limited to S$50,000"],
     ["Death benefit", "Death benefit for an insured younger than 18 is limited to S$50,000"],
+    // Only a frame tied to the cover's own end, at an adult age, is whole-cover; bare until/before/from frames narrow (Critic R373 M1, TE #195 r4 J1/J2).
+    ["Total and permanent disability", "TPD benefit is limited to S$50,000 before age 65."], ["Death benefit", "Death benefit is limited to S$50,000; cover starts from age 1."],
+    ["Death benefit", "Until the insured attains age 16, the death benefit is limited to S$50,000"], ["Death benefit", "Till the life assured reaches age 17, death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons up to age 16 is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 to age 16, then S$500,000"],
+    ["Death benefit", "The death benefit is limited to S$50,000 if death occurs before age 16"], ["Death benefit", "Reduced death benefit starts from age 70: limited to S$50,000"],
+    ["Death benefit", "Death benefit before age 5 is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000 up to age 5 and S$500,000 thereafter."],
+    ["Death benefit", "Death benefit until the insured turns 6 is limited to S$50,000."], ["Death benefit", "Death benefit for insured persons aged 18 to 25 is limited to S$50,000."],
+    ["Death benefit", "The death benefit is limited to £50,000 until the 4th birthday."],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -231,12 +239,13 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   assert.equal(one("Death benefit", 3000000, "Death benefit, which includes the funeral expenses benefit, is limited to £2,000,000", 2000000), 2000000);
   // An age or a plan name that ends or names the cover for everyone narrows nothing: the limit still cuts (TE #195 G1).
   for (const [title, quote] of [
-    ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."], ["Total and permanent disability", "TPD benefit is limited to S$50,000 before age 65."],
+    ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
     ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
     ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
-    ["Death benefit", "Death benefit is limited to S$50,000; cover starts from age 1."], ["Death benefit", "Entry age 18 to 65. Death benefit is limited to S$50,000."],
+    ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
+    ["Death benefit", "Entry age 18 to 65. Death benefit is limited to S$50,000."],
   ] as [string, string][])
     assert.equal(one(title, 500000, quote, 50000), 50000, `${title}: ${quote}`);
   // A child or minor-surgery limit of another kind still leaves a life benefit as it is.
