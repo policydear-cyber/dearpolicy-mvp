@@ -9745,3 +9745,7 @@ All 55 earlier probe rows give the same result as at 8dd81f75. "Hospital bills o
   - "Death benefit for persons over seventy is limited to S$50,000" (AGE_N spells out words only up to eighteen)
   Fix: keep the ≤120 cap (that fixes "bills over 1000"), and go back to setting the signal aside only when an allow-listed NON-AGE noun follows. Add TE's people, persons, operations, procedures, surgeries, items and members to the R381 unit list. Any other next word counts as an age. Also spell out number words to 120 in AGE_N for the comparator ("seventy", "sixty-five", "sixty five").
 - Add these 4 rows to printed-cap-test as withhold, and TE's "over 10 people" and "above 3 operations" as reduce.
+
+## R384: #195 head cb4cb982 (confirm pass): CHANGES (R383 M1 still open)
+
+cb4cb982 adds only "the over-70s" (1 line) on top of 93f6a1fd, so the R383 gate stands. The R383 probe rows give the same results at cb4cb982: "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ..." still cut an adult's S$900,000 Death figure to S$50,000. R383 M1 and its fix are unchanged: a non-age noun allow-list after the number, ≤120, and number words to 120.
