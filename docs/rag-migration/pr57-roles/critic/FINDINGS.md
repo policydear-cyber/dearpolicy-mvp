@@ -9955,3 +9955,16 @@ Every gate below was the free gate (network blocked, keys stripped): own test, s
   - Within a run the whole order is rebuilt (numeric collator, then page, then tier, then original index), so Postgres collation only decides where run boundaries fall. That stays identical.
   - Downstream code does not depend on the order. Summary counts are filter().length. Alternatives and planFigure pick found[0] only when every candidate is equal. documentNames is a Map keyed by policy_id, and every row of a policy gives the same name. resolveStoredRules/repairStoredRules work row by row.
   - L1 (cosmetic): numeric collation also orders figures inside names ("S$500 …" before "S$1,000 …"), which is fine.
+- **R407 #209 (d4461e80, then 87c5c216): CHANGES (High, money).** The gate on d4461e80 is green (prevailing-amount-test 0, plus all the standard suites, tsc, next build, merge-tree). The probes below were run on 87c5c216.
+  - **H1, benefit-catalog.ts CAP_WORDS:** this is still a deny-list. Every row below is "none" on main and becomes a sum_insured rule on 87c5c216, so the full share is shown where the wording bounds it:
+    - "10% of Prevailing Insured Amount, no more than 25,000 dollars"
+    - "…, not above MYR 25,000"
+    - "…, not more than 25,000 SGD"
+    - "…, to a total of twenty-five thousand"
+    - "10% of the Prevailing Insured Amount of the Basic Plan" (another policy's sum)
+    - "…, payable only if the insured is under age 65"
+    - "…for each insured child"
+    - "25% of current sum insured, and the remaining 75% on later diagnosis"
+  - **Fix (structural):** read prevailing/current only when the WHOLE quote has the shape `[label][:] N% of [the] (prevailing|current) <insured amount>[.]`, with nothing after the insured amount. The label is any text before the percentage that has no figure. Anything after the amount gives none. That answers all three of the builder's questions: "current" is fine inside that shape; "full" gets the same shape if it is ever added; and no cap phrasings need listing.
+  - **Q (please confirm):** does PREVAILING_NOTE reach every surface that shows the figure (Benefits pays line, chat answer, claim estimate)? A share of a possibly reduced amount shown without the note overstates it after an earlier claim.
+  - **Old (main 4103e10, inference, not checked downstream):** "10% of Sum Insured, up to S$25,000", "…subject to S$25,000" and "…not exceeding S$25,000" read as plain 10% on main. Check whether the printed-cap condition path applies the cap at claim time. If it does not, this is an open wrong-amount defect.
