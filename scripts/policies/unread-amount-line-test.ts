@@ -12,15 +12,19 @@ globalThis.fetch = (async () => { throw new Error("no network in this test"); })
 
 test("a passage with no figure is described in words; one with a figure could not be read; no passage could not be read", async () => {
   const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
-  for (const q of ["The life insured will be covered for death and terminal illness.", "Get one lump sum payment of the coverage amount upon diagnosis of any of the critical illnesses",
-    "You may choose to either fully or partially cash-in the policy."])
+  for (const q of ["The life insured will be covered for death and terminal illness.", "You may choose to either fully or partially cash-in the policy.",
+    "Covers death or terminal illness occurring within the first month of the policy."])
     assert.equal(unreadAmountLine(49, q), "The passage on page 49 describes this in words, with no amount in it.", q);
   assert.equal(unreadAmountLine(null, "The life insured will be covered for death."), "The passage on the page describes this in words, with no amount in it.");
   for (const q of ["Example Fund 0.85% p.a.", "Benefit $100,000.00 21 Sep 2020", "covered for 10 early critical illnesses", "", "   ", null, undefined,
     // An amount stated without an ASCII digit (TE pr206).
     "ten thousand dollars", "One hundred percent of the sum assured", "fifty per cent", "twenty-five dollars", "five hundred pounds sterling",
     "S$ five hundred", "SGD five thousand", "RM lima ratus", "£ (amount shown in the schedule)", "一万元", "S$５００",
-    "Double the sum assured", "Half of the sum insured", "Twice the daily benefit"])
+    "Double the sum assured", "Half of the sum insured", "Twice the daily benefit",
+    // A fraction in words, an amount printed elsewhere, or a quote cut at its stored length (Critic R400).
+    "a tenth of the benefit", "one twenty-fourth of the benefit", "satu perlima manfaat", "A sum equal to the Sum Assured as shown in the Policy Schedule",
+    "The full Sum Insured is payable", "the benefit amount stated in the schedule", "an amount equal to the annual premium", "the cash value of the policy",
+    "Get one lump sum payment of the coverage amount upon diagnosis", "subject to the overall limit", "x".repeat(255), "We pay this benefit ".repeat(13)])
     assert.equal(unreadAmountLine(13, q), "The amount on page 13 could not be read.", String(q));
 });
 
