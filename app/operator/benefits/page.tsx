@@ -18,6 +18,8 @@ import { useEffect,useMemo,useState } from "react";
  * re-read of that document. */
 type Benefit={
   id:string;policyId:string;productName:string|null;benefitName:string;traits:string[];
+  /** Added after a name cut at its stored length: ")" or "…" (lib/policies/cut-name). */
+  nameSuffix?:string;
   formulaKind:"none"|"sum_insured"|"fixed"|"expense_cap"|"daily";formulaValue:number|null;
   currency:string|null;factKey:string|null;offsetDays:number|null;maximumDays:number|null;
   pays:string;sourcePage:number|null;quote:string;conditions:string[];
@@ -302,7 +304,7 @@ export default function OperatorBenefitExtractionPage(){
             <tbody>
               {rows.map(benefit=><tr key={benefit.id} className={benefit.attention==="confirm"?"needs-review":""}>
                 <td>{benefit.owners.length?benefit.owners.join(", "):<em>unclaimed</em>}</td>
-                <td><strong>{benefit.benefitName}</strong>{benefit.attention==="confirm"&&<span className="schedule-flag">confirm this</span>}{benefit.reviewedAt&&<span className="schedule-flag checked">you confirmed this</span>}</td>
+                <td><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.attention==="confirm"&&<span className="schedule-flag">confirm this</span>}{benefit.reviewedAt&&<span className="schedule-flag checked">you confirmed this</span>}</td>
                 <td className={benefit.formulaKind==="none"||benefit.needsConfirmation?"muted-cell":"pays-cell"}>{benefit.pays}{benefit.needsConfirmation&&<small className="pays-unconfirmed">read from the table heading — not used until you confirm it</small>}
                   {benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.map((c,i)=><small key={i} className={c.amount?"pays-basis":"pays-unconfirmed"}>{c.amount?`${c.owner}: ${c.amount} (${c.plan})`:`${c.owner}: no sum insured on file for this plan — set the product name to match the certificate`}</small>)}</td>
                 <td>{benefit.sourcePage??"—"}</td>

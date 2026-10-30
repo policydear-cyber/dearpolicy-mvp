@@ -10,6 +10,7 @@ import { documentName,loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
+import { cutNameSuffix } from "@/lib/policies/cut-name";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
@@ -182,6 +183,8 @@ export async function GET(request:NextRequest){
         // The column of a multi-column table: the plan tier or person class.
         tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
+        // What the page adds after a name cut at its stored length: ")" or "…" (lib/policies/cut-name).
+        nameSuffix:cutNameSuffix(row.benefit_name,row.quote),
         conditions:stub.conditions,planColumns,planFigure,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
