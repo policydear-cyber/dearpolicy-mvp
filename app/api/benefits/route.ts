@@ -146,11 +146,11 @@ export async function GET(request:NextRequest){
         }
       }catch(error){console.warn("Benefit table unavailable for Benefits:",error instanceof Error?error.message:error);}
     }
-    // Whether no other stored row of the same page prints the same run of plan cells (planColumnFigure). Every row of
-    // the document counts, kept or not, so a hidden neighbour still blocks.
+    // Whether no other stored row of the same page prints the same run of plan cells (planColumnFigure), alone or beside
+    // another run (Critic R389 L1). Every row of the document counts, kept or not, so a hidden neighbour still blocks.
     const runIsUnique=(row:Row)=>{
       const run=planCellRun(row.quote);
-      return run!=null&&rows.rows.filter(r=>r.policy_id===row.policy_id&&r.source_page===row.source_page&&planCellRun(r.quote)===run).length===1;
+      return run!=null&&rows.rows.filter(r=>r.policy_id===row.policy_id&&r.source_page===row.source_page&&String(r.quote??"").replace(/\s+/g," ").includes(run)).length===1;
     };
     const benefits=usableRows.map(row=>{
       const stub=resolved.get(row.id)!;
@@ -166,7 +166,7 @@ export async function GET(request:NextRequest){
       const planColumns=stub.conditions.includes(PLAN_COLUMNS_NOTE);
       const planFigure=planColumns?(()=>{
         const people=member?[member]:holders.get(row.policy_id)??[];
-        const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote},planReadings.get(id)??[],
+        const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote,benefitName:row.benefit_name},planReadings.get(id)??[],
           {runIsUnique:runIsUnique(row)}));
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;

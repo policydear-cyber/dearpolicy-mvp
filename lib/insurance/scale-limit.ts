@@ -311,7 +311,7 @@ export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[
  * A reading may quote only the row's cells ("S$500,000  S$750,000  S$1,000,000") with the row's words read as its
  * benefit name instead. Such a reading is taken only when the run of cells is the page's alone on both sides: no other
  * stored row of the page prints the same cells (the caller says so with runIsUnique), and every reading of the page that
- * prints them quotes nothing but the cells and names one benefit. Any reading that prints them with other words gives
+ * prints them quotes nothing but the cells and names one benefit, whose name shares a naming word with the row's. Any reading that prints them with other words gives
  * none, as above. */
 export type PlanColumnReading={documentId:string;page:number;excerpt:string;column:string|null;qualifier:string|null;
   figure:{kind:string;amount?:number;currency?:string|null};figureText:string;benefit?:string};
@@ -323,7 +323,11 @@ export function planCellRun(quote:string|null|undefined):string|null{
   const runs=spaced(String(quote??"")).match(PLAN_ROW)??[];
   return runs.length===1?runs[0]:null;
 }
-export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null},readings:PlanColumnReading[],
+/** Words that name no particular benefit: two benefits of one travel table share them ("… while on your trip"). */
+const GENERIC_WORD=/^(?:with|from|that|this|will|your|while|trips?|travel(?:l?ing)?|overseas|abroad|journey|during|benefits?|cover(?:ed|age)?|insured|insurance|policy|plan|persons?|people|others?|each|also|have|been|under|upon|after|before|which|where|when|such|what|them|they|their|there|into|only|more|than|made|make|paid|pays|payable|amounts?|maximum|limits?|items?)$/;
+/** The first four letters of each word that names something ("liable" and "liability" share "liab"). */
+const nameStems=(text:string)=>new Set((text.toLowerCase().match(/[a-z]{4,}/g)??[]).filter(w=>!GENERIC_WORD.test(w)).map(w=>w.slice(0,4)));
+export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
   o:{runIsUnique?:boolean}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
   const runs=quote.match(PLAN_ROW)??[];
@@ -346,7 +350,11 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
     const printing=onPage.filter(r=>spaced(r.excerpt).includes(run));
     const cellsOnly=printing.every(r=>spaced(r.excerpt)===run);
     const names=new Set(printing.map(r=>spaced(r.benefit??"")));
-    if(cellsOnly&&names.size===1&&!names.has(""))found=printing;
+    // The reading's benefit must be this row's: its name shares a naming word with the row's name or words, so a
+    // reading of another benefit whose row was not stored never lends its cells (TE pr200 G6, Critic R389 L1).
+    const own=nameStems((row.benefitName??"")+" "+quote.slice(0,quote.indexOf(run)));
+    const ours=[...names].every(n=>[...nameStems(n)].some(w=>own.has(w)));
+    if(cellsOnly&&names.size===1&&!names.has("")&&ours)found=printing;
   }
   if(!found.length)return null;
   const picks=new Set(found.map(r=>{

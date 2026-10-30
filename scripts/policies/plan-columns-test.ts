@@ -116,6 +116,8 @@ test("a reading that quotes only the row's cells gives the plan's figure only wh
   assert.deepEqual(planColumnFigure(at, [cells(), cells()], one), { plan: "Gold", figureText: "up to S$750,000" });
   // Another stored row of the page prints the same cells: none.
   assert.equal(planColumnFigure(at, [cells()], { runIsUnique: false }), null);
+  // The row's stored name counts as its words too.
+  assert.deepEqual(planColumnFigure({ ...at, quote: "Cover S$500,000 S$750,000 S$1,000,000", benefitName: "Personal liability" }, [cells()], one), { plan: "Gold", figureText: "up to S$750,000" });
   assert.equal(planColumnFigure(at, [cells()]), null);
   for (const [why, readings] of [
     // Two benefits read with these cells, or one reading that prints them with other words: whose cells they are is unsure.
@@ -128,6 +130,9 @@ test("a reading that quotes only the row's cells gives the plan's figure only wh
     ["qualified", [cells({ qualifier: "per family" })]],
     ["not a cell", [cells({ amount: 800000 })]],
     ["no column", [cells({ column: null })]],
+    // A reading of another benefit, whose own row was not stored, never lends its cells (TE pr200 G6, Critic R389 L1).
+    ["another benefit", [cells({ benefit: "Loss of passport while on your trip" })]],
+    ["another benefit's legal costs", [cells({ benefit: "Legal expenses" })]],
   ] as [string, ReturnType<typeof cells>[]][])
     assert.equal(planColumnFigure(at, readings, one), null, why);
   // A row with no words before its cells still gives none.
