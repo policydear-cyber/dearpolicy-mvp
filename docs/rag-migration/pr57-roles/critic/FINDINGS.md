@@ -9632,3 +9632,34 @@ What was asked:
 
 Low (not blocking):
 - L1 `components/benefit-table-coverage.tsx:43`: when the premium line and its page state no currency, check.ts sets premiumCurrency to null, and `money(x, null)` (`lib/benefit-table/headline.ts:109`) prints a bare "$". The test calls this "no currency is claimed" (`coverage-premium-test.ts:27`), but "$" reads as a dollar currency. It also changes a cover whose sum line says S$: main printed "S$73.17", this head prints "$73.17". Home leaves such a premium out as unclear. Fix: when the resolved currency is null, print the figure with "(currency not stated)", as `app/coverage/page.tsx:12` does, and assert that in the test.
+
+## R375: #195 head 1ad2f3be (round 5, cover-anchored age frames): CHANGES
+
+Gate (base f58a289d, network blocked, model keys stripped): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R373 M1 is fixed. My six juvenile rows withhold, and the bare until/up to/before/starts-from frames are gone. Probe (adult Death, item S$900,000; scratch script, outside git) at this head and on main f58a289d:
+
+| Wording | This head | Main |
+|---|---|---|
+| "Death benefit for insured persons aged 65 to 99 is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit for lives assured aged 70 to 100 is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is limited to S$50,000 for those aged 66-99" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is payable up to age 65 in full; thereafter it is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit continues to age 70 and is then limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Entry age 60 to 70: death benefit is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is payable in full until age 70, after which it is limited to S$50,000" | withhold | reduce |
+| "Death benefit is limited to S$500,000; cover ends at age 85" / "(entry age 18 to 65)" / "payable until the insured attains age 85" | reduce 500,000 (correct) | same |
+
+None of these is a regression against main. They are, however, the cases this PR's narrowing is meant to catch, and each one cuts an adult's S$900,000 Death figure to S$50,000 (wrong claimable amount).
+
+- M1 `lib/insurance/cover-conditions.ts` WHOLE_COVER_AGES, the `aged ADULT to 60+` and `entry age N to 60+` frames: an elderly band ("aged 65 to 99", "aged 70 to 100", "aged 66-99", "Entry age 60 to 70") is a group, not everyone. Fix: strip a range only when it starts at a usual joining age (lower bound 0-21, say) AND is introduced by entry/issue/joining wording ("entry age", "issue age", "eligible ... aged", "may join"). A bare "aged X to Y" after a person word narrows.
+- M2 same regex, the COVER_RUNS frames: a duration frame followed by a sequence word ("thereafter", "then", "after which", "afterwards", "from then on", "beyond", "past") means the limit applies only after that age. Today the frame is stripped and the cap applies to everyone. Fix: do not strip a COVER_RUNS frame when the sentence also has one of those words (withhold), and include "If the policy continues until the insured turns 70" (a conditional "if ... continues/runs") in the same rule.
+- Add all 7 reduce rows above to printed-cap-test as withhold, keeping the three S$500,000 rows as reduce.
+
+## R376: #198 head 254fbac3 (R374 L1 applied): READY
+
+Gate (base f58a289d): coverage-premium-test 6/6, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. L1 is fixed: a null premium currency prints "73.17 (currency not stated)" and the test asserts there is no "Premium $".
+
+Low (not blocking):
+- L2 `components/benefit-table-coverage.tsx:45`: `Number(cover.premium).toLocaleString()` uses the viewer's locale. This is a client component, so a German browser shows "73,17" and the server render may differ (hydration warning), while `money()` pins "en-US" with 2 decimals. Fix: `toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2})`, the same as `headline.ts:109`.
