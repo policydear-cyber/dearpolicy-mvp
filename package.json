@@ -155,6 +155,7 @@
     "claims:indicative-estimate-test": "node --import tsx scripts/indicative-estimate-regressions.ts",
     "claims:fact-finding-test": "node --import tsx scripts/fact-finding-regressions.ts",
     "claims:injury-facts-test": "node --import tsx scripts/chat-injury-facts-regressions.ts",
+    "policies:plan-columns-test": "node --import tsx scripts/policies/plan-columns-test.ts",
     "claims:injury-compatibility-test": "node --import tsx scripts/injury-compatibility-regressions.ts",
     "claims:injury-sequencing-test": "node --import tsx scripts/injury-chat-sequencing-regressions.ts",
     "claims:injury-adversarial-test": "node --import tsx scripts/injury-chat-adversarial-regressions.ts",
