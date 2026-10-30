@@ -40,6 +40,13 @@ test("a share of the prevailing or current insured amount is a sum-insured rule 
   assert.equal(v("100% of Prevailing Insured Amount", 1), "sum_insured");
   assert.equal(v("10% of Prevailing Insured Amount, up to maximum S$25,000", 0.1), "none");
   assert.equal(v("100% of Prevailing Insured Amount", 0.5), "none");
+  // Only "label: N% of [the] prevailing insured amount" stands; any other wording after it, or a second share, is no rule.
+  for (const tail of [", but no more than 25,000 in total", ", payable once in the lifetime of the policy", " for each child", " of the rider",
+    ", tertakluk kepada RM25,000", "; 5% if the policy is under 1 year old", ". The total of all claims is twenty five thousand dollars."])
+    assert.equal(v("Angioplasty: 10% of Prevailing Insured Amount" + tail, 0.1), "none", tail);
+  assert.equal(v("Angioplasty: 10% of 50% of Prevailing Insured Amount", 0.5), "none");
+  assert.equal(v("Angioplasty: 10% of 50% of Prevailing Insured Amount", 0.1), "none");
+  assert.equal(v("Major cancer: 100% of Prevailing Insured Amount (see Section 4)", 1), "sum_insured");
   const stored = repairStoredRules([row("x", "Major cancer", "100% of Prevailing Insured Amount", { formulaKind: "sum_insured", formulaValue: 1 })] as never)[0];
   assert.ok(stored.conditions.includes(PREVAILING_NOTE));
 });

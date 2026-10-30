@@ -691,12 +691,15 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
 const INSURED_AMOUNT="(?:sum\\s+(?:insured|assured)|coverage\\s+amount|sum\\s+covered|insured\\s+amount)";
 /** "Prevailing Insured Amount", "current sum assured": the insured amount as it stands when the claim is made, which an
  * earlier claim on the policy may have reduced (a critical illness plan pays 10% for angioplasty, then the rest). Read as
- * a share of the sum insured only when the quote states no cap the rule would need ("10% of Prevailing Insured Amount,
- * up to maximum" with the maximum cut off gives no rule), and shown with that note. */
+ * a share of the sum insured only when the quote says nothing else: a benefit label (no figure in it) and a colon or dash,
+ * then exactly "N% of [the] prevailing insured amount", then at most a full stop or a bracketed "see ..." reference. Any
+ * other word may bound the share (a cap, "once only", "for each child", "of the rider", a second share), and cap wording
+ * has too many forms to list, so anything else gives no rule (TE #209: each listed cap word leaked the next one). */
 const PREVAILING="(?:prevailing|current)\\s+";
 const PREVAILING_AMOUNT=new RegExp("\\b"+PREVAILING+INSURED_AMOUNT);
-// Anything that may bound the share: a cap, a ceiling, a choice of the lower, an amount taken off, or another figure.
-const CAP_WORDS=/\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:ed|s)?\b|\bcap(?:ped|s)?\b|\bsubject\s+to\b|\bexceed\w*|\bwhichever\b|\bceiling\b|\bat\s+most\b|\bless\b|\bminus\b|\bdeduct\w*|\breduc\w*|\bafter\s+(?:any|the)\b|(?:s\$|sgd|usd|us\$|rm|£|\$)\s*\d/;
+const PREVAILING_SHARE_ONLY=new RegExp("^(?:[^\\d%$£€:]*[:–—-]\\s*)?\\d+(?:\\.\\d+)?\\s*%\\s*of\\s+(?:the\\s+)?"
+  +PREVAILING+INSURED_AMOUNT+"\\s*(?:\\(see\\b[^()]*\\))?\\s*[.;]?$");
+const prevailingNotProved=(text:string)=>PREVAILING_AMOUNT.test(text)&&!PREVAILING_SHARE_ONLY.test(text);
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
 const WORD_FRACTIONS=[
   {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
@@ -724,7 +727,7 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
     const read=validateCatalogFormula(input);
     return read.formulaKind==="none"?null:read;
   };
-  if(PREVAILING_AMOUNT.test(text)&&CAP_WORDS.test(text))return null;
+  if(prevailingNotProved(text))return null;
   const percentage=text.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
   if(percentage)return propose({kind:"sum_insured",value:Number(percentage)/100,currency:benefit.currency,
     quote,factKey:null,offsetDays:null,maximumDays:null});
@@ -777,7 +780,7 @@ export function validateCatalogFormula(input:{
   const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
     if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
-    if(PREVAILING_AMOUNT.test(quote)&&CAP_WORDS.test(quote))return none;
+    if(prevailingNotProved(quote))return none;
     const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
     const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);
     // "One twelfth of Sum Insured" is a rule stated in words. It is as provable
