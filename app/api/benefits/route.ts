@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
+import { nameWithoutPlanCell } from "@/lib/insurance/scale-limit";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -174,7 +175,7 @@ export async function GET(request:NextRequest){
         productName:row.product_name??row.document_product,
         // For a "% of Sum Insured" rule: whose sum insured, from which plan.
         calculatedAgainst,
-        benefitName:row.benefit_name,
+        benefitName:nameWithoutPlanCell(row.benefit_name,row.quote),
         traits:Array.isArray(row.traits)?row.traits:[],
         ...formula,
         // The whole point of the screen: the rule as a sentence, not a schema.

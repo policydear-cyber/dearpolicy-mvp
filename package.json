@@ -158,6 +158,7 @@
     "claims:fact-finding-test": "node --import tsx scripts/fact-finding-regressions.ts",
     "claims:injury-facts-test": "node --import tsx scripts/chat-injury-facts-regressions.ts",
     "policies:plan-columns-test": "node --import tsx scripts/policies/plan-columns-test.ts",
+    "policies:plan-cell-name-test": "node --import tsx scripts/policies/plan-cell-name-test.ts",
     "claims:injury-compatibility-test": "node --import tsx scripts/injury-compatibility-regressions.ts",
     "claims:injury-sequencing-test": "node --import tsx scripts/injury-chat-sequencing-regressions.ts",
     "claims:injury-adversarial-test": "node --import tsx scripts/injury-chat-adversarial-regressions.ts",
