@@ -9547,3 +9547,9 @@ Fix: make it structural. Any age figure ("age(s)? \d+", "\d+ years? (old|of age)
 - Cause: otherKind looks only at kinds the benefit lacks, and the subject-subset step (`subject.every(w=>own.has(w))`) returns "this" when the sentence names a strict subset of the benefit's kinds.
 - Fix: when the sentence's kinds are a strict subset of the benefit's kinds (said ⊂ mine, said ≠ mine), return unknown before the subset and productName steps.
 - Add all 9 rows above to printed-cap-test as withhold.
+
+## R368: #196 0f08671d, READY
+- Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+- The change can only move a row from "sum and premium" (figure taken) to "plan columns" (figure held). So it can hide a figure, never show a wrong one.
+- On the question asked: a run that prints the premium before the sum ("S$1,234.56 S$100,000", from an "Annual Premium | Sum Assured" column order) is now held as plan columns, where before it was taken as a pair. Main also had a risk on such a row: it could take the first figure, the premium, as the amount. Holding it is the safer side.
+- Low: a premium-first schedule loses that row's sum assured, with the plan-columns note shown. I know of no stored row in that order, and labels between the cells break the run anyway.
