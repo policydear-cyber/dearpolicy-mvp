@@ -9691,3 +9691,19 @@ All R375 and R377 rows now withhold. The S$500,000 rows still reduce: "cover end
 ## R379: #198 head 970c626e (R376 L2 applied): READY
 
 Gate (base f58a289d): coverage-premium-test 7/7, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. The bare figure now goes through `plainFigure` (en-US, 2 decimals), and the test checks that 1234.5 prints as 1,234.50.
+
+## R380: #195 head 7465b239 (frame after the figure): CHANGES (one Medium, one Low)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R378 rows withhold. Still correct: "limited to S$500,000; cover ends at age 85", "limited to S$500,000 (the policy expires on the 85th birthday)" and "(issue age 0 to 65)" reduce to S$500,000. A frame before the limit ("Cover ends at age 85. Death benefit ...") now withholds, which is the safe side.
+
+Adult Death, item S$900,000, limit amount S$50,000 (scratch probe, outside git):
+- M1 `lib/insurance/cover-conditions.ts`, the "after the first figure / inside brackets" test: it anchors to the wrong thing.
+  - "The sum assured is S$900,000 and the policy continues to age 70. Subsequently the death benefit is limited to S$50,000": reduce 50,000. The first figure is the sum assured, not the limit.
+  - "Minimum premium S$100 applies; cover runs to age 85, with the death benefit limited to S$50,000 later on": reduce 50,000. The first figure is a premium.
+  - "(The policy continues to age 70.) Subsequently the death benefit is limited to S$50,000": reduce 50,000. A bracket before the limit.
+  - "Death benefit (cover runs to age 85; reduced in later years) is limited to S$50,000": reduce 50,000.
+  Fix: anchor to the limit's own amount (the condition's `amount` as printed in the quote), not the first currency figure. Set a frame aside only when it starts after that figure, in brackets or not. A frame before it, bracketed or not, stays in and withholds.
+- L1 (accept or close): "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85": reduce 50,000. The frame does come after the figure, but the time phrase sits in the limit's clause. A closed rule would set the frame aside only when the words between the figure and the frame are an allow-listed join (";", ".", ",", "and", "and the", "while the", or a closing bracket). With anything else in between, the frame stays in.
+- Add these 5 rows to printed-cap-test as withhold.
