@@ -249,8 +249,10 @@ const KINDS:[string,string,RegExp][]=[
   ["early ci","ci",/\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness(?:es)?|ci)\b/giu],
   ["ci","ci",/\bcritical\s+illness(?:es)?\b|\bci\b|\bdread\s+diseases?\b/giu],
   ["tpd","tpd",/\btpd\b|\btotal\s+(?:(?:and|&)\s+)?permanent\s+disab\w*|\bpermanent\s+total\s+disab\w*/giu],
-  ["accidental death","death",/\baccident\w*\s+death\b|\bdeath\s+(?:due\s+to|by|from|caused\s+by)\s+(?:an?\s+)?accident\w*/giu],
+  ["accidental death","death",/\baccident\w*\s+death\b|\bdeath\s+(?:benefits?\s+)?(?:due\s+to|by|from|caused\s+by)\s+(?:an?\s+)?accident\w*/giu],
   ["death","death",/\bdeath\b|\bkematian\b/giu],
+  // Any other disablement ("Accidental Death and Disablement", "permanent disability"): paid apart from death.
+  ["disablement","tpd",/\bdisab(?:lement|ility|led)\b/giu],
   ["icu cash","cash hospital",/\b(?:icu|intensive\s+care(?:\s+unit)?)\s+(?:cash|income|allowance)\b/giu],
   ["hospital cash","cash",/\b(?:hospital(?:isation|ization)?|daily)\s+(?:cash|income|allowance)\b|\belaun(?:\s+tunai)?\s+hospital(?:\s+harian)?\b|\bhospital\s+income\b/giu],
   ["icu","hospital",/\b(?:hospital\s+)?(?:icu|intensive\s+care(?:\s+unit)?)\b/giu],
@@ -271,6 +273,19 @@ function kindsIn(text:string){
   const kinds=readKinds(text);
   kindsMemo.set(text,kinds);
   return kinds;
+}
+/** The kind a text names first; on a tie, the narrower (earlier listed) kind. */
+function firstKind(text:string):string|null{
+  const lower=" "+text.toLowerCase()+" ";
+  let best:string|null=null,at=Infinity;
+  for(const kind of kindsIn(text).keys()){
+    const re=KINDS.find(([k])=>k===kind)![2];
+    re.lastIndex=0;
+    const m=re.exec(lower);
+    re.lastIndex=0;
+    if(m&&m.index<at){at=m.index;best=kind;}
+  }
+  return best;
 }
 function readKinds(text:string){
   let rest=" "+text.toLowerCase()+" ";
@@ -293,6 +308,73 @@ const separateFrom=(mine:string[],said:string[])=>mine.length>0&&said.length>0&&
 const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|overall|combined|together|aggregate|semua)\b/iu;
 /** The same for a plan total, whose sentence says "overall" or "in total" anyway. */
 const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
+/** Words anywhere in a limit's sentence that narrow it to some insured people ("Death benefit for children under age 5 is
+ * limited to S$20,000", "for insured persons aged 70 and above", "Death benefit is limited to S$50,000 for children under
+ * 5"). Default-safe (TE #195 r3): any age wording or person-group word narrows, unless it sits in a frame known to apply
+ * to everyone: the adult age the cover itself ends or runs to ("cover ends at age 85", "payable until the insured attains
+ * age 85", "expires on the 85th birthday", "payable up to age 99"), the ages it may be joined at ("Entry age 18 to 65",
+ * "aged 18 to 70"), or a plan's own name ("Senior Protect Plan"). A wording this does not know, or a child's age in any
+ * frame, withholds the figure and never cuts it. A benefit whose own name narrows the same way may still be
+ * cut (TE #195 F2, G1, G2; Critic R367 M1). */
+const AGE_N=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
+const UNIT_WORD=String.raw`(?:one|two|three|four|five|six|seven|eight|nine)`;
+/** A number a person's age could be, 0 to 120, in digits or words ("seventy", "sixty-five", "one hundred and five"). */
+const AGE_UPTO_120=String.raw`(?:1[01]\d|120|\d{1,2}(?!\d)|(?:one\s+)?hundred(?:\s+(?:and\s+)?(?:${UNIT_WORD}|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty))?|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[-\s]${UNIT_WORD})?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|${UNIT_WORD})`;
+const PEOPLE=String.raw`(?:persons?|people|insureds?|lives?\s+(?:insured|assured)|members?|adults?|individuals?|those)`;
+const AGE_SIGNAL=new RegExp([
+  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|teen(?:ager)?s?|elderly|seniors?|students?|pensioners?)\b`,
+  String.raw`\bage[sd]?\b`, String.raw`\bbirthdays?\b`, String.raw`\b(?:younger|older)\s+than\b`,
+  String.raw`\b\d+\s*(?:years?|yrs?)[\s-]+(?:old|of\s+age)\b`,
+  String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_N}\b`, String.raw`\b${PEOPLE}\s+${AGE_N}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
+  // Any noun ("lives over 70", "anyone over 70", "customers above seventy"): a comparator and a number a person could be
+  // is an age (Critic R381 M1, R383 M1), unless a unit or a counted noun that is not a person's age follows ("over 30
+  // days", "over 10 people", "above 3 operations"); a figure over 120 ("bills over 1000") is an amount (TE #195 r11).
+  String.raw`\b(?:under|below|over|above)\s+${AGE_UPTO_120}\b(?!\s*(?:%|percent|per\s*cent|days?|weeks?|months?|hours?|nights?|km|kilometres?|kilometers?|miles?|times?|claims?|visits?|sessions?|treatments?|kg|people|persons|operations?|procedures?|surger(?:y|ies)|items?|members|dollars?|cents?)\b|\s*%)`,
+  String.raw`\b(?:over|under)[-\s]?\d{1,3}s\b`,
+  String.raw`\b(?:turns|reaches|attains)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}\b`, String.raw`\b(?:berumur|umur)\b`,
+].join("|"),"iu");
+// An adult's age (18 or more): a child's age is always a group's, never the age a whole cover ends at (TE #195 J1).
+const ADULT_AGE=String.raw`(?:1[89]|[2-9]\d|1\d\d)`;
+const COVER_RUNS=String.raw`(?:ends?|ending|expires?|expiring|terminates?|ceases?|matures?|lapses?|(?:is\s+)?renewable|runs|continues|(?:is\s+)?payable)`;
+// The cover itself as the subject: "this limit ends at age 18" or "the benefit is payable up to age 21" may be the limit's
+// own span, so only the cover, policy, plan, contract or insurance ends a whole cover (TE #195 K1).
+const COVER_ENDS=String.raw`\b(?:cover(?:age)?|polic(?:y|ies)|plan|contract|insurance)\s+(?:(?:is|will|shall)\s+(?:be\s+)?)?${COVER_RUNS}`;
+const WHOLE_COVER_AGES=new RegExp([
+  // The age the cover itself ends or runs to: the cover, a duration verb, then the adult age (Critic R373 M1). A bare
+  // "until age 16", "up to age 5", "before age 65" or "starts from age 70" is not anchored to the cover and narrows.
+  String.raw`${COVER_ENDS}\s+(?:(?:at|on|until|till|up\s+to|to)\s+)(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${ADULT_AGE}\b|${ADULT_AGE}(?:st|nd|rd|th)\s+birthday)`,
+  String.raw`${COVER_ENDS}\s+(?:until|till|when|once)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${ADULT_AGE}\b`,
+  // The ages it may be joined at, from a joining age to a usual entry age ("Entry age 18 to 65"). A bare "aged 65 to 99"
+  // or "entry age 60 to 70" may be an elderly band and narrows (Critic R375 M1).
+  String.raw`\b(?:entry|issue|joining)\s+ages?\s*(?:of|is|:|from)?\s*(?:\d|1\d|2[01])\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
+].join("|"),"giu");
+// A cover-end frame inside a sequence or a condition ("payable up to age 65 in full; thereafter ...", "if the policy
+// continues until ...") may start the limit, so no frame is set aside (Critic R375 M2).
+const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|where|while|once)\b/iu;
+/** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
+const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
+/** The words a limit's figure may be joined to a whole-cover frame by: a stop, a comma, "and", "the" or a bracket. */
+const FRAME_JOIN=/^\s*(?:[,;.()]\s*)*(?:and\s+)?(?:\(\s*)?(?:the\s+|this\s+|its\s+)?$/iu;
+/**
+ * Whether a text names a narrower group by age. In a limit's quote a cover-end frame is set aside only when it follows
+ * the limit's own printed amount, joined to it by a stop, a comma or "and" ("limited to S$500,000; cover ends at age 85").
+ * A frame before that amount, or after other words, may set the span the limit applies in ("The sum assured is
+ * S$900,000 and the policy continues to age 70. Subsequently ... limited to S$50,000"), so its age stays in (Critic
+ * R378 M1, R380 M1/L1). An entry age range, and any frame in a benefit's own name, is set aside.
+ */
+/** How long a policy has been held ("in force under 2 years") or a sum is paid over ("paid over 10 years") is not an age. */
+const HELD_FOR=/\b(?:(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|over|above|less\s+than|more\s+than)|(?:paid|payable|spread)\s+(?:out\s+)?over)\s+\d+\s+(?:years?|months?)\b/giu;
+const narrows=(text:string,limit?:{amount:number|null})=>{
+  const named=text.replace(PLAN_NAMES," ").replace(HELD_FOR," ");
+  if(SEQUENCE.test(named))return AGE_SIGNAL.test(named);
+  const own=limit?figuresIn(named,false).find(f=>limit.amount!=null&&Math.abs(f.value-limit.amount)<=0.005):undefined;
+  return AGE_SIGNAL.test(named.replace(WHOLE_COVER_AGES,(frame:string,...rest:unknown[])=>{
+    const at=rest.find(v=>typeof v==="number") as number;
+    // An entry age range says who may join, never the span a limit runs in, so it is set aside wherever it stands.
+    if(/^(?:entry|issue|joining)\b/iu.test(frame)||!limit)return " ";
+    return own&&at>=own.end&&FRAME_JOIN.test(named.slice(own.end,at))?" ":frame;
+  }));
+};
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
@@ -301,28 +383,43 @@ const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|
  * benefit is limited to S$5,000" is no limit on the death benefit). Anything else is "unknown", and the figure above the
  * limit is not shown: a sentence that names nothing, a part of a plan ("Double Cover: subject to a limit"), a wider scope
  * ("all benefits", "this section"), a related kind ("Room and board" for "Hospitalisation"), or words no kind knows. */
-const limitReads=new WeakMap<object,{head:string;scoped:boolean;quote:string;subject:string[];part:boolean}>();
+const limitReads=new WeakMap<object,{head:string;scoped:boolean;narrow:boolean;quote:string;subject:string[];part:boolean}>();
 function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??"",condition),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
 }
 function limitIsFor(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
+  const whose=limitIsForKind(condition,item);
+  // A limit for some people only (children) is never proof for a benefit not named for them, wherever it is stored.
+  return whose==="this"&&limitRead(condition).narrow&&!narrows(benefitOf(item))?"unknown":whose;
+}
+function limitIsForKind(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
   const {head,scoped,quote,subject,part}=limitRead(condition);
   const benefit=phrase(benefitOf(item));
-  if(condition.productName&&phrase(condition.productName)===benefit)return "this";
+  const said=kindsIn(head),mine=kindsIn(benefitOf(item));
+  // A sentence whose subject (its first kind) is a narrower kind than the benefit ("Early Critical Illness benefit is
+  // limited to S$50,000" for "Critical Illness", "Accidental death benefit" for "Death benefit", "Surgery under the
+  // Hospitalisation benefit" for "Hospitalisation") is that kind's limit, even inside the benefit's name or stored under
+  // it. A kind named later is a cause or a part ("Death benefit, whether by illness or accidental death", "Hospitalisation
+  // benefit including surgery", TE #195 F1).
+  const first=firstKind(head);
+  const otherKind=mine.size>0&&first!=null&&!mine.has(first);
+  // A limit on one part of a benefit that pays for several ("TPD benefit is limited to S$50,000" for "Death or TPD",
+  // Critic R367 M2) is no limit on the whole.
+  if(said.size&&said.size<mine.size&&[...said.keys()].every(k=>mine.has(k)))return "unknown";
+  if(condition.productName&&phrase(condition.productName)===benefit&&!otherKind)return "this";
   if(scoped)return "unknown";
-  if(benefit.trim().length>=3&&quote.includes(benefit))return "this";
+  if(benefit.trim().length>=3&&quote.includes(benefit)&&!otherKind)return "this";
   // A sentence that names a part of the plan ("Double Cover: subject to a limit") names a cover, whose benefits it does
   // not say: unknown, as with no name at all.
   if(!subject.length||part)return "unknown";
   const own=new Set([...contentWords(benefitOf(item)),...[...benefitOf(item).matchAll(/\(([\p{L}]{2,6})\)/gu)].map(m=>m[1].toLowerCase())]);
   if(subject.every(w=>own.has(w)))return "this";
-  const said=kindsIn(head),mine=kindsIn(benefitOf(item));
   if(!said.size||!mine.size)return "unknown";
   if(said.size===mine.size&&[...said.keys()].every(k=>mine.has(k)))return "this";
   return separateFrom([...mine.values()].flat(),[...said.values()].flat())?"other":"unknown";

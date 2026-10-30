@@ -188,6 +188,105 @@ test("a limit clears a benefit only when its sentence names a benefit of another
   assert.notEqual(one("Hospital cash", 3000, "Maximum hospital stay: 30", 30, "Hospital cash"), 30);
 });
 
+test("a narrower kind's limit, or a limit for children only, never cuts a wider benefit or an adult's", async () => {
+  const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
+  const one = (title: string, amount: number, quote: string, cap: number, productName: string | null = null) => {
+    const it = [item("Ada · " + title, productName ?? "Example Plan", amount)];
+    applyCoverConditions({ items: it, facts: {} as never, conditions: [cond({ kind: "sub_limit", productName, amount: cap, quote })] });
+    return it[0].calculatedAmount;
+  };
+  // The benefit's name inside a narrower kind's sentence: the figure is hidden, never cut to the narrower limit.
+  for (const [title, quote] of [
+    ["Critical Illness", "Early Critical Illness benefit is limited to S$50,000"], ["Critical Illness", "Intermediate stage critical illness: up to S$50,000"],
+    ["Death benefit", "Accidental death benefit is limited to S$50,000"], ["Hospitalisation", "Surgery under the Hospitalisation benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for children under age 5 is limited to S$50,000"], ["Death", "Death of a child below the age of 10: maximum S$50,000"],
+    ["Death benefit", "For insured persons aged under 16, the death benefit is limited to S$50,000"], ["Death benefit", "Juvenile death benefit: up to S$50,000"],
+    // Ages and people in any wording, before or after the figure (Critic R367 M1, TE #195 F2).
+    ["Death benefit", "If death occurs before the insured attains age 16, the death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons aged 70 and above is limited to S$50,000"], ["Death benefit", "Death benefit after age 65: up to S$50,000"],
+    ["Death benefit", "Death benefit is limited to S$50,000 for children under 5"], ["Death benefit", "Death benefit for a stillborn baby is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons under 18 is limited to S$50,000"], ["Death", "Death below 16 years of age: up to S$50,000"],
+    ["Death benefit", "Death benefit before the insured's 17th birthday is limited to S$50,000"], ["Death benefit", "Death benefit caused by an accident is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons aged between 1 and 17 is limited to S$50,000"], ["Death benefit", "Death benefit for persons 70 and older is limited to S$50,000"],
+    ["Death benefit", "Death benefit for an insured aged five or younger is limited to S$50,000"], ["Death benefit", "Death benefit for teenagers is limited to S$50,000"],
+    // Default-safe: any age wording outside a whole-cover frame narrows (TE #195 r3 Y1, Y2, Y8).
+    ["Death benefit", "Death benefit for an insured aged 6 months to 5 years is limited to S$50,000"], ["Death benefit", "Death benefit between ages 1 and 17 is limited to S$50,000"],
+    ["Death benefit", "Death benefit for an insured younger than 18 is limited to S$50,000"],
+    // Only a frame tied to the cover's own end, at an adult age, is whole-cover; bare until/before/from frames narrow (Critic R373 M1, TE #195 r4 J1/J2).
+    ["Total and permanent disability", "TPD benefit is limited to S$50,000 before age 65."], ["Death benefit", "Death benefit is limited to S$50,000; cover starts from age 1."],
+    ["Death benefit", "Until the insured attains age 16, the death benefit is limited to S$50,000"], ["Death benefit", "Till the life assured reaches age 17, death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons up to age 16 is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 to age 16, then S$500,000"],
+    ["Death benefit", "The death benefit is limited to S$50,000 if death occurs before age 16"], ["Death benefit", "Reduced death benefit starts from age 70: limited to S$50,000"],
+    ["Death benefit", "Death benefit before age 5 is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000 up to age 5 and S$500,000 thereafter."],
+    ["Death benefit", "Death benefit until the insured turns 6 is limited to S$50,000."], ["Death benefit", "Death benefit for insured persons aged 18 to 25 is limited to S$50,000."],
+    ["Death benefit", "The death benefit is limited to £50,000 until the 4th birthday."],
+    // An end frame whose subject may be the limit, not the cover, narrows (TE #195 r5 K1).
+    ["Death benefit", "The death benefit is limited to S$50,000 and this limit ends at age 18."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
+    ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit: the reduced amount ends at age 21 and is limited to S$50,000."],
+    ["Total and permanent disability", "TPD benefit is limited to S$50,000 and ends when the insured reaches age 70."],
+    // An elderly band, or a cover-end frame in a sequence or condition, narrows (Critic R375 M1/M2).
+    ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
+    ["Death benefit", "Death benefit for insured persons aged 65 to 99 is limited to S$50,000"], ["Death benefit", "Death benefit for lives assured aged 70 to 100 is limited to S$50,000"],
+    ["Death benefit", "Death benefit is limited to S$50,000 for those aged 66-99"], ["Death benefit", "Entry age 60 to 70: death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit is payable up to age 65 in full; thereafter it is limited to S$50,000"],
+    ["Death benefit", "Death benefit continues to age 70 and is then limited to S$50,000"],
+    ["Death benefit", "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons aged 18 to 60 is limited to S$50,000"],
+    ["Death benefit", "The policy continues to age 70; thereafter the death benefit is limited to S$50,000"],
+    ["Death benefit", "Cover is renewable to age 85, after which the death benefit is limited to S$50,000"],
+    ["Death benefit", "Where the policy runs to age 80, the death benefit is limited to S$50,000"],
+    // A cover-end frame before the limit's figure may open the span the limit applies in (Critic R378 M1).
+    ["Death benefit", "The policy continues to age 70. Subsequently the death benefit is limited to S$50,000"],
+    ["Death benefit", "Cover runs to age 85, with the death benefit limited to S$50,000 later on"],
+    ["Death benefit", "The policy continues to age 70. From that point the death benefit is limited to S$50,000"],
+    // Anchored to the limit's own amount, joined by a stop, comma or "and" only (Critic R380 M1/L1).
+    ["Death benefit", "The sum assured is S$900,000 and the policy continues to age 70. Subsequently the death benefit is limited to S$50,000"],
+    ["Death benefit", "Minimum premium S$100 applies; cover runs to age 85, with the death benefit limited to S$50,000 later on"],
+    ["Death benefit", "(The policy continues to age 70.) Subsequently the death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit (cover runs to age 85; reduced in later years) is limited to S$50,000"],
+    ["Death benefit", "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85"],
+    // Any noun before a comparator and an age (Critic R381 M1).
+    ["Death benefit", "Death benefit for lives over 70 is limited to S$50,000"], ["Death benefit", "Death benefit for policyholders over 70 is limited to S$50,000"],
+    ["Death benefit", "Death benefit for anyone over 70 is limited to S$50,000"],
+    ["Death benefit", "Lives over 70 have their death benefit limited to S$50,000"], ["Death benefit", "Policyholders over 70 get a death benefit limited to S$50,000"],
+    ["Death benefit", "Death benefit for anyone over 70 when they die is limited to S$50,000"], ["Death benefit", "Death benefit for persons over seventy is limited to S$50,000"],
+    ["Death benefit", "Death benefit for persons over sixty-five is limited to S$50,000"], ["Death benefit", "For the over-70s the death benefit is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 for customers above 70"],
+    ["Death benefit", "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"],
+    // A limit on one part of a benefit that pays for several (Critic R367 M2).
+    ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
+    ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
+  ] as [string, string][]) {
+    assert.equal(one(title, 500000, quote, 50000), undefined, `${title}: ${quote}`);
+    assert.equal(one(title, 500000, quote, 50000, title), undefined, `${title} (stored under it): ${quote}`);
+  }
+  // The narrower benefit itself, or one named for children, is still cut by its own limit.
+  assert.equal(one("Early Critical Illness", 100000, "Early Critical Illness benefit is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Accidental death benefit", 100000, "Accidental death benefit is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Child death benefit", 100000, "Death benefit for children under age 5 is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Critical Illness", 500000, "Critical illness benefit is limited to S$300,000", 300000), 300000);
+  // A kind named after the subject is a cause or a part, not a narrower limit (TE #195 F1).
+  assert.equal(one("Death benefit", 3000000, "Death benefit, whether by illness or accidental death, is limited to S$2,000,000", 2000000), 2000000);
+  assert.equal(one("Hospitalisation", 80000, "Hospitalisation benefit including surgery is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Hospital cash", 300, "Hospital cash is payable for each day in hospital up to S$200 per day", 200, "Hospital cash"), 200);
+  assert.equal(one("Death benefit", 3000000, "Death benefit, which includes the funeral expenses benefit, is limited to £2,000,000", 2000000), 2000000);
+  // An age or a plan name that ends or names the cover for everyone narrows nothing: the limit still cuts (TE #195 G1).
+  for (const [title, quote] of [
+    ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
+    ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for hospital stays over 30 days."],
+    ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for bills over 1000."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 above 3 operations a year."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for groups of over 10 people."], 
+    ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
+    ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
+    ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy is renewable up to age 99."], ["Death benefit", "Death benefit is limited to S$50,000. The plan matures at age 70."],
+    ["Death benefit", "Entry age 18 to 65. Death benefit is limited to S$50,000."],
+  ] as [string, string][])
+    assert.equal(one(title, 500000, quote, 50000), 50000, `${title}: ${quote}`);
+  // A child or minor-surgery limit of another kind still leaves a life benefit as it is.
+  assert.equal(one("Death", 500000, "Minor surgery is limited to S$500", 500), 500000);
+  assert.equal(one("Death", 500000, "Hospital cash for children is limited to S$100 a day", 100), 500000);
+});
+
 test("an unplaced plan total hides every benefit it may cover", async () => {
   const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
   const run = (quote: string) => {
