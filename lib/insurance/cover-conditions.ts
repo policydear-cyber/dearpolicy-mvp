@@ -327,6 +327,7 @@ const AGE_SIGNAL=new RegExp([
   // ending its clause, is an age (Critic R381 M1). Another noun after it ("over 10 people", "above 3 operations") or a
   // figure over 120 ("bills over 1000") is a count or an amount (TE #195 r11).
   String.raw`\b(?:under|below|over|above)\s+(?:\d{1,2}|1[01]\d|120|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)(?:\s+(?:years?|yrs?)(?:\s+(?:old|of\s+age))?)?(?=\s*(?:$|[.,;:!?)]|(?:and|or|is|are|will|shall|may|who|whose|at|on|in|for|the|its|their)\b))`,
+  String.raw`\b(?:over|under)[-\s]?\d{1,3}s\b`,
   String.raw`\b(?:turns|reaches|attains)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}\b`, String.raw`\b(?:berumur|umur)\b`,
 ].join("|"),"iu");
 // An adult's age (18 or more): a child's age is always a group's, never the age a whole cover ends at (TE #195 J1).

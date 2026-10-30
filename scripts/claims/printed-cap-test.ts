@@ -247,7 +247,7 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85"],
     // Any noun before a comparator and an age (Critic R381 M1).
     ["Death benefit", "Death benefit for lives over 70 is limited to S$50,000"], ["Death benefit", "Death benefit for policyholders over 70 is limited to S$50,000"],
-    ["Death benefit", "Death benefit for anyone over 70 is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 for customers above 70"],
+    ["Death benefit", "Death benefit for anyone over 70 is limited to S$50,000"], ["Death benefit", "For the over-70s the death benefit is limited to S$50,000"], ["Death benefit", "Death benefit is limited to S$50,000 for customers above 70"],
     ["Death benefit", "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
