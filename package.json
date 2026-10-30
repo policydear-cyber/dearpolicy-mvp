@@ -73,6 +73,7 @@
     "claims:reviewer-benefit-e2e-test": "node --import tsx scripts/claim-reviewer-benefit-e2e-regressions.ts",
     "claims:travel-currency-test": "node --import tsx scripts/claim-travel-currency-regressions.ts",
     "claims:legacy-decision-test": "node --import tsx scripts/claim-legacy-decision-regressions.ts",
+    "claims:printed-cap-test": "node --import tsx scripts/claims/printed-cap-test.ts",
     "claims:evidence-browser-write-test": "node --import tsx scripts/evidence-browser-write-regressions.ts",
     "claims:evidence-download-test": "node --import tsx scripts/evidence-download-regressions.ts",
     "policies:preview-test": "node --import tsx scripts/policy-preview-regressions.ts",
