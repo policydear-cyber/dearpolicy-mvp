@@ -249,8 +249,10 @@ const KINDS:[string,string,RegExp][]=[
   ["early ci","ci",/\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness(?:es)?|ci)\b/giu],
   ["ci","ci",/\bcritical\s+illness(?:es)?\b|\bci\b|\bdread\s+diseases?\b/giu],
   ["tpd","tpd",/\btpd\b|\btotal\s+(?:(?:and|&)\s+)?permanent\s+disab\w*|\bpermanent\s+total\s+disab\w*/giu],
-  ["accidental death","death",/\baccident\w*\s+death\b|\bdeath\s+(?:due\s+to|by|from|caused\s+by)\s+(?:an?\s+)?accident\w*/giu],
+  ["accidental death","death",/\baccident\w*\s+death\b|\bdeath\s+(?:benefits?\s+)?(?:due\s+to|by|from|caused\s+by)\s+(?:an?\s+)?accident\w*/giu],
   ["death","death",/\bdeath\b|\bkematian\b/giu],
+  // Any other disablement ("Accidental Death and Disablement", "permanent disability"): paid apart from death.
+  ["disablement","tpd",/\bdisab(?:lement|ility|led)\b/giu],
   ["icu cash","cash hospital",/\b(?:icu|intensive\s+care(?:\s+unit)?)\s+(?:cash|income|allowance)\b/giu],
   ["hospital cash","cash",/\b(?:hospital(?:isation|ization)?|daily)\s+(?:cash|income|allowance)\b|\belaun(?:\s+tunai)?\s+hospital(?:\s+harian)?\b|\bhospital\s+income\b/giu],
   ["icu","hospital",/\b(?:hospital\s+)?(?:icu|intensive\s+care(?:\s+unit)?)\b/giu],
@@ -271,6 +273,19 @@ function kindsIn(text:string){
   const kinds=readKinds(text);
   kindsMemo.set(text,kinds);
   return kinds;
+}
+/** The kind a text names first; on a tie, the narrower (earlier listed) kind. */
+function firstKind(text:string):string|null{
+  const lower=" "+text.toLowerCase()+" ";
+  let best:string|null=null,at=Infinity;
+  for(const kind of kindsIn(text).keys()){
+    const re=KINDS.find(([k])=>k===kind)![2];
+    re.lastIndex=0;
+    const m=re.exec(lower);
+    re.lastIndex=0;
+    if(m&&m.index<at){at=m.index;best=kind;}
+  }
+  return best;
 }
 function readKinds(text:string){
   let rest=" "+text.toLowerCase()+" ";
@@ -293,9 +308,16 @@ const separateFrom=(mine:string[],said:string[])=>mine.length>0&&said.length>0&&
 const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|overall|combined|together|aggregate|semua)\b/iu;
 /** The same for a plan total, whose sentence says "overall" or "in total" anyway. */
 const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
-/** Words that narrow a limit to some insured people ("Death benefit for children under age 5 is limited to S$20,000"):
- * a benefit whose own name does not narrow the same way may be paid in full to everyone else (an adult's death benefit). */
-const NARROWED=/\b(?:child(?:ren)?|juveniles?|minors?|infants?|kids?|(?:under|below|before)\s+(?:the\s+)?age|aged?\s+(?:under|below|less\s+than))\b/iu;
+/** Words anywhere in a limit's sentence that narrow it to some insured people ("Death benefit for children under age 5 is
+ * limited to S$20,000", "for insured persons aged 70 and above", "Death benefit is limited to S$50,000 for children under
+ * 5"): a person word, or an age (TE #195 F2, Critic R367 M1). A benefit whose own name does not narrow the same way may be
+ * paid in full to everyone else (an adult's death benefit). */
+const NARROWED=new RegExp([
+  String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|elderly|seniors?|students?)\b`,
+  String.raw`\bage[sd]?\s+(?:of\s+)?(?:under\s+|below\s+|over\s+|above\s+|less\s+than\s+)?\d`,
+  String.raw`\b\d+\s*(?:years?\s+(?:old|of\s+age)|(?:st|nd|rd|th)\s+birthday)`,
+  String.raw`\b(?:under|below|over|above)\s+(?:the\s+)?\d+\b(?!\s*(?:%|per\s?cent|days?|nights?|weeks?|months?|hours?|times|claims?|visits?|sessions?|treatments?|km|kilomet|miles?|[,.]\d))`,
+].join("|"),"iu");
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
@@ -309,7 +331,7 @@ function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:NARROWED.test(head),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:NARROWED.test(condition.quote??""),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
@@ -323,10 +345,16 @@ function limitIsForKind(condition:CoverCondition,item:ClaimItem):"this"|"other"|
   const {head,scoped,quote,subject,part}=limitRead(condition);
   const benefit=phrase(benefitOf(item));
   const said=kindsIn(head),mine=kindsIn(benefitOf(item));
-  // A sentence that names a narrower kind than the benefit ("Early Critical Illness benefit is limited to S$50,000" for
-  // "Critical Illness", "Accidental death benefit" for "Death benefit", "Surgery under the Hospitalisation benefit" for
-  // "Hospitalisation") is that kind's limit, even inside the benefit's name or stored under it: not proof it is this one's.
-  const otherKind=mine.size>0&&[...said.keys()].some(k=>!mine.has(k));
+  // A sentence whose subject (its first kind) is a narrower kind than the benefit ("Early Critical Illness benefit is
+  // limited to S$50,000" for "Critical Illness", "Accidental death benefit" for "Death benefit", "Surgery under the
+  // Hospitalisation benefit" for "Hospitalisation") is that kind's limit, even inside the benefit's name or stored under
+  // it. A kind named later is a cause or a part ("Death benefit, whether by illness or accidental death", "Hospitalisation
+  // benefit including surgery", TE #195 F1).
+  const first=firstKind(head);
+  const otherKind=mine.size>0&&first!=null&&!mine.has(first);
+  // A limit on one part of a benefit that pays for several ("TPD benefit is limited to S$50,000" for "Death or TPD",
+  // Critic R367 M2) is no limit on the whole.
+  if(said.size&&said.size<mine.size&&[...said.keys()].every(k=>mine.has(k)))return "unknown";
   if(condition.productName&&phrase(condition.productName)===benefit&&!otherKind)return "this";
   if(scoped)return "unknown";
   if(benefit.trim().length>=3&&quote.includes(benefit)&&!otherKind)return "this";

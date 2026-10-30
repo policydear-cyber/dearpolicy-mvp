@@ -201,6 +201,15 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Accidental death benefit is limited to S$50,000"], ["Hospitalisation", "Surgery under the Hospitalisation benefit is limited to S$50,000"],
     ["Death benefit", "Death benefit for children under age 5 is limited to S$50,000"], ["Death", "Death of a child below the age of 10: maximum S$50,000"],
     ["Death benefit", "For insured persons aged under 16, the death benefit is limited to S$50,000"], ["Death benefit", "Juvenile death benefit: up to S$50,000"],
+    // Ages and people in any wording, before or after the figure (Critic R367 M1, TE #195 F2).
+    ["Death benefit", "If death occurs before the insured attains age 16, the death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons aged 70 and above is limited to S$50,000"], ["Death benefit", "Death benefit after age 65: up to S$50,000"],
+    ["Death benefit", "Death benefit is limited to S$50,000 for children under 5"], ["Death benefit", "Death benefit for a stillborn baby is limited to S$50,000"],
+    ["Death benefit", "Death benefit for insured persons under 18 is limited to S$50,000"], ["Death", "Death below 16 years of age: up to S$50,000"],
+    ["Death benefit", "Death benefit before the insured's 17th birthday is limited to S$50,000"], ["Death benefit", "Death benefit caused by an accident is limited to S$50,000"],
+    // A limit on one part of a benefit that pays for several (Critic R367 M2).
+    ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
+    ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
   ] as [string, string][]) {
     assert.equal(one(title, 500000, quote, 50000), undefined, `${title}: ${quote}`);
     assert.equal(one(title, 500000, quote, 50000, title), undefined, `${title} (stored under it): ${quote}`);
@@ -210,6 +219,11 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   assert.equal(one("Accidental death benefit", 100000, "Accidental death benefit is limited to S$50,000", 50000), 50000);
   assert.equal(one("Child death benefit", 100000, "Death benefit for children under age 5 is limited to S$50,000", 50000), 50000);
   assert.equal(one("Critical Illness", 500000, "Critical illness benefit is limited to S$300,000", 300000), 300000);
+  // A kind named after the subject is a cause or a part, not a narrower limit (TE #195 F1).
+  assert.equal(one("Death benefit", 3000000, "Death benefit, whether by illness or accidental death, is limited to S$2,000,000", 2000000), 2000000);
+  assert.equal(one("Hospitalisation", 80000, "Hospitalisation benefit including surgery is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Hospital cash", 300, "Hospital cash is payable for each day in hospital up to S$200 per day", 200, "Hospital cash"), 200);
+  assert.equal(one("Death benefit", 3000000, "Death benefit, which includes the funeral expenses benefit, is limited to £2,000,000", 2000000), 2000000);
   // A child or minor-surgery limit of another kind still leaves a life benefit as it is.
   assert.equal(one("Death", 500000, "Minor surgery is limited to S$500", 500), 500000);
   assert.equal(one("Death", 500000, "Hospital cash for children is limited to S$100 a day", 100), 500000);
