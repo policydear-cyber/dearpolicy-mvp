@@ -9780,3 +9780,20 @@ Probe (adult Death, item S$900,000, limit S$50,000; coverStart 2025-06-01, 2010-
   - Reinstatement and revival: always withhold, because the held start is not the reinstatement date.
   - Add the 10 rows above to printed-cap-test as withhold when start is unknown or recent. Add the parsed ones as clear (while) or reduce (after) with start 2010-01-01.
 - L1 `lib/chat/workflow.ts:997`: coverStart is the EARLIEST `effective_date` across the contract's documents. If that set ever holds a replaced or lapsed-and-reinstated policy's older document, the "can only prove a span has passed" premise breaks: a while-limit clears and the full figure shows. That is an inference from the code; I did not check stored rows. Fix: for the tenure clear/cut, use the latest effective_date (a renewal or reinstatement only makes it later, and a later date stays safe), or withhold when the contract's documents give different effective dates.
+
+## R387: #199 head 84f38fd4 (TENURE_SIGNAL, exact forms, agreed start): CHANGES (one Medium)
+
+Gate (base 28693c90): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The 10 R386 rows behave as asked. With a 2010 start: while-limits clear, after-limits cut, and reinstatement withholds. With a recent start or none they withhold, except where the span has truly passed (the first policy year against a 2025-06-01 start clears, correctly). L1 is fixed: tenureStart is set only when every document's effective_date agrees.
+
+- M1 `lib/insurance/cover-conditions.ts` TENURE_SIGNAL is still a list of start phrases, so other tenure wordings fall through to "applies to everyone". Adult Death S$900,000, limit S$50,000, cut to 50,000 with any start (2025-06-01, 2010-01-01 or none):
+  - "during the first 730 days"
+  - "if the insured dies within two years after the policy starts"
+  - "if the insured dies within two years of the policy date"
+  - "within 2 years from the date the policy was issued"
+  - "in the policy's first year"
+  - "until the policy has run for two years"
+  - "during the contestability period"
+  Fix (default-safe, structural): treat any duration in a limit's quote (a number or number word + days|months|years, "first year", "contestab", "incontestab") as a tenure signal. Set it aside only when an allow-listed event anchor follows ("of|after|from|following the accident|injury|diagnosis|discharge|admission|event|treatment|surgery|loss|death"), or when it is the existing frequency wording ("per/any one policy year"). So "expenses incurred within 90 days of the accident" still cuts, and anything else withholds unless an exact form reads it.
+- Add the 7 rows above to printed-cap-test as withhold, and one "within 90 days of the accident" row as reduce.
