@@ -342,7 +342,7 @@ const WHOLE_COVER_AGES=new RegExp([
 ].join("|"),"giu");
 // A cover-end frame inside a sequence or a condition ("payable up to age 65 in full; thereafter ...", "if the policy
 // continues until ...") may start the limit, so no frame is set aside (Critic R375 M2).
-const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|while|once)\b/iu;
+const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|where|while|once)\b/iu;
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
 const narrows=(text:string)=>{
