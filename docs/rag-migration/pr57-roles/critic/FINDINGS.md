@@ -9584,3 +9584,20 @@ Gate: plan-columns-test, five suites, tsc, next build and merge with main all pa
 ### Lows
 - The match checks only that the reading's excerpt contains the row's cell run and that its figure is one of the cells. It does not check the benefit name or the cell position. A probe with a 2-cell row "Ward S$100 S$200" and a reading of another row "Ward upgrade S$100 S$200 S$300" (Business, S$200) gives Business S$200. Suggest also requiring the reading's excerpt line to carry the row's own words before the run.
 - Currency is not compared. An RM row ("Cash RM100 RM200") with a reading whose currency is SGD shows "S$200". Require the reading's currency to match the cells' sign.
+
+## R371: #195 0cc25029, READY
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- All R367/R369 rows behave as before. "below the age of 16" and "an insured child" withhold. "cover ends at age 85" and "Under the Senior Protect Plan" no longer narrow (TE G1/G2). The "over 500" low is gone.
+- Low (old, same on main; the figure is understated): these age wordings still reduce an adult's Death figure:
+  - "aged 70 or more"
+  - "If the insured is 70 or older"
+  - "For ages 70 and above"
+  - "younger than 16"
+  - "if death occurs before age 16" (left out on purpose, per G1 W2)
+- If a later round wants them, add "or more", "older/younger than N", "ages N and above" and "is N or older". I accept the accident-word low as it stands.
+
+## R372: #197 38e07bdd, READY
+- Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+- The R370 M1 fix is in place. In the household view, every active holder of the document (policy_members joined to active family_members) must get the same pick from their own readings. A document with no holders gives null, and a member param that is not in the table gives null.
+- Lows fixed: the row's last words must come right before the cell run, and the excerpt must hold exactly one run. Probes: "Ward upgrade" superset → null; the same run under another benefit → null; a currency mismatch → null; two readings that disagree → null; bare "$" cells → null (no code, so the row stays held).
+- Remaining Low: the cell position is not checked against the column. A checked reading that says Economy is S$200 is trusted as long as S$200 is one of the cells. This is acceptable because the reading itself is the checked figure.
