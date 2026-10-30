@@ -9731,3 +9731,17 @@ R381 M1 is fixed. "lives / policyholders / anyone / customers over|above 70" wit
 
 Low (not blocking, no change against main):
 - L1 HELD_FOR sets aside "in force under 2 years", so "Death benefit is limited to S$50,000 if the policy has been in force under 2 years" applies the cap to every policy (main does the same). That is a policy-duration condition, not an age group, so it belongs with the duration/waiting-period handling rather than in this PR. Worth a follow-up: a cap tied to "in force under/less than N years" should withhold unless the policy's start date proves it is past N years.
+
+## R383: #195 head 93f6a1fd (comparator signal needs a clause-ending word): CHANGES (one Medium)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+All 55 earlier probe rows give the same result as at 8dd81f75. "Hospital bills over 1000" now reduces, as TE r11 wanted.
+
+- M1 `lib/insurance/cover-conditions.ts`, the comparator signal: it now fires only when the number is followed by an allow-listed joining word, so an unknown next word makes the age invisible. That is the unsafe default. Adult Death, S$900,000, all reduce to 50,000:
+  - "Lives over 70 have their death benefit limited to S$50,000"
+  - "Policyholders over 70 get a death benefit limited to S$50,000"
+  - "Death benefit for anyone over 70 when they die is limited to S$50,000"
+  - "Death benefit for persons over seventy is limited to S$50,000" (AGE_N spells out words only up to eighteen)
+  Fix: keep the ≤120 cap (that fixes "bills over 1000"), and go back to setting the signal aside only when an allow-listed NON-AGE noun follows. Add TE's people, persons, operations, procedures, surgeries, items and members to the R381 unit list. Any other next word counts as an age. Also spell out number words to 120 in AGE_N for the comparator ("seventy", "sixty-five", "sixty five").
+- Add these 4 rows to printed-cap-test as withhold, and TE's "over 10 people" and "above 3 operations" as reduce.
