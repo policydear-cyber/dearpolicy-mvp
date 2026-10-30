@@ -9621,3 +9621,14 @@ Fix:
 - Drop the bare "until / till / to / up to age N", "before age N" and "starts from age N" frames.
 - With default-safe narrowing, an unanchored age now withholds, which is the safe side. TE G1's "before age 65" cover-end case then withholds instead of reducing.
 - Add the 6 rows above to printed-cap-test as withhold.
+
+## R374: #198 head 7b26a951 (Coverage premium currency): READY
+
+Gate (base f58a289d, network blocked, model keys stripped): coverage-premium-test 4/4, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+What was asked:
+- No other premium display on Coverage uses cover.currency. `components/benefit-table-coverage.tsx:43` is the only premium money line in the card (other premium uses: type at lines 12-15, render at 49). `app/coverage/page.tsx` and `app/api/benefit-table` print no premium.
+- The payload carries the field. `/api/benefit-table` sends the people's covers as built by check.ts (the field set at `lib/benefit-table/check.ts:533`), so a premium with its own currency reaches the card. The fallback (`=== undefined`) matches chat.ts:551-559 and premium-summary.ts:200.
+
+Low (not blocking):
+- L1 `components/benefit-table-coverage.tsx:43`: when the premium line and its page state no currency, check.ts sets premiumCurrency to null, and `money(x, null)` (`lib/benefit-table/headline.ts:109`) prints a bare "$". The test calls this "no currency is claimed" (`coverage-premium-test.ts:27`), but "$" reads as a dollar currency. It also changes a cover whose sum line says S$: main printed "S$73.17", this head prints "$73.17". Home leaves such a premium out as unclear. Fix: when the resolved currency is null, print the figure with "(currency not stated)", as `app/coverage/page.tsx:12` does, and assert that in the test.
