@@ -9491,3 +9491,23 @@ Gate on both heads: own tests, five suites, tsc, next build and merge with main 
 ## R365: #192 d5a3c4cb READY; #188 92552e9f READY
 - #192: the R363 M1 fix is in place. "any person" followed by a closed list of insured markers is own cover again, as in all 3 R363 rows and all 7 R360 rows. "Death of or bodily injury to any person" and "Death of a person other than the insured" stay null. Gate: coverage:table-test 106/0, five suites, tsc, next build and merge with main all pass. Low (old, same on main): "Accidental injury to any person insured" and "injury to any person named in the schedule" give null.
 - #188 92552e9f: one line moves cancer treatment from family ci to family medical. An inpatient or medical bill beside a cancer-drug limit now withholds, and CI and Death items still clear. Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+## R366: #194 256e40d8, READY
+Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass.
+
+I compared 22 probes against main f58a289d.
+
+Now null, as intended:
+- "Currency of rider : RM" under a US Dollar field
+- "Rider currency	RM" under SGD
+- a lowercase "us$20" on an SGD page
+
+No false voids:
+- The primary field's own sign gives the declared code: "Currency : S$", "Currency	: RM", "Currency : US$".
+- So do second fields in the same currency: "Currency of rider : S$" and "Currency of premium payment : S$" (SGD), "Payment currency: US$" (USD), and "Currency of payment: RM" under a Malay MYR field.
+- A "Currency	Sum Insured	Premium" header row stays SGD.
+- "costs$5" on a USD page stays USD.
+
+Low (misses, same as main, fail-open only where a second currency appears with no figure):
+- The qualified field needs ":" or a tab, so "Currency of rider RM", "Rider currency - RM" and a sign on the next line ("Currency of rider:" with "RM" below) still give SGD.
+- "Currency : Malaysian Ringgit" is not read as a declaration (it gives null, so it is safe).
