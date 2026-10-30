@@ -9922,3 +9922,28 @@ Gate (free, network-blocked, keys stripped): own test 0, simple:chat 85/85, repl
 - **M1 lib/policies/unread-amount-line.ts:8.** "No digit" is used as proof of "no amount in it". Made-up probes that all get "describes this in words, with no amount in it": "We will pay fifty thousand dollars on accidental death", "S$ five hundred per day of hospitalisation", "Up to RM ten thousand for funeral expenses", "Twice the sum insured is payable", "Half of the coverage amount", "Ten per cent of the Death Benefit, subject to a maximum of S$ twenty thousand". The page then states something false about a passage that prints an amount, and it reads as "this benefit has no amount" (the lost-cover direction). Fix: the words-only line only when the passage is provably amount-free. Tokenise into words, and keep "could not be read" if any word is a number word other than "one" (two to ninety, hundred, thousand, million, billion, lakh), a multiplier (twice, double, triple, half, quarter, times), "per cent"/"percent", or a currency sign, code or word (allow the default to fall to the old, honest line). Add these probes to the test.
 - **L1 same line.** "The coverage amount" / "the sum assured as shown in the Policy Schedule" passages do have an amount, printed elsewhere. Suggest that, when the passage names sum assured / sum insured / coverage amount / schedule, the line says the amount is the one printed elsewhere (for example on the policy schedule) and is not used here, rather than "with no amount in it".
 - **L2 lib/policies/catalog-builder.ts:272 (and condition-catalog.ts:119).** Stored quotes are cut at 260 characters, so a figure after the cut is not in `quote`. Keep the old line when the quote is 255+ characters long.
+
+## R398–R404 (30 Oct, re-reviews and #207)
+
+Every gate below was the free gate (network blocked, keys stripped): own test, simple:chat 85, replay 22/22, benefit-table 107/107, benefit-table chat 107/107, r5 21/21, tsc, next build, merge-tree clean. All of them passed.
+
+- **R398 #205 f31a9b8d: READY.** R396 L1 is fixed (with a blank or null insurer, the key is doc:policyId + product; insurers are compared trimmed).
+- **R399 #203 4ecad3ab: READY.** R392 L1 is fixed. The exemption runs per sentence, only in sentences that name no place, currency or funds. If it leaks, the result is null currency, the safe side.
+- **R400 #206 26c2aaa8: CHANGES (Medium).**
+  - Still called words-only: "a tenth of the sum assured" (ordinal fractions missing), amount-by-reference passages ("the Sum Assured as shown in the Policy Schedule", "the full Sum Insured", "the benefit amount stated in the schedule", "an amount equal to the annual premium"), and a 257-character cut quote.
+  - Fix: fall back to "could not be read" when the passage names amount, sum, premium, schedule, value or limit, has an ordinal fraction, or the quote is 255 characters or longer.
+- **R401 #200 c560c45a: READY.** R389 L1 is fixed (includes-count; 4-letter stem). A shared stem only matters when the cells are identical, which gives the same figure.
+- **R402 #201 020c43c6: READY.**
+  - R393 H1 is fixed: whole-row allow-lists (a fund name plus a NAV charge tail; a non-cash/property asset class plus 3 or more percentages; allow-listed footer sentence plus page count).
+  - R395 H2 is fixed: the cover line is hidden only when formula is none and there is no value, and only in the Benefits route filter. repairStoredRules is back to main plus namesOnlyAPlanCell. Claims and ledger callers use the 1-arg namesNoBenefit (unchanged).
+  - L1 (inference, not checked): a hidden ruleless cover line should still be on Coverage.
+- **R403 #204 823a3852: READY.**
+  - M2 is fixed: the trim happens only when planFigure != null, which needs a printed money amount in the household's column, and only when the run has a money cell.
+  - M1 is fixed: PATCH treats the shown trimmed name (or its masked copy) as unchanged.
+- **R404 #207 62e17992: CHANGES (Medium).** cutNameSuffix treats anything not starting with a letter, or a space plus a lowercase letter, as "whole". Made-up 90-character probes that show NO "…":
+  - mid-number cuts: "…up to age 7" (next "0 years"), "…limited to S$1,00" (next "0 per child"), "…limited to S$1" (next "0,000"). These show a wrong figure inside the name.
+  - Title Case labels cut before a capital ("…Of The Insured" + " Person").
+  - cuts before "," "-" "/" "'".
+  - ")" is added even when the label continues after the bracket (") and shoulder").
+  - Fix (allow-list, unsure = "…"): show whole only when the rest is "" or whitespace followed by a figure or currency. Add ")" only when the rest is ")" followed by "" or whitespace plus a figure. Everything else gets "…".
+  - L1: cleanBenefitName trims before slicing, but trims nothing after the slice, so a cut label is always exactly 90. OK as is. A reader-written name refused above 90 can legitimately be 90 and whole; under the fix it shows "…" only if its quote continues with words.
