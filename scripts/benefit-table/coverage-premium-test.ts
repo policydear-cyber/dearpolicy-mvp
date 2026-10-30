@@ -12,9 +12,9 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
 
 const source = { documentId: "00000000-0000-4000-8000-000000000001", document: "Travel summary", page: 1, excerpt: "Premium paid : S$73.17" };
-const page = (premiumCurrency: string | null | undefined, currency: string | null) => {
+const page = (premiumCurrency: string | null | undefined, currency: string | null, premium = 73.17) => {
   const cover = { personId: "p1", coverKey: "travel|single trip|gold", product: "Example Travel Summary", cover: "Single Trip", plan: "Gold", riderOf: null,
-    policyNumber: null, sumInsured: null, premium: 73.17, premiumFrequency: null, startDate: null, endDate: null, currency, source,
+    policyNumber: null, sumInsured: null, premium, premiumFrequency: null, startDate: null, endDate: null, currency, source,
     ...(premiumCurrency === undefined ? {} : { premiumCurrency }) };
   const data = { enabled: true, people: [{ id: "p1", name: "Ada Example", covers: [cover], rows: [] }], documents: [], unmatchedCovers: [],
     illustrationCovers: [], unlinkedSections: [] } as unknown as BenefitTableData;
@@ -28,4 +28,6 @@ assert.match(page(undefined, "SGD"), /Premium S\$73\.17/);
 assert.match(page(null, "SGD"), /Premium 73\.17 \(currency not stated\)/);
 assert.doesNotMatch(page(null, "SGD"), /Premium \$/);
 assert.match(page(undefined, null), /Premium 73\.17 \(currency not stated\)/);
-console.log("coverage-premium-test: 6 checks passed");
+// One fixed format whatever the viewer's locale.
+assert.match(page(null, null, 1234.5), /Premium 1,234\.50 \(currency not stated\)/);
+console.log("coverage-premium-test: 7 checks passed");
