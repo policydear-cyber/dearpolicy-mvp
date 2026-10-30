@@ -78,6 +78,7 @@
     "claims:evidence-browser-write-test": "node --import tsx scripts/evidence-browser-write-regressions.ts",
     "claims:evidence-download-test": "node --import tsx scripts/evidence-download-regressions.ts",
     "policies:preview-test": "node --import tsx scripts/policy-preview-regressions.ts",
+    "policies:benefit-order-test": "node --import tsx scripts/policies/benefit-order-test.ts",
     "policies:retry-read-test": "node --import tsx scripts/policies/retry-read-stalled-test.ts",
     "security:infrastructure-tables-test": "node --import tsx scripts/infrastructure-table-permissions-regressions.ts",
     "security:policy-state-test": "node --import tsx scripts/policy-state-protection-regressions.ts",
