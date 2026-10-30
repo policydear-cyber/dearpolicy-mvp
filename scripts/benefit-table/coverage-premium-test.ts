@@ -25,5 +25,7 @@ assert.match(page("SGD", null), /Premium S\$73\.17/);
 assert.match(page("MYR", "SGD"), /Premium MYR 73\.17/);
 // Unset: the cover's currency. Set to none: no currency is claimed.
 assert.match(page(undefined, "SGD"), /Premium S\$73\.17/);
-assert.match(page(null, "SGD"), /Premium \$73\.17/);
-console.log("coverage-premium-test: 4 checks passed");
+assert.match(page(null, "SGD"), /Premium 73\.17 \(currency not stated\)/);
+assert.doesNotMatch(page(null, "SGD"), /Premium \$/);
+assert.match(page(undefined, null), /Premium 73\.17 \(currency not stated\)/);
+console.log("coverage-premium-test: 6 checks passed");

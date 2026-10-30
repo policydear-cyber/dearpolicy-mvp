@@ -40,7 +40,9 @@ function benefitParts(row:Row,name:(r:Row)=>string){
 
 function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
-  const premium=cover.premium!=null?`${money(cover.premium,cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
+  // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
+  const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
+  const premium=cover.premium!=null?`${premiumCode?money(cover.premium,premiumCode):`${Number(cover.premium).toLocaleString()} (currency not stated)`}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
