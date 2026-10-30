@@ -120,16 +120,20 @@ const numbersIn = (text: string) => [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].ma
 
 type Currency = { sign: string; resolved: boolean };
 const SIGN: Record<string, string> = { SGD: "S$", USD: "US$", MYR: "RM", HKD: "HK$", AUD: "A$", EUR: "€", GBP: "£", JPY: "¥", "$": "$" };
-/** The currency of an amount, resolved only when the words it rests on print that currency, or when a bare "$" stands in
+/** The currency of an amount, resolved only when the words it rests on print that currency, when a bare "$" stands in
  * a document that names Singapore dollars and no other currency anywhere in it (a Singapore scheme's benefit summary
- * prints "S$" in one table and "$250" in the next). */
-function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocument): Currency {
+ * prints "S$" in one table and "$250" in the next), or when it stands on a page that declares one currency for every
+ * figure on it (pageCurrency: a policy schedule's "Insured Amount : $100,000.00  Currency : Singapore Dollar", in a long
+ * pack whose fund pages name other currencies). The benefit table reads the same page declaration (check.ts). */
+function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocument, page?: number): Currency {
   const f = moneyFiguresIn(amountText)[0];
   const printed = moneyFiguresIn(evidence).map((x) => x.currency);
   const named = /\bSGD\b|S\$|Singapore dollars?/i.test(evidence) ? "SGD" : null;
   if (f && f.currency !== "$") return { sign: SIGN[f.currency] ?? f.currency, resolved: printed.includes(f.currency) || named === f.currency };
   if (printed.includes("SGD") || (named && !printed.some((c) => c !== "$" && c !== "SGD"))) return { sign: "S$", resolved: true };
   if (doc && !printed.some((c) => c !== "$") && documentCurrency(doc) === "SGD") return { sign: "S$", resolved: true };
+  const declared = doc && page != null && !printed.some((c) => c !== "$") ? pageCurrency(doc.pages.find((p) => p.page === page)?.text ?? "") : null;
+  if (declared && SIGN[declared]) return { sign: SIGN[declared], resolved: true };
   return { sign: "$", resolved: false };
 }
 const docCurrencies = new WeakMap<HouseholdDocument, string | null>();
@@ -161,15 +165,21 @@ export function documentCurrency(doc: HouseholdDocument): string | null {
  * 5,000.00" under a "Currency : Singapore Dollar" field, with no sign on any figure): a currency field ("Currency : SGD",
  * "Policy Currency	Singapore Dollars", or a schedule's ": Singapore Dollar" value beside its "Currency" label) or "All
  * amounts are in Singapore dollars". Null when the page declares none, or more than one (a list of currency options). */
-const CURRENCY_NAMES: [string, string][] = [["SGD", String.raw`singapore\s+dollars?|SGD`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD`], ["MYR", String.raw`ringgit|MYR`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
+// A name or its code, and the sign a declaration may print as its value ("Singapore Dollar (SGD)", "S$", "Ringgit
+// Malaysia", "RM": TE pr191 F1, F2). The sign counts only as a declared value: a bare "RM" in prose ("Please contact your
+// RM", "Form RM-2") names no currency (Critic R359 M1).
+const CURRENCY_NAMES: [string, string, string?][] = [["SGD", String.raw`singapore\s+dollars?|SGD`, String.raw`(?<![A-Za-z])S\$`], ["USD", String.raw`(?:us|united\s+states)\s+dollars?|USD`, String.raw`US\$`], ["MYR", String.raw`ringgit(?:\s+malaysia)?|MYR`, String.raw`(?<![A-Za-z])RM(?![A-Za-z])`], ["HKD", String.raw`hong\s+kong\s+dollars?|HKD`], ["AUD", String.raw`australian\s+dollars?|AUD`], ["EUR", String.raw`euros?|EUR`], ["GBP", String.raw`pounds?\s+sterling|GBP`]];
+const OTHER_SIGNS: Record<string, RegExp> = { USD: /US\$/, HKD: /HK\$/, AUD: /(?<![A-Z])A\$/, MYR: /RM\s?\d/, EUR: /€/, GBP: /£/, JPY: /¥/, SGD: /(?<![A-Z])S\$/ };
 export function pageCurrency(pageText: string): string | null {
   const t = pageText ?? "";
   const said = new Set<string>();
-  for (const [code, name] of CURRENCY_NAMES) {
-    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?currency[ \t]*:?[ \t]*(?:${name})[ ]*(?:\t|$)`, "im");
-    const value = new RegExp(String.raw`^[ \t]*:[ \t]*(?:${name})[ ]*$`, "im");
+  for (const [code, name, sign] of CURRENCY_NAMES) {
+    // The name may carry its code or sign in brackets: "Singapore Dollar (SGD)", "Ringgit Malaysia (RM)".
+    const named = String.raw`(?:${name}${sign ? `|${sign}` : ""})(?:[ ]*\((?:[A-Z]{2,3}|[A-Z]{0,2}\$)\))?`;
+    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency|mata\s+wang)(?:\s+(?:polisi|kontrak))?[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
+    const value = new RegExp(String.raw`^[ \t]*:[ \t]*${named}[ ]*$`, "im");
     const all = new RegExp(String.raw`\ball\s+amounts\s+(?:are|quoted\s+are|shown\s+are)\s+in\s+(?:${name})\b`, "i");
-    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*currency[ ]*(?:\t|$)/im.test(t))) said.add(code);
+    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency|mata\s+wang(?:\s+(?:polisi|kontrak))?)[ ]*(?:\t|$)/im.test(t))) said.add(code);
     // A page listing the currencies a policy can be in ("Six currency options are available: SGD, USD, ...") declares none.
     if (new RegExp(String.raw`currency\s+options|currencies\s+are\s+available`, "i").test(t)) return null;
   }
@@ -179,7 +189,9 @@ export function pageCurrency(pageText: string): string | null {
   // (a row "(in US$)"): the page does not settle a figure's currency (R59-5).
   if (/\bunless\s+(?:otherwise\s+)?(?:stated|specified|shown|indicated)\b/i.test(t)) return null;
   if (moneyFiguresIn(t).some((f) => f.currency !== "$" && f.currency !== code)) return null;
-  if (CURRENCY_NAMES.some(([other, name]) => other !== code && new RegExp(String.raw`(?:${name})`, "i").test(t)) || /US\$|HK\$|(?<![A-Z])A\$|RM\s?\d|€|£|¥/.test(t) || (code !== "SGD" && /(?<![A-Z])S\$/.test(t))) return null;
+  if (CURRENCY_NAMES.some(([other, name]) => other !== code && new RegExp(String.raw`(?:${name})`, "i").test(t))) return null;
+  // Another currency's sign anywhere on the page; the declared currency's own sign is its figures ("Currency : US$").
+  if (Object.entries(OTHER_SIGNS).some(([other, re]) => other !== code && re.test(t))) return null;
   return code;
 }
 /** The currency a table's own heading prints on a line of its own ("(S$)", "(SGD$)", "(SGD)") above the quoted figure, on
@@ -581,14 +593,14 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);
       if (!b.ok) return { ok: false, why: b.why, asFact: true };
-      const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex]);
+      const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex], b.base.found.page);
       const value = Math.round(b.value * pct) / 100;
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
     if (!printed) return { ok: false, why: NO_PRINTED_BASE };
     if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
-    const cur = currencyOf(printed.raw, page.text, doc);
+    const cur = currencyOf(printed.raw, page.text, doc, page.page);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
   }
@@ -630,7 +642,7 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
   const printed = moneyFiguresIn(found.excerpt).find((f) => sameValue(f.value, value))!;
-  const cur = currencyOf(printed.raw ?? raw, found.excerpt, doc);
+  const cur = currencyOf(printed.raw ?? raw, found.excerpt, doc, found.page);
   return { ok: true, amount: { value, text: upTo(found.excerpt, printed.raw ? found.excerpt.indexOf(printed.raw) : -1) + formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
 }
 /** "Up to " when the quoted words print the figure as a limit ("Up to S$500 per incident", "up to maximum of $500",
@@ -1473,7 +1485,7 @@ function basisOf(household: Household, c: Checked): string {
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
