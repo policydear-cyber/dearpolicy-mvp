@@ -17,10 +17,11 @@ import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { formatMoney,statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
-import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
+import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
@@ -29,10 +30,13 @@ export type LedgerRow={
   offsetDays:number|null;maximumDays:number|null;conditions:string[];note:string|null;
   sourcePage:number|null;quote:string|null;origin:"schedule"|"wording"|"person";inferred:boolean;
   status:"proposed"|"confirmed"|"rejected";updatedAt:string;
+  /** The plan as the page shows it (readablePlanName). Display only: answers, keys and filters use planName. */
+  shownPlanName?:string;
 };
 type Row={id:string;family_member_id:string;policy_id:string|null;plan_name:string;insurer:string|null;event_type:string;detail:string|null;cause:string|null;
   minimum_fact:string|null;minimum_value:string|number|null;pays_kind:string;amount:string|number|null;currency:string;sum_basis:string|number|null;offset_days:number|null;maximum_days:number|null;
-  conditions:string[]|null;note:string|null;source_page:number|null;quote:string|null;origin:string;inferred:boolean;status:string;updated_at:string};
+  conditions:string[]|null;note:string|null;source_page:number|null;quote:string|null;origin:string;inferred:boolean;status:string;updated_at:string;
+  doc?:{product_name:string|null;original_filename:string|null;insurer:string|null;document_role:string|null;policy_number:string|null}|null};
 type LedgerGlobals=typeof globalThis&{__dearpolicyLedgerSchema?:Promise<void>;__dearpolicyLedgerSchemaReady?:boolean};
 
 export async function ensureLedgerSchema(){
@@ -61,14 +65,39 @@ export async function ensureLedgerSchema(){
   try{await state.__dearpolicyLedgerSchema;state.__dearpolicyLedgerSchemaReady=true;}finally{delete state.__dearpolicyLedgerSchema;}
 }
 const num=(v:string|number|null)=>v==null?null:Number(v);
+const sameName=(a:string,b:string)=>a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,"")===b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,"");
+/** A row's plan as the household reads it. A row seeded before documents were named readably (#179) carries its document's
+ * file name as its plan ("Output 202609281146157", "817d6e8b 874f 4527 ...", "InformationBookletForTheNewlyInsured.pdf"):
+ * it is shown under the name Documents gives that document. A plan a person typed, or a printed plan name, is kept. */
+export function readablePlanName(planName:string,origin:string,doc:Row["doc"]):string{
+  if(!doc||origin==="person")return planName;
+  const cut=planName.indexOf(" · "),base=cut<0?planName:planName.slice(0,cut),rest=cut<0?"":planName.slice(cut);
+  const file=doc.original_filename??"";
+  // Only a plan that is the file name itself: a printed code ("XK4", "G007500") never is.
+  const fromFile=!!file&&(sameName(base,file)||sameName(base,prettifyFilename(file))||sameName(base,file.replace(/\.[a-zA-Z0-9]{1,5}$/,"")));
+  // A short name a person gave the file ("eShield.pdf") reads better as typed than split into words.
+  const reads=!doc.product_name&&!isMachineFilename(file.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&base.length<16;
+  if(fromFile&&reads)return base.replace(/_+/g," ").replace(/\s+/g," ").trim()+rest; // "my_shield_plan" reads "my shield plan" (TE pr187 b)
+  return fromFile?documentName({...doc,original_filename:file})+rest:planName;
+}
+/** The plan an edit sends back. The page shows the readable, masked plan (readablePlanName, maskShownText) and sends it
+ * with every edit: that name is no new name, so it gives undefined and the stored plan, which keys the row and its answers,
+ * is kept (Critic R352 M1). Any other name is the household's own. */
+export function sentPlanName(sent:string|undefined,row:Pick<LedgerRow,"planName"|"shownPlanName">):string|undefined{
+  const even=(v:string)=>v.replace(/\s+/g," ").trim(),shown=row.shownPlanName??row.planName;
+  if(sent!==undefined&&shown!==row.planName&&(even(sent)===even(shown)||even(sent)===even(maskIdentityText(shown))))return undefined;
+  return sentName(sent,row.planName);
+}
 function toRow(r:Row):LedgerRow{
-  return {id:r.id,familyMemberId:r.family_member_id,policyId:r.policy_id,planName:r.plan_name,insurer:r.insurer,
+  return {id:r.id,familyMemberId:r.family_member_id,policyId:r.policy_id,planName:r.plan_name,shownPlanName:readablePlanName(r.plan_name,r.origin,r.doc),insurer:r.insurer,
     eventType:(r.event_type in EVENTS?r.event_type:"other") as EventType,detail:r.detail,cause:(r.cause==="accident"||r.cause==="illness")?r.cause:null,paysKind:r.pays_kind as PaysKind,
     amount:num(r.amount),currency:r.currency,sumBasis:num(r.sum_basis),minimumFact:r.minimum_fact,minimumValue:num(r.minimum_value),offsetDays:r.offset_days,maximumDays:r.maximum_days,
     conditions:r.conditions??[],note:r.note,sourcePage:r.source_page,quote:r.quote,origin:r.origin as LedgerRow["origin"],
     inferred:r.inferred,status:r.status as LedgerRow["status"],updatedAt:r.updated_at};
 }
-const SELECT="SELECT id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,minimum_fact,minimum_value::text,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,updated_at::text FROM coverage_rules";
+const SELECT="SELECT id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,minimum_fact,minimum_value::text,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,updated_at::text,"+
+  "(SELECT json_build_object('product_name',p.product_name,'original_filename',p.original_filename,'insurer',p.insurer,'document_role',p.document_role,'policy_number',p.policy_number)"+
+  " FROM policies p WHERE p.id=coverage_rules.policy_id AND p.account_id=coverage_rules.account_id) AS doc FROM coverage_rules";
 // A row whose policy_id points at a policy that is no longer active must
 // stop appearing on the Coverage Ledger and out of chat answers the moment
 // that policy is deleted (Checkpoint 7's "policy totals are invalidated
