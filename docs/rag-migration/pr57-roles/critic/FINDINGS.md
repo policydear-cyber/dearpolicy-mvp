@@ -9906,3 +9906,11 @@ R393 H1 is unchanged at this head. All 6 R393 rows are still hidden (loyalty and
   - "Death $500,000.00 21 Sep 2020 21 Sep 2092 $1,234.50 72"
   A cover line stored with a fixed formula is what a claim pays (for example S$200,000 on accidental death), and it would drop out of claims and the ledger.
   Fix: hide a cover line only when the stored row has no formula (formula_kind none / formulaValue null), and do it in the Benefits route's display filter, not in `repairStoredRules`/`loadBenefitCatalog`. Or show from the code (with a test) that the ledger and claims take the same sum from another source for these rows.
+
+## R396: #205 head 67499047 (benefit groups keyed by insurer + plan): READY (one Low)
+
+Gate (base 4103e103): benefits-document-name-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Two insurers' rows with the same plan name no longer share a group, its insurer heading or its owners. Insurer-string variants of one plan ("Singlife" / "Singapore Life Ltd") split into two groups with distinct headings, which is the accepted safe side. Numbering applies only within the same name and insurer, and since each heading shows the insurer, unnumbered same-name groups can still be told apart.
+
+- L1 `lib/policies/group-heading.ts` benefitGroupKey: with the insurer unknown on both documents, `"" + "\0" + productName` still merges two documents' "Hospitalisation" rows into one group, the original bug, now only when the insurer is null. Fix: when `insurer` is null, key by `doc:` + policyId + productName.
