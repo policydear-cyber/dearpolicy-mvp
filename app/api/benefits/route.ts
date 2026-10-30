@@ -106,7 +106,7 @@ export async function GET(request:NextRequest){
         needsReview:row.needs_review,basisInferred:row.basis_inferred,
         needsConfirmation:row.basis_inferred&&!row.reviewed_at,reviewedAt:row.reviewed_at};
     };
-    const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name)&&!namesNoBenefit(row.benefit_name));
+    const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name)&&!namesNoBenefit(row.benefit_name,row.quote));
     const resolved=new Map(repairStoredRules(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
     // Either/or amounts: the same row worked out two ways for one person (a share of a fixed limit in one table, a share
     // of the sum insured in another). Sent as one group on every member row, never as one picked figure, and only when

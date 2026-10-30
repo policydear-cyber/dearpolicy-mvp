@@ -49,3 +49,22 @@ test("stored rules with such names are left out of what the Benefits page and ch
   const kept = repairStoredRules([row("1", "2027", 717), row("2", "only", 100), row("3", "Kidney dialysis", 1000), row("4", "nd", null), row("5", "and Merdeka", 448.23)]);
   assert.deepEqual(kept.map((b) => b.benefitName), ["Kidney dialysis"]);
 });
+
+test("a plan's empty cell read as the name of its row names nothing; the same words with any other quote are kept", async () => {
+  const { namesNoBenefit } = await import("@/lib/policies/benefit-catalog");
+  const { namesOnlyAPlanCell } = await import("@/lib/insurance/scale-limit");
+  for (const [name, quote] of [["Not covered", "Not covered S$500 S$1,000"], ["Not covered", "Not covered\tS$500\tS$1,000"], ["N/A", "N/A RM 300 RM 500"],
+    ["Not applicable", "Not applicable £1,000 £1,500"], ["Nil", "Nil S$100 per day S$200 per day"], ["Not covered.", "Not covered S$500 S$1,000"],
+    ["Tidak dilindungi", "Tidak dilindungi RM300 RM500"], ["Excluded", "Excluded S$500"]]) {
+    assert.equal(namesOnlyAPlanCell(name, quote), true, quote);
+    assert.equal(namesNoBenefit(name, quote), true, quote);
+  }
+  // A heading over what a policy does not pay, a sentence, a row with its own words, a single cell, or no quote: kept.
+  for (const [name, quote] of [["Not covered", "Not covered: pre-existing conditions, cosmetic surgery"], ["Not covered", "Not covered S$500 S$1,000 if you travel against advice"],
+    ["Not covered", "Mobility aids Not covered S$500 S$1,000"], ["Not covered", "Not covered"], ["Not covered", null], ["Not covered", "S$500 S$1,000"],
+    ["Overall limit^", "Overall limit^ S$300 S$800 S$1,500"], ["Mobility aids", "Not covered S$500 S$1,000"]] as [string, string | null][]) {
+    assert.equal(namesOnlyAPlanCell(name, quote), false, String(quote));
+    if (quote != null) assert.equal(namesNoBenefit(name, quote), false, quote);
+  }
+  assert.equal(namesNoBenefit("Not covered"), false, "with no quote the name is kept, as before");
+});

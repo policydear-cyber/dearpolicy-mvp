@@ -6,7 +6,7 @@ import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
-import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,resolveStoredRules } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,namesOnlyAPlanCell,resolveStoredRules } from "@/lib/insurance/scale-limit";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -735,7 +735,7 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
  * way is held back, and a rule stated in a sentence is read from that
  * sentence. */
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)))
+  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName,benefit.quote)))
     .map(benefit=>{
       // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
       // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
@@ -1067,8 +1067,9 @@ const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|
 const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
 const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|as charged|-+|—)$/i;
 const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
-export function namesNoBenefit(benefitName:string){
+export function namesNoBenefit(benefitName:string,quote?:string|null){
   const name=(benefitName??"").trim();
+  if(quote!=null&&namesOnlyAPlanCell(name,quote))return true;
   if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
   const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
   const hasWord=/\p{L}{3}/u.test(words)||/\p{Script=Han}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
