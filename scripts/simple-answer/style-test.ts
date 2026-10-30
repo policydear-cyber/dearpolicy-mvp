@@ -153,10 +153,16 @@ t("a bare $ is S$ only in a document that names Singapore dollars and nothing th
   const mk = (text: string) => ({ pages: [{ page: 1, text: "Benefit Schedule (SGD$)\nAmbulance S$500\nRecuperation $250\n" + text }] }) as unknown as HouseholdDocument;
   for (const ok of ["", "GPA 600 and GTL 1 (scheme codes)", "Payable in Singapore dollars", "We won't pay for self-inflicted injury.", "We won’t pay for war.",
     // An amount in no particular currency (AIA schedule wording).
-    "We may impose limits on the dollar amount of benefits.", "a dollar limit applies", "paid dollar-for-dollar", "reduced dollar for dollar", "the total dollar value"]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
+    "We may impose limits on the dollar amount of benefits.", "a dollar limit applies", "paid dollar-for-dollar", "reduced dollar for dollar", "the total dollar value",
+    // Wrapped mid-sentence, and a place named in another sentence or as the pronoun "us".
+    "We may impose limits on the\ndollar amount of benefits.", "Claims are paid to us. The dollar limit applies.", "The dollar amount payable to us is shown."]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
   for (const other of ["Paid in U.S. dollars", "Limit 5,000 yen", "RMB 300", "300 RMB", "NT$ 400", "Canadian dollars", "Rs 500", "₹500", "USD500", "HK$100", "5,000 baht",
     "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs",
-    "the US dollar amount", "in Australian dollar amounts", "the dollars you paid abroad", "a dollar", "the dollar", "any dollars paid", "dollar amounts in Hong Kong dollars"])
+    "the US dollar amount", "in Australian dollar amounts", "the dollars you paid abroad", "a dollar", "the dollar", "any dollars paid", "dollar amounts in Hong Kong dollars",
+    // A place, currency or funds in the same sentence (TE pr203 XN1-XN5, Critic R392 L1).
+    "the dollar amount in US currency", "in Australian currency, the dollar amount", "the dollar amount (U.S.)", "the total dollar value in Canadian funds",
+    "the dollar amount in Hong Kong currency", "the dollar amount, in Australian terms", "a dollar limit of 500 Canadian", "the same dollar amounts as the Brunei plan",
+    "the dollar limit\nin Hong Kong"])
     assert.equal(documentCurrency(mk(other)), null, other);
 });
 t("a clarifying question says what is settled first; identifiers by their label; counts from links; read files never called unreadable (live run 22 Oct)", () => {

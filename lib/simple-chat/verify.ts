@@ -154,13 +154,26 @@ const OTHER_WORDS = new RegExp([
  * dollar" (AIA schedule: "impose limits on the dollar amount"). Taken out before OTHER_WORDS looks for another currency's
  * "dollars"; only after a plain determiner or a paying verb, so "the US dollar amount" still counts. */
 const NO_PARTICULAR_DOLLAR = /\b(?:the|a|any|each|this|that|such|same|total|maximum)\s+dollar(?:[\s-]+(?:amounts?|values?|limits?|figures?|terms)\b|[\s-]+for[\s-]+dollar\b)|\b(?:paid|payable|reduced|reimbursed|offset|matched)\s+(?:on\s+a\s+)?dollar[\s-]for[\s-]dollar\b/gi;
+/** A sentence that also names a place, a currency or funds may mean that place's dollar ("the dollar amount in US currency",
+ * "a dollar limit of 500 Canadian", TE pr203 XN1-XN5, Critic R392 L1): its wording keeps counting as maybe another currency.
+ * Short forms ("US", "U.S.", "HK", "NZ", "NT") count in capitals only, so "payable to us" is not a place. */
+const DOLLAR_PLACE_WORD = /\b(?:currenc(?:y|ies)|funds|foreign|overseas|abroad|exchange|convert\w*|american|australian|aussie|canadian|hong\s*kong|new\s+zealand|kiwi|brunei\w*|taiwan\w*|fiji\w*|jamaica\w*|bahamian|bahamas|barbad\w*|belize\w*|bermud\w*|cayman|caribbean|liberian?|namibian?|guyan\w*|surinam\w*|trinidad\w*|tobago|zimbabwe\w*|solomon|tuval\w*|kiribati|ecuador\w*|salvador\w*|panama\w*|timor\w*|micronesia\w*|marshall|palau\w*)\b/i;
+const DOLLAR_PLACE_CAPS = /(?<![A-Za-z])(?:U\.?S\.?(?:A\.?)?|HK|NZ|NT)(?![A-Za-z])/;
+/** The text with NO_PARTICULAR_DOLLAR wording taken out, sentence by sentence, only from sentences that name no place,
+ * currency or funds. A sentence ends at ".", "!", "?" or ";" before a space or line break, or at a blank line; a single
+ * line break does not end one, since PDF text wraps mid-sentence ("impose limits on the\ndollar amount"). */
+function withoutPlainDollarWording(t: string): string {
+  return t.split(/(?<=[.!?;])\s+|\n[ \t]*\n/)
+    .map((sentence) => (DOLLAR_PLACE_WORD.test(sentence) || DOLLAR_PLACE_CAPS.test(sentence) ? sentence : sentence.replace(NO_PARTICULAR_DOLLAR, " ")))
+    .join("\n");
+}
 /** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
  * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
 export function documentCurrency(doc: HouseholdDocument): string | null {
   if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
   const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
   const sgd = /\bSGD\b|(?<![A-Za-z])S\$|Singapore\s+dollars?/i.test(t);
-  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t.replace(NO_PARTICULAR_DOLLAR, " ")) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
+  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(withoutPlainDollarWording(t)) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
   const found = sgd && !other ? "SGD" : null;
   docCurrencies.set(doc, found);
   return found;
