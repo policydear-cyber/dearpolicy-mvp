@@ -151,9 +151,12 @@ t("pages printing how covers limit each other are sent with the table (Critic R1
 });
 t("a bare $ is S$ only in a document that names Singapore dollars and nothing that may be another currency (Critic R124-1)", () => {
   const mk = (text: string) => ({ pages: [{ page: 1, text: "Benefit Schedule (SGD$)\nAmbulance S$500\nRecuperation $250\n" + text }] }) as unknown as HouseholdDocument;
-  for (const ok of ["", "GPA 600 and GTL 1 (scheme codes)", "Payable in Singapore dollars", "We won't pay for self-inflicted injury.", "We won’t pay for war."]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
+  for (const ok of ["", "GPA 600 and GTL 1 (scheme codes)", "Payable in Singapore dollars", "We won't pay for self-inflicted injury.", "We won’t pay for war.",
+    // An amount in no particular currency (AIA schedule wording).
+    "We may impose limits on the dollar amount of benefits.", "a dollar limit applies", "paid dollar-for-dollar", "reduced dollar for dollar", "the total dollar value"]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
   for (const other of ["Paid in U.S. dollars", "Limit 5,000 yen", "RMB 300", "300 RMB", "NT$ 400", "Canadian dollars", "Rs 500", "₹500", "USD500", "HK$100", "5,000 baht",
-    "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs"])
+    "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs",
+    "the US dollar amount", "in Australian dollar amounts", "the dollars you paid abroad", "a dollar", "the dollar", "any dollars paid", "dollar amounts in Hong Kong dollars"])
     assert.equal(documentCurrency(mk(other)), null, other);
 });
 t("a clarifying question says what is settled first; identifiers by their label; counts from links; read files never called unreadable (live run 22 Oct)", () => {

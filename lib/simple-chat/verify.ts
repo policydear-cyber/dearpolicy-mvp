@@ -150,13 +150,17 @@ const OTHER_WORDS = new RegExp([
   String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won(?!['’]t)|francs?|dirhams?|riyals?)\b`,
   String.raw`\bforeign\s+currenc|\bexchange\s+rates?\b`,
 ].join("|"), "i");
+/** Wording that speaks of an amount in no particular currency: "the dollar amount", "a dollar limit", "paid dollar for
+ * dollar" (AIA schedule: "impose limits on the dollar amount"). Taken out before OTHER_WORDS looks for another currency's
+ * "dollars"; only after a plain determiner or a paying verb, so "the US dollar amount" still counts. */
+const NO_PARTICULAR_DOLLAR = /\b(?:the|a|any|each|this|that|such|same|total|maximum)\s+dollar(?:[\s-]+(?:amounts?|values?|limits?|figures?|terms)\b|[\s-]+for[\s-]+dollar\b)|\b(?:paid|payable|reduced|reimbursed|offset|matched)\s+(?:on\s+a\s+)?dollar[\s-]for[\s-]dollar\b/gi;
 /** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
  * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
 export function documentCurrency(doc: HouseholdDocument): string | null {
   if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
   const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
   const sgd = /\bSGD\b|(?<![A-Za-z])S\$|Singapore\s+dollars?/i.test(t);
-  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
+  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t.replace(NO_PARTICULAR_DOLLAR, " ")) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
   const found = sgd && !other ? "SGD" : null;
   docCurrencies.set(doc, found);
   return found;
