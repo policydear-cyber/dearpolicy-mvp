@@ -317,16 +317,19 @@ const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding
  * frame, withholds the figure and never cuts it. A benefit whose own name narrows the same way may still be
  * cut (TE #195 F2, G1, G2; Critic R367 M1). */
 const AGE_N=String.raw`(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)`;
+const UNIT_WORD=String.raw`(?:one|two|three|four|five|six|seven|eight|nine)`;
+/** A number a person's age could be, 0 to 120, in digits or words ("seventy", "sixty-five", "one hundred and five"). */
+const AGE_UPTO_120=String.raw`(?:1[01]\d|120|\d{1,2}(?!\d)|(?:one\s+)?hundred(?:\s+(?:and\s+)?(?:${UNIT_WORD}|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty))?|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[-\s]${UNIT_WORD})?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|${UNIT_WORD})`;
 const PEOPLE=String.raw`(?:persons?|people|insureds?|lives?\s+(?:insured|assured)|members?|adults?|individuals?|those)`;
 const AGE_SIGNAL=new RegExp([
   String.raw`\b(?:child(?:ren)?|juveniles?|minors?|infants?|bab(?:y|ies)|stillborn|new-?born|kids?|teen(?:ager)?s?|elderly|seniors?|students?|pensioners?)\b`,
   String.raw`\bage[sd]?\b`, String.raw`\bbirthdays?\b`, String.raw`\b(?:younger|older)\s+than\b`,
   String.raw`\b\d+\s*(?:years?|yrs?)[\s-]+(?:old|of\s+age)\b`,
   String.raw`\b${PEOPLE}\s+(?:who\s+are\s+)?(?:under|below|over|above)\s+${AGE_N}\b`, String.raw`\b${PEOPLE}\s+${AGE_N}\s+(?:and|or)\s+(?:above|over|older|below|under|younger)\b`,
-  // Any noun ("lives over 70", "anyone over 70", "customers above 70"): a comparator and a number a person could be,
-  // ending its clause, is an age (Critic R381 M1). Another noun after it ("over 10 people", "above 3 operations") or a
-  // figure over 120 ("bills over 1000") is a count or an amount (TE #195 r11).
-  String.raw`\b(?:under|below|over|above)\s+(?:\d{1,2}|1[01]\d|120|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen)(?:\s+(?:years?|yrs?)(?:\s+(?:old|of\s+age))?)?(?=\s*(?:$|[.,;:!?)]|(?:and|or|is|are|will|shall|may|who|whose|at|on|in|for|the|its|their)\b))`,
+  // Any noun ("lives over 70", "anyone over 70", "customers above seventy"): a comparator and a number a person could be
+  // is an age (Critic R381 M1, R383 M1), unless a unit or a counted noun that is not a person's age follows ("over 30
+  // days", "over 10 people", "above 3 operations"); a figure over 120 ("bills over 1000") is an amount (TE #195 r11).
+  String.raw`\b(?:under|below|over|above)\s+${AGE_UPTO_120}\b(?!\s*(?:%|percent|per\s*cent|days?|weeks?|months?|hours?|nights?|km|kilometres?|kilometers?|miles?|times?|claims?|visits?|sessions?|treatments?|kg|people|persons|operations?|procedures?|surger(?:y|ies)|items?|members|dollars?|cents?)\b|\s*%)`,
   String.raw`\b(?:over|under)[-\s]?\d{1,3}s\b`,
   String.raw`\b(?:turns|reaches|attains)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${AGE_N}\b`, String.raw`\b(?:berumur|umur)\b`,
 ].join("|"),"iu");
