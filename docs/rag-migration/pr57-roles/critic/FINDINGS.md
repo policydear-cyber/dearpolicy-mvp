@@ -9893,3 +9893,16 @@ The rule itself cannot eat a real word: it needs the quote to be exactly the nam
 
 - M1 "Nothing keys on the route's benefitName" does not hold. `app/operator/benefits/page.tsx:66` seeds the edit draft from the shown `benefitName`, and `:169` PATCHes `benefitName: draft.benefitName.trim()||benefit.benefitName` on every save, including a save that only changes the amount. `app/api/benefits/route.ts:280` passes it through `sentName`, which only undoes ID masking, so the stripped name is written over the stored one. The display-only change becomes a stored change that rules and links key on. Fix: in the PATCH, treat a sent name equal to `nameWithoutPlanCell(stored, quote)` as unchanged (extend `sentName`, or compare there), and add a test. (`app/ledger/page.tsx:95` only classifies by name; dropping "Not Applicable" doesn't change its kind.)
 - M2 `lib/insurance/scale-limit.ts` nameWithoutPlanCell: the cell is stripped whatever the household's plan is. When the household holds the first plan, the one whose cell is "Not Applicable", the row then reads as a benefit they have, and planColumnFigure gives no figure (the cell is not money). Before this PR the stray words happened to tell the truth. Fix: strip only when the row's plan figure for this household is a money cell (pass `planFigure != null` to the call, or strip in the same place the plan figure is resolved). Otherwise keep the stored name.
+
+## R395: #201 head 7be94408 (adds schedule cover lines): CHANGES (R393 H1 open, plus one High)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R393 H1 is unchanged at this head. All 6 R393 rows are still hidden (loyalty and welcome bonus, a Death Benefit quote with a NAV charge, the two benefit sentences with page footers, "Cash 10% 20%").
+
+- H2 `lib/policies/benefit-catalog.ts` COVER_LINE_TAIL: `namesNoBenefit` is applied inside `repairStoredRules`, which `loadBenefitCatalog` (line ~1113) uses. That catalog feeds claim answers (`lib/chat/workflow.ts:2323`, `lib/chat/policy-answer.ts:873`) and ledger seeding (`lib/ledger/store.ts:289`, `:476`). So "the ledger holds the sums" is not independent of this filter: the ledger is seeded from the same catalog. The shape hides any name + money + two dates, with or without a formula. Probe, all hidden:
+  - "Accidental Death Benefit S$200,000 01/01/2020 01/01/2060"
+  - "Hospital Cash S$200 01 Jan 2024 31 Dec 2024"
+  - "Death $500,000.00 21 Sep 2020 21 Sep 2092 $1,234.50 72"
+  A cover line stored with a fixed formula is what a claim pays (for example S$200,000 on accidental death), and it would drop out of claims and the ledger.
+  Fix: hide a cover line only when the stored row has no formula (formula_kind none / formulaValue null), and do it in the Benefits route's display filter, not in `repairStoredRules`/`loadBenefitCatalog`. Or show from the code (with a test) that the ledger and claims take the same sum from another source for these rows.
