@@ -345,24 +345,24 @@ const WHOLE_COVER_AGES=new RegExp([
 const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|where|while|once)\b/iu;
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
-/** Where a limit's own figure starts in its quote: a currency then a digit, or none. */
-const FIGURE_AT=/(?:US\$|HK\$|A\$|S\$|RM|€|£|¥|\$|\b(?:SGD|USD|MYR|GBP|HKD|AUD|EUR|JPY)\b)\s?\d/u;
+/** The words a limit's figure may be joined to a whole-cover frame by: a stop, a comma, "and", "the" or a bracket. */
+const FRAME_JOIN=/^\s*(?:[,;.()]\s*)*(?:and\s+)?(?:\(\s*)?(?:the\s+|this\s+|its\s+)?$/iu;
 /**
- * Whether a text names a narrower group by age. In a limit's quote a whole-cover frame is set aside only after the
- * limit's figure ("limited to S$500,000; cover ends at age 85") or in brackets: a frame before it may open the span the
- * limit applies in ("The policy continues to age 70. Subsequently ... limited to S$50,000"), so its age stays in
- * (Critic R378 M1). An entry age range, and any frame in a benefit's own name, is set aside.
+ * Whether a text names a narrower group by age. In a limit's quote a cover-end frame is set aside only when it follows
+ * the limit's own printed amount, joined to it by a stop, a comma or "and" ("limited to S$500,000; cover ends at age 85").
+ * A frame before that amount, or after other words, may set the span the limit applies in ("The sum assured is
+ * S$900,000 and the policy continues to age 70. Subsequently ... limited to S$50,000"), so its age stays in (Critic
+ * R378 M1, R380 M1/L1). An entry age range, and any frame in a benefit's own name, is set aside.
  */
-const narrows=(text:string,quote=false)=>{
+const narrows=(text:string,limit?:{amount:number|null})=>{
   const named=text.replace(PLAN_NAMES," ");
   if(SEQUENCE.test(named))return AGE_SIGNAL.test(named);
-  const figure=quote?named.search(FIGURE_AT):0;
-  if(figure<0)return AGE_SIGNAL.test(named);
+  const own=limit?figuresIn(named,false).find(f=>limit.amount!=null&&Math.abs(f.value-limit.amount)<=0.005):undefined;
   return AGE_SIGNAL.test(named.replace(WHOLE_COVER_AGES,(frame:string,...rest:unknown[])=>{
-    const at=rest.find(v=>typeof v==="number") as number,before=named.slice(0,at);
-    const bracketed=(before.match(/\(/g)?.length??0)>(before.match(/\)/g)?.length??0);
+    const at=rest.find(v=>typeof v==="number") as number;
     // An entry age range says who may join, never the span a limit runs in, so it is set aside wherever it stands.
-    return at>figure||bracketed||/^(?:entry|issue|joining)\b/iu.test(frame)?" ":frame;
+    if(/^(?:entry|issue|joining)\b/iu.test(frame)||!limit)return " ";
+    return own&&at>=own.end&&FRAME_JOIN.test(named.slice(own.end,at))?" ":frame;
   }));
 };
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
@@ -378,7 +378,7 @@ function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??"",true),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:narrows(condition.quote??"",condition),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
