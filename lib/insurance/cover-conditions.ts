@@ -336,13 +336,19 @@ const WHOLE_COVER_AGES=new RegExp([
   // "until age 16", "up to age 5", "before age 65" or "starts from age 70" is not anchored to the cover and narrows.
   String.raw`${COVER_ENDS}\s+(?:(?:at|on|until|till|up\s+to|to)\s+)(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${ADULT_AGE}\b|${ADULT_AGE}(?:st|nd|rd|th)\s+birthday)`,
   String.raw`${COVER_ENDS}\s+(?:until|till|when|once)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${ADULT_AGE}\b`,
-  // The ages it may be joined at, up to a usual entry or expiry age ("Entry age 18 to 65", insured persons "aged 18 to 70").
-  String.raw`\bentry\s+ages?\s*(?:of|is|:|from)?\s*${AGE_N}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
-  String.raw`\baged\s+(?:between\s+)?${ADULT_AGE}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
+  // The ages it may be joined at, from a joining age to a usual entry age ("Entry age 18 to 65"). A bare "aged 65 to 99"
+  // or "entry age 60 to 70" may be an elderly band and narrows (Critic R375 M1).
+  String.raw`\b(?:entry|issue|joining)\s+ages?\s*(?:of|is|:|from)?\s*(?:\d|1\d|2[01])\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
 ].join("|"),"giu");
+// A cover-end frame inside a sequence or a condition ("payable up to age 65 in full; thereafter ...", "if the policy
+// continues until ...") may start the limit, so no frame is set aside (Critic R375 M2).
+const SEQUENCE=/\b(?:thereafter|then|after\s+which|afterwards?|from\s+then\s+on|beyond|past|if|unless|provided|while|once)\b/iu;
 /** A plan's own name ("Senior Protect Plan", "Child Shield") is set aside before the person words are read. */
 const PLAN_NAMES=/\b[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+(?:Plan|Shield|Protect(?:or)?|Saver|Plus)\b|\b[A-Z][\w-]*\s+(?:Plan|Shield|Protect(?:or)?)\b/gu;
-const narrows=(text:string)=>AGE_SIGNAL.test(text.replace(PLAN_NAMES," ").replace(WHOLE_COVER_AGES," "));
+const narrows=(text:string)=>{
+  const named=text.replace(PLAN_NAMES," ");
+  return AGE_SIGNAL.test(SEQUENCE.test(named)?named:named.replace(WHOLE_COVER_AGES," "));
+};
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total

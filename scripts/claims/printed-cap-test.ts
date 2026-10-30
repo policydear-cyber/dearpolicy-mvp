@@ -224,6 +224,13 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "The death benefit is limited to S$50,000 and this limit ends at age 18."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
     ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit: the reduced amount ends at age 21 and is limited to S$50,000."],
     ["Total and permanent disability", "TPD benefit is limited to S$50,000 and ends when the insured reaches age 70."],
+    // An elderly band, or a cover-end frame in a sequence or condition, narrows (Critic R375 M1/M2).
+    ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
+    ["Death benefit", "Death benefit for insured persons aged 65 to 99 is limited to S$50,000"], ["Death benefit", "Death benefit for lives assured aged 70 to 100 is limited to S$50,000"],
+    ["Death benefit", "Death benefit is limited to S$50,000 for those aged 66-99"], ["Death benefit", "Entry age 60 to 70: death benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit is payable up to age 65 in full; thereafter it is limited to S$50,000"],
+    ["Death benefit", "Death benefit continues to age 70 and is then limited to S$50,000"],
+    ["Death benefit", "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000"],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -245,7 +252,7 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   for (const [title, quote] of [
     ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
-    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], 
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
