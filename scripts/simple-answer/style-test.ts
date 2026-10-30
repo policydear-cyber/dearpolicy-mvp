@@ -155,14 +155,20 @@ t("a bare $ is S$ only in a document that names Singapore dollars and nothing th
     // An amount in no particular currency (AIA schedule wording).
     "We may impose limits on the dollar amount of benefits.", "a dollar limit applies", "paid dollar-for-dollar", "reduced dollar for dollar", "the total dollar value",
     // Wrapped mid-sentence, and a place named in another sentence or as the pronoun "us".
-    "We may impose limits on the\ndollar amount of benefits.", "Claims are paid to us. The dollar limit applies.", "The dollar amount payable to us is shown."]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
+    "We may impose limits on the\ndollar amount of benefits.", "Claims are paid to us. The dollar limit applies.", "The dollar amount payable to us is shown.",
+    // Neighbouring clauses that name nothing (a unit-linked plan's right-to-limit clause).
+    "the price per unit may differ by day;\n(ii)\timpose limits on the dollar amount (or number of Units) credited to your Policy, or redeemed.\n2.\tProvided always that we are not liable for our decisions;"]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
   for (const other of ["Paid in U.S. dollars", "Limit 5,000 yen", "RMB 300", "300 RMB", "NT$ 400", "Canadian dollars", "Rs 500", "₹500", "USD500", "HK$100", "5,000 baht",
     "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs",
     "the US dollar amount", "in Australian dollar amounts", "the dollars you paid abroad", "a dollar", "the dollar", "any dollars paid", "dollar amounts in Hong Kong dollars",
     // A place, currency or funds in the same sentence (TE pr203 XN1-XN5, Critic R392 L1).
     "the dollar amount in US currency", "in Australian currency, the dollar amount", "the dollar amount (U.S.)", "the total dollar value in Canadian funds",
     "the dollar amount in Hong Kong currency", "the dollar amount, in Australian terms", "a dollar limit of 500 Canadian", "the same dollar amounts as the Brunei plan",
-    "the dollar limit\nin Hong Kong"])
+    "the dollar limit\nin Hong Kong",
+    // ... or in the sentence before or after it, across a blank line or a semicolon (TE pr203 XQ5-XQ7).
+    "The dollar amount is shown below. All amounts are in US currency.", "The dollar amount is shown below.\n\nAll amounts are in US currency.",
+    "Amounts are in Canadian funds. The dollar amount is shown below.", "the dollar limits; amounts are in Canadian funds",
+    "the dollar amount in the States", "the dollar amount in the issuing country's money", "the dollar amount in local money"])
     assert.equal(documentCurrency(mk(other)), null, other);
 });
 t("a clarifying question says what is settled first; identifiers by their label; counts from links; read files never called unreadable (live run 22 Oct)", () => {
