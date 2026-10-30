@@ -462,6 +462,10 @@ const COUNT=String.raw`(?:\d{1,3}(?:st|nd|rd|th)?|one|two|three|four|five|six|se
 const countOf=(word:string)=>/^\d/.test(word)?Number(word.replace(/\D+$/,"")):COUNT_WORDS[word.toLowerCase()]??null;
 const SPAN_UNIT=String.raw`(?:(?:full|complete|consecutive)\s+)?(?:policy\s+|contract\s+|cover(?:age)?\s+)?(years?|months?)`;
 const POLICY_START=String.raw`(?:the\s+)?(?:(?:policy|cover(?:age)?|risk)\s+)?(?:date\s+of\s+)?(?:(?:policy|risk)\s+)?(?:issue|issuance|commencement|inception|start|effective\s+date|cover\s+start)(?:\s+date)?(?:\s+of\s+(?:the\s+)?(?:policy|cover(?:age)?))?`;
+// "the policy date", "the date of the policy": the date the policy started (TE #199 r3 note).
+const START=String.raw`(?:${POLICY_START}|(?:the\s+)?(?:policy\s+date|date\s+of\s+(?:the\s+|this\s+|your\s+)?policy))`;
+// What a "years old" span is counted on: the policy itself, never an item or a person ("if it is less than 2 years old").
+const AGED=String.raw`\b(?:the\s+|this\s+|your\s+)?(?:policy|cover(?:age)?|plan|contract)\s+(?:is|has\s+been)\s+`;
 /**
  * A limit that holds only for part of how long the policy has run (Critic R382 L1): "while" ("in force under 2 years",
  * "within 24 months from the date of issue", "during the first two policy years", "before the second policy
@@ -470,12 +474,14 @@ const POLICY_START=String.raw`(?:the\s+)?(?:(?:policy|cover(?:age)?|risk)\s+)?(?
 const TENURE_FORMS:{when:"while"|"after";re:RegExp}[]=[
   {when:"while",re:new RegExp(String.raw`\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|less\s+than|fewer\s+than|within|not\s+more\s+than|up\s+to)\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
   {when:"while",re:new RegExp(String.raw`\b(?:within|during|in|for)\s+(?:the\s+)?first\s+(?:(${COUNT})\s+)?${SPAN_UNIT}`,"iu")},
-  {when:"while",re:new RegExp(String.raw`\b(?:within|during|in)\s+(?:the\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of|from|after|following)\s+${POLICY_START}\b`,"iu")},
+  {when:"while",re:new RegExp(String.raw`\b(?:within|during|in)\s+(?:the\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of|from|after|following)\s+${START}\b`,"iu")},
+  {when:"while",re:new RegExp(String.raw`${AGED}(?:under|below|less\s+than|fewer\s+than|younger\s+than|not\s+more\s+than)\s+(${COUNT})\s+${SPAN_UNIT}\s+old\b`,"iu")},
   {when:"while",re:new RegExp(String.raw`\b(?:before|prior\s+to|until)\s+(?:the\s+)?(${COUNT})\s+(?:policy\s+)?anniversary`,"iu")},
   {when:"after",re:new RegExp(String.raw`\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:over|above|more\s+than|at\s+least|longer\s+than)\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
   {when:"after",re:new RegExp(String.raw`\b(?:after|from|on\s+or\s+after|following)\s+(?:the\s+)?(${COUNT})\s+(?:policy\s+)?anniversary`,"iu")},
   {when:"after",re:new RegExp(String.raw`\b(?:after|following|beyond)\s+(?:the\s+)?first\s+(${COUNT})\s+${SPAN_UNIT}`,"iu")},
-  {when:"after",re:new RegExp(String.raw`\bafter\s+(?:the\s+)?(?:first\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of\s+cover|in\s+force|(?:from|of|after)\s+${POLICY_START})`,"iu")},
+  {when:"after",re:new RegExp(String.raw`\bafter\s+(?:the\s+)?(?:first\s+)?(${COUNT})\s+${SPAN_UNIT}\s+(?:of\s+cover|in\s+force|(?:from|of|after)\s+${START})`,"iu")},
+  {when:"after",re:new RegExp(String.raw`${AGED}(?:over|above|more\s+than|at\s+least|older\s+than)\s+(${COUNT})\s+${SPAN_UNIT}\s+old\b`,"iu")},
 ];
 /**
  * Any wording that may tie a limit to how long the policy has run. When it is there and no form above reads it exactly,
@@ -488,7 +494,7 @@ const TENURE_SIGNAL=new RegExp([
   String.raw`(?<!\b(?:each|every|any|per|on)\s+(?:policy\s+)?)\banniversar(?:y|ies)\b`,
   String.raw`\bin\s+force\s+(?:for|under|below|less|fewer|within|not|up|over|above|more|at|longer)\b`,
   String.raw`\b(?:within|during|in|for|before)\s+(?:the\s+)?first\s+(?:${COUNT}\s+)?(?:(?:full|complete|consecutive|policy|contract|cover(?:age)?)\s+)*(?:years?|months?)\b`,
-  String.raw`\b(?:of|from|after|since|following)\s+${POLICY_START}\b`,
+  String.raw`\b(?:of|from|after|since|following)\s+${START}\b`,
   String.raw`\breinstat\w*|\breviv\w*`,
 ].join("|"),"iu");
 /**
