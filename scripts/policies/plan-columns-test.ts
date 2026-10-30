@@ -102,3 +102,39 @@ test("a held row takes its plan's column only from a checked reading of the same
   assert.equal(planColumnFigure({ ...at, quote: "If you have to cancel your entire trip" }, [reading()]), null);
   assert.equal(planColumnFigure({ ...at, sourcePage: null }, [reading()]), null);
 });
+
+test("a reading that quotes only the row's cells gives the plan's figure only when the cells are the page's alone", async () => {
+  const { planColumnFigure, planCellRun } = await import("@/lib/insurance/scale-limit");
+  const at = { policyId: "doc1", sourcePage: 7, quote: "If you are liable for accidental death, injury or damage to S$500,000 S$750,000 S$1,000,000" };
+  const cells = (o: Partial<{ excerpt: string; benefit: string; column: string | null; amount: number; page: number; qualifier: string | null }> = {}) => ({
+    documentId: "doc1", page: o.page ?? 7, excerpt: o.excerpt ?? "S$500,000\tS$750,000\tS$1,000,000", column: o.column === undefined ? "Gold" : o.column,
+    qualifier: o.qualifier ?? null, figure: { kind: "printed", amount: o.amount ?? 750000, currency: "SGD" },
+    figureText: "up to S$" + (o.amount ?? 750000).toLocaleString("en-SG"), benefit: o.benefit ?? "Liability to others while travelling" });
+  const one = { runIsUnique: true };
+  assert.deepEqual(planColumnFigure(at, [cells()], one), { plan: "Gold", figureText: "up to S$750,000" });
+  // The same benefit read for two people on one plan still names one figure.
+  assert.deepEqual(planColumnFigure(at, [cells(), cells()], one), { plan: "Gold", figureText: "up to S$750,000" });
+  // Another stored row of the page prints the same cells: none.
+  assert.equal(planColumnFigure(at, [cells()], { runIsUnique: false }), null);
+  assert.equal(planColumnFigure(at, [cells()]), null);
+  for (const [why, readings] of [
+    // Two benefits read with these cells, or one reading that prints them with other words: whose cells they are is unsure.
+    ["two benefits", [cells(), cells({ benefit: "Legal costs abroad" })]],
+    ["other words", [cells(), cells({ excerpt: "Legal costs abroad S$500,000 S$750,000 S$1,000,000" })]],
+    ["cells and a note", [cells({ excerpt: "S$500,000 S$750,000 S$1,000,000 per family" })]],
+    ["no name", [cells({ benefit: "" })]],
+    ["other page", [cells({ page: 8 })]],
+    ["two plans", [cells(), cells({ column: "Platinum", amount: 1000000 })]],
+    ["qualified", [cells({ qualifier: "per family" })]],
+    ["not a cell", [cells({ amount: 800000 })]],
+    ["no column", [cells({ column: null })]],
+  ] as [string, ReturnType<typeof cells>[]][])
+    assert.equal(planColumnFigure(at, readings, one), null, why);
+  // A row with no words before its cells still gives none.
+  assert.equal(planColumnFigure({ ...at, quote: "S$500,000 S$750,000 S$1,000,000" }, [cells()], one), null);
+  // The run the caller compares rows by: one run, spaced, or none.
+  assert.equal(planCellRun(at.quote), "S$500,000 S$750,000 S$1,000,000");
+  assert.equal(planCellRun("Liability\tS$500,000\tS$750,000  S$1,000,000"), "S$500,000 S$750,000 S$1,000,000");
+  assert.equal(planCellRun("Death S$1,000,000"), null);
+  assert.equal(planCellRun(at.quote + " Family S$1,000,000 S$1,500,000"), null);
+});

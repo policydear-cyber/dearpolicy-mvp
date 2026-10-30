@@ -11,7 +11,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
-import { PLAN_COLUMNS_NOTE,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
@@ -137,7 +137,7 @@ export async function GET(request:NextRequest){
           const { figureText }=await import("@/lib/benefit-table/assemble");
           const { table }=await tableFor(appDb,accountId);
           for(const person of table.people)planReadings.set(person.id,person.rows.map(r=>
-            ({documentId:r.source.documentId,page:r.source.page,excerpt:r.source.excerpt,column:r.column,qualifier:r.qualifier,figure:r.figure,figureText:figureText(r.figure)})));
+            ({documentId:r.source.documentId,page:r.source.page,excerpt:r.source.excerpt,column:r.column,qualifier:r.qualifier,figure:r.figure,figureText:figureText(r.figure),benefit:r.benefit})));
           const held=await query<{policy_id:string;family_member_id:string}>(
             `SELECT pm.policy_id,pm.family_member_id FROM policy_members pm
                JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")}
@@ -146,6 +146,12 @@ export async function GET(request:NextRequest){
         }
       }catch(error){console.warn("Benefit table unavailable for Benefits:",error instanceof Error?error.message:error);}
     }
+    // Whether no other stored row of the same page prints the same run of plan cells (planColumnFigure). Every row of
+    // the document counts, kept or not, so a hidden neighbour still blocks.
+    const runIsUnique=(row:Row)=>{
+      const run=planCellRun(row.quote);
+      return run!=null&&rows.rows.filter(r=>r.policy_id===row.policy_id&&r.source_page===row.source_page&&planCellRun(r.quote)===run).length===1;
+    };
     const benefits=usableRows.map(row=>{
       const stub=resolved.get(row.id)!;
       const formula={
@@ -160,7 +166,8 @@ export async function GET(request:NextRequest){
       const planColumns=stub.conditions.includes(PLAN_COLUMNS_NOTE);
       const planFigure=planColumns?(()=>{
         const people=member?[member]:holders.get(row.policy_id)??[];
-        const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote},planReadings.get(id)??[]));
+        const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote},planReadings.get(id)??[],
+          {runIsUnique:runIsUnique(row)}));
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
