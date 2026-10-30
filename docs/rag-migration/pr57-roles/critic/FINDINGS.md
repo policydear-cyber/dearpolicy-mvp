@@ -9601,3 +9601,23 @@ Gate: plan-columns-test, five suites, tsc, next build and merge with main all pa
 - The R370 M1 fix is in place. In the household view, every active holder of the document (policy_members joined to active family_members) must get the same pick from their own readings. A document with no holders gives null, and a member param that is not in the table gives null.
 - Lows fixed: the row's last words must come right before the cell run, and the excerpt must hold exactly one run. Probes: "Ward upgrade" superset → null; the same run under another benefit → null; a currency mismatch → null; two readings that disagree → null; bare "$" cells → null (no code, so the row stays held).
 - Remaining Low: the cell position is not checked against the column. A checked reading that says Economy is S$200 is trusted as long as S$200 is one of the cells. This is acceptable because the reading itself is the checked figure.
+
+## R373: #195 32260eca, CHANGES
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- Default-safe AGE_SIGNAL works: "aged 70 or more" and "For ages 70 and above" now withhold, and every earlier row holds.
+- "cover ends at age 85", "(entry age 18 to 65)" and "per life" still reduce, which is correct.
+
+### M1: the WHOLE_COVER_AGES "until / up to / to / before / starts from age N" frames remove the classic juvenile and elderly limit wordings
+The frames are not tied to the cover's own duration, so these rows have their only age signal removed. Each one reduces an adult's Death figure from S$900,000 to S$50,000:
+- "Until the insured attains age 16, the death benefit is limited to S$50,000"
+- "Till the life assured reaches age 17, death benefit is limited to S$50,000"
+- "Death benefit for insured persons up to age 16 is limited to S$50,000"
+- "Death benefit is limited to S$50,000 to age 16, then the full sum assured"
+- "Death benefit is limited to S$50,000 if death occurs before age 16"
+- "Reduced death benefit starts from age 70: limited to S$50,000"
+
+Fix:
+- Keep only frames that are anchored to the cover's own duration. A cover word (cover, policy, plan, protection, benefit term, premiums) must come with a duration verb (ends, expires, terminates, ceases, matures, lapses, is renewable, runs, continues, is payable) before the "at / until / up to age N".
+- Drop the bare "until / till / to / up to age N", "before age N" and "starts from age N" frames.
+- With default-safe narrowing, an unanchored age now withholds, which is the safe side. TE G1's "before age 65" cover-end case then withholds instead of reducing.
+- Add the 6 rows above to printed-cap-test as withhold.
