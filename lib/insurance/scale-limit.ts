@@ -302,22 +302,40 @@ export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[
 }
 /** A plan-table row's own plan column, from the benefit table's checked reading of the same page: the household's plan
  * ("The Business column matches the held Business plan") and the figure it prints there. Taken only when every reading
- * of that page whose excerpt prints this row's cells names one column, one printed figure that is one of those cells, and
- * no qualifier ("per family", "child"); anything else gives no figure (the row stays held, PLAN_COLUMNS_NOTE). */
+ * of that page that prints this row (its own words, then its cells, and no other run of cells: a neighbouring row's
+ * reading never lends its figure, TE #197 H1, Critic R370) names one column, a printed figure in the row's own currency
+ * that is one of its cells, and no qualifier ("per family", "child"); anything else gives no figure (the row stays held,
+ * PLAN_COLUMNS_NOTE). */
 export type PlanColumnReading={documentId:string;page:number;excerpt:string;column:string|null;qualifier:string|null;
   figure:{kind:string;amount?:number;currency?:string|null};figureText:string};
 const spaced=(text:string)=>text.replace(/\s+/g," ").trim();
 const cellAmount=(cell:string)=>Number(cell.replace(/\s*(?:\/|per\b|each\b|a\s|daily|sehari|setiap).*$/i,"").replace(/[^\d.]/g,""));
+const CELL_CODE:Record<string,string>={"S$":"SGD",SGD:"SGD","US$":"USD",USD:"USD",RM:"MYR",MYR:"MYR","£":"GBP",GBP:"GBP","€":"EUR",EUR:"EUR","HK$":"HKD",HKD:"HKD","A$":"AUD",AUD:"AUD"};
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null},readings:PlanColumnReading[]):{plan:string;figureText:string}|null{
-  const runs=(String(row.quote??"").match(PLAN_ROW)??[]).map(spaced);
+  const quote=spaced(String(row.quote??""));
+  const runs=quote.match(PLAN_ROW)??[];
   if(runs.length!==1||row.sourcePage==null)return null;
   const run=runs[0];
-  const cells=(run.match(new RegExp(PLAN_CELL,"g"))??[]).filter(c=>/\d/.test(c)).map(cellAmount);
-  const found=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage&&spaced(r.excerpt).includes(run));
+  // The row's own last words before its cells: the reading must print them right before the same cells.
+  const words=quote.slice(0,quote.indexOf(run)).trim().split(" ").filter(Boolean).slice(-3).join(" ");
+  if(!words)return null;
+  const money=(run.match(new RegExp(PLAN_CELL,"g"))??[]).filter(c=>/\d/.test(c));
+  const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
+  const code=codes.size===1?[...codes][0]:null;
+  if(!code)return null;
+  const cells=money.map(cellAmount);
+  const found=readings.filter(r=>{
+    if(r.documentId!==row.policyId||r.page!==row.sourcePage)return false;
+    const excerpt=spaced(r.excerpt);
+    return (excerpt.match(PLAN_ROW)??[]).length===1&&excerpt.includes(words+" "+run);
+  });
   if(!found.length)return null;
-  const picks=new Set(found.map(r=>r.column&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)
-    ?JSON.stringify([r.column.trim(),r.figure.amount,r.figure.currency??null,r.figureText]):"none"));
+  const picks=new Set(found.map(r=>{
+    const column=(r.column??"").trim();
+    return column&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)&&r.figure.currency===code
+      ?JSON.stringify([column,r.figureText]):"none";
+  }));
   if(picks.size!==1||picks.has("none"))return null;
-  const [plan,,,figureText]=JSON.parse([...picks][0]) as [string,number,string|null,string];
+  const [plan,figureText]=JSON.parse([...picks][0]) as [string,string];
   return {plan,figureText};
 }
