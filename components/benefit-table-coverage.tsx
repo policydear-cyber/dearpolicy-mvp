@@ -10,7 +10,9 @@ import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, ty
 type Source={documentId:string;document:string;page:number;excerpt:string};
 type Cover={personId:string;coverKey:string;product:string;cover:string;plan:string|null;riderOf:string|null;policyNumber:string|null;
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
-  source:Source;premiumSource?:Source|null};
+  source:Source;premiumSource?:Source|null;
+  /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
+  premiumCurrency?:string|null};
 type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
@@ -38,7 +40,7 @@ function benefitParts(row:Row,name:(r:Row)=>string){
 
 function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
-  const premium=cover.premium!=null?`${money(cover.premium,cover.currency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
+  const premium=cover.premium!=null?`${money(cover.premium,cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
