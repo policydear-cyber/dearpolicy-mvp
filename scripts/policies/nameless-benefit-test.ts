@@ -78,6 +78,10 @@ test("a fund's charge, a fund's asset mix and an illustration's footer are not b
     ["This illustration is only valid when all pages are included.", "This illustration is only valid when all pages are included. Page 2 of 14 Reference Number: X-1"],
     ["This illustra)on is only valid when all pages are included.", "This illustra)on is only valid when all pages are included. Page 2 of 14"],
     ["Please read this together with your policy contract.", "Please read this together with your policy contract. Page 3 of 9"],
+    // A schedule's cover line: sum assured and the dates it runs between, perhaps its premium and term.
+    ["EXAMPLE CRITICAL COVER 1234X", "EXAMPLE CRITICAL COVER 1234X $100,000.00 21 Sep 2020 21 Sep 2092"],
+    ["EXAMPLE LIFE PLAN ---", "EXAMPLE LIFE PLAN --- $100,000.00 21 Sep 2020 21 Sep 2092 $200.00 72"],
+    ["Example Rider", "Example Rider S$50,000 01/03/2021 01/03/2041"], ["Example Rider", "Example Rider RM 50,000 1 March 2021 1 March 2041 RM 120.00"],
   ]) assert.equal(namesNoBenefit(name, quote), true, quote);
   for (const [name, quote] of [
     // A benefit paid as a share of the fund, a cash benefit, a fund's own benefit, and sentences with no page count: kept.
@@ -85,5 +89,8 @@ test("a fund's charge, a fund's asset mix and an illustration's footer are not b
     ["Fixed Income", "Fixed Income benefit S$200 a month"], ["Monthly Income", "Monthly Income 5% 5%"],
     ["This benefit pays a lump sum.", "This benefit pays a lump sum. S$10,000"], ["Note", "Note Page 2 of 14"],
     ["Hospital Cash", "Hospital Cash S$100 a day, Page 2 of 14"], ["Equities", "Equities 35%"],
+    // A benefit with one date, a benefit paid between dates in words, a cover line with other words after it: kept.
+    ["Maturity Benefit", "Maturity Benefit $100,000.00 21 Sep 2092"], ["Death Benefit", "Death Benefit $100,000.00 from 21 Sep 2020 to 21 Sep 2092"],
+    ["Example Rider", "Example Rider $100,000.00 21 Sep 2020 21 Sep 2092 payable on diagnosis"],
   ]) assert.equal(namesNoBenefit(name, quote), false, quote);
 });

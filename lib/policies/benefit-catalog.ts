@@ -1070,15 +1070,21 @@ const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP
 /** A stored row whose own words show it is not a benefit at all, read from a page of an investment-linked plan or a
  * page's footer: a fund's charge ("AIA Regional Fixed Income Fund 0.85% (max 2.50%) p.a. of its Net Asset Value"), an
  * asset-class row of a fund's mix ("Fixed Income 65.0% 58.0% 72.0% 70.3%"), or an illustration's footer sentence with
- * its page count ("This illustration is only valid when all pages are included. Page 2 of 14"). Each needs the quote's
- * own shape, never the name alone. */
+ * its page count ("This illustration is only valid when all pages are included. Page 2 of 14"), or a schedule's cover
+ * line, its sum assured with the dates it runs between ("DOUBLE CRITICAL COVER 2217S $100,000.00 21 Sep 2020 21 Sep
+ * 2092", optionally its premium and term after): that sum is the cover itself, already on the Coverage page, never a rule
+ * of what a claim pays. Each needs the quote's own shape, never the name alone. */
 const FUND_CHARGE=/\b(?:p\.\s?a\.|per\s+annum|a\s+year|yearly)\s+of\s+(?:its\s+|the\s+)?(?:fund'?s?\s+)?(?:net\s+asset\s+value|NAV)\b/i;
 const ASSET_CLASS=/^(?:fixed\s+income|equit(?:y|ies)|bonds?|cash(?:\s+and\s+(?:cash\s+)?equivalents)?|money\s+market|property|real\s+estate|alternatives?)$/i;
+const COVER_DATE=String.raw`(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})`;
+const COVER_MONEY=String.raw`(?:S\$|SGD\s?|US\$|RM\s?|£|\$)\s?\d[\d,]*(?:\.\d{2})?`;
+const COVER_LINE_TAIL=new RegExp(String.raw`^\s*${COVER_MONEY}\s+${COVER_DATE}\s+${COVER_DATE}(?:\s+${COVER_MONEY}(?:\s+\d{1,3})?)?\s*$`,"i");
 const FOOTER_SENTENCE=/^(?:this|these|please|note)\b.{0,120}\.$/i;
 function readsAsNoBenefit(name:string,quote:string){
   const n=name.replace(/\s+/g," ").trim(),q=quote.replace(/\s+/g," ").trim();
   if(FUND_CHARGE.test(q))return true;
   if(ASSET_CLASS.test(n)&&q.startsWith(n)&&/^(?:\s*\d{1,3}(?:\.\d+)?\s?%){2,}\s*$/.test(q.slice(n.length)))return true;
+  if(q.startsWith(n)&&COVER_LINE_TAIL.test(q.slice(n.length)))return true;
   return FOOTER_SENTENCE.test(n)&&q.startsWith(n)&&/\bpage\s+\d+\s+of\s+\d+\b/i.test(q.slice(n.length));
 }
 export function namesNoBenefit(benefitName:string,quote?:string|null){
