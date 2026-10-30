@@ -272,7 +272,7 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
   // An age or a plan name that ends or names the cover for everyone narrows nothing: the limit still cuts (TE #195 G1).
   for (const [title, quote] of [
     ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
-    ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
+    ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."],
     ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Death benefit", "Death benefit is limited to S$50,000 (the policy expires on the 85th birthday)."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for hospital stays over 30 days."],
     ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for bills over 1000."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 above 3 operations a year."], ["Hospitalisation", "Hospitalisation benefit is limited to S$50,000 for groups of over 10 people."], 
     ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
@@ -299,4 +299,34 @@ test("an unplaced plan total hides every benefit it may cover", async () => {
   assert.deepEqual(run("The overall annual limit for inpatient benefits is shown in the Schedule"), [undefined, undefined, 300000]);
   assert.deepEqual(run("The limit described in Section 3 applies to all benefits"), [undefined, undefined, undefined]);
   assert.deepEqual(run("An annual limit applies, as shown in the Schedule"), [undefined, undefined, undefined]);
+});
+
+test("a limit for part of the policy's life applies only when its start date shows which part (Critic R382 L1)", async () => {
+  const { applyCoverConditions, tenureOf } = await import("@/lib/insurance/cover-conditions");
+  const one = (quote: string, coverStart: string | null, today = "2026-10-30", eventDate?: string) => {
+    const it = [item("Ada · Death benefit", "Example Plan", 500000)];
+    const facts = (eventDate ? { eventDate: { value: eventDate, state: "known" } } : {}) as never;
+    applyCoverConditions({ items: it, facts, coverStart, today, conditions: [cond({ kind: "sub_limit", amount: 50000, quote })] });
+    return it[0].calculatedAmount;
+  };
+  const early = "Death benefit is limited to S$50,000 if the policy has been in force under 2 years.";
+  // No start date, or a start that may be the latest renewal's: whether the limit applies is unknown, so no figure.
+  assert.equal(one(early, null), undefined);
+  assert.equal(one(early, "2025-06-01"), undefined);
+  // The start is over 2 years before the claim: the early-years limit has surely ended.
+  assert.equal(one(early, "2020-01-15"), 500000);
+  assert.equal(one(early, "2024-10-30"), 500000);
+  assert.equal(one(early, "2024-10-31"), undefined);
+  // The claim's own date decides, not today.
+  assert.equal(one(early, "2023-01-01", "2026-10-30", "2024-06-01"), undefined);
+  assert.equal(one("Within the first 3 policy years the death benefit is limited to S$50,000.", "2019-03-01"), 500000);
+  assert.equal(one("Within the first 12 months the death benefit is limited to S$50,000.", "2026-01-01"), undefined);
+  // A limit that starts after a span: it applies once the span has surely passed, and is unknown before.
+  const late = "Death benefit is limited to S$50,000 once the policy has been in force for more than 10 years.";
+  assert.equal(one(late, "2010-01-01"), 50000);
+  assert.equal(one(late, "2022-01-01"), undefined);
+  assert.equal(one(late, null), undefined);
+  // A sum paid out over years is not how long the policy has run.
+  assert.equal(tenureOf("Death benefit is limited to S$50,000, paid over 10 years."), null);
+  assert.equal(one("Death benefit is limited to S$50,000.", null), 50000);
 });

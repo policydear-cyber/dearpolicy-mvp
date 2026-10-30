@@ -442,6 +442,40 @@ function addDays(from:string,days:number){
   if(!Number.isFinite(a))return null;
   return new Date(a+days*86_400_000).toISOString().slice(0,10);
 }
+/** The date a span of whole years or months after a start ends on ("2024-03-01" + 2 years = "2026-03-01"). */
+function addPeriod(from:string,n:number,unit:"year"|"month"){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
+  if(!m)return null;
+  const months=Number(m[1])*12+Number(m[2])-1+(unit==="year"?n*12:n);
+  const y=Math.floor(months/12),mo=months%12+1,last=new Date(Date.UTC(y,mo,0)).getUTCDate();
+  return `${String(y).padStart(4,"0")}-${String(mo).padStart(2,"0")}-${String(Math.min(Number(m[3]),last)).padStart(2,"0")}`;
+}
+/**
+ * A limit that holds only for part of how long the policy has run: "if the policy has been in force under 2 years",
+ * "within the first 3 policy years" (while), or "after the policy has been in force for over 5 years" (after). A
+ * limit like this is not every policy's (Critic R382 L1).
+ */
+const TENURE_WHILE=/\b(?:(?:in\s+force|held|owned)\s+(?:for\s+)?(?:under|below|less\s+than|fewer\s+than|within|not\s+more\s+than|up\s+to)|within\s+(?:the\s+)?first)\s+(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\b/iu;
+const TENURE_AFTER=/\b(?:in\s+force|held|owned)\s+(?:for\s+)?(?:over|above|more\s+than|at\s+least|longer\s+than)\s+(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\b|\bafter\s+(?:the\s+)?(?:first\s+)?(\d+)\s+(?:(?:full|complete|policy)\s+)?(years?|months?)\s+(?:of\s+cover|in\s+force|from\s+(?:the\s+)?(?:policy\s+)?(?:start|inception|commencement))/iu;
+export type Tenure={when:"while"|"after";n:number;unit:"year"|"month"};
+export function tenureOf(quote:string|null|undefined):Tenure|null{
+  const text=quote??"";
+  const w=TENURE_WHILE.exec(text);
+  if(w)return {when:"while",n:Number(w[1]),unit:/^month/i.test(w[2])?"month":"year"};
+  const a=TENURE_AFTER.exec(text);
+  if(a)return {when:"after",n:Number(a[1]??a[3]),unit:/^month/i.test(a[2]??a[4])?"month":"year"};
+  return null;
+}
+/**
+ * Whether the policy has surely run the span by the claim date. The start DearPolicy holds may be the latest renewal's,
+ * not the first, so it can only show a span HAS passed, never that it has not.
+ */
+function tenurePassed(tenure:Tenure,coverStart:string|null|undefined,when:string){
+  const start=coverStart?isoDate(coverStart):null;
+  const ends=start?addPeriod(start,tenure.n,tenure.unit):null;
+  return ends!=null&&ends<=when;
+}
+
 /** The date the benefit responds to, in the order the contract would read them:
  * the diagnosis for a living benefit, the accident for an injury, the death
  * last. */
@@ -625,6 +659,15 @@ export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:
       // A limit that may be this benefit's: the figure above it is not shown, and never shown uncapped.
       const whose=limitIsFor(raw,item);
       if(whose==="other")return {kind:"clear"};
+      // A limit for part of the policy's life applies only once DearPolicy can show which part the claim falls in.
+      const tenure=tenureOf(raw.quote);
+      if(tenure){
+        const passed=tenurePassed(tenure,coverStart,claimDate(facts)??today);
+        if(tenure.when==="while"&&passed)return {kind:"clear"};
+        if(!passed)return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
+          +" that depends on how long the policy has been in force, and DearPolicy cannot confirm that, so no amount is shown for "
+          +item.title+"."+quoteTail};
+      }
       if(read.kind==="unsure"||ceiling==null||whose==="unknown")
         return {kind:"withhold",text:"the policy states a limit of "+limit+(raw.productName?" under "+raw.productName:"")
           +" that may apply to "+item.title+", so no amount is shown for it."+quoteTail};
