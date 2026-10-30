@@ -33,6 +33,68 @@ test("benefit names in three markets go to their category", () => {
   assert.equal(categoryOfBenefit("Funeral expenses"), null);
 });
 
+test("cover for what the person owes others is never their own accident, death or hospital cover", () => {
+  for (const b of ["If you are liable for accidental death, injury or damage to other people, items or property", "Personal Liability",
+    "Legal liability to third parties for accidental bodily injury or death", "Death or injury to a third party", "Third party property damage",
+    "Liabiliti Peribadi / Personal Liability", "Public liability (accidental death or injury to others)"]) assert.equal(categoryOfBenefit(b), null, b);
+  assert.equal(categoryOfBenefit("Accidental death", "Section 6 - Personal Liability"), null);
+  // Not liability: the person's own cover, whoever caused it.
+  assert.equal(categoryOfBenefit("Accidental death due to assault by a third party"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Accidental Death"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Hospital cash for injury caused by a third party"), "Hospital Cash");
+  assert.deepEqual(categoryRows("Personal Accident", [row("Accidental Death"), row("If you are liable for accidental death, injury or damage to other people")]).map((r) => r.benefit), ["Accidental Death"]);
+});
+
+test("the insurer's own limits of liability are no liability cover: the person's own cover under them keeps its category (Critic R355, TE pr192 F1)", () => {
+  const own: [string, string | null, string][] = [
+    ["Accidental death", "Maximum Liability per Insured Person", "Personal Accident"],
+    ["Accidental death", "Schedule of Benefits and Limits of Liability", "Personal Accident"],
+    ["Death", "Our liability", "Death"],
+    ["Daily hospital cash", "Limit of Liability (S$)", "Hospital Cash"],
+    ["Total and Permanent Disability", "Benefits and liabilities", "Total Permanent Disability"],
+    ["Accidental death - maximum liability", null, "Personal Accident"],
+    ["Death Benefit (limit of liability S$200,000)", null, "Death"],
+    ["Accidental Death - maximum liability RM 100,000", null, "Personal Accident"],
+    ["Daily Hospital Cash (our liability is limited to 30 days)", null, "Hospital Cash"],
+    ["Accidental Death (we are not liable for death from illness)", null, "Personal Accident"],
+    ["Accidental death", "Jadual Manfaat dan Had Liabiliti", "Personal Accident"],
+    ["Accidental death", "Benefits and maximum liability (£)", "Personal Accident"],
+    ["Accidental death (excluding damage to third party property)", null, "Personal Accident"],
+    ["Accidental death", "Third party claims administrator: Example TPA", "Personal Accident"],
+    ["Death caused by a third party", null, "Death"],
+    // TE pr192 r2 G1.
+    ["Death Benefit of the Public Officers Group Insurance Scheme", null, "Death"],
+    ["Daily Hospital Cash - ward of the public hospital", null, "Hospital Cash"],
+    ["Accidental death from assault by a third party or medical misadventure", null, "Personal Accident"],
+    ["Accidental death - injury to others is excluded", null, "Personal Accident"],
+    ["Accidental death [excluding injury to others]", null, "Personal Accident"],
+    ["Accidental death, not payable if you are liable to others", null, "Personal Accident"],
+    ["Death of any person covered under this policy", null, "Death"],
+    // "Any person" outside a liability frame is the insured (Critic R360 M1, TE pr192 r3 note 1).
+    ["Death of any person in your family", null, "Death"], ["Death of any person who is a Life Assured", null, "Death"],
+    ["Death of any person aged 18 to 65", null, "Death"], ["Accidental death of any person travelling with you", null, "Personal Accident"],
+    ["Death of any person to whom this certificate applies", null, "Death"], ["Accidental death of any person on the plan", null, "Personal Accident"],
+    ["Total and permanent disability of any person under 65", null, "Total Permanent Disability"], ["Death benefit of any person aged 18 to 70", null, "Death"],
+    ["Death or bodily injury to any person covered under this policy", null, "Personal Accident"], ["Death or injury to any person in your family", null, "Personal Accident"],
+    ["Compensation for death of any person insured", null, "Death"],
+    ["Death or injury to any person covered by this policy", null, "Personal Accident"],
+  ];
+  for (const [b, section, want] of own) assert.equal(categoryOfBenefit(b, section), want, b + " / " + section);
+});
+
+test("liability worded many ways is never the person's own cover (TE pr192 F3)", () => {
+  for (const b of ["Death of a third party", "Daily hospital allowance for injured third parties", "Total and permanent disability of a third party",
+    "Bodily injury or death of a third party", "Third party death or bodily injury", "Claims against you for death or injury of others",
+    "Third party hospital expenses", "Liability to others", "Injury caused to others", "Tanggungan Pihak Ketiga - kematian", "第三者责任 - 身故",
+    "Responsabilité civile - décès", "Haftpflicht Tod", "Death of or bodily injury to any person", "Liability to pay compensation for accidental death of any person",
+    "Death of someone else", "Bodily injury you cause to other people", "Death of a visitor to your home", "Liabiliti terhadap pihak ketiga",
+    "Tanggung jawab hukum", "Trách nhiệm dân sự",
+    "If you are legally liable for the accidental death of, or injury to, another person", "Accidental death of any other person caused by you",
+    "Third party daily hospital cash", "Death of a person other than the insured", "Injury to any person other than you"]) assert.equal(categoryOfBenefit(b), null, b);
+  assert.equal(categoryOfBenefit("Death", "Third Party Cover"), null);
+  for (const section of ["Section 4: Liability", "Your liability", "Liabilities"]) assert.equal(categoryOfBenefit("Death", section), null, section);
+});
+
 test("an illness the name excludes is not a cause it pays; injury is accident; an accident uplift keeps the Death tile (TE P144-6, Critic R227)", () => {
   for (const b of ["Accidental Death (death from illness or disease is not covered)", "Death due to Injury", "Accidental Death - not payable for sickness",
     "Accidental TPD (sickness excluded)", "TPD due to Injury", "Kematian akibat Kemalangan / Death due to Injury"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);

@@ -70,6 +70,44 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   return "accident";
 }
 
+// Cover for what the person owes other people, named only by words that say so (an allow-list, Critic R355, TE pr192 F1):
+// a kind of liability cover ("Personal Liability", "public liability"), liability or harm TO others or third parties,
+// harm OF a third party ("Death of a third party"), or a third party's own loss ("Third party property damage"). The
+// insurer's own limits ("Limits of Liability", "maximum liability", "our liability is limited to", "we are not liable")
+// name no one else and are never matched; nor is the person's own cover caused BY a third party ("assault by a third party").
+const OTHERS = String.raw`(?:(?:any\s+)?other\s+(?:people|persons?)|another\s+person|others|(?:a|any|the)\s+third[\s-]part(?:y|ies)|third[\s-]part(?:y|ies)|members?\s+of\s+the\s+public|someone\s+else|anyone\s+else|`
+  + String.raw`(?:a\s+)?visitors?\s+to\s+your\s+home|(?:a\s+)?passers?[\s-]by|pihak\s+ketiga|orang\s+lain)`;
+/** "Any person" is someone else only in a liability frame: liability or compensation to them, or harm done TO them
+ * ("injury to any person"). "Death of any person in your family" or "aged 18 to 65" is the insured's own cover (Critic
+ * R360 M1). */
+// Liability by default, unless a closed list of insured markers follows ("injury to any person covered under this policy",
+// "any person in your family": Critic R363 M1, TE pr192 K40/K41).
+const TO_ANYONE = String.raw`(?:` + OTHERS + String.raw`|any\s+persons?(?!\s+(?:insured|covered|named|listed|in\s+your\s+family|on\s+the\s+plan|under\s+this\s+(?:policy|plan|certificate)|who\s+(?:is|are)\s+(?:insured|covered))\b))`;
+const LIABILITY = new RegExp([
+  String.raw`\b(?:personal|public|legal|civil|third[\s-]party|family|individual|tenant['’]?s?|occupiers?['’]?|employers?['’]?|golfers?['’]?|pet\s+owners?['’]?)\s+liabilit(?:y|ies)\b`,
+  String.raw`\bliabilit(?:y|ies|i)\s+(?:to|towards|terhadap)\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\bliable\b[^.;()]{0,100}?\b(?:to|towards|of),?\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\bcompensation\b[^.;()]{0,80}?\b(?:to|for|of)\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:(?:caused|you\s+cause)\s+)?to\s+` + TO_ANYONE + String.raw`\b`,
+  String.raw`\b(?:damage|injury|injuries|death|disability|loss)\s+(?:(?:caused|you\s+cause)\s+)?of\s+` + OTHERS + String.raw`\b`,
+  String.raw`\b(?:injured|deceased)\s+(?:third[\s-]part(?:y|ies)|other\s+(?:people|persons)|others)\b`,
+  String.raw`\b(?:total\s+and\s+permanent\s+disability|tpd|bodily\s+injury|death|hospital\w*|medical\s+expenses?)\b[^.;()]{0,40}?\bof\s+` + OTHERS + String.raw`\b`,
+  String.raw`\bthird[\s-]part(?:y|ies)['’]?\s+(?:(?!(?:or|and)\b)[a-z]+\s+){0,2}?(?:property|bodily|death|injury|injuries|hospital\w*|medical|cover|liabilit(?:y|ies)|damage)\b`,
+  String.raw`\bclaims?\s+(?:made\s+)?against\s+(?:you|the\s+insured)\b`,
+  String.raw`\bliabiliti\s+(?:peribadi|awam|diri|undang-undang|pihak\s+ketiga)\b|\btanggungan\s+pihak\s+ketiga\b`,
+  String.raw`\btanggung\s+jawab\s+(?:hukum|pihak\s+ketiga)\b|trách\s+nhiệm\s+dân\s+sự|第三者|第三方责任|\bresponsabilit[ée]\s+civile\b|\bhaftpflicht\w*`,
+].join("|"), "iu");
+/** Bracketed wording that excludes something ("(excluding damage to third party property)") says what is NOT paid: it
+ * never decides that a row is liability cover. */
+const EXCLUDED_ASIDE = /[(\[]\s*(?:excluding|excludes|except|other\s+than|not\s+including|but\s+not|no)\b[^()\[\]]*[)\]]/giu;
+/** Wording from which on a row says what is NOT paid ("Accidental death excluding injury to others", "- injury to others is
+ * excluded", "not payable if you are liable to others", TE pr192 G1). */
+const EXCLUDED_TAIL = /\b(?:excluding|except(?:\s+for)?|other\s+than|not\s+payable\s+(?:if|when|where)|not\s+covered\s+(?:if|when|where))\b.*$|\s[-–—]\s[^-–—]*\b(?:is|are)\s+(?:excluded|not\s+covered)\b.*$/isu;
+/** A section headed only "Liability" ("Section 4: Liability", "Your liability", "Liabilities"), with no limit word. */
+const LIABILITY_SECTION = /^\W*(?:(?:section|part|benefit)\s+\w+\W+)?(?:your\s+|personal\s+)?liabilit(?:y|ies)\W*$/iu;
+/** "Death of a person other than the insured" names someone else; its "other than" is no exclusion (TE pr192 r3 note 2). */
+const OTHER_THAN_INSURED = /\b(?:death|injury|injuries|disability|loss|damage)\s+(?:of|to)\s+(?:a|any)\s+persons?\s+other\s+than\s+(?:the\s+|you|yourself)(?:insured|life\s+assured|policy\s?holder|policy\s?owner|covered\s+person)?/iu;
+const isLiability = (text: string) => OTHER_THAN_INSURED.test(text) || LIABILITY.test(text.replace(EXCLUDED_ASIDE, " ").replace(EXCLUDED_TAIL, " "));
 /** A section that is accident cover as a whole: "Personal accident", or one that starts with accident words ("Accidental
  * Benefits"). A section that only mentions an accident ("Death and Accidental Death") is not. */
 const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?:benefit|section|part)\s+\w+\W+)?(?:the\s+)?${ACC}`, "i");
@@ -79,6 +117,9 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * whatever its own name says: a travel policy's "Total and permanent disability" under "Personal accident" pays only on an
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
+  // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
+  // to other people") pays a third party, never the person's own death, injury or hospital bill.
+  if (isLiability(benefit) || (section && (isLiability(section) || LIABILITY_SECTION.test(section.trim())))) return null;
   const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
