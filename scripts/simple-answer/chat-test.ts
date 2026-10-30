@@ -245,6 +245,14 @@ async function main() {
     }
     // The page itself names another currency, or says "unless stated otherwise", or declares none: the "$" stays unresolved.
     assert.deepEqual(ask(pack(schedule + "\nRider premium\tUS$20.00")), [["$100,000", false]]);
+    // A lowercase sign, or a second, qualified currency field printing only a sign, also names another currency.
+    assert.deepEqual(ask(pack(schedule + "\nRider premium\tus$20.00")), [["$100,000", false]]);
+    for (const other of ["Currency of rider\t:\tRM", "Rider currency\tRM", "Currency of rider: US$", "Currency (rider)\t:\thk$"]) {
+      assert.deepEqual(ask(pack(`${schedule}\n${other}`)), [["$100,000", false]], other);
+    }
+    // The same field printing the declared currency's own sign changes nothing.
+    assert.deepEqual(ask(pack(`${schedule}\nCurrency of rider\t:\tS$`)), [["S$100,000", true]]);
+    assert.deepEqual(ask(pack(`${schedule.replace("Singapore Dollar", "US$")}\nCurrency of rider: US$`)), [["US$100,000", true]]);
     assert.deepEqual(ask(pack(schedule + "\nAll amounts are in Singapore dollars unless stated otherwise")), [["$100,000", false]]);
     assert.deepEqual(ask(pack("Insured Amount\t:\t$100,000.00\nDeath Benefit\t$100,000.00")), [["$100,000", false]]);
   });
