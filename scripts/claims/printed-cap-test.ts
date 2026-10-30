@@ -220,6 +220,10 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Death benefit", "Death benefit before age 5 is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000 up to age 5 and S$500,000 thereafter."],
     ["Death benefit", "Death benefit until the insured turns 6 is limited to S$50,000."], ["Death benefit", "Death benefit for insured persons aged 18 to 25 is limited to S$50,000."],
     ["Death benefit", "The death benefit is limited to £50,000 until the 4th birthday."],
+    // An end frame whose subject may be the limit, not the cover, narrows (TE #195 r5 K1).
+    ["Death benefit", "The death benefit is limited to S$50,000 and this limit ends at age 18."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
+    ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit: the reduced amount ends at age 21 and is limited to S$50,000."],
+    ["Total and permanent disability", "TPD benefit is limited to S$50,000 and ends when the insured reaches age 70."],
     // A limit on one part of a benefit that pays for several (Critic R367 M2).
     ["Death or TPD", "TPD benefit is limited to S$50,000"], ["Hospitalisation and Surgery", "Surgery is limited to S$50,000"],
     ["Accidental Death and Disablement", "Accidental death is limited to S$50,000"],
@@ -242,9 +246,10 @@ test("a narrower kind's limit, or a limit for children only, never cuts a wider 
     ["Critical illness", "Critical illness benefit is limited to S$50,000 and cover ends at age 85."],
     ["Death benefit", "Death benefit is limited to S$50,000, paid over 10 years."], ["Death benefit", "Death benefit is limited to S$50,000 for policies in force under 2 years."],
     ["Death benefit", "Death benefit is limited to S$50,000; the policy expires on the 85th birthday."], ["Accidental death", "Accidental death benefit is limited to S$50,000 for insured persons aged 18 to 70."],
-    ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."], ["Death benefit", "Death benefit is limited to S$50,000, payable up to age 99."],
-    ["Death benefit", "Death benefit is limited to S$50,000, payable until the insured attains age 85."], ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
+    ["Death benefit", "Death benefit under the Senior Protect plan is limited to S$50,000."],
+    ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured reaches age 70."],
     ["Death benefit", "Death benefit is limited to S$50,000; cover ends when the insured turns 75."],
+    ["Death benefit", "Death benefit is limited to S$50,000; the policy is renewable up to age 99."], ["Death benefit", "Death benefit is limited to S$50,000. The plan matures at age 70."],
     ["Death benefit", "Entry age 18 to 65. Death benefit is limited to S$50,000."],
   ] as [string, string][])
     assert.equal(one(title, 500000, quote, 50000), 50000, `${title}: ${quote}`);

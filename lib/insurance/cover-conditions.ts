@@ -328,11 +328,14 @@ const AGE_SIGNAL=new RegExp([
 // An adult's age (18 or more): a child's age is always a group's, never the age a whole cover ends at (TE #195 J1).
 const ADULT_AGE=String.raw`(?:1[89]|[2-9]\d|1\d\d)`;
 const COVER_RUNS=String.raw`(?:ends?|ending|expires?|expiring|terminates?|ceases?|matures?|lapses?|(?:is\s+)?renewable|runs|continues|(?:is\s+)?payable)`;
+// The cover itself as the subject: "this limit ends at age 18" or "the benefit is payable up to age 21" may be the limit's
+// own span, so only the cover, policy, plan, contract or insurance ends a whole cover (TE #195 K1).
+const COVER_ENDS=String.raw`\b(?:cover(?:age)?|polic(?:y|ies)|plan|contract|insurance)\s+(?:(?:is|will|shall)\s+(?:be\s+)?)?${COVER_RUNS}`;
 const WHOLE_COVER_AGES=new RegExp([
-  // The age the cover itself ends or runs to: a duration verb, then the adult age (Critic R373 M1). A bare "until age 16",
-  // "up to age 5", "before age 65" or "starts from age 70" is not anchored to the cover and narrows.
-  String.raw`\b${COVER_RUNS}\s+(?:(?:at|on|until|till|up\s+to|to)\s+)(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${ADULT_AGE}\b|${ADULT_AGE}(?:st|nd|rd|th)\s+birthday)`,
-  String.raw`\b${COVER_RUNS}\s+(?:until|till|when|once)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${ADULT_AGE}\b`,
+  // The age the cover itself ends or runs to: the cover, a duration verb, then the adult age (Critic R373 M1). A bare
+  // "until age 16", "up to age 5", "before age 65" or "starts from age 70" is not anchored to the cover and narrows.
+  String.raw`${COVER_ENDS}\s+(?:(?:at|on|until|till|up\s+to|to)\s+)(?:the\s+)?(?:\p{L}+(?:'s|’s)\s+)?(?:age\s+(?:of\s+)?${ADULT_AGE}\b|${ADULT_AGE}(?:st|nd|rd|th)\s+birthday)`,
+  String.raw`${COVER_ENDS}\s+(?:until|till|when|once)\s+(?:\p{L}+\s+){0,3}(?:reaches|attains|turns)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?${ADULT_AGE}\b`,
   // The ages it may be joined at, up to a usual entry or expiry age ("Entry age 18 to 65", insured persons "aged 18 to 70").
   String.raw`\bentry\s+ages?\s*(?:of|is|:|from)?\s*${AGE_N}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
   String.raw`\baged\s+(?:between\s+)?${ADULT_AGE}\s*(?:to|-|–|and)\s*(?:[6-9]\d|1\d\d)\b`,
