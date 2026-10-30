@@ -9810,3 +9810,48 @@ R387 M1 is fixed. I probed 37 tenure wordings (adult Death S$900,000, limit S$50
 
 Low (accepted gap, no change against main):
 - L1: "Death benefit is limited to S$50,000 for up to 2 years" reduces. This is the builder's noted gap ("payable for N years" read as a benefit-payment period), and the "up to" prefix sets it aside the same way. A contrived "within 2 years of the trip start of the policy" also reduces, because "trip" is an event anchor. Neither is a regression.
+
+## R389: #200 head ff0e2c63 (plan column from a cells-only reading): READY (one Low)
+
+Gate (base 4103e103): plan-columns-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `planColumnFigure` (scratch, outside git), row "Personal liability while on your trip S$500,000 S$750,000 S$1,000,000":
+- A cells-only reading with column Business and figure S$750,000 gives Business S$750,000.
+- None is given when two cells-only readings name different benefits, when the run is not unique, when the figure is not one of the cells, when another reading prints the same run with words, or when the currency differs.
+
+The questions asked:
+- Could a cells-only reading belong to a different row whose stored row is missing? Yes, and the code does not prevent it (see L1). It cannot change the figure, though: the reading must print exactly the same run and its figure must be one of those cells, so any row it belongs to has the same cells, and the same column gives the same amount.
+- Could the column position differ? The figure is checked against the cell values, not against a position. A run with two equal cells ("S$750,000 S$750,000 S$1,000,000") would accept either plan name for S$750,000, but the amount is the same. The plan column name comes from the checked reading, as on main.
+
+- L1 `lib/insurance/scale-limit.ts` cells-only branch: the reading's `benefit` is required to be one name, but it is never compared with the stored row's own words. A reading named "Legal expenses" is accepted for "Personal liability ..." (probe). The amount cannot differ, as explained above, but for clarity require the reading's benefit name to contain the row's last words (the `words` the worded branch already uses). Also `runIsUnique` compares `planCellRun(r.quote)===run`, so a stored row whose quote prints two runs (one of them the same) does not block. Count rows whose spaced quote includes the run instead.
+
+## R390: #201 head 62d993d1 (hide a benefit named only by an empty plan cell): READY (one Low)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `namesNoBenefit(name, quote)`:
+- Newly hidden: "Not covered" / "Not Covered" / "Not covered." / "Excluded" / "Tiada" when the quote is exactly one cell run that starts with that name.
+- Kept: a quote with any other words ("Pre-existing conditions: Not covered S$500 S$1,000"), a quote that is the name alone, "Nil excess", and a real name over a "Not covered" run.
+- "N/A", "Nil" and "Not applicable" are hidden on main already (EMPTY_CELL), whatever the quote.
+I found no name + quote shape that hides a row with its own benefit name.
+
+- L1 (lost-cover direction): the hidden row is still a documented plan-table row whose name the reader lost. The Business column may hold S$500 for the household's own plan. Hiding it at read time is better than showing "Not covered S$500", but the household is not told that a row could not be named. Suggest a follow-up that counts such rows into the document's "could not read every row" note (or offers Read again), instead of dropping them silently.
+
+## R391: #202 head f91fe508 (policy date and "years old" tenure forms): CHANGES (one High)
+
+Gate (base 4103e103): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe (adult Death S$900,000, limit S$50,000; start 2010-01-01; scratch, outside git). These withhold on main 4103e103 and now CLEAR, so the full S$900,000 shows where the limit may apply (a wrong claimable amount, and a regression):
+- "within 2 years of the date of the policy alteration"
+- "within 2 years of the date of the policy endorsement increasing the sum assured"
+- "within 2 years of the date of the policy change"
+- "within 2 years of the policy date of the latest increase"
+- "if the cover is less than 2 years old following any increase"
+- "if the policy is less than 2 years old or the rider is less than 2 years old"
+
+Correct: "of the policy date", "of the date of the policy", "while the policy is less than 2 years old" and "the plan is under two years old" clear with a 2010 start. Reinstatement and revival, "the insured is less than 2 years old" and the after-form withhold. With no start, all withhold.
+
+- H1 `lib/insurance/cover-conditions.ts` START and AGED: "date of the policy" + `\b` matches inside "date of the policy alteration / endorsement / change", and "policy date" matches inside "policy date of the latest increase". The AGED forms ignore a following "following any increase", and an "or" clause naming another item. An alteration, an endorsement or an increase restarts the clock for that part, so the held start proves nothing about it. Fix:
+  - End START with a closed set of followers: end of quote, punctuation, or a joining word (and, or, the, is, ...). Then "date of the policy <noun>" does not match.
+  - Withhold any tenure quote that also names increase, alteration, endorsement, change, addition, rider, reinstat or reviv (extend the existing reinstatement rule to these words).
+  - Add the 6 rows to printed-cap-test as withhold with a 2010 start.
