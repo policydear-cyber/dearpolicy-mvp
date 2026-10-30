@@ -14,6 +14,7 @@ import { premiumSourceKind } from "@/lib/format/premium-source";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
+import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -72,11 +73,13 @@ export async function GET(request:NextRequest){
   // figure the document prints for it, and a category nothing else confirms is covered by those rows. Nothing here is
   // tied to one scheme, product or insurer. Read from stored readings only: no model call.
   let tableCovers:TablePremiumCover[]|null=null;
+  let tableDocuments:{id:string;state:string}[]=[];
   try{
     const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
     if(await benefitTableLive(accountId)){
       const { tableFor }=await import("@/lib/benefit-table/service");
-      const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
+      const loaded=await tableFor(appDb,accountId);tableDocuments=loaded.documents;
+      const person=loaded.table.people.find(p=>p.id===active.id);
       tableCovers=person?.covers??[];
       const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
       for(const category of COVERAGE_CATEGORIES){
@@ -155,14 +158,20 @@ export async function GET(request:NextRequest){
   if(!premiumItems.length)reminders.push({kind:"payment",title:"Add your latest premium record",detail:"Upload a renewal notice or premium receipt so DearPolicy can track whether the cover is still being paid for.",href:"/records"});
   else{const now=Date.now();const staleMonthly=premiumItems.find((p)=>/month/i.test(p.frequency??"")&&now-new Date(p.payment_date||p.period_start||p.created_at).getTime()>45*86400000);const staleAnnual=premiumItems.find((p)=>/year|annual/i.test(p.frequency??"")&&now-new Date(p.payment_date||p.period_start||p.created_at).getTime()>330*86400000);if(staleMonthly)reminders.push({kind:"payment",title:"Upload this month's premium record",detail:`${staleMonthly.product_name??staleMonthly.insurer??"A monthly policy"} has no recent payment record.`,href:"/records"});else if(staleAnnual)reminders.push({kind:"payment",title:"Upload the latest annual renewal",detail:`${staleAnnual.product_name??staleAnnual.insurer??"An annual policy"} may have a newer premium or renewal notice.`,href:"/records"});}
   if(Number(unmatched.rows[0]?.count??0)>0)reminders.push({kind:"family",title:"Match the people we found",detail:"A personalised document contains named insured people that are not linked to a family profile yet.",href:"/policies"});
-  if(Number(q.needs_review)>0)reminders.push({kind:"coverage",title:"Review source evidence",detail:`${q.needs_review} document${q.needs_review===1?" needs":"s need"} review. Portfolio cards still show the best-supported binary result, with the review flag inside the evidence view.`,href:"/policies"});
+  // A failed or partly read document of this person may hold cover the tiles cannot show: say so, never "not found" alone.
+  const notRead=await notFullyRead(accountId,active.id,tableDocuments);
+  const notReadNote=notFullyReadNote(notRead,active.display_name,true);
+  // Documents with details not matched to their page, in the words Documents uses. One already named as not fully read is not named twice.
+  const unconfirmed=Number(q.needs_review)>0?(await query<{id:string}>(`SELECT DISTINCT p.id::text AS id FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2")} AND p.needs_review`,[accountId,active.id])).rows.filter((r)=>!notRead.ids.includes(r.id)).length:0;
+  if(unconfirmed>0)reminders.push({kind:"coverage",title:unconfirmed===1?"Some details in a document are not confirmed":"Some details in documents are not confirmed",detail:`${unconfirmed===1?"One document has":`${unconfirmed} documents have`} details that could not be matched to the page they came from, so DearPolicy does not use them in answers yet. Documents shows which.`,href:"/policies"});
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
   if(premiumSummary.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumSummary.note,href:"/records"});
+  if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
+  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});
