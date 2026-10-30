@@ -9866,3 +9866,21 @@ Probe of `documentCurrency` on a page that also prints "S$100,000" and "$120" (s
 The exemption removes only the phrase itself, so any other mention of a currency elsewhere still counts.
 
 - L1 `lib/simple-chat/verify.ts` NO_PARTICULAR_DOLLAR: a foreign dollar named only by a country adjective beside the exempt phrase now passes as SGD, so a bare "$" in that document reads as S$. Examples: "the dollar amount, in Australian terms", "a dollar limit of 500 Canadian", "the same dollar amounts as the Brunei plan". These are unlikely in a real schedule. A cheap close: do not apply the exemption in a sentence that also names a dollar country (Australian, Canadian, Hong Kong, Brunei, US/American, New Zealand, Taiwan, Fiji, ...).
+
+## R393: #201 head bc66aa06 (fund charge, asset mix and footer rows hidden): CHANGES (one High)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `namesNoBenefit(name, quote)` (scratch, outside git). The four stored shapes are hidden as intended. These real benefits are hidden too, a documented benefit dropped (the lost-cover direction):
+- "Loyalty Bonus" / "Loyalty Bonus of 0.50% p.a. of the Net Asset Value of your policy, paid yearly from year 10"
+- "Welcome Bonus" / "A welcome bonus of 1% per annum of the fund's NAV for the first 5 years"
+- "Death Benefit" / "Death Benefit: higher of 105% of premiums paid or the Net Asset Value; a charge of 1% p.a. of the NAV applies"
+- "This rider pays 100% of the sum assured on diagnosis." / the same sentence + "Page 2 of 14"
+- "Please note the hospital cash benefit is S$200 per day." / the same sentence + "Page 3 of 10"
+- "Cash" / "Cash 10% 20%" (an asset-class name with two bare percentages: plausibly a cash-benefit row with plan percentages)
+
+- H1 `lib/policies/benefit-catalog.ts` readsAsNoBenefit:
+  - FUND_CHARGE hides any quote that mentions "p.a. of the NAV", whatever the name. ILP bonuses (loyalty, welcome, power-up) are worded exactly like this. Fix: hide only when the NAME is a fund (ends "Fund", or matches the fund-name shape) AND the quote is the name followed only by the charge figures and the NAV phrase (an anchored whole-quote shape, like the asset-mix rule). Never hide when the name or quote has a benefit word (bonus, benefit, payout, reward, pays, payable).
+  - FOOTER_SENTENCE hides any This/Please/Note sentence that is followed by a page count. Fix: also require that the name has no figure, money or %, and no benefit word. Better still, allow-list the footer sentences themselves ("valid when all pages are included", "read together with", "not a contract", "for illustration only").
+  - ASSET_CLASS: "Cash" and "Property" are also benefit words (cash benefit, property damage). Require the fund-mix context: 3 or more percentages that each look like an allocation (not 100%/200% style), or drop cash and property from the list.
+  - Add the 6 rows above to nameless-benefit-test as kept.
