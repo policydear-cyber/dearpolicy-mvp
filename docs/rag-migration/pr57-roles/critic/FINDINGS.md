@@ -9755,3 +9755,28 @@ cb4cb982 adds only "the over-70s" (1 line) on top of 93f6a1fd, so the R383 gate 
 Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
 
 R383 M1 is fixed. All 9 R383 age rows withhold, including "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ...". "Hospital bills over 1000" and "Hospital stays over 30 days" reduce. The 55 earlier probe rows (R373-R382) are unchanged: 45 withhold, the 6 cover-end and entry/issue rows reduce to S$500,000, and the R382 L1 tenure rows reduce as on main (follow-up already noted).
+
+## R386: #199 head 39707bc9 (tenure-limited sub-limits, R382 L1): CHANGES (one Medium, one Low)
+
+Gate (base 28693c90, network blocked, model keys stripped): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The rule is right where it applies. The held start can only prove that a span has passed, so a while-limit clears and an after-limit cuts only once start + N ≤ the claim date, and anything else withholds. The `addPeriod` month-end clamp is correct.
+
+Probe (adult Death, item S$900,000, limit S$50,000; coverStart 2025-06-01, 2010-01-01 and none; today 2026-10-30; scratch script, outside git). Only the two exact forms are read: "in force under 2 years" and "in force for more than 10 years". Every other common tenure wording is not recognised, so it cuts every policy to S$50,000 whatever the start date, as on main:
+- "if death occurs within 2 years of the commencement date"
+- "if death occurs within 24 months from the date of issue"
+- "during the first two policy years" (number word)
+- "in the first 2 years"
+- "before the second policy anniversary"
+- "during the first policy year"
+- "if death occurs within one year of the risk commencement date"
+- "if the policy has been in force for less than two years" (number word)
+- "within 2 years of reinstatement"
+- "from the 10th policy anniversary"
+
+- M1 `lib/insurance/cover-conditions.ts` TENURE_WHILE / TENURE_AFTER: these recognise only a few exact phrasings, and anything else falls through to "applies to everyone". Fix (default-safe):
+  - Add a broad TENURE_SIGNAL: "policy year(s)", "policy anniversary", "in force", "within/during/in the first ...", or "(of|from) the (date of) issue/commencement/inception/risk commencement/reinstatement/start". It withholds whenever tenureOf cannot parse the quote exactly.
+  - Widen the parser: number words (reuse AGE_N); "within N years|months of|from the <start word>" as while; "first N policy year(s)" and "first policy year" as while N=1; "before the Nth policy anniversary" as while N; "from|after|on or after the Nth policy anniversary" as after N.
+  - Reinstatement and revival: always withhold, because the held start is not the reinstatement date.
+  - Add the 10 rows above to printed-cap-test as withhold when start is unknown or recent. Add the parsed ones as clear (while) or reduce (after) with start 2010-01-01.
+- L1 `lib/chat/workflow.ts:997`: coverStart is the EARLIEST `effective_date` across the contract's documents. If that set ever holds a replaced or lapsed-and-reinstated policy's older document, the "can only prove a span has passed" premise breaks: a while-limit clears and the full figure shows. That is an inference from the code; I did not check stored rows. Fix: for the tenure clear/cut, use the latest effective_date (a renewal or reinstatement only makes it later, and a later date stays safe), or withhold when the contract's documents give different effective dates.
