@@ -4,7 +4,7 @@ import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,isRulelessCoverLine,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
 import { documentName,loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
@@ -106,7 +106,8 @@ export async function GET(request:NextRequest){
         needsReview:row.needs_review,basisInferred:row.basis_inferred,
         needsConfirmation:row.basis_inferred&&!row.reviewed_at,reviewedAt:row.reviewed_at};
     };
-    const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name)&&!namesNoBenefit(row.benefit_name,row.quote));
+    const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name)&&!namesNoBenefit(row.benefit_name,row.quote)
+      &&!isRulelessCoverLine({benefitName:row.benefit_name,quote:row.quote,formulaKind:row.formula_kind,formulaValue:row.formula_value}));
     const resolved=new Map(repairStoredRules(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
     // Either/or amounts: the same row worked out two ways for one person (a share of a fixed limit in one table, a share
     // of the sum insured in another). Sent as one group on every member row, never as one picked figure, and only when
