@@ -695,12 +695,20 @@ const WORD_FRACTIONS=[
   {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
   {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
 ];
-/** A share of the sum insured whose passage also prints an amount ("10% of Sum Insured, up to S$25,000", "subject to a
- * maximum of RM25,000", "not exceeding 25,000", "to a total of twenty-five thousand"): the amount may cap the share, and
- * paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover where the cap is S$25,000; Critic R407).
- * Such a share is not used: a figure with a currency sign, code or word, a figure of four digits or more, or a number word
- * for thousands or more. Default-safe: a passage that prints a figure the share does not need gives no rule. */
-const PRINTS_AN_AMOUNT=/(?:s\$|us\$|hk\$|a\$|\$|€|£|¥|\b(?:sgd|usd|myr|rm|hkd|aud|eur|gbp)\s*)\d|\d[\d,.]*\s*(?:dollars?|ringgit|sgd|usd|myr|eur|gbp)\b|\d{1,3}(?:,\d{3})+|\d{4,}|\b(?:thousand|million|billion|lakh|ribu|juta)\b/i;
+/** A share of the sum insured whose passage also prints an amount or a bound ("10% of Sum Insured, up to S$25,000",
+ * "subject to a maximum of RM25,000", "not exceeding 25 000", "up to the limit in the Benefit Table", "capped at 1/40 of the
+ * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover
+ * where the cap is S$25,000; Critic R407, TE pr210). Such a share is not used. Counted: a figure with a currency sign,
+ * code or word; a grouped, four-digit or "k" figure; a number word for hundreds or more; a figure per day or week; a
+ * fraction; and any cap word. A figure the share does not need ("within 30 days", "under age 65") is left alone, as on
+ * main; on the stored rows only the 6 that print a cap change. */
+const PRINTS_AN_AMOUNT=new RegExp([
+  String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd)\s*)\d`,
+  String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
+  String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
+  String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
+  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower)\s+of\b`,
+].join("|"),"iu");
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *

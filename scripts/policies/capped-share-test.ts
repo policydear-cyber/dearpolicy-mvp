@@ -17,7 +17,12 @@ const coverage = { id: "cov-1", policyId: "policy-1", familyMemberId: "fam-1", c
 
 const CAPPED = ["Angioplasty: 10% of Sum Insured, up to S$25,000", "10% of the sum insured, subject to a maximum of SGD 25,000", "10% of the sum insured, not exceeding RM25,000",
   "10% of the sum insured, no more than 25,000 in total", "10% of the sum insured, to a total of twenty-five thousand", "10% of the sum insured, capped at 25,000 dollars",
-  "10% of the sum insured, maximum US$ 25,000", "10% of the sum insured or €25,000, whichever is lower", "10% of the sum insured (limit 25000)"];
+  "10% of the sum insured, maximum US$ 25,000", "10% of the sum insured or €25,000, whichever is lower", "10% of the sum insured (limit 25000)",
+  // Other ways to print an amount or a bound (TE pr210).
+  "10% of the sum insured, payable to 25 000", "10% of the sum insured, payable to 25.000", "10% of the sum insured, payable to 25k",
+  "10% of the sum insured, at five hundred dollars", "10% of the sum insured, twenty-five hundred dollars", "10% of the sum insured, CHF 25'000",
+  "10% of the sum insured, 900 per day", "10% of the sum insured, up to the maximum shown in the Schedule",
+  "10% of the sum insured, up to the limit in the Benefit Table", "10% of the sum insured, capped at 1/40 of the Sum Insured"];
 
 test("a share whose passage prints an amount gives no rule, read or stored; a share alone still stands", async () => {
   const { repairStoredRules, validateCatalogFormula, assessCatalogBenefit, CAPPED_SHARE_NOTE } = await import("@/lib/policies/benefit-catalog");
@@ -33,7 +38,8 @@ test("a share whose passage prints an amount gives no rule, read or stored; a sh
   }
   // A share with no amount beside it stands; a person-confirmed share is kept as confirmed.
   for (const q of ["Angioplasty: 10% of the sum insured", "Receive 150% of your coverage amount if Total and Permanent Disability is due to an accident",
-    "10% of the sum insured, payable within 30 days of diagnosis"]) {
+    "10% of the sum insured, payable within 30 days of diagnosis", "10% of the sum insured if diagnosed under age 65",
+    "10% of the sum insured. We won't pay for a pre-existing condition."]) {
     const value = q.includes("150%") ? 1.5 : 0.1;
     assert.equal(validateCatalogFormula({ kind: "sum_insured", value, currency: null, quote: q, factKey: null, offsetDays: null, maximumDays: null }).formulaKind, "sum_insured", q);
     assert.equal(repairStoredRules([row(q, { formulaKind: "sum_insured", formulaValue: value })] as never)[0].formulaKind, "sum_insured", q);
