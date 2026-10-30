@@ -11,7 +11,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
-import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 
 export const runtime="nodejs";
@@ -123,6 +123,29 @@ export async function GET(request:NextRequest){
       if(!found.length||found.some(g=>!g))return null;
       return new Set(found.map(g=>JSON.stringify(g!.options))).size===1?found[0]:null;
     };
+    // A plan-table row whose plan the household's benefit table already settled from its documents (the Coverage page's
+    // "Plan Business"): that column's checked figure, said with its plan. Read from stored readings only; nothing is read.
+    // Each person's own readings, and who holds each document: a row's figure is taken only when every person who holds
+    // its document (or the one person asked about) has the same plan column for it (Critic R370 M1).
+    const planReadings=new Map<string,PlanColumnReading[]>();
+    const holders=new Map<string,string[]>();
+    if(usableRows.some(row=>resolved.get(row.id)?.conditions.includes(PLAN_COLUMNS_NOTE))){
+      try{
+        const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
+        if(await benefitTableLive(accountId)){
+          const { tableFor }=await import("@/lib/benefit-table/service");
+          const { figureText }=await import("@/lib/benefit-table/assemble");
+          const { table }=await tableFor(appDb,accountId);
+          for(const person of table.people)planReadings.set(person.id,person.rows.map(r=>
+            ({documentId:r.source.documentId,page:r.source.page,excerpt:r.source.excerpt,column:r.column,qualifier:r.qualifier,figure:r.figure,figureText:figureText(r.figure)})));
+          const held=await query<{policy_id:string;family_member_id:string}>(
+            `SELECT pm.policy_id,pm.family_member_id FROM policy_members pm
+               JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")}
+              WHERE pm.account_id=$1`,[accountId]);
+          for(const h of held.rows)holders.set(h.policy_id,[...(holders.get(h.policy_id)??[]),h.family_member_id]);
+        }
+      }catch(error){console.warn("Benefit table unavailable for Benefits:",error instanceof Error?error.message:error);}
+    }
     const benefits=usableRows.map(row=>{
       const stub=resolved.get(row.id)!;
       const formula={
@@ -135,6 +158,11 @@ export async function GET(request:NextRequest){
       const term=isScheduleTerm(row.row_kind);
       // A row of a plan table with one figure per plan: nothing is unreadable, the plan is simply not known (scale-limit.ts).
       const planColumns=stub.conditions.includes(PLAN_COLUMNS_NOTE);
+      const planFigure=planColumns?(()=>{
+        const people=member?[member]:holders.get(row.policy_id)??[];
+        const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote},planReadings.get(id)??[]));
+        return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
+      })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
@@ -154,7 +182,7 @@ export async function GET(request:NextRequest){
         // The column of a multi-column table: the plan tier or person class.
         tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
-        conditions:stub.conditions,planColumns,
+        conditions:stub.conditions,planColumns,planFigure,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and
