@@ -19,7 +19,7 @@
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { categoriesFor, conditionDrivenQuestions, FACT_FINDING_SPECS, planFactFinding, type FactFindingCategory, type FactFindingPlan, type FactFindingQuestion } from "@/lib/claims/fact-finding";
 import { loadCoverConditions } from "@/lib/policies/condition-catalog";
-import { describesAScenario } from "@/lib/policies/benefit-catalog";
+import { describesAScenario, namesNoBenefit } from "@/lib/policies/benefit-catalog";
 import { query } from "@/lib/db/client";
 import { dedupeDocuments } from "@/lib/claims/claim-pack";
 import { forSeveral, sharedReasonLine } from "@/lib/claims/answer-shape";
@@ -51,7 +51,8 @@ async function personBenefitNames(accountId: string, personId: string): Promise<
       `SELECT DISTINCT b.benefit_name FROM policy_benefits b JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id
         WHERE b.account_id=$1 AND ${activePredicate("p")} AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`,
       [accountId, personId]);
-    return rows.rows.map((r) => r.benefit_name);
+    // A fragment stored as a name ("273,411", "(a)", "and Merdeka") names no benefit (lib/policies/benefit-catalog.ts).
+    return rows.rows.map((r) => r.benefit_name).filter((name) => !namesNoBenefit(name));
   } catch { return null; }
 }
 export async function applyFactFinding(

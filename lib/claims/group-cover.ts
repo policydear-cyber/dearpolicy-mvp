@@ -14,7 +14,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { tierApplies } from "@/lib/policies/benefit-catalog";
+import { namesNoBenefit, tierApplies } from "@/lib/policies/benefit-catalog";
 import type { FactFindingCategory } from "@/lib/claims/fact-finding";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ChatAnswer, ChatCitation, ClaimItem } from "@/types";
@@ -54,7 +54,7 @@ export async function loadGroupBooklets(accountId: string, personId: string): Pr
       employer: d.employer?.trim() || null, employeeId: d.owner, employeeName: d.owner_name, memberTier: d.tier,
       effectiveDate: day(d.effective_date), expiryDate: day(d.renewal_or_expiry_date),
       documentYear: printedYear((d.product_name ?? "") + " " + d.original_filename),
-      rows: rows.filter((r) => r.policy_id === d.id).map((r) => ({ benefitName: r.benefit_name, tier: r.tier, page: r.source_page })),
+      rows: rows.filter((r) => r.policy_id === d.id && !namesNoBenefit(r.benefit_name)).map((r) => ({ benefitName: r.benefit_name, tier: r.tier, page: r.source_page })),
     }));
   } catch { return []; }
 }

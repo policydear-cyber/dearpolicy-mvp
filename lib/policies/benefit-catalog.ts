@@ -735,7 +735,7 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
  * way is held back, and a rule stated in a sentence is read from that
  * sentence. */
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)))
+  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)))
     .map(benefit=>{
       const read=ruleFromQuote(benefit);
       return read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
@@ -1048,6 +1048,28 @@ export function looksLikeCoverageLine(benefitName:string){
   if(/[A-Z]\s*\*{2,}\s*\d{2,}\s*[A-Z]/i.test(name))return true;
   if(/\b[STFGM]\d{7}[A-Z]\b/i.test(name))return true;
   return false;
+}
+/** A stored benefit "name" that names nothing: a cell of a table read as a row of its own. Seen in read documents: an
+ * illustration's projected values ("273,411"), a header's ordinal suffixes ("nd", "3rd"), a list marker ("(a)"), a
+ * year from a payout-by-year table ("2027" paying "S$717"), "N/A", and the tail of a wrapped line ("only" up to S$100,
+ * "and Merdeka" S$448.23, "percent (20%) of the surface of the Life"). Shown, they are headings on the Benefits page and
+ * amounts chat can cite for a benefit nobody can identify. Used when rows are read back, never at intake: a row this
+ * hides is still stored, so a name it wrongly hides comes back when the rule is corrected.
+ * When unsure, the name is kept. It is kept when it carries a letter run of three or more ("Décès"), two in a script other than Latin ("身故",
+ * "입원"), or a capitalised short form of two or more letters ("CI", "A&E", "TI/CI"), once list markers, figures,
+ * ordinals, money and empty-cell words are taken out. A name is a piece of a sentence only when a lower-case joining
+ * word is followed (or preceded) by a space, so "in-patient treatment" and "up-front cash" are kept. */
+const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|plus|less|including|which|that|if|as|from|up|dan|atau|untuk|termasuk|sahaja|nd|rd|st|th)(?:\s|$)/u;
+const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
+const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|as charged|-+|—)$/i;
+const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
+export function namesNoBenefit(benefitName:string){
+  const name=(benefitName??"").trim();
+  if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
+  const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
+  const hasWord=/\p{L}{3}/u.test(words)||/\p{Script=Han}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);
+  if(!hasWord)return true;
+  return JOINING_START.test(name)||JOINING_END.test(name);
 }
 /** Every rule read from these documents. The order is total (benefit name, then page, then id): rows that share a
  * benefit name are otherwise returned in whatever order the database scans them, and the first of them wins
