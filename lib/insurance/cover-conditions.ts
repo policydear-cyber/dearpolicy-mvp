@@ -293,6 +293,9 @@ const separateFrom=(mine:string[],said:string[])=>mine.length>0&&said.length>0&&
 const LIMIT_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|overall|combined|together|aggregate|semua)\b/iu;
 /** The same for a plan total, whose sentence says "overall" or "in total" anyway. */
 const AGGREGATE_SCOPE=/\b(?:all|every|section|part|except|other\s+than|excluding|semua)\b/iu;
+/** Words that narrow a limit to some insured people ("Death benefit for children under age 5 is limited to S$20,000"):
+ * a benefit whose own name does not narrow the same way may be paid in full to everyone else (an adult's death benefit). */
+const NARROWED=/\b(?:child(?:ren)?|juveniles?|minors?|infants?|kids?|(?:under|below|before)\s+(?:the\s+)?age|aged?\s+(?:under|below|less\s+than))\b/iu;
 const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
@@ -301,28 +304,37 @@ const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|
  * benefit is limited to S$5,000" is no limit on the death benefit). Anything else is "unknown", and the figure above the
  * limit is not shown: a sentence that names nothing, a part of a plan ("Double Cover: subject to a limit"), a wider scope
  * ("all benefits", "this section"), a related kind ("Room and board" for "Hospitalisation"), or words no kind knows. */
-const limitReads=new WeakMap<object,{head:string;scoped:boolean;quote:string;subject:string[];part:boolean}>();
+const limitReads=new WeakMap<object,{head:string;scoped:boolean;narrow:boolean;quote:string;subject:string[];part:boolean}>();
 function limitRead(condition:CoverCondition){
   const known=limitReads.get(condition);
   if(known)return known;
   const head=limitHead(condition);
-  const read={head,scoped:LIMIT_SCOPE.test(head),quote:phrase(condition.quote??""),subject:limitSubject(condition),
+  const read={head,scoped:LIMIT_SCOPE.test(head),narrow:NARROWED.test(head),quote:phrase(condition.quote??""),subject:limitSubject(condition),
     part:/\p{L}+\s+(?:cover|plan|rider|policy)\b/iu.test(head)};
   limitReads.set(condition,read);
   return read;
 }
 function limitIsFor(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
+  const whose=limitIsForKind(condition,item);
+  // A limit for some people only (children) is never proof for a benefit not named for them, wherever it is stored.
+  return whose==="this"&&limitRead(condition).narrow&&!NARROWED.test(benefitOf(item))?"unknown":whose;
+}
+function limitIsForKind(condition:CoverCondition,item:ClaimItem):"this"|"other"|"unknown"{
   const {head,scoped,quote,subject,part}=limitRead(condition);
   const benefit=phrase(benefitOf(item));
-  if(condition.productName&&phrase(condition.productName)===benefit)return "this";
+  const said=kindsIn(head),mine=kindsIn(benefitOf(item));
+  // A sentence that names a narrower kind than the benefit ("Early Critical Illness benefit is limited to S$50,000" for
+  // "Critical Illness", "Accidental death benefit" for "Death benefit", "Surgery under the Hospitalisation benefit" for
+  // "Hospitalisation") is that kind's limit, even inside the benefit's name or stored under it: not proof it is this one's.
+  const otherKind=mine.size>0&&[...said.keys()].some(k=>!mine.has(k));
+  if(condition.productName&&phrase(condition.productName)===benefit&&!otherKind)return "this";
   if(scoped)return "unknown";
-  if(benefit.trim().length>=3&&quote.includes(benefit))return "this";
+  if(benefit.trim().length>=3&&quote.includes(benefit)&&!otherKind)return "this";
   // A sentence that names a part of the plan ("Double Cover: subject to a limit") names a cover, whose benefits it does
   // not say: unknown, as with no name at all.
   if(!subject.length||part)return "unknown";
   const own=new Set([...contentWords(benefitOf(item)),...[...benefitOf(item).matchAll(/\(([\p{L}]{2,6})\)/gu)].map(m=>m[1].toLowerCase())]);
   if(subject.every(w=>own.has(w)))return "this";
-  const said=kindsIn(head),mine=kindsIn(benefitOf(item));
   if(!said.size||!mine.size)return "unknown";
   if(said.size===mine.size&&[...said.keys()].every(k=>mine.has(k)))return "this";
   return separateFrom([...mine.values()].flat(),[...said.values()].flat())?"other":"unknown";

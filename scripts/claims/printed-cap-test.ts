@@ -188,6 +188,33 @@ test("a limit clears a benefit only when its sentence names a benefit of another
   assert.notEqual(one("Hospital cash", 3000, "Maximum hospital stay: 30", 30, "Hospital cash"), 30);
 });
 
+test("a narrower kind's limit, or a limit for children only, never cuts a wider benefit or an adult's", async () => {
+  const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
+  const one = (title: string, amount: number, quote: string, cap: number, productName: string | null = null) => {
+    const it = [item("Ada · " + title, productName ?? "Example Plan", amount)];
+    applyCoverConditions({ items: it, facts: {} as never, conditions: [cond({ kind: "sub_limit", productName, amount: cap, quote })] });
+    return it[0].calculatedAmount;
+  };
+  // The benefit's name inside a narrower kind's sentence: the figure is hidden, never cut to the narrower limit.
+  for (const [title, quote] of [
+    ["Critical Illness", "Early Critical Illness benefit is limited to S$50,000"], ["Critical Illness", "Intermediate stage critical illness: up to S$50,000"],
+    ["Death benefit", "Accidental death benefit is limited to S$50,000"], ["Hospitalisation", "Surgery under the Hospitalisation benefit is limited to S$50,000"],
+    ["Death benefit", "Death benefit for children under age 5 is limited to S$50,000"], ["Death", "Death of a child below the age of 10: maximum S$50,000"],
+    ["Death benefit", "For insured persons aged under 16, the death benefit is limited to S$50,000"], ["Death benefit", "Juvenile death benefit: up to S$50,000"],
+  ] as [string, string][]) {
+    assert.equal(one(title, 500000, quote, 50000), undefined, `${title}: ${quote}`);
+    assert.equal(one(title, 500000, quote, 50000, title), undefined, `${title} (stored under it): ${quote}`);
+  }
+  // The narrower benefit itself, or one named for children, is still cut by its own limit.
+  assert.equal(one("Early Critical Illness", 100000, "Early Critical Illness benefit is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Accidental death benefit", 100000, "Accidental death benefit is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Child death benefit", 100000, "Death benefit for children under age 5 is limited to S$50,000", 50000), 50000);
+  assert.equal(one("Critical Illness", 500000, "Critical illness benefit is limited to S$300,000", 300000), 300000);
+  // A child or minor-surgery limit of another kind still leaves a life benefit as it is.
+  assert.equal(one("Death", 500000, "Minor surgery is limited to S$500", 500), 500000);
+  assert.equal(one("Death", 500000, "Hospital cash for children is limited to S$100 a day", 100), 500000);
+});
+
 test("an unplaced plan total hides every benefit it may cover", async () => {
   const { applyCoverConditions } = await import("@/lib/insurance/cover-conditions");
   const run = (quote: string) => {
