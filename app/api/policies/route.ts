@@ -12,6 +12,7 @@ import { notDismissedCondition } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
 import { planChoiceAsked } from "@/lib/policies/plan-choice";
 import { simpleChatEnabled } from "@/lib/simple-chat/flag";
+import { maskIdentityText } from "@/lib/chat/identity-numbers";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -138,6 +139,10 @@ export async function GET(request: NextRequest) {
       planChoice,
       policies: policies.map((p) => ({
         ...p,
+        // The names and notes a card shows, with ID numbers masked as on every other screen (lib/chat/identity-numbers.ts).
+        // Detected names are not changed: the page sends them back to link a person.
+        original_filename: maskIdentityText(p.original_filename ?? ""), product_name: p.product_name && maskIdentityText(p.product_name),
+        processing_message: p.processing_message && maskIdentityText(p.processing_message), review_reason: p.review_reason && maskIdentityText(p.review_reason),
         scan_result_detail: userFacingScanResultDetail(p),
         processing_stalled: stalledIds.has(p.id),
         processing_error: p.processing_error ? (USER_ACTIONABLE_PROCESSING_ERRORS.has(p.processing_error) ? p.processing_error : POLICY_PROCESSING_STOPPED_MESSAGE) : null,

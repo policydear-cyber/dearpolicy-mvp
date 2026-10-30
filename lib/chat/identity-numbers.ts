@@ -17,10 +17,11 @@
 // Bounded by any non-alphanumeric, not \b: a file name joins an ID with "_" ("Certificate_S1234567D.pdf"), and "_" is a
 // word character, so \b would leave it whole (TE pr153 F1).
 const SHAPES: [RegExp, string][] = [
-  // Singapore NRIC / FIN.
-  [/(?<![A-Za-z0-9])([STFGM])\d{4}(\d{3}[A-Z])(?![A-Za-z0-9])/g, "$1****$2"],
-  // Hong Kong identity card, with its bracketed check digit.
-  [/(?<![A-Za-z0-9])([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/g, "$1***$2($3)"],
+  // Singapore NRIC / FIN, in any letter case: a file name is often lower case ("cert_s1234567d.pdf"), and no policy
+  // number takes the shape in either case.
+  [/(?<![A-Za-z0-9])([STFGM])\d{4}(\d{3}[A-Z])(?![A-Za-z0-9])/gi, "$1****$2"],
+  // Hong Kong identity card, with its bracketed check digit, in any letter case (TE pr193 G1).
+  [/(?<![A-Za-z0-9])([A-Z]{1,2})\d{3}(\d{3})\(([0-9A])\)/gi, "$1***$2($3)"],
 ];
 // Malaysia MyKad as printed with its dashes, whose first six digits are a birth date (YYMMDD): "Group policy 123456-78-0001"
 // is not one. A dashed US Social Security number is masked only after its label: unlabelled, "123-45-6789" is as likely a
@@ -30,9 +31,11 @@ const MYKAD = /(?<![A-Za-z0-9])(\d{2})(\d{2})(\d{2})-\d{2}-(\d{4})(?![A-Za-z0-9]
 /** A label that says the value after it is a person's identity number; "policy no." and "member ID" are not among them. */
 const LABEL = String.raw`(?:NRIC|FIN|NIRC|I\/?C|(?:No\.?\s*)?K\/P|Kad\s+Pengenalan|MyKad|MyKid|Birth\s+Cert(?:ificate)?|HKID|NINO|SSN|TFN|PAN|Aadhaar|National\s+Insurance|NI|Passport|National\s+ID(?:entity)?|Identity(?:\s+Card)?|Identification|ID|Social\s+Security|Tax\s+File)`;
 const NOT_A_PERSON = String.raw`(?<!\b(?:policy|member|membership|claim|group|plan|certificate|scheme|account|staff|employee|card|reference|case|invoice|receipt)\s{1,3})`;
-const LABELLED = new RegExp(String.raw`${NOT_A_PERSON}\b(${LABEL}\b(?:\s*(?:No\.?|Number|#))?\s*[:.]?\s*(?:(?:is|was)\s+)?)([A-Z0-9][A-Z0-9 -]{4,22}[A-Z0-9])(?![A-Z0-9*])`, "gi");
+// A file name joins a label to its number with "_" ("mykad_850101145678.jpg", "nino_qq123456c.pdf", TE pr193 G2), and "_" is
+// a word character, so the label is bounded by letters, not \b.
+const LABELLED = new RegExp(String.raw`${NOT_A_PERSON}(?<![A-Za-z])(${LABEL}(?![A-Za-z])(?:[\s_]*(?:No\.?|Number|#))?[\s_]*[:.]?[\s_]*(?:(?:is|was)\s+)?)([A-Z0-9][A-Z0-9 -]{4,22}[A-Z0-9])(?![A-Z0-9*])`, "gi");
 // "ID" and "NI" alone are only labels when a number word follows them ("ID No.", "NI number"), never "ID: ..." on a membership card.
-const BARE_SHORT = /^(?:ID|NI|PAN|FIN)\s*[:.]?\s*(?:(?:is|was)\s+)?$/i;
+const BARE_SHORT = /^(?:ID|NI|PAN|FIN)[\s_]*[:.]?[\s_]*(?:(?:is|was)\s+)?$/i;
 
 function maskValue(value: string) {
   const chars = [...value];
@@ -44,8 +47,13 @@ function maskValue(value: string) {
 export function maskIdentityText(text: string): string {
   let out = text;
   for (const [re, to] of SHAPES) out = out.replace(re, to);
-  out = out.replace(MYKAD, (all, _yy: string, mm: string, dd: string, last: string) =>
-    Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31 ? "******-**-" + last : all);
+  // Only a number labelled right before it as a policy's or certificate's own number ("Group policy no. 851231-00-1234")
+  // is kept. A person's words near it ("Member: Ada Tan", "Certificate holder", "Member ID") never are, since an
+  // over-masked policy number is harmless and a shown MyKad is not (Critic R360 H1, TE pr193 F1).
+  out = out.replace(MYKAD, (all, _yy: string, mm: string, dd: string, last: string, at: number, whole: string) =>
+    Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31
+      && !/\b(?:policy|certificate|reference|invoice|receipt)[ \t]*(?:no\.?|number|#)[ \t]*[:.]?[ \t]*$/i.test(whole.slice(Math.max(0, at - 30), at))
+      ? "******-**-" + last : all);
   return out.replace(LABELLED, (all, label: string, value: string) => {
     const digits = value.replace(/\D/g, "").length;
     if (digits < 5 || BARE_SHORT.test(label)) return all;
