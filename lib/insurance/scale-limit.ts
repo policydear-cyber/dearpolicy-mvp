@@ -285,9 +285,10 @@ export function figuresDifferByPlan(quote:string|null|undefined):boolean{
     const signs=new Set(money.map(c=>c.trim().match(SIGN)?.[0].replace(/^SGD$/,"S$").replace(/^MYR$/,"RM").replace(/^GBP$/,"£").replace(/^USD$/,"US$")));
     const cents=new Set(money.map(c=>/\d\.\d{2}(?!\d)/.test(c)));
     // A pair whose second figure is a small part of the first ("SGD 100,000.00 SGD 1,234.56", "S$100,000 S$1,234") is a sum
-    // and its premium, never two plans (TE pr190 r2 G1).
+    // and its premium, never two plans (TE pr190 r2 G1). A schedule prints the sum first: a larger second figure ("S$40,000
+    // S$1,000,000") is a higher plan's column (TE pr190 r3 D41).
     const amounts=money.map(c=>Number(c.replace(/\s*(?:\/|per\b|each\b|a\s|daily|sehari|setiap).*$/i,"").replace(/[^\d.]/g,"")));
-    const pairOfSumAndPremium=money.length===2&&cells.length===2&&(cents.size>1||Math.min(...amounts)<0.05*Math.max(...amounts));
+    const pairOfSumAndPremium=money.length===2&&cells.length===2&&amounts[1]<amounts[0]&&(cents.size>1||amounts[1]<0.05*amounts[0]);
     if(signs.size>1||pairOfSumAndPremium)continue;
     const values=new Set(cells.map(c=>/\d/.test(c)?c.replace(/\s*(?:\/|per\b|each\b|a\s|daily|sehari|setiap).*$/i,"").replace(/[^\d.]/g,"").replace(/\.0+$/,""):"none"));
     if(cells.length>1&&values.size>1)return true;
