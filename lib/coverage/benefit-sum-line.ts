@@ -21,8 +21,9 @@ import { PRINTED_FIGURE, FIGURE_END, printedNumber, groupsInLakhs } from "@/lib/
  * A closed list in English, Malay, Indonesian, French, German and Chinese.
  */
 const NOT_A_SUM_TERM = [
-  // A premium or contribution the person pays (Takaful "contribution", Malay "caruman", French "cotisation").
-  String.raw`\bpremi(?:um|ums|a)?`, String.raw`\bcontributions?`, String.raw`\bcaruman`, String.raw`\biuran`, String.raw`\bcotisations?`,
+  // A premium or contribution the person pays (Takaful "contribution", Malay "caruman" or "sumbangan", Indonesian
+  // "kontribusi", French "cotisation").
+  String.raw`\bpremi(?:um|ums|a)?`, String.raw`\bcontributions?`, String.raw`\bcaruman`, String.raw`\bsumbangan`, String.raw`\bkontribusi`, String.raw`\biuran`, String.raw`\bcotisations?`,
   String.raw`\bprimes?\s+(?:annuelle|mensuelle|totale|d['’]assurance|nette|brute)`, String.raw`prämie`, String.raw`\bbeitr[aä]g\w*`, "保费", "保費",
   // A waiver of premium: what is waived is a premium, never the cover's sum.
   String.raw`\bwaiver`,
@@ -103,7 +104,7 @@ export function labelHead(label: string): string {
  */
 const HOLDS_NOT_A_SUM = new RegExp([
   String.raw`\bpremi(?:um|ums|a)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)`,
-  String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
+  String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\bsumbangan\b|\bkontribusi\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
   String.raw`\bwaiver\b|\bpayor\b|\bpayer\s+benefit\b|払込免除|保费豁免|保費豁免`,
   String.raw`\b(?:fund|surrender|cash|account|policy|units?|investment)\s+values?\b|\bnilai\s+(?:tunai|serahan|dana|akaun|penyerahan)\b|\bvaleur\s+de\s+rachat\b|r[uü]ckkaufswert|现金价值|現金價值`,
   String.raw`\bdeductibles?\b|\bexcess\b|\bco-?(?:payments?|pay|insurance)\b|\bfranchise\b|selbstbeteiligung|selbstbehalt`,
