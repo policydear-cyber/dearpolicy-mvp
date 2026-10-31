@@ -430,4 +430,8 @@ test("last year's and this year's schedule of one policy: the renewal's premium 
   const a = cover({ doc: "doc-x", policyNumber: "HP-77" }), b = cover({ doc: "doc-y", policyNumber: "HP-77", premium: 120 });
   assert.deepEqual(run([a, b]).items, []);
   assert.deepEqual(run([a, { ...b, documentPeriodFrom: null }]).items, []);
+  // One product name and no numbers may be two real policies (two single trips): neither is chosen, both named (Critic R455).
+  const t1 = cover({ doc: "trip-1", product: "Kestrel Single Trip", documentPeriodFrom: "01/03/2025" }), t2 = cover({ doc: "trip-2", product: "Kestrel Single Trip", premium: 40, documentPeriodFrom: "01/06/2026" });
+  assert.deepEqual(run([t1, t2]).items, []);
+  assert.deepEqual(run([t1, t2]).leftOut, [{ name: "Kestrel Single Trip", why: "two_documents" }]);
 });

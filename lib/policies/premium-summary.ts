@@ -230,9 +230,12 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     const others = found.filter((o) => o.cover.source.documentId !== cover.source.documentId
       && samePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }) !== "different");
     if (!others.length) { items.push(item); continue; }
+    // Only documents that are surely one policy (samePolicy "same") are versions; a "maybe" (one product name, no numbers)
+    // may be two real policies, so neither is chosen (Critic R455).
+    const sure = others.every((o) => samePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }) === "same");
     const mine = startOf(cover), theirs = others.map((o) => startOf(o.cover));
-    if (mine != null && theirs.every((t) => t != null && t < mine)) items.push(item);
-    else if (mine != null && theirs.some((t) => t != null && t > mine) && theirs.every((t) => t != null)) continue;
+    if (sure && mine != null && theirs.every((t) => t != null && t < mine)) items.push(item);
+    else if (sure && mine != null && theirs.some((t) => t != null && t > mine) && theirs.every((t) => t != null)) continue;
     else leftOut.push({ name, why: "two_documents" });
   }
   return { items, leftOut: leftOut.filter((x, i) => leftOut.findIndex((y) => y.name === x.name && y.why === x.why) === i) };
