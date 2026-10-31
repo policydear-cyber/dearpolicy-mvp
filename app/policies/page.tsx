@@ -11,6 +11,7 @@ import { documentFoundLabels, documentTableKinds, type KindRow } from "@/compone
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
+import { authorityLabel, isOwnDocument } from "@/lib/policies/document-filter";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -75,7 +76,6 @@ function roleLabel(role: string | null) {
   const t = role.replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1);
 }
 /** How much a document says about the household's own cover, in their words: the stored labels are internal. */
-function authorityLabel(label: string) { return label === "Personal proof" ? "Your own policy" : label === "Reference" ? "General wording" : label; }
 /** "a, b and 2 more": what a document was found to pay for, in a line. */
 function foundLine(labels: string[]) {
   const l = labels;
@@ -388,12 +388,12 @@ export default function PoliciesPage() {
 
   const forPerson = useMemo(() => policies.filter((p) => !personId || p.linked_people.some((l) => l.id === personId)), [policies, personId]);
   const shown = useMemo(
-    () => forPerson.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || false),
+    () => forPerson.filter((p) => filter === "all" || filter === "personal" && isOwnDocument(p) || filter === "reference" && !isOwnDocument(p) || false),
     [forPerson, filter],
   );
   const counts = {
-    personal: forPerson.filter((p) => p.personal_coverage_confirmed).length,
-    reference: forPerson.filter((p) => !p.personal_coverage_confirmed).length,
+    personal: forPerson.filter(isOwnDocument).length,
+    reference: forPerson.filter((p) => !isOwnDocument(p)).length,
   };
 
 
@@ -451,7 +451,7 @@ export default function PoliciesPage() {
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), authorityLabel(policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference"))].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), authorityLabel(policy)].join(" · ")}</span>}
               {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? "Read in part" : "Ready") : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
