@@ -15,10 +15,12 @@
  * PRIVACY (31 Oct): by default NO FILE CONTENT LEAVES DEARPOLICY. Uploads are
  * people's policy documents (health and identity details), and VirusTotal
  * shares submitted files with its partners. So scanFile() only looks up the
- * file's SHA-256 (GET {baseUrl}/files/{sha256}): a file VirusTotal already
- * knows is judged by its last analysis; a file it has never seen (almost
- * every personal document) is "scan_unavailable", never "clean", because a
- * hash lookup cannot clear an unseen file. Uploading the whole file, the
+ * file's SHA-256 (GET {baseUrl}/files/{sha256}). A file VirusTotal knows as
+ * malicious or suspicious is rejected. Every other file, including one it has
+ * never seen (almost every personal document), then goes through DearPolicy's
+ * own local check (lib/scanning/local-file-check.ts: strict type, structure,
+ * size, no active content): it proceeds when that passes and is rejected when
+ * it does not, so no upload is held forever. Uploading the whole file, the
  * flow described below, happens ONLY when VIRUSTOTAL_UPLOAD_FILES is set to
  * true; it is off by default.
  *
@@ -68,6 +70,7 @@
  * doesn't care which path produced the verdict).
  */
 import { createHash } from "node:crypto";
+import { checkFileLocally } from "../local-file-check";
 import type { FileScanAdapter, FileScanResult, FileScanStatus, ScanRetryHint } from "../adapter";
 
 export const VIRUSTOTAL_DEFAULT_BASE_URL = "https://www.virustotal.com/api/v3";
@@ -335,11 +338,14 @@ async function scanByHash(bytes: Uint8Array, config: VirusTotalConfig): Promise<
   if (!found) {
     return { status: "scan_unavailable", detail: "VirusTotal hash lookup did not succeed after retrying transient failures.", retry: { reason: trace.reason ?? "provider_unavailable", retryAfterSeconds: trace.retryAfterSeconds } };
   }
-  if (!found.known) {
-    // Never "clean": a lookup cannot clear a file nobody has analysed, and the file is not uploaded (privacy).
-    return { status: "scan_unavailable", detail: "VirusTotal has no record of this file, and files are not uploaded (hash-only lookup), so it could not be cleared." };
+  if (found.known && classifyVirusTotalStats(found.stats) === "infected") {
+    return { status: "infected", detail: describeVirusTotalStats("hash lookup", found.stats) };
   }
-  return { status: classifyVirusTotalStats(found.stats), detail: describeVirusTotalStats("hash lookup", found.stats) };
+  // Known and not flagged, or never seen (the file is not uploaded to find out): DearPolicy's own local check decides.
+  const seen = found.known ? describeVirusTotalStats("hash lookup", found.stats) : "VirusTotal has no record of this file (hash-only lookup; the file was not uploaded).";
+  const local = checkFileLocally(bytes);
+  if (!local.ok) return { status: "infected", detail: `${seen} Local file check failed (${local.reason}): ${local.detail}.` };
+  return { status: "clean", detail: `${seen} Local file check passed (${local.format}: type, structure, size, no active content).` };
 }
 
 async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env): Promise<FileScanResult> {
