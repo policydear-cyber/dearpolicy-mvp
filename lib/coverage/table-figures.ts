@@ -352,7 +352,7 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
 }
 
 /** One confirmed schedule line (a sum insured) of a tile's category: the documents of its policy, and its amount. */
-export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string };
+export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string | null };
 type TileRow = CoverRow & { source?: { documentId: string } | null };
 /** Whether the confirmed lines' total is the whole of a tile's cover, for a category whose figures are not added up: every
  * paying cover the person's benefit table gives for the category is one of them, joined through its own document (a
@@ -515,12 +515,16 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   if (parts.some((a, i) => parts.some((b, j) => j > i && a.amount != null && a.amount === b.amount && a.currency === b.currency
     && !!words(a.name) && words(a.name) === words(b.name)))) unsure = true;
   const currencies = new Set(parts.map((p) => p.currency));
-  const total = !unsure && parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
+  // Added up only within one currency that is stated: two sums whose documents do not say their currency may be in two.
+  const total = !unsure && parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 && (parts.length === 1 || !currencies.has(null))
+    ? parts.reduce((t, p) => t + p.amount!, 0) : null;
   // The policies with a fixed sum, added up, where another policy's amount is not a fixed sum (a death benefit of "the
   // higher of 105% of premiums paid or the cash value"): shown as those policies' sum with the other policy named, never
-  // as the whole. Only when nothing may be counted twice and the fixed sums share one currency.
+  // as the whole. Only when nothing may be counted twice, the fixed sums share one currency, and no sum on the tile
+  // leaves its currency unstated (it may be in another currency, so it is neither added nor left out unnamed).
   const fixed = parts.filter((p) => p.amount != null && p.currency);
   const known = total == null && !unsure && fixed.length && fixed.length < parts.length && new Set(fixed.map((p) => p.currency)).size === 1
+    && parts.every((p) => p.amount == null || p.currency)
     ? { amount: fixed.reduce((t, p) => t + p.amount!, 0), currency: fixed[0].currency!, without: parts.filter((p) => p.amount == null && !p.otherTile).map((p) => p.name),
       otherTile: parts.filter((p) => p.otherTile).map((p) => p.name) } : null;
   return { parts, total, known };
