@@ -181,11 +181,19 @@ export function documentKinds(people: { covers?: SourcedCover[]; rows?: SourcedR
   return out;
 }
 
+/** What the person pays in, by the names insurers use in any market: a premium, a Takaful "contribution" (Malay
+ * "sumbangan", "caruman", Indonesian "kontribusi", "iuran"), a French "cotisation", a German "Prämie" or "Beitrag", Chinese
+ * 保费. A contribution TOWARDS something ("contribution towards funeral costs") and a funeral, burial, bereavement or
+ * education contribution are benefits the policy pays, never what the person pays. */
+const PAID_IN_WORD = String.raw`premiums?|(?<!\b(?:funeral|burial|bereavement|education)\s)contributions?(?!\s+(?:to|towards)\b)|sumbangan|caruman|kontribusi|iuran|cotisations?|pr[äa]mien?|beitr[äa]ge?`;
+const PAID_IN = String.raw`premiums?|contributions?|sumbangan|caruman|kontribusi|iuran|cotisations?`;
 /** A premium the person pays, never a benefit (chat.ts uses the same). A benefit worked out from the premiums paid is a
  * benefit: "Waiver of Premium", "Return of Premium", and a share of them ("Death benefit: higher of 105% of total premiums
  * paid to date", "sum of all premiums paid"); left out, a Death tile added up the other policies as if they were all of it.
  * Only premiums PAID: a premium priced as a share of another ("rider premium: 12% of basic premium") is a premium (Critic R418 M1). */
-export const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*)(?!.*(?:\b\d+(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:total\s+|all\s+)?premiums?\s+paid|\b(?:sum|total)\s+of\s+(?:all\s+)?(?:the\s+)?premiums?\s+paid)\b).*\bpremiums?\b/i;
+export const PREMIUM = new RegExp(String.raw`^(?!.*(?:\b(?:waiv|return|refund|pemulangan|pengembalian|pengecualian|pembebasan|exon[ée]ration|remboursement)\w*|befreiung|r[uü]ckgew[aä]hr|退还|返还|豁免))`
+  + String.raw`(?!.*(?:\b\d+(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:total\s+|all\s+)?(?:${PAID_IN})\s+paid|\b(?:sum|total)\s+of\s+(?:all\s+)?(?:the\s+)?(?:${PAID_IN})\s+paid)\b)`
+  + String.raw`.*(?:\b(?:${PAID_IN_WORD})\b|保费|保費)`, "i");
 /** The person's rows for the category: rows that pay something the person holds, never a projection, a fund or
  * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). Nor a
  * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
@@ -223,7 +231,7 @@ const THRESHOLD = String.raw`(?<!\b(?:not|no|at)\s+)\b(?:above|below|over|under|
 const CLAUSE = new RegExp(String.raw`${THRESHOLD}\s+(?:\w+\s+){0,2}?${FIGURE}|${FIGURE}[\d,.]*\s+(?:or\s+(?:less|more|above|below|under|over))\b`, "i");
 /** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out ("Waiver of premium
  * on total and permanent disability benefit"). */
-const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
+const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?(?:premiums?|contributions?)\b|\b(?:premiums?|contributions?)\s+waiv|\b(?:pengecualian|pembebasan)\s+(?:sumbangan|caruman|premium|premi|kontribusi)\b|beitragsbefreiung|\bexon[ée]ration\s+des\s+(?:primes|cotisations)\b|豁免保费/i;
 
 type CoverRow = SummaryRow & { coverKey?: string; holding?: string; product?: string; cover?: string; plan?: string | null };
 /** The policy a row or held cover belongs to: its own holding when the person holds several policies of its cover type

@@ -152,6 +152,42 @@ test("a fund or surrender value and a premium never give a tile's figure (Critic
   assert.deepEqual(categoryRows("Death", rows).map((r) => r.benefit), ["Premium waiver on death"]);
 });
 
+test("what the person pays in is never a benefit, by whatever name the market uses (Takaful contribution, sumbangan, cotisation, Beitrag)", () => {
+  const paid = (benefit: string, amount: number, currency: string) => row(benefit, { figure: { kind: "printed", amount, currency, unit: "lump_sum" } });
+  const death = [
+    paid("Death Benefit", 250000, "MYR"), paid("Death benefit contribution", 45, "MYR"), paid("Tabarru' contribution for death cover", 30, "MYR"),
+    paid("Monthly contribution (Death & TPD)", 120, "MYR"), paid("Sumbangan bulanan Death Benefit", 120, "MYR"), paid("Caruman Death Benefit", 90, "MYR"),
+    paid("Kontribusi Death Benefit", 50000, "IDR"), paid("Cotisation Death Benefit", 20, "EUR"), paid("Beitrag Death Benefit", 25, "EUR"),
+    paid("Death Benefit Prämie", 25, "EUR"), paid("Death Benefit 保费", 300, "CNY"),
+    // Benefits that name what was paid in stay benefits.
+    paid("Death benefit: return of contributions paid", 8000, "MYR"), paid("Death benefit: 105% of total contributions paid", 8400, "MYR"),
+    paid("Death Benefit (pengembalian kontribusi)", 9000000, "IDR"), paid("Death benefit Beitragsrückgewähr", 4000, "EUR"),
+    paid("Funeral contribution on death", 3000, "GBP"), paid("Death benefit: contribution towards funeral costs", 2000, "GBP"),
+  ];
+  assert.deepEqual(categoryRows("Death", death).map((r) => r.benefit), ["Death Benefit", "Death benefit: return of contributions paid",
+    "Death benefit: 105% of total contributions paid", "Death Benefit (pengembalian kontribusi)", "Death benefit Beitragsrückgewähr",
+    "Funeral contribution on death", "Death benefit: contribution towards funeral costs"]);
+  const ci = [paid("Critical Illness Benefit", 100000, "MYR"), paid("Annual contribution Critical Illness", 600, "MYR"), paid("Contribution for Critical Illness rider", 50, "MYR")];
+  assert.deepEqual(categoryRows("Critical Illness", ci).map((r) => r.benefit), ["Critical Illness Benefit"]);
+});
+
+test("a Death tile never shows a Takaful contribution as the sum: with the sum printed in words only, it gives no figure", () => {
+  const r = (benefit: string, amount: number | null) => ({ ...row(benefit, amount == null ? { pays: "words", figure: { kind: "none", why: "no figure printed" } }
+    : { figure: { kind: "printed", amount, currency: "MYR", unit: "lump_sum" } }), coverKey: "takaful" });
+  for (const paid of ["Tabarru' contribution for death cover", "Sumbangan bulanan Death Benefit", "Death benefit contribution"]) {
+    const parts = lumpSumParts(tileRows(categoryRows("Death", [r("Death Benefit", null), r(paid, 30)])), [], [], "Death");
+    assert.equal(parts.total, null, paid); assert.ok(parts.parts.every((p) => p.amount == null), paid);
+  }
+});
+
+test("a waiver of contribution is a waiver: it never gives the TPD tile its figure while the cover has another row", () => {
+  for (const w of ["Waiver of contribution on TPD", "TPD contribution waiver", "Pengecualian Sumbangan atas Total Permanent Disability", "Total Permanent Disability Beitragsbefreiung"]) {
+    const rows = [{ ...row("Total Permanent Disability", { figure: { kind: "printed", amount: 250000, currency: "MYR", unit: "lump_sum" } }), coverKey: "t" },
+      { ...row(w, { figure: { kind: "printed", amount: 120, currency: "MYR", unit: "lump_sum" } }), coverKey: "t" }];
+    assert.deepEqual(tileRows(rows).map((r) => r.benefit), ["Total Permanent Disability"], w);
+  }
+});
+
 test("a per-day hospital cash row shows its rate, first day and most days, as printed", () => {
   const rows = [row("Daily Hospital Cash", { figure: { kind: "printed", amount: 80, currency: "MYR", unit: "per_day" }, fromDay: 4, maxDays: 60 })];
   assert.equal(tableDisplay(categoryRows("Hospital Cash", rows)), "MYR 80 a day · from day 4 · up to 60 days");
