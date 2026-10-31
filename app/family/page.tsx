@@ -57,13 +57,12 @@ export default function FamilyPage() {
         if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])]))); }
         return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[] } | null) => {
           if (!l) return;
-          // Per person, each kind found and whether any of its rows is confirmed; a kind only a schedule line suggests is "to confirm".
-          const by: Record<string, Map<string, boolean>> = {};
-          for (const r of l.rows ?? []) if (r.status !== "rejected") {
-            const kinds = by[r.familyMemberId] ??= new Map(), id = kindOfRow(r).id;
-            kinds.set(id, kinds.get(id) === true || !isToConfirm(r));
-          }
-          setKinds(Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => found.get(k.id) ? k.label : `${k.label} (to confirm)`)])));
+          // Per person, only the kinds their documents establish: a confirmed row, the wording or the household's own entry.
+          // A kind only a plan type suggests (isToConfirm) is not listed, as on Home and Documents (owner rule, 28 Oct: a plan
+          // type is not proof of cover); Coverage still shows that row, with what is unread (cross-page check, 31 Oct).
+          const by: Record<string, Set<string>> = {};
+          for (const r of l.rows ?? []) if (r.status !== "rejected" && !isToConfirm(r)) (by[r.familyMemberId] ??= new Set()).add(kindOfRow(r).id);
+          setKinds(Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label)])));
         });
       }).catch(() => undefined);
   }
