@@ -20,7 +20,7 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
-import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,scheduleLineEvent,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 
 export type LedgerRow={
@@ -208,18 +208,17 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
   for(const coverage of contract.coverages){
     if(coverage.amount==null||!(coverage.amount>0))continue;
     const name=(coverage.category+" "+(coverage.productName??"")+" "+contract.name).trim();
-    const kind=PRODUCT_DEFAULTS.find(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
-    if(!kind)continue;
+    // The line's own benefit only (lib/ledger/events.ts SCHEDULE_LINE_EVENTS): never a second benefit carrying its sum.
+    const own=scheduleLineEvent(coverage.category,name);
+    if(!own||eventsFromWording.has(own.event))continue; // the wording already says what this pays
     const currency=statedCurrencyCode(coverage.currency);
     if(!currency)continue; // never assume SGD for a schedule line
-    for(const ev of kind.events){
-      if(eventsFromWording.has(ev.event))continue; // the wording already says what this pays
-      out.push({familyMemberId:contract.ownerId,policyId:coverage.policyId,planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,
-        eventType:ev.event,detail:null,cause:null,paysKind:ev.pays,amount:ev.pays==="lump_sum"?coverage.amount:null,currency,
-        sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note:ev.note,
-        sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
-        seedKey:"coverage:"+coverage.id+":"+ev.event+"|member:"+contract.ownerId});
-    }
+    const note=PRODUCT_DEFAULTS.flatMap(d=>d.events).find(e=>e.event===own.event)?.note??null;
+    out.push({familyMemberId:contract.ownerId,policyId:coverage.policyId,planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,
+      eventType:own.event,detail:null,cause:null,paysKind:own.pays,amount:own.pays==="lump_sum"?coverage.amount:null,currency,
+      sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note,
+      sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
+      seedKey:"coverage:"+coverage.id+":"+own.event+"|member:"+contract.ownerId});
   }
   return out;
 }
@@ -309,6 +308,15 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
     seeds.push(...mineSeeds);
   }
+  // A schedule line seeds only its own benefit now (scheduleSeeds). A machine-made row an older rule seeded beside it from
+  // the plan type ("Total and permanent disability" carrying a life cover's sum) is removed once nobody has touched it;
+  // a row a person changed or rejected stays.
+  const lineKeys=seeds.filter(s=>s.origin==="schedule").flatMap(s=>[s.seedKey,s.seedKey.replace(/\|member:[^|]+$/,"")]);
+  const lineIds=[...new Set(contracts.flatMap(c=>c.coverages.map(x=>x.id)))];
+  if(lineIds.length)await query(
+    `DELETE FROM coverage_rules WHERE account_id=$1 AND origin='schedule' AND status<>'rejected' AND updated_at=created_at AND seed_key LIKE 'coverage:%'
+       AND split_part(split_part(seed_key,'|',1),':',2)=ANY($2::text[]) AND NOT (seed_key=ANY($3::text[]))`,
+    [accountId,lineIds,lineKeys]).catch(()=>undefined);
   // A seed's key is fixed by the row it came from, so a row seeded under an older rule is never seeded again: it kept
   // what that rule said (live, 21 Oct: a travel policy's liability-to-others row still "Accidental death S$500,000",
   // seeded the day before liability rows stopped being read as the person's own death cover). A machine-made row nobody

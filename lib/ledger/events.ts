@@ -167,6 +167,31 @@ export function eventsFromText(text:string):EventCandidate[]{
   return out;
 }
 
+/** The one benefit a schedule line names by its own cover category ("Death", "Total Permanent Disability"), and whether
+ * the line's printed amount is what that benefit pays. A schedule line says what it insures and no more: a life cover's
+ * sum is never also a disability or terminal-illness figure, and nothing a plan type "usually" pays is added beside it
+ * (new-user walkthrough, 31 Oct: an Australian schedule printing Life Cover $850,000 and TPD Cover $500,000 showed
+ * "Total and permanent disability A$850,000"). A category not listed here seeds nothing. */
+export const SCHEDULE_LINE_EVENTS:Record<string,{event:EventType;pays:PaysKind}>={
+  "Death":{event:"death",pays:"lump_sum"},
+  "Total Permanent Disability":{event:"tpd",pays:"lump_sum"},
+  "Critical Illness":{event:"critical_illness",pays:"lump_sum"},
+  "Early Critical Illness":{event:"early_critical_illness",pays:"lump_sum"},
+  "Personal Accident":{event:"accidental_death",pays:"lump_sum"},
+  "Hospitalisation":{event:"hospital_medical_expense",pays:"stated"},
+  "Hospital Cash":{event:"hospital_daily_cash",pays:"stated"},
+  "Long-term Care":{event:"long_term_care",pays:"stated"},
+  "Disability Income":{event:"disability_income",pays:"stated"},
+};
+/** The benefit a schedule line seeds: its own category's, with an accident plan's death line read as accidental death
+ * (a personal accident schedule's "Death" sum pays only on an accident). Null when the line names no listed cover. */
+export function scheduleLineEvent(category:string,name:string):{event:EventType;pays:PaysKind}|null{
+  const own=SCHEDULE_LINE_EVENTS[category.trim()];
+  if(!own)return null;
+  if(own.event==="death"&&/\b(?:personal accident|group accident|accident(?:al)?(?: death)?(?: cover| plan| insurance| protection)?|\bpa\b)\b/i.test(name))return {event:"accidental_death",pays:"lump_sum"};
+  return own;
+}
+
 /** What a plan of a given kind pays, when only its schedule line is on file.
  * These are the industry's standard shapes, and every row seeded from them
  * says so: they are proposals for the person to confirm, never the wording. */

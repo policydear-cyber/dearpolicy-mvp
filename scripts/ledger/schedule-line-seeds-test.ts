@@ -1,0 +1,127 @@
+/** Coverage (the ledger every account off the benefit table gets): a schedule line seeds only the benefit it names, with
+ * its own printed amount (new-user walkthrough, 31 Oct: an Australian schedule printing "Life Cover $850,000" and "TPD
+ * Cover $500,000" showed "Total and permanent disability A$850,000", plus a terminal illness row carrying the life sum
+ * and an early-stage critical illness row "Plans like this usually include this"). Runs the real seedLedger
+ * (lib/ledger/store.ts) against a real, disposable PostgreSQL for made-up households in A$, £, RM and S$:
+ *   - each schedule line's own benefit is seeded with its own amount, and nothing else is seeded beside it;
+ *   - a personal accident schedule's death sum is accidental death, never death from any cause;
+ *   - a row an older rule seeded beside a line is removed when nobody touched it; a row a person changed or rejected stays;
+ *   - a line whose currency is unstated still seeds nothing (never S$).
+ * No real household, insurer or scheme; no model call; no paid call.
+ *   DEARPOLICY_DISPOSABLE_DB=1 DATABASE_URL=postgres://... npm run -s ledger:schedule-line-test */
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+
+const url = process.env.DATABASE_URL ?? "";
+if (process.env.DEARPOLICY_DISPOSABLE_DB !== "1" || !/@(localhost|127\.0\.0\.1)[:/]|host=\//.test(url)) {
+  console.log("schedule line seeds: skipped (set DEARPOLICY_DISPOSABLE_DB=1 and a local DATABASE_URL to run)");
+  process.exit(0);
+}
+// The ledger is what an account off the benefit table reads: keep this household off it.
+delete process.env.DEARPOLICY_BENEFIT_TABLE;
+for (const k of Object.keys(process.env)) if (/API_KEY|ANTHROPIC_KEY|OPENAI_KEY/i.test(k)) delete process.env[k];
+const outbound: string[] = [];
+globalThis.fetch = (async (input: RequestInfo | URL) => {
+  outbound.push(String(input instanceof URL ? input.href : typeof input === "string" ? input : input.url).replace(/[?#].*/, ""));
+  throw new Error("schedule line test: outbound request refused");
+}) as typeof fetch;
+
+let passed = 0;
+const failures: string[] = [];
+async function test(name: string, fn: () => Promise<void>) {
+  try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+const ACCOUNT = randomUUID();
+
+async function main() {
+  const { query } = await import("@/lib/db/client");
+  const { seedLedger, ensureLedgerSchema } = await import("@/lib/ledger/store");
+  await ensureLedgerSchema();
+
+  await query("INSERT INTO accounts(id,name) VALUES($1,$2)", [ACCOUNT, "Test household schedule lines"]);
+  const person = async (name: string, rel: string) =>
+    (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,$3) RETURNING id", [ACCOUNT, name, rel])).rows[0].id;
+  const [au, gb, my, sg] = [await person("Linh Nguyen", "self"), await person("Amara Okafor", "spouse"), await person("Nur Aisyah", "parent"), await person("Priya Nair", "sibling")];
+  /** A personal schedule and its schedule lines; returns each line's id by category. */
+  async function schedule(member: string, product: string, lines: { category: string; amount: number | null; currency: string | null; quote: string }[]) {
+    const id = randomUUID();
+    await query(`INSERT INTO policies(id,account_id,family_member_id,product_name,insurer,original_filename,storage_key,processing_status,quarantine_status,personal_coverage_confirmed,document_role,document_authority)
+      VALUES($1,$2,$3,$4,'Example Insurance Ltd',$5,$5,'ready','scan_clean',true,'personal_schedule',95)`, [id, ACCOUNT, member, product, `${id}.pdf`]);
+    await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [id, member, ACCOUNT]);
+    await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [ACCOUNT, id, lines.map((l) => l.quote).join("\n")]);
+    const ids: Record<string, string> = {};
+    for (const l of lines) ids[l.category] = (await query<{ id: string }>(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,confirmed,evidence_verified,evidence_text)
+      VALUES($1,$2,$3,$4,$5,$6,$7,1,true,true,$8) RETURNING id`, [ACCOUNT, id, member, l.category, l.amount, l.currency, product, l.quote])).rows[0].id;
+    return { id, ids };
+  }
+  const life = await schedule(au, "Wattle Life Protection", [
+    { category: "Death", amount: 850000, currency: "AUD", quote: "Life Cover\t$850,000" },
+    { category: "Total Permanent Disability", amount: 500000, currency: "AUD", quote: "Total and Permanent Disability (TPD) Cover - linked to Life Cover\t$500,000" },
+    { category: "Critical Illness", amount: 150000, currency: "AUD", quote: "Trauma Cover - stand-alone\t$150,000" },
+  ]);
+  const term = await schedule(gb, "Level Term Assurance", [{ category: "Death", amount: 250000, currency: "GBP", quote: "Sum assured\t250,000.00" }]);
+  const pa = await schedule(my, "Group Personal Accident", [{ category: "Death", amount: 200000, currency: "MYR", quote: "Accidental death\tRM200,000" }]);
+  const unstated = await schedule(sg, "Lighthouse Term Plan", [{ category: "Death", amount: 150000, currency: null, quote: "Sum assured\t$150,000" }]);
+
+  // Rows an older rule seeded beside the £ life line: one untouched, one a person changed, one a person rejected.
+  const old = (event: string, amount: number | null) => query<{ id: string }>(`INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,pays_kind,amount,currency,sum_basis,origin,status,seed_key)
+    VALUES($1,$2,$3,'Level Term Assurance',$4,'lump_sum',$5,'GBP',250000,'schedule','proposed',$6) RETURNING id`,
+    [ACCOUNT, gb, term.id, event, amount, `coverage:${term.ids.Death}:${event}|member:${gb}`]);
+  const untouched = (await old("terminal_illness", 250000)).rows[0].id;
+  const changed = (await old("tpd", 250000)).rows[0].id;
+  await query("UPDATE coverage_rules SET amount=200000, updated_at=now()+interval '1 minute' WHERE id=$1", [changed]);
+  const rejected = (await old("critical_illness", null)).rows[0].id;
+  await query("UPDATE coverage_rules SET status='rejected' WHERE id=$1", [rejected]);
+
+  const rows = async (member: string) => (await query<{ id: string; event_type: string; amount: string | null; currency: string; origin: string; status: string }>(
+    "SELECT id,event_type,amount::text,currency,origin,status FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 ORDER BY event_type", [ACCOUNT, member])).rows;
+
+  try {
+    await seedLedger(ACCOUNT);
+
+    await test("each A$ line seeds its own benefit with its own amount: TPD is A$500,000, never the life cover's A$850,000", async () => {
+      const r = await rows(au);
+      assert.deepEqual(r.map((x) => [x.event_type, Number(x.amount), x.currency]), [["critical_illness", 150000, "AUD"], ["death", 850000, "AUD"], ["tpd", 500000, "AUD"]]);
+    });
+    await test("nothing a plan type usually pays is seeded beside a line (no terminal illness, no early-stage critical illness)", async () => {
+      const events = (await rows(au)).map((x) => x.event_type);
+      assert.ok(!events.includes("terminal_illness") && !events.includes("early_critical_illness"), events.join(", "));
+    });
+    await test("a £ life schedule printing one sum seeds death only, at that sum", async () => {
+      const seeded = (await rows(gb)).filter((x) => x.id !== changed && x.id !== rejected);
+      assert.deepEqual(seeded.map((x) => [x.event_type, Number(x.amount), x.currency]), [["death", 250000, "GBP"]]);
+    });
+    await test("a personal accident schedule's death sum is accidental death only (RM)", async () => {
+      assert.deepEqual((await rows(my)).map((x) => [x.event_type, Number(x.amount), x.currency]), [["accidental_death", 200000, "MYR"]]);
+    });
+    await test("an untouched row an older rule seeded beside a line is removed; a person's changed or rejected row stays", async () => {
+      const ids = (await rows(gb)).map((x) => x.id);
+      assert.ok(!ids.includes(untouched), "the untouched terminal illness row is gone");
+      assert.ok(ids.includes(changed), "the row a person changed stays");
+      assert.ok(ids.includes(rejected), "the row a person rejected stays");
+    });
+    await test("a line whose currency is unstated seeds nothing, never S$", async () => {
+      assert.deepEqual(await rows(sg), []);
+      void unstated;
+    });
+    await test("seeding again changes nothing", async () => {
+      const before = JSON.stringify([await rows(au), await rows(gb), await rows(my)]);
+      await seedLedger(ACCOUNT);
+      assert.equal(JSON.stringify([await rows(au), await rows(gb), await rows(my)]), before);
+    });
+    void life; void pa;
+  } finally {
+    await query("DELETE FROM coverage_rules WHERE account_id=$1", [ACCOUNT]).catch(() => undefined);
+    await query("DELETE FROM accounts WHERE id=$1", [ACCOUNT]).catch(() => undefined);
+  }
+
+  await test("no request tried to leave this machine (no model was asked)", async () => {
+    assert.deepEqual(outbound, []);
+  });
+  console.log(`schedule line seeds: ${passed} passed, ${failures.length} failed`);
+  for (const f of failures) console.log("  FAIL " + f);
+  process.exit(failures.length ? 1 : 0);
+}
+
+main().catch((error) => { console.error(error); process.exit(1); });
