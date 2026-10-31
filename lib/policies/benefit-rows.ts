@@ -1,8 +1,9 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
-import { canadianDollarCode, explicitCurrency } from "@/lib/chat/policy-analysis";
+import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
+import { canadianDollarCode } from "@/lib/chat/policy-analysis";
 
 /** Reading the "what it pays" cell of a benefit schedule.
  *
