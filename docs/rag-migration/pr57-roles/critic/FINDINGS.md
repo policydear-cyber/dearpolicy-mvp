@@ -10342,3 +10342,7 @@ Low: on "Hearing Loss in | 15% …, up to" / "Both Ears | S$20,000" / "One Ear |
 
 ## R476: #236 0064e16 (premium caption test follows #228): READY
 This is a test-only change to a test that is not a registered grader. The old assertion on app/api/dashboard/route.ts is moved to lib/policies/counted-premiums.ts, where #228 put the same mapping (items, and now oneOff too, carry premiumSourceKind). The route is checked to call countedPremiums. Nothing is loosened. premium:source-caption-test and premium:table-test pass, the rest of the gate is green, and the test fails on main 6b9e814.
+
+## R477: #234 9321c81: READY (replaces R475)
+All 6 p234b pages now give one row per cover, the same as main, including the "Both Ears / One Ear" sub-table. The intended joins still work ("Keyhole Surgery for | … up to maximum" + "Blocked Arteries | of S$25,000", "Early Cancer upon | … subject to a maximum" + "diagnosis | of RM50,000"), and a following row stays its own row. Gate green (wrapped-cell, unread-amount-line, share/cap tests, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). R476 note: premium:source-caption-test fails on main 6b9e814 (9 pass, 1 fail), as stated.
+Low (no regression, safe side): "Hearing Loss in | …, up to" + "One Ear | £10,000" joins only when no name | amount row follows. When "Burns | 50%…" comes next, it falls back to main's reading: an unfinished "up to" row plus a separate "One Ear £10,000" row (/mnt/project-files/critic/p234c-wrapped2.mts).
