@@ -222,3 +222,18 @@ test("after 'when' or 'to whom', only words that say who, what, when or who cert
     "100% of the Sum Assured is payable upon diagnosis of Type 1 Diabetes Mellitus in the Life Assured."])
     assert.equal(shareBound(quote, "Critical Illness").kind, "none", quote);
 });
+
+test("ordinary conditions, payees and periods from other insurers keep the share (Critic R460 keep corpus)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  for (const tail of [
+    "upon diagnosis of any one of the 27 conditions covered", "upon diagnosis of any one of the covered conditions", "if the Life Assured is diagnosed with an Early Stage Critical Illness",
+    "if the insured person suffers a heart attack", "payable to the beneficiary named in the policy", "if death occurs within 90 days of the accident",
+    "if the Life Insured is diagnosed with cancer before age 65", "when the insured is hospitalised for at least 3 consecutive days", "as a lump sum",
+    "upon confirmation by a registered medical practitioner", "if the life assured suffers total and permanent disability before age 70", "in one lump sum to the policyholder",
+    "provided the diagnosis is made after the waiting period of 90 days", "for Total and Permanent Loss of Sight of one eye", "subject to the terms and conditions of this policy",
+    "if the insured person dies as a result of an accident", "upon diagnosis of Major Cancer", "upon diagnosis of a covered Critical Illness, subject to a survival period of 14 days",
+    "jika Hayat Diinsuranskan didiagnosis menghidap penyakit kritikal", "apabila berlaku kematian akibat kemalangan", "kepada penama", "en cas de décès accidentel",
+    "if the insured is diagnosed with a Specified Illness listed in Schedule A", "for angioplasty and other invasive treatment for coronary artery disease",
+    "upon diagnosis of one of the 37 covered critical illnesses", "upon Total and Permanent Disability lasting at least 6 consecutive months",
+  ]) assert.equal(shareBound("Benefit: 50% of the Sum Insured " + tail, "Benefit").kind, "none", tail);
+});
