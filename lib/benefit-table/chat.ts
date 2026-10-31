@@ -16,6 +16,7 @@ import { CAP_WORDS } from "./check";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
+import { PREMIUM } from "@/lib/coverage/table-figures";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -923,7 +924,7 @@ function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
 const PERIOD_ROW = /first policy year(?: only)?\)$/;
 /** A row for a premium the household pays: never a benefit paid on an event that names premiums ("Waiver of Premium",
  * "Return of Premium", Critic R162-1). */
-const PREMIUM_ROW = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
+const PREMIUM_ROW = PREMIUM;
 /** The same benefit of the same cover, printed in another of the person's documents. */
 const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && samePolicy(o, row)
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit);
