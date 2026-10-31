@@ -10346,3 +10346,23 @@ This is a test-only change to a test that is not a registered grader. The old as
 ## R477: #234 9321c81: READY (replaces R475)
 All 6 p234b pages now give one row per cover, the same as main, including the "Both Ears / One Ear" sub-table. The intended joins still work ("Keyhole Surgery for | … up to maximum" + "Blocked Arteries | of S$25,000", "Early Cancer upon | … subject to a maximum" + "diagnosis | of RM50,000"), and a following row stays its own row. Gate green (wrapped-cell, unread-amount-line, share/cap tests, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). R476 note: premium:source-caption-test fails on main 6b9e814 (9 pass, 1 fail), as stated.
 Low (no regression, safe side): "Hearing Loss in | …, up to" + "One Ear | £10,000" joins only when no name | amount row follows. When "Burns | 50%…" comes next, it falls back to main's reading: an unfinished "up to" row plus a separate "One Ear £10,000" row (/mnt/project-files/critic/p234c-wrapped2.mts).
+
+## R478: #234 36c5c05 (merge of main #231-#235): READY
+The remerge diff shows the conflicts were resolved additively: STOPS_AT_ITS_CAP sits beside paysWholeSum, both package.json scripts are kept, and both unread-line tests are kept. Gate green: wrapped-cell, unread-amount-line, whole-sum, share-cap, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, main-merge.
+
+## R479: #237 fb61b7d (whole sum person by person): READY
+A declared contract with no covers is skipped. Each person still needs an evidenced contract that holds the cover, which matches the figure rules in policy-analysis.ts:443 and workflow.ts:798. Anything else is still null: a declared contract with any cover, an evidenced contract without the cover, two sums, only a declared document, or Plus/II/+. Gate green.
+Low (inferred): a declared second certificate whose reading failed also has 0 covers and is skipped. The first certificate's sum is shown with its source. That understates, but no wrong figure is shown.
+
+## R480: #239 c6325b8 (printedNumber): findings
+- H1 (regression, overpays): with a scale word, shareCapInPassage reads "up to US$1.250 million" as cap 1,250,000,000 (main: 1,250,000) and "S$0.500 million" as 500,000,000. Before million/m/k/thousand, a dot followed by 3 digits is a decimal.
+- M2 (pre-existing): typedValue and parseBenefitValue ignore a trailing scale word. "Up to S$1.250 million" gives 1250 (main: 1.25), and "US$1.5 million" gives 1.5.
+- M3: "S$0.500" gives 500 (main: 0.5). A leading 0 group is never thousands grouping.
+- M4 (pre-existing): space grouping is never captured. typedValue("€10 000") gives 10 on both main and #239.
+- L5: parseBenefitValue("CHF 10'000") gives currency null. L6: benefit-rows MONEY lacks Rs, though layout and typedValue have it.
+Fixed: €50.000, €2.500 per day, up to €25.000, Rp 1.500.000, ₹5,00,000, and S$5,000,00, which is now null (main read it as 500000). Probe: /mnt/project-files/critic/p239-locales.mts.
+Gate for #239 is green: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. The gate does not cover the cases above, so H1 stands.
+
+## R481: #238 5a8dc71 (benefit people once per person): READY
+oncePerPerson keys people by ownerId. The same sum and plan collapse to one entry, two sums are both kept, and an entry with no sum is shown only for someone with no sum at all. ?member= is now honoured. Gate green: benefit-people, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+Low: a person whose cover was found with no amount loses the plan name (plan null). Neither page shows the plan for an entry with no sum (operator: "no sum insured on file"; schedule filters on amount), so nothing visible changes.
