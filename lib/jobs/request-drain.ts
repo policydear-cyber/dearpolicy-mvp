@@ -85,6 +85,10 @@ export async function drainOnce(params: { jobTypes?: WorkerJobTypeConfig[]; now?
   state.inFlight = true;
   state.lastStartedAt = now();
   try {
+    // What chat answers and the coverage ledger took from deleted documents is
+    // removed, catching up any earlier failure (lib/lifecycle/derived-content-scrub.ts;
+    // bounded, never throws).
+    await (await import("@/lib/lifecycle/derived-content-scrub")).scrubDeletedDocumentDerivedContent();
     // Round 5: retry any storage objects of deleted documents/households
     // that could not be removed at deletion time (bounded; never throws).
     await (await import("@/lib/storage/purge")).purgeSoon();
