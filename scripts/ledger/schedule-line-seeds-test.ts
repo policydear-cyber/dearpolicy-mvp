@@ -3,9 +3,12 @@
  * Cover $500,000" showed "Total and permanent disability A$850,000", plus a terminal illness row carrying the life sum
  * and an early-stage critical illness row "Plans like this usually include this"). Runs the real seedLedger
  * (lib/ledger/store.ts) against a real, disposable PostgreSQL for made-up households in A$, £, RM and S$:
- *   - each schedule line's own benefit is seeded with its own amount, and nothing else is seeded beside it;
+ *   - each schedule line's own benefit is seeded with its own amount;
+ *   - what a plan of that kind usually also pays is proposed with no figure, never with another line's sum, and never
+ *     where a line already gives that benefit;
  *   - a personal accident schedule's death sum is accidental death, never death from any cause;
- *   - a row an older rule seeded beside a line is removed when nobody touched it; a row a person changed or rejected stays;
+ *   - an untouched row an older rule seeded with another benefit's sum loses that sum; a row a person changed or rejected
+ *     stays as it is;
  *   - a line whose currency is unstated still seeds nothing (never S$).
  * No real household, insurer or scheme; no model call; no paid call.
  *   DEARPOLICY_DISPOSABLE_DB=1 DATABASE_URL=postgres://... npm run -s ledger:schedule-line-test */
@@ -80,26 +83,34 @@ async function main() {
   try {
     await seedLedger(ACCOUNT);
 
+    const figures = (r: { event_type: string; amount: string | null; currency: string }[]) => r.map((x) => [x.event_type, x.amount == null ? null : Number(x.amount), x.currency]);
     await test("each A$ line seeds its own benefit with its own amount: TPD is A$500,000, never the life cover's A$850,000", async () => {
       const r = await rows(au);
-      assert.deepEqual(r.map((x) => [x.event_type, Number(x.amount), x.currency]), [["critical_illness", 150000, "AUD"], ["death", 850000, "AUD"], ["tpd", 500000, "AUD"]]);
+      assert.deepEqual(figures(r).filter((x) => x[1] != null), [["critical_illness", 150000, "AUD"], ["death", 850000, "AUD"], ["tpd", 500000, "AUD"]]);
     });
-    await test("nothing a plan type usually pays is seeded beside a line (no terminal illness, no early-stage critical illness)", async () => {
-      const events = (await rows(au)).map((x) => x.event_type);
-      assert.ok(!events.includes("terminal_illness") && !events.includes("early_critical_illness"), events.join(", "));
+    await test("what a plan type usually also pays carries no figure, and no benefit is seeded twice", async () => {
+      const r = await rows(au);
+      const extra = r.filter((x) => !["death", "tpd", "critical_illness"].includes(x.event_type));
+      assert.ok(extra.every((x) => x.amount == null), JSON.stringify(figures(extra)));
+      assert.equal(new Set(r.map((x) => x.event_type)).size, r.length, JSON.stringify(figures(r)));
     });
-    await test("a £ life schedule printing one sum seeds death only, at that sum", async () => {
+    await test("a £ life schedule printing one sum carries that sum on death only", async () => {
       const seeded = (await rows(gb)).filter((x) => x.id !== changed && x.id !== rejected);
-      assert.deepEqual(seeded.map((x) => [x.event_type, Number(x.amount), x.currency]), [["death", 250000, "GBP"]]);
+      assert.deepEqual(figures(seeded).filter((x) => x[1] != null), [["death", 250000, "GBP"]]);
     });
-    await test("a personal accident schedule's death sum is accidental death only (RM)", async () => {
-      assert.deepEqual((await rows(my)).map((x) => [x.event_type, Number(x.amount), x.currency]), [["accidental_death", 200000, "MYR"]]);
+    await test("a personal accident schedule's death sum is accidental death only (RM); nothing else carries it", async () => {
+      const r = await rows(my);
+      assert.deepEqual(figures(r).filter((x) => x[1] != null), [["accidental_death", 200000, "MYR"]]);
+      assert.ok(!r.some((x) => x.event_type === "death"), "never death from any cause");
     });
-    await test("an untouched row an older rule seeded beside a line is removed; a person's changed or rejected row stays", async () => {
-      const ids = (await rows(gb)).map((x) => x.id);
-      assert.ok(!ids.includes(untouched), "the untouched terminal illness row is gone");
-      assert.ok(ids.includes(changed), "the row a person changed stays");
-      assert.ok(ids.includes(rejected), "the row a person rejected stays");
+    await test("an untouched older row that carried the life sum on another benefit no longer carries it", async () => {
+      const r = (await rows(gb)).find((x) => x.id === untouched);
+      assert.ok(!r || r.amount == null, JSON.stringify(r));
+    });
+    await test("a row a person changed keeps their figure, and a rejected row stays rejected", async () => {
+      const r = await rows(gb);
+      assert.equal(Number(r.find((x) => x.id === changed)?.amount), 200000);
+      assert.equal(r.find((x) => x.id === rejected)?.status, "rejected");
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);

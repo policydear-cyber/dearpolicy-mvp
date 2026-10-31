@@ -168,10 +168,9 @@ export function eventsFromText(text:string):EventCandidate[]{
 }
 
 /** The one benefit a schedule line names by its own cover category ("Death", "Total Permanent Disability"), and whether
- * the line's printed amount is what that benefit pays. A schedule line says what it insures and no more: a life cover's
- * sum is never also a disability or terminal-illness figure, and nothing a plan type "usually" pays is added beside it
- * (new-user walkthrough, 31 Oct: an Australian schedule printing Life Cover $850,000 and TPD Cover $500,000 showed
- * "Total and permanent disability A$850,000"). A category not listed here seeds nothing. */
+ * the line's printed amount is what that benefit pays. A line's sum is that benefit's only: never also a disability or
+ * terminal-illness figure (new-user walkthrough, 31 Oct: an Australian schedule printing Life Cover $850,000 and TPD
+ * Cover $500,000 showed "Total and permanent disability A$850,000"). A category not listed here seeds its own nothing. */
 export const SCHEDULE_LINE_EVENTS:Record<string,{event:EventType;pays:PaysKind}>={
   "Death":{event:"death",pays:"lump_sum"},
   "Total Permanent Disability":{event:"tpd",pays:"lump_sum"},
