@@ -14,7 +14,7 @@ const t = (name: string, fn: () => void) => { try { fn(); passed++; console.log(
 const words = (n: number, w = "word") => Array.from({ length: n }, () => w).join(" ");
 
 async function main() {
-  const { conciseDetails } = await import("@/lib/chat/policy-answer");
+  const { conciseDetails, MONEY_CELL } = await import("@/lib/chat/policy-answer");
   type Card = { ownerName: string | null; benefitTitle: string; amountText: string };
   const card = (benefitTitle: string, amountText: string, ownerName: string | null = "Aminah"): Card => ({ ownerName, benefitTitle, amountText });
 
@@ -66,6 +66,15 @@ async function main() {
     const before = [...details];
     conciseDetails(details, [], { cap: 8 });
     assert.deepEqual(details, before);
+  });
+
+  t("a row printing one figure per column is seen in any market's money (RM, £, HK$, €, Rp, CHF), so it is never a card", () => {
+    const cells = (row: string) => row.split(/\t| · |\s{3,}|\s\|\s/).filter((c) => MONEY_CELL.test(c)).length;
+    for (const row of ["Hospital cash per day | RM100 | RM200 | RM300", "Hospital cash per day\t£100\t£200", "Room and board · HK$1,500 · HK$2,500",
+      "Room & board €100 · €200", "Daily cash Rp100.000 | Rp200.000", "Tagegeld\t100 €\t200 €", "Taggeld\tCHF 1'250\tCHF 2'500", "Ward\tS$300\tS$500"])
+      assert.ok(cells(row) >= 2, row);
+    assert.equal(cells("Hospital cash per day: RM100 for up to 180 days"), 1);
+    assert.equal(cells("Room and board as charged, up to 30 days"), 0);
   });
 
   t("a full list is never cut", () => {

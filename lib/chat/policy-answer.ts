@@ -1659,6 +1659,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   for (const a of kept) {
     const citation = cite(a);
+    // A row printed once per column for someone whose column is not known is one line with no amount (above): none of its
+    // columns' figures is a card of the person's own limit, in any currency (TE #259 F1).
+    if (inColumns.has(a)) continue;
     // (Round 7 port: a row of a table with a column per employee plan is not quoted
     // whole as a limit card -- the quote would show another plan's figure.)
     // Round 11: one card for a figure several people share on the same plan (a family travel plan's row), naming them all.
@@ -1669,7 +1672,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}/).filter((cell) => /(?:S\$|US\$|SGD\s?|USD\s?)\s?\d/.test(cell)).length > 1)))
+    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
@@ -1972,6 +1975,10 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
  * is one question away -- "ask for the full list". Every part of a several-part question keeps a line (`keep`).
  * The cards of amounts follow the lines shown.
  */
+/** A table cell that prints an amount in any market's money: a sign or code before the figure ("RM100", "HK$ 1,500",
+ * "Rp100.000", "£50", "CHF 1'250") or after it ("100 €", "150,00 EUR"). A row with two or more such cells prints one figure
+ * per column, so no one of them is a person's own limit card. */
+export const MONEY_CELL = /(?:[A-Z]{1,3}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\b[A-Z]{3})\s?\d|\d[\d.,'’ ]*\s?(?:€|£|\b(?:EUR|GBP|USD|SGD|MYR|IDR|HKD|CHF|AUD|INR)\b)/u;
 export function conciseDetails(details: string[], limits: { benefitTitle: string; ownerName?: string | null; amountText?: string }[], opts: { cap: number; keep?: RegExp[] }) {
   if (opts.cap === Infinity) return;
   // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
