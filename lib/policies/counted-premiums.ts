@@ -15,7 +15,9 @@ export type CountedPremiums = { monthly: number | null; annual: number | null; c
   totals: { currency: string; monthly: number; annual: number }[]; items: CountedPremium[];
   /** Premiums the record says are paid once (a single trip): listed with their source, never in the monthly or yearly cost. */
   oneOff: CountedPremium[];
-  cashAnnual: number | null; medisaveAnnual: number | null; missing: string[]; complete: boolean; note: string | null };
+  cashAnnual: number | null; medisaveAnnual: number | null; missing: string[];
+  /** This person's policies whose premium is on file under another family member (counted in that person's total). */
+  countedElsewhere: { name: string; owner: string }[]; complete: boolean; note: string | null };
 
 /** Each person's covers in the household's benefit table (by family member id), or null when the table is not live here. */
 export async function tableCoversByMember(accountId: string): Promise<Map<string, TablePremiumCover[]> | null> {
@@ -46,6 +48,6 @@ export async function countedPremiums(accountId: string, member: ClaimPerson, ta
   const none = !items.length;
   const unstatedNote = unstated.length ? `The total ${summary.note ? "also " : ""}leaves out ${[...new Set(unstated)].slice(0, 4).join(", ")}: ${unstated.length === 1 ? "its record does not say" : "their records do not say"} which currency the premium is in.` : null;
   return { monthly: one?.monthly ?? (none ? 0 : null), annual: one?.annual ?? (none ? 0 : null), currency: one?.currency ?? null, totals: list, items, oneOff: summary.oneOff.map((i) => ({ ...i, source: premiumSourceKind(i) })),
-    cashAnnual: summary.cashAnnual, medisaveAnnual: summary.medisaveAnnual, missing: summary.missing, complete: summary.complete && !unstated.length,
+    cashAnnual: summary.cashAnnual, medisaveAnnual: summary.medisaveAnnual, missing: summary.missing, countedElsewhere: summary.countedElsewhere ?? [], complete: summary.complete && !unstated.length,
     note: [summary.note, unstatedNote].filter(Boolean).join(" ") || null };
 }

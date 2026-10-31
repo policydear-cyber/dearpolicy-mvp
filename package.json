@@ -191,6 +191,7 @@
     "ledger:schedule-line-test": "node --import tsx scripts/ledger/schedule-line-seeds-test.ts",
     "documents:letterhead-insurer-test": "node --import tsx scripts/documents/letterhead-insurer-test.ts",
     "claims:home-country-test": "node --import tsx scripts/claims/home-country-test.ts",
+    "policies:premium-elsewhere-test": "node --import tsx scripts/policies/premium-counted-elsewhere-test.ts",
     "documents:no-guessed-cover-test": "node --import tsx scripts/documents/no-guessed-cover-test.ts",
     "documents:found-line-table-test": "node --import tsx scripts/documents/found-line-table-test.ts",
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",

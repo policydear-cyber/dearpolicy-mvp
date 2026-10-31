@@ -41,6 +41,9 @@ export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amou
   /** Said with the premium: a first-year premium, and the premium from the next policy year. */
   detail?: string | null };
 export type PremiumSummary = { monthly: number; annual: number; cashAnnual: number | null; medisaveAnnual: number | null; items: PremiumItem[];
+  /** This person's policies whose premium is on file under another family member (a family plan's one premium, printed
+   * under the policyholder): never "no premium is printed", and never counted twice. `owner` is that member's name. */
+  countedElsewhere?: { name: string; owner: string }[];
   /** Premiums the record says are one-off (PremiumItem.oneOff): listed, never in the totals or treated as missing. */
   oneOff: PremiumItem[];
   /** Premiums for a short period with no frequency (PremiumItem.shortPeriod): left out of the totals, and named in the note. */
@@ -346,6 +349,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const medisaveAnnual = items.some((i) => i.medisaveAnnual != null) ? items.reduce((sum, i) => sum + (i.medisaveAnnual ?? 0), 0) : null;
   // Which of this person's policies have no premium evidence at all.
   let missing: string[] = [], inventoryDocumentIds = new Set<string>();
+  const countedElsewhere: { name: string; owner: string }[] = [];
   let missingPolicies: { policy_number: string | null; product_name: string | null; insurer: string | null }[] = [];
   try {
     const inventory = await loadPolicyInventory(accountId, [member]);
@@ -355,13 +359,37 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
       return !all.some((i) => (i.policy_id && ids.has(i.policy_id)) || (normalizedIdentifier(i.policy_number) && numbers.has(normalizedIdentifier(i.policy_number))));
     });
-    missing = unpaid.map((c) => c.name);
-    missingPolicies = unpaid.flatMap((c) => c.documents.map((d) => ({ policy_number: d.policy_number, product_name: d.product_name ?? c.name, insurer: d.insurer })));
+    // A policy whose premium is filed under another family member (a family plan's one premium, read from the
+    // policyholder's schedule) has its premium printed: it is counted in that person's total, never "missing" here.
+    const unpaidIds = unpaid.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id));
+    const unpaidNumbers = unpaid.flatMap((c) => c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean)) as string[];
+    const elsewhere = unpaidIds.length || unpaidNumbers.length ? (await query<{ doc_id: string | null; policy_id_text: string | null; policy_number: string | null; owner: string }>(
+      `SELECT coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,pr.policy_number,fm.display_name AS owner
+         FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id
+        WHERE pr.account_id=$1 AND pr.family_member_id<>$2
+          AND (pr.policy_id::text=ANY($3::text[]) OR pr.source_document_id::text=ANY($3::text[]) OR pr.policy_number IS NOT NULL)`,
+      [accountId, member.id, unpaidIds])).rows : [];
+    const ownerOf = (c: (typeof unpaid)[number]) => {
+      const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
+      const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
+      return elsewhere.find((e) => (e.doc_id && ids.has(e.doc_id)) || (e.policy_id_text && ids.has(e.policy_id_text))
+        || (normalizedIdentifier(e.policy_number) && numbers.has(normalizedIdentifier(e.policy_number))))?.owner ?? null;
+    };
+    for (const c of unpaid) { const owner = ownerOf(c); if (owner) countedElsewhere.push({ name: c.name, owner }); }
+    const paidElsewhere = new Set(unpaid.filter((c) => ownerOf(c)));
+    missing = unpaid.filter((c) => !paidElsewhere.has(c)).map((c) => c.name);
+    missingPolicies = unpaid.filter((c) => !paidElsewhere.has(c)).flatMap((c) => c.documents.map((d) => ({ policy_number: d.policy_number, product_name: d.product_name ?? c.name, insurer: d.insurer })));
   } catch { missing = []; }
   missing = [...new Set(missing)];
   // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent;
   // when the inventory could not be read, every such policy is named rather than none (Critic R300 L2).
   if (table) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today, missingPolicies));
+  if (countedElsewhere.length) { const names = new Set(countedElsewhere.map((c) => c.name)); tableLeftOut = tableLeftOut.filter((x) => !names.has(x.name)); }
+  const owners = [...new Set(countedElsewhere.map((c) => c.owner))];
+  const elsewhereNote = countedElsewhere.length
+    ? (countedElsewhere.length === 1 ? "The premium for " + countedElsewhere[0].name + " is" : "The premiums for " + [...new Set(countedElsewhere.map((c) => c.name))].slice(0, 4).join(", ") + " are") +
+      " on file under " + (owners.length === 1 ? owners[0] : owners.slice(0, -1).join(", ") + " and " + owners.at(-1)) + ", so " + (countedElsewhere.length === 1 ? "it is" : "they are") + " counted in " + (owners.length === 1 ? "that person’s" : "their") + " total, not again here."
+    : null;
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
     : null;
@@ -381,6 +409,6 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     const names = [...new Set(tableLeftOut.filter((x) => x.why === why).map((x) => x.name))];
     return names.length ? names.slice(0, 4).join(", ") + ": " + WHY[why][names.length === 1 ? 0 : 1] : null;
   }).filter(Boolean).map((part, i) => (i === 0 ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " : "It also leaves out ") + part + ".").join(" ") || null;
-  const note = [missingNote, shortNote, tableNote].filter(Boolean).join(" ") || null;
-  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, complete: missing.length === 0 && shortPeriod.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
+  const note = [missingNote, shortNote, tableNote, elsewhereNote].filter(Boolean).join(" ") || null;
+  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, countedElsewhere, complete: missing.length === 0 && shortPeriod.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
 }
