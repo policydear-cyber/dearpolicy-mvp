@@ -44,14 +44,14 @@ export async function GET(request:NextRequest){
     if(!confirmed.rows.length&&reference.rows.length){
      for(const ref of reference.rows as any[]){const owner=owned.rows.find(o=>wordingDescribes({productName:o.coverage_product_name??o.policy_name,groupPolicyNumber:o.group_policy_number,insurer:o.insurer},{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}));if(!owner)continue;derived.push({id:`derived:${owner.id}:${ref.id}`,amount:null,currency:owner.currency,display_amount:null,product_name:ref.product_name??owner.coverage_product_name??owner.policy_name,insurer:owner.insurer,policy_number:owner.policy_number,group_policy_number:owner.group_policy_number,ownership_source_page:owner.source_page,ownership_evidence_text:owner.evidence_text,ownership_name:documentCardTitle({product_name:owner.policy_name,original_filename:owner.original_filename,insurer:owner.insurer,document_role:owner.document_role,policy_number:owner.policy_number}),reference_name:documentCardTitle({product_name:ref.document_product,original_filename:ref.original_filename,insurer:ref.insurer,document_role:ref.document_role,policy_number:ref.policy_number}),reference_role:ref.document_role,reference_notes:ref.notes});}
     }
-    // A figure paid per period carries its printed period; a periodic cover's figure with none is not shown (lib/coverage/line-period.ts).
-    const shown=(confirmed.rows as any[]).map(r=>{const f=lineFigure(category,r.amount==null?null:Number(r.amount),r.evidence_text);return{...r,amount:f.amount==null?null:r.amount,period:f.period};});
-    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:shown,derived,reference:reference.rows.map((r:any)=>({...r,document_name:documentCardTitle({product_name:r.document_product,original_filename:r.original_filename,insurer:r.insurer,document_role:r.document_role,policy_number:r.policy_number})})),table:await tableRows(accountId,member,category,seen)};
+    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmed.rows,derived,reference:reference.rows.map((r:any)=>({...r,document_name:documentCardTitle({product_name:r.document_product,original_filename:r.original_filename,insurer:r.insurer,document_role:r.document_role,policy_number:r.policy_number})})),table:await tableRows(accountId,member,category,seen)};
   });
   if(!payload) return NextResponse.json({error:"Family member not found"},{status:404});
   // A failed or partly read document of this person may hold this cover: "not found" says so (see lib/policies/not-fully-read).
   const notRead=notFullyReadNote(await notFullyRead(accountId,member,seen.documents),payload.member.name);
   // ID numbers in quotes, excerpts and evidence are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({...payload,kind:seen.kind??null,notFullyRead:notRead}));
+  // A figure paid per period carries its printed period; a periodic cover's figure with none is not shown (lib/coverage/line-period.ts).
+  const confirmedShown=(payload.confirmed as {amount:string|null;evidence_text:string|null}[]).map(r=>{const f=lineFigure(category,r.amount==null?null:Number(r.amount),r.evidence_text);return{...r,amount:f.amount==null?null:r.amount,period:f.period};});
+  return NextResponse.json(maskShownText({...payload,confirmed:confirmedShown,kind:seen.kind??null,notFullyRead:notRead}));
  }catch(error){return routeErrorResponse(error);}
 }
