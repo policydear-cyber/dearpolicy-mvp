@@ -20,6 +20,7 @@
  */
 import { looksScanned } from "@/lib/chat/scanned-text";
 import { createHash } from "node:crypto";
+import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 
@@ -134,7 +135,9 @@ function moneyPattern(value: number) {
   const body = groups.join("[,\\s]?");
   const fraction = cents ? "\\." + String(cents).padStart(2, "0").replace(/0$/, "0?") : "(?:\\.0{1,2})?";
   // Round 10: never part of a figure a scan printed unclearly ("S$1,O36.00" is not 36).
-  return new RegExp("(?<![\\d.,])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.]?[OoIl|])");
+  // The figure is read whole: it ends where the printed figure ends, so 1,936 is not printed by "S$1,936.50" and 4,250 is
+  // not printed by "Rp4.250.000" (a separator followed by a digit carries the figure on).
+  return new RegExp("(?<![\\d.,])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.'’]\\d|[,.]?[OoIl|])");
 }
 /** Does the passage print this amount? A money amount must appear as that
  * number; a fraction of the sum insured as its percentage; a fixed amount
@@ -148,8 +151,11 @@ export function amountAppears(passage: string, value: number, kind: "money" | "f
       || (value === 1 && /\b(?:full|entire|100\s*%)\s*(?:of\s+the\s+)?sum\s+(?:insured|assured)/i.test(text));
   }
   if (moneyPattern(value).test(text)) return true;
-  for (const m of text.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%\s*of\s*(?:the\s+)?(?:[A-Z]{0,3}\$|[A-Z]{3}\s?)\s?([\d,]+(?:\.\d{1,2})?)/gi)) {
-    const computed = Math.round(Number(m[2].replace(/,/g, "")) * Number(m[1])) / 100;
+  // The base is read whole (printed-number.ts): "25% of €5.000" is a quarter of five thousand, never of five.
+  for (const m of text.matchAll(new RegExp(String.raw`(\d{1,3}(?:\.\d+)?)\s*%\s*of\s*(?:the\s+)?(?:[A-Z]{0,3}\$|[A-Z]{3}\s?|€|£|₹)\s?(` + PRINTED_FIGURE + ")" + FIGURE_END + NO_SCALE_AFTER, "gi"))) {
+    const base = printedNumber(m[2], null, { lakh: groupsInLakhs(text) });
+    if (base == null) continue;
+    const computed = Math.round(base * Number(m[1])) / 100;
     if (Math.abs(computed - value) < 0.005) return true;
   }
   return false;
