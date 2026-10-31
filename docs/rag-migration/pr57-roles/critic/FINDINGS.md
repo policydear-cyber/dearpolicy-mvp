@@ -10378,3 +10378,6 @@ Neither changes code. #237 adds one test assertion (a contract that is only decl
 - Low (safe side): a money figure followed by a space and 3 digits now reads as unsure: capReading("Up to S$5,000 120 days per year") and typedValue("S$500 365 days"). "Up to Rs. 5,00,000" stays unsure on both main and #239, because the sentence splitter breaks at "Rs.".
 - Low: typedValue("S$1.5 million or S$2,000") gives 2000 (main: 1.5). Both are wrong, for a rare cell. "Md" is read as billion, so "S$2 Md" gives a cap of 2,000,000,000.
 Probes: /mnt/project-files/critic/p239b-locales2.mts, p239c-scale.mts.
+
+## R484: #239 9b50743: READY (replaces R483)
+Changes since 997856e: "mil" now gives nothing (it means a thousand in some markets and a million in others), so "RM5 mil" and "€5 mil" are unsure. "€50 Tsd." gives 50,000 and "US$2 mln" gives 2,000,000. typedValue returns null for any cell where a money figure carries a multiplier, which fixes R483's Low ("S$1.5 million or S$2,000" no longer stores 2000). All changes are on the safe side. The full gate is green at 1f7f561 and at 9b50743: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. Probe: /mnt/project-files/critic/p239c-scale.mts.
