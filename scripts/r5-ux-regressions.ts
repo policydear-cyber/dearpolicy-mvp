@@ -175,6 +175,15 @@ async function main() {
     assert.match(home, /function EmptyPortfolio/);
     assert.match(home, /emptyPortfolio\?<EmptyPortfolio/);
   });
+  await test("no verdict before the data is in: cover detail and Payments say nothing found only once loaded", () => {
+    const cover = read("app/coverage/page.tsx");
+    assert.match(cover, /const ready=Boolean\(data&&!data\.error\)/, "the cover page knows when its answer is in");
+    assert.match(cover, /\{ready\?<>\s*<section className="section evidence-section">[^]*?Not found in your documents/, "the ANSWER section renders only once ready");
+    assert.match(cover, /!ready\?"This cover could not be loaded\."/, "a failed load is not read as not found");
+    const payments = read("app/records/page.tsx");
+    assert.match(payments, /useState<RecordRow\[\]\|null>\(null\)/, "payments start unknown, not empty");
+    assert.match(payments, /records && !records\.length && <div className="empty-card">No payments/, "'No payments found' only after loading");
+  });
   await test("signed-out pages carry no app navigation", () => {
     const shell = read("components/AppShell.tsx");
     assert.match(shell, /const noNav = signedOutPage \|\| NO_NAV_PATHS\.has\(pathname\)/);
