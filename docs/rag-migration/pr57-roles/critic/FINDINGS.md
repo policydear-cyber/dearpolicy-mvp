@@ -10153,3 +10153,17 @@ OK: burns band, "greater than 15% of body surface", "loss greater than 80 dB", "
 ## R427/R429 — #219 d570331 -> 6797d87 (Home currency): R427 H1 r5 E1 empty household premiums null vs registered 0 (E2 cascade); fixed in route at 6797d87. READY. M1 conflicts with #213; known sum must refuse 2+ unstated-currency parts.
 
 ## R428 — #211 40e93b6: READY. All R416 attacks unsure; follow-up over-withholding: "up to a maximum of", "per policy year", "payable only once", wrapped newline; Low "per additional claim" caps.
+
+"% of the annual premium / of Sum Insured / of total benefits" stay withheld.
+
+## R430 — re-gate at cab0e27
+Gate green (stored-share-shapes fail 0, chat 85, replay 22/22, bt 107/107, r5 21/21, tsc 0, build 0, merges clean into main).
+The R425 rows are withheld, and so are "at no time / at no point / in no event / no higher". Three regressions vs main remain (main: none, head: share):
+- "50% of Sum Insured, but the amount we pay will not under any circumstances be higher than 25%" (the negation is more than 3 words back)
+- "50% of Sum Insured, without being higher than 25%" ("without" is not on the list)
+- "50% of Sum Insured, reduced to 25% if the burn is smaller than 10%" (a conditional second share; the comparative was its only guard)
+Root cause: a negation window is still a deny-list. Structural fix:
+(a) Strip EVENT_THRESHOLD only in an event-band position: at the start of the passage or the benefit label ("Burns: greater than 15% ... 30%"),
+    or right after if/where/when/whose + a subject that is not it/this/the amount/benefit/payment/we.
+(b) Independently, a second percentage in the passage that is not the threshold's own number (here "reduced to 25%") means unsure.
+    This is the same rule as R416 H2 on #211.
