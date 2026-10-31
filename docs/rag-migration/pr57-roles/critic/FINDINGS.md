@@ -10315,3 +10315,23 @@ Low (contrived, follow-up only), probe /mnt/project-files/critic/p230d-reasons4.
 ## R470: #231 2287c17 (lifecycle guard on the reading check): READY
 This is a one-line change. activePredicate("p") is `p.lifecycle_state='active'`, the deletion state, with no date in it. The detail route already returns 404 unless the policy row is active (line 172, same id and account), so a household sees nothing new and no ended or expired status comes back. security:lifecycle-query-guard-test fails on main 6b9e814 and passes here. Gate green: guard, document-filter 10/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
 Process gap (mine): R459 passed #228 without running the security:* guards. From now on my gate runs security:lifecycle-query-guard-test on every PR that touches SQL.
+
+## R471: #232 677c69c (share keeps, payment periods): READY
+Gate green at b1500f8 (6 share/cap tests fail 0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). At 677c69c, which only adds words, share-cap-test is 9/0 and the probes match. Every attack row from R443-R462 is still withheld. p222g payment periods are all withheld except "after 2 years" (a waiting time, correct). The new closed payee and medical lists, stage/type stripping and "failing that" keep ordinary wordings and withhold changers ("failing that the policy value", "failing that half"). Probes: /mnt/project-files/critic/p232-keeps.mts, p232b-failing.mts.
+Low: "if diagnosed with cancer, lasting for 10 years" pays because "lasting" is in the PAYMENT_PERIOD exemption. It is ambiguous whether this is the illness or the payment period.
+
+## R472: #233 f002ea2 (whole sum per person): READY
+Gate green (whole-sum, unread-amount-line, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). The amount is shown only when the cover name is the benefit's own name letter for letter, the currency is verified, a person's copies agree, and every person in scope resolves. Otherwise nothing is shown. It is display only (the Benefits page) and uses the same paysWholeSum test as R469. security:lifecycle-query-guard-test fails only on the [id] route site inherited from main, which #231 fixes. This PR adds no SQL.
+
+## R473: #234 7268321 (wrapped cell): not ready, it eats the next row
+Gate green (wrapped-cell, share/cap tests, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). H1 (lost cover, possible wrong cap): when a row's amount ends on "up to / or / and / maximum", the dangling rule joins the next line even when that line is a separate benefit row. Probe /mnt/project-files/critic/p234b-wrapped.mts, where main keeps both rows:
+- "Hearing Loss | 15% …, up to" + "Child Benefit | S$5,000" gives one row "15% …, up to Child Benefit S$5,000", and Child Benefit is lost
+- "Loss of Sight | 50% … or" + "Loss of Speech | 50% …" loses Loss of Speech
+- "Fracture of Leg | … up to maximum" + "Fracture of Arm | S$5,000" loses Fracture of Arm
+- "Burns | … subject to a maximum" + "Coma | S$50,000" loses Coma
+- "Accidental Death | 100% … and" + "Permanent Disability | S$100,000" loses Permanent Disability
+- "Hearing Loss in | … up to" + "Both Ears | S$20,000" + "One Ear | S$10,000" joins Both Ears and leaves One Ear as an orphan row
+Fix: join a dangling amount only when the row's own name is unfinished (UNFINISHED, as all three test cases are), the next line's left cell does not itself name a benefit (namesABenefit), and the line after it is not another label | amount row of the same shape.
+
+## R474: #235 0ec09c7 (parallel Benefits queries): READY
+The same SQL, now started earlier. query() uses the shared pool and each statement filters by its own account_id, so running them in parallel crosses no household. The failure handling is unchanged: an inventory query failure still fails the route, conditions failures still give [], and `.catch(()=>undefined)` prevents unhandled rejections on early exits. Gate green (85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). The lifecycle guard fails only on the site inherited from main (#231).
