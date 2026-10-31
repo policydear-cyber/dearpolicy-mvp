@@ -1983,10 +1983,13 @@ export function conciseDetails(details: string[], limits: { benefitTitle: string
       n += [l.ownerName ?? "", l.benefitTitle, l.amountText ?? ""].join(" ").split(/\s+/).filter(Boolean).length; }
     return n; };
   const words = (xs: string[]) => xs.join(" ").split(/\s+/).length + cardWords(xs);
-  if (details.length <= opts.cap + 1 && words(details) <= 200) return;
+  // The whole answer is read in at most 180 words for a question about one thing and 250 for an overview or several
+  // parts; the summary and the "more lines" note take part of that, so the lines and cards get the rest.
+  const budget = opts.cap <= 5 ? 155 : 220, MORE_NOTE = 22;
+  if (details.length <= opts.cap + 1 && words(details) <= budget) return;
   const chosen = details.slice(0, opts.cap);
   for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
-  while (chosen.length > 3 && words(chosen) > 200) {
+  while (chosen.length > 3 && words(chosen) + MORE_NOTE > budget) {
     // A line is held only while it is the last one left for a part of the question: a second death-cover line can move
     // to "more lines", the only premium line cannot.
     const fromEnd = [...chosen].reverse().findIndex((d) => (opts.keep ?? []).every((re) => !re.test(d) || chosen.some((o) => o !== d && re.test(o))));

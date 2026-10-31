@@ -20,7 +20,7 @@ async function main() {
 
   t("few lines but over the budget once the cards are counted: the last lines move to 'more lines'", () => {
     const details = ["Lindung Plus — Death benefit: RM500,000 (page 2).", "Lindung Plus — Annual premium: RM2,400.00 (page 2).",
-      "Lindung Plus — Accidental death " + words(60) + " (page 3).", "Lindung Plus — Hospital income " + words(60) + " (page 4).", "Lindung Plus — Rider " + words(40) + " (page 5)."];
+      "Lindung Plus — Accidental death " + words(80) + " (page 3).", "Lindung Plus — Hospital income " + words(80) + " (page 4).", "Lindung Plus — Rider " + words(40) + " (page 5)."];
     const limits = [card("Death benefit", "RM500,000"), card("Accidental death", "RM100,000"), card("Hospital income", "RM200 a day"), card("Rider", "RM50,000")];
     conciseDetails(details, limits, { cap: 8 });
     assert.match(details[details.length - 1], /^There (?:is 1 more line|are \d+ more lines) on this/);
@@ -39,8 +39,8 @@ async function main() {
   t("a several-part question keeps its only premium line and its only renewal line; a second death line can move", () => {
     const premium = /\bpremium\b/i, death = /\bdeath\b/i, renewal = /\brenew/i;
     const details = ["TermCare — Annual premium: S$1,204.50 (page 2).", "TermCare — Death benefit: S$600,000 (page 2).",
-      "Group booklet — Group term life death " + words(90) + " (page 3).", "TermCare — Renewal date: 1 March 2027 (page 2).",
-      "Group booklet — Accidental death " + words(90) + " (page 3)."];
+      "Group booklet — Group term life death " + words(110) + " (page 3).", "TermCare — Renewal date: 1 March 2027 (page 2).",
+      "Group booklet — Accidental death " + words(110) + " (page 3)."];
     conciseDetails(details, [], { cap: 8, keep: [premium, death, renewal] });
     for (const re of [premium, death, renewal]) assert.ok(details.some((d) => re.test(d)), "a line for " + re);
     assert.ok(details.some((d) => /more line/.test(d)));
@@ -52,6 +52,20 @@ async function main() {
     const details = ["A — Premium " + words(120) + ".", "A — Death " + words(120) + ".", "A — Renewal " + words(120) + ".", "A — Death again " + words(10) + "."];
     conciseDetails(details, [], { cap: 8, keep: [/Premium/, /Death/, /Renewal/] });
     assert.ok(details.some((d) => d.startsWith("A — Premium")) && details.some((d) => d.startsWith("A — Renewal")) && details.some((d) => /^A — Death/.test(d)));
+  });
+
+  t("a question about one thing: lines within the line cap but past its smaller budget move to 'more lines'", () => {
+    // Six lines (the cap of five plus one) of about 30 words each: 180+ words before the summary.
+    const details = Array.from({ length: 6 }, (_, i) => `Harbour Shield — Post-hospital line ${i}: as charged, within 365 days ` + words(22) + ` (page ${i + 1}).`);
+    conciseDetails(details, [], { cap: 5 });
+    assert.match(details[details.length - 1], /more line/);
+    assert.ok(details.join(" ").split(/\s+/).length <= 160, "lines and the note fit the one-thing budget: " + details.join(" ").split(/\s+/).length);
+  });
+  t("control: the same lines for an overview (cap 8) fit its larger budget and are left whole", () => {
+    const details = Array.from({ length: 6 }, (_, i) => `Harbour Shield — Line ${i}: S$${i + 1},000 ` + words(25) + ".");
+    const before = [...details];
+    conciseDetails(details, [], { cap: 8 });
+    assert.deepEqual(details, before);
   });
 
   t("a full list is never cut", () => {
