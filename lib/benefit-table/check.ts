@@ -179,10 +179,20 @@ export function numbersIn(text: string): number[] {
       if (v != null && Number.isFinite(k)) out.push(v * k);
       continue;
     }
+    // Abbreviations the shared list does not hold ("Rp 2 jt" juta, "Rp 500 rb" ribu, "₹2 Cr" crore, "150 tr ₫" triệu):
+    // short, so a scale only beside a currency, like the short words above; with none, the bare figure (a count).
+    const abbr = ABBREVIATION_AFTER.exec(after);
+    if (abbr && (MONEY_BEFORE.test(text.slice(Math.max(0, m.index! - 8), m.index!)) || MONEY_AFTER.test(after.slice(abbr[0].length)))) {
+      const v = scaledFigure(m[1], null, { scaled: true });
+      if (v != null) out.push(v * ABBREVIATIONS[abbr[1].toLowerCase()]);
+      continue;
+    }
     if (Number.isFinite(n)) out.push(n);
   }
   return out;
 }
+const ABBREVIATIONS: Record<string, number> = { jt: 1_000_000, rb: 1_000, cr: 10_000_000, tr: 1_000_000 };
+const ABBREVIATION_AFTER = /^\s*(jt|rb|cr|tr)\.?(?![\p{L}\p{N}])/iu;
 /** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
  * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it
  * states more than one, or only a limit ("not payable after the 30th day"). */
