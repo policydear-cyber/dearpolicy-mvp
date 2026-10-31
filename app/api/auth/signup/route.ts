@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureDefaultHousehold } from "@/lib/household/repo";
+import { ensureDefaultHousehold, invitedToSignUp } from "@/lib/household/repo";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
+import { signupMode, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -34,6 +35,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter a valid email and a password of at least 8 characters." }, { status: 400 });
   }
 
+  // Invite-only sign-up (lib/auth/signup-gate.ts): checked before any account is made, so a person who is not invited
+  // gets no account at all. Any error while checking is a no.
+  if (signupMode() === "invite") {
+    if (!(await invitedToSignUp(email).catch(() => false))) return NextResponse.json({ error: SIGNUP_CLOSED_MESSAGE }, { status: 403 });
+  }
+
   const origin = new URL(request.url).origin;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
@@ -55,7 +62,12 @@ export async function POST(request: Request) {
   // session comes back from signUp() yet. ensureDefaultHousehold() is
   // idempotent, so calling it again at sign-in/callback is always safe.
   if (data.user) {
-    await ensureDefaultHousehold(data.user.id, householdName || `${email.split("@")[0]}'s household`);
+    try {
+      await ensureDefaultHousehold(data.user.id, householdName || `${email.split("@")[0]}'s household`, undefined, { email: data.user.email ?? email });
+    } catch (e) {
+      if (e instanceof SignupClosedError) return NextResponse.json({ error: SIGNUP_CLOSED_MESSAGE }, { status: 403 });
+      throw e;
+    }
   }
 
   return NextResponse.json({

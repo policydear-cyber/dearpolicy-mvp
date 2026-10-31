@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
+import { SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 import { isReviewerOnlyAccount } from "@/lib/claims/reviewers/boundary";
@@ -62,7 +63,15 @@ export async function POST(request: Request) {
     if (nativeForm) return formRedirect("/reviewer");
     return NextResponse.json({ ok: true, destination: "/reviewer" });
   }
-  await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`);
+  try {
+    await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`, undefined, { email: data.user.email ?? email });
+  } catch (e) {
+    // Invite-only sign-up (lib/auth/signup-gate.ts): an account with no household that is not invited gets no session.
+    if (!(e instanceof SignupClosedError)) throw e;
+    await supabase.auth.signOut().catch(() => {});
+    if (nativeForm) return backToLogin("invite_only");
+    return NextResponse.json({ error: SIGNUP_CLOSED_MESSAGE }, { status: 403 });
+  }
   if (nativeForm) return formRedirect(next ?? "/");
   return NextResponse.json({ ok: true, destination: null });
 }

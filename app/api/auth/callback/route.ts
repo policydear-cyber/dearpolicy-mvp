@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
+import { SignupClosedError } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -36,7 +37,14 @@ export async function GET(request: Request) {
 
   // Idempotent -- see app/api/auth/signup/route.ts for why this needs to run
   // here too (email-confirmation-required accounts have no household yet).
-  await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`);
+  try {
+    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, { email: data.user.email });
+  } catch (e) {
+    // Invite-only sign-up (lib/auth/signup-gate.ts): not invited, so no household and no session.
+    if (!(e instanceof SignupClosedError)) throw e;
+    await supabase.auth.signOut().catch(() => {});
+    return NextResponse.redirect(new URL("/login?error=invite_only", url.origin));
+  }
 
   return NextResponse.redirect(new URL(next, url.origin));
 }
