@@ -101,8 +101,11 @@ test("household screens never render a raw server error or a raw processing erro
 test("household navigation: no Usage & Cost, no operator or reviewer links; no service status panel", () => {
   const shell = read("components/AppShell.tsx");
   const nav = shell.slice(shell.indexOf("const nav"), shell.indexOf("];", shell.indexOf("const nav")));
-  assert.ok(!nav.includes("/usage"), "Usage is not in household navigation");
-  assert.ok(!nav.includes("/operator") && !nav.includes("/reviewer"));
+  // Links only: an item's `also` list names pages that keep it highlighted (Account settings for /usage), not menu entries.
+  const links = [...nav.matchAll(/href:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(links.length >= 4, "the household menu was read");
+  assert.ok(!links.includes("/usage"), "Usage is not in household navigation");
+  assert.ok(!links.some((h) => h.startsWith("/operator") || h.startsWith("/reviewer")));
   assert.ok(!/services\.map|service-row|payload\.services/.test(shell), "no per-service status in the household shell");
   assert.match(shell, /const operatorNav/);
   assert.match(shell, /operatorArea \? operatorNav : nav/);
@@ -165,7 +168,8 @@ test("chat: one direct answer, collapsed sources, plain uncertainty, one next st
   assert.ok(!/policyReview/.test(chat), "no per-contract page/passage table");
   assert.ok(!/excludedBenefits/.test(chat), "no ruled-out list");
   assert.ok(!/reviewerRequirements/.test(chat), "no reviewer routing");
-  assert.match(chat, /nextSteps\[0\]/);
+  assert.match(chat, /uniqueSteps\(answer\?\.nextSteps\)/);
+  assert.match(chat, /shown\(steps\[0\]\)/);
   assert.match(chat, /customerAnswerText\(message\.content\)/);
   assert.match(chat, /customerMessage\(p\?\.stage,/);
 });
@@ -175,7 +179,9 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   const text = visibleText(usage);
   assert.ok(!/model|token|routing|hard stop|cost|\$/i.test(text.replace(/\$\{/g, "")), "no model, token, routing or cost text");
   assert.match(usage, /includedChatTurns/);
-  assert.match(read("app/household/page.tsx"), /href="\/usage"/);
+  // Plan usage is reached from the Account settings tabs (Household, People, Plan usage).
+  assert.match(read("components/account-tabs.tsx"), /href: "\/usage"/);
+  assert.match(read("app/household/page.tsx"), /<AccountTabs/);
 });
 
 test("sign-in: form values read at submit, button disabled only while busy, one navigation", () => {

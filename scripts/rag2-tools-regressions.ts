@@ -123,7 +123,9 @@ async function main() {
     const offenders: string[] = [];
     for (const f of files) {
       const rel = path.relative(path.resolve("."), f);
-      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/") || rel.startsWith("scripts/fixtures/rag2-stress/") || rel.startsWith("scripts/fixtures/rag2-binding/") || rel.startsWith("scripts/fixtures/rag2-livelib/") || rel.startsWith("scripts/fixtures/rag2-pr50/") || rel.startsWith("scripts/fixtures/reliable-chat/") || /^scripts\/reliable-chat-/.test(rel) || rel === "scripts/fixtures/rag2-live-replay.ts") continue;
+      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/") || rel.startsWith("scripts/fixtures/rag2-stress/") || rel.startsWith("scripts/fixtures/rag2-binding/") || rel.startsWith("scripts/fixtures/rag2-livelib/") || rel.startsWith("scripts/fixtures/rag2-pr50/") || rel.startsWith("scripts/fixtures/reliable-chat/") || /^scripts\/reliable-chat-/.test(rel) || rel === "scripts/fixtures/rag2-live-replay.ts"
+        // A database regression suite that checks lib/rag2/search directly: a test, not a production path.
+        || rel === "scripts/system-database-regressions.ts") continue;
       const text = await readFile(f, "utf8").catch(() => "");
       // Prompt 2: the one flagged hook -- lib/chat/workflow.ts imports only the loop's flag, and loads the loop's hook
       // only behind ragLoopEnabled() (DEARPOLICY_RAG_LOOP, default off).
