@@ -138,6 +138,20 @@ async function main() {
     }
   }
 
+  await test("a tile's sum of fixed amounts never adds sums whose currency is unstated", async () => {
+    const { lumpSumParts } = await import("@/lib/coverage/table-figures");
+    const line = (name: string, amount: number | null, currency: string | null) => ({ name, amount, currency, documentIds: [] as string[] });
+    // Two unstated sums beside a policy with no fixed sum: they may be in two currencies, so no total and no known sum.
+    const unstated = lumpSumParts([], [line("Alder Term Plan", 100000, null), line("Birch Life Plan", 200000, null), line("Cedar Endowment", null, null)], [], "Death");
+    assert.deepEqual([unstated.total, unstated.known], [null, null]);
+    // A stated sum beside an unstated one: the unstated one is neither added nor left out unnamed.
+    const mixed = lumpSumParts([], [line("Alder Term Plan", 100000, "GBP"), line("Birch Life Plan", 200000, null), line("Cedar Endowment", null, null)], [], "Death");
+    assert.deepEqual([mixed.total, mixed.known], [null, null]);
+    // Negative control: stated sums in one currency beside a policy with no fixed sum still give the known sum.
+    const known = lumpSumParts([], [line("Alder Term Plan", 100000, "GBP"), line("Birch Life Plan", 200000, "GBP"), line("Cedar Endowment", null, null)], [], "Death");
+    assert.deepEqual([known.total, known.known?.amount, known.known?.currency], [null, 300000, "GBP"]);
+  });
+
   await test("no request tried to leave this machine (no model was asked)", async () => {
     assert.deepEqual(outbound, []);
   });
