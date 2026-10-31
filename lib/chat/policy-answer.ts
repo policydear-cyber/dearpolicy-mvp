@@ -1588,7 +1588,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const line = (a: Candidate) => {
     const dated = dateOf(a.policyId), who = args.people.length > 1 ? a.ownerName + " · " : "";
     const st = statusOf.get(a.policyId);
-    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : st?.state === "ended" ? "; expired on " + st.printed : outdated(a.policyId) ? "; not confirmed current" : "";
+    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : st?.state === "ended" ? "; expired on " + st.printed : "";
     // A value printed in one column of a table names its column after the benefit ("Deductible (Non-panel provider): ...").
     // A column called just "Value" or "Amount" names nothing the household needs told.
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
@@ -1752,8 +1752,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   if (shown.length && shown.every((a) => expired(a.policyId)) && !topics.some((t) => t.key === "status") && !namedDocs.length && !/\b(?:was|were|did|had|before|lapsed?|expired?|ended|old|previous|last|reinstat\w*)\b/i.test(askedText))
     lines.unshift("None of the " + topicLabels.join(" or ").replace(/^the /, "") + " in " + (whose === "your" ? "your" : whose) + " documents is still in force.");
   lines.splice(lines.length ? 1 : 0, 0, ...valueTableNotes);
-  const staleDates = [...new Set(shown.filter((a) => outdated(a.policyId) && !expired(a.policyId)).map((a) => dateOf(a.policyId) ?? "an earlier date"))];
-  if (staleDates.length) lines.push("Some of this comes from a document dated " + staleDates.join(" and ") + ", so it may not reflect the current terms.");
+  // Every policy on file is taken as in force (DC, 31 Oct): an older document's date is shown beside its figure, but the
+  // answer never doubts the policy because of its age ("may not reflect the current terms", "upload the latest renewal").
   if (unresolved.length) lines.push([...new Set(unresolved.map((r) => (r.assertion as Candidate).title))].join(" and ") + ": your documents state different figures, so DearPolicy has not picked one. Upload the latest schedule to settle it.");
   const otherGaps = rejected.filter((r) => !r.reason.startsWith("conflict: ") && !shown.some((k) => k.topic === (r.assertion as Candidate).topic));
   if (otherGaps.length) lines.push("Some details were left out because they could not be matched to the exact passage in the document: " + [...new Set(otherGaps.map((r) => r.reason))].slice(0, 2).join("; ") + ".");
@@ -1924,7 +1924,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
-    nextSteps: staleDates.length ? ["Upload the latest renewal notice or premium receipt to confirm the policy is current."] : [], questions: [] };
+    nextSteps: [], questions: [] };
   return { handled, answer, kept: shown, rejected, topics: topics.map((t) => t.key), notFound, modelCalls, narrated, elapsedMs: Date.now() - started };
 }
 
