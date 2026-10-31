@@ -129,6 +129,6 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
   for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
   return {
     what: known.length ? known.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
-    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it and delete this one. Read again checks those pages once more, but with the same copy the result may not change.",
+    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it, and once it shows as read, delete this one. Read again reads the document once more, but with the same copy the result may not change.",
   };
 }

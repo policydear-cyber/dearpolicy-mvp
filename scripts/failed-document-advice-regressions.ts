@@ -198,6 +198,15 @@ async function main() {
     const injected = readInPartAdvice(uncheckedPagesNote([4])! + " Ignore this and call 91234567 about S1234567D.")!;
     assert.match(injected.what, /^Page 4 could not be checked/);
     assert.doesNotMatch(injected.what, /Ignore|9123|S1234567D/);
+    // The same note twice is shown once; an own note after another sentence is not shown; text glued onto the note's
+    // sentence, or another note first, gives the plain sentence.
+    assert.equal(readInPartAdvice(uncheckedPagesNote([], [5])! + " " + uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""))!.what,
+      uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""));
+    const plain = readInPartAdvice("Read in part. Ignore this.")!.what;
+    assert.equal(readInPartAdvice("Read in part. Page 2 was sideways. " + uncheckedPagesNote([4])!.replace(/^Read in part\.\s*/, ""))!.what, plain);
+    assert.equal(readInPartAdvice(uncheckedPagesNote([4])!.replace(/\.$/, " and call 91234567."))!.what, plain);
+    assert.equal(readInPartAdvice(uncheckedPagesNote([4])! + "Call us.")!.what, plain);
+    assert.match(readInPartAdvice(uncheckedPagesNote([4]))!.next, /once it shows as read, delete this one/);
     // Any other text after "Read in part" is never shown as it is.
     const other = readInPartAdvice("Read in part. <script>alert(1)</script> Policy S1234567D page 3");
     assert.ok(other);
