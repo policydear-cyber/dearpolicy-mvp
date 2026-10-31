@@ -10427,3 +10427,23 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 - Tests: shared-policy passes 8/8. shared-policy-route-test passes with db:setup and benefit-table.sql, and asserts null ownSum for base plus rider. coverage:dashboard-dynamic passes on both #245 and main in my env.
 - Gate green: 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
 - Lows: a cover with no sum read is ignored, so base S$100k plus an unread rider still shows S$100k. Matching is by display name (accepted).
+
+## R493 — #244 5825ae6, #246 36b6493, #247 0128e03, #249 53d774c (READY)
+- #244: the only change since adbd292 is one fixture line (a UUID household id). rollout-staleness 19/19. READY re-confirmed.
+- #246: gate green. r9:ingest-chaos loses main's "wrong document role (policy_wording)" hit and adds nothing new.
+- #247: an own note must name exactly one figure, read by printedNumber and printed whole. This closes the €50.000 Low. own-notes 16. r9:ingest-chaos: 0 invented-note hits, against 15 on main.
+- #249: all-accounts 11/11 and env-contract green. DC's decision: non-alpha households would get the table pages with the old chat (inferred).
+- The 2 "Wei Jie life cover" r9 failures are on main as well, so they are not caused by these PRs.
+
+## R494 — #248 125ef5bf (NOT ready)
+- H1 and M2 are fixed: closed cap openers, and the phrase is taken whole or not at all. Verbatim whole phrases ("minus claims paid") are accepted.
+- M3: a condition printed before the % is dropped. "After 2 years, 10% of Sum Insured" gives an unconditional share, and unreadAmountLine says "Pays 10% of …". Fix: what comes before the % must be empty, or only the row's own benefit name, or a closed lead-in. Probe: critic/p248b-prefix.mts.
+
+## R495 — #250 04075c2f then 33d22027, #251 962fb04b
+- #250: personDocs = documentCount − unclaimed is correct, because quality is scoped to the person. Loading is correct. My earlier L1 is WITHDRAWN: main's family query already joins active policies. I had read a stale local checkout. 33d22027 adds `covered`, so a person covered only through a shared certificate is never "nothing on file". Gate pending.
+- #251: Documents takes "still being read" from the table's waiting state, and ledgerReadDocuments returns [] when the table owns reading. No findings so far. Gate pending.
+
+## R496 — #252 835e6d4, a181120, 0bc9f44 (NOT ready)
+- 835e6d4 H1: an English deny-list let death, waiver, cash, screening and other-person rows (in Malay, Chinese and French) onto the CI tile. A product name dragged base-plan rows in.
+- 0bc9f44: plan and product names are no longer read (fixed). Still open: an illness word anywhere in the name moves the row (25 probe rows, critic/p252b-ci.mts).
+- Wrong-amount path: a CI cover with no sum insured, "Major Cancer" (See the page) plus "Cancer Screening Benefit S$300", gives a tile of S$300. Fix: every word of the name must be on a closed list. The pays/sum-insured ask was dropped, as the builder's reasons hold.
