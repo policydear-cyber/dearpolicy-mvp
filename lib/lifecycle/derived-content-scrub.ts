@@ -119,8 +119,11 @@ function staysWith(active: Set<string>, known: Set<string>) {
 
 async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_id: string; added_at: string }) {
   const counts = { answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0 };
+  // Every document of the household, in every state, named explicitly: the test needs to know which ids are this
+  // household's documents (deleted ones too) and which of them are still on file.
   const docs = await tx.query<{ id: string; active: boolean }>(
-    `SELECT id::text AS id, lifecycle_state='active' AS active FROM policies WHERE account_id=$1`, [doc.account_id]);
+    `SELECT id::text AS id, lifecycle_state='active' AS active FROM policies WHERE account_id=$1 AND lifecycle_state=ANY($2::text[])`,
+    [doc.account_id, ["active", ...DELETED_STATES]]);
   const known = new Set(docs.rows.map((r) => r.id.toLowerCase()));
   const active = new Set(docs.rows.filter((r) => r.active).map((r) => r.id.toLowerCase()));
   active.delete(doc.id.toLowerCase());
