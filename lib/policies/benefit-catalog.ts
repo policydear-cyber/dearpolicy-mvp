@@ -695,6 +695,23 @@ const WORD_FRACTIONS=[
   {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
   {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
 ];
+/** A share of the sum insured whose passage also prints an amount or a bound ("10% of Sum Insured, up to S$25,000",
+ * "subject to a maximum of RM25,000", "not exceeding 25 000", "up to the limit in the Benefit Table", "capped at 1/40 of the
+ * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover
+ * where the cap is S$25,000; Critic R407, TE pr210). Such a share is not used. Counted: a figure with a currency sign,
+ * code or word; a grouped, four-digit or "k" figure; a number word for hundreds or more; a figure per day or week; a
+ * fraction; any cap word; a choice of the lower; and a pointer to a table or schedule, which may hold the cap. A figure the share does not need ("within 30 days", "under age 65") is left alone, as on
+ * main; on the stored rows only the 6 that print a cap change. */
+const PRINTS_AN_AMOUNT=new RegExp([
+  String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd))\s*\d`,
+  String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
+  String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
+  String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
+  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater)\b|\b(?:table|schedule)\b`,
+  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited.
+  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
+].join("|"),"iu");
+export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *
  * "Receive 150% of your coverage amount if Total and Permanent Disability is
@@ -737,6 +754,9 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)))
     .map(benefit=>{
+      // A stored share whose passage also prints an amount is withheld when read, unless a person confirmed it.
+      if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&PRINTS_AN_AMOUNT.test(normalText(benefit.quote??"")))
+        return {...benefit,formulaKind:"none" as const,formulaValue:null,conditions:[...new Set([...benefit.conditions,CAPPED_SHARE_NOTE])]};
       // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
       // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
       // (Critic R351 H1).
@@ -755,6 +775,7 @@ export function validateCatalogFormula(input:{
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
+  if(input.kind==="sum_insured"&&PRINTS_AN_AMOUNT.test(quote))return none;
   // The currency is what the quoted clause writes. A sum-insured percentage
   // quotes none -- it is paid in the cover's own currency, which is verified
   // against the personal schedule when used. Nothing is defaulted to SGD, and
