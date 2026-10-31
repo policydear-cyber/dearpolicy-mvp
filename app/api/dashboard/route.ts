@@ -6,7 +6,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { statedCurrencyCode } from "@/lib/format/currency";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { summarisePremiums, type TablePremiumCover } from "@/lib/policies/premium-summary";
 import { singaporeDay } from "@/lib/benefit-table/dates";
@@ -45,17 +45,17 @@ export async function GET(request:NextRequest){
   const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT p.id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id LEFT JOIN policies p ON p.id=pm.policy_id AND p.account_id=f.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")} WHERE f.account_id=$1 AND ${activePredicate("f")} GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
   const requested=url.searchParams.get("familyMemberId"); const active=familyResult.rows.find((m)=>m.id===requested)??familyResult.rows[0]??null;
   // An empty household is not "everything current": it has nothing on file yet.
-  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,items:[],missing:[],complete:false,note:null},
+  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:null,annual:null,currency:null,totals:[],items:[],missing:[],complete:false,note:null},
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
   const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
-  type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
+  type Chosen={category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];
-    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:normalizeCurrencyCode(row.currency,"SGD"),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
+    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
     byPolicyCategory.set(key,list);
   }
   const selected:Chosen[]=[]; const conflictCategories=new Set<string>();
@@ -63,14 +63,21 @@ export async function GET(request:NextRequest){
     list.sort((a,b)=>b.authority-a.authority+((b.effectiveDate?Date.parse(b.effectiveDate):Date.parse(b.createdAt))-(a.effectiveDate?Date.parse(a.effectiveDate):Date.parse(a.createdAt)))/1e15);
     const top=list[0]; selected.push(top); const sameAuthority=list.filter(x=>x.authority===top.authority); const amounts=new Set(sameAuthority.map(x=>x.amount).filter(x=>x!=null)); if(amounts.size>1)conflictCategories.add(top.category);
   }
-  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[];known?:KnownSum|null;planNote?:string|null}>();
+  // A currency the document does not state stays unstated (never SGD), and sums are added up only within one stated
+  // currency: "120,000" under "All amounts in pounds sterling" is not Singapore dollars, and RM + £ sums give no total.
+  // Where they cannot be added, each policy's sum is listed instead.
+  const coverageMap=new Map<string,{total:number|null;currency:string|null;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[];known?:KnownSum|null;planNote?:string|null}>();
   // A category whose only cover has ended (a single trip that is over): its last day, so the tile says so, never "Not found".
   const endedOn=new Map<string,string>();
   // A single trip whose last day was not read: neither current nor ended (its names).
   const undatedTrip=new Map<string,string>();
-  for(const row of selected){
-    const cur=coverageMap.get(row.category)??{total:null,currency:row.currency,count:0,policyNames:[],displayAmount:null,derived:false};
-    if(row.amount!=null)cur.total=(cur.total??0)+row.amount; cur.count+=1; if(row.productName&&!cur.policyNames.includes(row.productName))cur.policyNames.push(row.productName); coverageMap.set(row.category,cur);
+  for(const category of new Set(selected.map(x=>x.category))){
+    const rows=selected.filter(x=>x.category===category),priced=rows.filter(x=>x.amount!=null);
+    const currencies=new Set(priced.map(x=>x.currency));
+    const addable=priced.length<=1||(currencies.size===1&&!currencies.has(null));
+    coverageMap.set(category,{total:priced.length&&addable?priced.reduce((t,x)=>t+x.amount!,0):null,currency:currencies.size===1?[...currencies][0]:null,count:rows.length,
+      policyNames:[...new Set(rows.map(x=>x.productName).filter((n):n is string=>!!n))],displayAmount:null,derived:false,
+      ...(addable?{}:{parts:rows.map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency}))})});
   }
 
   // The person's benefit table (the same rows the Family page and the chat use): a category its rows name shows the
@@ -95,15 +102,15 @@ export async function GET(request:NextRequest){
         // then no total, never a part sum (DC 27 Oct).
         if(LUMP_SUM_CATEGORIES.has(category)&&(rows.length||lines.length)){
           const {parts,total,known}=lumpSumParts(rows,lines,held,category); const cur=coverageMap.get(category);
-          const entry=cur??{total:null,currency:"SGD",count:0,policyNames:[],displayAmount:null,derived:false,fromTable:true};
-          entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.known=known; entry.count=parts.length; entry.currency=normalizeCurrencyCode(parts.find(p=>p.currency)?.currency??entry.currency,"SGD");
+          const entry=cur??{total:null,currency:null,count:0,policyNames:[],displayAmount:null,derived:false,fromTable:true};
+          entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.known=known; entry.count=parts.length; entry.currency=total!=null?parts.find(p=>p.amount!=null)?.currency??null:null;
           entry.policyNames=[...new Set(parts.map(p=>p.name))]; coverageMap.set(category,entry); continue;
         }
         // A whole-policy kind (travel, savings, investment) is decided by the cover, not by a benefit's name: the same rule
         // for every page (lib/coverage/table-figures personKinds). A held cover with no linked row still counts.
         const kind=kinds.get(category);
         if(kind&&!coverageMap.has(category)){
-          if(kind.current.length)coverageMap.set(category,{total:null,currency:"SGD",count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
+          if(kind.current.length)coverageMap.set(category,{total:null,currency:null,count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
           else if(kind.undated.length)undatedTrip.set(category,kind.undated.join(", "));
           else if(kind.endedOn)endedOn.set(category,kind.endedOn);
           continue;
@@ -113,7 +120,7 @@ export async function GET(request:NextRequest){
         // A confirmed total that leaves out a cover the table gives (a scheme's sum only its summary prints) is part of the
         // cover: the tile says Covered, never a part sum, and the table's own figure is not shown in its place either.
         if(cur&&cur.total!=null){if(!confirmedTotalComplete(rows,lines,held))cur.total=null;continue;}
-        if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
+        if(!cur)coverageMap.set(category,{total:null,currency:statedCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
         else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
       }
     }
@@ -143,7 +150,7 @@ export async function GET(request:NextRequest){
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,endedOn:row?null:endedOn.get(category)??null,undated:row?null:undatedTrip.get(category)??null};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,endedOn:row?null:endedOn.get(category)??null,undated:row?null:undatedTrip.get(category)??null};});
 
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the
@@ -153,7 +160,18 @@ export async function GET(request:NextRequest){
   // Each counted premium says where it was read (a policy schedule, or a payment record by its source document's role;
   // null when not known), so Home names the real source or the neutral "from your documents".
   const premiumItems=premiumSummary.items.map((i)=>({...i,source:premiumSourceKind(i)}));
-  const annual=premiumSummary.annual,monthly=premiumSummary.monthly;
+  // Premiums are added up only within one stated currency (a ringgit premium is not Singapore dollars; RM + £ is no total):
+  // one total per currency, and a premium whose record does not state its currency is listed but left out of every total.
+  const totals=new Map<string,{currency:string;monthly:number;annual:number}>(),unstated:string[]=[];
+  for(const i of premiumItems){
+    if(!i.currencyStated){unstated.push(i.product_name??i.insurer??"One policy");continue;}
+    const t=totals.get(i.currency)??{currency:i.currency,monthly:0,annual:0};t.monthly+=i.monthly;t.annual+=i.annual;totals.set(i.currency,t);
+  }
+  const premiumTotals=[...totals.values()].sort((a,b)=>b.annual-a.annual);
+  const one=premiumTotals.length===1?premiumTotals[0]:null;
+  const annual=one?.annual??null,monthly=one?.monthly??null,premiumCurrency=one?.currency??null;
+  const unstatedNote=unstated.length?`The total ${premiumSummary.note?"also ":""}leaves out ${[...new Set(unstated)].slice(0,4).join(", ")}: ${unstated.length===1?"its record does not say":"their records do not say"} which currency the premium is in.`:null;
+  const premiumNote=[premiumSummary.note,unstatedNote].filter(Boolean).join(" ")||null;
 
   const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true${await notDismissedClause("pd")}`,[accountId]);
   const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND ${activePredicate("p")} AND pm.family_member_id=$2`,[accountId,active.id]);
@@ -180,12 +198,12 @@ export async function GET(request:NextRequest){
   if(unconfirmed>0)reminders.push({kind:"coverage",title:unconfirmed===1?"Some details in a document are not confirmed":"Some details in documents are not confirmed",detail:`${unconfirmed===1?"One document has":`${unconfirmed} documents have`} details that could not be matched to the page they came from, so DearPolicy does not use them in answers yet. Documents shows which.`,href:"/policies"});
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
-  if(premiumSummary.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumSummary.note,href:"/records"});
+  if(premiumNote&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumNote,href:"/records"});
   if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
+  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,currency:premiumCurrency,totals:premiumTotals,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete&&!unstated.length,note:premiumNote},reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});
