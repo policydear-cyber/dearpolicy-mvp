@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { lineFigure, linePeriodWords } from "@/lib/coverage/line-period";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
@@ -654,6 +655,13 @@ function reviewAmount(amount: number | string | null, currency: string | null): 
   const numeric = Number(amount);
   return currency ? `${currency} ${numeric.toLocaleString()}` : `${numeric.toLocaleString()} (currency not stated)`;
 }
+/** A cover line's figure: a figure paid per period carries its printed period, and a periodic cover's figure with none
+ * is not shown (lib/coverage/line-period.ts), as on Home and Coverage. */
+function coverFigure(c: { category: string; amount: number | string | null; currency: string | null; evidence_text: string | null }): string {
+  const f = lineFigure(c.category, c.amount == null ? null : Number(c.amount), c.evidence_text);
+  if (c.amount != null && f.amount == null) return "see the document for how much it pays";
+  return reviewAmount(f.amount, c.currency) + (f.period ? " " + linePeriodWords(f.period) : "");
+}
 const showValue = (value: unknown) => (value == null || value === "" ? "Not stated in this document" : String(value));
 
 /** What one document establishes, for the household: its identity, whose it
@@ -688,7 +696,7 @@ function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () =
         <div><label>What it is</label><span>{showValue(d.authorityLabel ?? d.documentRole)}</span></div>
       </div>
       {!!data.linkedMembers.length && <div className="detail-section"><b>Whose cover</b>{[...new Map(data.linkedMembers.map((m) => [m.id, m] as const)).values()].map((m) => <div key={m.id}>{m.display_name}</div>)}</div>}
-      {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {reviewAmount(c.amount, c.currency)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
+      {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {coverFigure(c)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
       {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
       {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${p.payment_date}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
       {!!data.extracted.riders.length && <div className="detail-section"><b>Riders</b>{data.extracted.riders.map((w, i) => <div key={i}>{w}</div>)}</div>}

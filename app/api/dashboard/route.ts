@@ -6,7 +6,8 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
-import { statedCurrencyCode } from "@/lib/format/currency";
+import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
+import { PERIODIC_CATEGORIES, lineFigure, linePeriodWords, type LinePeriod } from "@/lib/coverage/line-period";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { TablePremiumCover } from "@/lib/policies/premium-summary";
 import { countedPremiums } from "@/lib/policies/counted-premiums";
@@ -48,13 +49,16 @@ export async function GET(request:NextRequest){
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
-  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
-  type Chosen={category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
+  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;evidence_text:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.evidence_text,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
+  type Chosen={category:string;amount:number|null;period:LinePeriod|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];
-    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
+    // A figure paid per day, week or month carries its printed period; a periodic cover's figure with none is not shown
+    // (lib/coverage/line-period.ts).
+    const figure=lineFigure(category,row.amount==null?null:Number(row.amount),row.evidence_text);
+    list.push({category,amount:figure.amount,period:figure.period,currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
     byPolicyCategory.set(key,list);
   }
   const selected:Chosen[]=[]; const conflictCategories=new Set<string>();
@@ -70,6 +74,17 @@ export async function GET(request:NextRequest){
     const rows=selected.filter(x=>x.category===category),priced=rows.filter(x=>x.amount!=null);
     const currencies=new Set(priced.map(x=>x.currency));
     const addable=priced.length<=1||(currencies.size===1&&!currencies.has(null));
+    // Only lump sums are added up (Critic R246). A figure paid per period, or a limit of a cover that is not a lump sum,
+    // is shown with its own period and never added into a total: one line shows its figure, several each show their own
+    // (cross-page check, 31 Oct: Disability Income "2,400" a month read as a sum).
+    const periodic=PERIODIC_CATEGORIES.has(category)||priced.some(x=>x.period);
+    if(!LUMP_SUM_CATEGORIES.has(category)&&(periodic||priced.length>1)){
+      const one=rows.length===1?rows[0]:null;
+      coverageMap.set(category,{total:null,currency:null,count:rows.length,policyNames:[...new Set(rows.map(x=>x.productName).filter((n):n is string=>!!n))],
+        displayAmount:one?.amount!=null?[formatMoney(one.amount,one.currency),linePeriodWords(one.period)].filter(Boolean).join(" "):null,derived:false,
+        ...(one?{}:{parts:rows.map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,period:x.period,...(x.amount==null&&PERIODIC_CATEGORIES.has(category)?{noFigure:true}:{})}))})});
+      continue;
+    }
     coverageMap.set(category,{total:priced.length&&addable?priced.reduce((t,x)=>t+x.amount!,0):null,currency:currencies.size===1?[...currencies][0]:null,count:rows.length,
       policyNames:[...new Set(rows.map(x=>x.productName).filter((n):n is string=>!!n))],displayAmount:null,derived:false,
       ...(addable?{}:{parts:rows.map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency}))})});

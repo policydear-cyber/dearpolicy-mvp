@@ -365,7 +365,9 @@ export type HeldCover = { coverKey: string; holding?: string; name: string; docu
 export type KnownSum = { amount: number; currency: string; without: string[]; otherTile: string[] };
 /** `otherTile`: a printed sum that pays only on what another tile covers ("Accidental Death Benefit" on Death): no amount
  * here, and never said to have no fixed sum (TE #213 F4). */
-export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean; otherTile?: boolean };
+/** period: a figure paid per day, week, month or year ("a month" is shown after it); such parts are never added up.
+ * noFigure: a periodic cover whose line prints no period, so its figure is not shown anywhere. */
+export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean; otherTile?: boolean; period?: string | null; noFigure?: boolean };
 /** A survival or waiting period only decides when a sum is paid, not how much: an allow-list of its words, every word known. */
 const TIMING_WORDS = new Set(["the", "a", "an", "life", "assured", "insured", "person", "survives", "survive", "surviving", "survival", "at", "least",
   "day", "days", "after", "from", "date", "of", "diagnosis", "or", "and", "surgical", "procedure", "performed", "for", "critical", "illness", "covered",
