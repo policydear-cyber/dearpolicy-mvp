@@ -26,21 +26,21 @@ const MAY_STATE_AMOUNT = new RegExp([
  * follows it; one that pays the whole sum insured in words needs the person's own schedule; one worked out from the
  * policy's value or the premiums paid has no figure until the claim. A reason is given only when, with the reason's own
  * words and harmless counts and durations taken out, nothing else in the passage may state an amount (TE pr230). */
-const WAIVES_PREMIUMS = /\bwaive[sd]?\s+(?:all\s+|any\s+)?(?:the\s+)?(?:future\s+|further\s+|subsequent\s+)?premiums?\b|\bwaiver\s+of\s+(?:future\s+)?premiums?\b|\bpremiums?\s+(?:will\s+be|shall\s+be|are|is)\s+waived\b|\b(?:not|no\s+longer)\s+(?:charge|collect)\s+(?:any\s+)?(?:further\s+|future\s+)?premiums?\b|\b(?:pengecualian|pembebasan|mengecualikan|membebaskan)\s+premi(?:um)?\b|\bpremi(?:um)?\s+(?:akan\s+)?dibebaskan\b/giu;
+const WAIVES_PREMIUMS = /\bwaive[sd]?\s+(?:all\s+|any\s+)?(?:the\s+)?(?:future\s+|further\s+|subsequent\s+)?premiums?\b|\bwaiver\s+of\s+(?:future\s+)?premiums?\b|\bpremiums?\s+(?:will\s+be|shall\s+be|are|is)\s+waived\b|\b(?:not|no\s+longer)\s+(?:charge|collect)\s+(?:any\s+)?(?:further\s+|future\s+)?premiums?\b|\b(?:pengecualian|pembebasan|mengecualikan|membebaskan)\s+(?:semua\s+|sebarang\s+)?premi(?:um)?\b|\bpremi(?:um)?\s+(?:akan\s+)?dibebaskan\b/giu;
 const ADVANCE_OF_DEATH_BENEFIT = /\b(?:an\s+)?(?:advance(?:ment)?|accelerat\w*)\s+(?:of|from|on)\s+(?:the\s+)?death\s+benefit\b/giu;
 const WHOLE_SUM_IN_WORDS = /\b(?:(?:one\s+)?lump\s+sum\s+(?:payment\s+)?of|pays?|payable\s+is|the\s+full)\s+the\s+(?:coverage\s+amount|sum\s+(?:assured|insured)|insured\s+amount|amount\s+of\s+cover)\b/giu;
 const FROM_POLICY_VALUE = /\b(?:\d{1,3}(?:\.\d+)?\s*%\s+of\s+\(?\s*(?:the\s+)?)?(?:(?:policy|cash[\s-]?in|cash|surrender|account|fund|unit|investment|maturity)\s+values?\b|bid\s+price\b|(?:reversionary|accumulated|cash[\s-]?in|terminal)\s+bonus(?:es)?\b)|\b(?:\d{1,3}(?:\.\d+)?\s*%\s+of|of|return\w*|refund\w*|and|or)\s+\(?\s*(?:the\s+|all\s+)?(?:total\s+)?premiums?\s+paid\b(?:\s+on\s+the\s+[\p{L}\s]{1,20}?\b(?:plan|policy|benefit)\b)?(?:,?\s*(?:less|minus|excluding)\s+any\s+(?:[\p{L}-]+\s+){0,2}premiums?\b)?/giu;
 /** Counts and durations that state no amount: "37 critical illnesses", "12 months", "age 65", "the 2nd year". */
-const HARMLESS_FIGURES = /\b\p{Nd}{1,3}\s+(?:early\s+|covered\s+|specified\s+|major\s+)?(?:critical\s+)?(?:illnesses|conditions|diseases)\b|\b\p{Nd}{1,4}\s+(?:consecutive\s+)?(?:hours?|days?|weeks?|months?|years?)\b|\b(?:age|aged)\s+\p{Nd}{1,3}\b|\b\p{Nd}{1,2}(?:st|nd|rd|th)\s+(?:policy\s+)?(?:year|month)\b/giu;
+const HARMLESS_FIGURES = /\b\p{Nd}{1,3}\s+(?:early\s+|covered\s+|specified\s+|major\s+)?(?:critical\s+)?(?:illnesses|conditions|diseases)\b|\b\p{Nd}{1,4}\s+(?:consecutive\s+|policy\s+|calendar\s+)?(?:hours?|days?|weeks?|months?|years?)\b|\b(?:age|aged)\s+\p{Nd}{1,3}\b|\b\p{Nd}{1,2}(?:st|nd|rd|th)\s+(?:policy\s+)?(?:year|month)\b/giu;
 /** How it is paid, not how much: "in one lump sum". */
 const IN_A_LUMP_SUM = /\b(?:in|as)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b/giu;
 /** Words that make the payout differ from the whole sum: "less any loan", "for each child", "in ten yearly instalments". */
 const CHANGES_THE_SUM = /\b(?:less|minus|deduct\w*|net|reduc\w*|loans?|debts?|offset|except|or|but|times|instead|after|plus|subject|each|per|every|instal\w*|yearly|annual\w*|monthly|parts?|only|base)\b/iu;
 const NAMED_LIMIT = /\b(?:(?:will\s+)?not\s+(?:be\s+)?more\s+than|no\s+more\s+than|within|up\s+to|subject\s+to)\s+the\s+[\p{L}/()\s-]{0,40}?\blimits?\b/giu;
-const NEGATED = /\b(?:not|never|no)\s+(?:[\p{L}-]+\s+){0,2}$/iu;
-/** The first match of a reason that is not denied just before it ("is not an advance of the death benefit"). */
+const NEGATED = /\b(?:not|never|no|bukan|tidak)\b/iu;
+/** The first match of a reason that no earlier word of its own sentence denies ("is not an advance of the death benefit"). */
 function says(passage: string, reason: RegExp): boolean {
-  for (const m of passage.matchAll(reason)) if (!NEGATED.test(passage.slice(0, m.index))) return true;
+  for (const m of passage.matchAll(reason)) if (!NEGATED.test(passage.slice(0, m.index).split(/[.;:!?]\s/u).at(-1) ?? "")) return true;
   return false;
 }
 
