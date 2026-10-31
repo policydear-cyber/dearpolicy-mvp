@@ -10238,3 +10238,9 @@ Gate green. M1 fixed; Malay fixed. H1 still leaks the full share (all old, in sc
 
 ## R451 — #226 76fb43a (every policy in force): code READY, merge needs DC's word on graders
 Gate green (in-force 18/0, family-ended 12, intake 56/0, portfolio-kinds 143/0, policy-status, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). r7:answers, r7:claims, r11:blind, v11:answer, v11:claims all fail on PR and pass on main; every failing line expects a status from a printed end date (none from a lapse notice), so each contradicts DC's 05:38Z rule. Correction justified but grader edits are DC's call. Inference to confirm: start dates are ignored too (not_started removed). /mnt/project-files/critic/r451-pr226.md
+
+## R452: #227 78a8cc1 (Server-Timing, early table, checkedOnce): READY
+Gate is green: speed-test, service 22/0, coverage-recovery 11/0, unread-notice 15/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Staleness: checkReading and mergeReadings read only doc.id, name, pages, readable and people, plus the stored JSON, and every one of these is in the hash. check.ts and completeness.ts have no clock, env var or module state. Callers get a structuredClone. Keys include doc.id, so no data crosses households.
+- Early start: `tableOnce.catch(()=>undefined)` is attached to the promise that `.finally` chains, so a rejection is never unhandled. Both uses await it inside try blocks. When the table is off, the promise resolves to null and both uses skip it. The table was already built on every live request for documentKinds, so this does not change behaviour.
+- Low: a request that ends early (an invalid member, before the start) never starts the table. A route error after the start leaves the table work running in the background. That work is harmless.
