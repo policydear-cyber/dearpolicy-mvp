@@ -10173,3 +10173,7 @@ Root cause: a negation window is still a deny-list. Structural fix:
 - R423 M2 mostly fixed: "with the same copy the result may not change" is honest. Low: Read again re-reads the whole document, not only "those pages". "Read again reads the document once more" is more exact.
 - R423 M3 OPEN (one-line wording): "upload it and delete this one". Say delete only once the new copy shows as read, e.g. "upload it, and once it shows as read, delete this one". Otherwise a household that deletes first and then gets a failed read has no copy of that cover on file.
 - R423 L1 OPEN (inferred from page.tsx): a doc with needs_review also shows "Not fully confirmed" right under the Read in part card, which says the same thing twice. Hide that card when the Read in part card shows.
+
+## R432 — #218 73334e3: READY (one upload place on Documents; labels display-only; cents 2 digits in no-currency path; gate green). Conflicts with #219 in app/page.tsx. Low: "Applies to" also on personal policies.
+
+## R433 — #214 3d796d7: READY (People list before add form; gate green).
