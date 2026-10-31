@@ -6,7 +6,7 @@ import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-er
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { maskShownText } from "@/lib/chat/identity-numbers";
-import { readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { READING_POLICY_SQL, readAsPolicyDocument } from "@/lib/policies/document-filter";
 import {
   DeletionValidationError,
   finishPolicyDeletion,
@@ -202,9 +202,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ]);
       // What the document's own benefit reading found it to be (lib/policies/document-filter.ts readAsPolicyDocument).
       const readings = await client.query<{ ok: boolean }>("SELECT to_regclass('public.benefit_readings') IS NOT NULL AS ok");
-      const kind = readings.rows[0]?.ok ? await client.query<{ kind: string | null }>(
-        `SELECT reading #>> '{document,kind}' AS kind FROM benefit_readings WHERE policy_id=$1 AND account_id=$2`, [id, ctx.householdId]) : null;
-      return { policy: { ...policy.rows[0], reading_kind: kind?.rows[0]?.kind ?? null }, members: members.rows, detected: detected.rows, coverages: coverages.rows, referenceCoverages: referenceCoverages.rows, premiums: premiums.rows };
+      const reading = readings.rows[0]?.ok ? await client.query<{ ok: boolean }>(
+        `SELECT ${READING_POLICY_SQL} AS ok FROM policies p WHERE p.id=$1 AND p.account_id=$2`, [id, ctx.householdId]) : null;
+      return { policy: { ...policy.rows[0], reading_policy: reading?.rows[0]?.ok === true }, members: members.rows, detected: detected.rows, coverages: coverages.rows, referenceCoverages: referenceCoverages.rows, premiums: premiums.rows };
     });
     if (!result) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     const p = result.policy as Record<string, unknown> & { extracted_json?: Record<string, unknown> | null };
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         policyType: correctedFields.policy_type ?? p.policy_type,
         correctedFields: Object.keys(correctedFields),
         // A pack filed as a letter whose own reading found the people it insures is called a policy document, never Correspondence.
-        documentRole: p.document_role, authorityLabel: readAsPolicyDocument({ document_role: p.document_role as string | null, reading_kind: p.reading_kind as string | null }) ? "Policy document" : p.document_authority_label,
+        documentRole: p.document_role, authorityLabel: readAsPolicyDocument({ document_role: p.document_role as string | null, reading_policy: p.reading_policy as boolean }) ? "Policy document" : p.document_authority_label,
         personalCoverageConfirmed: p.personal_coverage_confirmed, needsReview: p.needs_review, reviewReason: p.review_reason,
         pageCount: p.page_count, effectiveDate: p.effective_date, renewalOrExpiryDate: p.renewal_or_expiry_date,
         processingStatus: p.processing_status, processingStage: p.processing_stage, processingMessage: p.processing_message,

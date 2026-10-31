@@ -35,7 +35,7 @@ type Policy = {
   personal_coverage_confirmed: boolean;
   document_authority: number;
   document_authority_label: string | null;
-  reading_kind?: string | null;
+  reading_policy?: boolean;
   needs_review: boolean;
   review_reason: string | null;
   processing_status: string;
