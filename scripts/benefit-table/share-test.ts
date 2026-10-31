@@ -82,7 +82,7 @@ async function main() {
 
   await test("no share is said when the row does not print one with one meaning", () => {
     for (const q of ["Hip 75% / Knee 50%, up to maximum", "Payout: 10% of the, up to maximum", "S$100 per day, up to maximum", "Up to 10%", "10 % of"]) assert.equal(shareOf(q), null, q);
-    assert.deepEqual(shareOf("Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum"), { percent: 10, of: "Jumlah Diinsuranskan" });
+    assert.deepEqual(shareOf("Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum", { name: "Rawatan" }), { percent: 10, of: "Jumlah Diinsuranskan" });
     assert.deepEqual(shareOf("12,5 % of the Insured Sum (maximum"), { percent: 12.5, of: "the Insured Sum" });
     // "or" opens an alternative ("150% of the Death Benefit or S$X, whichever is higher"): not a cap opener, so no share.
     assert.equal(shareOf("pays 150% of the Death Benefit or"), null);
@@ -105,6 +105,19 @@ async function main() {
       ["15% of the Sum Assured not exceeding £20,000", "the Sum Assured"], ["10% of Annual Limit whichever is lower", "Annual Limit"],
       ["50% of the sum insured, capped at €40.000", "the sum insured"]] as const)
       assert.deepEqual(shareOf(q), { percent: Number(q.match(/^\D*(\d+)/)![1]), of }, q);
+  });
+
+  await test("a condition printed before the share, or a currency named as its base, gives no share (Critic M3, test engineer F1)", () => {
+    for (const q of ["After 2 years, 10% of Sum Insured", "If hospitalised overseas, 10% of Sum Insured, up to maximum", "Only for the first claim: 10% of Sum Insured",
+      "Selepas 2 tahun, 10% daripada Jumlah Diinsuranskan", "Where the child is under 5: 25% of the Sum Assured",
+      "10% of RM", "10% of SGD, up to maximum", "Angioplasty : 10% of HKD", "10% of USD", "10% of IDR", "10% of Ringgit", "15% of Sum Insured dollars"])
+      assert.equal(shareOf(q, { name: "Angioplasty" }), null, q);
+    // The row's own name or heading, numbering, a bullet or a closed lead-in may come first.
+    for (const [q, name] of [["Angioplasty\t:\t10% of Prevailing Insured Amount, up to maximum", "Angioplasty"], ["(b) Keyhole surgery – 20% of the Sum Assured", "Keyhole surgery"],
+      ["• Pays 10% of the Sum Insured", null], ["We will pay 50% of the Basic Sum Assured, subject to a maximum", null], ["Bayaran: 25% daripada Jumlah Diinsuranskan", null],
+      ["Early Critical Illness 25% of Basic Coverage Amount", "Early Critical Illness"]] as const)
+      assert.ok(shareOf(q, { name }), q);
+    assert.equal(shareOf("Minor surgery 15% of the sum insured", { name: "Dental" }), null, "another benefit's name is not this row's");
   });
 
   console.log(`benefit-table share: ${passed} passed, ${failures.length} failed`);

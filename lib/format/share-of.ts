@@ -9,6 +9,10 @@
  *   - nothing more (an optional full stop or semicolon), or
  *   - an optional comma or bracket and a cap opener from a closed list ("up to", "max", "maximum", "subject to a
  *     maximum", "limited to", "not exceeding", "capped at", "whichever is lower/less", "sehingga", "maksimum", "hingga").
+ * Before the percentage, on its line, there may be only the row's own benefit name or heading (opts.name), a bullet or
+ * numbering, punctuation, or a closed lead-in ("Pays", "We will pay", "Benefit", "Payable", "Bayaran"): a condition printed
+ * first ("After 2 years, 10% of Sum Insured") makes the share conditional, so it gives null. A phrase naming a currency
+ * ("10% of SGD, up to maximum": the figure wrapped onto the next line) is not what the share is of, so it gives null.
  * Anything else is null, so nothing is said that the row does not print. A share is never an amount: callers show it
  * as words and work out no figure from it.
  */
@@ -22,14 +26,28 @@ const SHARE = new RegExp(
 const DANGLING = new Set(("the a an of your its his her their and or but nor by to for per with than in on at from after before if upon " +
   "minus plus less except excluding including yang dan atau bagi untuk dengan").split(" "));
 
-export function shareOf(text: string | null | undefined): { percent: number; of: string } | null {
+/** Words that name a currency, never what a share is of: every ISO code (in capitals) and the common written names. */
+const ISO_CODES = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : []);
+const CURRENCY_NAMES = new Set(("rm rp hk us nz sg ringgit ringgits rupiah rupee rupees dollar dollars euro euros pound pounds sterling yen yuan " +
+  "renminbi baht peso pesos won dong dirham dirhams riyal riyals franc francs krona kronor krone kroner").split(" "));
+const isCurrency = (w: string) => ISO_CODES.has(w) || ISO_CODES.has(w.toUpperCase()) && w === w.toUpperCase() || CURRENCY_NAMES.has(w.toLowerCase());
+/** Words that may lead into a share without changing it. */
+const LEAD_IN = new Set(["pays", "pay", "we", "will", "benefit", "payable", "bayaran"]);
+const wordsOf = (t: string) => t.normalize("NFKC").toLowerCase().match(/[\p{L}\p{Nd}]+/gu) ?? [];
+
+export function shareOf(text: string | null | undefined, opts: { name?: string | null } = {}): { percent: number; of: string } | null {
   const t = (text ?? "").normalize("NFKC").trim();
   if ((t.match(PERCENT) ?? []).length !== 1) return null;
   const m = t.match(SHARE);
   if (!m) return null;
+  // What is printed before the percentage on its line: only the row's own name or heading, numbering or a lead-in.
+  const before = t.slice(t.lastIndexOf("\n", m.index!) + 1, m.index).replace(/^\s*(?:[-–•*·▪]|\(?(?:[a-z]|\d{1,3}|[ivx]{1,4})[.)])\s*/i, "");
+  const named = new Set(wordsOf(opts.name ?? ""));
+  if (wordsOf(before).some((w) => !named.has(w) && !LEAD_IN.has(w))) return null;
   const percent = Number(m[1].replace(",", "."));
   if (!Number.isFinite(percent) || percent <= 0 || percent > 1000) return null;
   const words = m[2].trim().split(/[ \t]+/);
   if (DANGLING.has(words[words.length - 1].toLowerCase())) return null;
+  if (words.some(isCurrency)) return null;
   return { percent, of: words.join(" ") };
 }

@@ -227,8 +227,9 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
 /** The words a percentage row says it is a share of, as printed (lib/format/share-of): "10% of Prevailing Insured
  * Amount, up to maximum of S$25,000" gives "Prevailing Insured Amount". When the row prints none, "the sum insured" if the
  * reading says that is the base, otherwise null (and the row keeps "See the page"). */
-function shareWords(b: Pick<CheckedBenefit, "value" | "percentOf"> & { source: { excerpt: string } }): string | null {
-  const printed = readShare(b.source.excerpt);
+function shareWords(b: Pick<CheckedBenefit, "value" | "percentOf" | "benefit" | "section"> & { source: { excerpt: string } }): string | null {
+  // Only the row's own name and heading may come before its share; anything else printed first may be a condition.
+  const printed = readShare(b.source.excerpt, { name: [b.benefit, b.section].filter(Boolean).join(" ") });
   if (printed && printed.percent === b.value) return printed.of;
   return b.percentOf === "sum_insured" ? "the sum insured" : null;
 }

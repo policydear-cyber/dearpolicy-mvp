@@ -93,7 +93,8 @@ export function paysWholeSum(quote: string | null | undefined): boolean {
   return !MAY_STATE_AMOUNT.test(rest) && onlyFiller(rest) && !CHANGES_THE_SUM.test(rest);
 }
 
-export function unreadAmountLine(sourcePage: number | null, quote: string | null | undefined): string {
+/** benefitName: the benefit's own name, which may be printed before its share ("Keyhole surgery: 20% of the Sum Assured"). */
+export function unreadAmountLine(sourcePage: number | null, quote: string | null | undefined, benefitName?: string | null): string {
   const where = sourcePage ? `page ${sourcePage}` : "the page";
   const passage = (quote ?? "").normalize("NFKC").trim();
   // A stored quote is cut at 260 characters, so a long one may have lost its figure at the cut.
@@ -117,7 +118,7 @@ export function unreadAmountLine(sourcePage: number | null, quote: string | null
   // The share it pays is printed in full and is kept, in the row's own words ("10% of Prevailing Insured Amount"); only the
   // maximum is missing, so no amount is worked out from the share.
   if (STOPS_AT_ITS_CAP.test(passage)) {
-    const share = shareOf(passage);
+    const share = shareOf(passage, { name: benefitName });
     if (share) return `Pays ${share.percent}% of ${share.of}, up to a maximum that was not captured from ${where}, so no amount is worked out. The maximum is printed further down ${where}.`;
     return `The passage on ${where} stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down ${where}.`;
   }
