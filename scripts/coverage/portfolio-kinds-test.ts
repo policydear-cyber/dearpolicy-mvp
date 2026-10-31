@@ -9,9 +9,9 @@
  *   node --import tsx scripts/coverage/portfolio-kinds-test.ts */
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type CheckedBenefit, type CheckedCover, type CheckedReading } from "@/lib/benefit-table/check";
-import { categoryRows, lumpSumParts, personKinds, tileRows, type HeldCover } from "@/lib/coverage/table-figures";
+import { categoryRows, documentKinds, lumpSumParts, personKinds, tileRows, type HeldCover } from "@/lib/coverage/table-figures";
 import { planKindOfName, planTypeOf, planTypeOfPages } from "@/lib/coverage/plan-type";
-import { kindsOfTable } from "@/components/cover-kinds";
+import { documentTableKinds, endedKinds, kindsOfTable } from "@/components/cover-kinds";
 
 let pass = 0, fail = 0;
 function t(id: string, ok: boolean, detail: unknown) {
@@ -121,6 +121,40 @@ for (const cur of ["SGD", "MYR", "GBP"]) {
   t(`${cur}: every policy fixed gives the total, not a known sum`, all.total === 3000 && all.known === null, all);
   const twice = lumpSumParts([], [{ name: "Group Term Life", documentIds: ["a"], amount: 5000, currency: cur }, { name: "GROUP TERM LIFE", documentIds: ["b"], amount: 5000, currency: cur }, { name: "C", documentIds: ["c"], amount: null, currency: cur }], [], "Death");
   t(`${cur}: one policy maybe read twice gives no known sum`, twice.known === null, twice.known);
+}
+
+// Every page reads the same answer: Home (personKinds), Family (kindsOfTable, endedKinds), Documents (documentTableKinds),
+// Benefits (documentKinds) and Coverage cards (the cover's own `ended`), on one assembled table per market.
+for (const { m, sign } of [{ m: "SG", sign: "S$" }, { m: "MY", sign: "RM" }, { m: "UK", sign: "£" }]) {
+  const trip = { id: `trip-${m}`, name: "Kestrel trip.pdf", readable: true, people: ["Ana Reyes"], pages: [
+    { page: 1, text: `TRAVEL INSURANCE SUMMARY\nInsured: Ana Reyes\nSingle Trip\tGold\nPeriod of insurance: 29/09/2026 to 04/10/2026\nTrip cancellation\t${sign}10,000` }] };
+  const tripRaw = { document: { kind: "personal_proof", product: "Kestrel Travel Insurance", insurer: "Kestrel", namedPeople: ["Ana Reyes"], plan: "Gold", periodFrom: "29/09/2026", periodTo: "04/10/2026" },
+    covers: [{ person: "Ana Reyes", product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, policyNumber: null, sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: "Single Trip\tGold" }],
+    benefits: [{ section: "Benefits", column: null, benefit: "Trip cancellation", pays: "up_to", value: 10000, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: `Trip cancellation\t${sign}10,000` }] };
+  const endow = { id: `endow-${m}`, name: "Maju.pdf", readable: true, people: ["Ana Reyes"], pages: [
+    { page: 3, text: `POLICY SCHEDULE\nLife Assured: Ana Reyes\nMAJU ENDOW 10\t${sign}49,000.00` },
+    { page: 5, text: "This is a regular premium participating endowment insurance policy." }] };
+  const endowRaw = { document: { kind: "personal_proof", product: "MAJU ENDOW 10", insurer: "Maju Life", namedPeople: ["Ana Reyes"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ana Reyes", product: "MAJU ENDOW 10", cover: "MAJU ENDOW 10", plan: null, riderOf: null, policyNumber: null, sumInsured: 49000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 3, quote: `MAJU ENDOW 10\t${sign}49,000.00` }], benefits: [] };
+  const rs = [checkReading(trip as never, tripRaw), checkReading(endow as never, endowRaw)];
+  const links = rs[0].benefits.map((b) => ({ section: sectionKeyOf(rs[0].documentId, b), cover: coverKeyOf(rs[0].covers[0]), why: "test" }));
+  const table = assembleTable(rs, family, links, [], new Date("2026-10-31T04:00:00Z"));
+  const ana = table.people.find((p) => p.id === "p-ana")!;
+  const home = personKinds(ana.covers, ana.rows);
+  const family_ = kindsOfTable(ana.rows, ana.covers), familyEnded = endedKinds(ana.rows, ana.covers);
+  const docs = documentTableKinds([ana]), bens = documentKinds([ana]);
+  const card = ana.covers.find((c) => c.cover === "Single Trip");
+  t(`${m}: Home says the trip ended on 04/10/2026`, home.get("Travel")?.current.length === 0 && home.get("Travel")?.endedOn === "04/10/2026", home.get("Travel"));
+  t(`${m}: Family does not list travel as cover and says it ended`, !family_.includes("Travel") && familyEnded.includes("Travel cover ended on 04/10/2026"), { family_, familyEnded });
+  t(`${m}: Documents says the trip ended`, (docs[`trip-${m}`] ?? []).includes("Travel cover ended on 04/10/2026") && !(docs[`trip-${m}`] ?? []).includes("Travel"), docs);
+  t(`${m}: Benefits says the trip ended`, bens[`trip-${m}`]?.endedOn === "04/10/2026", bens);
+  t(`${m}: Coverage card says the trip ended`, card?.ended === "04/10/2026", card?.ended);
+  t(`${m}: savings on Home, Family, Documents and Benefits alike`, !!home.get("Savings")?.current.length && family_.includes("Savings and investment")
+    && (docs[`endow-${m}`] ?? []).includes("Savings and investment") && bens[`endow-${m}`]?.plan === "Savings", { home: home.get("Savings"), family_, docs, bens });
+  // The same trip read before it ended is current everywhere.
+  const before = assembleTable(rs, family, links, [], new Date("2026-10-01T04:00:00Z")).people.find((p) => p.id === "p-ana")!;
+  t(`${m}: during the trip every page says travel is current`, !!personKinds(before.covers, before.rows).get("Travel")?.current.length && kindsOfTable(before.rows, before.covers).includes("Travel")
+    && !endedKinds(before.rows, before.covers).length && !documentKinds([before])[`trip-${m}`]?.endedOn && !before.covers.find((c) => c.cover === "Single Trip")?.ended, null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

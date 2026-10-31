@@ -136,7 +136,7 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
  * is over), so Home says it ended instead of "Not found". A held cover counts even before any row is linked to it. */
 export type KindEntry = { current: string[]; endedOn: string | null; note: string | null };
 type KindCover = CoverNames & { riderOf?: string | null; ended?: string | null; planType?: PlanType | null };
-export function personKinds(covers: KindCover[], rows: (SummaryRow & CoverNames)[]): Map<string, KindEntry> {
+export function personKinds(covers: KindCover[], rows: (CoverNames & { pays: string; coverEnded?: string | null })[]): Map<string, KindEntry> {
   const out = new Map<string, KindEntry>();
   const add = (category: string, name: string, ended: string | null, note: string | null = null) => {
     const e = out.get(category) ?? { current: [], endedOn: null, note: null };
@@ -156,6 +156,34 @@ export function personKinds(covers: KindCover[], rows: (SummaryRow & CoverNames)
   for (const r of rows) if (travelName(r) && r.pays !== "not_covered" && r.pays !== "value") add("Travel", travelLabel(r), r.coverEnded ?? null);
   // A policy with one current cover is current, whatever an older trip of the same name did.
   for (const e of out.values()) if (e.current.length) e.endedOn = null;
+  return out;
+}
+
+/** What the rule above says about each document of the household's benefit table (Benefits lists by document): its travel
+ * cover ended on a printed day, or it is a savings or investment plan. A document with a current cover of the kind is not
+ * ended for anyone; a document no rule says anything about is left out. */
+export type DocumentKind = { endedOn: string | null; plan: "Savings" | "Investment" | null; note: string | null };
+type SourcedCover = KindCover & { source?: { documentId?: string | null } | null };
+type SourcedRow = CoverNames & { pays: string; coverEnded?: string | null; source?: { documentId?: string | null } | null };
+export function documentKinds(people: { covers?: SourcedCover[]; rows?: SourcedRow[] }[]): Record<string, DocumentKind> {
+  const per = new Map<string, { current: boolean; ended: string | null; plan: Set<string>; note: string | null }>();
+  for (const p of people) {
+    const ids = new Set([...(p.covers ?? []), ...(p.rows ?? [])].map((x) => x.source?.documentId).filter((d): d is string => !!d));
+    for (const id of ids) {
+      const kinds = personKinds((p.covers ?? []).filter((c) => c.source?.documentId === id), (p.rows ?? []).filter((r) => r.source?.documentId === id));
+      const e = per.get(id) ?? { current: false, ended: null, plan: new Set<string>(), note: null };
+      const travel = kinds.get("Travel");
+      if (travel?.current.length) e.current = true;
+      else if (travel?.endedOn && (!e.ended || (printedDay(travel.endedOn) ?? 0) > (printedDay(e.ended) ?? 0))) e.ended = travel.endedOn;
+      for (const k of ["Savings", "Investment"]) if (kinds.get(k)?.current.length) { e.plan.add(k); e.note ??= kinds.get(k)!.note; }
+      per.set(id, e);
+    }
+  }
+  const out: Record<string, DocumentKind> = {};
+  for (const [id, e] of per) {
+    const endedOn = e.current ? null : e.ended, plan = e.plan.size === 1 ? [...e.plan][0] as "Savings" | "Investment" : null;
+    if (endedOn || plan) out[id] = { endedOn, plan, note: plan ? e.note : null };
+  }
   return out;
 }
 
