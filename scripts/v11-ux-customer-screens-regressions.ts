@@ -102,7 +102,8 @@ test("household navigation: no Usage & Cost, no operator or reviewer links; no s
   const shell = read("components/AppShell.tsx");
   const nav = shell.slice(shell.indexOf("const nav"), shell.indexOf("];", shell.indexOf("const nav")));
   // Links only: an item's `also` list names pages that keep it highlighted (Account settings for /usage), not menu entries.
-  const links = [...nav.matchAll(/href:\s*"([^"]+)"/g)].map((m) => m[1]);
+  // Any quote style ("/usage", '/usage', `/usage`), so a re-quoted link is still read.
+  const links = [...nav.matchAll(/\bhref\s*:\s*(["'`])([^"'`]+)\1/g)].map((m) => m[2]);
   assert.ok(links.length >= 4, "the household menu was read");
   assert.ok(!links.includes("/usage"), "Usage is not in household navigation");
   assert.ok(!links.some((h) => h.startsWith("/operator") || h.startsWith("/reviewer")));
@@ -180,7 +181,7 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   assert.ok(!/model|token|routing|hard stop|cost|\$/i.test(text.replace(/\$\{/g, "")), "no model, token, routing or cost text");
   assert.match(usage, /includedChatTurns/);
   // Plan usage is reached from the Account settings tabs (Household, People, Plan usage).
-  assert.match(read("components/account-tabs.tsx"), /href: "\/usage"/);
+  assert.match(read("components/account-tabs.tsx"), /\bhref\s*:\s*(["'`])\/usage\1/);
   assert.match(read("app/household/page.tsx"), /<AccountTabs/);
 });
 
