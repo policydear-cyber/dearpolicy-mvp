@@ -251,7 +251,7 @@ export async function GET(request:NextRequest){
       });
     }catch{/* A document whose conditions have not been read yet simply has none to show. */}
     // ID numbers in quotes are masked as chat masks them; ids are left as stored.
-    // Each document's whole-policy kind by the rule Home and Coverage use (a trip that has ended, a savings plan), so Benefits
+    // Each document's whole-policy kind by the rule Home and Coverage use (a savings plan), so Benefits
     // says the same. Optional: without the benefit table, nothing is said.
     let documentKindsById:Record<string,DocumentKind>={};
     try{

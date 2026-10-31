@@ -73,11 +73,10 @@ function chatFor(context: ChatContext): string {
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";
 }
 
-/** Each date range a document prints ("29/09/2026 to 04/10/2026"), with whether it has ended, is running or has not
- * started by today's date in Singapore: worked out here, so the answer never calls an ended trip "not started" (live run
- * 23 Oct, S048). At most three ranges a document. */
-export function periodsNote(household: Household, now: Date): string {
-  const today = Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
+/** Each date range a document prints ("29/09/2026 to 04/10/2026"), as printed. Every policy on file is treated as in
+ * force (DC, 31 Oct: "ignore all expiry dates"), so no range is called ended, running or not started. At most three
+ * ranges a document. */
+export function periodsNote(household: Household, _now: Date): string {
   const said: string[] = [];
   for (const d of household.documents) {
     const seen = new Set<string>();
@@ -85,10 +84,10 @@ export function periodsNote(household: Household, now: Date): string {
       const from = printedDay(m[1]), to = printedDay(m[2]);
       if (from == null || to == null || to <= from || seen.has(`${m[1]}|${m[2]}`) || seen.size >= 3) continue;
       seen.add(`${m[1]}|${m[2]}`);
-      said.push(`${d.productName ?? d.name} prints ${m[1]} to ${m[2]}: ${to < today ? "ended before today" : from > today ? "not started yet" : "running today"}`);
+      said.push(`${d.productName ?? d.name} prints ${m[1]} to ${m[2]}`);
     }
   }
-  return said.length ? `(Dates printed: ${said.join("; ")}.) ` : "";
+  return said.length ? `(Dates printed, treated as in force: ${said.join("; ")}.) ` : "";
 }
 
 /** The days the household's message names ("on 29 september", "29/09"), as dates with how far each is from today, so a

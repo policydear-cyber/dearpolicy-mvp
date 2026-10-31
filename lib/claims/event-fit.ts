@@ -5,11 +5,9 @@
  * test keeps its card, labelled with the reason, and is never named as a
  * possible benefit (lib/chat/fact-finding-chat.ts, finalizeClaimAnswer).
  *
- *  - Expired: the policy's own renewal/expiry date has passed with no later
- *    premium or renewal evidence (lib/policies/currentness.ts,
- *    "expiry_date_passed"), and the event did not happen on or before that
- *    date. An expired travel policy's "Overseas medical expenses" is not a
- *    possible benefit for a fracture last week.
+ *  - Dates: never. Every policy on file is treated as in force (DC, 31 Oct:
+ *    "ignore all expiry dates"), so a printed expiry or start date never
+ *    rules a benefit out.
  *  - Location: cover that pays only for events overseas (travel policies,
  *    overseas / evacuation / repatriation benefits) is not a possible benefit
  *    for an event in Singapore.
@@ -65,16 +63,7 @@ export function eventFitIssue(args: {
   tripStart?: string | null;
   tripEnd?: string | null;
 }): EventFitIssue | null {
-  const expiry = isoDay(args.expiryDate);
   const eventDay = isoDay(meaningfulFact(args.eventDate));
-  const whose = args.policyName ? args.policyName + "’s" : "this policy’s";
-  if (args.expiryPassed && expiry && !(eventDay && eventDay <= expiry))
-    return { kind: "expired", text: "Not a possible benefit: " + whose + " cover ended on " + plainDate(expiry) +
-      (eventDay ? ", before the event on " + plainDate(eventDay) + ", and no renewal is on file." : " and no renewal is on file. If it happened before then, tell DearPolicy the date.") };
-  const effective = isoDay(args.effectiveDate);
-  if (effective && eventDay && eventDay < effective)
-    return { kind: "not_started", text: "Not a possible benefit on the document on file: " + (args.policyName ? args.policyName + "’s" : "the") + " cover on file starts on " + plainDate(effective) +
-      ", after the event on " + plainDate(eventDay) + ". If the policy was in force before then, the earlier certificate or renewal notice will show it." };
   if (!args.travelEvent && happenedInSingapore(meaningfulFact(args.eventLocation)) && overseasOnly(args.benefitTitle, args.policyType))
     return { kind: "location", text: "Not a possible benefit: this cover is for events overseas, and this happened in Singapore." };
   // Travel cover needs a trip: an event overseas, within the trip's dates. A

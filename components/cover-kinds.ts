@@ -60,9 +60,8 @@ const PREMIUM_ONLY = /^(?:(?:annual|monthly|quarterly|half[- ]yearly|yearly|sing
  * a travel policy). The cover's own name decides first; a row's benefit name adds its kind (a term life's TPD row is
  * disability cover too), never "Home and vehicle" ("Home Nursing", "Home Modification" are not home insurance). A row
  * printed as not covered, a value and a premium are no cover. A cover with no row counted (its pages not linked yet) is
- * still cover: never "Nothing found" for a person who has one (Critic R199-2). A cover that has ended (a single trip whose
- * printed period is over: coverEnded in lib/benefit-table/assemble.ts sets `coverEnded` on its rows, `ended` on the cover)
- * is not current cover, as on Home; a missing date never ends a cover. */
+ * still cover: never "Nothing found" for a person who has one (Critic R199-2). Every policy on file is treated as in force:
+ * a printed end date never takes a kind away (DC, 31 Oct). */
 export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
   const found = new Set<string>(), counted = new Set<string>();
   const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
@@ -70,9 +69,6 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
     // rows are all printed as not covered is no cover (TE P124-2).
     if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
-    // An ended cover's rows are not counted: a current cover of the same name whose rows are not linked yet still
-    // lists (TE E9: a renewed single trip beside the one that ended).
-    if (r.coverEnded) continue;
     counted.add(`${r.product}\u0000${r.cover}`);
     if (r.pays === "not_covered") continue;
     const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
@@ -81,24 +77,15 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     if (benefit !== "other" && benefit !== "property") found.add(benefit);
     else if (!cover) found.add("other");
   }
-  for (const c of covers) if (!c.ended && !counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
   // Whole-policy kinds by the rule Home's tiles use (personKinds): savings or investment from the plan type, travel from a
-  // current travel cover.
+  // travel cover.
   const whole = personKinds(covers, rows);
   if (whole.get("Savings")?.current.length || whole.get("Investment")?.current.length) found.add("savings");
-  // Travel as Home's rule finds it: listed for a current trip, never for one that ended or whose dates were not read.
-  const travel = whole.get("Travel");
-  if (travel?.current.length) found.add("travel"); else if (travel) found.delete("travel");
+  if (whole.get("Travel")?.current.length) found.add("travel");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
-/** Whole-policy cover a person held that has ended (a single trip whose printed period is over), or a single trip whose
- * dates were not read, in Home's words and by its rule (personKinds): "Travel cover ended on 04/10/2026", "Travel: trip
- * dates not found". Empty when a current one is held. */
-export function endedKinds(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
-  return [...personKinds(covers, rows)].filter(([, e]) => !e.current.length && (e.undated.length || e.endedOn))
-    .map(([category, e]) => e.undated.length ? `${category}: trip dates not found` : `${category} cover ended on ${e.endedOn}`);
-}
 
 /** What each document was found to pay for (Documents page), for a household on the benefit table: the kinds of cover
  * (kindsOfTable, the rules Family uses) of the table rows read from that document, and of the covers printed in it. A
@@ -123,7 +110,7 @@ export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[
   }
   const out: Record<string, string[]> = {};
   for (const id of new Set([...rows.keys(), ...covers.keys()])) {
-    const kinds = [...kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? []), ...endedKinds([...(rows.get(id) ?? [])], covers.get(id) ?? [])];
+    const kinds = [...kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? [])];
     if (kinds.length) out[id] = kinds;
   }
   return out;

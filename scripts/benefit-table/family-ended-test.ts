@@ -1,13 +1,12 @@
-/** Family's "Covered for" (kindsOfTable) does not list a cover that has ended. A single trip whose printed period is over
- * (coverEnded, lib/benefit-table/assemble.ts) is not current cover: Home tiles already leave it out, and Family listed it
- * as "Travel". Made-up households only, no database and no model: each table is assembled from synthetic readings and sent
+/** Family's "Covered for" (kindsOfTable) lists every policy on file, whatever its printed dates: a single trip whose
+ * printed period is over is still Travel (DC, 31 Oct: every policy is treated as in force). Made-up households only, no database and no model: each table is assembled from synthetic readings and sent
  * through JSON, as GET /api/benefit-table hands it to the Family page.
  *   npm run benefit-table:family-ended-test */
 import assert from "node:assert/strict";
 import { checkReading } from "@/lib/benefit-table/check";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import type { SectionLink } from "@/lib/benefit-table/reading";
-import { endedKinds, kindsOfTable, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { kindsOfTable, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 let passed = 0;
 const failures: string[] = [];
@@ -57,41 +56,48 @@ function familyKinds(readings: ReturnType<typeof checkReading>[], on: string, li
 }
 const ENDED = "29/09/2026 to 04/10/2026";
 
-test("an ended single trip and an ongoing life plan: Death, no Travel", () => {
-  assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-28"), ["Death"]);
+// Changed 31 Oct (DC: "ignore all expiry dates ... assume all policies are still in force"): this suite used to check
+// that Family leaves out a single trip whose printed period is over. Every policy on file is now in force, so a past
+// end date never takes Travel away. The checks below are the same households, with that expectation reversed.
+test("a single trip whose printed period is over and an ongoing life plan: Death and Travel", () => {
+  assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-28"), ["Death", "Travel"]);
 });
-test("an ended single trip whose pages are not linked yet: still no Travel", () => {
-  assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-28", LINKS.filter((l) => l.cover !== trip)), ["Death"]);
+test("the same trip whose pages are not linked yet: still Travel (its cover counts)", () => {
+  assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-28", LINKS.filter((l) => l.cover !== trip)), ["Death", "Travel"]);
 });
-test("only an ended single trip: nothing listed", () => {
-  assert.deepEqual(familyKinds([tripReading(ENDED)], "2026-10-28"), []);
+test("only that trip, years after its dates: Travel", () => {
+  assert.deepEqual(familyKinds([tripReading(ENDED)], "2030-01-01"), ["Travel"]);
 });
-// Negative controls: what must not change.
 test("during the trip (and on its last day) it is Travel", () => {
   assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-01"), ["Death", "Travel"]);
   assert.deepEqual(familyKinds([tripReading(ENDED), lifeReading], "2026-10-04"), ["Death", "Travel"]);
 });
-test("an ended single trip and a running annual multi-trip plan: Travel", () => {
+test("a trip that has not started yet is Travel", () => {
+  assert.deepEqual(familyKinds([tripReading(ENDED)], "2026-01-01"), ["Travel"]);
+});
+test("a single trip and an annual multi-trip plan: Travel", () => {
   assert.deepEqual(familyKinds([tripReading(ENDED), annualReading, lifeReading], "2026-10-28"), ["Death", "Travel"]);
 });
 test("an annual multi-trip plan past its printed end (no renewal on file) stays Travel", () => {
   assert.deepEqual(familyKinds([annualReading], "2027-06-01"), ["Travel"]);
 });
-// Changed in #213 (TE F3): a single trip whose printed period was not read may be long over, so it is neither current
-// (no "Travel" in Covered for) nor ended. Missing dates still never make it ended: Family says its dates were not found.
-test("a single trip with no printed period is not listed as current Travel, nor as ended: its dates were not found", () => {
-  assert.deepEqual(familyKinds([tripReading(null), lifeReading], "2026-10-28"), ["Death"]);
-  const p = JSON.parse(JSON.stringify(assembleTable([tripReading(null), lifeReading], family, LINKS, [], sgt("2026-10-28")).people[0])) as { rows: TableKindRow[]; covers: TableKindCover[] };
-  assert.deepEqual(endedKinds(p.rows, p.covers), ["Travel: trip dates not found"]);
+test("a single trip with no printed period: Travel", () => {
+  assert.deepEqual(familyKinds([tripReading(null), lifeReading], "2026-10-28"), ["Death", "Travel"]);
+});
+test("no cover or row the table sends carries an ended date, whatever today is", () => {
+  for (const on of ["2026-10-28", "2035-12-31"]) {
+    const p = assembleTable([tripReading(ENDED), annualReading, lifeReading], family, LINKS, [], sgt(on)).people[0];
+    assert.ok(p.covers.every((c) => !c.ended) && p.rows.every((r) => !r.coverEnded), on);
+  }
 });
 test("rows and covers without an end field (older callers) are listed as before", () => {
   assert.deepEqual(kindsOfTable([{ benefit: "Loss of baggage", pays: "up_to", product: "Example Travel Insurance", cover: "Single Trip" }],
     [{ product: "Example Term Life", cover: "Term Life" }]), ["Death", "Travel"]);
 });
-test("an ended single trip beside a current one of the same name whose rows are not linked yet: Travel (TE E9)", () => {
+test("a row or cover an older caller sends with an ended date is still listed", () => {
   assert.deepEqual(kindsOfTable(
     [{ benefit: "Loss of baggage", pays: "up_to", product: "Example Travel Insurance", cover: "Single Trip", coverEnded: "2026-10-04" }],
-    [{ product: "Example Travel Insurance", cover: "Single Trip", ended: "2026-10-04" }, { product: "Example Travel Insurance", cover: "Single Trip", ended: null }]),
+    [{ product: "Example Travel Insurance", cover: "Single Trip", ended: "2026-10-04" }]),
   ["Travel"]);
 });
 test("a cover sent with ended: null and no rows is still listed (TE Q3)", () => {

@@ -105,8 +105,7 @@ function periodOf(d: DocRow, pages: Map<number, string>, asOf: string): InForce 
   }
   if (/^(?:lapsed|terminated|cancelled|surrendered)$/i.test(d.status ?? "")) return { status: "lapsed", from, to, basis: `recorded as ${d.status}`, evidence };
   if (!from && !to) return { status: "unknown", from, to, basis: "the document prints no period of cover and none is recorded", evidence };
-  if (from && asOf < from) return { status: "not_started", from, to, basis, evidence };
-  if (to && asOf > to) return { status: "expired", from, to, basis, evidence };
+  // Every policy on file is treated as in force: a printed period never makes it "not started" or "expired" (DC, 31 Oct).
   return { status: "in_force", from, to, basis, evidence };
 }
 

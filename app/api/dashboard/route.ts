@@ -67,10 +67,6 @@ export async function GET(request:NextRequest){
   // currency: "120,000" under "All amounts in pounds sterling" is not Singapore dollars, and RM + £ sums give no total.
   // Where they cannot be added, each policy's sum is listed instead.
   const coverageMap=new Map<string,{total:number|null;currency:string|null;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[];known?:KnownSum|null;planNote?:string|null}>();
-  // A category whose only cover has ended (a single trip that is over): its last day, so the tile says so, never "Not found".
-  const endedOn=new Map<string,string>();
-  // A single trip whose last day was not read: neither current nor ended (its names).
-  const undatedTrip=new Map<string,string>();
   for(const category of new Set(selected.map(x=>x.category))){
     const rows=selected.filter(x=>x.category===category),priced=rows.filter(x=>x.amount!=null);
     const currencies=new Set(priced.map(x=>x.currency));
@@ -110,9 +106,7 @@ export async function GET(request:NextRequest){
         // for every page (lib/coverage/table-figures personKinds). A held cover with no linked row still counts.
         const kind=kinds.get(category);
         if(kind&&!coverageMap.has(category)){
-          if(kind.current.length)coverageMap.set(category,{total:null,currency:null,count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
-          else if(kind.undated.length)undatedTrip.set(category,kind.undated.join(", "));
-          else if(kind.endedOn)endedOn.set(category,kind.endedOn);
+          coverageMap.set(category,{total:null,currency:null,count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
           continue;
         }
         if(!rows.length)continue;
@@ -150,7 +144,7 @@ export async function GET(request:NextRequest){
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,endedOn:row?null:endedOn.get(category)??null,undated:row?null:undatedTrip.get(category)??null};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null};});
 
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the

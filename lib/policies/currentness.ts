@@ -22,10 +22,8 @@ export function assessCurrentness(args:{now:Date;lastEvidenceOn:string|null;rene
   // 5 April 2027 on a renewal notice) is evidence the policy is being kept
   // current, not "older than 400 days": a negative age used to fall through.
   const fresh=ageDays!=null&&ageDays<=CURRENTNESS_MAX_EVIDENCE_DAYS;
-  if(expiry&&Date.parse(expiry)<args.now.getTime()&&!fresh)
-    return {state:"expiry_date_passed",label:"Active status not recently verified",
-      detail:"The uploaded document shows a renewal or expiry date of "+day(expiry)+" that has already passed, and no later premium receipt or renewal notice is on file. "+ownership,
-      lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
+  // A printed renewal or expiry date that has passed never changes the status: every policy on file is treated as in
+  // force (DC, 31 Oct: "ignore all expiry dates").
   if(fresh)
     return {state:"verified_recent",label:"Active status evidenced",
       detail:(ageDays!=null&&ageDays<0?"Next payment or renewal on file: ":"Latest payment or renewal on file: ")+day(evidence!)+".",
