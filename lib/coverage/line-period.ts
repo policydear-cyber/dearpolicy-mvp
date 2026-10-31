@@ -34,7 +34,15 @@ const CJK: Record<LinePeriod, string[]> = { day: ["每日", "每天", "日額", 
 const spaced = (w: string) => w.replace(/ \?/g, "\\s*").replace(/ /g, "\\s+");
 const PATTERNS = WORDS.map(([p, ws]) => [p, new RegExp(B + "(?:" + ws.map(spaced).join("|") + ")" + E + "|" + CJK[p].join("|"), "iu")] as const);
 // A premium or contribution printed on the line: its period is the payment's, never the cover's.
-const PAYMENT = new RegExp(B + "(?:premiums?|contributions?|caruman|sumbangan|premi|prämie|beitrag|prime|cotisation|premio|prêmio|prémio|primas?|phí bảo hiểm|保费|保費)" + E, "iu");
+const PAYMENT = new RegExp(B + "(?:premiums?|contributions?|caruman|sumbangan|premi|prämie|beitrag|prime|cotisation|premio|prêmio|prémio|primas?|phí bảo hiểm)" + E + "|保费|保費|保険料", "iu");
+// Period words that say when or how long, never how often the figure is paid: "24 hours a day", "Yearly Renewable Term",
+// "within a month of approval", "waiting period of a year". They are taken out before the figure's period is read.
+const NOT_A_PAY_PERIOD = new RegExp([
+  String.raw`24\s*(?:hours?|hrs?|jam|giờ|horas|heures|stunden)\b[^,;:\n\d]{0,12}`, "每日\\s*24\\s*小[时時]", "24\\s*小[时時]",
+  B + String.raw`(?:yearly|annual(?:ly)?|monthly|annually)\s+renew\w*`, B + String.raw`renew\w*\s+(?:each|every)\s+(?:year|month)`,
+  B + String.raw`(?:within|in|dalam(?:\s+tempoh)?|dentro\s+de|innerhalb)\s+(?:(?:a|one|1|the)\s+)?(?:\w+\s+)?(?:day|month|year|sebulan|setahun|sehari)s?` + E,
+  B + String.raw`waiting\s+period[^,;:\n\d]{0,20}`,
+].join("|"), "giu");
 
 const periodsIn = (t: string) => PATTERNS.filter(([, re]) => re.test(t)).map(([p]) => p);
 // The same words, read only where they start: right after a figure ("S$150/day", "S$2,000 per month"), after any currency
@@ -43,8 +51,11 @@ const AFTER = WORDS.map(([p, ws]) => [p, new RegExp("^\\s*(?:" + ws.map(spaced).
 const FIGURE = /\d(?:[\d.,'’ \u00a0]*\d)?/g;
 /** Whether a printed figure is this amount, in any grouping ("3,000", "3.000", "3 000", "3000.00"). */
 const isAmount = (figure: string, amount: number) => {
-  const digits = figure.replace(/[^\d]/g, "");
-  return digits === String(Math.round(amount)) || digits === String(Math.round(amount * 100)) || digits === String(Math.round(amount * 1000));
+  // The figure read with "," or "." as the decimal mark, or as a whole number: "100.00", "3.000" and "3,000" are what they
+  // print, and "10,000" is never 100 (TE #266 F2).
+  const plain = figure.replace(/[\s\u00a0'’]/g, "");
+  const readings = [Number(plain.replace(/,/g, "")), Number(plain.replace(/\./g, "").replace(",", ".")), Number(plain.replace(/[.,]/g, ""))];
+  return readings.some((v) => Number.isFinite(v) && Math.abs(v - amount) < 0.005);
 };
 /** The period attached to the line's figure, or null. A period counts only where it is attached to the figure: right
  * after it ("S$150/day", "S$2,000 per month"), or in the figure's own label right before it, with no other figure or
@@ -52,8 +63,10 @@ const isAmount = (figure: string, amount: number) => {
  * line ("S$100 (max 30 days per year)", a waiting period, a premium) is not the figure's (coordinator, 31 Oct: strict
  * first). With the line's amount, the figure is the one printing that amount; without, the line's only figure. */
 export function printedLinePeriod(text: string | null | undefined, amount?: number | null): LinePeriod | null {
-  const t = String(text ?? "");
-  if (!t || PAYMENT.test(t)) return null;
+  const raw = String(text ?? "");
+  if (!raw || PAYMENT.test(raw)) return null;
+  // Same length, so positions still line up: "24 hours a day" and the like are blanked, never read.
+  const t = raw.replace(NOT_A_PAY_PERIOD, (w) => w.replace(/[\s\S]/g, " "));
   const figures = [...t.matchAll(FIGURE)];
   const own = amount == null ? figures : figures.filter((m) => isAmount(m[0], amount));
   if (own.length !== 1) return null;
@@ -70,9 +83,14 @@ export function printedLinePeriod(text: string | null | undefined, amount?: numb
 
 /** What a schedule line's figure shows: its amount and printed period. A periodic category's figure with no printed
  * period is withheld (amount null). */
+/** Covers whose figure is one sum paid once (Home adds these up): never shown with a period. One printed with a period
+ * attached to it ("Death benefit S$2,000 per month", a family income benefit) is not a sum, so it shows no figure and is
+ * never added up, on every page. */
+export const LUMP_SUM_LINE_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
 export function lineFigure(category: string, amount: number | null, evidenceText: string | null | undefined): { amount: number | null; period: LinePeriod | null } {
   if (amount == null) return { amount: null, period: null };
   const period = printedLinePeriod(evidenceText, amount);
+  if (LUMP_SUM_LINE_CATEGORIES.has(category)) return { amount: period ? null : amount, period: null };
   if (!period && PERIODIC_CATEGORIES.has(category)) return { amount: null, period: null };
   return { amount, period };
 }
