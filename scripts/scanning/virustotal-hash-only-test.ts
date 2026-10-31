@@ -1,8 +1,9 @@
 /**
  * No file content leaves DearPolicy for malware scanning by default (lib/scanning/adapters/virustotal.ts). With
  * VirusTotal selected, only the file's SHA-256 is looked up; the whole file is uploaded only when
- * VIRUSTOTAL_UPLOAD_FILES=true. A file VirusTotal flags is rejected; any other file, including one it has never seen,
- * proceeds only when DearPolicy's local file check passes, so nothing is held forever. Made-up documents; every
+ * VIRUSTOTAL_UPLOAD_FILES=true. A file VirusTotal flags is rejected; a file it knows as harmless is clean; a file it
+ * has never seen is "not_scanned" (never "clean"), and proceeds exactly like today's not-scanned path, so nothing is
+ * held. Made-up documents; every
  * request is captured by a fake fetch, nothing reaches the network.
  *   npm run scanning:virustotal-hash-only-test
  */
@@ -24,7 +25,8 @@ const stats = (malicious = 0, suspicious = 0) => ({ malicious, suspicious, undet
 async function main() {
   const { currentFileScanAdapter } = await import("@/lib/scanning/adapter");
   const KEYS = ["MALWARE_SCANNER_PROVIDER", "VIRUSTOTAL_API_KEY", "VIRUSTOTAL_UPLOAD_FILES", "VIRUSTOTAL_MAX_TRANSIENT_RETRIES", "VIRUSTOTAL_RETRY_BACKOFF_BASE_MS", "VIRUSTOTAL_POLL_INTERVAL_MS"];
-  async function scan(bytes: Uint8Array, replies: Array<() => Response>, env: Record<string, string | undefined> = {}) {
+  const { currentScanAdapter } = await import("@/lib/claims/evidence/scan-adapter");
+  async function scan(bytes: Uint8Array, replies: Array<() => Response>, env: Record<string, string | undefined> = {}, via: "policy" | "claim_evidence" = "policy") {
     const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
     const calls: Call[] = [];
     const realFetch = globalThis.fetch;
@@ -37,7 +39,7 @@ async function main() {
     Object.assign(process.env, { MALWARE_SCANNER_PROVIDER: "virustotal", VIRUSTOTAL_API_KEY: "test-key-not-real", VIRUSTOTAL_MAX_TRANSIENT_RETRIES: "1", VIRUSTOTAL_RETRY_BACKOFF_BASE_MS: "1", VIRUSTOTAL_POLL_INTERVAL_MS: "1" });
     for (const [k, v] of Object.entries(env)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     if (!("VIRUSTOTAL_UPLOAD_FILES" in env)) delete process.env.VIRUSTOTAL_UPLOAD_FILES;
-    try { return { result: await currentFileScanAdapter().scanFile(bytes), calls }; }
+    try { return { result: await (via === "policy" ? currentFileScanAdapter() : currentScanAdapter()).scanFile(bytes), calls }; }
     finally {
       globalThis.fetch = realFetch;
       for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
@@ -61,21 +63,29 @@ async function main() {
     assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: stats(3, 0) } } })])).result.status, "infected");
     assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: stats(0, 1) } } })])).result.status, "infected");
   });
-  await t("a file VirusTotal has never seen is NOT uploaded; the local check passes an ordinary document, which proceeds", async () => {
+  await t("a file VirusTotal has never seen is NOT uploaded and is not_scanned, never clean", async () => {
     const { result, calls } = await scan(medical, [() => json(404, { error: { code: "NotFoundError", message: "File not found" } })]);
-    assert.equal(result.status, "clean");
-    assert.match(result.detail ?? "", /no record of this file[\s\S]*Local file check passed/);
+    assert.equal(result.status, "not_scanned");
+    assert.doesNotMatch(result.detail ?? "", /\bclean\b|passed/i);
+    assert.match(result.detail ?? "", /not malware-scanned/);
     assert.equal(calls.length, 1, "no upload follows the lookup");
     assert.equal(sentContent(calls), false);
   });
-  await t("a never-seen file with active content is rejected, and a known-clean file still has to pass the local check", async () => {
-    const withScript = doc("1 0 obj << /Type /Catalog /OpenAction << /S /JavaScript /JS (app.alert(1)) >> >> endobj Insured: Siti Rahmah.");
-    const unseen = await scan(withScript, [() => json(404, { error: { code: "NotFoundError", message: "x" } })]);
-    assert.equal(unseen.result.status, "infected"); assert.match(unseen.result.detail ?? "", /active_content/);
-    const known = await scan(withScript, [() => json(200, { data: { attributes: { last_analysis_stats: stats() } } })]);
-    assert.equal(known.result.status, "infected");
-    const notAPdf = await scan(new TextEncoder().encode("%PDF-1.4 cut off before its end marker"), [() => json(404, { error: { code: "NotFoundError", message: "x" } })]);
-    assert.equal(notAPdf.result.status, "infected");
+  await t("an unknown hash is labelled 'Not malware-scanned' and goes ahead like the not-scanned path (policy and claim evidence)", async () => {
+    const { NOT_MALWARE_SCANNED_DETAIL, PROTOTYPE_NOT_SCANNED_DETAIL, persistableScanResultDetail, userFacingScanResultDetail } = await import("@/lib/policies/quarantine/ui");
+    const { isPolicyProcessingAllowed } = await import("@/lib/policies/quarantine/store");
+    const stored = persistableScanResultDetail("not_scanned", "VirusTotal has no record of this file");
+    assert.equal(stored, NOT_MALWARE_SCANNED_DETAIL);
+    const shown = userFacingScanResultDetail({ quarantine_status: "not_scanned_prototype", scan_result_detail: stored } as never) ?? "";
+    assert.match(shown, /^Not malware-scanned/); assert.doesNotMatch(shown, /\bclean\b/i);
+    // Scanning switched off still shows its own wording.
+    assert.equal(userFacingScanResultDetail({ quarantine_status: "not_scanned_prototype", scan_result_detail: PROTOTYPE_NOT_SCANNED_DETAIL } as never), PROTOTYPE_NOT_SCANNED_DETAIL);
+    // The policy row is recorded as not_scanned_prototype, which processing already allows (never held).
+    assert.equal(isPolicyProcessingAllowed({ quarantine_status: "not_scanned_prototype" }), true);
+    assert.equal(isPolicyProcessingAllowed({ quarantine_status: "scan_pending" }), false);
+    const evidence = await scan(medical, [() => json(404, { error: { code: "NotFoundError", message: "x" } })], {}, "claim_evidence");
+    assert.equal(evidence.result.status, "not_scanned_prototype", "claim evidence records the not-scanned state, never clean");
+    assert.equal(sentContent(evidence.calls), false);
   });
   await t("only an explicit VIRUSTOTAL_UPLOAD_FILES=true uploads; '1', 'yes', 'on' or a typo stay hash-only", async () => {
     for (const v of ["1", "yes", "on", "ture", "", "false"]) {

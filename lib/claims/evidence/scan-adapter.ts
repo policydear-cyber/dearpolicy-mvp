@@ -23,12 +23,13 @@ export interface EvidenceScanAdapter {
   scanFile(bytes: Uint8Array): Promise<ScanResult>;
 }
 
-/** The shared registry's FileScanStatus ("clean"|"infected"|"scan_unavailable")
- * is a strict subset of ClaimEvidenceScanStatus (which also has
- * "pending_scan", a DB-default-only value no adapter ever emits), so this
- * mapping is total and lossless. */
+/** The shared registry's FileScanStatus maps onto ClaimEvidenceScanStatus
+ * (which also has "pending_scan", a DB-default-only value no adapter ever
+ * emits): "not_scanned" is recorded as "not_scanned_prototype", the not-scanned
+ * state; the rest map to themselves. */
 function toEvidenceScanStatus(result: FileScanResult): ClaimEvidenceScanStatus {
-  return result.status;
+  // Not scanned (a hash lookup with no record): the same recorded state as scanning switched off, never "clean".
+  return result.status === "not_scanned" ? "not_scanned_prototype" : result.status;
 }
 
 function wrapAdapter(inner: FileScanAdapter): EvidenceScanAdapter {
