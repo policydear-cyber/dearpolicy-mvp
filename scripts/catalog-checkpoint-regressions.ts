@@ -87,15 +87,19 @@ async function main() {
        VALUES($1,$2,$3,'ckpt.pdf','k-ckpt','queued')`,
       [policy, account, member]);
 
-    // Prose-only pages: no parseable schedule rows, so every page takes the
+    // Prose pages: no parseable schedule rows, so every page takes the
     // model path, which fails fast offline and is skipped -- the loop still
-    // visits and checkpoints every page.
-    const syntheticPages = (count: number) =>
-      Array.from({ length: count }, (_, i) => ({
-        page_number: i + 1,
-        text: `Page ${i + 1}. This section explains the policy's administrative provisions in continuous prose, with no benefit schedule, no amounts and no table rows, so only the reading model could be consulted about it.`,
-      }));
-    const pages = syntheticPages(8);
+    // visits and checkpoints every page. Page 1 is a schedule the table
+    // parser reads without the model, so the pass finds something; a pass in
+    // which every model page failed and nothing was found is a failed read
+    // (tested last).
+    const prose = (n: number) => ({
+      page_number: n,
+      text: `Page ${n}. This section explains the policy's administrative provisions in continuous prose, with no benefit schedule, no amounts and no table rows, so only the reading model could be consulted about it.`,
+    });
+    const schedule = { page_number: 1,
+      text: "Schedule of Benefits\nBenefit\tLimit\nOverseas medical expenses\tS$500,000\nPersonal accident\tS$200,000\nBaggage loss\tS$5,000\nEmergency evacuation\tS$100,000" };
+    const pages = [schedule, ...Array.from({ length: 7 }, (_, i) => prose(i + 2))];
 
     const checkpointRow = async (stage: string) => {
       const r = await pool.query(
@@ -149,6 +153,21 @@ async function main() {
         assert.equal(done?.nextIndex, changed.length, "done marker recorded for the new text");
       });
     }
+
+    await testAsync("benefits: a pass in which every model page failed and nothing was found is a failed read, not \"read, nothing found\"", async () => {
+      const other = "83000000-0000-4000-8000-0000000000f1";
+      await pool.query(
+        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status)
+         VALUES($1,$2,$3,'prose.pdf','k-prose','queued')`, [other, account, member]);
+      const prosePages = Array.from({ length: 3 }, (_, i) => prose(i + 1));
+      await assert.rejects(catalogueDocument({ accountId: account, policyId: other, productName: null, pages: prosePages }),
+        "the caller records the failure and the document stays on the unread list");
+      const rows = await pool.query(`SELECT count(*)::int AS n FROM policy_benefits WHERE policy_id=$1`, [other]);
+      assert.equal((rows.rows[0] as { n: number }).n, 0);
+      const left = await pool.query(`SELECT 1 FROM policy_analysis_cache WHERE account_id=$1 AND cache_key=$2`,
+        [account, `catalog-progress:benefits:${other}`]);
+      assert.equal(left.rows.length, 0, "no checkpoint is left to skip the pass on Try again");
+    });
 
     console.log(`Catalogue checkpoint regressions passed (${cases} cases).`);
   } finally {
