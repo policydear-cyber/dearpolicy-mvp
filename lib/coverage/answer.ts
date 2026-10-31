@@ -1,6 +1,7 @@
 import { confirmedOwnedCoverages, type OwnedCoverage } from "./facts";
 import { formatMoney } from "@/lib/format/currency";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatAnswer,ChatCitation } from "@/types";
 
 const CORE=["Hospitalisation","Hospital Cash","Death","Critical Illness","Early Critical Illness","Total Permanent Disability","Personal Accident","Disability Income","Outpatient"];
@@ -11,7 +12,7 @@ function cite(c:OwnedCoverage):ChatCitation{return{chunkId:`coverage:${c.id}`,po
  * A policy that was not uploaded, or a page that was not read, may still hold it. */
 const NOT_FOUND_IS_NOT_NONE="A policy that hasn't been uploaded, or a page that couldn't be read, may still include it.";
 async function personName(accountId:string,familyMemberId:string){
- const r=await query<{name:string|null}>("SELECT COALESCE(NULLIF(preferred_name,''),display_name) AS name FROM family_members WHERE id=$1 AND account_id=$2",[familyMemberId,accountId]);
+ const r=await query<{name:string|null}>("SELECT COALESCE(NULLIF(preferred_name,''),display_name) AS name FROM family_members WHERE id=$1 AND account_id=$2 AND "+activePredicate(),[familyMemberId,accountId]);
  return r.rows[0]?.name?.trim()||"this person";
 }
 export async function answerPortfolioQuestion(accountId:string,familyMemberId:string,question:string):Promise<ChatAnswer>{

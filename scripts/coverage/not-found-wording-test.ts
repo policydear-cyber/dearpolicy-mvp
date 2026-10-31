@@ -67,6 +67,13 @@ async function main() {
       const a = await answerPortfolioQuestion(account, priya, "How much death cover do I have?");
       assert.match(a.summary, /^Covered — Death is S\$200,000\.$/);
     });
+    await test("a deleted member is never named", async () => {
+      const gone = await person("Ghost Member", null, "child");
+      await query("UPDATE family_members SET lifecycle_state='pending_deletion' WHERE id=$1", [gone]);
+      const a = await answerPortfolioQuestion(account, gone, "How much death cover do I have?");
+      assert.ok(!/Ghost/.test(text(a)), text(a));
+      assert.match(a.summary, /for this person/);
+    });
     await test("a person in another household is never named (control)", async () => {
       const a = await answerPortfolioQuestion(randomUUID(), dewi, "How much death cover do I have?");
       assert.ok(!/Dewi/.test(text(a)), text(a));
