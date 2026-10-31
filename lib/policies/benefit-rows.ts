@@ -1,3 +1,4 @@
+import { PRINTED_FIGURE, printedNumber } from "@/lib/format/printed-number";
 import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
@@ -36,12 +37,10 @@ const NUMBER=String.raw`\d[\d,]*(?:\.\d{1,2})?`;
 // is read by statedCode() from what is printed, never defaulted.
 // Round 10: a figure a scan printed unclearly ("S$5O,000", "S$2,l84") is not a
 // figure at all -- never "S$5" or "S$2" (see lib/documents/messy.ts).
-const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)\s?(${NUMBER})(?![,.]?[OoIl|])`;
-function amount(raw:string|undefined){
-  if(!raw)return null;
-  const value=Number(raw.replace(/,/g,""));
-  return Number.isFinite(value)&&value>=0?value:null;
-}
+// The figure is captured whole, separators and all, and read by printedNumber: "€50.000" is fifty thousand, never
+// fifty, and a figure grouped in no known way ("12,50") is no amount at all.
+const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])Rp\.?|€|£|¥|₹|₱|฿)\s?(${PRINTED_FIGURE})(?![,.]?[OoIl|])`;
+function amount(raw:string|undefined){return printedNumber(raw);}
 /** A schedule of bare percentages states its basis once, in a heading:
  * "Schedule of Indemnities (% of Sum Insured)", "Compensation (% of S$5,000)".
  * Without it a cell reading "50%" is fifty percent of nothing, which is why a

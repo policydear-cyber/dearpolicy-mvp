@@ -1,3 +1,4 @@
+import { PRINTED_FIGURE, printedNumber } from "@/lib/format/printed-number";
 import { knownValue } from "@/lib/chat/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ClaimItem } from "@/types";
@@ -150,7 +151,9 @@ const AMOUNT_LABEL=/\b(?:amount|sum|benefit|payout|pay(?:able|ment)?|reimburse\w
 const COUNT_LABEL=/(?<!\bper\s+(?:policy\s+|calendar\s+)?)\b(?:number|no\.|period|days?|nights?|weeks?|months?|years?|visits?|times|stays?|age|sessions?|count)\b/iu;
 const COUNT_AFTER=/^\s*(?:claims?|visits?|times|sessions?|treatments?|consultations?|days?|nights?|weeks?|months?|years?|people|persons|children|trips?|occurrences?)\b/iu;
 const CURRENCY=String.raw`(?:S\$|US\$|A\$|HK\$|NZ\$|£|€|¥|₹|\$|(?<![\p{L}])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|NZD|JPY|CNY|RMB|INR|Rs\.?|PHP|IDR|Rp\.?|THB)\s?)`;
-const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(\d[\d,]*(?:\.\d+)?)\s*(million|mil|m|k|thousand)?(?![\d\p{L}])`,"giu");
+// The figure is taken whole, separators and all, and read in its own grouping (printedNumber): "€25.000" is twenty-five
+// thousand, never twenty-five, and "Rp50.000.000" is never fifty.
+const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(${PRINTED_FIGURE})\s*(million|mil|m|k|thousand)?(?![\d\p{L}])`,"giu");
 const WORD_FRACTIONS:Record<string,number>={half:0.5,"one half":0.5,"a half":0.5,quarter:0.25,"one quarter":0.25,"a quarter":0.25,"one third":1/3,"a third":1/3,"two thirds":2/3,"three quarters":0.75};
 const TENS:Record<string,number>={ten:10,twenty:20,"twenty-five":25,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,"seventy-five":75,eighty:80,ninety:90,"one hundred":100,hundred:100};
 /** Each figure a sentence prints, with where it is. A share is a fraction (50% = 0.5). */
@@ -165,7 +168,7 @@ function figuresIn(sentence:string,share:boolean){
     return out;
   }
   for(const m of sentence.matchAll(FIGURE)){
-    const base=Number(m[2].replace(/,/g,""));if(!Number.isFinite(base))continue;
+    const base=printedNumber(m[2]);if(base==null)continue;
     const unit=(m[3]??"").toLowerCase();
     out.push({value:base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1),start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
   }
@@ -225,7 +228,8 @@ export function shareCapInPassage(quote:string):{amount:number;currency:string|n
   const found:{amount:number;currency:string|null;cut:[number,number]}[]=[];
   for(const m of text.matchAll(FIGURE)){
     if(!m[1])continue;
-    const base=Number(m[2].replace(/,/g,""));if(!Number.isFinite(base)||base<=0)continue;
+    // A money figure grouped in no known way may be the cap: no cap is read rather than another figure taken for it.
+    const base=printedNumber(m[2]);if(base==null)return null;if(base<=0)continue;
     const unit=(m[3]??"").toLowerCase();
     const amount=base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1);
     const start=m.index!,end=start+m[0].length;
