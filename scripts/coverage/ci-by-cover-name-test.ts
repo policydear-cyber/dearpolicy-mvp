@@ -45,13 +45,44 @@ const ci = { product: "Kestrel CritiCare Critical Illness Plan" };
 for (const [benefit, want] of [
   ["Death Benefit", "Death"], ["Daily Hospital Cash", "Hospital Cash"], ["Accidental Death", "Personal Accident"], ["Total and Permanent Disability", "Total Permanent Disability"],
   ["Waiver of premium", null], ["Surrender value", null], ["Terminal illness", null], ["Maturity benefit", null], ["Funeral expenses", null], ["Return of premiums", null],
-  ["Surgical benefit", null], ["Personal liability", null],
+  ["Surgical benefit", null], ["Personal liability", null], ["Cancer hospital cash", "Hospital Cash"], ["Death due to cancer", "Death"], ["Kidney dialysis expenses reimbursed", null], ["Waiver of premium on cancer", null], ["Cancer surrender value", null],
 ] as const) {
   const got = categoryOfRow(row("kestrel", ci, benefit, 1000, "SGD"));
   t(`in a critical illness plan, "${benefit}" stays ${want ?? "uncategorised"}`, got === want, got);
 }
 t("a liability section of a critical illness plan stays out",
   categoryOfRow(row("kestrel", ci, "Cancer", 1000, "SGD", "Liability")) === null);
+
+// TE pr252 F1: under a takaful or Chinese-language critical illness cover, rows that are not an illness stay out, in any
+// language: death, disability, waivers, surrender values, refunds, cash, and periods.
+for (const cover of ["Maju Dread Disease Takaful", "Kestrel CritiCare Critical Illness Plan", "Pelan Penyakit Kritikal Maju", "Lotus 危疾保障"]) {
+  for (const benefit of ["Manfaat Kematian", "Kematian", "Hilang Upaya Menyeluruh dan Kekal", "Pengecualian Caruman", "Nilai Penyerahan", "Pemulangan sumbangan",
+    "Wang tunai", "身故保险金", "全残保障", "豁免保费", "Free-look period", "Grace period", "Waiting period", "Survival period", "Tempoh bertenang", "Policy term", "Sum assured"]) {
+    const got = categoryOfRow(row("t", { cover }, benefit, 90000, "MYR"));
+    t(`under "${cover}", "${benefit}" is never critical illness`, got !== "Critical Illness" && got !== "Early Critical Illness", got);
+  }
+}
+// Illnesses and procedures in Malay and Chinese, and surgery that is itself a covered condition, under each such cover.
+for (const cover of ["Pelan Penyakit Kritikal Maju", "Lotus 危疾保障", "Kestrel Major Illness Plan"]) {
+  for (const benefit of ["Serangan Jantung", "Strok", "Kegagalan Buah Pinggang", "癌症", "中风", "心脏病发作", "Coronary artery by-pass surgery", "Heart valve surgery", "Surgery to aorta"]) {
+    const got = categoryOfRow(row("t", { cover }, benefit, 90000, "MYR"));
+    t(`under "${cover}", "${benefit}" is critical illness`, got === "Critical Illness", got);
+  }
+}
+t("an intermediate-stage heart disease row is early critical illness",
+  categoryOfRow(row("t", { cover: "Kestrel CritiCare Critical Illness Plan" }, "Intermediate stage heart disease", 30000, "SGD")) === "Early Critical Illness");
+t("an early-stage row in Malay is early critical illness",
+  categoryOfRow(row("t", { cover: "Pelan Penyakit Kritikal Maju" }, "Kanser peringkat awal", 20000, "MYR")) === "Early Critical Illness");
+// A partial benefit beside the plan's sum (TE pr252 note): with the plan's own sum insured, the tile shows that sum; without
+// it, two different sums give no total, never a wrong one.
+{
+  const rows = [row("kestrel", ci, "Major Cancer", 150000, "SGD"), row("kestrel", ci, "Angioplasty", 30000, "SGD")];
+  const held = [{ coverKey: "kestrel", name: ci.product, documentId: "kestrel-doc", sumInsured: 150000, currency: "SGD" }];
+  const withSum = lumpSumParts(tileRows(categoryRows("Critical Illness", rows)), [], held, "Critical Illness");
+  t("a partial angioplasty row beside the sum: the tile shows the plan's sum insured", withSum.total === 150000, withSum);
+  const noSum = lumpSumParts(tileRows(categoryRows("Critical Illness", rows)), [], [], "Critical Illness");
+  t("without the plan's sum insured, two different sums give no total", noSum.total === null, noSum);
+}
 
 // A plan whose names never say critical illness is never made critical illness by its illness rows.
 for (const names of [{ product: "Harbour Term Life" }, { product: "Acme Health Shield", cover: "Acme Health Shield" }, { cover: "Critical Care Hospital Plan" }]) {

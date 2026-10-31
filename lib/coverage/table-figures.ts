@@ -130,24 +130,36 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
 }
 
 /** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified
- * severity", "Kanser", "Stroke") with no "critical illness" word in the row: the section it is printed under or the cover it
- * belongs to says what it is ("Critical Illness Benefits", "Acme CritiCare Critical Illness Plan", "Dread Disease Takaful").
- * Such a row is critical illness cover (or early critical illness, where the row or the cover names an early or
- * intermediate stage). Only these two categories are read from a section or cover name: a cover's name never makes a row
- * death, disability, accident or hospital cover. The row's own name decides first; a row whose name places it in another
- * category, or names another kind of payment (a waiver, premium, refund, cash or fund value, bonus, maturity, terminal
- * illness, death, disability, accident, hospital or medical bill, funeral), or cover for other people, keeps that and is
- * never moved to critical illness. The same for any insurer, market, language or currency. */
-const CI_NAMES = NAMES.filter(([name]) => name === "Early Critical Illness" || name === "Critical Illness");
-const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b/i;
-const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|units?|bonus\w*|dividends?|maturity|matures?|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|dies|died|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|surg\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily)\b/i;
-const ciOf = (text: string | null | undefined) => (text ? CI_NAMES.find(([, re]) => re.test(text))?.[0] ?? null : null);
+ * severity", "Kanser", "中风") with no "critical illness" word in the row: the section it is printed under or the cover it
+ * belongs to says what it is ("Critical Illness Benefits", "Acme CritiCare Critical Illness Plan", "Dread Disease Takaful",
+ * "Pelan Penyakit Kritikal", "危疾保障"). Such a row is critical illness cover, or early critical illness where the row
+ * names an early or intermediate stage.
+ *
+ * An allow-list (TE pr252 F1): a row moves only when its own name is an illness, condition or procedure from the closed
+ * list below, in English, Malay or Chinese. Every other row (a death, disability, waiver, surrender value, refund, cash,
+ * or a period such as free-look, grace, waiting or survival, in any language) stays where its own name puts it, or
+ * nowhere. Only these two categories are read from a section or cover name, the row's own name decides first, and a row
+ * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
+const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|penyakit\s+(?:kritikal|kritis|berbahaya)|major\s+illness(?:es)?)\b|危疾|重大疾病|重疾`, "iu");
+const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
+const CONDITION = new RegExp([
+  // English
+  String.raw`\b(?:cancers?|carcinoma\w*|malignan\w*|tumou?rs?|leuka?emia|lymphoma|sarcoma|melanoma|heart|myocardial|coronary|by-?pass|angioplasty|cardiomyopathy|aort(?:a|ic)|pulmonary|strokes?|cerebrovascular|kidney|renal|organ\s+transplants?|transplant\w*|bone\s+marrow|blindness|loss\s+of\s+(?:sight|hearing|speech|limbs?|independent\s+existence)|deafness|dementia|alzheimer\w*|parkinson\w*|motor\s+neuron\w*|multiple\s+sclerosis|muscular\s+dystrophy|paralysis|coma|encephalitis|meningitis|brain|head\s+trauma|burns?|liver|lungs?|respiratory|hepatitis|aplastic\s+an(?:a)?emia|lupus|hiv|poliomyelitis|apallic|neurological|endocarditis|myasthenia)\b`,
+  // Malay
+  String.raw`\b(?:kanser|barah|tumor|serangan\s+jantung|jantung|koronari|strok|angin\s+ahmar|buah\s+pinggang|ginjal|pemindahan\s+organ|sumsum\s+tulang|buta|kebutaan|pekak|bisu|lumpuh|kelumpuhan|koma|otak|hati|paru-paru|lecur|demensia|nyanyuk)\b`,
+  // Chinese
+  String.raw`癌|肿瘤|白血病|心脏|心肌|冠状动脉|中风|脑|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化`,
+].join("|"), "iu");
+const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
+const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;
 export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
   const own = categoryOfBenefit(r.benefit, r.section);
-  if (own || isLiability(r.benefit) || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim()))) || OTHER_PAYMENT.test(r.benefit)) return own;
-  const named = ciOf(r.section) ?? ciOf(r.cover) ?? ciOf(r.plan) ?? ciOf(r.product);
-  if (!named) return null;
-  return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : named;
+  if (own || !CONDITION.test(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
+    || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim())))) return own;
+  const names = [r.section, r.cover, r.plan, r.product].filter((x): x is string => !!x);
+  if (names.some((n) => EARLY_COVER.test(n))) return "Early Critical Illness";
+  if (!names.some((n) => CI_COVER.test(n))) return null;
+  return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : "Critical Illness";
 }
 
 /** One person's cover by whole-policy kind (Travel, Savings, Investment), the one rule Home and the Coverage page use: the
