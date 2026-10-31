@@ -91,10 +91,14 @@ async function main() {
     whole("Premium Plan Death Benefit S$500,000", 500000); whole("Contribution Takaful Plan Death Benefit RM200,000", 200000);
     whole("Mortgage loan protection — outstanding loan balance covered up to S$300,000", 300000); whole("Hospital & Surgical, 10% co-insurance, up to S$1,000,000 per year", 1000000);
     whole("Death Benefit: 101% of premiums paid or Sum Assured of S$200,000, whichever is higher", 200000); whole("Return of Premium Benefit S$12,000", 12000);
-    whole("身故保险金（保费豁免除外） HK$500,000", 500000); whole("Death benefit (excluding premium waiver) S$500,000", 500000);
+    // Strict: any not-a-sum term inside a bracket withholds, with no exemption for negations or the note's own figure.
+    held("身故保险金（保费豁免除外） HK$500,000", 500000); held("Death benefit (excluding premium waiver) S$500,000", 500000);
     held("身故保险金（保费豁免）HK$3,000", 3000); held("Death Benefit (Premium Waiver) S$3,000", 3000); held("Manfaat Kematian [Pengecualian Premium] RM3,000", 3000);
     held("Accidental Death (premiums waived on claim) RM100,000", 100000);
-    whole("Overseas Medical Expenses (Excess: S$100) S$500,000", 500000); whole("Hospitalisation (co-insurance 10% applies) S$1,000,000", 1000000); held("死亡保険金【保険料払込免除特約付】 ¥10,000,000", 10000000);
+    held("Overseas Medical Expenses (Excess: S$100) S$500,000", 500000); held("Hospitalisation (co-insurance 10% applies) S$1,000,000", 1000000);
+    held("Overseas medical expenses (no excess applies) S$250,000", 250000); held("Daily room & board (inclusive of GST) S$500", 500);
+    held("Critical Illness (Premium Plan) S$200,000", 200000); held("Hospital cash (fund value not affected) RM300", 300); held("Garantie décès (hors cotisations) 150 000 €", 150000);
+    whole("Accidental Death (worldwide, 24 hours) S$600,000", 600000); whole("Death Benefit (Plan B) RM300,000", 300000); whole("身故保险金（基本保额） HK$1,000,000", 1000000); held("死亡保険金【保険料払込免除特約付】 ¥10,000,000", 10000000);
     whole("Car Rental Excess Cover £2,000", 2000); whole("Premium ward hospital cash S$300/day", 300); whole("Death\tS$500,000", 500000);
   });
   t("a reader leaves a non-sum line out, withholds a doubtful figure, and passes a sum through unchanged", () => {
