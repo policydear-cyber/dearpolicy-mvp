@@ -150,13 +150,34 @@ const OTHER_WORDS = new RegExp([
   String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won(?!['’]t)|francs?|dirhams?|riyals?)\b`,
   String.raw`\bforeign\s+currenc|\bexchange\s+rates?\b`,
 ].join("|"), "i");
+/** Wording that speaks of an amount in no particular currency: "the dollar amount", "a dollar limit", "paid dollar for
+ * dollar" (AIA schedule: "impose limits on the dollar amount"). Taken out before OTHER_WORDS looks for another currency's
+ * "dollars"; only after a plain determiner or a paying verb, so "the US dollar amount" still counts. */
+const NO_PARTICULAR_DOLLAR = /\b(?:the|a|any|each|this|that|such|same|total|maximum)\s+dollar(?:[\s-]+(?:amounts?|values?|limits?|figures?|terms)\b|[\s-]+for[\s-]+dollar\b)|\b(?:paid|payable|reduced|reimbursed|offset|matched)\s+(?:on\s+a\s+)?dollar[\s-]for[\s-]dollar\b/gi;
+/** A sentence that, or whose neighbour, also names a place, a currency, money or funds may mean that place's dollar ("the
+ * dollar amount in US currency", "a dollar limit of 500 Canadian", "The dollar amount is shown below. All amounts are in US
+ * currency.", TE pr203 XN1-XN5 and XQ5-XQ7, Critic R392 L1): its wording keeps counting as maybe another currency.
+ * Short forms ("US", "U.S.", "HK", "NZ", "NT") count in capitals only, so "payable to us" is not a place. */
+const DOLLAR_PLACE_WORD = /\b(?:currenc(?:y|ies)|funds|mone(?:y|ys|ies)|countr(?:y|ies)|states|nation\w*|territor\w*|local|foreign|overseas|abroad|exchange|convert\w*|american|australian|aussie|canadian|hong\s*kong|new\s+zealand|kiwi|brunei\w*|taiwan\w*|fiji\w*|jamaica\w*|bahamian|bahamas|barbad\w*|belize\w*|bermud\w*|cayman|caribbean|liberian?|namibian?|guyan\w*|surinam\w*|trinidad\w*|tobago|zimbabwe\w*|solomon|tuval\w*|kiribati|ecuador\w*|salvador\w*|panama\w*|timor\w*|micronesia\w*|marshall|palau\w*)\b/i;
+const DOLLAR_PLACE_CAPS = /(?<![A-Za-z])(?:U\.?S\.?(?:A\.?)?|HK|NZ|NT)(?![A-Za-z])/;
+/** The text with NO_PARTICULAR_DOLLAR wording taken out, sentence by sentence, only from sentences that, with the sentence
+ * before and the one after, name no place, currency, money or funds. A sentence ends at ".", "!", "?" or ";" before a space
+ * or line break, or at a blank line; a single line break does not end one, since PDF text wraps mid-sentence ("impose
+ * limits on the\ndollar amount"). A dollar named only by a place off the list ("Guam") is a known limit. */
+function withoutPlainDollarWording(t: string): string {
+  const sentences = t.split(/(?<=[.!?;])\s+|\n[ \t]*\n/);
+  const placed = sentences.map((sentence) => DOLLAR_PLACE_WORD.test(sentence) || DOLLAR_PLACE_CAPS.test(sentence));
+  return sentences
+    .map((sentence, i) => (placed[i - 1] || placed[i] || placed[i + 1] ? sentence : sentence.replace(NO_PARTICULAR_DOLLAR, " ")))
+    .join("\n");
+}
 /** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
  * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
 export function documentCurrency(doc: HouseholdDocument): string | null {
   if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
   const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
   const sgd = /\bSGD\b|(?<![A-Za-z])S\$|Singapore\s+dollars?/i.test(t);
-  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
+  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(withoutPlainDollarWording(t)) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
   const found = sgd && !other ? "SGD" : null;
   docCurrencies.set(doc, found);
   return found;
