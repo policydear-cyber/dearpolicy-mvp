@@ -10307,3 +10307,7 @@ Gate green on 427f03f (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 2
 M1 (same shape as R466 H1, narrower): "We waive future premiums. CI benefit is paid within 30 days." still says "This benefit pays no amount itself". The filler "<abbreviation> benefit is paid within" lets a second payout through.
 M2: "We pay the death benefit in advance, or the TPD Benefit." gets the advance line. The new filler "or" joins an alternative payout.
 Fix: "is paid ..." is filler only when its subject is it/this benefit (never another named benefit), and "or" is filler only between two filler words (for example "payor or policyowner"). Neither may come before a word naming a benefit. With those two closed, READY.
+
+## R469: #230 ecc71f5: READY
+Gate green (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). R468 M1 and M2 are fixed. Across p230/p230b/p230c, the only rows that still get a reason are accurate (higher of value or premiums, return of premiums or cash value, whole sum to the Policyowner, advance with the rest of the death benefit continuing).
+Low (contrived, follow-up only), probe /mnt/project-files/critic/p230d-reasons4.mts: "Premium waiver; it is paid as the TPD Benefit." still says "pays no amount itself", and "We pay the death benefit in advance, or (b) the ADB Benefit." still gets the advance line, because the single letter "(b)" is counted as filler before a benefit word. Fix by also refusing "is paid as <benefit>" and by counting "(b) the X Benefit" inside the 3-word benefit window.
