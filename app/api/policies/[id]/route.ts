@@ -203,7 +203,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // What the document's own benefit reading found it to be (lib/policies/document-filter.ts readAsPolicyDocument).
       const readings = await client.query<{ ok: boolean }>("SELECT to_regclass('public.benefit_readings') IS NOT NULL AS ok");
       const reading = readings.rows[0]?.ok ? await client.query<{ ok: boolean }>(
-        `SELECT ${READING_POLICY_SQL} AS ok FROM policies p WHERE p.id=$1 AND p.account_id=$2`, [id, ctx.householdId]) : null;
+        `SELECT ${READING_POLICY_SQL} AS ok FROM policies p WHERE p.id=$1 AND p.account_id=$2 AND ${activePredicate("p")}`, [id, ctx.householdId]) : null;
       return { policy: { ...policy.rows[0], reading_policy: reading?.rows[0]?.ok === true }, members: members.rows, detected: detected.rows, coverages: coverages.rows, referenceCoverages: referenceCoverages.rows, premiums: premiums.rows };
     });
     if (!result) return NextResponse.json({ error: "Document not found" }, { status: 404 });
