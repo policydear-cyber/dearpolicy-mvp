@@ -56,3 +56,23 @@ test("a passage with no fixed amount says why, for any policy: a premium waiver,
     "the cash value of the policy", "We pay the Sum Insured or the policy value, whichever is higher.", "Nilai tunai: we pay the surrender value of the policy."])
     assert.equal(why(q), "The passage on page 7 works this out from the policy's value or the premiums paid at the time, so the document prints no fixed amount for it.", q);
 });
+
+test("a reason is never given when it would mislead: a waiver not of premiums, a printed figure, a denied advance, premiums paid as a condition, a part of the sum (TE pr230)", async () => {
+  const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
+  for (const [q, bad] of [
+    ["We waive the excess for claims made at a panel hospital.", /waives future premiums/],
+    ["The waiting period is waived for accidents and the benefit is payable from day one.", /waives future premiums/],
+    ["Waiver of the survival period applies for this condition.", /waives future premiums/],
+    ["We waive all future premiums and pay a lump sum of 5,000 SGD on diagnosis.", /waives future premiums/],
+    ["Premi dibebaskan dan kami membayar Rp50.000.000 apabila didiagnosis.", /waives future premiums/],
+    ["We waive future premiums and pay Rs 5,00,000 on the first claim.", /waives future premiums/],
+    ["We waive future premiums and pay CHF 20,000 on diagnosis.", /waives future premiums/],
+    ["This benefit is in addition to, and is not an advance of the death benefit.", /in advance from the death benefit/],
+    ["An acceleration of the death benefit, up to fifty thousand dollars.", /in advance from the death benefit/],
+    ["Accidental death benefit is payable provided all premiums paid are up to date.", /policy's value/],
+    ["This claim does not reduce the policy value. We pay the sum assured on accidental death.", /policy's value/],
+    ["We pay the sum insured for each child who is injured in the same accident.", /whole sum insured/],
+    ["We pay the sum assured in ten yearly instalments.", /whole sum insured/],
+    ["We pay the sum assured of the base plan only, if the rider sum is higher.", /whole sum insured/],
+  ] as const) assert.doesNotMatch(unreadAmountLine(12, q), bad, q);
+});
