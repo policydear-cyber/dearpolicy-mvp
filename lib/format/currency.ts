@@ -50,19 +50,41 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
     "₩": "KRW",
     "฿": "THB",
     "RP": "IDR",
+    // Signs of one currency only, from a closed list (cross-page check, 31 Oct: "R$" was read as no currency). "Rs", "kr",
+    // "Fr." and a bare "$" are left out: several countries print them.
+    "R$": "BRL",
+    "MX$": "MXN",
+    "NT$": "TWD",
+    "₫": "VND",
+    "₺": "TRY",
+    "₪": "ILS",
+    "₦": "NGN",
+    "₴": "UAH",
+    "₽": "RUB",
+    "৳": "BDT",
+    "ZŁ": "PLN",
+    "KČ": "CZK",
+    "KD": "KWD",
+    "BD": "BHD",
+    "S/": "PEN",
+    "S/.": "PEN",
   };
 
   if (aliases[compact]) return aliases[compact];
-  if (/^[A-Z]{3}$/.test(compact)) {
-    try {
-      // Intl is the final authority for whether the runtime accepts the code.
-      new Intl.NumberFormat("en", { style: "currency", currency: compact }).format(0);
-      return compact;
-    } catch {
-      return fallback;
-    }
-  }
+  if (/^[A-Z]{3}$/.test(compact)) return isIsoCurrency(compact) ? compact : fallback;
   return fallback;
+}
+
+/** Whether a three-letter code is a real currency: the runtime's own closed list of ISO 4217 codes ("TPD" or "MED" is
+ * never one, though Intl formats any three letters). Where the runtime has no list, a code it formats is taken. */
+let isoList: Set<string> | null | undefined;
+export function isIsoCurrency(code: string): boolean {
+  if (isoList === undefined) {
+    try { isoList = new Set((Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("currency") ?? []); if (!isoList.size) isoList = null; }
+    catch { isoList = null; }
+  }
+  if (isoList) return isoList.has(code);
+  try { new Intl.NumberFormat("en", { style: "currency", currency: code }).format(0); return true; } catch { return false; }
 }
 
 /** A money sign or code printed before a figure, in any market: "S$", "US$", "RM", "£", "€", "MYR", "GBP", or a bare "$".

@@ -195,6 +195,7 @@
     "documents:failed-advice-test": "node --import tsx scripts/failed-document-advice-regressions.ts",
     "chat:failed-document-test": "node --import tsx scripts/chat-failed-document-regressions.ts",
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",
+    "format:currency-markers-test": "node --import tsx scripts/format/currency-markers-test.ts",
     "policies:plan-choice-test": "node --import tsx scripts/plan-choice-regressions.ts",
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
     "r7:answers-test": "node --import tsx scripts/r7-answers-regressions.ts",

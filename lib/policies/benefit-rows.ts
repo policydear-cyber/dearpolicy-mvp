@@ -1,6 +1,6 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { explicitCurrency } from "@/lib/chat/policy-analysis";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { isIsoCurrency, normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
 
@@ -78,6 +78,26 @@ function printedMarker(text:string):string|null{
   if(/\bSG\$/i.test(text))return "SGD";
   if(/\bNZ\$/i.test(text))return "NZD";
   if(/\bCA?\$/.test(text))return "CAD";
+  // More signs of one currency only (cross-page check, 31 Oct: "R$ 2.000" had no currency). "Rs", "kr" and "Fr." are left out.
+  if(/(?:^|[^A-Za-z])R\$/.test(text))return "BRL";
+  if(/(?:^|[^A-Za-z])MX\$/.test(text))return "MXN";
+  if(/₺/.test(text))return "TRY";
+  if(/₪/.test(text))return "ILS";
+  if(/₦/.test(text))return "NGN";
+  if(/₴/.test(text))return "UAH";
+  if(/₽/.test(text))return "RUB";
+  if(/৳/.test(text))return "BDT";
+  if(/\d\s?zł|zł\s?\d/i.test(text))return "PLN";
+  if(/\d\s?Kč|Kč\s?\d/.test(text))return "CZK";
+  if(/(?:^|[^A-Za-z])KD\s?\d/.test(text))return "KWD";
+  if(/(?:^|[^A-Za-z])BD\s?\d/.test(text))return "BHD";
+  if(/(?:^|[^A-Za-z])S\/\.?\s?\d/.test(text))return "PEN";
+  // Any other ISO 4217 code printed beside a figure ("BRL 2.000", "2.000 ZAR"), from the runtime's closed list.
+  for(const m of text.matchAll(/(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])/g)){
+    const near=text.slice(Math.max(0,m.index!-3),m.index!+6);
+    // Codes that are also printed words ("ALL 3 PLANS", "TOP 10") or test codes are never read this way.
+    if(/\d/.test(near)&&isIsoCurrency(m[1])&&!/^(?:ALL|TOP|CUP|BOB|SOS|GEL|X..)$/.test(m[1]))return m[1];
+  }
   return null;
 }
 /** An amount with its stated currency; without one, the figure is labelled as
