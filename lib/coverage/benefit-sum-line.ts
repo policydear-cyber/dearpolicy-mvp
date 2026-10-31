@@ -121,6 +121,25 @@ export type BenefitSumKind = "sum" | "not_a_sum" | "withhold";
 export function benefitSumKind(line: { evidenceText?: string | null; amount?: number | null }): BenefitSumKind {
   const label = lineLabel(line.evidenceText, line.amount ?? null);
   if (!label) return "sum";
+  const kind = kindOfLabel(label);
+  // A bracketed note that names a premium, waiver, value or share, with no figure of its own and not negated
+  // ("Death Benefit (Premium Waiver)", "身故保险金（保费豁免）"), may be saying what the figure is: withhold it. A note
+  // with its own figure describes that figure ("(Excess: S$100)"); a negated one excludes it ("(excluding premium waiver)").
+  return kind === "sum" && bracketNamesNotASum(label) ? "withhold" : kind;
+}
+
+const BRACKETED = /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|［([^［］]*)］|【([^【】]*)】/gu;
+const NEGATED = /\b(?:no|not|non|without|excluding|except|excl\.?|other\s+than|ohne|sans|hors|tanpa|tidak|kecuali|bukan)\b|除外|不含|不包括|以外/iu;
+function bracketNamesNotASum(label: string): boolean {
+  for (const m of label.matchAll(BRACKETED)) {
+    const note = m.slice(1).find((g) => g != null) ?? "";
+    if (/\d/.test(note) || NEGATED.test(note)) continue;
+    if (HOLDS_NOT_A_SUM.test(note) || /保费|保費|豁免|保険料/u.test(note)) return true;
+  }
+  return false;
+}
+
+function kindOfLabel(label: string): BenefitSumKind {
   const head = labelHead(label);
   if (!head) {
     // A figure on its own after a comma belongs to the row's first words: a share or premium named there withholds it
