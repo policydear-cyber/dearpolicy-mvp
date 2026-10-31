@@ -10471,3 +10471,18 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 - The "ended" state is removed. Only a printed lapse is reported.
 - M1: a passed end date is now "in_force", and the days-left branch prints "ends on <date> — -27 days from today".
 - M2: it conflicts with #253. Suggest also dropping the age-based "not confirmed current" line.
+
+## R501 — #260 c637f9df (READY)
+- H1 fixed: "2.500%", "Multiplier 1.250", "Section 1.500", "Version 3.100", "Rate 0.750", "Table 2.000", "Policy year 2.026", "3.5 times" no longer verify as thousands.
+- Currency-adjacent figures (S$1.250, €18.500,50, Rp4.250.000, CHF 1'250.00, 1 250,00 €) still verify. Probe: critic/p260-amount.mts.
+- Full gate green; security:* clean apart from the env-only tls/launch-guard.
+
+## R502 — #253 94d1f32, #256 9c3e18d, #257 f254c0d3, #258 a99fefe4 (READY)
+- Full gate green on each head. DB suites ran on a schema'd scratch DB (not "skipped"); lifecycle-query-guard passed on #253 and #256.
+- #253 and #257 conflict on one line at policy-answer.ts ~1591. Whichever merges second needs a refresh.
+
+## R503 — #261 a246bca7 (NOT ready, High)
+- The not-a-benefit-sum filter tests the whole label before the figure. Any premium, excess, deductible, GST or waiver word anywhere in a real cover's row drops that cover from Home, claims and chat, so the person reads as not covered.
+- 13 of 15 real-cover probes dropped, e.g. "Medical Expenses (Excess: S$100) S$500,000", "Deductible S$3,500, Annual Limit S$1,000,000", "101% of premiums paid or Sum Assured of S$200,000", "Krankheitskosten ohne Selbstbeteiligung 100.000 €". Travel benefits also dropped: "Rental Vehicle Excess", "Excess Waiver Benefit".
+- M1: when the stored figure isn't found, the label of the first figure decides.
+- Fix: judge only the label head next to the figure, with a closed keep-list for cover words. Probe: critic/p261-sumline.mts.
