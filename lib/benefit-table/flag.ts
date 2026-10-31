@@ -15,12 +15,20 @@ export type BenefitTableStatus = { enabled: boolean; reason: string; production:
 const productionBuild = (env: NodeJS.ProcessEnv) => isProduction(env) || (env.VERCEL ?? "").trim() !== "" || (env.VERCEL_ENV ?? "").trim() !== "";
 
 /** accountId: whose request this is. Even switched on, the table is only for the accounts in DEARPOLICY_ALPHA_ACCOUNTS
- * (lib/launch/alpha.ts); in production a call that names no account is off. */
+ * (lib/launch/alpha.ts); in production a call that names no account is off.
+ *
+ * DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS=1 opens the table to every signed-in household instead of the alpha list. It
+ * changes nothing else: DEARPOLICY_BENEFIT_TABLE (and, in production, DEARPOLICY_BENEFIT_TABLE_ALLOW_PRODUCTION) must
+ * still be set, a call that names no account is still off, and the simple chat stays limited to the alpha list. */
 export function benefitTableStatus(env: NodeJS.ProcessEnv = process.env, accountId?: string | null): BenefitTableStatus {
   const production = productionBuild(env);
   if (!truthy(env.DEARPOLICY_BENEFIT_TABLE)) return { enabled: false, production, reason: "DEARPOLICY_BENEFIT_TABLE is not set (default off)" };
   if (production && !truthy(env.DEARPOLICY_BENEFIT_TABLE_ALLOW_PRODUCTION))
     return { enabled: false, production, reason: "DEARPOLICY_BENEFIT_TABLE is refused in a production build unless DEARPOLICY_BENEFIT_TABLE_ALLOW_PRODUCTION=1" };
+  if (truthy(env.DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS)) {
+    if (!accountId || !accountId.trim()) return { enabled: false, production, reason: "no account named (the table is per household)" };
+    return { enabled: true, production, reason: "enabled for every account by DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS" };
+  }
   if (!alphaAccountAllowed(accountId, env)) return { enabled: false, production, reason: "this account is not in DEARPOLICY_ALPHA_ACCOUNTS" };
   return { enabled: true, production, reason: production ? "enabled in production by DEARPOLICY_BENEFIT_TABLE_ALLOW_PRODUCTION" : "enabled by DEARPOLICY_BENEFIT_TABLE" };
 }

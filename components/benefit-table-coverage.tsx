@@ -41,7 +41,10 @@ function benefitParts(row:Row,name:(r:Row)=>string){
 /** A figure with no currency, in one fixed format so server and browser renders agree (Critic R376 L2). */
 const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2});
 
-function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
+/** reading: some document of the household is still being read, so benefits may yet arrive. With nothing being read, a
+ * cover with no benefit rows is never said to be "still being read": its schedule was read, and what it pays is in a
+ * document not uploaded yet (or its benefits could not be read). */
+function CoverCard({cover,rows,reading}:{cover:Cover;rows:Row[];reading:boolean}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
   const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
@@ -54,7 +57,7 @@ function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
-    {!rows.length?<p className="muted cov-reading">Its benefits are still being read.</p>:<>
+    {!rows.length?<p className="muted cov-reading">{reading?"Its benefits are still being read.":"No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays."}</p>:<>
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
@@ -124,7 +127,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {people.length>1?<nav className="cov-people" aria-label="People">{people.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {people.map(person=><section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
-      {person.covers.map(c=><CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={person.rows.filter(r=>r.coverKey===c.coverKey)}/>)}
+      {person.covers.map(c=><CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={person.rows.filter(r=>r.coverKey===c.coverKey)} reading={waiting.length>0}/>)}
       <TellUs person={person}/>
     </section>)}
     {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length?<section className="cov-person" data-testid="table-also-found">
