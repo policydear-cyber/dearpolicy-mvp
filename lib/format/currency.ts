@@ -52,6 +52,9 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
     "RP": "IDR",
     // Signs of one currency only, from a closed list (cross-page check, 31 Oct: "R$" was read as no currency). "Rs", "kr",
     // "Fr." and a bare "$" are left out: several countries print them.
+    "NTD": "TWD",
+    "YEN": "JPY",
+    "NIS": "ILS",
     "SGD$": "SGD",
     "RP.": "IDR",
     "EURO": "EUR",

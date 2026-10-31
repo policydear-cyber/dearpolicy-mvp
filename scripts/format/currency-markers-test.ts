@@ -24,13 +24,14 @@ for (const [text, want] of [
 ] as const) t(`${text} is ${want}`, statedCurrencyCode(text) === want, statedCurrencyCode(text));
 for (const text of ["TPD 1,000", "ALL 3 PLANS 1,000", "TOP 10 benefits 5,000", "Benefit $5,000", "Rs 5,00,000", "kr 10 000", "Fr. 1'000", "MED 2,000", "Plan B 50,000",
   // Strict first (coordinator, 31 Oct): a code only directly beside a money-shaped figure; "KD"/"BD" are read later, not now.
-  "TRY 3 times a year", "Benefit KD 1.500", "Benefit BD 1.500", "ZAR 12 visits", "Code AED-7", "S/N 12345", "S/ 12"])
+  "TRY 3 times a year", "Benefit KD 1.500", "Benefit BD 1.500", "ZAR 12 visits", "Code AED-7", "IRR 4.25% illustrated", "IRR 12.50% p.a.", "AMD 3 stages", "PEN 2 days", "SAR 1.5x", "MOP 2 visits", "MAD 5", "BAM 3", "MDL 2", "ANG 3", "NPR 2", "AED 2 units on site", "Plan PLN 3: 20,000", "Policy no. S/ 12345 issued", "KD 3 days hospital", "S/N 12345", "S/ 12"])
   t(`${text} names no currency`, statedCurrencyCode(text) === null, statedCurrencyCode(text));
 
 for (const label of ["TPD", "TL", "Rs", "MED", "KD", "dollars?"]) {
   t(`unknown label ${label} stays unknown, never SGD`, normalizeCurrencyCode(label) === "" && statedCurrencyCode(label) === null, normalizeCurrencyCode(label));
 }
 t("an empty value still takes the caller's fallback", normalizeCurrencyCode("", "SGD") === "SGD" && normalizeCurrencyCode(null, "") === "");
+t("NTD, YEN and NIS normalise to TWD, JPY and ILS", normalizeCurrencyCode("NTD", "") === "TWD" && normalizeCurrencyCode("yen", "") === "JPY" && normalizeCurrencyCode("NIS", "") === "ILS");
 t("R$ normalises to BRL", normalizeCurrencyCode("R$", "") === "BRL");
 t("zł normalises to PLN", normalizeCurrencyCode("zł", "") === "PLN");
 t("a lower-case code normalises", normalizeCurrencyCode("brl", "") === "BRL");
