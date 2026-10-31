@@ -7,6 +7,7 @@ import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,namesOnlyAPlanCell,resolveStoredRules } from "@/lib/insurance/scale-limit";
+import { shareCapInPassage } from "@/lib/insurance/cover-conditions";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -546,6 +547,14 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&coverage.currencyVerified===true&&currency===normalizeCurrencyCode(coverage.currency)){
     amount=Math.round(coverage.amount*benefit.formulaValue*100)/100;
     basis=Math.round(benefit.formulaValue*1000)/10+"% of verified "+formatMoney(coverage.amount,currency);
+    // A share the passage caps ("10% of Sum Insured, up to S$25,000") is paid up to the cap, and only when the cap is in
+    // the cover's own currency; a passage with any other bound gives no figure (see shareBound).
+    const bound=benefit.reviewedAt?{kind:"none" as const}:shareBound(benefit.quote);
+    if(bound.kind==="cap"&&bound.currency===currency&&amount>bound.amount){
+      basis="Lower of "+basis+" and the printed cap of "+formatMoney(bound.amount,currency);amount=bound.amount;
+    } else if(bound.kind==="cap"&&bound.currency===currency){
+      basis+=", within the printed cap of "+formatMoney(bound.amount,currency);
+    } else if(bound.kind!=="none"){amount=null;basis="";missing.push("a cap this passage prints in the cover's own currency");}
   } else if(benefit.formulaKind==="fixed"&&benefit.formulaValue!=null){
     amount=benefit.formulaValue;basis="Fixed benefit in the quoted clause";
   } else if(benefit.formulaKind==="expense_cap"&&benefit.formulaValue!=null&&benefit.factKey){
@@ -738,6 +747,21 @@ const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
 ].join("|"),"iu");
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
+/** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one
+ * cap with its currency ("up to S$25,000", "RM5,000, whichever is lower") and nothing else that may bound the share once
+ * that cap is taken out, so the share is paid up to the cap. "unsure": anything else, and the share is not used. */
+export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|{kind:"unsure"};
+export function shareBound(quote:string|null|undefined):ShareBound{
+  const text=quote??"";
+  if(!PRINTS_AN_AMOUNT.test(normalText(text)))return {kind:"none"};
+  const cap=shareCapInPassage(text);
+  // A cap per day, week or month is not a cap on a lump sum, and an amount taken off is another bound.
+  if(!cap||!cap.currency||PRINTS_AN_AMOUNT.test(normalText(cap.rest))||/\b(?:per|a|each|every)\s+(?:day|night|week|month|visit)\b|\b(?:daily|weekly|monthly)\b/i.test(cap.rest)
+    ||/\b(?:less|minus|greater|lower|lesser|bonus|previous|deduct\w*|reduc\w*|after)\b/i.test(cap.rest))
+    return {kind:"unsure"};
+  return {kind:"cap",amount:cap.amount,currency:cap.currency};
+}
+export const shareCapNote=(amount:number,currency:string)=>"Paid up to "+formatMoney(amount,currency)+", the cap this passage prints.";
 /** A rule the document states in a sentence rather than in a table cell.
  *
  * "Receive 150% of your coverage amount if Total and Permanent Disability is
@@ -784,8 +808,10 @@ export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)&&!namesOnlyAPlanCell(benefit.benefitName,benefit.quote)))
     .map(benefit=>{
       // A stored share whose passage also prints an amount is withheld when read, unless a person confirmed it.
-      if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&PRINTS_AN_AMOUNT.test(normalText(benefit.quote??"")))
+      const bound=benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt?shareBound(benefit.quote):{kind:"none" as const};
+      if(bound.kind==="unsure")
         return {...benefit,formulaKind:"none" as const,formulaValue:null,conditions:[...new Set([...benefit.conditions,CAPPED_SHARE_NOTE])]};
+      if(bound.kind==="cap")return {...benefit,conditions:[...new Set([...benefit.conditions,shareCapNote(bound.amount,bound.currency)])]};
       // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
       // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
       // (Critic R351 H1).
@@ -806,7 +832,7 @@ export function validateCatalogFormula(input:{
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
-  if(input.kind==="sum_insured"&&PRINTS_AN_AMOUNT.test(quote))return none;
+  if(input.kind==="sum_insured"&&shareBound(input.quote).kind==="unsure")return none;
   // The currency is what the quoted clause writes. A sum-insured percentage
   // quotes none -- it is paid in the cover's own currency, which is verified
   // against the personal schedule when used. Nothing is defaulted to SGD, and
@@ -816,7 +842,9 @@ export function validateCatalogFormula(input:{
   if(quoted&&declared&&quoted!==declared)return none;
   const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
-    if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
+    // A choice of the lower that belongs to a printed cap ("or RM5,000, whichever is lower") is read by shareBound.
+    const bound=shareBound(input.quote);
+    if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(bound.kind==="cap"?normalText(shareCapInPassage(input.quote)?.rest??""):quote))return none;
     if(prevailingNotProved(quote,input.benefitName))return none;
     const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
     const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);
