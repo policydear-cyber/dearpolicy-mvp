@@ -9998,3 +9998,22 @@ Every gate below was the free gate (network blocked, keys stripped): own test, s
     - "of the basic policy": another policy's sum.
     - "reduced to 5% after age 65": write-time validation already refuses "reduced", so only stale rows can carry it.
   - Not amount bounds: "payable once only" and "for each child". These are fine.
+
+## R416 #211 f8b9f4b9 (31 Oct): CHANGES (High, money)
+
+Probes call shareBound directly on made-up passages. "cap" means the share is paid up to that figure.
+
+- **H1 (overstatement): the rest of the passage is still checked with a deny-list.**
+  - "up to S$25,000 for adults; for children 50% of that" → cap 25,000. A child's claim is shown double.
+  - "up to S$25,000 in total for all early stage claims" and "up to S$25,000 per lifetime across all policies with us" → cap 25,000. These are aggregate caps, so the full cap is shown even after earlier claims used part of it (CAP_TAIL accepts "in total/aggregate/lifetime").
+- **H2: SHARE_PHRASE blanks every share phrase, not just one.** "…, up to S$25,000; the benefit is 20% of Sum Insured if diagnosed before age 18" → cap, because the second share disappears from `rest`.
+- **M1 (wrong amount): the cap can come from another benefit.**
+  - "10% of Sum Insured. Ambulance fees up to S$500." → cap 500, read from another benefit's sentence.
+  - "plus 5% for each year in force", "doubled if the event happens overseas" and "increased by 10% each year" → cap 25,000, although the passage changes the amount.
+- Correctly unsure: two caps, (S$10,000 for each child), minimum, "exceeds", "whichever is higher", a cap by reference, a second-currency figure, "overall limit … under this rider", and "with no limit on the number of claims". A US$ cap on an SGD cover gives no figure.
+- **Fix (allow-list, structural):**
+  - Exactly one share phrase.
+  - The cap must sit in the share's own sentence.
+  - After blanking the share and the cap, `rest` may hold only the row's own name words, punctuation, and a small harmless set: payable, paid, per/for each claim, life, insured person, policy year, event, only.
+  - Anything else is unsure. That includes any %, multiplier or change word, and any aggregate word (total, aggregate, all, across, lifetime, combined, overall).
+  - Add the probes above as tests.
