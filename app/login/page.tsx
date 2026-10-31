@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import { PRIVACY_NOTICE_FINAL } from "@/lib/privacy/notice-status";
 import { useSearchParams } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
 
@@ -109,9 +110,11 @@ function LoginForm() {
       <p>
         New here? <Link href="/signup">Create a household</Link>
       </p>
-      <p className="field-hint">
-        <Link href="/privacy">How we handle your information</Link>
-      </p>
+      {PRIVACY_NOTICE_FINAL ? (
+        <p className="field-hint">
+          <Link href="/privacy">How we handle your information</Link>
+        </p>
+      ) : null}
     </div>
   );
 }

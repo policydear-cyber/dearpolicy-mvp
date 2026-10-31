@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { privacyNoticeVisible } from "@/lib/privacy/notice-status";
 
 /**
  * The privacy notice for the invite-only beta, in plain English. Public (middleware.ts OPEN_PATHS), so a person can read
  * it before signing up. DRAFT: every passage marked "To confirm" needs DC's review before the beta opens; the legal
  * wording (who the operator is, which law applies, contact, where data is kept, backup retention) is DC's to settle.
- * Static text only: it reads nothing from the database and calls no service.
+ * Static text only: it reads nothing from the database and calls no service. Until DC settles the wording it is not
+ * published (lib/privacy/notice-status.ts): the page is "not found" unless the draft preview is switched on.
  */
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Privacy · DearPolicy" };
 
 /** A passage DC still has to confirm, shown plainly so nobody mistakes the draft for the final text. */
@@ -14,6 +18,7 @@ function ToConfirm({ children }: { children: React.ReactNode }) {
 }
 
 export default function PrivacyPage() {
+  if (!privacyNoticeVisible()) notFound();
   return (
     <div className="page" style={{ maxWidth: 720, paddingTop: 48 }} data-testid="privacy-notice">
       <div className="eyebrow">PRIVACY NOTICE · BETA DRAFT</div>
@@ -57,7 +62,8 @@ export default function PrivacyPage() {
           <li><strong>Anthropic</strong> reads your documents and writes the answers to your questions, using its Claude models. The pages and questions it needs are sent to it for that purpose only. <ToConfirm>Anthropic&rsquo;s commercial terms say it does not use information sent through its API to train its models; check the current terms and the retention period before publishing.</ToConfirm></li>
           <li><strong>Supabase</strong> stores your records and files and handles signing in.</li>
           <li><strong>Vercel</strong> hosts the website.</li>
-          <li><ToConfirm>a file-scanning service, if one is switched on to check uploads for malware.</ToConfirm></li>
+          <li><strong>Pinecone</strong> keeps passages of your documents, as search entries, so the right page can be found when you ask a question. This is used only when that search is switched on, and a document&rsquo;s passages are removed from it when you delete the document.</li>
+          <li><strong>Checking uploads for malware:</strong> when this is switched on, only a fingerprint of each file (a code worked out from the file, from which the file cannot be rebuilt) is checked with VirusTotal. The file itself is not sent. <ToConfirm>whether malware checking is switched on for the beta (it is off today), and that files are never uploaded to VirusTotal.</ToConfirm></li>
         </ul>
         <p>Your information is kept in <ToConfirm>the country or region where the database and files are hosted.</ToConfirm></p>
       </section>
@@ -74,7 +80,7 @@ export default function PrivacyPage() {
       <section className="section">
         <h2>Removing your information</h2>
         <ul>
-          <li><strong>A document:</strong> delete it from Documents. Its file is removed from storage, and it is no longer used for anything.</li>
+          <li><strong>A document:</strong> delete it from Documents. Its file is removed from storage, and everything read from it is deleted: its page text, the passages used to search it (in our database and in Pinecone), and the covers, amounts, names and policy numbers taken from it. We keep only a record that a document was deleted and when, with none of its content. If a step cannot finish straight away, it is retried automatically until it does.</li>
           <li><strong>Your whole household:</strong> the owner can choose &ldquo;Permanently delete household&rdquo;. Its family profiles, documents, claims and chats are removed, and their files are deleted from storage straight after.</li>
           <li><strong>A copy first:</strong> the owner can download an export of the household before deleting it.</li>
           <li><strong>Your sign-in:</strong> to close the account itself, contact us at the address above.</li>

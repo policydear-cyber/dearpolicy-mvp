@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { PRIVACY_NOTICE_FINAL } from "@/lib/privacy/notice-status";
 import { customerMessage } from "@/components/customer-text";
 
 /** Form fields carry suppressHydrationWarning: browser extensions and
@@ -91,9 +92,11 @@ export default function SignupPage() {
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href="/login">Sign in</Link>
       </p>
-      <p className="field-hint">
-        By creating a household you agree to how we handle your information: <Link href="/privacy">privacy notice</Link>.
-      </p>
+      {PRIVACY_NOTICE_FINAL ? (
+        <p className="field-hint">
+          By creating a household you agree to how we handle your information: <Link href="/privacy">privacy notice</Link>.
+        </p>
+      ) : null}
     </div>
   );
 }
