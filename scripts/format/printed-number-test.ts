@@ -23,7 +23,8 @@ test("every common grouping reads as printed; an ambiguous one reads as nothing"
   assert.equal(printedNumber("1,50,000"), null);
   assert.equal(printedNumber("5,00,000", null, { lakh: true }), 500000);
   assert.equal(printedNumber("1,50,00,000", "INR"), 15000000);
-  assert.equal(printedNumber("1.250", null, { scaled: true }), 1.25);
+  assert.equal(printedNumber("1.25", null, { scaled: true }), 1.25);
+  for (const raw of ["1.250", "1.500", "1.000", "1,500"]) assert.equal(printedNumber(raw, null, { scaled: true }), null, raw);
   assert.equal(printedNumber("2,5", null, { scaled: true }), 2.5);
   assert.equal(printedNumber("1,500", null, { scaled: true }), null);
   assert.equal(printedNumber("1.000.000", null, { scaled: true }), null);
@@ -34,12 +35,15 @@ test("a multiplier is applied where it is read and never left off where it is no
   const { parseBenefitValue } = await import("@/lib/policies/benefit-rows");
   const { shareBound } = await import("@/lib/policies/benefit-catalog");
   const { capReading } = await import("@/lib/insurance/cover-conditions");
-  for (const [cap, amount, currency] of [["US$1.250 million", 1250000, "USD"], ["S$1.125 million", 1125000, "SGD"], ["US$2.250m", 2250000, "USD"],
+  for (const [cap, amount, currency] of [["US$1.25 million", 1250000, "USD"], ["£1.25M", 1250000, "GBP"], ["€2 Mrd.", 2000000000, "EUR"],
     ["₹2 crore", 20000000, "INR"], ["Rs. 5 lakh", 500000, "INR"], ["RM1.5 juta", 1500000, "MYR"], ["S$1.5k", 1500, "SGD"]] as const)
     assert.deepEqual(shareBound("10% of the Sum Insured, up to " + cap, "Angioplasty"), { kind: "cap", amount, currency }, cap);
-  assert.deepEqual(capReading({ amount: 1250000, amountBasis: null, quote: "We pay up to S$1.250 million per life." } as never), { kind: "cap", amount: 1250000 });
+  assert.deepEqual(capReading({ amount: 1250000, amountBasis: null, quote: "We pay up to S$1.25 million per life." } as never), { kind: "cap", amount: 1250000 });
+  // Three digits after the dot before a multiplier read two ways a thousand apart: no cap (TE pr239 D3).
+  for (const cap of ["S$1.125 million", "US$2.250m", "€1.500 Mio.", "HK$1.000 million"])
+    assert.equal(shareBound("10% of the Sum Insured, up to " + cap, "Angioplasty").kind, "unsure", cap);
   // A cell or a check that does not apply the multiplier gives no figure: never S$1.5 or S$1,250.
-  for (const cell of ["S$1.5 million", "Up to S$1.250 million", "US$2m", "₹2 crore", "S$1.5k", "RM 2 juta"]) {
+  for (const cell of ["S$1.5 million", "Up to S$1.250 million", "US$2m", "₹2 crore", "S$1.5k", "RM 2 juta", "£1.25M", "€1.500 Mio.", "€2 Mrd."]) {
     assert.equal(typedValue("policy_year_limit", cell), null, cell);
     assert.equal(parseBenefitValue(cell, {}), null, cell);
   }

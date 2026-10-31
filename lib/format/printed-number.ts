@@ -24,12 +24,15 @@ export const PRINTED_FIGURE = String.raw`\d(?:\d|[,.'’](?=\d)|[ \u00a0\u202f](
 /** Put right after a captured PRINTED_FIGURE: the capture is the whole figure, never a shorter part of it. */
 export const FIGURE_END = String.raw`(?![,.'’ \u00a0\u202f]?\d)`;
 /** A word after a figure that multiplies it ("1.5 million", "S$2.250m", "₹2 crore", "Rp 1,5 juta"). */
-export const SCALE_WORD = String.raw`(?:million|mil|mio|mn|m|billion|bn|k|thousand|lakhs?|lacs?|crores?|juta)`;
+const SCALE_WORDS = ["million", "mil", "mio", "mn", "m", "billion", "bn", "mrd", "md", "mld", "miliar", "milyar", "k", "thousand", "lakhs?", "lacs?", "crores?", "juta"];
+/** Each letter in both cases, so the pattern reads "M", "Mio." or "MILLION" with or without the i flag. */
+const anyCase = (word: string) => word.replace(/[a-z]/g, (c) => "[" + c + c.toUpperCase() + "]");
+export const SCALE_WORD = "(?:" + SCALE_WORDS.map(anyCase).join("|") + ")";
 export function scaleOf(word: string | null | undefined): number {
   const w = (word ?? "").toLowerCase();
   if (!w) return 1;
   if (/^(?:million|mil|mio|mn|m|juta)$/.test(w)) return 1_000_000;
-  if (/^(?:billion|bn)$/.test(w)) return 1_000_000_000;
+  if (/^(?:billion|bn|mrd|md|mld|miliar|milyar)$/.test(w)) return 1_000_000_000;
   if (/^(?:k|thousand)$/.test(w)) return 1_000;
   if (/^(?:lakhs?|lacs?)$/.test(w)) return 100_000;
   if (/^crores?$/.test(w)) return 10_000_000;
@@ -43,11 +46,12 @@ export function printedNumber(raw: string | null | undefined, currency?: string 
   if (!raw) return null;
   const s = raw.trim();
   let digits: string | null = null;
-  // Before a multiplier ("1.250 million", "1,5 juta") one dot or comma is the decimal point. Grouped figures and a comma
-  // before three digits ("1,500 million": fifteen hundred million, or one and a half?) are no figure.
+  // Before a multiplier ("1.25 million", "1,5 juta") one dot or comma with one or two digits after it is the decimal point.
+  // Grouped figures and three digits after the dot or comma ("1,500 million", "1.500 Mio.") are no figure.
   if (options.scaled) {
-    if (/^\d+(?:\.\d+)?$/.test(s)) digits = s;
-    else if (/^\d+,\d{1,2}$/.test(s)) digits = s.replace(",", ".");
+    // A dot or comma before three digits reads two ways a thousand apart ("€1.500 Mio.", "HK$1.000 million"): no figure.
+    if (/^\d+(?:\.\d{1,2})?$/.test(s) || /^0\.\d+$/.test(s)) digits = s;
+    else if (/^\d+,\d{1,2}$/.test(s) || /^0,\d+$/.test(s)) digits = s.replace(",", ".");
   }
   else if (/^\d+(?:\.\d{1,2})?$/.test(s)) digits = s;
   // A first group of 0 is never a thousands group ("S$0.500", "0,250").
