@@ -20,8 +20,9 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
-import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,scheduleLineEvent,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
+import { scheduleLineEvent } from "@/lib/ledger/events";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
