@@ -217,12 +217,23 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
       amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
       oneOff: false, shortPeriod: false, fromTable: true, detail } });
   }
-  // A policy two documents give a premium (by a number, or a name, that may be one): which is current is not known.
+  // A policy two documents give a premium (by a number, or a name, that may be one): the one whose printed period starts
+  // latest is the renewal, and its premium counts (Critic R453 M1: last year's and this year's schedule). Choosing between
+  // versions of one policy is reading content, never an expiry: no premium is dropped for its end date. When the starts tie
+  // or one is missing, which is current is not known.
+  const startOf = (c: TablePremiumCover) => {
+    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
+    return starts.length ? Math.max(...starts) : null;
+  };
   const items: PremiumItem[] = [];
   for (const { cover, name, item } of found) {
-    const twice = found.some((o) => o.cover.source.documentId !== cover.source.documentId
+    const others = found.filter((o) => o.cover.source.documentId !== cover.source.documentId
       && samePolicy({ number: o.cover.policyNumber ?? null, product: o.cover.product }, { number: cover.policyNumber ?? null, product: cover.product }) !== "different");
-    if (twice) leftOut.push({ name, why: "two_documents" }); else items.push(item);
+    if (!others.length) { items.push(item); continue; }
+    const mine = startOf(cover), theirs = others.map((o) => startOf(o.cover));
+    if (mine != null && theirs.every((t) => t != null && t < mine)) items.push(item);
+    else if (mine != null && theirs.some((t) => t != null && t > mine) && theirs.every((t) => t != null)) continue;
+    else leftOut.push({ name, why: "two_documents" });
   }
   return { items, leftOut: leftOut.filter((x, i) => leftOut.findIndex((y) => y.name === x.name && y.why === x.why) === i) };
 }

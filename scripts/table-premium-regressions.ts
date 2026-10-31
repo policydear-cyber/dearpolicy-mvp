@@ -413,3 +413,21 @@ test("no plan on a schedule without numbers of its own is left out by an old pro
   assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Harbour Protector" }), cover({ ...none, product: "Early CI Rider" })], [{ policy_id: "doc-a", policy_number: null, product_name: "Early CI Rider", amount: 9, insurer: "Harbour Life" }] as never, bare, new Set(), TODAY),
     [{ name: "Harbour Protector", why: "maybe_counted" }]);
 });
+
+test("last year's and this year's schedule of one policy: the renewal's premium counts, whatever the old one's end date (Critic R453 M1)", () => {
+  for (const [currency, sign] of [["SGD", "S$"], ["MYR", "RM"], ["GBP", "£"]] as const) {
+    const old = cover({ doc: "doc-2025", policyNumber: "HP-77", premium: 90, currency, premiumCurrency: currency, documentPeriodFrom: "01/03/2025", documentPeriodTo: "28/02/2026" });
+    const renewal = cover({ doc: "doc-2026", policyNumber: "HP-77", premium: 100, currency, premiumCurrency: currency, documentPeriodFrom: "01/03/2026", documentPeriodTo: "28/02/2027" });
+    for (const order of [[old, renewal], [renewal, old]]) {
+      const r = run(order);
+      assert.deepEqual(r.items.map((i) => [i.policy_id, i.amount, i.currency]), [["doc-2026", 100, currency]], sign);
+      assert.deepEqual(r.leftOut, [], sign);
+    }
+    // Read long after both periods: still the renewal (no end date drops either).
+    assert.deepEqual(run([old, renewal], day("01/01/2031")).items.map((i) => i.policy_id), ["doc-2026"], sign);
+  }
+  // The same start, or a start missing on one: which is current is not known, so neither counts and both are named.
+  const a = cover({ doc: "doc-x", policyNumber: "HP-77" }), b = cover({ doc: "doc-y", policyNumber: "HP-77", premium: 120 });
+  assert.deepEqual(run([a, b]).items, []);
+  assert.deepEqual(run([a, { ...b, documentPeriodFrom: null }]).items, []);
+});
