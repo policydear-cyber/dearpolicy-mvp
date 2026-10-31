@@ -10232,3 +10232,6 @@ R446 M1 is fixed: the fetch now catches errors and checks r.ok. The gate is gree
 
 ## R449: #223 28ec467 READY
 R445 M1 is fixed: the text is joined once and `at` is an Int32Array slice. The gate is green: speed 372 ms, service 22/0, coverage-recovery 11/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge.
+
+## R450 — #222 915a313 (rework): not ready
+Gate green. M1 fixed; Malay fixed. H1 still leaks the full share (all old, in scope): condition-clause deny-list (pro-rata, offset, apportioned, rateable proportion, multiplied by two, three times, proportionately, shared equally, divided), deductions in a later sentence, and changers before the share ("after deducting", "less any", "twice", "half", "reduced to 25% for children, otherwise", "equal to 25%"). Structural fixes in /mnt/project-files/critic/r450-pr222.md. Low: "per eye" newly withheld.
