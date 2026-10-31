@@ -62,6 +62,9 @@ function statedCode(text:string):string|null{
 }
 /** Markers explicitCurrency() does not know: RM, ₹, ₱, ฿, ₩, ₫, Rp, NT$, HK$, A$/AU$, SG$, NZ$, C$/CA$.
  * A bare "$" is deliberately NOT a currency -- it stays null. */
+/** A figure that reads as money, not a count: thousands groups ("2.000", "1,500,000", "3 000"), three or more digits,
+ * or two decimals. "3" or "10" beside a code-like word is a count. */
+const MONEY_SHAPED=String.raw`(?:\d{1,3}(?:[.,' \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2})(?![\d])`;
 function printedMarker(text:string):string|null{
   if(/(?:^|[^A-Za-z])RM\s?\d/.test(text))return "MYR";
   // Signs of one currency only (TE #145 India parity). "Rs" is left out: rupees of several countries print it.
@@ -89,14 +92,13 @@ function printedMarker(text:string):string|null{
   if(/৳/.test(text))return "BDT";
   if(/\d\s?zł|zł\s?\d/i.test(text))return "PLN";
   if(/\d\s?Kč|Kč\s?\d/.test(text))return "CZK";
-  if(/(?:^|[^A-Za-z])KD\s?\d/.test(text))return "KWD";
-  if(/(?:^|[^A-Za-z])BD\s?\d/.test(text))return "BHD";
-  if(/(?:^|[^A-Za-z])S\/\.?\s?\d/.test(text))return "PEN";
-  // Any other ISO 4217 code printed beside a figure ("BRL 2.000", "2.000 ZAR"), from the runtime's closed list.
+  if(new RegExp(String.raw`(?:^|[^A-Za-z])S\/\.?\s?${MONEY_SHAPED}`).test(text))return "PEN";
+  // Any other ISO 4217 code (the runtime's closed list) only directly beside a money-shaped figure: "BRL 2.000",
+  // "2,500.00 ZAR", never a code-like word near a count ("TRY 3 times", "ALL 3 PLANS").
   for(const m of text.matchAll(/(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])/g)){
-    const near=text.slice(Math.max(0,m.index!-3),m.index!+6);
-    // Codes that are also printed words ("ALL 3 PLANS", "TOP 10") or test codes are never read this way.
-    if(/\d/.test(near)&&isIsoCurrency(m[1])&&!/^(?:ALL|TOP|CUP|BOB|SOS|GEL|X..)$/.test(m[1]))return m[1];
+    if(!isIsoCurrency(m[1])||/^(?:ALL|TOP|CUP|BOB|SOS|GEL|MAD|X..)$/.test(m[1]))continue;
+    const before=text.slice(0,m.index!),after=text.slice(m.index!+3);
+    if(new RegExp(String.raw`^\s?${MONEY_SHAPED}`).test(after)||new RegExp(String.raw`${MONEY_SHAPED}\s?$`).test(before))return m[1];
   }
   return null;
 }

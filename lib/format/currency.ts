@@ -52,6 +52,10 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
     "RP": "IDR",
     // Signs of one currency only, from a closed list (cross-page check, 31 Oct: "R$" was read as no currency). "Rs", "kr",
     // "Fr." and a bare "$" are left out: several countries print them.
+    "SGD$": "SGD",
+    "RP.": "IDR",
+    "EURO": "EUR",
+    "EUROS": "EUR",
     "R$": "BRL",
     "MX$": "MXN",
     "NT$": "TWD",
@@ -64,15 +68,15 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
     "৳": "BDT",
     "ZŁ": "PLN",
     "KČ": "CZK",
-    "KD": "KWD",
-    "BD": "BHD",
     "S/": "PEN",
     "S/.": "PEN",
   };
 
   if (aliases[compact]) return aliases[compact];
-  if (/^[A-Z]{3}$/.test(compact)) return isIsoCurrency(compact) ? compact : fallback;
-  return fallback;
+  // A label that is written but not recognised stays unknown (""): it is never the caller's fallback, so never SGD
+  // ("TPD", "TL" or "Rs" is no currency we can name). Only an empty value takes the fallback its caller chose.
+  if (/^[A-Z]{3}$/.test(compact) && isIsoCurrency(compact)) return compact;
+  return "";
 }
 
 /** Whether a three-letter code is a real currency: the runtime's own closed list of ISO 4217 codes ("TPD" or "MED" is

@@ -1,5 +1,5 @@
-/** Every currency a document prints is read from a closed list: signs of one currency only (R$, MX$, ₺, ₪, zł, Kč, KD, BD,
- * S/ ...) and real ISO 4217 codes beside a figure. Before, "R$" and most codes outside Asia were read as no currency, so a
+/** Every currency a document prints is read from a closed list: signs of one currency only (R$, MX$, ₺, ₪, zł, Kč,
+ * S/ ...) and real ISO 4217 codes directly beside a money-shaped figure; an unknown label stays unknown, never SGD. Before, "R$" and most codes outside Asia were read as no currency, so a
  * Brazilian household's covers had no currency (cross-page check, 31 Oct); and any three letters counted as a code ("TPD").
  * Signs several countries print (Rs, kr, Fr., a bare $) stay unresolved. No model, no database, no network.
  *   npm run format:currency-markers-test */
@@ -15,16 +15,22 @@ function t(id: string, ok: boolean, detail?: unknown) { if (ok) pass++; else { f
 
 for (const [text, want] of [
   ["Renda mensal R$ 2.000", "BRL"], ["Capital segurado BRL 150000", "BRL"], ["Suma asegurada MX$500,000", "MXN"], ["Teminat 100.000 ₺", "TRY"],
-  ["Kisui ₪ 50,000", "ILS"], ["Suma ubezpieczenia 200 000 zł", "PLN"], ["Pojistná částka 500 000 Kč", "CZK"], ["Benefit KD 1.500", "KWD"],
-  ["Benefit BD 1.500", "BHD"], ["Suma asegurada S/ 50,000", "PEN"], ["Cover ZAR 1,000,000", "ZAR"], ["Cover 1,000,000 ZAR", "ZAR"],
+  ["Kisui ₪ 50,000", "ILS"], ["Suma ubezpieczenia 200 000 zł", "PLN"], ["Pojistná částka 500 000 Kč", "CZK"],
+  ["Suma asegurada S/ 50,000", "PEN"], ["Cover ZAR 1,000,000", "ZAR"], ["Cover 1,000,000 ZAR", "ZAR"],
   ["Cover AED 500,000", "AED"], ["Sum insured ₦ 2,000,000", "NGN"], ["Bima ৳ 5,00,000", "BDT"],
   // Unchanged markets.
   ["Sum assured S$500,000", "SGD"], ["Death benefit RM100,000", "MYR"], ["Uang Pertanggungan Rp 500.000.000", "IDR"], ["Sum assured £250,000", "GBP"],
   ["Capitale € 100.000", "EUR"], ["Cover US$1,000,000", "USD"], ["Cover A$500,000", "AUD"], ["Cover ₹ 50,00,000", "INR"],
 ] as const) t(`${text} is ${want}`, statedCurrencyCode(text) === want, statedCurrencyCode(text));
-for (const text of ["TPD 1,000", "ALL 3 PLANS 1,000", "TOP 10 benefits 5,000", "Benefit $5,000", "Rs 5,00,000", "kr 10 000", "Fr. 1'000", "MED 2,000", "Plan B 50,000"])
+for (const text of ["TPD 1,000", "ALL 3 PLANS 1,000", "TOP 10 benefits 5,000", "Benefit $5,000", "Rs 5,00,000", "kr 10 000", "Fr. 1'000", "MED 2,000", "Plan B 50,000",
+  // Strict first (coordinator, 31 Oct): a code only directly beside a money-shaped figure; "KD"/"BD" are read later, not now.
+  "TRY 3 times a year", "Benefit KD 1.500", "Benefit BD 1.500", "ZAR 12 visits", "Code AED-7", "S/N 12345", "S/ 12"])
   t(`${text} names no currency`, statedCurrencyCode(text) === null, statedCurrencyCode(text));
 
+for (const label of ["TPD", "TL", "Rs", "MED", "KD", "dollars?"]) {
+  t(`unknown label ${label} stays unknown, never SGD`, normalizeCurrencyCode(label) === "" && statedCurrencyCode(label) === null, normalizeCurrencyCode(label));
+}
+t("an empty value still takes the caller's fallback", normalizeCurrencyCode("", "SGD") === "SGD" && normalizeCurrencyCode(null, "") === "");
 t("R$ normalises to BRL", normalizeCurrencyCode("R$", "") === "BRL");
 t("zł normalises to PLN", normalizeCurrencyCode("zł", "") === "PLN");
 t("a lower-case code normalises", normalizeCurrencyCode("brl", "") === "BRL");
