@@ -31,15 +31,19 @@ const CAPPED = ["Angioplasty: 10% of Sum Insured, up to S$25,000", "10% of the s
 
 test("a share whose passage prints an amount gives no rule, read or stored; a share alone still stands", async () => {
   const { repairStoredRules, validateCatalogFormula, assessCatalogBenefit, CAPPED_SHARE_NOTE } = await import("@/lib/policies/benefit-catalog");
-  const v = (quote: string) => validateCatalogFormula({ kind: "sum_insured", value: 0.1, currency: null, quote, factKey: null, offsetDays: null, maximumDays: null }).formulaKind;
+  const v = (quote: string) => validateCatalogFormula({ kind: "sum_insured", value: 0.1, currency: null, quote, factKey: null, offsetDays: null, maximumDays: null, benefitName: "Angioplasty" }).formulaKind;
+  // Each is either withheld with the note, or (one printed cap in the cover's currency, nothing else) paid up to that cap
+  // (share-cap-test.ts); never the full uncapped share.
   for (const q of CAPPED) {
-    assert.equal(v(q), "none", q);
-    assert.equal(repairStoredRules([row(q)] as never)[0].formulaKind, "none", "read from quote: " + q);
     const stored = repairStoredRules([row(q, { formulaKind: "sum_insured", formulaValue: 0.1 })] as never)[0];
-    assert.equal(stored.formulaKind, "none", "stored: " + q);
-    assert.ok(stored.conditions.includes(CAPPED_SHARE_NOTE), q);
-    const claim = assessCatalogBenefit({ benefit: stored as never, coverage: coverage as never, ownerName: "Ana Wong", facts: {} as never, events: ["critical_illness"] as never });
-    assert.notEqual(JSON.stringify(claim).includes("S$100,000"), true, q);
+    const read = repairStoredRules([row(q)] as never)[0];
+    if (stored.formulaKind === "none") assert.ok(stored.conditions.includes(CAPPED_SHARE_NOTE), q);
+    else assert.ok(stored.conditions.some((c) => c.startsWith("Paid up to ")), q);
+    assert.equal(v(q) === "none", read.formulaKind === "none", q);
+    for (const b of [stored, read]) {
+      const claim = assessCatalogBenefit({ benefit: b as never, coverage: coverage as never, ownerName: "Ana Wong", facts: {} as never, events: ["critical_illness"] as never });
+      assert.notEqual(JSON.stringify(claim).includes("S$100,000"), true, q);
+    }
   }
   // A share with no amount beside it stands; a person-confirmed share is kept as confirmed.
   for (const q of ["Angioplasty: 10% of the sum insured", "Receive 150% of your coverage amount if Total and Permanent Disability is due to an accident",

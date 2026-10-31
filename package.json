@@ -199,6 +199,7 @@
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
     "policies:not-fully-read-test": "node --import tsx scripts/policies/not-fully-read-test.ts",
     "policies:capped-share-test": "node --import tsx scripts/policies/capped-share-test.ts",
+    "policies:share-cap-test": "node --import tsx scripts/policies/share-cap-test.ts",
     "policies:stored-share-shapes-test": "node --import tsx scripts/policies/stored-share-shapes-test.ts",
     "r10:perf-test": "node --import tsx scripts/r10-perf-regressions.ts",
     "r11:blind-test": "node --import tsx scripts/r11-blind-test.ts",

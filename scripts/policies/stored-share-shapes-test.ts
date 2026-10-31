@@ -116,6 +116,8 @@ test("every stored share without a printed cap keeps its amount; one with a cap 
   }
   for (const [name, value, quote] of CAPPED) {
     const out = repairStoredRules([row(name, value, quote)] as never)[0];
-    assert.ok(out.formulaKind === "none" ? out.conditions.includes(CAPPED_SHARE_NOTE) : out.formulaValue !== value, "never the full share: " + quote);
+    // Withheld, or kept with the printed cap it is paid up to (shareBound).
+    const capped = out.conditions.some((note: string) => /^Paid up to .+, the cap this passage prints\.$/.test(note));
+    assert.ok(out.formulaKind === "none" ? out.conditions.includes(CAPPED_SHARE_NOTE) : capped || out.formulaValue !== value, "never the full share: " + quote);
   }
 });
