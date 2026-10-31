@@ -64,8 +64,8 @@ function statedCode(text:string):string|null{
  * A bare "$" is deliberately NOT a currency -- it stays null. */
 /** A figure that reads as money, not a count: thousands groups ("2.000", "1,500,000", "3 000"), three or more digits,
  * or two decimals. "3" or "10" beside a code-like word is a count. */
-// Never a rate, a multiple or a count: "IRR 4.25%", "SAR 1.5x", "TRY 3 times" (Critic #269 M1).
-const MONEY_SHAPED=String.raw`(?:\d{1,3}(?:[.,' \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2})(?![\d.,])(?!\s?(?:%|x\b|×|times\b|per\s?cent|percent))`;
+// Never a rate, a multiple or a count: "IRR 4.25%", "IRR 1,250 bps", "SAR 1.5x", "TRY 3 times" (Critic #269 M1).
+const MONEY_SHAPED=String.raw`(?:\d{1,3}(?:[.,' \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2})(?![\d.,])(?!\s?(?:%|x\b|×|times\b|per\s?cent|percent|bps\b|basis\s+points?))`;
 function printedMarker(text:string):string|null{
   if(/(?:^|[^A-Za-z])RM\s?\d/.test(text))return "MYR";
   // Signs of one currency only (TE #145 India parity). "Rs" is left out: rupees of several countries print it.
