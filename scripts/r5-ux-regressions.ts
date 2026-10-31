@@ -182,7 +182,23 @@ async function main() {
     assert.match(cover, /!ready\?"This cover could not be loaded\."/, "a failed load is not read as not found");
     const payments = read("app/records/page.tsx");
     assert.match(payments, /useState<RecordRow\[\]\|null>\(null\)/, "payments start unknown, not empty");
-    assert.match(payments, /records && !records\.length && <div className="empty-card">No payments/, "'No payments found' only after loading");
+    assert.match(payments, /records && !records\.length && <div className="empty-card">No payment records/, "'No payment records' only after loading");
+    assert.match(payments, /useState<Person\[\]\|null>\(null\)/, "the premiums Home counts start unknown, not empty");
+    assert.match(payments, /!people && !peopleFailed && <div className="empty-card" role="status">Loading/, "the counted premiums say loading first");
+  });
+  await test("Payments shows every premium Home counts, from the same computation, with its source", () => {
+    // Home's cost and Payments' list both come from countedPremiums, so a premium read off a policy schedule (no payment
+    // record) is on both, and the figures reconcile for any household.
+    const dashboard = read("app/api/dashboard/route.ts"), summary = read("app/api/premiums/summary/route.ts"), payments = read("app/records/page.tsx");
+    assert.match(dashboard, /const premiums=await countedPremiums\(accountId,/, "Home counts through the shared helper");
+    assert.ok(!/summarisePremiums\(/.test(dashboard), "Home has no premium count of its own");
+    assert.match(summary, /countedPremiums\(accountId,/, "the Payments summary counts through the same helper");
+    assert.ok(!/runAfterResponse|readPendingDocuments|seedLedger/.test(summary), "the Payments summary reads only, starting no background work");
+    assert.match(payments, /fetch\("\/api\/premiums\/summary"\)/, "Payments loads the counted premiums");
+    assert.match(payments, /policy_schedule:"From the policy schedule",payment_record:"From a payment record"/, "each premium names where it was read");
+    assert.match(payments, /\|\|"From your documents"/, "an unknown source says the neutral words");
+    assert.match(payments, /p\.oneOff\.map/, "a premium paid once is listed, not hidden");
+    assert.match(payments, /p\.note&&<p className="note">\{p\.note\}/, "what the total leaves out is said, as on Home");
   });
   await test("signed-out pages carry no app navigation", () => {
     const shell = read("components/AppShell.tsx");

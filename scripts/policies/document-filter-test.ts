@@ -4,7 +4,7 @@
  * Made-up rows only. Pure: no database, no network, no model.
  *   node --import tsx scripts/policies/document-filter-test.ts */
 import assert from "node:assert/strict";
-import { authorityLabel, isOwnDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -55,6 +55,16 @@ test("the badge always agrees with the filter the card sits under", () => {
     const c = card({ document_role: role, linked_people, document_authority_label: label });
     assert.equal(authorityLabel(c) === "General wording", !isOwnDocument(c), `${role}/${label}/${linked_people.map((l) => l.source)}`);
   }
+});
+test("a pack filed as a letter whose reading found a cover is never called Correspondence; nothing else is renamed", () => {
+  const card = (o: Partial<Row> & { document_authority_label?: string | null; reading_policy?: boolean | null }) => ({ document_authority_label: null, ...doc(o), ...o });
+  assert.ok(readAsPolicyDocument({ document_role: "insurer_letter", reading_policy: true }));
+  for (const linked_people of [[], chosen]) assert.notEqual(authorityLabel(card({ document_role: "insurer_letter", document_authority_label: "Correspondence", reading_policy: true, linked_people })), "Correspondence");
+  assert.equal(authorityLabel(card({ document_role: "insurer_letter", document_authority_label: "Correspondence", reading_policy: true, linked_people: chosen })), "Linked to your cover");
+  // A letter whose reading does not qualify keeps its label.
+  for (const reading_policy of [false, null, undefined]) assert.equal(authorityLabel(card({ document_role: "insurer_letter", document_authority_label: "Correspondence", reading_policy, linked_people: chosen })), "Correspondence");
+  // Only a letter can be a pack's cover letter: a claim decision, bill, screenshot or notes is never renamed, nor any other role.
+  for (const role of ["claim_decision", "medical_bill", "app_screenshot", "personal_notes", "policy_wording", null]) assert.ok(!readAsPolicyDocument({ document_role: role, reading_policy: true }), String(role));
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`document-filter: ${passed} passed, fetches 0`);

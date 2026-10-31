@@ -12,6 +12,7 @@ import { notDismissedCondition } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
 import { planChoiceAsked } from "@/lib/policies/plan-choice";
 import { simpleChatEnabled } from "@/lib/simple-chat/flag";
+import { READING_POLICY_SQL } from "@/lib/policies/document-filter";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -19,7 +20,7 @@ export const ROUTE_AUTH = "household-member" as const;
 type PolicyRow = {
   id: string; family_member_id: string; insurer: string | null; product_name: string | null; policy_number: string | null;
   group_policy_number: string | null; policy_type: string | null; document_role: string | null; personal_coverage_confirmed: boolean;
-  document_authority: number; document_authority_label: string | null; needs_review: boolean; review_reason: string | null; status: string;
+  document_authority: number; document_authority_label: string | null; reading_policy: boolean; needs_review: boolean; review_reason: string | null; status: string;
   processing_status: string; processing_stage: string; processing_progress: number; processing_message: string | null;
   quarantine_status: string; scan_result_detail: string | null;
   original_filename: string; page_count: number | null; processing_error: string | null;
@@ -46,9 +47,14 @@ export async function GET(request: NextRequest) {
         params.push(familyMemberId);
         memberClause = ` AND EXISTS (SELECT 1 FROM policy_members x WHERE x.policy_id=p.id AND x.account_id=p.account_id AND x.family_member_id=$${params.length})`;
       }
+      // What the document's own benefit reading found it to be (lib/policies/document-filter.ts readAsPolicyDocument);
+      // false where this database has no benefit readings.
+      const readings = await client.query<{ ok: boolean }>("SELECT to_regclass('public.benefit_readings') IS NOT NULL AS ok");
+      const readingPolicy = readings.rows[0]?.ok ? READING_POLICY_SQL : "false";
       const result = await client.query<PolicyRow>(
         `SELECT p.id,p.family_member_id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.policy_type,p.document_role,
-         p.personal_coverage_confirmed,p.document_authority,p.document_authority_label,p.needs_review,p.review_reason,p.status,
+         p.personal_coverage_confirmed,p.document_authority,p.document_authority_label,p.needs_review,
+         ${readingPolicy} AS reading_policy,p.review_reason,p.status,
          p.processing_status,p.processing_stage,p.processing_progress,p.processing_message,p.quarantine_status,p.scan_result_detail,p.original_filename,p.page_count,p.processing_error,p.created_at,
          COALESCE((SELECT json_agg(json_build_object('id',f.id,'name',f.display_name,'relationship',f.relationship,'source',pm.source,'planTier',pm.benefit_tier) ORDER BY f.display_name)
            FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND ${activePredicate("f")}),'[]'::json) AS linked_people,

@@ -11,7 +11,7 @@ import { documentFoundLabels, documentTableKinds, type KindRow } from "@/compone
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
-import { authorityLabel, isOwnDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -35,6 +35,7 @@ type Policy = {
   personal_coverage_confirmed: boolean;
   document_authority: number;
   document_authority_label: string | null;
+  reading_policy?: boolean;
   needs_review: boolean;
   review_reason: string | null;
   processing_status: string;
@@ -451,7 +452,7 @@ export default function PoliciesPage() {
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), authorityLabel(policy)].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy)].join(" · ")}</span>}
               {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? "Read in part" : "Ready") : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
