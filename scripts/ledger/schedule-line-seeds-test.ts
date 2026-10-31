@@ -71,6 +71,20 @@ async function main() {
     { category: "Life Cover", amount: 300000, currency: "GBP", quote: "Life cover (level)\t£300,000.00" },
     { category: "TPD Cover", amount: 100000, currency: "GBP", quote: "Total permanent disability\t£100,000.00" },
   ]);
+  // Lines whose category has a cover's name in it but is something else: a premium waiver, a premium, a fund value.
+  const notSums = await person("Rohan Mehta", "sibling");
+  await schedule(notSums, "Harbour Protector", [
+    { category: "TPD Premium Waiver", amount: 3000, currency: "SGD", quote: "TPD premium waiver\tS$3,000" },
+    { category: "Life Cover Premium", amount: 1200, currency: "AUD", quote: "Life cover premium\tA$1,200" },
+    { category: "Life Insurance Fund Value", amount: 45000, currency: "MYR", quote: "Fund value\tRM45,000" },
+  ]);
+  // As intake stores them: the category is the cover the line names, only the printed label says what it is.
+  const stored = await person("Grace Tan", "sibling");
+  await schedule(stored, "Harbour Protector Plus", [
+    { category: "Total Permanent Disability", amount: 3000, currency: "SGD", quote: "TPD Premium Waiver\tS$3,000" },
+    { category: "Death", amount: 1200, currency: "AUD", quote: "Term Life Premium A$1,200" },
+    { category: "Death", amount: 45000, currency: "MYR", quote: "Nilai tunai / Cash value\tRM45,000" },
+  ]);
   const unstated = await schedule(sg, "Lighthouse Term Plan", [{ category: "Death", amount: 150000, currency: null, quote: "Sum assured\t$150,000" }]);
 
   // Rows an older rule seeded beside the £ life line: one untouched, one a person changed, one a person rejected.
@@ -120,6 +134,10 @@ async function main() {
     });
     await test("a line category in other words keeps its own amount: 'Life Cover' is death £300,000, 'TPD Cover' is TPD £100,000", async () => {
       assert.deepEqual(figures(await rows(other)).filter((x) => x[1] != null), [["death", 300000, "GBP"], ["tpd", 100000, "GBP"]]);
+    });
+    await test("a premium waiver, a premium or a fund value is never a TPD or death sum (S$, A$, RM)", async () => {
+      assert.deepEqual(figures(await rows(notSums)).filter((x) => x[1] != null), []);
+      assert.deepEqual(figures(await rows(stored)).filter((x) => x[1] != null), [], "stored under the cover it names");
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);

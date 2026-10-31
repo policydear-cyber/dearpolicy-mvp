@@ -218,7 +218,7 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
   // Each line first seeds the benefit it names itself, with its own printed amount (lib/ledger/events.ts
   // SCHEDULE_LINE_EVENTS): "TPD Cover $500,000" is the TPD row, never the life cover's sum.
   for(const coverage of lines){
-    const own=scheduleLineEvent(coverage.category,named(coverage));
+    const own=scheduleLineEvent(coverage.category,named(coverage),coverage.evidenceText);
     if(!own||given.has(own.event))continue; // the wording already says what this pays
     const note=PRODUCT_DEFAULTS.flatMap(d=>d.events).find(e=>e.event===own.event)?.note??null;
     out.push(seed(coverage,own.event,own.pays,own.pays==="lump_sum"?coverage.amount:null,note));

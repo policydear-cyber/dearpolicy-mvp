@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/format/currency";
 import { amountAppears, amountPrintedWith } from "./assertions";
 import { attachOperand, boundOperand, citeLine, differenceOperands, documentHashes, figuresIn, perPeriodOperand, printedRowFor, productOperand, rowBenefit, sumOperands } from "./answer-verification";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
-import { summarisePremiums, type PremiumItem } from "@/lib/policies/premium-summary";
+import { summarisePremiums, type PremiumItem, type PremiumSummaryMemo } from "@/lib/policies/premium-summary";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding, FigurePeriod } from "@/types";
 import { documentsByPerson, noPoliciesSentence, personName } from "./household-status";
@@ -188,8 +188,9 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
   // The pages that say why a premium is not counted are cited like any other.
   const uncounted: { docId: string; page: number; name: string; insurer: string | null; id: string }[] = [];
   const perPerson: { person: ClaimPerson; lines: Line[]; missing: string[]; elsewhere: { name: string; owner: string }[]; annual: number; cash: number | null; medisave: number | null; currency: string }[] = [];
+  const premiumMemo: PremiumSummaryMemo = {};
   for (const person of args.people) {
-    const summary = await summarisePremiums(args.accountId, person);
+    const summary = await summarisePremiums(args.accountId, person, undefined, premiumMemo);
     const listed = [...summary.items, ...summary.oneOff, ...summary.shortPeriod], ids = listed.map((i) => i.id);
     const sources = ids.length ? (await query<{ id: string; doc_id: string | null; page: number | null; product_name: string | null; role: string | null; insurer: string | null; policy_type: string | null; active: boolean }>(
       `SELECT pr.id::text AS id,coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.source_page AS page,p.product_name,p.document_role AS role,p.insurer,p.policy_type,

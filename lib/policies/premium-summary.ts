@@ -325,7 +325,23 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
 }
 /** An insurer's name for matching: lower case, letters and digits, without "Ltd", "plc", "Berhad" and the like. */
 const insurerKey = (name: string | null | undefined) => String(name ?? "").toLowerCase().replace(/\b(?:ltd|limited|plc|pte|bhd|berhad|inc|co|company|insurance|assurance|the)\b/g, "").replace(/[^a-z0-9]+/g, "");
-export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
+type FiledPremium = { member_id: string; doc_id: string | null; policy_id_text: string | null; source_id: string | null; policy_number: string | null; owner: string; insurer: string | null };
+/** Shared across one household's summaries, so a household question reads the filed premiums once. */
+export type PremiumSummaryMemo = { filed?: Promise<FiledPremium[]> };
+/** Every premium on file under an active family member who still holds its active document (linked to it, or it is
+ * theirs and linked to no one): a member removed from the policy is not who pays for it now. */
+function filedPremiums(accountId: string): Promise<FiledPremium[]> {
+  return query<FiledPremium>(
+    `SELECT pr.family_member_id::text AS member_id,coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,
+            pr.source_document_id::text AS source_id,pr.policy_number,fm.display_name AS owner,coalesce(pr.insurer,sp.insurer) AS insurer
+       FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id AND ${activePredicate("fm")}
+       JOIN policies sp ON sp.id=coalesce(pr.source_document_id,pr.policy_id) AND sp.account_id=pr.account_id AND ${activePredicate("sp")}
+      WHERE pr.account_id=$1
+        AND (EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id AND pm.family_member_id=pr.family_member_id)
+          OR (sp.family_member_id=pr.family_member_id AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id)))`,
+    [accountId]).then((r) => r.rows);
+}
+export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }, memo?: PremiumSummaryMemo): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
     `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role
        FROM premium_records pr LEFT JOIN policies sd ON sd.id=pr.source_document_id AND sd.account_id=pr.account_id AND ${activePredicate("sd")}
@@ -365,18 +381,9 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     // policyholder's schedule) has its premium printed: it is counted in that person's total, never "missing" here.
     const unpaidIds = unpaid.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id));
     const unpaidNumbers = unpaid.flatMap((c) => c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean)) as string[];
-    const elsewhere = unpaidIds.length || unpaidNumbers.length ? (await query<{ doc_id: string | null; policy_id_text: string | null; policy_number: string | null; owner: string; insurer: string | null }>(
-      `SELECT coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,pr.policy_number,fm.display_name AS owner,
-              coalesce(pr.insurer,sp.insurer) AS insurer
-         FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id AND ${activePredicate("fm")}
-         JOIN policies sp ON sp.id=coalesce(pr.source_document_id,pr.policy_id) AND sp.account_id=pr.account_id AND ${activePredicate("sp")}
-        WHERE pr.account_id=$1 AND pr.family_member_id<>$2
-          -- The member the premium is filed under still holds that document (linked to it, or it is theirs and linked to
-          -- no one): a member removed from the policy is not who pays for it now.
-          AND (EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id AND pm.family_member_id=pr.family_member_id)
-            OR (sp.family_member_id=pr.family_member_id AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id)))
-          AND (pr.policy_id::text=ANY($3::text[]) OR pr.source_document_id::text=ANY($3::text[]) OR pr.policy_number IS NOT NULL)`,
-      [accountId, member.id, unpaidIds])).rows : [];
+    // Read once per household when the caller shares a memo (a household question asks for every person in turn).
+    const filed = unpaidIds.length || unpaidNumbers.length ? await (memo ? (memo.filed ??= filedPremiums(accountId)) : filedPremiums(accountId)) : [];
+    const elsewhere = filed.filter((e) => e.member_id !== member.id && ((e.policy_id_text && unpaidIds.includes(e.policy_id_text)) || (e.source_id && unpaidIds.includes(e.source_id)) || e.policy_number != null));
     const ownerOf = (c: (typeof unpaid)[number]) => {
       const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));

@@ -5,7 +5,7 @@
  * Totals are per stated currency (a ringgit premium is not Singapore dollars; RM + £ is no total), and a premium whose
  * record does not state its currency is listed but left out of every total, with a note naming it. No model call.
  */
-import { summarisePremiums, type PremiumItem, type TablePremiumCover } from "@/lib/policies/premium-summary";
+import { summarisePremiums, type PremiumItem, type PremiumSummaryMemo, type TablePremiumCover } from "@/lib/policies/premium-summary";
 import { singaporeDay } from "@/lib/benefit-table/dates";
 import { premiumSourceKind, type PremiumSourceKind } from "@/lib/format/premium-source";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -29,11 +29,12 @@ export async function tableCoversByMember(accountId: string): Promise<Map<string
 }
 
 /** The premiums counted for one person. `tableCovers` is that person's benefit-table covers, or null when the table is not live. */
-export async function countedPremiums(accountId: string, member: ClaimPerson, tableCovers: TablePremiumCover[] | null): Promise<CountedPremiums> {
+/** `memo`, shared across one household's people, reads what they share once. */
+export async function countedPremiums(accountId: string, member: ClaimPerson, tableCovers: TablePremiumCover[] | null, memo?: PremiumSummaryMemo): Promise<CountedPremiums> {
   // Every premium component (plan and rider under one policy number), with the MediSave portion added back where the
   // evidence prints it, and the policies with no premium evidence named -- never the rider alone. A policy with no
   // premium record is counted from the premium its own document prints (the benefit table's checked line).
-  const summary = await summarisePremiums(accountId, member, tableCovers ? { covers: tableCovers, today: singaporeDay(new Date()) } : undefined);
+  const summary = await summarisePremiums(accountId, member, tableCovers ? { covers: tableCovers, today: singaporeDay(new Date()) } : undefined, memo);
   // Each counted premium says where it was read (a policy schedule, or a payment record by its source document's role;
   // null when not known), so the page names the real source or the neutral "from your documents".
   const items = summary.items.map((i) => ({ ...i, source: premiumSourceKind(i) }));
