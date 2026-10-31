@@ -25,6 +25,12 @@ for (const f of machine) {
 }
 test("chosen file name is prettified", () => assert.equal(documentCardTitle(row({ original_filename: "family_hospital_plan_2026.pdf" })), "Family Hospital Plan 2026"));
 test("chosen file name with casing kept", () => assert.equal(documentCardTitle(row({ original_filename: "My CI Plan.pdf" })), "My CI Plan"));
+// Live review on 4103e10 (finding 6): a brand written as one word in a name the person spaced is kept as typed.
+test("one-word brand in a spaced name kept", () => assert.equal(documentCardTitle(row({ original_filename: "TerraFlexiSave Protection Plus (3rd Series) (TX3).pdf" })), "TerraFlexiSave Protection Plus (3rd Series) (TX3)"));
+test("one-word brand with underscores kept", () => assert.equal(documentCardTitle(row({ original_filename: "Harbour_MediShield_Gold.pdf" })), "Harbour MediShield Gold"));
+test("one-word brand with dashes kept", () => assert.equal(documentCardTitle(row({ original_filename: "LionCare-Takaful-Plan.pdf" })), "LionCare Takaful Plan"));
+test("a name with no separator is still split", () => assert.equal(documentCardTitle(row({ original_filename: "FamilyHospitalPlan.pdf" })), "Family Hospital Plan"));
+test("an acronym run into a word with no separator is still split", () => assert.equal(documentCardTitle(row({ original_filename: "AIAShieldBooklet.pdf" })), "AIA Shield Booklet"));
 test("product name wins over everything", () => assert.equal(documentCardTitle(row({ product_name: " Shield Gold ", original_filename: machine[0], policy_number: "P1234" })), "Shield Gold"));
 test("product name wins over a chosen file name", () => assert.equal(documentCardTitle(row({ product_name: "Shield Gold", original_filename: "my_plan.pdf" })), "Shield Gold"));
 test("no insurer, machine name -> kind", () => assert.equal(documentCardTitle(row({ insurer: null, original_filename: machine[1] })), "Policy wording"));
