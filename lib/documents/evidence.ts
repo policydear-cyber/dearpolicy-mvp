@@ -139,6 +139,22 @@ function moneyPattern(value: number) {
   // not printed by "Rp4.250.000" (a separator followed by a digit carries the figure on).
   return new RegExp("(?<![\\d.,])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.'’]\\d|[,.]?[OoIl|])");
 }
+/** Every figure the passage prints, each read whole (printed-number.ts), so a figure is never found inside a longer one.
+ *  Two forms printed-number.ts leaves alone, because elsewhere they can be two figures, are read here as one: a comma
+ *  decimal with no grouping ("150,75 EUR") and space thousands closed by a comma decimal ("1 250,00 €"). A figure an
+ *  unclear scan printed ("1,O36") or one with a scale word after it ("1.5 million") is not read. */
+function printedFigures(text: string): number[] {
+  const lakh = groupsInLakhs(text), out: number[] = [];
+  const re = new RegExp(String.raw`(?<![\d.,'’]|\d[,.]?[OoIl|]+[,.]?)(` + PRINTED_FIGURE + ")" + FIGURE_END + String.raw`(?![,.]?[OoIl|])` + NO_SCALE_AFTER, "g");
+  for (const m of text.matchAll(re)) {
+    const raw = m[1];
+    let v = printedNumber(raw, null, { lakh });
+    if (v === null && /^\d+,\d{2}$/.test(raw)) v = Number(raw.replace(",", "."));
+    if (v === null && /^\d{1,3}(?:[ \u00a0\u202f]\d{3})+,\d{2}$/.test(raw)) v = Number(raw.replace(/[ \u00a0\u202f]/g, "").replace(",", "."));
+    if (v !== null && Number.isFinite(v)) out.push(v);
+  }
+  return out;
+}
 /** Does the passage print this amount? A money amount must appear as that
  * number; a fraction of the sum insured as its percentage; a fixed amount
  * that is a percentage of a printed limit ("25% of S$5,000") as that pair. */
@@ -151,6 +167,8 @@ export function amountAppears(passage: string, value: number, kind: "money" | "f
       || (value === 1 && /\b(?:full|entire|100\s*%)\s*(?:of\s+the\s+)?sum\s+(?:insured|assured)/i.test(text));
   }
   if (moneyPattern(value).test(text)) return true;
+  // Every printed figure, read whole in its own market's grouping: "Rp4.250.000", "€18.500,50", "CHF 1'250.00".
+  if (printedFigures(text).some((f) => Math.abs(f - value) < 0.005)) return true;
   // The base is read whole (printed-number.ts): "25% of €5.000" is a quarter of five thousand, never of five.
   for (const m of text.matchAll(new RegExp(String.raw`(\d{1,3}(?:\.\d+)?)\s*%\s*of\s*(?:the\s+)?(?:[A-Z]{0,3}\$|[A-Z]{3}\s?|€|£|₹)\s?(` + PRINTED_FIGURE + ")" + FIGURE_END + NO_SCALE_AFTER, "gi"))) {
     const base = printedNumber(m[2], null, { lakh: groupsInLakhs(text) });
