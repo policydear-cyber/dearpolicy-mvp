@@ -227,7 +227,7 @@ async function main() {
       const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's accident cover?", people: [ch] });
       assert.equal(r.handled, true, JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /S\$50,000/);
-      assert.match(text(r.answer), /1 Jan 2019/); assert.doesNotMatch(text(r.answer), /expired/i); assert.ok(!/is currently active|currently covered/i.test(text(r.answer)));
+      assert.match(text(r.answer), /1 Jan 2019/); assert.doesNotMatch(text(r.answer), /\b(?:expired|ended|lapsed|no longer in force)\b/i); assert.ok(!/is currently active|currently covered/i.test(text(r.answer)));
       assert.ok(r.answer.citations.some((c) => c.notConfirmedCurrent === true));
     });
     await check("C2 maturity (not in stored facts) is handed back, never 'not covered'", async () => {

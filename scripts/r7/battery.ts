@@ -149,8 +149,8 @@ export function battery(): Conversation[] {
     // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in force"; Critic R451):
     // these two used to expect Wanderlust to be called ended or expired because its printed period (to 14 December 2025)
     // has passed. Only a date says so, so the answer now shows the travel cover and never calls it ended or expired.
-    ["Is my travel insurance still valid?", Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired)\b/i)],
-    ["Am I covered for my trip to Bangkok next month?", Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired)\b/i)],
+    ["Is my travel insurance still valid?", Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired|lapsed|no longer|not (?:valid|covered|in force|active)|run out|out of date|no current|invalid)\b/i)],
+    ["Am I covered for my trip to Bangkok next month?", Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired|lapsed|no longer|not (?:valid|covered|in force|active)|run out|out of date|no current|invalid)\b/i)],
     ["Which of my policies have lapsed?", Y(RAHMAN, /AssureTerm 65/)],
     ["Is Aisyah's policy in its grace period?", Y(AISYAH, /grace period/i)],
     ["When does Aisyah's grace period end?", Y(AISYAH, /20 October 2026/)],
@@ -318,7 +318,7 @@ export function battery(): Conversation[] {
     { say: "What travel insurance do I have?", expect: Y(RAHMAN, /Wanderlust/) },
     // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in force"; Critic R451): this and "is it valid now?" used to expect
     // Wanderlust to be called ended or expired from its printed period alone; it is now answered as in force.
-    { say: "is it still valid?", expect: Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired)\b/i) },
+    { say: "is it still valid?", expect: Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired|lapsed|no longer|not (?:valid|covered|in force|active)|run out|out of date|no current|invalid)\b/i) },
     { say: "what did it cover for baggage?", expect: Y(RAHMAN, /S\$3,000/) },
     { say: "who else was on it?", expect: Y(RAHMAN, /Aisyah/) },
     { say: "Delete that travel document — I don't need it anymore", expect: { mentions: /Documents page/, notMentions: /S\$/ } },
@@ -330,7 +330,7 @@ export function battery(): Conversation[] {
     { say: "what policies do I have now?", expect: Y(RAHMAN, /MediGuard/, /Wanderlust/) },
     { say: "how much do I pay in premiums a year?", expect: Y(RAHMAN, /a year/i, /Wanderlust/) },
     { say: "What travel insurance do I have?", action: "restore:travel", expect: Y(RAHMAN, /Wanderlust/) },
-    { say: "is it valid now?", expect: Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired)\b/i) },
+    { say: "is it valid now?", expect: Y(RAHMAN, /Wanderlust/, /\b(?:ended|expired|lapsed|no longer|not (?:valid|covered|in force|active)|run out|out of date|no current|invalid)\b/i) },
     { say: "thanks", expect: { mentions: /welcome/i } },
   ]);
   conv("helper-and-names", RAHMAN, [
