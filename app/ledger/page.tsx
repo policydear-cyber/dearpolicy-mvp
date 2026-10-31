@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
-import { COVER_KINDS,coverGaps,isToConfirm,kindOfName,kindOfRow,listOf } from "@/components/cover-kinds";
+import { coveragePersonKinds,isToConfirm,kindOfName,listOf,type ScheduleLine } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 import { BenefitTableCoverage,type BenefitTableData } from "@/components/benefit-table-coverage";
 
@@ -24,11 +24,11 @@ type Row={
   alternatives?:AlternativeAmounts|null;
 };
 type Member={id:string;display_name:string;relationship:string};
+/** A line a schedule lists for a person that no row below shows (it prints no amount, or no currency): GET /api/ledger. */
+type Line=ScheduleLine&{ownerName:string};
 type Reading={pending:number;inProgress:boolean;documents?:ReadingDocument[]};
 const slug=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 
-const KINDS=COVER_KINDS;
-const kindOf=(row:Row)=>kindOfRow(row);
 
 /** The server's pays text, read aloud: a capital first letter, and "after the first 1" says what the 1 counts. */
 const plainPays=(pays:string)=>pays.replace(/after the first (\d+)\b(?! day)/,(_,n)=>`after the first ${n==="1"?"day":n+" days"}`).replace(/^./,c=>c.toUpperCase());
@@ -76,6 +76,7 @@ export default function CoveragePage(){
 
 function LedgerCoveragePage(){
   const [rows,setRows]=useState<Row[]>([]);
+  const [lines,setLines]=useState<Line[]>([]);
   const [family,setFamily]=useState<Member[]>([]);
   const [member,setMember]=useState("");
   const [error,setError]=useState(false);
@@ -103,7 +104,7 @@ function LedgerCoveragePage(){
       const data=await res.json().catch(()=>({}));
       if(!res.ok)throw new Error("load");
       const next:Reading=data.reading??{pending:0,inProgress:false};
-      setRows((data.rows??[]).filter((r:Row)=>r.status!=="rejected"));setFamily(data.family??[]);setReading(next);setError(false);
+      setRows((data.rows??[]).filter((r:Row)=>r.status!=="rejected"));setLines(data.scheduleLines??[]);setFamily(data.family??[]);setReading(next);setError(false);
       if(!next.pending)setReadStalled(false);
       return next;
     }catch{setError(true);return null;}
@@ -138,17 +139,17 @@ function LedgerCoveragePage(){
 
   /** Person, then kind of cover. A person with no rows is listed too, so a gap is never just an absence. */
   const people=useMemo(()=>{
-    const names=member?family.filter(m=>m.id===member).map(m=>m.display_name):[...new Set([...family.map(m=>m.display_name),...rows.map(r=>r.ownerName)])];
+    const names=member?family.filter(m=>m.id===member).map(m=>m.display_name):[...new Set([...family.map(m=>m.display_name),...rows.map(r=>r.ownerName),...lines.map(l=>l.ownerName)])];
     return names.map(name=>{
       const own=rows.filter(r=>r.ownerName===name);
       // An either/or pair is one choice for this person: drawn once, where its first option appears.
       const seen=new Set<string>();
       const shown=own.filter(r=>{const g=hasAlternatives(r.alternatives)?r.alternatives.groupId:null;if(!g)return true;if(seen.has(g))return false;seen.add(g);return true;});
-      const kinds=KINDS.map(k=>({...k,rows:shown.filter(r=>kindOf(r).id===k.id)})).filter(k=>k.rows.length).map(k=>({...k,toConfirm:k.rows.every(isToConfirm)}));
-      const gaps=coverGaps(own,benefitKinds[name]??[]);
-      return {name,kinds,gaps,count:own.length};
+      // A schedule line counts as cover, as on Home and Family, under its kind, even with no amount.
+      const ownLines=lines.filter(l=>l.ownerName===name);
+      return {name,...coveragePersonKinds(shown,own,ownLines,benefitKinds[name]??[])};
     });
-  },[rows,family,member,benefitKinds]);
+  },[rows,lines,family,member,benefitKinds]);
   const stillReading=reading.pending>0||reading.inProgress;
   /** A document that could not be read will not be read on its own: gaps are then "in the documents read so far". */
   const unreadable=stuck.length||(readStalled?Math.max(1,reading.pending):0);
@@ -174,8 +175,8 @@ function LedgerCoveragePage(){
         </select>
       </div>
     </div>
-    {loaded&&!rows.length&&!error?<div className="empty-card">{(readStalled||stuck.length)&&!retrying?"Nothing to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
-    {loaded&&rows.length?people.map(person=><section className="section coverage-person" key={person.name} data-testid="coverage-person">
+    {loaded&&!rows.length&&!lines.length&&!error?<div className="empty-card">{(readStalled||stuck.length)&&!retrying?"Nothing to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
+    {loaded&&(rows.length||lines.length)?people.map(person=><section className="section coverage-person" key={person.name} data-testid="coverage-person">
       <div className="section-heading"><h2>{person.name}</h2></div>
       {/* At a glance: the kinds of cover found, then the main kinds that are not in the documents. */}
       <div className="coverage-glance">
@@ -205,7 +206,14 @@ function LedgerCoveragePage(){
               {row.conditions.length?<ul>{row.conditions.map((c,i)=><li key={i}>{c}</li>)}</ul>:null}
               {row.quote?<blockquote>{row.quote}</blockquote>:<p className="muted">No passage recorded for this row.</p>}
             </details>
-          </li>;})}</ul>
+          </li>;})}
+          {k.lines.map((l,i)=><li key={"line"+i} className="benefit-item coverage-row" data-testid="coverage-schedule-line">
+            <div className="coverage-top">
+              <div className="benefit-head"><strong>{l.category}</strong></div>
+              <p className="muted-cell">Listed on your schedule or certificate. The amount isn&rsquo;t shown here; see {l.sourcePage?`page ${l.sourcePage}`:"the document"}.</p>
+            </div>
+            <p className="coverage-plan">{l.planName??"Your plan"}{l.insurer?` · ${l.insurer}`:""}</p>
+          </li>)}</ul>
       </div>)}
       {!person.kinds.length?<p className="empty-row">{unreadable?`No cover for ${person.name} was found in the documents read so far. ${unreadableNote} them.`:stillReading?`Nothing for ${person.name} yet. Documents are still being read.`:`No cover for ${person.name} was found in your uploaded documents. A plan you haven’t uploaded may still cover them.`}</p>:null}
     </section>):null}

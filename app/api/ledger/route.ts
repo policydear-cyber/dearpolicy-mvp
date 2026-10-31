@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { scheduleOnlyLines,type ScheduleLine } from "@/components/cover-kinds";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
@@ -21,6 +23,13 @@ export const ROUTE_AUTH = "household-member" as const;
  * next answer exact. */
 function family(accountId:string){
   return query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
+}
+/** The lines of cover each person's schedules and certificates list, by the same rule Home's tiles read them
+ * (app/api/dashboard: confirmed, checked against the page, on an active and trusted policy). Coverage rows are seeded only
+ * from a line with an amount and a stated currency, so a line without one is shown from here (scheduleOnlyLines). No
+ * amount is sent: a line's figure has no stated basis (per month, per day, or a sum) on this path. */
+async function scheduleLines(accountId:string){
+  return (await query<ScheduleLine>(`SELECT pc.family_member_id::text AS "familyMemberId",p.id::text AS "policyId",pc.category,coalesce(pc.product_name,p.product_name) AS "planName",p.insurer,pc.source_page AS "sourcePage" FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} JOIN family_members f ON f.id=pc.family_member_id AND f.account_id=pc.account_id AND ${activePredicate("f")} WHERE pc.account_id=$1 AND pc.confirmed=true AND pc.evidence_verified=true ORDER BY p.created_at,pc.created_at`,[accountId])).rows;
 }
 /** A row as the page shows it, with ID numbers masked as on every other screen (a short plan a person named after a file
  * can carry one: TE pr187 a). Row ids are kept. */
@@ -50,7 +59,10 @@ export async function GET(request:NextRequest){
       noFigure:shown.filter(r=>!r.hasFigure).length,
     };
     const pending=await pendingDocumentCount(accountId);
-    return NextResponse.json({rows:shown,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
+    // Optional: the page works without it, as before.
+    const lines=scheduleOnlyLines((await scheduleLines(accountId).catch(()=>[])).filter(l=>!member||l.familyMemberId===member),rows)
+      .map(l=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
+    return NextResponse.json({rows:shown,scheduleLines:lines,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       // documents: which document is waiting, being read, or failed and why.
       reading:{pending,inProgress:ledgerReadingInProgress(accountId),documents:await ledgerReadDocuments(accountId)}});
   }catch(error){
