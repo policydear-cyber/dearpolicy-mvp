@@ -26,8 +26,8 @@ const MAY_STATE_AMOUNT = new RegExp([
  * follows it; one that pays the whole sum insured in words needs the person's own schedule; one worked out from the
  * policy's value or the premiums paid has no figure until the claim. A reason is given only when, with the reason's own
  * words and harmless counts and durations taken out, nothing else in the passage may state an amount (TE pr230). */
-const WAIVES_PREMIUMS = /\bwaive[sd]?\s+(?:all\s+|any\s+)?(?:the\s+)?(?:future\s+|further\s+|subsequent\s+)?premiums?\b|\bwaiver\s+of\s+(?:future\s+)?premiums?\b|\bpremiums?\s+(?:will\s+be|shall\s+be|are|is)\s+waived\b|\b(?:not|no\s+longer)\s+(?:charge|collect)\s+(?:any\s+)?(?:further\s+|future\s+)?premiums?\b|\b(?:pengecualian|pembebasan|mengecualikan|membebaskan)\s+(?:semua\s+|sebarang\s+)?premi(?:um)?\b|\bpremi(?:um)?\s+(?:akan\s+)?dibebaskan\b/giu;
-const ADVANCE_OF_DEATH_BENEFIT = /\b(?:an\s+)?(?:advance(?:ment)?|accelerat\w*)\s+(?:of|from|on)\s+(?:the\s+)?death\s+benefit\b/giu;
+const WAIVES_PREMIUMS = /\bwaive[sd]?\s+(?:all\s+|any\s+)?(?:the\s+)?(?:future\s+|further\s+|subsequent\s+)?premiums?\b|\bwaiver\s+of\s+(?:future\s+)?premiums?\b|\bpremium\s+waiver\b|\bpremiums?(?:\s+under\s+this\s+(?:policy|plan))?\s+(?:will\s+be|shall\s+be|are|is)\s+waived\b|\b(?:not|no\s+longer)\s+(?:charge|collect)\s+(?:any\s+)?(?:further\s+|future\s+)?premiums?\b|\b(?:pengecualian|pembebasan|mengecualikan|membebaskan)\s+(?:semua\s+|sebarang\s+)?premi(?:um)?\b|\bpremi(?:um)?\s+(?:selanjutnya\s+)?(?:akan\s+)?dibebaskan\b/giu;
+const ADVANCE_OF_DEATH_BENEFIT = /\b(?:an\s+)?(?:advance(?:ment)?|accelerat\w*)(?:\s+payment)?\s+(?:of|from|on)\s+(?:the\s+)?death\s+benefit\b|\bpay\s+(?:the\s+)?death\s+benefit\s+in\s+advance\b/giu;
 const WHOLE_SUM_IN_WORDS = /\b(?:(?:one\s+)?lump\s+sum\s+(?:payment\s+)?of|pays?|payable\s+is|(?:pay(?:s|able)?\s+)?the\s+full)\s+the\s+(?:coverage\s+amount|sum\s+(?:assured|insured)|insured\s+amount|amount\s+of\s+cover)\b/giu;
 const FROM_POLICY_VALUE = /\b(?:\d{1,3}(?:\.\d+)?\s*%\s+of\s+\(?\s*(?:the\s+)?)?(?:(?:policy|cash[\s-]?in|cash|surrender|account|fund|unit|investment|maturity)\s+values?\b|bid\s+price\b|nilai\s+(?:tunai|penyerahan|polisi)\b|(?:reversionary|accumulated|cash[\s-]?in|terminal)\s+bonus(?:es)?\b)|\b(?:\d{1,3}(?:\.\d+)?\s*%\s+of|of|return\w*|refund\w*|and|or)\s+\(?\s*(?:the\s+|all\s+)?(?:total\s+)?premiums?\s+paid\b(?:\s+on\s+the\s+[\p{L}\s]{1,20}?\b(?:plan|policy|benefit)\b)?(?:,?\s*(?:less|minus|excluding)\s+any\s+(?:[\p{L}-]+\s+){0,2}premiums?\b)?/giu;
 /** Counts and durations that state no amount: "37 critical illnesses", "12 months", "age 65", "the 2nd year". */
@@ -46,19 +46,19 @@ const FILLER = new Set(("a an the this that these those it its we will shall wou
   + "you your our his her their life insured assured person policy policyholder policyowner owner plan basic main rider contract "
   + "benefit due date beginning starting diagnosis diagnosed death dies die dying terminal terminally illness illnesses critical "
   + "early major disease diseases condition conditions covered total totally permanent permanently disability disabled "
-  + "accident accidental injury hospital get receive continues continue cover force future further remaining first stated shown specified set out applies apply "
+  + "accident accidental injury hospital get receive continues continue cover force future further remaining first stated shown specified set out applies apply until anniversary payor payer next attached riders ends end suffers suffer or stage accelerated reaches "
   + "kami akan yang dan jika apabila semasa hayat diinsuranskan orang polisi pelan manfaat kematian penyakit kritikal hilang upaya kekal "
-  + "masa hadapan depan peserta").split(" "));
+  + "masa hadapan depan peserta tertanggung mengalami cacat tetap total").split(" "));
 /** A value passage may also say how the value is taken: "pay … being the Policy Value as at the relevant Valuation Day",
  * "the higher of (a) … or (b) …", "choose to fully or partially withdraw". Adding to it ("plus a bonus", "together with
  * interest", "otherwise we refund") is not here. */
 const VALUE_FILLER = new Set(("pay pays paid payable return returns refund refunds being higher greater of or following alive maturity "
   + "relevant valuation day determined reference prevailing immediately choose either fully partially withdraw withdrawn surrender "
-  + "surrendered term dies policy guaranteed declared accumulated").split(" "));
+  + "surrendered term dies policy guaranteed declared accumulated which depends depend performance funds fund date death at polis dibayar diserahkan").split(" "));
 /** Fees and charges taken from a value leave it a value: "(less applicable fees and charges, if any)". */
 const LESS_FEES = /\(?\s*less\s+(?:any\s+)?(?:applicable\s+)?(?:fees|charges)(?:\s+and\s+(?:fees|charges))?(?:,?\s*if\s+any)?\s*\)?/giu;
 /** "we will pay the TI benefit as …", "is paid as …": the reason itself, said with a verb of paying. */
-const PAID_AS = /\b(?:(?:we\s+(?:will\s+|shall\s+)?)?pay(?:s|able)?\s+(?:the\s+|this\s+)?(?:[\p{L}/]+\s+){0,3}?benefit\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid(?=\s+(?:within|on|upon|to|when|if)\b))\b/giu;
+const PAID_AS = /\b(?:(?:we\s+(?:will\s+|shall\s+)?)?pay(?:s|able)?\s+(?:the\s+|this\s+)?(?:[\p{L}/]+\s+){0,3}?benefit\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid(?=\s+(?:within|on|upon|to|when|if)\b)|payable\s+once|once\s+it\s+is\s+paid)\b/giu;
 function onlyFiller(rest: string, extra?: Set<string>): boolean {
   return rest.replace(PAID_AS, " ").split(/[^\p{L}\p{N}%]+/u).filter(Boolean)
     .every((w) => FILLER.has(w.toLowerCase()) || extra?.has(w.toLowerCase()) || /^\p{Lu}{2,4}$/u.test(w) || /^\p{Ll}$/u.test(w));
