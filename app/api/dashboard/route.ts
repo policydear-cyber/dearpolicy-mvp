@@ -45,7 +45,7 @@ export async function GET(request:NextRequest){
   const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT p.id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id LEFT JOIN policies p ON p.id=pm.policy_id AND p.account_id=f.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")} WHERE f.account_id=$1 AND ${activePredicate("f")} GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
   const requested=url.searchParams.get("familyMemberId"); const active=familyResult.rows.find((m)=>m.id===requested)??familyResult.rows[0]??null;
   // An empty household is not "everything current": it has nothing on file yet.
-  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:null,annual:null,currency:null,totals:[],items:[],missing:[],complete:false,note:null},
+  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,currency:null,totals:[],items:[],missing:[],complete:false,note:null},
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
@@ -169,7 +169,9 @@ export async function GET(request:NextRequest){
   }
   const premiumTotals=[...totals.values()].sort((a,b)=>b.annual-a.annual);
   const one=premiumTotals.length===1?premiumTotals[0]:null;
-  const annual=one?.annual??null,monthly=one?.monthly??null,premiumCurrency=one?.currency??null;
+  // Nothing on file is 0; premiums in two currencies, or none with a stated currency, have no one figure (null).
+  const none=!premiumItems.length;
+  const annual=one?.annual??(none?0:null),monthly=one?.monthly??(none?0:null),premiumCurrency=one?.currency??null;
   const unstatedNote=unstated.length?`The total ${premiumSummary.note?"also ":""}leaves out ${[...new Set(unstated)].slice(0,4).join(", ")}: ${unstated.length===1?"its record does not say":"their records do not say"} which currency the premium is in.`:null;
   const premiumNote=[premiumSummary.note,unstatedNote].filter(Boolean).join(" ")||null;
 
