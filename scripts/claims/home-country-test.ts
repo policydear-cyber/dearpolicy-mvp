@@ -25,7 +25,8 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { homeCountryFromCurrencies, awayFromHome } = await import("@/lib/claims/home-country");
+  const homeMod = await import("@/lib/claims/home-country");
+  const { homeCountryFromCurrencies, awayFromHome } = homeMod;
   const { applyMessageFacts } = await import("@/lib/claims/message-facts");
   const { eventFitIssue } = await import("@/lib/claims/event-fit");
   const { planFactFinding } = await import("@/lib/claims/fact-finding");
@@ -52,6 +53,30 @@ async function main() {
     assert.equal(awayFromHome("Bali", "Australia"), true);
     assert.equal(awayFromHome("Singapore", "Malaysia"), true);
   });
+  const located = (message: string, home: string | null | undefined) => {
+    const facts: Record<string, { value: unknown }> = {};
+    applyMessageFacts({ message, facts: facts as never, now, ...(home === undefined ? {} : { home }) });
+    return facts.eventLocation?.value ?? null;
+  };  await test("a place is read only where the words say where it happened, never from an ordinary word or a name", () => {
+    const { placeCountry } = homeMod;
+    for (const t of ["We had a nice time until Mai fell at the park", "Florence broke her wrist at netball", "Darwin slipped at work and hurt his back",
+      "She was admitted to the Prince of Wales Hospital", "Victoria needs a filling", "Reading the schedule, is Perth covered?".replace("Perth", "Jordan"), "Georgia hurt her knee"])
+      assert.equal(placeCountry(t), null, t);
+    assert.equal(placeCountry("He fell in Darwin last week"), "Australia");
+    assert.equal(placeCountry("we were on holiday in Nice"), "France");
+    assert.equal(placeCountry("broke her arm on a school trip to Florence"), "Italy");
+    assert.equal(placeCountry("hiking in Wales"), "United Kingdom");
+    assert.equal(placeCountry("Sydney"), "Australia");
+    assert.equal(placeCountry("in Kuala Lumpur."), "Malaysia");
+    assert.equal(placeCountry("she was admitted overnight at KKH"), "Singapore");
+  });
+  await test("a name or ordinary word never makes an event overseas, in several markets", () => {
+    for (const home of ["Singapore", "Malaysia", "United Kingdom", "Australia"]) {
+      assert.equal(located("Florence broke her wrist at netball yesterday", home), null, home);
+      assert.equal(located("We had a nice time but Bao fell off his bike near our flat", home), null, home);
+      assert.equal(located("Darwin slipped at work and broke his ankle", home), null, home);
+    }
+  });
   await test("with home unknown, a named place is neither at home nor overseas; 'overseas' and 'at home' still are", () => {
     assert.equal(awayFromHome("Sydney", null), null);
     assert.equal(awayFromHome("Overseas", null), true);
@@ -59,11 +84,7 @@ async function main() {
     assert.equal(awayFromHome("the park near our flat", "Australia"), null);
   });
 
-  const located = (message: string, home: string | null | undefined) => {
-    const facts: Record<string, { value: unknown }> = {};
-    applyMessageFacts({ message, facts: facts as never, now, ...(home === undefined ? {} : { home }) });
-    return facts.eventLocation?.value ?? null;
-  };
+
   await test("an Australian family's accident in Sydney is at home, never Overseas", () => {
     assert.equal(located("Daniel slipped at work in Sydney and broke his ankle last week", "Australia"), "Australia");
   });

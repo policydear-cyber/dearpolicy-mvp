@@ -58,10 +58,22 @@ const REGIONS: [RegExp, Set<string>][] = [
   [/\beurope\b/i, new Set(["United Kingdom", "France", "Italy", "Spain", "Germany", "Switzerland"])],
 ];
 
-/** The country a place a family named is in, or null when it is not one listed (a park, an office, a town not listed). */
+/** The words that put a place where something happened: "in Sydney", "at KKH", "on holiday to Bali", "back from
+ * Penang". A place name anywhere else is not read as one: "a nice time", "Florence's knee", "Darwin fell", "the Prince
+ * of Wales Hospital" (test engineer, 31 Oct). */
+const LOCATIVE = /\b(?:in|at|to|from|near|around|visiting|visit|across|through|outside|inside|into|towards?|via|within|on)\s+(?:the\s+)?(?:(?:city|centre|center|middle|north|south|east|west|northern|southern|eastern|western|central|downtown|outskirts|island|state|region)\s+(?:of\s+)?)?$/i;
+
+/** The country a place a family named is in, or null when it is not one listed (a park, an office, a town not listed).
+ * A closed, positive match: the text is only the place ("Sydney", an answer to "Where did it happen?"), or the place
+ * follows a word that says where (LOCATIVE). */
 export function placeCountry(text: string | null | undefined): string | null {
-  const t = String(text ?? "");
-  for (const [pattern, country] of PLACES) if (pattern.test(t)) return country;
+  const t = String(text ?? "").trim();
+  const bare = t.replace(/^(?:in|at)\s+/i, "").replace(/[\s.!?,;:]+$/, "");
+  for (const [pattern, country] of PLACES) {
+    const whole = bare.match(pattern);
+    if (whole && whole.index === 0 && whole[0].length === bare.length) return country;
+    for (const m of t.matchAll(new RegExp(pattern.source, "gi"))) if (LOCATIVE.test(t.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0))) return country;
+  }
   return null;
 }
 
@@ -77,6 +89,9 @@ export function awayFromHome(location: string | null | undefined, home: string |
   if (HOME_WORDS.test(t)) return false;
   const country = placeCountry(t);
   if (country) return home ? country !== home : null;
-  for (const [pattern, countries] of REGIONS) if (pattern.test(t)) return home ? !countries.has(home) : null;
+  for (const [pattern, countries] of REGIONS) {
+    const m = t.match(pattern);
+    if (m && (m[0].length === t.replace(/[\s.!?]+$/, "").length || LOCATIVE.test(t.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0)))) return home ? !countries.has(home) : null;
+  }
   return null;
 }

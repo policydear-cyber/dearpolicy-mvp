@@ -65,6 +65,12 @@ async function main() {
   ]);
   const term = await schedule(gb, "Level Term Assurance", [{ category: "Death", amount: 250000, currency: "GBP", quote: "Sum assured\t250,000.00" }]);
   const pa = await schedule(my, "Group Personal Accident", [{ category: "Death", amount: 200000, currency: "MYR", quote: "Accidental death\tRM200,000" }]);
+  const other = await person("Hamish Reid", "parent");
+  // Line categories in other words than the usual list, as some intakes store them.
+  await schedule(other, "Thistle Level Term", [
+    { category: "Life Cover", amount: 300000, currency: "GBP", quote: "Life cover (level)\t£300,000.00" },
+    { category: "TPD Cover", amount: 100000, currency: "GBP", quote: "Total permanent disability\t£100,000.00" },
+  ]);
   const unstated = await schedule(sg, "Lighthouse Term Plan", [{ category: "Death", amount: 150000, currency: null, quote: "Sum assured\t$150,000" }]);
 
   // Rows an older rule seeded beside the £ life line: one untouched, one a person changed, one a person rejected.
@@ -111,6 +117,9 @@ async function main() {
       const r = await rows(gb);
       assert.equal(Number(r.find((x) => x.id === changed)?.amount), 200000);
       assert.equal(r.find((x) => x.id === rejected)?.status, "rejected");
+    });
+    await test("a line category in other words keeps its own amount: 'Life Cover' is death £300,000, 'TPD Cover' is TPD £100,000", async () => {
+      assert.deepEqual(figures(await rows(other)).filter((x) => x[1] != null), [["death", 300000, "GBP"], ["tpd", 100000, "GBP"]]);
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);

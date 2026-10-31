@@ -184,8 +184,22 @@ export const SCHEDULE_LINE_EVENTS:Record<string,{event:EventType;pays:PaysKind}>
 };
 /** The benefit a schedule line seeds: its own category's, with an accident plan's death line read as accidental death
  * (a personal accident schedule's "Death" sum pays only on an accident). Null when the line names no listed cover. */
+/** A line category in other words than the list above ("Life Cover", "Death Benefit", "TPD", "Trauma"), read from the
+ * category alone, never from the plan's name: a "TPD Cover" line on a life plan is TPD, never death. Ordered so the
+ * narrower cover wins ("Accidental Death" before "Death", "Early Critical Illness" before "Critical Illness"). */
+const SCHEDULE_LINE_WORDS:[RegExp,string][]=[
+  [/\btpd\b|\btotal (?:and |& )?permanent(?:ly)? disab/i,"Total Permanent Disability"],
+  [/\b(?:early|intermediate|early[- ]stage|minor)\b[^,;]{0,20}\b(?:critical|dread|trauma|crisis)\b/i,"Early Critical Illness"],
+  [/\b(?:critical illness|dread disease|trauma|crisis cover|major illness|\bci\b)/i,"Critical Illness"],
+  [/\baccident(?:al)?\b[^,;]{0,20}\b(?:death|life)\b|\bpersonal accident\b/i,"Personal Accident"],
+  [/\bhospital (?:cash|income|allowance)\b|\bdaily (?:hospital )?(?:cash|allowance)\b/i,"Hospital Cash"],
+  [/\b(?:long[- ]term care|severe disability)\b/i,"Long-term Care"],
+  [/\b(?:income protection|disability income|salary continuance)\b/i,"Disability Income"],
+  [/\b(?:death|life (?:cover|insurance|assurance|benefit|sum assured)|^life$|term life|whole life|death in service)\b/i,"Death"],
+];
 export function scheduleLineEvent(category:string,name:string):{event:EventType;pays:PaysKind}|null{
-  const own=SCHEDULE_LINE_EVENTS[category.trim()];
+  const said=category.trim();
+  const own=SCHEDULE_LINE_EVENTS[said]??SCHEDULE_LINE_EVENTS[SCHEDULE_LINE_WORDS.find(([re])=>re.test(said))?.[1]??""];
   if(!own)return null;
   if(own.event==="death"&&/\b(?:personal accident|group accident|accident(?:al)?(?: death)?(?: cover| plan| insurance| protection)?|\bpa\b)\b/i.test(name))return {event:"accidental_death",pays:"lump_sum"};
   return own;

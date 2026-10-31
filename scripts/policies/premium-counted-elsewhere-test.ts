@@ -37,10 +37,10 @@ async function main() {
     const id = randomUUID(); accounts.push(id);
     await query("INSERT INTO accounts(id,name) VALUES($1,$2)", [id, name]);
     const person = async (n: string, rel: string) => ({ id: (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,$3) RETURNING id", [id, n, rel])).rows[0].id, display_name: n, preferred_name: null, relationship: rel });
-    async function policy(owner: string, members: string[], product: string, number: string | null, type: string, page: string) {
+    async function policy(owner: string, members: string[], product: string, number: string | null, type: string, page: string, insurer = "Example Mutual Ltd") {
       const pid = randomUUID();
       await query(`INSERT INTO policies(id,account_id,family_member_id,product_name,insurer,policy_number,policy_type,original_filename,storage_key,processing_status,quarantine_status,personal_coverage_confirmed,document_role,document_authority)
-        VALUES($1,$2,$3,$4,'Example Mutual Ltd',$5,$6,$7,$7,'ready','scan_clean',true,'personal_schedule',95)`, [pid, id, owner, product, number, type, `${pid}.pdf`]);
+        VALUES($1,$2,$3,$4,$8,$5,$6,$7,$7,'ready','scan_clean',true,'personal_schedule',95)`, [pid, id, owner, product, number, type, `${pid}.pdf`, insurer]);
       for (const m of members) await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [pid, m, id]);
       await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [id, pid, page]);
       return pid;
@@ -64,6 +64,17 @@ async function main() {
     const letter = await gb.policy(dad.id, [dad.id], "Family Health Plan", "FH004277", "Health", "Your monthly premium is £96.50");
     await gb.premium(letter, dad.id, 96.5, "GBP", "FH004277");
     void schedule;
+    // RM: a different insurer happens to use the same policy number; that premium is not this plan's.
+    const my = await household("Test household other insurer RM");
+    const ibu = await my.person("Siti Rahman", "self"), anak = await my.person("Adam Rahman", "child");
+    await my.policy(ibu.id, [ibu.id, anak.id], "Keluarga Medical Card", "MC-778812", "Health", "Members: Siti Rahman, Adam Rahman", "Contoh Takaful Berhad");
+    const other = await my.policy(ibu.id, [ibu.id], "Motor Comprehensive", "MC-778812", "Motor", "Premium RM210.00 per month", "Lain General Insurance Bhd");
+    await my.premium(other, ibu.id, 210, "MYR", "MC-778812");
+    // £: the payer was removed from the shared plan; their premium is no longer this person's plan's premium.
+    const uk2 = await household("Test household removed payer GBP");
+    const exPayer = await uk2.person("Robin Hale", "spouse"), kid = await uk2.person("Ivy Hale", "child");
+    const shared = await uk2.policy(exPayer.id, [kid.id], "Dental Plan", "DP-55120", "Health", "Members: Ivy Hale\nPremium £18.20 per month");
+    await uk2.premium(shared, exPayer.id, 18.2, "GBP", "DP-55120");
 
     await test("the child's family plan is counted under the policyholder, not called missing", async () => {
       const s = await summarisePremiums(au.id, child);
@@ -86,6 +97,21 @@ async function main() {
       const s = await summarisePremiums(gb.id, son);
       assert.deepEqual(s.missing, []);
       assert.deepEqual(s.countedElsewhere, [{ name: "Family Health Plan", owner: "Amara Okafor" }]);
+    });
+    await test("the person it says counts the premium really does count it, once (£)", async () => {
+      const s = await summarisePremiums(gb.id, dad);
+      assert.equal(Math.round(s.annual * 100) / 100, 1158, "£96.50 a month in Amara's own total");
+      assert.deepEqual(s.countedElsewhere ?? [], []);
+    });
+    await test("the same policy number from a different insurer is not counted elsewhere (RM)", async () => {
+      const s = await summarisePremiums(my.id, anak);
+      assert.deepEqual(s.countedElsewhere ?? [], []);
+      assert.ok(s.missing.includes("Keluarga Medical Card"), JSON.stringify(s.missing));
+    });
+    await test("a premium filed under someone no longer on the document is not counted elsewhere (£)", async () => {
+      const s = await summarisePremiums(uk2.id, kid);
+      assert.deepEqual(s.countedElsewhere ?? [], []);
+      assert.ok(s.missing.includes("Dental Plan"), JSON.stringify(s.missing));
     });
     await test("the chat answer for the child says whose policy pays, never that no premium is printed", async () => {
       const a = await premiumAnswer({ accountId: gb.id, people: [son], question: "How much do we pay for Tobi's insurance?" });

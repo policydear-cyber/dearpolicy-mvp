@@ -323,6 +323,8 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
   }
   return out;
 }
+/** An insurer's name for matching: lower case, letters and digits, without "Ltd", "plc", "Berhad" and the like. */
+const insurerKey = (name: string | null | undefined) => String(name ?? "").toLowerCase().replace(/\b(?:ltd|limited|plc|pte|bhd|berhad|inc|co|company|insurance|assurance|the)\b/g, "").replace(/[^a-z0-9]+/g, "");
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
     `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role
@@ -363,18 +365,26 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     // policyholder's schedule) has its premium printed: it is counted in that person's total, never "missing" here.
     const unpaidIds = unpaid.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id));
     const unpaidNumbers = unpaid.flatMap((c) => c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean)) as string[];
-    const elsewhere = unpaidIds.length || unpaidNumbers.length ? (await query<{ doc_id: string | null; policy_id_text: string | null; policy_number: string | null; owner: string }>(
-      `SELECT coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,pr.policy_number,fm.display_name AS owner
+    const elsewhere = unpaidIds.length || unpaidNumbers.length ? (await query<{ doc_id: string | null; policy_id_text: string | null; policy_number: string | null; owner: string; insurer: string | null }>(
+      `SELECT coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,pr.policy_number,fm.display_name AS owner,
+              coalesce(pr.insurer,sp.insurer) AS insurer
          FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id AND ${activePredicate("fm")}
          JOIN policies sp ON sp.id=coalesce(pr.source_document_id,pr.policy_id) AND sp.account_id=pr.account_id AND ${activePredicate("sp")}
         WHERE pr.account_id=$1 AND pr.family_member_id<>$2
+          -- The member the premium is filed under still holds that document (linked to it, or it is theirs and linked to
+          -- no one): a member removed from the policy is not who pays for it now.
+          AND (EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id AND pm.family_member_id=pr.family_member_id)
+            OR (sp.family_member_id=pr.family_member_id AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=sp.id AND pm.account_id=sp.account_id)))
           AND (pr.policy_id::text=ANY($3::text[]) OR pr.source_document_id::text=ANY($3::text[]) OR pr.policy_number IS NOT NULL)`,
       [accountId, member.id, unpaidIds])).rows : [];
     const ownerOf = (c: (typeof unpaid)[number]) => {
       const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
+      // A policy number alone can be another insurer's: it matches only with the same insurer, and only a number long
+      // enough to name one policy (Critic, 31 Oct).
+      const insurers = new Set(c.documents.map((d) => insurerKey(d.insurer)).filter(Boolean));
       return elsewhere.find((e) => (e.doc_id && ids.has(e.doc_id)) || (e.policy_id_text && ids.has(e.policy_id_text))
-        || (normalizedIdentifier(e.policy_number) && numbers.has(normalizedIdentifier(e.policy_number))))?.owner ?? null;
+        || ((normalizedIdentifier(e.policy_number) ?? "").length >= 5 && numbers.has(normalizedIdentifier(e.policy_number)) && !!insurerKey(e.insurer) && insurers.has(insurerKey(e.insurer))))?.owner ?? null;
     };
     for (const c of unpaid) { const owner = ownerOf(c); if (owner) countedElsewhere.push({ name: c.name, owner }); }
     const paidElsewhere = new Set(unpaid.filter((c) => ownerOf(c)));
