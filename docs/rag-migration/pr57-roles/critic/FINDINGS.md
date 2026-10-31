@@ -10189,3 +10189,7 @@ Root cause: a negation window is still a deny-list. Structural fix:
 Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
 
 ## R438 — #220 be502a3: READY (all-pages-failed benefits read throws, clears checkpoints; resumed/table/previous rows prevent throw; all 3 callers noteReadFailure; unread = benefits_indexed_at NULL). Low: add resumed-with-rows and table-plus-failed cases to the test.
+
+## R439 — #211 08be005 (merged main 5575198 incl #215): READY; probes unchanged; gate green.
+
+## R440 — #219 ee535fb (rebased 5575198): READY; known sum needs every priced part to state a currency; home-currency 14/0; gate green.
