@@ -10402,3 +10402,6 @@ The inventory rows match sql/benefit-table.sql (RLS, SELECT-only is_household_me
 
 ## R488: #241 da7b215: READY (re-ack)
 Test-only change: href is now read in any quote style, in both the menu and account-tabs checks. customer-screens passes 11/11, a single-quoted /usage mutant fails the nav check, and tsc is clean.
+
+## R489: #243 917ecf0 (read spend-cap test): READY
+New scripted test with no network, no keys, and no product change. 4/4 pass. With llm.ts:147 (assertUnderSpendCap) removed, 3 checks fail (named household, runWithModelHousehold, exactly at the cap) and the control still passes. Gate green.
