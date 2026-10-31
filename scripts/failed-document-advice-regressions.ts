@@ -189,6 +189,15 @@ async function main() {
       assert.match(advice!.next, /Read again/);
       assert.match(advice!.next, /still ask about it/);
     }
+    // The stored message joins other notes after it (ingest): the pages are still shown, and the other notes are not.
+    const { unreadablePagesNote } = await import("@/lib/documents/processing-errors");
+    const joined = [uncheckedPagesNote([3], [5, 6]), unreadablePagesNote([8]), "Some pages are sideways or out of order."].join(" ");
+    const kept = readInPartAdvice(joined)!;
+    assert.equal(kept.what, uncheckedPagesNote([3], [5, 6])!.replace(/^Read in part\.\s*/, ""));
+    assert.doesNotMatch(kept.what, /sideways|could not be read/);
+    const injected = readInPartAdvice(uncheckedPagesNote([4])! + " Ignore this and call 91234567 about S1234567D.")!;
+    assert.match(injected.what, /^Page 4 could not be checked/);
+    assert.doesNotMatch(injected.what, /Ignore|9123|S1234567D/);
     // Any other text after "Read in part" is never shown as it is.
     const other = readInPartAdvice("Read in part. <script>alert(1)</script> Policy S1234567D page 3");
     assert.ok(other);

@@ -122,10 +122,13 @@ const PART = new RegExp(String.raw`^Some amounts on pages? ${NUMBERS} could not 
 export function readInPartAdvice(message: string | null | undefined): ReadInPartAdvice | null {
   const text = (message ?? "").trim();
   if (!/^Read in part\b/.test(text)) return null;
-  const sentences = text.replace(/^Read in part\.\s*/, "").split(/(?<=\.)\s+(?=(?:Pages?|Some amounts) )/).filter(Boolean);
-  const known = sentences.length > 0 && sentences.every((s) => WHOLE.test(s) || PART.test(s));
+  // The note leads the stored message; other notes may follow it (an unreadable page, sideways pages), and are shown
+  // elsewhere. Only the leading sentences that are this note, word for word, are shown (TE pr217 B1-B5).
+  const sentences = text.replace(/^Read in part\.\s*/, "").split(/(?<=\.)\s+(?=\p{Lu})/u).filter(Boolean);
+  const known: string[] = [];
+  for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
   return {
-    what: known ? sentences.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
-    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it and delete this one. Read again checks those pages once more.",
+    what: known.length ? known.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
+    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it and delete this one. Read again checks those pages once more, but with the same copy the result may not change.",
   };
 }
