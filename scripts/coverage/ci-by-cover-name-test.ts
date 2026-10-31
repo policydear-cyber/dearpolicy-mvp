@@ -84,6 +84,22 @@ t("an early-stage row in Malay is early critical illness",
   t("without the plan's sum insured, two different sums give no total", noSum.total === null, noSum);
 }
 
+// Critic H1 on #252: rows of a critical illness plan that are not an illness, in several languages, and cover for others.
+for (const benefit of ["Santunan Meninggal Dunia", "Pembebasan Premi", "Bantuan Pengebumian", "Annual Cash Payout", "Guaranteed Cash Benefit", "Survival Benefit",
+  "Health Screening Benefit", "Second Medical Opinion", "Wellness Reward", "Vaccination", "Policy Loan", "Prestation décès", "Rente mensuelle", "Child Benefit",
+  "Spouse Benefit", "Dependant's benefit", "Lump sum payout", "Benefit A", "Premium Holiday", "Coverage Multiplier", "Monthly Payout for 3 years"]) {
+  const got = categoryOfRow(row("kestrel", { product: "Acme CritiCare Critical Illness Plan", cover: "Acme CritiCare Critical Illness Plan" }, benefit, 5000, "SGD"));
+  t(`in a critical illness plan, "${benefit}" is not critical illness`, got === null, got);
+}
+// The product names the whole policy: a base plan's row is never critical illness because a rider's name is in the product;
+// the rider's own row is.
+t("a base savings plan's illness-named row is not critical illness because the product names a CI rider",
+  categoryOfRow(row("base", { product: "LifeGuard Saver with Critical Illness Rider", cover: "LifeGuard Saver" }, "Kidney failure", 20000, "SGD")) === null);
+t("the rider's own row is critical illness",
+  categoryOfRow(row("rider", { product: "LifeGuard Saver", cover: "CritiCare Critical Illness Rider" }, "Kanser", 20000, "MYR")) === "Critical Illness");
+t("a plan tier name is never read",
+  categoryOfRow(row("tier", { product: "Acme Health", cover: "Acme Health", plan: "Critical Illness Option" }, "Major Cancer", 20000, "SGD")) === null);
+
 // A plan whose names never say critical illness is never made critical illness by its illness rows.
 for (const names of [{ product: "Harbour Term Life" }, { product: "Acme Health Shield", cover: "Acme Health Shield" }, { cover: "Critical Care Hospital Plan" }]) {
   const r = row("other", names, "Major Cancer", 50000, "SGD");

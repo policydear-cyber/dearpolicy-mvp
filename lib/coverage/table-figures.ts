@@ -156,7 +156,11 @@ export function categoryOfRow(r: { benefit: string; section?: string | null } & 
   const own = categoryOfBenefit(r.benefit, r.section);
   if (own || !CONDITION.test(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
     || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim())))) return own;
-  const names = [r.section, r.cover, r.plan, r.product].filter((x): x is string => !!x);
+  // The row's own section and its own cover's name (Critic R on #252 H1a). The product names the whole policy, base plan and
+  // riders together ("LifeGuard Saver with Critical Illness Rider"), so it is read only when it is that cover's own name
+  // (a stand-alone plan) or the cover has none. A plan tier ("Plan B") is never read.
+  const own_ = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const names = [r.section, r.cover, !r.cover || own_(r.cover) === own_(r.product) ? r.product : null].filter((x): x is string => !!x);
   if (names.some((n) => EARLY_COVER.test(n))) return "Early Critical Illness";
   if (!names.some((n) => CI_COVER.test(n))) return null;
   return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : "Critical Illness";
