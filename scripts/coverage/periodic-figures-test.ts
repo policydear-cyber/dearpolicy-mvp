@@ -40,6 +40,24 @@ async function readerTests() {
     ["S$150/day", 150, "day"], ["S$2,000 per month", 2000, "month"], ["Monthly benefit S$2,000", 2000, "month"], ["2,000 SGD a month", 2000, "month"],
     ["Waiting period 30 days; Monthly benefit A$7,500", 7500, "month"],
   ] as const) await test(`"${text}" has its figure's period`, () => assert.equal(printedLinePeriod(text, amount), want));
+  // Reviewers' probes (Critic and TE, #266): when or how long is never how often; a lump sum takes no period.
+  for (const [text, amount] of [
+    ["Accidental Death S$100,000 (24 hours a day, worldwide)", 100000], ["Yearly Renewable Term Life Cover S$500,000", 500000],
+    ["Annual Renewable Term — Sum Assured S$500,000", 500000], ["Death Benefit S$200,000 payable within a month of claim approval", 200000],
+    ["TPD S$300,000 (disabled for 6 months in a year)", 300000], ["Critical Illness RM200,000, waiting period a year", 200000],
+    ["Kematian RM100,000 (perlindungan 24 jam sehari)", 100000], ["死亡保险金 HK$1,000,000 每日24小时保障", 1000000],
+    ["Faedah kematian RM150,000 dibayar dalam tempoh sebulan", 150000], ["Accident Medical Reimbursement S$5,000 per accident, physiotherapy S$50 per day", 5000],
+    ["重大疾病 HK$500,000 每年保费 HK$3,000", 500000], ["Critical Illness S$200,000, payable after a waiting period of a month", 200000],
+    ["Death RM300,000 (policy renewable each year)", 300000],
+  ] as const) await test(`"${text}" has no period`, () => assert.equal(printedLinePeriod(text, amount), null));
+  for (const [text, amount, want] of [["Hospital Cash S$150/day ICU S$300/day", 150, "day"], ["S$150/night", 150, "day"],
+    ["RM100 sehari, maksimum RM10,000 setahun", 100, "day"], ["RM100 sehari, maksimum RM10,000 setahun", 10000, "year"]] as const)
+    await test(`"${text}" (${amount}) prints ${want}`, () => assert.equal(printedLinePeriod(text, amount), want));
+  await test("a lump sum never shows a period; one paid per period shows no figure", () => {
+    assert.deepEqual(lineFigure("Death", 500000, "Yearly Renewable Term Life Cover S$500,000"), { amount: 500000, period: null });
+    assert.deepEqual(lineFigure("Death", 2000, "Death benefit S$2,000 per month"), { amount: null, period: null });
+    assert.deepEqual(lineFigure("Critical Illness", 200000, "Critical Illness S$200,000 (24 hours a day)"), { amount: 200000, period: null });
+  });
   await test("two periods on a line: the clause that prints the amount decides", () => {
     assert.equal(printedLinePeriod("Daily S$100, max S$3,000 per year", 100), "day");
     assert.equal(printedLinePeriod("Daily S$100, max S$3,000 per year", 3000), "year");
@@ -141,6 +159,19 @@ async function routeTests() {
         const t = tile(await home(account, priya), "Hospitalisation");
         assert.equal(t.amount, null);
         assert.deepEqual((t.parts ?? []).map((p) => [p.amount, p.period]).sort(), [[1000000, "year"], [500000, "year"]]);
+      });
+      await test(`${which}: chat lists each income with its period and never adds incomes or hospital limits`, async () => {
+        const { answerPortfolioQuestion } = await import("@/lib/coverage/answer");
+        const di = await answerPortfolioQuestion(account, tom, "How much disability income cover do I have?");
+        const text = [di.summary, ...di.details].join("\n");
+        assert.ok(!/3,400/.test(text), text);
+        assert.match(text, /2,400 a month/); assert.match(text, /1,000 a month/);
+        const hosp = await answerPortfolioQuestion(account, priya, "How much hospital cover do I have?");
+        assert.ok(!/1,500,000/.test([hosp.summary, ...hosp.details].join("\n")), hosp.summary);
+        const none = await answerPortfolioQuestion(account, aiman, "How much disability income cover do I have?");
+        assert.ok(!/3,000/.test([none.summary, ...none.details].join("\n")), none.summary);
+        const death = await answerPortfolioQuestion(account, priya, "How much death cover do I have?");
+        assert.match(death.summary, /350,000/); // lump sums in one currency still add up
       });
       await test(`${which}: lump sums still add up (control)`, async () => {
         const t = tile(await home(account, priya), "Death");
