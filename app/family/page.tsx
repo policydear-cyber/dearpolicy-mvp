@@ -51,10 +51,10 @@ export default function FamilyPage() {
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
     void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
-      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[] }[] } | null) => {
+      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
         if (!table) return;
-        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])]))); }
+        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); }
         return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
           if (!l) return;
           setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));

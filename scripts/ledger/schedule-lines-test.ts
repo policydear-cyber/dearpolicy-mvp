@@ -4,7 +4,7 @@
  * Coverage (new-user walkthrough, 31 Oct). The rule now: a confirmed, checked schedule line is cover on every page.
  * Made-up households in AUD, GBP, MYR and SGD, invented insurers and plan names. No model, no database, no network.
  *   npm run ledger:schedule-lines-test */
-import { coveragePersonKinds, kindOfCategory, ledgerKindsByPerson, scheduleOnlyLines, type KindRow, type ScheduleLine } from "@/components/cover-kinds";
+import { coveragePersonKinds, kindOfCategory, kindsOfTable, ledgerKindsByPerson, scheduleOnlyLines, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 import { COVERAGE_CATEGORIES } from "@/lib/insurance";
 
 const realFetch = globalThis.fetch;
@@ -150,6 +150,41 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
   const none = coveragePersonKinds([], [], []);
   t("nobody's lines: no kinds, every main kind missing, count 0", none.kinds.length === 0 && none.count === 0 && none.gaps.missing.length === 4, none);
   t("Family: a person with nothing is not listed", Object.keys(ledgerKindsByPerson([], [])).length === 0);
+}
+
+// A confirmed schedule line confirms its kind even when the policy's only row of that kind is a plan type's usual benefit
+// (proposed, from the schedule): Home shows "Death RM200,000", so Family never says "Death (to confirm)" (cross-page check).
+{
+  const a = "m-aiman2";
+  const rows = [row({ familyMemberId: a, policyId: "pol-tk", eventType: "death", status: "proposed", origin: "schedule" }),
+    row({ familyMemberId: a, policyId: "pol-tk", eventType: "tpd", status: "proposed", origin: "schedule" })];
+  const lines = scheduleOnlyLines([line(a, "pol-tk", "Death")], rows);
+  t("proposed death row + Death line: the line is kept to confirm the kind", lines.length === 1 && lines[0].confirmsOnly === true, lines);
+  t("... Family: Death confirmed, TPD still to confirm", JSON.stringify(ledgerKindsByPerson(rows, lines)[a]) === JSON.stringify(["Death", "Disability (to confirm)"]), ledgerKindsByPerson(rows, lines));
+  const cov = coveragePersonKinds(rows, rows, lines);
+  const death = cov.kinds.find((k) => k.id === "death")!;
+  t("... Coverage: Death is not 'to confirm', and the line is not drawn again beside its row", !death.toConfirm && death.lines.length === 0 && death.rows.length === 1, death);
+  t("... Coverage: Disability stays 'to confirm'", cov.kinds.find((k) => k.id === "disability")!.toConfirm === true);
+  t("a confirmed row still hides the line", scheduleOnlyLines([line(a, "pol-tk", "Death")], [row({ familyMemberId: a, policyId: "pol-tk", eventType: "death" })]).length === 0);
+}
+
+// The table path: Family lists the kinds the person's schedule lines name, as Home does, whatever language the cover and
+// its benefits are named in. A row or cover named in no known words is "Other" only when no line of its document says what it is.
+{
+  const doc = "doc-tk", other = "doc-x";
+  const tr = (benefit: string, product: string, cover: string, documentId: string): TableKindRow => ({ benefit, pays: "amount", product, cover, source: { documentId } });
+  const tc = (product: string, cover: string, documentId: string): TableKindCover => ({ product, cover, source: { documentId } });
+  const rows = [tr("Kematian atau Hilang Upaya Menyeluruh dan Kekal", "Teratai Family Takaful", "Family Takaful", doc), tr("Serangan Jantung", "Teratai Family Takaful", "Rider Penyakit Kritikal", doc)];
+  const covers = [tc("Teratai Family Takaful", "Family Takaful", doc), tc("Teratai Family Takaful", "Rider Penyakit Kritikal", doc)];
+  t("table: without the lines, a takaful plan is only 'Other' (the bug)", JSON.stringify(kindsOfTable(rows, covers)) === JSON.stringify(["Other"]), kindsOfTable(rows, covers));
+  const lines = [{ policyId: doc, category: "Death" }, { policyId: doc, category: "Critical Illness" }];
+  t("table: with its lines, Death and Critical illness, no 'Other'", JSON.stringify(kindsOfTable(rows, covers, lines)) === JSON.stringify(["Death", "Critical illness"]), kindsOfTable(rows, covers, lines));
+  const stray = [...rows, tr("Santunan khusus", "Plan Lain", "Plan Lain", other)];
+  t("table: an unnamed row of another document stays 'Other'", kindsOfTable(stray, covers, lines).includes("Other"), kindsOfTable(stray, covers, lines));
+  const ip = [tr("Monthly benefit", "Larkfield Income Protection", "Income Protection", "doc-ip")];
+  t("table: income protection with its Disability Income line is Disability", JSON.stringify(kindsOfTable(ip, [], [{ policyId: "doc-ip", category: "Disability Income" }])) === JSON.stringify(["Disability"]), kindsOfTable(ip, [], [{ policyId: "doc-ip", category: "Disability Income" }]));
+  t("table: a line whose document has no table cover yet still counts", JSON.stringify(kindsOfTable([], [], [{ policyId: "doc-none", category: "Hospital Cash" }])) === JSON.stringify(["Hospital and medical"]));
+  t("table: no lines, English names unchanged", JSON.stringify(kindsOfTable([tr("Death benefit", "Wattle Term Life", "Term Life", "d")], [])) === JSON.stringify(["Death"]));
 }
 
 globalThis.fetch = realFetch;
