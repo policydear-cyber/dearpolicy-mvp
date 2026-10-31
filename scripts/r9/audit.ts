@@ -15,6 +15,7 @@ import { INGEST_SENTINEL_PATTERN } from "@/lib/ai/chaos-ingest";
 import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { shareCapNote } from "@/lib/policies/benefit-catalog";
 import { formatMoney } from "@/lib/format/currency";
+import { FIGURE_END, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { benefitNamePrinted, looksLikeName, personPrinted } from "@/lib/documents/fact-check";
 
 type Row = Record<string, unknown>;
@@ -59,12 +60,19 @@ const SYSTEM_NOTE = /^(?:The policy states this benefit as|DearPolicy read this 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // The share-cap note, taken from the product's own wording so the two never drift: "Paid up to <figure>, the cap ...".
 const SHARE_CAP_NOTE = (() => { const [pre, post] = shareCapNote(12345, "SGD").split(formatMoney(12345, "SGD")); return new RegExp("^" + escape(pre) + "(.+?)" + escape(post) + "$"); })();
-/** A note DearPolicy writes itself rather than reads from the page. One that names a figure counts only when the
- * document prints that figure: a note is never a way to plant an amount. */
+/** A note DearPolicy writes itself rather than reads from the page. One that names a figure counts only when it names
+ * exactly ONE figure and the document prints it: a note is never a way to plant an amount ("up to S$75,000 and
+ * S$999,999" names two, so it is not DearPolicy's note). */
 export function ownNote(note: string, text: string) {
   if (SYSTEM_NOTE.test(note) || note === PLAN_COLUMNS_NOTE) return true;
-  const figure = note.match(SHARE_CAP_NOTE)?.[1]?.match(/\d[\d,]*(?:\.\d+)?/)?.[0];
-  return !!figure && amountAppears(text, Number(figure.replace(/,/g, "")), "money");
+  if (!SHARE_CAP_NOTE.test(note)) return false;
+  const figures = note.match(new RegExp(PRINTED_FIGURE, "g")) ?? [];
+  if (figures.length !== 1) return false;
+  const value = printedNumber(figures[0]);
+  if (value === null) return false;
+  // The page prints that figure WHOLE: "S$1,936" is not printed by "S$1,936.50", and "Rp4.250.000" prints 4,250,000.
+  const lakh = groupsInLakhs(text);
+  return (text.match(new RegExp(PRINTED_FIGURE + FIGURE_END, "g")) ?? []).some((f) => printedNumber(f, null, { lakh }) === value);
 }
 
 export function audit(chaos: Snapshot, pristine: Snapshot): Violation[] {
