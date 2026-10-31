@@ -109,6 +109,9 @@ function LoginForm() {
       <p>
         New here? <Link href="/signup">Create a household</Link>
       </p>
+      <p className="field-hint">
+        <Link href="/privacy">How we handle your information</Link>
+      </p>
     </div>
   );
 }

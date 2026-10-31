@@ -111,6 +111,7 @@ table { font-variant-numeric: tabular-nums; }
 .sidebar-footer { margin-top: auto; padding: 16px 8px 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; display: grid; gap: 10px; }
 .sidebar-footer p { margin: 0; }
 .privacy-pill { display: inline-flex; justify-self: start; border: 1px solid var(--good-line); background: var(--good-tint); color: var(--good-text); padding: 4px 10px; border-radius: 999px; font-weight: 650; font-size: var(--fs-xs); }
+.to-confirm { background: var(--warn-tint); color: var(--warn-text); border: 1px dashed var(--warn-line); border-radius: 4px; padding: 0 4px; }
 .main-content { min-width: 0; }
 .page { max-width: 1120px; margin: 0 auto; padding: 44px 40px 72px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; }

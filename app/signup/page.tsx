@@ -91,6 +91,9 @@ export default function SignupPage() {
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href="/login">Sign in</Link>
       </p>
+      <p className="field-hint">
+        By creating a household you agree to how we handle your information: <Link href="/privacy">privacy notice</Link>.
+      </p>
     </div>
   );
 }
