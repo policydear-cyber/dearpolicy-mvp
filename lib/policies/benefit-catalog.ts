@@ -843,12 +843,12 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"pengesahan tuntutan diluluskan kelulusan umur berumur atau menderita "
   // Who is paid, as a closed list of payee nouns: never an open slot for any words (Critic R461).
   +"executor executors administrator administrators assignee assignees assignment valid legal personal representative "
-  +"representatives trust nominated appointed designated "
+  +"representatives trust nominated appointed designated heirs heir failing "
   // What happens, as a closed list of medical words: an illness's name says when the share is paid, never how much.
   +"cancer cancers carcinoma situ tumour tumor benign malignant specified severity neurological deficit end stage kidney renal "
   +"liver lung failure requiring dialysis alzheimer dementia severe motor neurone neuron als parkinson multiple sclerosis "
   +"muscular dystrophy diabetes mellitus heart valve open coronary artery bypass graft angioplasty organ transplant "
-  +"paraplegia quadriplegia tetraplegia hemiplegia blindness deafness burns encephalitis meningitis aplastic anaemia anemia "
+  +"paraplegia quadriplegia tetraplegia hemiplegia systemic lupus erythematosus nephritis pulmonary hypertension primary hiv transfusion blood blindness deafness burns encephalitis meningitis aplastic anaemia anemia "
   +"cervix uteri breast prostate brain early intermediate advanced kanser barah strok jantung serangan kegagalan buah pinggang "
   +"kanker stadium peringkat type akhir gagal ginjal cardiaque crise vasculaire cérébral").split(" "));
 /** A period the share is paid over, not a time it is paid in ("payable for 5 years", "for 12 months", "for life", Critic

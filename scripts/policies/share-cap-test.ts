@@ -248,6 +248,10 @@ test("payees and illnesses from closed word lists keep the share; a period the s
     "100% of the Sum Assured is payable upon diagnosis of Type 1 Diabetes Mellitus in the Life Assured.",
     "100% of the Sum Assured is payable upon diagnosis of Stage 3 cancer or above.",
     "100% of the Sum Insured shall be paid upon permanent and total loss of use of both legs (paraplegia).",
+    "100% of the Sum Assured is payable to the nominee or, failing that, to the legal heirs.",
+    "100% of the Sum Insured is payable upon diagnosis of Systemic Lupus Erythematosus with lupus nephritis.",
+    "100% of the Sum Insured is payable upon diagnosis of Primary Pulmonary Hypertension.",
+    "100% of the Sum Insured is payable upon diagnosis of HIV due to blood transfusion.",
     "50% of the Sum Insured if hospitalised for 5 consecutive days",
     "50% of the Sum Insured after 2 years",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
@@ -258,5 +262,7 @@ test("payees and illnesses from closed word lists keep the share; a period the s
     S + "within 30 days, for 12 months", S + "upon diagnosis for 3 years only", "50% daripada Jumlah Diinsuranskan selama 5 tahun",
     "100% of the Sum Assured is payable upon diagnosis of cancer or above.", "100% of the Sum Assured is payable for type 2 claims.",
     "100% of the Sum Assured is payable to the Life Assured's spouse or children as nominees.",
+    // "dependants" shares its stem with "depending on", a changer: held back, the safe side (TE pr232).
+    "100% of the Sum Assured is payable to your dependants or your legal personal representative.",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
 });
