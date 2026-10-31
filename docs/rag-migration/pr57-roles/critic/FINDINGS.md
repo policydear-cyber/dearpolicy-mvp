@@ -10203,3 +10203,13 @@ Gate green (share-cap 2/0, stored-share-shapes 1/0, 85, 22/22, 107/107, 107/107,
 
 ## R444 — #221 1001adf (role first, main e3aa6d3 merged): READY
 The gate is green: document-filter 9 passed with 0 fetches, r5:ux 14, r8:render 6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge all pass. R442 M1 is fixed: a linked brochure or wording stays under General, and the badge always matches the filter. One low note: an unconfirmed "rider" document is a generic rider contract, labelled "Contract wording" like policy_wording, but it is filed under Your policies with the badge "Linked to your cover" or "Your document". Consider treating an unconfirmed rider the same as policy_wording.
+
+## R445: #223 7d1b3d1 (Benefits load speed): READY, one recommended fix
+Gate green. speed-test passed (checkStored 373 ms on 360 pages). service 22/0, unread-notice 15/0, misfiled-letter, coverage-recovery 11/0, simple chat 85, replay 22/22, benefit-table 107/107, benefit-table chat 107/107, r5 21/21, tsc, build, merge.
+
+- No caller can mutate the cached value. squashPage is module-private, and locateQuote only reads sq.text and sq.at.
+- The cache cannot serve stale text. The key is the page text itself, and the value depends only on that text, so a hit can never belong to a different page or household.
+
+M1 (memory): text built with += is a rope, and at is a JS number array. A standalone probe at the 8M-char cap held about 294 MB of heap. The same probe with parts.join("") and an Int32Array (sliced to length) held about 16 MB heap plus 27 MB external. Recommendation: make this change (verify.ts:44-54), or lower the cap.
+
+Low: tableOnce also caches a rejected promise, so the second use does not retry. Both uses are inside try blocks, so this is harmless.
