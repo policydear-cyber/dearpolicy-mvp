@@ -144,21 +144,38 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
   return result;
 }
 
-/** Shortest product or plan name, and policy number, matched in kept text (shorter ones are ordinary words or figures). */
+/** Shortest product or plan name matched in kept text (shorter ones are ordinary words). */
 const MIN_NAME_LENGTH = 4;
-const MIN_NUMBER_LENGTH = 5;
+/** A policy number is matched only when it holds a letter or is at least this long; a short run of digits is just a figure. */
+const MIN_DIGITS_ONLY_NUMBER_LENGTH = 8;
+/**
+ * Words that describe a cover rather than name a product. A name made only of these ("Critical Illness", "Basic Plan",
+ * "Hospitalisation", "Life") is how any answer or person talks about a cover, so it never counts as naming the document.
+ * A closed list: a name with any other word in it ("Merlion Term", "Rawat Inap Platinum") is matched.
+ */
+const COVER_WORDS = new Set([
+  "a", "an", "and", "of", "the", "for", "with", "plus", "&",
+  "life", "health", "medical", "hospital", "hospitalisation", "hospitalization", "hospitalised", "hospitalized",
+  "critical", "illness", "illnesses", "early", "major", "cancer", "accident", "accidental", "death", "dismemberment",
+  "disability", "total", "permanent", "tpd", "income", "personal", "travel", "term", "whole", "endowment", "savings",
+  "rider", "riders", "plan", "plans", "basic", "base", "benefit", "benefits", "cover", "covers", "coverage",
+  "protection", "insurance", "policy", "premium", "waiver", "payor", "payer", "supplementary", "optional", "additional",
+  "group", "family", "individual", "outpatient", "inpatient", "surgical", "surgery", "dental", "maternity",
+]);
 const escapeRegExp = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const onlyCoverWords = (name: string) => name.split(/[^\p{L}\p{N}&]+/u).filter(Boolean).every((w) => COVER_WORDS.has(w));
 
 /**
- * True when the text names the deleted document: its product name, a plan name on it, or its policy number, as a whole
- * word (no letter or digit right before or after), ignoring case. Names another document still on file shares (a
- * renewal) are not counted.
+ * True when the text names the deleted document: a product or plan name on it, or its policy number, as a whole word
+ * (no letter or digit right before or after), ignoring case and spacing. Names made only of cover words, digits-only
+ * numbers shorter than MIN_DIGITS_ONLY_NUMBER_LENGTH, and names another document still on file shares (a renewal) are
+ * never counted.
  */
 export function namesDocumentMatcher(names: string[], numbers: string[], sharedWithKept: Set<string>): (...parts: unknown[]) => boolean {
   const norm = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
   const wanted = [...new Set([
-    ...names.map(norm).filter((n) => n.length >= MIN_NAME_LENGTH),
-    ...numbers.map(norm).filter((n) => n.length >= MIN_NUMBER_LENGTH),
+    ...names.map(norm).filter((n) => n.length >= MIN_NAME_LENGTH && !onlyCoverWords(n)),
+    ...numbers.map(norm).filter((n) => /\p{L}/u.test(n) ? n.length >= 4 : n.replace(/\D/g, "").length >= MIN_DIGITS_ONLY_NUMBER_LENGTH),
   ])].filter((n) => !sharedWithKept.has(n));
   if (!wanted.length) return () => false;
   const re = new RegExp("(?<![\\p{L}\\p{N}])(?:" + wanted.map((n) => escapeRegExp(n).replace(/ /g, "\\s+")).join("|") + ")(?![\\p{L}\\p{N}])", "iu");
@@ -220,7 +237,11 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
        UNION SELECT c.product_name FROM policy_coverages c JOIN policies p ON p.id=c.policy_id AND p.lifecycle_state='active' WHERE c.account_id=$1 AND c.policy_id<>$2
      ) x WHERE n IS NOT NULL`, [doc.account_id, doc.id]);
   const o = own.rows[0];
-  const namesDoc = namesDocumentMatcher([o?.product ?? "", ...(o?.plans ?? [])].filter(Boolean), [o?.number ?? ""].filter(Boolean), new Set(kept.rows.map((r) => r.name)));
+  const sharedNames = new Set(kept.rows.map((r) => r.name));
+  const namesDoc = namesDocumentMatcher([o?.product ?? "", ...(o?.plans ?? [])].filter(Boolean), [o?.number ?? ""].filter(Boolean), sharedNames);
+  // The person's own typed facts are tested against the product name and policy number only: a plan name is more often
+  // the person's own words for what happened to them.
+  const typedNamesDoc = namesDocumentMatcher([o?.product ?? ""].filter(Boolean), [o?.number ?? ""].filter(Boolean), sharedNames);
   const stays = (...parts: unknown[]) => refsStay(...parts) && !namesDoc(...parts);
 
   if (tables.has("chat_messages")) {
@@ -243,7 +264,7 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
     for (const c of rows.rows) {
       if (stays(c.state, c.last_answer)) continue;
       // The person's own facts stay, less anything that names the deleted document (by id or in words).
-      let typed = withoutNamed(userTypedChatState(c.state), namesDoc);
+      let typed = withoutNamed(userTypedChatState(c.state), typedNamesDoc);
       if (referencesIn(known, [typed]).some((id) => !active.has(id))) typed = { ...typed, subjects: {} };
       if (JSON.stringify(typed) === JSON.stringify(c.state) && c.last_answer == null) continue;
       await tx.query(`UPDATE chat_conversations SET state=$3::jsonb, last_answer=NULL, revision=revision+1, updated_at=now() WHERE account_id=$1 AND id=$2`,

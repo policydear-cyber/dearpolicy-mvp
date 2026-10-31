@@ -234,7 +234,7 @@ async function main() {
     const budi = await member(acc4, "Budi Santoso", "self");
     const gone = await doc(acc4, budi, { file: "Sehat-Prima.pdf", insurer: "Nusantara Insurance (fictitious)", product: "Sehat Prima", policyNo: "SP-77120931" });
     const keep = await doc(acc4, budi, { file: "Jiwa-Abadi.pdf", insurer: "Nusantara Insurance (fictitious)", product: "Jiwa Abadi", policyNo: "JA-55102288" });
-    await q(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name) VALUES ($1,$2,$3,'hospital',75000000,'IDR','Rawat Inap Platinum'),($1,$4,$3,'life',1000000000,'IDR','Jiwa Abadi')`, [acc4, gone, budi, keep]);
+    await q(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name) VALUES ($1,$2,$3,'hospital',75000000,'IDR','Rawat Inap Platinum'),($1,$2,$3,'critical_illness',50000000,'IDR','Critical Illness'),($1,$2,$3,'hospital',1000000,'IDR','Hospitalisation'),($1,$4,$3,'life',1000000000,'IDR','Jiwa Abadi')`, [acc4, gone, budi, keep]);
     const ff = (summary: string) => ({ content: summary, citations: [], answer: { mode: "fact_finding", summary, citations: [], questions: [{ text: summary }], claimItems: [] } });
     const byProduct = await turn(acc4, budi, null, "I want to claim", ff("Is this claim under your sehat  prima policy?"));
     const byPlan = await turn(acc4, budi, null, "Claim", ff("Were you admitted as an in-patient under Rawat Inap Platinum?"));
@@ -245,8 +245,10 @@ async function main() {
     // An answer about the kept document that also names the deleted one in words.
     const mixed = await turn(acc4, budi, null, "Life?", { content: "Jiwa Abadi pays on death; Sehat Prima was your hospital plan.", citations: [{ policyId: keep }], answer: null });
     const keptOnly = await turn(acc4, budi, null, "Life?", { content: "Jiwa Abadi pays on death.", citations: [{ policyId: keep }], answer: null });
+    // Plan names made only of cover words are how anyone talks about a cover; they never count as naming the document.
+    const coverWords = await turn(acc4, budi, null, "CI?", { content: "Jiwa Abadi pays Rp 100.000.000 for critical illness and hospitalisation.", citations: [{ policyId: keep }], answer: null });
     const typed = (value: string) => ({ value, state: "known", quote: value, recordedAt: "2026-10-01T00:00:00Z", source: "user" });
-    const conv = await conversation(acc4, budi, { intent: "claim", activeClaimQuery: "claim on SP-77120931 for my stay", subjects: { [budi]: { card: typed("my Sehat Prima card"), ward: typed("I was in ward 3"), plan: typed("Rawat Inap Platinum") } }, facts: [{ policyId: keep }] }, null);
+    const conv = await conversation(acc4, budi, { intent: "claim", activeClaimQuery: "claim on SP-77120931 for my stay", subjects: { [budi]: { card: typed("my Sehat Prima card"), ward: typed("I was in ward 3"), plan: typed("Rawat Inap Platinum"), why: typed("I was admitted for hospitalisation, critical illness"), bill: typed("the bill was Rp 77120931") } }, facts: [{ policyId: keep }] }, null);
     await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [gone]);
     await scrubDeletedDocumentDerivedContent({ policyIds: [gone] });
     for (const id of [byProduct, byPlan, byNumber, mixed]) assert.equal((await msg(id)).content, STALE_ANSWER_NOTICE, id);
@@ -254,8 +256,27 @@ async function main() {
     assert.equal((await msg(plain)).content, "Which hospital were you admitted to?");
     assert.equal((await msg(longerRef)).content, "Did you register at the KlinikSehat Prima desk?", "a name at the end of a longer word is not a match");
     assert.equal((await msg(keptOnly)).content, "Jiwa Abadi pays on death.");
+    assert.equal((await msg(coverWords)).content, "Jiwa Abadi pays Rp 100.000.000 for critical illness and hospitalisation.");
     const c = (await q<{ state: unknown }>(`SELECT state FROM chat_conversations WHERE id=$1`, [conv])).rows[0];
-    assert.deepEqual(c.state, { intent: "claim", subjects: { [budi]: { ward: typed("I was in ward 3") } } });
+    // The person's own words are tested against the product name and policy number only; a plan name, cover words and
+    // the digits of a policy number inside a figure stay.
+    assert.deepEqual(c.state, { intent: "claim", subjects: { [budi]: { ward: typed("I was in ward 3"), plan: typed("Rawat Inap Platinum"), why: typed("I was admitted for hospitalisation, critical illness"), bill: typed("the bill was Rp 77120931") } } });
+  });
+  await t("the name test: whole words, any spacing, never cover words alone, never a short run of digits", async () => {
+    const { namesDocumentMatcher } = await import("@/lib/lifecycle/derived-content-scrub");
+    const cases: [string[], string[], string[], string, boolean][] = [
+      [["Merlion Term"], ["MT-778812"], [], "Merlion Term pays S$500,000", true],
+      [["Merlion Term"], ["MT-778812"], [], "policy mt-778812", true],
+      [["Merlion Term"], [], [], "MERLION   TERM", true],
+      [["Merlion Term"], [], ["merlion term"], "Merlion Term pays", false],
+      [["Merlion Term"], [], [], "Merlion Terms of use", false],
+      [["Critical Illness", "Hospitalisation", "Accidental Death", "Life", "Basic Plan"], [], [], "Lion Shield pays S$200,000 for critical illness, hospitalisation, accidental death; basic plan; life cover", false],
+      [["Leben Komfort"], [], [], "Ihr leben komfort Tarif", true],
+      [[], ["12345"], [], "The bill was S$12345", false],
+      [[], ["4410227193"], [], "policy 4410227193", true],
+      [[], ["4410227193"], [], "ref 44102271930", false],
+    ];
+    for (const [names, numbers, kept, text, want] of cases) assert.equal(namesDocumentMatcher(names, numbers, new Set(kept))(text), want, JSON.stringify([names, numbers, text]));
   });
   await t("a document still on file is never handled", async () => {
     assert.equal((await q(`SELECT 1 FROM policy_document_audit_log WHERE policy_id=ANY($1::uuid[]) AND action=$2`, [[kranken, otherDoc], DERIVED_SCRUB_ACTION])).rows.length, 0);
