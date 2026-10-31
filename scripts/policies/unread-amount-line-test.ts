@@ -120,5 +120,8 @@ test("a second payment, an addition or a change next to a reason keeps 'could no
 "This benefit is an advance of the death benefit, increased by a quarter.",
 "This benefit is an advance of the death benefit, together with an extra payment.",
 "This benefit is an advance of the death benefit, plus the funeral grant.",
+    // Critic R468: another named benefit paid, or an alternative payout after "or".
+    "We waive future premiums. CI benefit is paid within 30 days.", "We pay the death benefit in advance, or the TPD Benefit.",
+    "We waive future premiums or pay the CI benefit.", "Advance payment of the death benefit, or the ADB Benefit is paid.",
   ]) assert.match(unreadAmountLine(3, q), /could not be read|describes this in words/, q);
 });

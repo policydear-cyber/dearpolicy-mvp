@@ -58,10 +58,15 @@ const VALUE_FILLER = new Set(("pay pays paid payable return returns refund refun
 /** Fees and charges taken from a value leave it a value: "(less applicable fees and charges, if any)". */
 const LESS_FEES = /\(?\s*less\s+(?:any\s+)?(?:applicable\s+)?(?:fees|charges)(?:\s+and\s+(?:fees|charges))?(?:,?\s*if\s+any)?\s*\)?/giu;
 /** "we will pay the TI benefit as …", "is paid as …": the reason itself, said with a verb of paying. */
-const PAID_AS = /\b(?:(?:we\s+(?:will\s+|shall\s+)?)?pay(?:s|able)?\s+(?:the\s+|this\s+)?(?:[\p{L}/]+\s+){0,3}?benefit\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid(?=\s+(?:within|on|upon|to|when|if)\b)|payable\s+once|once\s+it\s+is\s+paid)\b/giu;
+const PAID_AS = /\b(?:(?:we\s+(?:will\s+|shall\s+)?)?pay(?:s|able)?\s+(?:the\s+|this\s+)?(?:[\p{L}/]+\s+){0,3}?benefit\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid\s+as|(?:\bit|\bthis(?:\s+benefit)?|\band)\s+(?:is|will\s+be|shall\s+be)\s+paid(?=\s+(?:within|on|upon|to|when|if)\b)|payable\s+once|once\s+it\s+is\s+paid)\b/giu;
 function onlyFiller(rest: string, extra?: Set<string>): boolean {
-  return rest.replace(PAID_AS, " ").split(/[^\p{L}\p{N}%]+/u).filter(Boolean)
-    .every((w) => FILLER.has(w.toLowerCase()) || extra?.has(w.toLowerCase()) || /^\p{Lu}{2,4}$/u.test(w) || /^\p{Ll}$/u.test(w));
+  const words = rest.replace(PAID_AS, " ").split(/[^\p{L}\p{N}%]+/u).filter(Boolean);
+  const plain = (w: string | undefined) => !!w && w !== "or" && (FILLER.has(w.toLowerCase()) || !!extra?.has(w.toLowerCase()) || /^\p{Ll}$/u.test(w));
+  return words.every((w, i) => {
+    // "or" joins two filler words ("payor or policyowner"), never an alternative benefit ("or the TPD Benefit", Critic R468).
+    if (w.toLowerCase() === "or") return plain(words[i - 1]) && plain(words[i + 1]) && !words.slice(i + 1, i + 4).some((n) => /^(?:benefits?|manfaat)$/iu.test(n));
+    return plain(w) || /^\p{Lu}{2,4}$/u.test(w) || /^\p{Ll}$/u.test(w);
+  });
 }
 const NEGATED = /\b(?:not|never|no|bukan|tidak)\b/iu;
 /** The first match of a reason that no earlier word of its own sentence denies ("is not an advance of the death benefit"). */
