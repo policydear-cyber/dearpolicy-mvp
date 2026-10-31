@@ -28,7 +28,8 @@ export type FamilyMember = { id: string; display_name: string; preferred_name?: 
   documents?: string[]; printedAs?: { documentId: string; name: string }[] };
 /** A cover printed for a name two or more family members share, which neither the document's own links nor a match the
  * household made tells apart: shown with everyone it may be, never dropped and never given to one of them by guess. */
-export type AmbiguousCover = { cover: CheckedCover; documentId: string; candidates: { id: string; name: string }[] };
+/** `sameName`: every candidate has the printed name itself; false when each only fits part of it ("Wei Jie" and "Wei"). */
+export type AmbiguousCover = { cover: CheckedCover; documentId: string; candidates: { id: string; name: string }[]; sameName: boolean };
 export type Figure =
   | { kind: "printed"; amount: number; currency: string | null; unit: "lump_sum" | "up_to" | "per_day" | "per_period"; period?: string | null }
   | { kind: "value"; amount: number; currency: string | null; asOf: string | null }
@@ -113,7 +114,7 @@ const money = (amount: number, currency: string | null) =>
  * this document, else, between people with the very same name, the one of them this document is linked to by their own
  * record. Nobody on record, or several,
  * gives the candidates (never a guess). A name nobody in the family has gives null. */
-function sharedNameMatch(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | { candidates: { id: string; name: string }[] } | null {
+function sharedNameMatch(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | { candidates: { id: string; name: string }[]; sameName: boolean } | null {
   const { members: candidates, exact } = familyNameCandidates(name, family);
   if (candidates.length < 2) return null;
   const key = nameKey(name);
@@ -124,7 +125,7 @@ function sharedNameMatch(name: string, documentId: string, family: FamilyMember[
   // his own cover while this line is the father's (Critic H1 on #254).
   const linked = exact ? candidates.filter((m) => (m.documents ?? []).includes(documentId)) : [];
   if (linked.length === 1) return { member: linked[0] };
-  return { candidates: candidates.map((m) => ({ id: m.id, name: m.display_name })) };
+  return { candidates: candidates.map((m) => ({ id: m.id, name: m.display_name })), sameName: exact };
 }
 
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
@@ -135,7 +136,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const named = findFamilyMatchWithKind(c.person, family);
     const shared = named ? null : sharedNameMatch(c.person, r.documentId, family);
-    if (shared && "candidates" in shared) { ambiguous.push({ cover: c, documentId: r.documentId, candidates: shared.candidates }); continue; }
+    if (shared && "candidates" in shared) { ambiguous.push({ cover: c, documentId: r.documentId, candidates: shared.candidates, sameName: shared.sameName }); continue; }
     const match = named ?? shared;
     if (!match) { unmatched.push(c); continue; }
     found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });

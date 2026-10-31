@@ -57,7 +57,7 @@ for (const x of markets) {
     tb = assembleTable([reading], fam, links);
     const amb = tb.ambiguousCovers[0];
     t(`${x.m} (${what}): the cover is shown as undecided with both namesakes`, tb.ambiguousCovers.length === 1 && amb.documentId === x.doc
-      && amb.candidates.map((c) => c.id).sort().join() === "a,b" && amb.cover.person === x.name, tb.ambiguousCovers);
+      && amb.candidates.map((c) => c.id).sort().join() === "a,b" && amb.cover.person === x.name && amb.sameName === true, tb.ambiguousCovers);
     t(`${x.m} (${what}): neither namesake is given it, and it is not called "not in your family"`, tb.people.every((p) => p.covers.length === 0 && p.rows.length === 0) && tb.unmatchedCovers.length === 0);
   }
 
@@ -98,7 +98,8 @@ for (const [printedName, parent, child, ccy] of [["Tan Wei Jie", "Wei Jie", "Wei
   const links: SectionLink[] = [{ section: sectionKeyOf(doc, { section: "CERTIFICATE", column: null }), cover: coverKeyOf({ product: "Kestrel Family Life", cover: "Term Life", plan: null }), why: "the plan" }];
   let tb = assembleTable([reading], [{ id: "p", display_name: parent }, { id: "c", display_name: child, documents: [doc] }], links);
   t(`"${printedName}" with the document linked only to the child "${child}": the child never gets the parent's cover`, tb.people.find((p) => p.id === "c")!.covers.length === 0, tb.people.map((p) => [p.id, p.covers.length]));
-  t(`"${printedName}": shown as undecided between "${parent}" and "${child}"`, tb.ambiguousCovers.length === 1 && tb.ambiguousCovers[0].candidates.map((c) => c.id).sort().join() === "c,p", tb.ambiguousCovers);
+  t(`"${printedName}": shown as undecided between "${parent}" and "${child}"`, tb.ambiguousCovers.length === 1 && tb.ambiguousCovers[0].candidates.map((c) => c.id).sort().join() === "c,p"
+    && tb.ambiguousCovers[0].sameName === false, tb.ambiguousCovers); // the card then says "could be any of", not "have this name" (Critic Low)
   tb = assembleTable([reading], [{ id: "p", display_name: parent, printedAs: [{ documentId: doc, name: printedName }] }, { id: "c", display_name: child, documents: [doc] }], links);
   t(`"${printedName}": the household's own match of the printed name decides`, tb.people.find((p) => p.id === "p")!.covers.length === 1 && tb.people.find((p) => p.id === "c")!.covers.length === 0 && tb.ambiguousCovers.length === 0);
 }

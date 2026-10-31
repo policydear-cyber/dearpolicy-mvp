@@ -19,7 +19,7 @@ type Other={person:string;product:string;cover:string;plan:string|null;source:So
 export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"stalled"|"held"|"table_unread"|"no_table"|"not_readable";hold?:string|null}[];
   unmatchedCovers:Other[];illustrationCovers:Other[];
   /** A cover printed for a name several people in the family share, not yet placed under one of them. Optional: an older server sends none. */
-  ambiguousCovers?:{cover:Other;documentId:string;candidates:{id:string;name:string}[]}[];
+  ambiguousCovers?:{cover:Other;documentId:string;candidates:{id:string;name:string}[];sameName?:boolean}[];
   unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[]};
 
 const coverName=(c:{product:string;cover:string;plan:string|null;riderOf?:string|null})=>
@@ -132,7 +132,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length||data.ambiguousCovers?.length?<section className="cov-person" data-testid="table-also-found">
       <div className="cov-person-head"><h2>Also in your documents</h2></div>
       <ul className="cov-also">
-        {(data.ambiguousCovers??[]).map((a,i)=><li key={"a"+i} data-testid="table-same-name"><span><strong>{a.cover.person}</strong>: {coverName(a.cover)}. {a.candidates.length} people in your family have this name, so it isn&rsquo;t under anyone yet. Choose who this document covers in <Link className="text-link" href="/policies">Documents</Link>.</span><PageLink source={a.cover.source}/></li>)}
+        {(data.ambiguousCovers??[]).map((a,i)=><li key={"a"+i} data-testid="table-same-name"><span><strong>{a.cover.person}</strong>: {coverName(a.cover)}. {a.sameName===false?`This could be any of ${a.candidates.length} people in your family`:`${a.candidates.length} people in your family have this name`}, so it isn&rsquo;t under anyone yet. Choose who this document covers in <Link className="text-link" href="/policies">Documents</Link>.</span><PageLink source={a.cover.source}/></li>)}
         {data.unmatchedCovers.map((c,i)=><li key={"u"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Not in your family. Add them under <Link className="text-link" href="/family">Account settings &gt; People</Link> if they should be here.</span><PageLink source={c.source}/></li>)}
         {data.unlinkedSections.length?<li data-testid="table-unplaced"><details className="cov-unplaced"><summary>{data.unlinkedSections.length===1?"One part":`${data.unlinkedSections.length} parts`} of your documents couldn&rsquo;t be placed under a cover, so {data.unlinkedSections.length===1?"it isn’t":"they aren’t"} in this summary or in the chat.</summary>
           <ul>{data.unlinkedSections.map(u=><li key={u.section.key}><span>{u.section.section??"Untitled part"}{u.section.column?` (${u.section.column})`:""} <small>{u.section.document}</small></span>{u.source?<PageLink source={u.source}/>:null}</li>)}</ul></details></li>:null}
