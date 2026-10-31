@@ -1,3 +1,4 @@
+import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
@@ -36,12 +37,10 @@ const NUMBER=String.raw`\d[\d,]*(?:\.\d{1,2})?`;
 // is read by statedCode() from what is printed, never defaulted.
 // Round 10: a figure a scan printed unclearly ("S$5O,000", "S$2,l84") is not a
 // figure at all -- never "S$5" or "S$2" (see lib/documents/messy.ts).
-const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)\s?(${NUMBER})(?![,.]?[OoIl|])`;
-function amount(raw:string|undefined){
-  if(!raw)return null;
-  const value=Number(raw.replace(/,/g,""));
-  return Number.isFinite(value)&&value>=0?value:null;
-}
+// The figure is captured whole, separators and all, and read by printedNumber: "€50.000" is fifty thousand, never
+// fifty, and a figure grouped in no known way ("12,50") is no amount at all.
+const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])Rp\.?|€|£|¥|₹|₱|฿)\s?(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}(?![,.]?[OoIl|])`;
+function amount(raw:string|undefined,text?:string){return printedNumber(raw,null,{lakh:groupsInLakhs(text)});}
 /** A schedule of bare percentages states its basis once, in a heading:
  * "Schedule of Indemnities (% of Sum Insured)", "Compensation (% of S$5,000)".
  * Without it a cell reading "50%" is fifty percent of nothing, which is why a
@@ -72,6 +71,7 @@ function printedMarker(text:string):string|null{
   if(/₩\s?\d/.test(text))return "KRW";
   if(/₫|\d\s?₫/.test(text))return "VND";
   if(/(?:^|[^A-Za-z])Rp\.?\s?\d/.test(text))return "IDR";
+  if(/(?:^|[^A-Za-z])CHF\s?\d/.test(text))return "CHF";
   if(/\bNT\$/.test(text))return "TWD";
   if(/\bHK\$/i.test(text))return "HKD";
   if(/\bAU?\$/.test(text))return "AUD";
@@ -91,7 +91,7 @@ function headingBasis(cell:string):PercentageBasis|null{
   if(text.length>70||text.length<6)return null;
   if(OF_SUM_INSURED.test(text))return {kind:"sum_insured"};
   const limit=text.match(OF_LIMIT);
-  const value=amount(limit?.[1]);
+  const value=amount(limit?.[1],text);
   if(value!=null&&value>0)return {kind:"limit",amount:value,currency:statedCode(text)};
   return null;
 }
@@ -141,7 +141,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   const ofLimit=lower.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?`+MONEY.toLowerCase().replace("s?\\$","s?\\$"),"i"))
     ??text.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?`+MONEY,"i"));
   if(ofLimit){
-    const percent=amount(ofLimit[1]),limit=amount(ofLimit[2]);
+    const percent=amount(ofLimit[1]),limit=amount(ofLimit[2],text);
     if(percent!=null&&limit!=null&&percent<=100)
       return {kind:"fixed",value:Math.round(limit*(percent/100)*100)/100,currency,
         basis:ofLimit[1]+"% of the "+moneyLabel(currency,limit)+" limit printed in the schedule"};
@@ -168,7 +168,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // "Up to S$500 per incident" — a reimbursement ceiling, never a payout.
   const cap=text.match(new RegExp(String.raw`^(?:(?:reimbursed\s+)?up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
   if(cap){
-    const limit=amount(cap[1]);
+    const limit=amount(cap[1],text);
     if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};
   }
   // "S$30 per day" / "$689/month"
@@ -177,7 +177,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)`,"i"))
     ??text.match(new RegExp(String.raw`^(${NUMBER})\s*(?:per|/|a)\s*(day|night|week|month|year)\b`,"i"));
   if(periodic){
-    const rate=amount(periodic[1]);
+    const rate=amount(periodic[1],text);
     const unit=periodic[2].toLowerCase()==="night"?"day":periodic[2].toLowerCase() as ParsedBenefitValue["period"];
     if(rate!=null)return unit==="day"
       ?{kind:"daily",value:rate,currency,period:"day",basis:moneyLabel(currency,rate)+" for each day"}
@@ -188,7 +188,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // the benefit; when it is paid stays in the quoted row.
   const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20}|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
   if(flat){
-    const value=amount(flat[1]);
+    const value=amount(flat[1],text);
     if(value!=null)return {kind:"fixed",value,currency,basis:"the amount printed in the schedule"};
   }
   return null;
