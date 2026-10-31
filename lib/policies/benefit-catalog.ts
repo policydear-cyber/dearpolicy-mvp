@@ -745,8 +745,10 @@ const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
   String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|(?:\b(?:no|not|never|cannot|nor)|n['’]t)(?:\s+\p{L}+){0,3}?\s+(?:more|longer)\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
-  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited.
-  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
+  // Words that change the share itself: "reduced to 25%", "less any amount paid", "or 25% for children" is caught below.
+  String.raw`\breduc(?:ed|es|tion)\s+(?:to|by)\b|\bless\s+(?:any|the|all|amounts?)\b`,
+  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited, reduced, more/less than.
+  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad|dikurangkan)\b|\btidak\s+(?:lebih|melebihi)\b`,
 ].join("|"),"iu");
 /** A comparative that measures the event, not the payout: "than" followed by a number with a unit of the event
  * (a percentage that is not a share of an amount, years, decibels, a length, a weight, a time), or an age compared with a
@@ -757,8 +759,10 @@ const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(
 /** A negation up to three words before the comparative ("not more than 60 days", "never higher than 25%", "which shall
  * not be greater than", "isn't more than") makes it a cap on what is paid, never a threshold of the event (TE pr215 C11,
  * C18, C19; Critic R425). */
-const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
+const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither|tidak|bukan)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
 const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
+  // The same comparative in Malay: "lebih daripada 15% permukaan badan".
+  +String.raw`|${NEGATED}\b(?:lebih|kurang)\s+(?:daripada|dari)\s+(?:\d+(?:\.\d+)?${EVENT_UNIT})`
   +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
 /** PRINTS_AN_AMOUNT, with event thresholds taken out first. Only a threshold that comes before any share is taken out:
  * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after
@@ -766,6 +770,8 @@ const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger
  * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
 // A share in any form: a percentage, a fraction in words ("one half") or the insured amount itself (Critic R434).
 const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|`+INSURED_AMOUNT,"iu");
+const SHARE_COUNT=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b`,"iu");
+const SHARE_OF_INSURED=new RegExp(String.raw`(?:\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b)\s*(?:of\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?`+INSURED_AMOUNT,"iu");
 function printsAnAmount(text:string){
   let out="",at=0;
   for(const match of text.matchAll(EVENT_THRESHOLD)){
@@ -774,7 +780,11 @@ function printsAnAmount(text:string){
     if(SHARE_FIGURE.test(before))return true;
     out+=before+" ";at=match.index+match[0].length;
   }
-  return PRINTS_AN_AMOUNT.test(out+text.slice(at));
+  const rest=out+text.slice(at);
+  // A second share after a share of the insured amount ("50% of the Sum Insured, or 25% for children") is a different
+  // rule for some claims, so the first is not paid as it stands (TE pr215 P2). A figure before it is the event's.
+  const share=SHARE_OF_INSURED.exec(rest);
+  return PRINTS_AN_AMOUNT.test(rest)||(!!share&&SHARE_COUNT.test(rest.slice(share.index+share[0].length)));
 }
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one
@@ -786,7 +796,7 @@ export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|
  * "doubled if overseas", "for a child under 18", a figure) leaves the share unsure. The benefit's own name words count too. */
 const CAP_PASSAGE_WORDS=new Set(("a an the this that it its we will shall be is are was pay pays paid payable paying receive "
   +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only").split(" "));
-const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
+const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
 /** The share's own trigger when it names every covered condition, never one of them: "upon diagnosis of any one of the 27
  * conditions covered", "on the diagnosis of any of the covered illnesses". It narrows nothing, so it does not unsettle the
  * cap. A named condition, a person, a place or a time ("upon diagnosis of carcinoma in situ", "in the first year") is not
@@ -799,6 +809,7 @@ function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   const words=normalText(rest).replace(CAP_PASSAGE_PHRASES," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CAP_PASSAGE_WORDS.has(w)||own.has(w));
 }
+const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)\s+(?:claims?|events?|conditions?|diagnos[ie]s)\b/iu;
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
   const text=quote??"";
   if(!printsAnAmount(normalText(text)))return {kind:"none"};
@@ -807,7 +818,8 @@ export function shareBound(quote:string|null|undefined,benefitName?:string|null)
   // The cap is in the share's own sentence: "Ambulance fees up to S$500." after it is another benefit's (R416 M1).
   const [from,to]=cap.shareAt<cap.capAt?[cap.shareAt,cap.capAt]:[cap.capAt,cap.shareAt];
   if(/[.;!?](?:\s|$)|\n/.test(text.normalize("NFKC").slice(from,to)))return {kind:"unsure"};
-  if(!capPassageHarmless(cap.rest,benefitName))return {kind:"unsure"};
+  // "per additional claim", "for the first claim": another claim may be paid by a different rule (Critic R428).
+  if(!capPassageHarmless(cap.rest,benefitName)||ORDINAL_CLAIM.test(cap.rest))return {kind:"unsure"};
   return {kind:"cap",amount:cap.amount,currency:cap.currency};
 }
 export const shareCapNote=(amount:number,currency:string)=>"Paid up to "+formatMoney(amount,currency)+", the cap this passage prints.";

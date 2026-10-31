@@ -36,6 +36,9 @@ test("one printed cap in the cover's currency: the lower of the share and the ca
     ["An additional 20% of the Sum Assured will be payable, subject to a maximum amount of S$25,000 (or equivalent currency) per life per condition.", 1_000_000, "SGD", 25_000],
     ["we will, subject to the provisions of this Policy, pay 20% of the Insured Amount under this Supplementary Agreement, subject to a limit of S$25,000", 1_000_000, "SGD", 25_000],
     ["10% of the sum insured, no more than €8,000", 200_000, "EUR", 8_000],
+    ["10% of Sum Insured, up to a maximum of S$25,000", 1_000_000, "SGD", 25_000],
+    ["10% of Sum Insured, up to S$25,000, payable only once", 1_000_000, "SGD", 25_000],
+    ["10% of the sum insured, but up to a maximum of RM20,000 per claim", 1_000_000, "MYR", 20_000],
   ] as const) {
     assert.equal(pay(quote, sumInsured, currency, true), expected, "stored: " + quote);
     assert.equal(pay(quote, sumInsured, currency, false), expected, "read: " + quote);
@@ -55,6 +58,8 @@ test("anything less sure than one cap in the cover's currency gives no figure, n
     ["10% of the sum insured, after an excess of S$500", "SGD"], // not a cap
     ["10% of the sum insured, up to S$25,000 less any amount paid before", "SGD"], // another bound
     ["10% of the sum insured, up to the limit in the Schedule", "SGD"], // a cap with no figure
+    ["10% of Sum Insured, up to S$25,000 per additional claim", "SGD"], // a later claim may follow another rule
+    ["10% of Sum Insured, up to S$25,000 for the first claim", "SGD"],
     ["10% of the sum insured, up to S$25,000 or the amount in the table, whichever is lower", "SGD"],
     // Critic R416 and TE pr211: a cap for some claims only, an aggregate, a second share, another sentence's cap, a change.
     ["10% of the sum insured, up to S$25,000 for adults; for children 50% of that", "SGD"],

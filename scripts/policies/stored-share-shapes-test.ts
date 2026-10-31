@@ -58,6 +58,8 @@ const KEPT: [string, number, string][] = [
   // A word that only looks like a negation keeps the threshold free.
   ["Burns", 0.5, "Burns, nothing paid below this; greater than 20% of the body surface 50%"],
   ["Note", 0.3, "Third degree burns, not less than 30 days in hospital, more than 20% of body 30%"],
+  ["Luka bakar", 0.5, "Luka bakar lebih daripada 15% permukaan badan 50%"],
+  ["Luka bakar", 0.3, "Luka bakar lebih daripada 10% tetapi kurang daripada 15% permukaan badan 30% daripada Jumlah Diinsuranskan"],
 ];
 // Passages that print a cap: withheld (or, once read, capped), never the full share.
 const CAPPED: [string, number, string][] = [
@@ -103,6 +105,14 @@ const CAPPED: [string, number, string][] = [
   ["Disability", 1, "Disability: loss greater than 50%, Sum Insured, reduced to one half if less than 10%"],
   ["Disability", 0.5, "Disability: one half of the Sum Assured, reduced to one quarter if the loss is less than 10%"],
   ["Burns", 0.5, "Burns: 50 % of the Sum Insured, reduced to 25 % if the burn is smaller than 10%"],
+  // Words that change the share, a second share after it, and the same in Malay (TE pr215 P1/P2, Critic R436).
+  ["Benefit", 0.5, "50% of the Sum Insured, or 25% for children"],
+  ["Benefit", 0.5, "One half of the Sum Assured, or one quarter for a child"],
+  ["Benefit", 0.5, "50% of the Sum Insured, reduced to 5% if older than 65"],
+  ["Benefit", 0.5, "50% of the Sum Insured, less any amount paid under Benefit 2"],
+  ["Benefit", 0.5, "50% of the Sum Insured, but less the amount shown"],
+  ["Faedah", 0.5, "50% daripada Jumlah Diinsuranskan, tetapi tidak lebih daripada 25% bagi kanak-kanak"],
+  ["Faedah", 0.5, "50% daripada Jumlah Diinsuranskan, dikurangkan kepada 25% selepas umur 65"],
 ];
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
