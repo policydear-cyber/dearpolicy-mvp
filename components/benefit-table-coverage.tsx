@@ -1,6 +1,5 @@
 "use client";
 
-import { personKinds } from "@/lib/coverage/table-figures";
 import Link from "next/link";
 import { useState } from "react";
 import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
@@ -13,9 +12,7 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
   source:Source;premiumSource?:Source|null;
   /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
-  premiumCurrency?:string|null;
-  /** The printed last day when the cover was for one short term that is over (a single trip): lib/benefit-table/assemble.ts coverEnded. */
-  ended?:string|null;documentPeriodTo?:string|null};
+  premiumCurrency?:string|null;};
 type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
@@ -57,8 +54,6 @@ function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
-    {!cover.ended&&personKinds([cover],[]).get("Travel")?.undated.length?<p className="muted cov-reading" data-testid="cover-undated">Trip dates not found: DearPolicy cannot tell whether this trip is still current. Check the dates on the policy.</p>:null}
-    {cover.ended?<p className="muted cov-reading" data-testid="cover-ended">{`Cover ended on ${cover.ended}: its printed period is over, so it is not current cover. The amounts below still answer for an event inside that period.`}</p>:null}
     {!rows.length?<p className="muted cov-reading">Its benefits are still being read.</p>:<>
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>

@@ -307,43 +307,19 @@ test("a claim for a critical illness never takes the combined limit as what it p
 
 // ------------------------------------------------------------------------------------------------- 2. ended short terms
 
-test("coverEnded: a single trip whose short printed term is over has ended; a long, undated or running one has not", () => {
+// Changed 31 Oct (DC: "ignore all expiry dates ... assume all policies are still in force"): these used to check that a
+// single trip whose short printed term is over is marked ended. No cover is ever ended by a printed date now.
+test("coverEnded: no printed term, short or long, passed or running, on any cover, ever ends it", () => {
   const day = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
   const trip = { cover: "Single Trip", plan: "Business", product: "Travel insurance summary", startDate: null, endDate: null };
-  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-27")), "04/10/2026");
-  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-04")), null, "the last day is still covered");
-  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, day("2026-10-05")), "04/10/2026");
-  assert.equal(coverEnded(trip, { periodFrom: "29 September 2026", periodTo: "4 October 2026" }, day("2026-10-27")), "4 October 2026");
-  assert.equal(coverEnded(trip, { periodFrom: "2026-09-29", periodTo: "2026-10-04" }, day("2026-10-27")), "2026-10-04");
-  assert.equal(coverEnded({ ...trip, startDate: "01/08/2026", endDate: "15/08/2026" }, { periodFrom: null, periodTo: null }, day("2026-10-27")), "15/08/2026");
-  // An annual multi-trip plan past its printed end may have been renewed.
-  assert.equal(coverEnded({ ...trip, cover: "Annual Multi-Trip" }, { periodFrom: "01/04/2025", periodTo: "31/03/2026" }, day("2026-10-27")), null);
-  // Only one end printed, an unreadable date, or an end before the start: kept.
-  assert.equal(coverEnded(trip, { periodFrom: null, periodTo: "04/10/2026" }, day("2026-10-27")), null);
-  assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "Oct 4th" }, day("2026-10-27")), null);
-  assert.equal(coverEnded(trip, { periodFrom: "04/10/2026", periodTo: "29/09/2026" }, day("2026-10-27")), null);
-  // The cover line's own dates come first.
-  assert.equal(coverEnded({ ...trip, startDate: "01/10/2026", endDate: "10/10/2026" }, { periodFrom: "01/01/2026", periodTo: "31/12/2026" }, day("2026-10-27")), "10/10/2026");
-  assert.equal(coverEnded({ ...trip, startDate: "01/01/2026", endDate: "31/12/2026" }, { periodFrom: "01/10/2026", periodTo: "10/10/2026" }, day("2026-10-27")), null);
-});
-test("coverEnded: a short, passed term on anything but a single trip may have been renewed, so it stays current (Critic R251 Q2)", () => {
-  const day = (iso: string) => Math.floor(Date.parse(`${iso}T00:00:00Z`) / 86_400_000), today = day("2026-10-27");
   const none = { periodFrom: null, periodTo: null };
-  // A mid-year joiner's group certificate (renewed each 1 January).
-  assert.equal(coverEnded({ cover: "Group Term Life", plan: null, product: "Acme Staff Group Insurance Scheme", startDate: "01/10/2025", endDate: "31/12/2025" }, none, today), null);
-  // A monthly renewable accident plan printing the current month.
-  assert.equal(coverEnded({ cover: "Personal Accident", plan: null, product: "MonthlyGuard PA", startDate: "01/09/2026", endDate: "30/09/2026" }, none, today), null);
-  // A rider attached mid-term, ending with its annual base.
-  assert.equal(coverEnded({ cover: "Hospital Cash Rider", plan: null, product: "LifeFirst", startDate: "01/06/2026", endDate: "31/08/2026" }, none, today), null);
-  // A short period printed for a whole group certificate never ends its covers.
-  assert.equal(coverEnded({ cover: "Group Personal Accident", plan: null, product: "Group Scheme", startDate: null, endDate: null }, { periodFrom: "01/07/2026", periodTo: "30/09/2026" }, today), null);
-  // A travel-named rider ends with its base plan (Critic R253 L2).
-  assert.equal(coverEnded({ cover: "Overseas Travel Cover", plan: null, product: "LifeFirst", riderOf: "LifeFirst", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
-  assert.equal(coverEnded({ cover: "Overseas Travel Cover", plan: null, product: "LifeFirst", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), "30/09/2026");
-  // A group travel scheme is a scheme, not one trip.
-  assert.equal(coverEnded({ cover: "Group Travel Insurance", plan: null, product: "Staff Benefits", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
-  // A product name with a travel-like word is standing cover.
-  assert.equal(coverEnded({ cover: "Life Journey Saver", plan: null, product: "Life Journey Saver", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
+  for (const today of [day("2026-10-27"), day("2026-10-05"), day("2035-01-01")]) {
+    assert.equal(coverEnded(trip, { periodFrom: "29/09/2026", periodTo: "04/10/2026" }, today), null);
+    assert.equal(coverEnded(trip, { periodFrom: "29 September 2026", periodTo: "4 October 2026" }, today), null);
+    assert.equal(coverEnded({ ...trip, startDate: "01/08/2026", endDate: "15/08/2026" }, none, today), null);
+    assert.equal(coverEnded({ cover: "Overseas Travel Cover", plan: null, product: "LifeFirst", startDate: "01/07/2026", endDate: "30/09/2026" }, none, today), null);
+    assert.equal(coverEnded({ cover: "Group Term Life", plan: null, product: "Acme Staff Group Insurance Scheme", startDate: "01/10/2025", endDate: "31/12/2025" }, none, today), null);
+  }
 });
 
 for (const { m, person, sign } of MARKETS) {
@@ -367,25 +343,19 @@ for (const { m, person, sign } of MARKETS) {
     { section: sectionKeyOf(GPA, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "the scheme" }];
   const tableOn = (iso: string, r = tripReading({ from: "29/09/2026", to: "04/10/2026" })) => assembleTable([r, gpaReading], family, links, [], sgt(iso));
 
-  test(`${m}: after the trip, its rows stay in the table, marked, but are not Personal Accident or Hospital Cash cover`, () => {
-    const t = tableOn("2026-10-27"), p = t.people[0];
-    assert.equal(p.covers.find((c) => c.coverKey === trip)!.ended, "04/10/2026");
-    assert.equal(p.covers.find((c) => c.coverKey === gpa)!.ended, null);
-    const tripRows = p.rows.filter((r) => r.coverKey === trip);
-    assert.equal(tripRows.length, 2);
-    assert.ok(tripRows.every((r) => r.coverEnded === "04/10/2026"));
-    assert.deepEqual(categoryRows("Personal Accident", p.rows).map((r) => r.coverKey), [gpa]);
-    assert.deepEqual(categoryRows("Hospital Cash", p.rows), []);
-  });
-  test(`${m}: during the trip, the same rows are current cover`, () => {
-    const p = tableOn("2026-10-01").people[0];
-    assert.equal(p.covers.find((c) => c.coverKey === trip)!.ended, null);
-    assert.deepEqual(categoryRows("Personal Accident", p.rows).map((r) => r.coverKey).sort(), [gpa, trip].sort());
-    assert.equal(categoryRows("Hospital Cash", p.rows).length, 1);
-    // On its last day in Singapore it is still current; from the next day it is not.
-    assert.equal(tableOn("2026-10-04").people[0].covers.find((c) => c.coverKey === trip)!.ended, null);
-    assert.equal(assembleTable([tripReading({ from: "29/09/2026", to: "04/10/2026" }), gpaReading], family, links, [], new Date("2026-10-04T16:30:00Z"))
-      .people[0].covers.find((c) => c.coverKey === trip)!.ended, "04/10/2026");
+  // Changed 31 Oct (DC: every policy is in force): after the trip used to mark its rows ended and leave them out of
+  // Personal Accident and Hospital Cash. A printed period no longer changes that, whatever today is.
+  test(`${m}: after the trip, before it and during it, its rows are current cover (a printed period never ends it)`, () => {
+    for (const on of ["2026-10-27", "2026-10-01", "2026-10-04", "2031-06-30"]) {
+      const p = tableOn(on).people[0];
+      assert.equal(p.covers.find((c) => c.coverKey === trip)!.ended, null, on);
+      assert.equal(p.covers.find((c) => c.coverKey === gpa)!.ended, null, on);
+      const tripRows = p.rows.filter((r) => r.coverKey === trip);
+      assert.equal(tripRows.length, 2, on);
+      assert.ok(tripRows.every((r) => !r.coverEnded), on);
+      assert.deepEqual(categoryRows("Personal Accident", p.rows).map((r) => r.coverKey).sort(), [gpa, trip].sort(), on);
+      assert.equal(categoryRows("Hospital Cash", p.rows).length, 1, on);
+    }
   });
   test(`${m}: a period the document does not print, or prints only one end of, never ends the cover`, () => {
     const unprinted = tripReading({ from: "29/09/2026", to: "04/10/2026" }, [{ ...tripPages[0], text: tripPages[0].text.replace(/Period of insurance:[^\n]*/, "Period of insurance: see schedule") }, tripPages[1]]);

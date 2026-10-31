@@ -1186,7 +1186,10 @@ test("a card whose copied benefit name is not its row's is left out: the id slip
   assert.equal(run(cef.id, undefined).labels.length, 1);
 });
 
-test("a card for an event outside its cover's printed period is never shown; with no event it says the period ended (live run 23 Oct, S048, S008)", () => {
+// Changed 31 Oct (DC: "ignore all expiry dates ... assume all policies are still in force"): this used to check that a card
+// for an event after a trip's printed period was dropped, and that a card shown with no event said the period ended.
+// Every policy on file is now in force, so the same cards are always shown and never say a period ended.
+test("a printed cover period never drops a card or adds an ended note: every policy is in force (was: live run 23 Oct, S048, S008)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const trip: ChatRow = { ...amb, id: "R961", cover: "Single Trip", benefit: "Daily hospital cash while overseas", coverKey: coverKeyOf({ product: amb.product, cover: "Single Trip", plan: null }) };
   const run = (eventFit: string, period: unknown) => {
@@ -1195,23 +1198,13 @@ test("a card for an event outside its cover's printed period is never shown; wit
     return { labels: r.report.labels, why: r.report.dropped.map((d) => d.why) };
   };
   const p = (eventOn: string | null) => ({ from: "29/09/2026", to: "04/10/2026", eventOn });
-  // An event with no date said may have been during the trip: shown, saying when the period ended (Critic R156-1).
-  const undated = run("any_event", p(""));
-  assert.equal(undated.labels.length, 1);
-  assert.match(undated.labels[0], / Its cover period ended on 04\/10\/2026, so it pays only for an event on or before that day\.$/);
-  // Happening now (today's date): after the trip ended, no card.
-  assert.deepEqual(run("any_event", p("23/10/2026")), { labels: [], why: ["its cover period ended on 04/10/2026"] });
-  // On a date inside the trip: shown. Before it: not.
-  assert.equal(run("any_event", p("29/09/2026")).labels.length, 1);
-  assert.deepEqual(run("any_event", p("20/09/2026")).why, ["its cover period starts on 29/09/2026"]);
-  // No period printed, or one that cannot be dated: shown as before.
-  assert.equal(run("any_event", null).labels.length, 1);
-  assert.equal(run("any_event", { from: null, to: null, eventOn: null }).labels.length, 1);
-  // With no event, the card is shown and says the period ended.
-  const lookup = run("no_event", p("")).labels;
-  assert.equal(lookup.length, 1);
-  assert.match(lookup[0], / Its cover period ended on 04\/10\/2026\.$/);
-  assert.doesNotMatch(run("no_event", { from: "01/10/2026", to: "01/12/2026", eventOn: null }).labels[0], /ended/);
+  for (const [eventFit, period] of [["any_event", p("")], ["any_event", p("23/10/2026")], ["any_event", p("29/09/2026")], ["any_event", p("20/09/2026")],
+    ["any_event", null], ["any_event", { from: null, to: null, eventOn: null }], ["no_event", p("")], ["no_event", { from: "01/10/2026", to: "01/12/2026", eventOn: null }]] as const) {
+    const out = run(eventFit, period);
+    assert.equal(out.labels.length, 1, JSON.stringify(period));
+    assert.doesNotMatch(out.labels[0], /ended|expired|starts on|not started/i, JSON.stringify(period));
+    assert.ok(!out.why.some((w) => /period/.test(w)), JSON.stringify(out.why));
+  }
 });
 
 test("a sentence that sets the daily cards' one day rule against itself is left out (live run 23 Oct, H4)", () => {
@@ -1238,14 +1231,16 @@ test("a sentence that sets the daily cards' one day rule against itself is left 
   assert.deepEqual(dropAgreeingDayRules(kept, two), []);
 });
 
-test("each printed date range is said with whether it has ended, is running or has not started (live run 23 Oct, S048)", () => {
+// Changed 31 Oct (DC: every policy is in force): the dates note used to say whether each range had ended, was running or
+// had not started. It now gives the printed ranges only.
+test("each printed date range is given as printed, never as ended, running or not started (was: live run 23 Oct, S048)", () => {
   const withPages = (text: string): Household => ({ ...HOUSE, documents: [...HOUSE.documents, doc("aaaaaaaa-0000-0000-0000-0000000000e2", "Trip.pdf", [{ page: 1, text }])] });
   const now = new Date("2026-10-23T03:00:00Z");
-  assert.match(periodsNote(withPages("Period of Insurance: 29/09/2026 to 04/10/2026"), now), /29\/09\/2026 to 04\/10\/2026: ended before today/);
-  assert.match(periodsNote(withPages("Cover 01/10/2026 - 01/12/2026"), now), /running today/);
-  assert.match(periodsNote(withPages("Trip 01/12/2026 to 05/12/2026"), now), /not started yet/);
-  // Singapore's date: 23 Oct begins at 16:00 UTC on 22 Oct, so a trip ending 22 Oct has ended.
-  assert.match(periodsNote(withPages("Trip 01/10/2026 to 22/10/2026"), new Date("2026-10-22T16:30:00Z")), /ended before today/);
+  for (const [text, range] of [["Period of Insurance: 29/09/2026 to 04/10/2026", "29/09/2026 to 04/10/2026"], ["Cover 01/10/2026 - 01/12/2026", "01/10/2026 to 01/12/2026"], ["Trip 01/12/2026 to 05/12/2026", "01/12/2026 to 05/12/2026"]]) {
+    const note = periodsNote(withPages(text), now);
+    assert.ok(note.includes(range), note);
+    assert.doesNotMatch(note, /ended|running|not started/i);
+  }
   // Not a range: nothing said.
   for (const t of ["Issued 01/10/2026", "05/10/2026 to 01/10/2026", "31/02/2026 to 01/03/2026"]) assert.ok(!/\bTrip prints/.test(periodsNote(withPages(t), now)), t);
 });

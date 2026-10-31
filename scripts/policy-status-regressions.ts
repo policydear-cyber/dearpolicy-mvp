@@ -52,7 +52,9 @@ test("after the grace date with no amount printed: no figure invented", () => {
 test("a lapse notice still reads as lapsed, and a document with neither reads as before", () => {
   assert.equal(printedStatus([{ page: 1, text: "Your policy lapsed on 17 March 2026." }], null, "2026-10-29").state, "lapsed");
   assert.equal(printedStatus([{ page: 1, text: "Period of insurance 1 June 2025 to 31 May 2027" }], null, "2026-10-29").state, "in_force");
-  assert.equal(printedStatus([{ page: 1, text: "Period of insurance 1 June 2024 to 31 May 2025" }], null, "2026-10-29").state, "ended");
+  // Changed 31 Oct (DC: "ignore all expiry dates ... assume all policies are still in force"): a printed period that
+  // has passed used to read "ended". Every policy on file is in force now.
+  assert.equal(printedStatus([{ page: 1, text: "Period of insurance 1 June 2024 to 31 May 2025" }], null, "2026-10-29").state, "in_force");
   assert.equal(printedStatus([{ page: 1, text: "Schedule of benefits" }], null, "2026-10-29").state, "unknown");
   assert.equal(statusSentence("X", { state: "unknown", date: null, printed: null, page: null, line: null }), null);
 });

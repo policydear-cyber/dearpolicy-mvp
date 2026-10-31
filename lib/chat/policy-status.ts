@@ -5,8 +5,8 @@
  *   lapsed    "Your policy lapsed on 17 March 2026"            (a lapse notice)
  *   grace     "Grace period ends 20 October 2026"               (a premium reminder)
  *   grace_passed  the same reminder after that date: it cannot say whether the premium was paid
- *   ended     the period of insurance printed has run out       (an old certificate)
- *   in_force  the period printed runs past today                (a current schedule)
+ *   in_force  a period of insurance is printed: every policy on file is treated as in force, whatever its printed end
+ *             date (DC, 31 Oct: "ignore all expiry dates"), so a date that has passed never makes it "ended".
  *   unknown   nothing printed says either way
  *
  * Every state carries the page and line that says it, so an answer can cite it.
@@ -143,7 +143,6 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
   }
   const end = printedPeriodEnd(pages);
   const endIso = end?.iso ?? expiryIso?.slice(0, 10) ?? null;
-  if (endIso && endIso < today) return { state: "ended", date: endIso, printed: end?.printed ?? longDate(endIso), page: end?.page ?? null, line: end?.line ?? null };
   if (endIso) return { state: "in_force", date: endIso, printed: end?.printed ?? longDate(endIso), page: end?.page ?? null, line: end?.line ?? null };
   return { state: "unknown", date: null, printed: null, page: null, line: null };
 }

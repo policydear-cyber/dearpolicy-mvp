@@ -5,11 +5,11 @@
  * test keeps its card, labelled with the reason, and is never named as a
  * possible benefit (lib/chat/fact-finding-chat.ts, finalizeClaimAnswer).
  *
- *  - Expired: the policy's own renewal/expiry date has passed with no later
- *    premium or renewal evidence (lib/policies/currentness.ts,
- *    "expiry_date_passed"), and the event did not happen on or before that
- *    date. An expired travel policy's "Overseas medical expenses" is not a
- *    possible benefit for a fracture last week.
+ *  - Expiry: never. Every policy on file is treated as in force (DC, 31 Oct:
+ *    "ignore all expiry dates"), so a printed expiry date never rules a
+ *    benefit out.
+ *  - Not started: an event before the cover's own start date (as the death
+ *    and critical illness calculators check).
  *  - Location: cover that pays only for events overseas (travel policies,
  *    overseas / evacuation / repatriation benefits) is not a possible benefit
  *    for an event in Singapore.
@@ -65,12 +65,7 @@ export function eventFitIssue(args: {
   tripStart?: string | null;
   tripEnd?: string | null;
 }): EventFitIssue | null {
-  const expiry = isoDay(args.expiryDate);
   const eventDay = isoDay(meaningfulFact(args.eventDate));
-  const whose = args.policyName ? args.policyName + "’s" : "this policy’s";
-  if (args.expiryPassed && expiry && !(eventDay && eventDay <= expiry))
-    return { kind: "expired", text: "Not a possible benefit: " + whose + " cover ended on " + plainDate(expiry) +
-      (eventDay ? ", before the event on " + plainDate(eventDay) + ", and no renewal is on file." : " and no renewal is on file. If it happened before then, tell DearPolicy the date.") };
   const effective = isoDay(args.effectiveDate);
   if (effective && eventDay && eventDay < effective)
     return { kind: "not_started", text: "Not a possible benefit on the document on file: " + (args.policyName ? args.policyName + "’s" : "the") + " cover on file starts on " + plainDate(effective) +

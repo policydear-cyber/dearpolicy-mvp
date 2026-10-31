@@ -11,7 +11,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/li
 import { checkReading, type CheckedBenefit, type CheckedCover, type CheckedReading } from "@/lib/benefit-table/check";
 import { categoryRows, documentKinds, lumpSumParts, personKinds, tileRows, type HeldCover } from "@/lib/coverage/table-figures";
 import { planKindOfName, planTypeOf, planTypeOfPages } from "@/lib/coverage/plan-type";
-import { documentTableKinds, endedKinds, kindsOfTable } from "@/components/cover-kinds";
+import { documentTableKinds, kindsOfTable } from "@/components/cover-kinds";
 
 let pass = 0, fail = 0;
 function t(id: string, ok: boolean, detail: unknown) {
@@ -81,23 +81,15 @@ for (const { m, sign, cur } of [{ m: "SG", sign: "S$", cur: "SGD" }, { m: "MY", 
   t(`${m}: currency not used for the type`, r.planType?.kind === "savings", r.planType);
 }
 
-// Travel by policy: current, ended, renewed, annual, and never a group scheme named after a hotel.
+// Travel by policy: every travel policy on file is in force, whatever its printed dates (DC, 31 Oct: "ignore all expiry
+// dates"); never a group scheme named after a hotel.
 type KC = Parameters<typeof personKinds>[0][number];
-const tc = (o: Partial<KC>): KC => ({ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, ended: null, endDate: "20/11/2026", ...o });
+const tc = (o: Partial<KC>): KC => ({ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, ...o });
 const k1 = personKinds([tc({})], []);
-t("current single trip is current Travel", JSON.stringify(k1.get("Travel")) === JSON.stringify({ current: ["Single Trip · Gold plan"], endedOn: null, note: null, undated: [] }), k1.get("Travel"));
-const k2 = personKinds([tc({ ended: "04/10/2026" })], []);
-t("an ended trip gives its last day", k2.get("Travel")?.current.length === 0 && k2.get("Travel")?.endedOn === "04/10/2026", k2.get("Travel"));
-const k3 = personKinds([tc({ ended: "04/10/2026" }), tc({ ended: "12/09/2026" })], []);
-t("two ended trips give the later day (day first)", k3.get("Travel")?.endedOn === "04/10/2026", k3.get("Travel"));
-const k4 = personKinds([tc({ ended: "04/10/2026" }), tc({ plan: "Silver" })], []);
-t("a renewed trip beside an ended one is current", k4.get("Travel")?.current.length === 1 && k4.get("Travel")?.endedOn === null, k4.get("Travel"));
-const k5 = personKinds([tc({ endDate: null })], []);
-t("a single trip whose dates were not read is neither current nor ended", k5.get("Travel")?.current.length === 0 && !k5.get("Travel")?.endedOn && k5.get("Travel")?.undated.length === 1, k5.get("Travel"));
-t("a single trip dated by its document's period is current", personKinds([tc({ endDate: null, documentPeriodTo: "2026-12-01" })], []).get("Travel")?.current.length === 1, null);
-t("Family and Documents say the dates were not found", JSON.stringify(endedKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", endDate: null, documentPeriodTo: null }])) === JSON.stringify(["Travel: trip dates not found"]), null);
-t("a cover sent without date fields (older callers) is current, as before", personKinds([{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold" }], []).get("Travel")?.current.length === 1, null);
-t("a row cannot say its dates were not read: an unmatched single trip's row is current unless it ended", personKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", pays: "up_to", coverEnded: null }]).get("Travel")?.current.length === 1, null);
+t("a single trip is current Travel", JSON.stringify(k1.get("Travel")) === JSON.stringify({ current: ["Single Trip · Gold plan"], note: null }), k1.get("Travel"));
+t("two trips are both listed", personKinds([tc({}), tc({ plan: "Silver" })], []).get("Travel")?.current.length === 2, null);
+t("a cover sent with old ended/date fields (older callers) is still current", personKinds([{ ...tc({}), ended: "04/10/2026", endDate: "04/10/2026" } as KC], []).get("Travel")?.current.length === 1, null);
+t("a row of an unmatched single trip is current, whatever coverEnded it carries", personKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", pays: "up_to", coverEnded: "04/10/2026" } as never]).get("Travel")?.current.length === 1, null);
 t("annual multi-trip with no end is current", personKinds([tc({ product: "Osprey Cover", cover: "Annual Multi-Trip", plan: null })], []).get("Travel")?.current.length === 1, null);
 t("a hotel's group scheme is not travel", !personKinds([tc({ product: "Holiday Inn Group Insurance", cover: "Group Term Life", plan: null })], []).has("Travel"), null);
 t("a life plan with a journey name is not travel", !personKinds([tc({ product: "Life Journey Saver", cover: "Life Journey Saver", plan: null })], []).has("Travel"), null);
@@ -145,38 +137,38 @@ for (const cur of ["SGD", "MYR", "GBP"]) {
   t(`${cur}: one policy maybe read twice gives no known sum`, twice.known === null, twice.known);
 }
 
-// Every page reads the same answer: Home (personKinds), Family (kindsOfTable, endedKinds), Documents (documentTableKinds),
-// Benefits (documentKinds) and Coverage cards (the cover's own `ended`), on one assembled table per market.
-for (const { m, sign } of [{ m: "SG", sign: "S$" }, { m: "MY", sign: "RM" }, { m: "UK", sign: "£" }]) {
+// A past end date never changes status: every page reads the same answer (Home personKinds, Family kindsOfTable,
+// Documents documentTableKinds, Benefits documentKinds, Coverage card `ended`) on one assembled table per market, read
+// long after the trip's printed period (and before it), with the trip's amounts kept.
+for (const { m, sign, from, to } of [{ m: "SG", sign: "S$", from: "29/09/2026", to: "04/10/2026" }, { m: "MY", sign: "RM", from: "01/01/2025", to: "15/01/2025" }, { m: "UK", sign: "£", from: "10/06/2024", to: "24/06/2024" }]) {
   const trip = { id: `trip-${m}`, name: "Kestrel trip.pdf", readable: true, people: ["Ana Reyes"], pages: [
-    { page: 1, text: `TRAVEL INSURANCE SUMMARY\nInsured: Ana Reyes\nSingle Trip\tGold\nPeriod of insurance: 29/09/2026 to 04/10/2026\nTrip cancellation\t${sign}10,000` }] };
-  const tripRaw = { document: { kind: "personal_proof", product: "Kestrel Travel Insurance", insurer: "Kestrel", namedPeople: ["Ana Reyes"], plan: "Gold", periodFrom: "29/09/2026", periodTo: "04/10/2026" },
-    covers: [{ person: "Ana Reyes", product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, policyNumber: null, sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: "Single Trip\tGold" }],
+    { page: 1, text: `TRAVEL INSURANCE SUMMARY\nInsured: Ana Reyes\nSingle Trip\tGold\nPeriod of insurance: ${from} to ${to}\nTrip cancellation\t${sign}10,000` }] };
+  const tripRaw = { document: { kind: "personal_proof", product: "Kestrel Travel Insurance", insurer: "Kestrel", namedPeople: ["Ana Reyes"], plan: "Gold", periodFrom: from, periodTo: to },
+    covers: [{ person: "Ana Reyes", product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, policyNumber: null, sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: from, endDate: to, page: 1, quote: "Single Trip\tGold" }],
     benefits: [{ section: "Benefits", column: null, benefit: "Trip cancellation", pays: "up_to", value: 10000, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: `Trip cancellation\t${sign}10,000` }] };
   const endow = { id: `endow-${m}`, name: "Maju.pdf", readable: true, people: ["Ana Reyes"], pages: [
-    { page: 3, text: `POLICY SCHEDULE\nLife Assured: Ana Reyes\nMAJU ENDOW 10\t${sign}49,000.00` },
+    { page: 3, text: `POLICY SCHEDULE\nLife Assured: Ana Reyes\nMAJU ENDOW 10\t${sign}49,000.00\nPolicy term: 01/03/2010 to 01/03/2020` },
     { page: 5, text: "This is a regular premium participating endowment insurance policy." }] };
-  const endowRaw = { document: { kind: "personal_proof", product: "MAJU ENDOW 10", insurer: "Maju Life", namedPeople: ["Ana Reyes"], plan: null, periodFrom: null, periodTo: null },
+  const endowRaw = { document: { kind: "personal_proof", product: "MAJU ENDOW 10", insurer: "Maju Life", namedPeople: ["Ana Reyes"], plan: null, periodFrom: "01/03/2010", periodTo: "01/03/2020" },
     covers: [{ person: "Ana Reyes", product: "MAJU ENDOW 10", cover: "MAJU ENDOW 10", plan: null, riderOf: null, policyNumber: null, sumInsured: 49000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 3, quote: `MAJU ENDOW 10\t${sign}49,000.00` }], benefits: [] };
   const rs = [checkReading(trip as never, tripRaw), checkReading(endow as never, endowRaw)];
   const links = rs[0].benefits.map((b) => ({ section: sectionKeyOf(rs[0].documentId, b), cover: coverKeyOf(rs[0].covers[0]), why: "test" }));
-  const table = assembleTable(rs, family, links, [], new Date("2026-10-31T04:00:00Z"));
-  const ana = table.people.find((p) => p.id === "p-ana")!;
-  const home = personKinds(ana.covers, ana.rows);
-  const family_ = kindsOfTable(ana.rows, ana.covers), familyEnded = endedKinds(ana.rows, ana.covers);
-  const docs = documentTableKinds([ana]), bens = documentKinds([ana]);
-  const card = ana.covers.find((c) => c.cover === "Single Trip");
-  t(`${m}: Home says the trip ended on 04/10/2026`, home.get("Travel")?.current.length === 0 && home.get("Travel")?.endedOn === "04/10/2026", home.get("Travel"));
-  t(`${m}: Family does not list travel as cover and says it ended`, !family_.includes("Travel") && familyEnded.includes("Travel cover ended on 04/10/2026"), { family_, familyEnded });
-  t(`${m}: Documents says the trip ended`, (docs[`trip-${m}`] ?? []).includes("Travel cover ended on 04/10/2026") && !(docs[`trip-${m}`] ?? []).includes("Travel"), docs);
-  t(`${m}: Benefits says the trip ended`, bens[`trip-${m}`]?.endedOn === "04/10/2026", bens);
-  t(`${m}: Coverage card says the trip ended`, card?.ended === "04/10/2026", card?.ended);
-  t(`${m}: savings on Home, Family, Documents and Benefits alike`, !!home.get("Savings")?.current.length && family_.includes("Savings and investment")
-    && (docs[`endow-${m}`] ?? []).includes("Savings and investment") && bens[`endow-${m}`]?.plan === "Savings", { home: home.get("Savings"), family_, docs, bens });
-  // The same trip read before it ended is current everywhere.
-  const before = assembleTable(rs, family, links, [], new Date("2026-10-01T04:00:00Z")).people.find((p) => p.id === "p-ana")!;
-  t(`${m}: during the trip every page says travel is current`, !!personKinds(before.covers, before.rows).get("Travel")?.current.length && kindsOfTable(before.rows, before.covers).includes("Travel")
-    && !endedKinds(before.rows, before.covers).length && !documentKinds([before])[`trip-${m}`]?.endedOn && !before.covers.find((c) => c.cover === "Single Trip")?.ended, null);
+  for (const on of ["2026-10-31T04:00:00Z", "2031-01-01T04:00:00Z", "2020-01-01T04:00:00Z"]) {
+    const ana = assembleTable(rs, family, links, [], new Date(on)).people.find((p) => p.id === "p-ana")!;
+    const home = personKinds(ana.covers, ana.rows), family_ = kindsOfTable(ana.rows, ana.covers);
+    const docs = documentTableKinds([ana]), bens = documentKinds([ana]);
+    const card = ana.covers.find((c) => c.cover === "Single Trip");
+    const travelRows = tileRows(categoryRows("Travel", ana.rows));
+    const day = on.slice(0, 10);
+    t(`${m} on ${day}: Home says Travel is covered`, home.get("Travel")?.current.length === 1, home.get("Travel"));
+    t(`${m} on ${day}: Family lists Travel`, family_.includes("Travel"), family_);
+    t(`${m} on ${day}: Documents lists Travel and no ended line`, (docs[`trip-${m}`] ?? []).includes("Travel") && !(docs[`trip-${m}`] ?? []).some((x) => /ended|not found/i.test(x)), docs);
+    t(`${m} on ${day}: Benefits has no ended note for the trip`, !bens[`trip-${m}`] && !JSON.stringify(bens).includes("ended"), bens);
+    t(`${m} on ${day}: the Coverage card and every row carry no ended date`, !card?.ended && ana.rows.every((r) => !r.coverEnded), card?.ended);
+    t(`${m} on ${day}: the trip's amount is kept (${sign}10,000)`, travelRows.some((r) => r.benefit === "Trip cancellation" && (r.figure as { amount?: number }).amount === 10000), travelRows.map((r) => r.benefit));
+    t(`${m} on ${day}: savings on Home, Family, Documents and Benefits alike (its 2020 policy term changes nothing)`, !!home.get("Savings")?.current.length && family_.includes("Savings and investment")
+      && (docs[`endow-${m}`] ?? []).includes("Savings and investment") && bens[`endow-${m}`]?.plan === "Savings", { home: home.get("Savings"), family_, docs, bens });
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

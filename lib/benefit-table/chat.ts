@@ -615,7 +615,7 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY; today's date when they say it is happening now; "" when they did not say when)}; all three "" when no period is printed for the cover. The app compares these dates with today as well (a card for an event outside the period is never shown; say why in a fact), so say whether a period has started or ended only from those dates. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY; today's date when they say it is happening now; "" when they did not say when)}; all three "" when no period is printed for the cover. Every policy on file is treated as in force: never say a cover has ended, expired, lapsed or not started because of a printed date or period, and never leave an amount out for that reason. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -650,27 +650,6 @@ function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number
   return null;
 }
 
-/** Why a card for an event is not shown because its cover's printed period (a trip's dates) does not include the event's
- * date, or null. The model gives the period as printed and the date of the event as the household said it (today's for an
- * event happening now); with no date said, the card is shown with when its period ended. The server compares the dates (live run 23 Oct, S048 and S008: a trip that ended on 4 Oct). */
-function outsidePeriod(raw: Record<string, unknown>, row: ChatRow, today: number): string | null {
-  if (raw.eventFit !== "on_list" && raw.eventFit !== "any_event") return null;
-  const p = raw.period as { from?: unknown; to?: unknown; eventOn?: unknown } | null | undefined;
-  if (!p || typeof p !== "object") return null;
-  // An event with no date said is not taken as today's: it may have happened during the trip, and missing information is
-  // never an exclusion (Critic R156-1). Its card says when the period ended instead.
-  const from = printedDay(p.from), to = printedDay(p.to), on = printedDay(p.eventOn);
-  if (on == null) return null;
-  if (to != null && on > to) return `its cover period ended on ${p.to}`;
-  if (from != null && on < from) return `its cover period starts on ${p.from}`;
-  return null;
-}
-/** The day a card's cover period ended, as printed, when it ended before today: said on a card shown with no event. */
-function periodEnded(raw: Record<string, unknown>, today: number): string | null {
-  const p = raw.period as { to?: unknown } | null | undefined;
-  const to = p && typeof p === "object" ? printedDay(p.to) : null;
-  return to != null && to < today ? String(p!.to) : null;
-}
 /** Whether the question asks about the row's benefit by its name: the whole name, or the name before the event it is
  * paid on ("Mobility aid" of "Mobility aid upon Accidental Total & Permanent Disablement"), at least two words long. */
 function asksFor(question: string, row: ChatRow): boolean {
@@ -726,7 +705,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1).
       : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
-      : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
+      : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {
@@ -837,12 +816,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
       const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
       const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
-      // A card shown with no event, for a cover whose printed period has ended, says so (S008: an ended trip's daily cash).
-      // So does an event card with no date said (Critic R156-1).
-      const event = raw.eventFit === "on_list" || raw.eventFit === "any_event";
-      const undated = printedDay((raw.period as { eventOn?: unknown } | null | undefined)?.eventOn) == null;
-      const ended = st && (!event || undated) ? periodEnded(raw, today) : null;
-      if (st && ended) st.text = `${String(st.text).replace(/\.?\s*$/, ".")} Its cover period ended on ${ended}${event ? ", so it pays only for an event on or before that day" : ""}.`;
+      // A printed cover period never changes what a card says: every policy on file is treated as in force (DC, 31 Oct).
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
       if (st) st.rowConditions = r.conditions;

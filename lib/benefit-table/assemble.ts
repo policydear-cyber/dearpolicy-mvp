@@ -147,21 +147,11 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
 
 /** A travel cover's term is short when its printed period runs at most this many days: a trip, never an annual plan. */
 export const SHORT_TERM_DAYS = 183;
-/** The last day of a cover's term, as printed, when the cover is a single trip that ended before `today` (a day count);
- * otherwise null. Only travel cover ends this way, by the two signals the Home tiles use (#147): a travel name on its
- * cover, plan or (non-scheme) product, and no group-scheme name on its cover or product. Its term is the cover line's own
- * start and end dates, or else the period its own document prints. Both ends must be printed and dated, and the term at
- * most SHORT_TERM_DAYS long, so an annual multi-trip plan never ends by its old date. Any other cover is never ended by
- * a printed date: a mid-year joiner's group certificate, a monthly renewable plan or a rider ending with its base may
- * all have been renewed, and missing renewal papers are not an ended cover (Critic R251 Q2). */
-export function coverEnded(c: Pick<CheckedCover, "startDate" | "endDate" | "cover" | "plan" | "product"> & { riderOf?: string | null }, r: Pick<CheckedReading, "periodFrom" | "periodTo">, today: number): string | null {
-  // A rider ends with its base plan, which may have been renewed, whatever its name (Critic R253 L2).
-  if (c.riderOf || !travelName(c) || SCHEME_NAME.test(`${c.cover} ${c.product}`)) return null;
-  const own = c.endDate != null;
-  const fromText = own ? c.startDate ?? r.periodFrom ?? null : r.periodFrom ?? null, toText = own ? c.endDate : r.periodTo ?? null;
-  const from = printedDay(fromText), to = printedDay(toText);
-  if (from == null || to == null || to < from || to - from > SHORT_TERM_DAYS) return null;
-  return to < today ? toText : null;
+/** Every policy on file is treated as in force (DC, 31 Oct: "ignore all expiry dates ... assume all policies are still in
+ * force"). A printed end date, period or expiry is a fact of the document, never a status: no cover is ever ended by one,
+ * so this is always null. Kept so every reader of `ended` / `coverEnded` sees one answer. */
+export function coverEnded(_c: Pick<CheckedCover, "startDate" | "endDate" | "cover" | "plan" | "product"> & { riderOf?: string | null }, _r: Pick<CheckedReading, "periodFrom" | "periodTo">, _today: number): string | null {
+  return null;
 }
 
 /** Whether a row under a heading that names the limits of compensation is one of those limits: a printed lump sum or

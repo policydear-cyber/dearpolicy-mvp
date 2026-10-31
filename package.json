@@ -294,7 +294,8 @@
     "identity:mask-test": "node --import tsx scripts/identity-mask-regressions.ts",
     "chat:policy-status-test": "node --import tsx scripts/policy-status-regressions.ts",
     "premium:table-test": "node --import tsx scripts/table-premium-regressions.ts",
-    "premium:source-caption-test": "node --import tsx scripts/premium-source-caption-regressions.ts"
+    "premium:source-caption-test": "node --import tsx scripts/premium-source-caption-regressions.ts",
+    "coverage:in-force-test": "node --import tsx scripts/coverage/in-force-test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

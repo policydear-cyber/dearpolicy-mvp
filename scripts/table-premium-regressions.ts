@@ -81,14 +81,17 @@ test("anything unsure is left out, never guessed", () => {
   none(cover({ firstYearPremium: 80, firstYearFrom: "sometime in 2026" }), "a start date that is not a date");
 });
 
-test("a document that is not current, or says the policy lapsed or ended, gives no figure and is named (Critic R284 H2, M1)", () => {
+// Changed 31 Oct (DC: "ignore all expiry dates ... assume all policies are still in force"): a printed period that has
+// ended, an old start, or no period printed used to leave the premium out as not current. Only the document's own words
+// (lapsed or ended) do now.
+test("a printed period that ended, an old start or no period never drops a premium; a document that says the policy lapsed or ended gives no figure and is named (Critic R284 H2, M1)", () => {
   const old = cover({ documentPeriodFrom: "01/01/2019", documentPeriodTo: "31/12/2019" });
-  assert.deepEqual(run([old]).items, []);
-  assert.deepEqual(run([old]).leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
-  assert.deepEqual(amounts([cover({ endDate: "01/10/2026" })]), [], "the cover's own printed end is past");
-  assert.deepEqual(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: "01/01/2024" })]), [], "no end printed, and it started long ago");
+  assert.equal(run([old]).items.length, 1, "a period that ended in 2019");
+  assert.deepEqual(run([old]).leftOut, []);
+  assert.equal(amounts([cover({ endDate: "01/10/2026" })]).length, 1, "the cover's own printed end is past");
+  assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: "01/01/2024" })]).length, 1, "no end printed, and it started long ago");
   assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: "01/03/2026" })]).length, 1, "no end printed, started this year");
-  assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: null })]).length, 0, "no period printed at all");
+  assert.equal(amounts([cover({ documentPeriodTo: null, documentPeriodFrom: null })]).length, 1, "no period printed at all");
   const lapsed = new Map([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: true }]]);
   assert.deepEqual(amounts([cover({})], TODAY, [], lapsed), []);
   assert.deepEqual(run([cover({})], TODAY, [], lapsed).leftOut, [{ name: "Harbour Critical Illness", why: "not_current" }]);
@@ -311,11 +314,11 @@ test("a policy is not named as unread when its premium is counted, read, already
   assert.deepEqual(unread([{ ...bare, ended: "the cover ended" as never }]), [], "an ended cover is no current cost");
   assert.deepEqual(unread([{ ...bare, source: src("doc-e") as never }]), [], "a document whose pages say the policy ended");
   assert.deepEqual(unread([{ ...bare, source: src("doc-gone") as never }]), [], "a deleted or superseded document (not in the current documents)");
-  // A period that ran out, an old start with no end (whole life), or an ending word on the page may still be a held policy:
-  // named, its document perhaps out of date; no dates printed is plainly unread (TE pr163 N6-N8, Critic R301 H3).
+  // An ending word on the page may still be a held policy: named, its document perhaps out of date (TE pr163 N6-N8, Critic
+  // R301 H3). Changed 31 Oct (DC: every policy is in force): a period that ran out, or an old start, is plainly unread now.
   const old = [{ name: "Harbour Protector", why: "unread_old" }];
-  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: "28/02/2024" }]), old, "a period that ran out");
-  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "05/01/2019", documentPeriodTo: null }]), old, "an old start, no end");
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "01/03/2023", documentPeriodTo: "28/02/2024" }]), [{ name: "Harbour Protector", why: "unread" }], "a period that ran out");
+  assert.deepEqual(unread([{ ...bare, documentPeriodFrom: "05/01/2019", documentPeriodTo: null }]), [{ name: "Harbour Protector", why: "unread" }], "an old start, no end");
   assert.deepEqual(unread([{ ...bare, documentPeriodFrom: null, documentPeriodTo: null }]), [{ name: "Harbour Protector", why: "unread" }], "no dates printed");
   const endedDocs = new Map([...docs, ["doc-t", { insurer: "Harbour Life", lapsedOrEnded: false, endedPages: [1] }]]);
   assert.deepEqual(unreadPremiumCovers([{ ...bare, source: src("doc-t") as never }], [], endedDocs, new Set(), TODAY), old, "a page with an ending word");
@@ -358,8 +361,9 @@ test("a combined schedule's second policy is named; a rider of a named plan is n
     [{ name: "Harbour Protector", why: "maybe_counted" }]);
   // The plan's own premium read: not named, nor a rider named after it.
   assert.deepEqual(unreadPremiumCovers([{ ...plan, premium: 80, premiumFrequency: "Monthly", premiumCurrency: "SGD" }, cover({ ...none, product: "Harbour Protector Rider: Waiver of Premium" })], [], docsBare, new Set(), TODAY), []);
-  // A rider whose term ran out listed first: still named, after the current plan (TE pr163 R5, Critic R304 H1).
-  assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Term Rider 5", endDate: "28/02/2026" }), plan], [], new Map([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]), new Set(), TODAY), [{ name: "Harbour Protector and Term Rider 5", why: "unread" }]);
+  // A rider whose term ran out listed first: still named (TE pr163 R5, Critic R304 H1). Changed 31 Oct (DC: every policy
+  // is in force): its passed end no longer moves it after the plan, so both are named in the order printed.
+  assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Term Rider 5", endDate: "28/02/2026" }), plan], [], new Map([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]), new Set(), TODAY), [{ name: "Term Rider 5 and Harbour Protector", why: "unread" }]);
   // A rider printed with no number of its own is the plan's: named once.
   const docsNo = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", policyNumber: "HL-1001", lapsedOrEnded: false }]]);
   assert.deepEqual(unreadPremiumCovers([{ ...a, policyNumber: null }, cover({ ...none, product: "Harbour Protector", cover: "Waiver of Premium" })], [], docsNo, new Set(), TODAY), [{ name: "Harbour Protector", why: "unread" }]);
@@ -396,7 +400,9 @@ test("no plan on a schedule without numbers of its own is left out by an old pro
   assert.deepEqual(run([cover({ ...none, product: "Harbour Protector", policyNumber: "HL-111" }), cover({ ...none, product: "Harbour Protector", policyNumber: "HL-222" })],
     [{ policy_id: "doc-a", policy_number: null, product_name: null, amount: 50, insurer: null }]).map((x) => x.why), ["maybe_counted", "maybe_counted"]);
   // TE S11: one plan on an ended page and a live page is named by its live cover's spelling.
-  assert.deepEqual(run([cover({ ...none, product: "HARBOUR PROTECTOR PLAN", endDate: "28/02/2026" }), cover({ ...none, product: "Harbour Protector" })]), [{ name: "Harbour Protector", why: "unread" }]);
+  // Changed 31 Oct (DC: every policy is in force): the cover whose printed end passed is no longer passed over for the name;
+  // the product is still named once.
+  assert.deepEqual(run([cover({ ...none, product: "HARBOUR PROTECTOR PLAN", endDate: "28/02/2026" }), cover({ ...none, product: "Harbour Protector" })]), [{ name: "HARBOUR PROTECTOR PLAN", why: "unread" }]);
   // TE S2: a read premium and a rider printing the same own number in another format: one policy.
   assert.deepEqual(run([cover({ product: "Harbour Protector", policyNumber: "HL001234" }), cover({ ...none, product: "Rider Wakaf", policyNumber: "hl-1234" })]), []);
   // TE S9: a premium read on another document never hides this one.
@@ -406,4 +412,26 @@ test("no plan on a schedule without numbers of its own is left out by an old pro
   const bare = new Map<string, TablePremiumDocument>([["doc-a", { insurer: "Harbour Life", lapsedOrEnded: false }]]);
   assert.deepEqual(unreadPremiumCovers([cover({ ...none, product: "Harbour Protector" }), cover({ ...none, product: "Early CI Rider" })], [{ policy_id: "doc-a", policy_number: null, product_name: "Early CI Rider", amount: 9, insurer: "Harbour Life" }] as never, bare, new Set(), TODAY),
     [{ name: "Harbour Protector", why: "maybe_counted" }]);
+});
+
+test("last year's and this year's schedule of one policy: the renewal's premium counts, whatever the old one's end date (Critic R453 M1)", () => {
+  for (const [currency, sign] of [["SGD", "S$"], ["MYR", "RM"], ["GBP", "£"]] as const) {
+    const old = cover({ doc: "doc-2025", policyNumber: "HP-77", premium: 90, currency, premiumCurrency: currency, documentPeriodFrom: "01/03/2025", documentPeriodTo: "28/02/2026" });
+    const renewal = cover({ doc: "doc-2026", policyNumber: "HP-77", premium: 100, currency, premiumCurrency: currency, documentPeriodFrom: "01/03/2026", documentPeriodTo: "28/02/2027" });
+    for (const order of [[old, renewal], [renewal, old]]) {
+      const r = run(order);
+      assert.deepEqual(r.items.map((i) => [i.policy_id, i.amount, i.currency]), [["doc-2026", 100, currency]], sign);
+      assert.deepEqual(r.leftOut, [], sign);
+    }
+    // Read long after both periods: still the renewal (no end date drops either).
+    assert.deepEqual(run([old, renewal], day("01/01/2031")).items.map((i) => i.policy_id), ["doc-2026"], sign);
+  }
+  // The same start, or a start missing on one: which is current is not known, so neither counts and both are named.
+  const a = cover({ doc: "doc-x", policyNumber: "HP-77" }), b = cover({ doc: "doc-y", policyNumber: "HP-77", premium: 120 });
+  assert.deepEqual(run([a, b]).items, []);
+  assert.deepEqual(run([a, { ...b, documentPeriodFrom: null }]).items, []);
+  // One product name and no numbers may be two real policies (two single trips): neither is chosen, both named (Critic R455).
+  const t1 = cover({ doc: "trip-1", product: "Kestrel Single Trip", documentPeriodFrom: "01/03/2025" }), t2 = cover({ doc: "trip-2", product: "Kestrel Single Trip", premium: 40, documentPeriodFrom: "01/06/2026" });
+  assert.deepEqual(run([t1, t2]).items, []);
+  assert.deepEqual(run([t1, t2]).leftOut, [{ name: "Kestrel Single Trip", why: "two_documents" }]);
 });
