@@ -255,8 +255,10 @@ export function isPremiumSection(section: string | null | undefined): boolean {
  * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
+  // A row under a heading that holds only what the person pays is a premium, whatever its own name says (TE R276 F1).
+  rows = rows.filter((r) => !isPremiumSection(r.section));
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && !isPremiumSection(r.section) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
 }
 
 /** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip
