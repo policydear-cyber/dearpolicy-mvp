@@ -10177,3 +10177,5 @@ Root cause: a negation window is still a deny-list. Structural fix:
 ## R432 — #218 73334e3: READY (one upload place on Documents; labels display-only; cents 2 digits in no-currency path; gate green). Conflicts with #219 in app/page.tsx. Low: "Applies to" also on personal policies.
 
 ## R433 — #214 3d796d7: READY (People list before add form; gate green).
+
+## R434 — #215 c96306e: one regression left: "Disability: loss greater than 50%, Sum Insured, reduced to one half if less than 10%" (main none, head share); threshold freed after a worded share. Fix: free only before first share mention of any kind (digit %, WORD_FRACTIONS, INSURED_AMOUNT). Gate green.
