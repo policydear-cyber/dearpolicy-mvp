@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
+import { confirmedLater, CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 import { isReviewerOnlyAccount } from "@/lib/claims/reviewers/boundary";
@@ -64,11 +64,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, destination: "/reviewer" });
   }
   try {
-    await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`, undefined, { email: data.user.email ?? email });
+    await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`, undefined, {
+      email: data.user.email ?? email,
+      emailProven: confirmedLater(data.user.email_confirmed_at, data.user.created_at),
+    });
   } catch (e) {
-    // Invite-only sign-up (lib/auth/signup-gate.ts): an account with no household that is not invited gets no session.
+    // Invite-only sign-up (lib/auth/signup-gate.ts): an account with no household gets no session unless it is invited
+    // and its address is proven. An invited person is emailed a link that proves it (app/api/auth/callback).
     if (!(e instanceof SignupClosedError)) throw e;
     await supabase.auth.signOut().catch(() => {});
+    if (e.reason === "unproven") {
+      const origin = new URL(request.url).origin;
+      await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback`, shouldCreateUser: false } }).catch(() => {});
+      if (nativeForm) return backToLogin("confirm_email");
+      return NextResponse.json({ error: CONFIRM_EMAIL_MESSAGE }, { status: 403 });
+    }
     if (nativeForm) return backToLogin("invite_only");
     return NextResponse.json({ error: SIGNUP_CLOSED_MESSAGE }, { status: 403 });
   }

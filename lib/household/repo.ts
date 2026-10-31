@@ -16,7 +16,7 @@ import type { Pool } from "pg";
 import { createUserSupabaseClient, withServiceTransaction, type ScopedDbClient } from "@/lib/db/authz-client";
 import { isUuid } from "@/lib/db/client";
 import { enqueueStoragePurge, householdStorageKeys, purgeSoon, type PurgeItem } from "@/lib/storage/purge";
-import { mayCreateHousehold, signupMode, SignupClosedError } from "@/lib/auth/signup-gate";
+import { householdGate, SignupClosedError } from "@/lib/auth/signup-gate";
 
 export class ForbiddenError extends Error {}
 export class NotFoundError extends Error {}
@@ -97,7 +97,7 @@ export async function ensureDefaultHousehold(
   userId: string,
   displayName: string,
   poolOverride?: Pick<Pool, "connect">,
-  options: { email?: string | null } = {},
+  options: { email?: string | null; emailProven?: boolean } = {},
 ): Promise<string> {
   return withServiceTransaction(async (client) => {
     const existing = await client.query<{ household_id: string }>(
@@ -107,8 +107,10 @@ export async function ensureDefaultHousehold(
     if (existing.rows.length > 0) return existing.rows[0].household_id;
 
     // Invite-only sign-up (lib/auth/signup-gate.ts, off unless DEARPOLICY_SIGNUP_MODE=invite): a new household only for
-    // an invited email. A person already in a household returned above, so is never affected. Fails closed.
-    if (!(await mayCreateHousehold(options.email, client))) throw new SignupClosedError();
+    // an invited email that is proven to be theirs. A person already in a household returned above, so is never
+    // affected. Fails closed.
+    const gate = await householdGate(options.email, options.emailProven === true, client);
+    if (gate !== "ok") throw new SignupClosedError(gate);
 
     // accounts.id has NO column default in sql/schema.sql (nor in the live
     // database), so the id must be generated here -- relying on a default
@@ -123,13 +125,6 @@ export async function ensureDefaultHousehold(
     ]);
     return householdId;
   }, poolOverride);
-}
-
-/** Invite-only sign-up (lib/auth/signup-gate.ts): may this email make a new account and household? Always yes unless
- * DEARPOLICY_SIGNUP_MODE=invite. Service-mediated because the person has no account yet; any error is a no. */
-export async function invitedToSignUp(email: string, poolOverride?: Pick<Pool, "connect">): Promise<boolean> {
-  if (signupMode() === "open") return true;
-  return withServiceTransaction((client) => mayCreateHousehold(email, client), poolOverride).catch(() => false);
 }
 
 /** Owner-only: rename the household. */

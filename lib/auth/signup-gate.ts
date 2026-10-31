@@ -11,13 +11,35 @@
  * form, so an account made any other way (for example straight against the auth service) still gets no household and
  * so no access. A person who already belongs to a household is never affected.
  *
- * It fails closed: in invite mode, no email, an unreadable setting or an error while checking invitations means no
- * new household. Any value of DEARPOLICY_SIGNUP_MODE other than unset/"open" counts as invite-only.
+ * The email must also be PROVEN, by this code itself, whatever the auth service's "Confirm email" setting is: an
+ * invited address (or any address at an invited domain) is worth nothing if anyone can type it. Proven means the person
+ * came back through an emailed link (the callback's code exchange), or the auth service recorded a confirmation at
+ * least CONFIRM_GAP_MS after the account was made. With "Confirm email" off the service stamps the confirmation at the
+ * moment of sign-up, so that stamp proves nothing and counts as unproven; the person is sent a sign-in link instead.
+ *
+ * It fails closed: in invite mode, no email, an unproven email, an unreadable setting or an error while checking
+ * invitations means no new household. Any value of DEARPOLICY_SIGNUP_MODE other than unset/"open" counts as invite-only.
  */
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 
 export class SignupClosedError extends Error {
-  constructor() { super("DearPolicy is open by invitation only at the moment."); this.name = "SignupClosedError"; }
+  /** "not_invited": no invitation for this email. "unproven": invited, but the email is not yet proven to be theirs. */
+  constructor(readonly reason: "not_invited" | "unproven" = "not_invited") {
+    super(reason === "unproven" ? "Confirm your email first." : "DearPolicy is open by invitation only at the moment.");
+    this.name = "SignupClosedError";
+  }
+}
+
+/** What an invited person sees while their email is not yet proven: a link has been (or will be) emailed to them. */
+export const CONFIRM_EMAIL_MESSAGE = "Check your email: we have sent you a link to confirm the address is yours. Open it to finish signing in.";
+
+/** A confirmation stamped within this long of the account being made was not done by a person opening an email. */
+export const CONFIRM_GAP_MS = 10_000;
+
+/** Did the auth service record a real confirmation (see the module note)? Unreadable or missing dates are a no. */
+export function confirmedLater(confirmedAt: string | null | undefined, createdAt: string | null | undefined): boolean {
+  const c = Date.parse(String(confirmedAt ?? "")), m = Date.parse(String(createdAt ?? ""));
+  return Number.isFinite(c) && Number.isFinite(m) && c - m >= CONFIRM_GAP_MS;
 }
 
 /** What a person sees when sign-up is closed to them. Says nothing about whether the email exists. */
@@ -58,7 +80,23 @@ export async function mayCreateHousehold(
   client: Pick<ScopedDbClient, "query"> | null,
   env: Record<string, string | undefined> = process.env,
 ): Promise<boolean> {
-  if (signupMode(env) === "open") return true;
+  return (await householdGate(email, true, client, env)) === "ok";
+}
+
+/** The gate itself: "ok", or why not. `proven` says whether the email is proven to be the person's (see above). */
+export async function householdGate(
+  email: string | null | undefined,
+  proven: boolean,
+  client: Pick<ScopedDbClient, "query"> | null,
+  env: Record<string, string | undefined> = process.env,
+): Promise<"ok" | "not_invited" | "unproven"> {
+  if (signupMode(env) === "open") return "ok";
+  const invited = await isInvited(email, client, env);
+  if (!invited) return "not_invited";
+  return proven === true ? "ok" : "unproven";
+}
+
+async function isInvited(email: string | null | undefined, client: Pick<ScopedDbClient, "query"> | null, env: Record<string, string | undefined>): Promise<boolean> {
   const e = normalEmail(email);
   if (!e) return false;
   if (onInvitedList(e, env)) return true;

@@ -2,7 +2,9 @@
  * Invite-only sign-up (lib/auth/signup-gate.ts). Off by default: with DEARPOLICY_SIGNUP_MODE unset anyone can sign up,
  * exactly as before. With DEARPOLICY_SIGNUP_MODE=invite a new household is made only for an invited email (on
  * DEARPOLICY_INVITED_EMAILS, an "@domain" entry, or a pending in-app household invitation), and it fails closed: no email,
- * or an error while checking invitations, means no household. A person already in a household is never affected.
+ * or an error while checking invitations, means no household. The email must also be proven by this code itself
+ * (an emailed link, or a confirmation stamped well after sign-up), whatever the auth service's "Confirm email" setting
+ * is. A person already in a household is never affected.
  * Made-up people and domains; a fake database; no network.
  *   npm run auth:signup-gate-test
  */
@@ -38,15 +40,15 @@ function fakePool(db: Db) {
 }
 
 async function main() {
-  const { signupMode, onInvitedList, mayCreateHousehold, SignupClosedError } = await import("@/lib/auth/signup-gate");
+  const { signupMode, onInvitedList, mayCreateHousehold, SignupClosedError, confirmedLater } = await import("@/lib/auth/signup-gate");
   const { ensureDefaultHousehold } = await import("@/lib/household/repo");
   const setEnv = (mode: string | undefined, list?: string) => {
     if (mode === undefined) delete process.env.DEARPOLICY_SIGNUP_MODE; else process.env.DEARPOLICY_SIGNUP_MODE = mode;
     if (list === undefined) delete process.env.DEARPOLICY_INVITED_EMAILS; else process.env.DEARPOLICY_INVITED_EMAILS = list;
   };
-  const ensure = (db: Db, email: string | null | undefined) => {
+  const ensure = (db: Db, email: string | null | undefined, emailProven = true) => {
     const f = fakePool(db);
-    return { f, run: ensureDefaultHousehold("00000000-0000-4000-8000-000000000001", "Lim household", f.pool as never, { email }) };
+    return { f, run: ensureDefaultHousehold("00000000-0000-4000-8000-000000000001", "Lim household", f.pool as never, { email, emailProven }) };
   };
 
   await t("off by default: unset or 'open' is open; any other value is invite-only (fails closed)", () => {
@@ -55,7 +57,7 @@ async function main() {
   });
   await t("open mode: a new household is made exactly as before, even with no email given", async () => {
     setEnv(undefined);
-    const { f, run } = ensure({}, undefined);
+    const { f, run } = ensure({}, undefined, false);
     assert.equal(await run, "hh-new"); assert.ok(f.created());
     assert.ok(!f.log.some((l) => /household_invitations/.test(l)), "open mode checks nothing");
   });
@@ -92,6 +94,36 @@ async function main() {
     }
     assert.equal(await mayCreateHousehold("someone@example.com", null), false, "no database to check: no");
   });
+  await t("invite mode: an invited address that is not proven to be the person's gets no household (whatever 'Confirm email' is set to)", async () => {
+    setEnv("invite", "nur.aisyah@contoh.my, @family-lim.sg");
+    for (const email of ["nur.aisyah@contoh.my", "anyone@family-lim.sg"]) {
+      const { f, run } = ensure({}, email, false);
+      await assert.rejects(run, (e: unknown) => e instanceof SignupClosedError && e.reason === "unproven", email); assert.ok(!f.created());
+    }
+    const stranger = ensure({}, "stranger@example.org", false);
+    await assert.rejects(stranger.run, (e: unknown) => e instanceof SignupClosedError && e.reason === "not_invited");
+  });
+  await t("a confirmation stamped at sign-up (the auth service's 'Confirm email' off) proves nothing; one made later by a person does", () => {
+    const made = "2026-11-02T03:00:00.000Z";
+    assert.equal(confirmedLater(made, made), false, "stamped at the same moment");
+    assert.equal(confirmedLater("2026-11-02T03:00:02.000Z", made), false, "two seconds later is no person opening an email");
+    assert.equal(confirmedLater("2026-11-02T03:04:10.000Z", made), true);
+    for (const [c, m] of [[null, made], [made, null], ["", made], ["not a date", made], [undefined, undefined]] as const) assert.equal(confirmedLater(c, m), false, String(c));
+  });
+  await t("every caller says how the address was proven: the emailed-link callback proves it, the others ask the auth service's record", () => {
+    assert.match(readFileSync("app/api/auth/callback/route.ts", "utf8"), /emailProven: true/);
+    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/household/start/route.ts"]) {
+      const src = readFileSync(f, "utf8");
+      assert.match(src, /emailProven: confirmedLater\(/, f);
+      assert.doesNotMatch(src, /emailProven: true/, f + " never takes the address as proven on its own");
+    }
+    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts"]) {
+      const src = readFileSync(f, "utf8");
+      assert.match(src, /signInWithOtp\(\{ email, options: \{ emailRedirectTo: `\$\{origin\}\/api\/auth\/callback`, shouldCreateUser: false \} \}\)/, f + " emails a link that proves the address and makes no account");
+      assert.match(src, /signOut\(/, f + " leaves no session for an unproven address");
+    }
+    assert.match(readFileSync("lib/auth/session.ts", "utf8"), /createdAt: user\.created_at/);
+  });
   await t("a person already in a household is never affected by invite mode", async () => {
     setEnv("invite", "");
     const { f, run } = ensure({ member: "hh-existing" }, "stranger@example.org");
@@ -111,7 +143,7 @@ async function main() {
     assert.match(readFileSync("app/login/page.tsx", "utf8"), /invite_only:/);
   });
   await t("the sign-up pre-check fails closed too: a database that cannot be reached means no account", async () => {
-    const { invitedToSignUp } = await import("@/lib/household/repo");
+    const { invitedToSignUp } = await import("@/lib/auth/signup-invited");
     setEnv("invite", "");
     const broken = { connect: async () => { throw new Error("connection refused"); } };
     assert.equal(await invitedToSignUp("someone@example.com", broken as never), false);

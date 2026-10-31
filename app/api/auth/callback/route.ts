@@ -38,7 +38,8 @@ export async function GET(request: Request) {
   // Idempotent -- see app/api/auth/signup/route.ts for why this needs to run
   // here too (email-confirmation-required accounts have no household yet).
   try {
-    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, { email: data.user.email });
+    // The code exchange itself proves the person opened a link sent to this address.
+    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, { email: data.user.email, emailProven: true });
   } catch (e) {
     // Invite-only sign-up (lib/auth/signup-gate.ts): not invited, so no household and no session.
     if (!(e instanceof SignupClosedError)) throw e;

@@ -9,7 +9,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isProduction } from "@/lib/launch/guards";
 
-export type SessionUser = { id: string; email: string | null; emailConfirmedAt: string | null; lastSignInAt: string | null };
+export type SessionUser = { id: string; email: string | null; emailConfirmedAt: string | null; lastSignInAt: string | null; createdAt?: string | null };
 
 /** Development-only identity fallback, mirroring lib/db/client.ts's
  * devAccountId() guard exactly: gated behind DEV_AUTH_ENABLED, and
@@ -50,6 +50,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     id: user.id,
     email: user.email ?? null,
     emailConfirmedAt: user.email_confirmed_at ?? null,
+    createdAt: user.created_at ?? null,
     // Supabase Auth's own record of when this user last completed a real
     // sign-in (password, magic link, OAuth...) -- not something this app
     // tracks itself, so it cannot be spoofed by anything short of a
