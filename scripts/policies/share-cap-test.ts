@@ -123,3 +123,39 @@ test("a trigger that names every covered condition keeps the cap; one that names
     "100% of the Sum Assured, up to a maximum of S$400,000 in the event that an Insured Person is diagnosed with any disease",
   ]) assert.equal(shareBound(quote, "Special Benefit").kind, "unsure", quote);
 });
+
+test("words after a share that change it, or a second share before it, give no figure; words before it that describe the event do not", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  // The event, then the share (Critic R443 M1): paid as printed.
+  for (const quote of [
+    "Loss of hearing: hearing reduced by more than 80 decibels in one ear, 50% of Sum Insured",
+    "Loss of speech: speech reduced to unintelligible sounds, 50% of Sum Insured",
+    "Burns: 20% of body surface, 50% of Sum Insured",
+    "Luka bakar lebih daripada 15% permukaan badan: 50% daripada Jumlah Diinsuranskan",
+    "100% of the Sum Assured will be payable in one lump sum.",
+    "100% of the Sum Assured upon diagnosis of a Critical Illness",
+    "100% of the Sum Assured upon diagnosis of carcinoma in situ",
+    "10% of the sum insured if diagnosed under age 65",
+    "10% of the sum insured. We won't pay for a pre-existing condition.",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
+  // Anything after the share that may change it, in any language, and a second share before it (Critic R443 H1).
+  for (const quote of [
+    "50% of the Sum Insured minus any amount paid before",
+    "50% of the Sum Insured after deducting any amount paid under Benefit 2",
+    "50% of the Sum Insured net of any earlier payment",
+    "50% of the Sum Insured, halved for children",
+    "50% of the Sum Insured, doubled if the accident happens overseas",
+    "50% of the Sum Insured, or half that for children",
+    "50% of the Sum Insured, or a quarter for children",
+    "Children 25%, adults 50% of the Sum Insured",
+    "25% for a child, otherwise 50% of the Sum Insured",
+    "50% daripada Jumlah Diinsuranskan, atau 25% bagi kanak-kanak",
+    "50% daripada Jumlah Diinsuranskan, ditolak sebarang jumlah yang telah dibayar",
+    "50% daripada Jumlah Diinsuranskan, separuh bagi kanak-kanak",
+    "50% dari Uang Pertanggungan, dikurangi pembayaran sebelumnya",
+    "50% of the Sum Insured. 25% for children.",
+    "50% of the Sum Insured if the insured is a child",
+    "50% of the Sum Insured if overseas, otherwise 25%",
+    "50% of the Sum Insured, payable after deducting any earlier claim",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
+});

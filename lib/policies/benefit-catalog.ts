@@ -745,10 +745,9 @@ const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
   String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|(?:\b(?:no|not|never|cannot|nor)|n['’]t)(?:\s+\p{L}+){0,3}?\s+(?:more|longer)\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
-  // Words that change the share itself: "reduced to 25%", "less any amount paid", "or 25% for children" is caught below.
-  String.raw`\breduc(?:ed|es|tion)\s+(?:to|by)\b|\bless\s+(?:any|the|all|amounts?)\b`,
-  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited, reduced, more/less than.
-  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad|dikurangkan)\b|\btidak\s+(?:lebih|melebihi)\b`,
+  // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited, not more than. Words that change
+  // the share ("reduced to 25%", "less any amount paid", "dikurangkan") are read only after it (shareStandsAlone).
+  String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b|\btidak\s+(?:lebih|melebihi)\b`,
 ].join("|"),"iu");
 /** A comparative that measures the event, not the payout: "than" followed by a number with a unit of the event
  * (a percentage that is not a share of an amount, years, decibels, a length, a weight, a time), or an age compared with a
@@ -770,8 +769,11 @@ const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger
  * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
 // A share in any form: a percentage, a fraction in words ("one half") or the insured amount itself (Critic R434).
 const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|`+INSURED_AMOUNT,"iu");
-const SHARE_COUNT=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b`,"iu");
-const SHARE_OF_INSURED=new RegExp(String.raw`(?:\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b)\s*(?:of\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?`+INSURED_AMOUNT,"iu");
+const SHARE_COUNT_SOURCE=String.raw`\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?per\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b`;
+/** The insured amount in the languages read (English, Malay, Indonesian), after "of": "of the Sum Insured", "daripada
+ * Jumlah Diinsuranskan", "dari Uang Pertanggungan". */
+const OF_INSURED=String.raw`\s*(?:(?:of|daripada|dari)\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:${INSURED_AMOUNT}|jumlah\s+(?:yang\s+)?(?:diinsuranskan|dijamin(?:kan)?)|uang\s+pertanggungan)`;
+const SHARE_OF_INSURED=new RegExp(String.raw`(?:${SHARE_COUNT_SOURCE})`+OF_INSURED,"iu");
 function printsAnAmount(text:string){
   let out="",at=0;
   for(const match of text.matchAll(EVENT_THRESHOLD)){
@@ -780,13 +782,51 @@ function printsAnAmount(text:string){
     if(SHARE_FIGURE.test(before))return true;
     out+=before+" ";at=match.index+match[0].length;
   }
-  const rest=out+text.slice(at);
-  // A second share after a share of the insured amount ("50% of the Sum Insured, or 25% for children") is a different
-  // rule for some claims, so the first is not paid as it stands (TE pr215 P2). A figure before it is the event's.
-  const share=SHARE_OF_INSURED.exec(rest);
-  return PRINTS_AN_AMOUNT.test(rest)||(!!share&&SHARE_COUNT.test(rest.slice(share.index+share[0].length)));
+  return PRINTS_AN_AMOUNT.test(out+text.slice(at));
 }
-export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
+/** Event thresholds taken out, as printsAnAmount takes them out: only those before any share. */
+function withoutEventBands(text:string){
+  let out="",at=0;
+  for(const match of text.matchAll(EVENT_THRESHOLD)){
+    const before=text.slice(at,match.index);
+    if(SHARE_FIGURE.test(before))break;
+    out+=before+" ";at=match.index+match[0].length;
+  }
+  return out+text.slice(at);
+}
+/** A percentage that measures the event, not a share: one compared ("greater than 15%", "at least 10%", "lebih dari 15%", "supérieures
+ * à 15%", "大于15%") or one of the body ("15% of the body surface", "15% permukaan badan", "15% de la surface"). */
+const EVENT_PERCENT_BEFORE=/(?:\b(?:than|to|least|dari|daripada)|\bà|于|过)\s*$/u;
+const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du\s+|total\s+)?(?:body|surface|skin|tbsa|permukaan|badan|tubuh|kulit|corps|corporelle)\b/u;
+/** What a share passage may say after its share when it prints no amount (allow-list, Critic R443 H1): the insured amount,
+ * the benefit's own name words, and words that neither change nor narrow the share (CAP_PASSAGE_WORDS and phrases). Any
+ * other word, figure or second share ("minus any amount paid before", "halved for children", "or half that", "atau 25%
+ * bagi kanak-kanak", "ditolak sebarang jumlah") may change what is paid. Before the share, a second share ("Children 25%,
+ * adults 50% of the Sum Insured") does too; a figure that measures the event does not. Words before the share describe
+ * the event ("hearing reduced by more than 80 decibels in one ear, 50%", Critic R443 M1) and are not read. */
+/** A condition on when the share is paid, after it: "if Total and Permanent Disability is due to an accident", "payable
+ * within 30 days of diagnosis", "if diagnosed under age 65", "upon diagnosis of a Critical Illness". It says when, not how
+ * much, unless it holds a word that changes or splits the amount (SHARE_CHANGER). */
+const SHARE_CONDITION=/^[\s,]*(?:(?:payable|paid)\s+)?(?:if|when|where|provided|within|upon|on|following|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of)\b/u;
+/** Words that change, split or scope the amount, in English and Malay: a deduction, a multiple or part, another class of
+ * person, or an alternative. */
+const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher)\b/u;
+function shareStandsAlone(text:string,benefitName:string|null|undefined){
+  const rest=withoutEventBands(text);
+  const main=SHARE_OF_INSURED.exec(rest)??[...rest.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu"))].at(-1)??null;
+  if(!main||main.index==null)return true;
+  const before=rest.slice(0,main.index);
+  for(const m of before.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu")))
+    if(!EVENT_PERCENT_BEFORE.test(before.slice(0,m.index))&&!EVENT_PERCENT_AFTER.test(before.slice(m.index!+m[0].length)))return false;
+  const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ");
+  // A second share anywhere after it ("50% of the Sum Insured. 25% for children.") is another rule for some claims.
+  if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
+  // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
+  const sentence=after.split(/\.(?:\s|$)/u)[0];
+  if(SHARE_CONDITION.test(sentence))return !SHARE_CHANGER.test(sentence);
+  return capPassageHarmless(sentence,benefitName);
+}
+export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount or other words, which may cap or change what is paid.";
 /** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one
  * cap with its currency ("up to S$25,000", "RM5,000, whichever is lower") and nothing else that may bound the share once
  * that cap is taken out, so the share is paid up to the cap. "unsure": anything else, and the share is not used. */
@@ -812,7 +852,7 @@ function capPassageHarmless(rest:string,benefitName:string|null|undefined){
 const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)\s+(?:claims?|events?|conditions?|diagnos[ie]s)\b/iu;
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
   const text=quote??"";
-  if(!printsAnAmount(normalText(text)))return {kind:"none"};
+  if(!printsAnAmount(normalText(text)))return shareStandsAlone(normalText(text),benefitName)?{kind:"none"}:{kind:"unsure"};
   const cap=shareCapInPassage(text);
   if(!cap||!cap.currency||cap.shares!==1)return {kind:"unsure"};
   // The cap is in the share's own sentence: "Ambulance fees up to S$500." after it is another benefit's (R416 M1).

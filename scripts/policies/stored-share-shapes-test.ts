@@ -68,6 +68,9 @@ const CAPPED: [string, number, string][] = [
   ["Special Benefit", 0.2, "Pays a Special Benefit of an additional 20% of the Sum Assured upon diagnosis of any one of the 27 conditions covered, up to S$25,000 (or equivalent currency) per life per condition."],
   ["Advance Payment", 1, "Singlife will make an advance payment of 100% of the Sum Assured, up to a maximum of S$400,000 in the event that an Insured Person is diagnosed with any disease which is probable to lead to death within the next 12 months"],
   ["Special Condition Benefit", 0.2, "we will, subject to the provisions of this Policy, pay 20% of the Insured Amount under this Supplementary Agreement, subject to a limit of S$25,000"],
+  // Made-up (TE pr222 C1, C9): a Malay negated comparative after the share, and a cap for later claims.
+  ["Burns", 0.5, "50% daripada Jumlah Diinsuranskan, tetapi tidak dalam apa jua keadaan lebih daripada 25%"],
+  ["Angioplasty", 0.2, "20% of the Sum Insured, up to S$25,000 per additional claim"],
   // Made-up: a share bounded by another share or by "if lower", in words only.
   ["Partial disability", 0.5, "50% of the Sum Insured, but not greater than the amount in the Benefit Table"],
   ["Early stage", 0.25, "25% of the Sum Insured, no greater than 10% of the total Sum Insured of all policies"],
