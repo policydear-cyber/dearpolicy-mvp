@@ -10,7 +10,7 @@
  */
 import assert from "node:assert/strict";
 
-delete process.env.ANTHROPIC_API_KEY; delete process.env.DEARPOLICY_ANTHROPIC_KEY;
+for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (() => { throw new Error("no network in this test"); }) as typeof fetch;
 
 let cases = 0;
