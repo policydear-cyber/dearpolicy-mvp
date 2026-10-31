@@ -6,12 +6,16 @@ import { maskIdentityText } from "@/lib/chat/identity-numbers";
  * name yet -- a raw filename like "dps.pdf" or
  * "careshield_life_welcome_booklet_for_1980_2026.pdf" reads as broken when it
  * shows up inline in a sentence ("Upload the latest receipt for ... dps.pdf"),
- * so this turns separators and case boundaries into spaces and title-cases a
+ * so this turns separators (and, in a name with none, case boundaries) into spaces and title-cases a
  * name that was all lowercase (snake_case/kebab-case filenames), while
  * leaving deliberate casing (acronyms, PascalCase) alone. */
 export function prettifyFilename(filename:string):string {
   const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"");
-  const spaced=base.replace(/[_\-]+/g," ").replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g,"$1 $2").replace(/\s+/g," ").trim();
+  // Case boundaries become spaces only in a name with no separator of its own ("CareShieldBooklet"): a name a person
+  // already spaced keeps every word as typed, so a brand written as one word ("PruFlexiCash Protection Plus") is not split.
+  const separated=/[\s_\-]/.test(base);
+  const words=base.replace(/[_\-]+/g," ");
+  const spaced=(separated?words:words.replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g,"$1 $2")).replace(/\s+/g," ").trim();
   if(!spaced)return filename;
   if(spaced===spaced.toLowerCase())return spaced.replace(/\b\w/g,c=>c.toUpperCase());
   return spaced;
