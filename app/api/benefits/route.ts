@@ -37,6 +37,20 @@ type Row={
   owner_names:string[]|null;tier:string|null;row_kind:string|null;
 };
 
+type ConditionRow={id:string;policy_id:string;product_name:string|null;condition_kind:string;
+        cause:string|null;condition_names:string[];days:number|null;amount:string|null;amount_basis:string|null;
+        scope:string|null;carve_out:string|null;source_page:number|null;quote:string;needs_review:boolean;
+        original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;document_policy_number:string|null};
+const CONDITIONS_SQL=`SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
+                c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename,
+                p.insurer,p.document_role,p.product_name AS document_product,p.policy_number AS document_policy_number
+           FROM policy_cover_conditions c
+           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
+          WHERE c.account_id=$1
+            AND ($2::uuid IS NULL OR EXISTS (
+                  SELECT 1 FROM policy_members pm
+                   WHERE pm.policy_id=c.policy_id AND pm.account_id=c.account_id AND pm.family_member_id=$2::uuid))
+          ORDER BY c.product_name NULLS FIRST,c.condition_kind,c.source_page`;
 export async function GET(request:NextRequest){
   try{
     const url=new URL(request.url);
@@ -58,6 +72,15 @@ export async function GET(request:NextRequest){
     }).finally(()=>{tableMs=performance.now()-tableTimer;});
     tableOnce.catch(()=>undefined);
     await ensureBenefitSchema();
+    // The household's contracts and the documents' conditions do not depend on the benefit rows, so they are fetched
+    // while the rows are (Benefits load, 31 Oct: on a cold start rows, inventory and conditions ran one after another).
+    // Each keeps its own failure handling below: a failed contract list leaves amounts unjoined, failed conditions none.
+    const inventoryOnce=query<{id:string;display_name:string;preferred_name:string|null;relationship:string}>(
+      `SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()}`,[accountId])
+      .then(people=>loadPolicyInventory(accountId,people.rows).catch(()=>null));
+    inventoryOnce.catch(()=>undefined);
+    const conditionRowsOnce=ensureConditionSchema().then(()=>query<ConditionRow>(CONDITIONS_SQL,[accountId,member||null]));
+    conditionRowsOnce.catch(()=>undefined);
     const rows=await query<Row>(
       `SELECT b.id,b.policy_id,b.product_name,b.benefit_name,b.traits,b.formula_kind,b.formula_value::text,
               b.currency,b.fact_key,b.offset_days,b.maximum_days,b.source_page,b.quote,
@@ -104,8 +127,7 @@ export async function GET(request:NextRequest){
     // Which sum insured each rule would be calculated against — the join that
     // decides whether a "% of Sum Insured" row ever becomes money. Shown, so a
     // wrong or missing join is a thing a person can see and fix.
-    const inventory=await loadPolicyInventory(accountId,(await query<{id:string;display_name:string;preferred_name:string|null;relationship:string}>(
-      `SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()}`,[accountId])).rows).catch(()=>null);
+    const inventory=await inventoryOnce;
     lap("inventory");
     const contractsByDocument=new Map<string,typeof inventory extends null?never:NonNullable<typeof inventory>["contracts"]>();
     for(const contract of inventory?.contracts??[])
@@ -233,22 +255,7 @@ export async function GET(request:NextRequest){
     let conditions:{id:string;policyId:string;documentName:string;cover:string|null;kind:string;
       description:string;effect:string;sourcePage:number|null;quote:string;needsReview:boolean}[]=[];
     try{
-      await ensureConditionSchema();
-      const conditionRows=await query<{id:string;policy_id:string;product_name:string|null;condition_kind:string;
-        cause:string|null;condition_names:string[];days:number|null;amount:string|null;amount_basis:string|null;
-        scope:string|null;carve_out:string|null;source_page:number|null;quote:string;needs_review:boolean;
-        original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;document_policy_number:string|null}>(
-        `SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
-                c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename,
-                p.insurer,p.document_role,p.product_name AS document_product,p.policy_number AS document_policy_number
-           FROM policy_cover_conditions c
-           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
-          WHERE c.account_id=$1
-            AND ($2::uuid IS NULL OR EXISTS (
-                  SELECT 1 FROM policy_members pm
-                   WHERE pm.policy_id=c.policy_id AND pm.account_id=c.account_id AND pm.family_member_id=$2::uuid))
-          ORDER BY c.product_name NULLS FIRST,c.condition_kind,c.source_page`,
-        [accountId,member||null]);
+      const conditionRows=await conditionRowsOnce;
       conditions=conditionRows.rows.map(row=>{
         const condition:CoverCondition={
           id:row.id,policyId:row.policy_id,productName:row.product_name,
