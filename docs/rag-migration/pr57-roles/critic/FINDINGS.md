@@ -10235,3 +10235,6 @@ R445 M1 is fixed: the text is joined once and `at` is an Int32Array slice. The g
 
 ## R450 — #222 915a313 (rework): not ready
 Gate green. M1 fixed; Malay fixed. H1 still leaks the full share (all old, in scope): condition-clause deny-list (pro-rata, offset, apportioned, rateable proportion, multiplied by two, three times, proportionately, shared equally, divided), deductions in a later sentence, and changers before the share ("after deducting", "less any", "twice", "half", "reduced to 25% for children, otherwise", "equal to 25%"). Structural fixes in /mnt/project-files/critic/r450-pr222.md. Low: "per eye" newly withheld.
+
+## R451 — #226 76fb43a (every policy in force): code READY, merge needs DC's word on graders
+Gate green (in-force 18/0, family-ended 12, intake 56/0, portfolio-kinds 143/0, policy-status, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). r7:answers, r7:claims, r11:blind, v11:answer, v11:claims all fail on PR and pass on main; every failing line expects a status from a printed end date (none from a lapse notice), so each contradicts DC's 05:38Z rule. Correction justified but grader edits are DC's call. Inference to confirm: start dates are ignored too (not_started removed). /mnt/project-files/critic/r451-pr226.md
