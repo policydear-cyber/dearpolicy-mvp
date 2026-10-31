@@ -769,7 +769,7 @@ const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger
  * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
 // A share in any form: a percentage, a fraction in words ("one half") or the insured amount itself (Critic R434).
 const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|`+INSURED_AMOUNT,"iu");
-const SHARE_COUNT_SOURCE=String.raw`\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?per\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b`;
+const SHARE_COUNT_SOURCE=String.raw`\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?per\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|\b(?:half|a\s+quarter|a\s+third)\b`;
 /** The insured amount in the languages read (English, Malay, Indonesian), after "of": "of the Sum Insured", "daripada
  * Jumlah Diinsuranskan", "dari Uang Pertanggungan". */
 const OF_INSURED=String.raw`\s*(?:(?:of|daripada|dari)\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:${INSURED_AMOUNT}|jumlah\s+(?:yang\s+)?(?:diinsuranskan|dijamin(?:kan)?)|uang\s+pertanggungan)`;
@@ -796,7 +796,7 @@ function withoutEventBands(text:string){
 }
 /** A percentage that measures the event, not a share: one compared ("greater than 15%", "at least 10%", "lebih dari 15%", "supérieures
  * à 15%", "大于15%") or one of the body ("15% of the body surface", "15% permukaan badan", "15% de la surface"). */
-const EVENT_PERCENT_BEFORE=/(?:\b(?:than|to|least|dari|daripada)|\bà|于|过)\s*$/u;
+const EVENT_PERCENT_BEFORE=/(?:\b(?:than|or\s+equal\s+to|least|dari|daripada)|\bà|于|过)\s*$/u;
 const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du\s+|total\s+)?(?:body|surface|skin|tbsa|permukaan|badan|tubuh|kulit|corps|corporelle)\b/u;
 /** What a share passage may say after its share when it prints no amount (allow-list, Critic R443 H1): the insured amount,
  * the benefit's own name words, and words that neither change nor narrow the share (CAP_PASSAGE_WORDS and phrases). Any
@@ -811,24 +811,36 @@ const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du
 const SHARE_CONDITION=/(?:^|[\s,])(?:if|when|where|for|once|provided|within|upon|on|following|to|after|before|during|until|as\s+certified|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of|apabila|jika|bila|semasa|sekiranya|kepada)\b/u;
 /** Words that change, split or scope the amount, in English and Malay: a deduction, a multiple or part, another class of
  * person, or an alternative. */
-const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
+const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|shared?|proportion\w*|pro[\s-]?rata|rateabl\w*|apportion\w*|divid\w*|split|equally|times|multipl\w*|offset|basis|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
+/** Words before the share that change it rather than describe the event: a deduction, a multiple, an alternative (Critic
+ * R450 H1c). "reduced" is left out: "hearing reduced by more than 80 decibels" is the event (R443 M1). */
+const CHANGER_BEFORE_SHARE=/\b(?:deduct\w*|minus|net\s+of|offset|less\s+(?:any|the|all|amounts?)|twice|double[sd]?|triple[sd]?|otherwise|else|instead|ditolak|separuh)\b/u;
+/** In a condition clause, a word of paying or of the amount: the clause goes on to say what is paid, not only when (Critic
+ * R450 H1a: "if other insurance applies, we pay only our rateable proportion"). */
+const PAY_WORD=/\b(?:pay|pays|paid|payable|paying|amount|amounts|benefit|benefits|sum)\b/u;
+const PER_BODY_PART=/\b(?:per|for\s+each|for\s+one)\s+(?:eye|ear|limb|arm|leg|hand|foot|finger|toe|thumb|tooth)\b/gu;
 function shareStandsAlone(text:string,benefitName:string|null|undefined){
   const rest=withoutEventBands(text);
   const main=SHARE_OF_INSURED.exec(rest)??[...rest.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu"))].at(-1)??null;
   if(!main||main.index==null)return true;
   const before=rest.slice(0,main.index);
+  if(CHANGER_BEFORE_SHARE.test(before))return false;
   for(const m of before.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu")))
     if(!EVENT_PERCENT_BEFORE.test(before.slice(0,m.index))&&!EVENT_PERCENT_AFTER.test(before.slice(m.index!+m[0].length)))return false;
-  const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ");
+  // "per eye", "for each hand": the share is for each such part, which changes nothing (Critic R450 low).
+  const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ").replace(PER_BODY_PART," ");
   // A second share anywhere after it ("50% of the Sum Insured. 25% for children.") is another rule for some claims.
   if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
   // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
   const sentence=after.split(/\.(?:\s|$)/u)[0];
   // The words before the first condition or payee ("is payable", "will be paid in one lump sum") must be harmless; the
   // condition itself ("within 30 days of approval", "to your estate upon your death") may say anything but change the amount.
+  // Every later sentence may still change it ("For children this amount is halved.", Critic R450 H1b).
+  if(SHARE_CHANGER.test(after.slice(sentence.length)))return false;
   const at=SHARE_CONDITION.exec(sentence);
-  if(at)return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(sentence.slice(at.index));
-  return capPassageHarmless(sentence,benefitName);
+  if(!at)return capPassageHarmless(sentence,benefitName);
+  const condition=sentence.slice(at.index+at[0].length);
+  return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(condition)&&!PAY_WORD.test(condition);
 }
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount or other words, which may cap or change what is paid.";
 /** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one

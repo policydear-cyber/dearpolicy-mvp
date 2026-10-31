@@ -167,3 +167,22 @@ test("words after a share that change it, or a second share before it, give no f
     "50% of the Sum Insured, payable after deducting any earlier claim",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
 });
+
+test("a condition that goes on to change the amount, a later sentence that does, and a change before the share give no figure", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const S = "50% of the Sum Insured";
+  // Critic R450 H1a-c.
+  for (const quote of [
+    S + " on a pro-rata basis", S + " if a claim has been paid under Benefit 2 it will be offset", S + " where it is apportioned among all insured persons",
+    S + " if other insurance applies, we pay only our rateable proportion", S + " when hospitalised overseas, multiplied by two",
+    S + " if the accident happens overseas, three times the amount", S + " if diagnosed after age 70, payable proportionately",
+    S + " when shared equally between the insured persons", S + " if two lives are covered, divided between them",
+    S + ". Any amount paid under Benefit 2 will be deducted.", S + ". For children this amount is halved.", S + ". This is reduced by any earlier payment.",
+    "After deducting any amount paid under Benefit 2, we pay 50% of the Sum Insured", "Less any amount paid under Benefit 2, 50% of the Sum Insured",
+    "Twice the amount if overseas, else 50% of the Sum Insured", "For a child, half of the amount; for an adult 50% of the Sum Insured",
+    "Reduced to 25% for children, otherwise 50% of the Sum Insured", "Equal to 25% for a child, and 50% of the Sum Insured",
+  ]) assert.equal(shareBound(quote, "Loss").kind, "unsure", quote);
+  for (const quote of [S + " due to an accident", S + " if the insured dies within 12 months of the accident", S + " per eye",
+    "Head - Equals to or greater than 2% but less than 5% 50%"])
+    assert.equal(shareBound(quote, "Loss").kind, "none", quote);
+});
