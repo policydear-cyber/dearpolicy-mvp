@@ -76,6 +76,8 @@ test("a person's second document that holds no cover (their own wording or lette
   assert.equal(ask([evidence("Ana", 350000), declared("Ana", [{ productName: "Kritische Krankheit", amount: 100000, currency: "SGD" }])]), null);
   // A person with only a declared document, or an evidenced contract without the cover, still shows nothing.
   assert.equal(ask([declared("Ana", [])]), null);
+  // Declared only, even with the cover read from it: no evidenced contract, no sum (TE pr237 P13).
+  assert.equal(ask([declared("Ana", [{ productName: "Kritische Krankheit", amount: 350000, currency: "EUR" }])]), null);
   assert.equal(ask([evidence("Ana", 350000), contract("Ana", [])]), null);
   assert.equal(ask([evidence("Ana", 350000), declared("Ben", [])]), null);
   // Two evidenced documents of one person printing two sums: never one of them.
