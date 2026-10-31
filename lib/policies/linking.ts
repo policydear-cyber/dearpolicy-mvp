@@ -45,6 +45,21 @@ export function findFamilyMatchWithKind<T extends FamilyCandidate>(name: string,
   }));
   return partial.length === 1 ? { member: partial[0], kind: "partial" } : null;
 }
+/** Everyone in the family a printed name could be, by the same rule as findFamilyMatchWithKind: every exact match, or
+ * when none, every profile whose name words all appear in the printed name. Two or more means the name alone cannot
+ * tell them apart (two people with one display name), and the caller decides by the document's own links, never by
+ * guessing. */
+export function familyNameCandidates<T extends FamilyCandidate>(name: string, family: T[]): T[] {
+  const normalized = normalizePersonName(name);
+  if (!normalized) return [];
+  const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
+  if (exact.length) return exact;
+  const printed = new Set(normalized.split(" "));
+  return family.filter((member) => memberNames(member).some((n) => {
+    const words = normalizePersonName(n).split(" ").filter((w) => w.length >= 2);
+    return words.length > 0 && words.every((w) => printed.has(w));
+  }));
+}
 export function findFamilyMatch<T extends FamilyCandidate>(name: string, family: T[]): T | null {
   return findFamilyMatchWithKind(name, family)?.member ?? null;
 }
