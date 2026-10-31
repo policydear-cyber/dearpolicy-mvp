@@ -1606,9 +1606,39 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (looksScanned(text)) text = (cleanScannedLine(text) ?? a.title) + " (read from a scanned page; check it against the original)";
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" && outdated(a.policyId) ? ", document dated " + dated : "") + status + ").";
   };
+  // One row of a table read once per column (an employee plan, a ward class) for a person whose own column is not
+  // known: one line naming each column's figure, and saying which is theirs is not shown -- never one line per column,
+  // each reading like that person's own figure.
+  const columnRows = new Map<string, Candidate[]>();
+  for (const a of kept) if (a.tierLabel && a.source === "benefit" && a.page != null) {
+    const k = a.subjectId + "|" + a.policyId + "|" + a.page + "|" + a.title.toLowerCase();
+    (columnRows.get(k) ?? columnRows.set(k, []).get(k)!).push(a);
+  }
+  const inColumns = new Map<Candidate, Candidate | null>();
+  for (const group of columnRows.values()) {
+    const labels = [...new Set(group.map((g) => g.tierLabel!.trim().toLowerCase()))];
+    if (group.length < 2 || labels.length !== group.length) continue;
+    // "the schedule prints “Not covered” in this column" is, beside its column's name, just the printed words.
+    const valueOf = (g: Candidate) => (g.text.startsWith(g.title) ? g.text.slice(g.title.length).replace(/^[:\s]+/, "") : g.text).replace(/[.;:\s]+$/, "")
+      .replace(/^the schedule prints (“[^”]*”) in this column$/, "$1");
+    // In the order the page prints its columns.
+    const printed = ((pagesByDocEarly.get(group[0].policyId) ?? []).find((p) => p.page === group[0].page)?.text ?? "").toLowerCase();
+    const at = (g: Candidate) => { const i = printed.indexOf(g.tierLabel!.trim().toLowerCase()); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+    const parts = [...group].sort((x, y) => at(x) - at(y)).map((g) => g.tierLabel!.trim() + (valueOf(g) ? ": " + valueOf(g) : ""));
+    // One sentence: the same caveat on two lines must not read as a repeated sentence.
+    const whom = group[0].ownerName || "you";
+    const merged: Candidate = { ...group[0], tierLabel: null, amount: null, currency: null,
+      text: group[0].title + " (which applies to " + whom + " isn’t shown): " + parts.join("; ") };
+    inColumns.set(group[0], merged);
+    for (const g of group.slice(1)) inColumns.set(g, null);
+  }
   // One line for a fact several people share (a family travel plan), naming them all.
   const shared = new Map<string, Candidate[]>();
-  for (const a of kept) { const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a); }
+  for (const raw of kept) {
+    const a = inColumns.has(raw) ? inColumns.get(raw) : raw;
+    if (!a) continue;
+    const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a);
+  }
   const listNames = (names: string[]) => names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names.at(-1);
   // Round 11: the same printed line reached twice (a family plan's row for adults and for children) is one line naming everyone once.
   const sameLine = new Map<string, { at: number; names: string[] }>();
