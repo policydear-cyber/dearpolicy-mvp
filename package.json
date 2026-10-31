@@ -197,6 +197,7 @@
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",
     "policies:plan-choice-test": "node --import tsx scripts/plan-choice-regressions.ts",
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
+    "chat:concise-budget-test": "node --import tsx scripts/chat/concise-budget-test.ts",
     "r7:answers-test": "node --import tsx scripts/r7-answers-regressions.ts",
     "r7:claims-test": "node --import tsx scripts/r7-claims-regressions.ts",
     "r8:chaos-test": "node --import tsx scripts/r8-chaos-regressions.ts",

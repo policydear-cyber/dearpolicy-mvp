@@ -1972,15 +1972,24 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
  * is one question away -- "ask for the full list". Every part of a several-part question keeps a line (`keep`).
  * The cards of amounts follow the lines shown.
  */
-export function conciseDetails(details: string[], limits: { benefitTitle: string }[], opts: { cap: number; keep?: RegExp[] }) {
-  if (details.length <= opts.cap + 1) return;
+export function conciseDetails(details: string[], limits: { benefitTitle: string; ownerName?: string | null; amountText?: string }[], opts: { cap: number; keep?: RegExp[] }) {
+  if (opts.cap === Infinity) return;
+  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
+  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it. The budget
+  // counts what the household reads: the lines and the limit cards shown beside them (one per amount a line shows).
+  const cardWords = (xs: string[]) => { const visible = xs.join("\n"); const seen = new Set<string>(); let n = 0;
+    for (const l of limits) { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + (l.amountText ?? "");
+      if (seen.has(k) || !visible.includes(l.benefitTitle)) continue; seen.add(k);
+      n += [l.ownerName ?? "", l.benefitTitle, l.amountText ?? ""].join(" ").split(/\s+/).filter(Boolean).length; }
+    return n; };
+  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length + cardWords(xs);
+  if (details.length <= opts.cap + 1 && words(details) <= 200) return;
   const chosen = details.slice(0, opts.cap);
   for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
-  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
-  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it.
-  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length;
   while (chosen.length > 3 && words(chosen) > 200) {
-    const fromEnd = [...chosen].reverse().findIndex((d) => !(opts.keep ?? []).some((re) => re.test(d)));
+    // A line is held only while it is the last one left for a part of the question: a second death-cover line can move
+    // to "more lines", the only premium line cannot.
+    const fromEnd = [...chosen].reverse().findIndex((d) => (opts.keep ?? []).every((re) => !re.test(d) || chosen.some((o) => o !== d && re.test(o))));
     if (fromEnd < 0) break;
     chosen.splice(chosen.length - 1 - fromEnd, 1);
   }
