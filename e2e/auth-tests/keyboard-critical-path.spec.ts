@@ -1,6 +1,6 @@
 /**
  * Keyboard-only critical path: no pointer input at all. Sign in, reach the
- * Family page from the navigation, add and delete a person (with the
+ * People page (Account settings) from the navigation, add and delete a person (with the
  * two-step confirmation), upload a document, sign out, sign in and delete
  * the household -- each control reached with Tab and operated with
  * Enter/Space, each focused control visibly focused. Synthetic data only.
@@ -55,7 +55,10 @@ test.describe.serial("keyboard-only critical path", () => {
     expect(hh.toLowerCase()).toContain("synthetic-dptest");
 
     await page.goto("/");
-    await tabTo(page, (f) => f.tag === "a" && f.text === "Family", "the Family navigation link");
+    await tabTo(page, (f) => f.tag === "a" && f.text === "Account settings", "the Account settings navigation link");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/household$/);
+    await tabTo(page, (f) => f.tag === "a" && f.text === "People", "the People tab");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/family$/);
 

@@ -270,9 +270,10 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     expect(await box.inputValue(), "the unsent message is kept").toBe("Is dental covered?");
 
     // Household roster: email shown, the sole owner is not offered Leave.
-    await page.goto("/household");
-    await expect(page.locator(".profile-list").first()).toContainText(email);
-    await expect(page.locator(".profile-list").first().getByRole("button", { name: "Leave" })).toHaveCount(0);
+    // (Since the Account settings menu: the sign-in list is on People, beside the family profiles.)
+    await page.goto("/family");
+    await expect(page.getByTestId("household-access")).toContainText(email);
+    await expect(page.getByTestId("household-access").getByRole("button", { name: "Leave" })).toHaveCount(0);
     await shot(page, "10-household-roster");
 
     // 2. Delete the household -> a confirmation with next steps, not an error.
