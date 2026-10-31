@@ -42,7 +42,7 @@ function documentKind(role:string|null|undefined):string {
   switch(role){
     case "personal_schedule":case "schedule":return "policy schedule";
     case "insurer_letter":return "letter";
-    case null:case undefined:case "":return "document";
+    case null:case undefined:case "":case "unknown":return "document";
     default:return role.replace(/_/g," ");
   }
 }

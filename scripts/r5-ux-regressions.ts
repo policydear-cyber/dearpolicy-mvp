@@ -58,11 +58,13 @@ async function main() {
   rmSync(dir, { recursive: true, force: true });
 
   await test("the pages upload through the direct flow; the multipart route refuses bodies a function cannot carry", () => {
-    for (const page of ["app/policies/page.tsx", "app/records/page.tsx"]) {
-      const src = read(page);
-      assert.match(src, /uploadPolicyDocument\(/, `${page} uses the direct upload`);
-      assert.ok(!/fetch\("\/api\/policies\/upload"/.test(src), `${page} no longer posts the file through a function`);
-    }
+    const docs = read("app/policies/page.tsx");
+    assert.match(docs, /uploadPolicyDocument\(/, "Documents uses the direct upload");
+    assert.ok(!/fetch\("\/api\/policies\/upload"/.test(docs), "Documents no longer posts the file through a function");
+    // One place to upload: Payments lists what was found and sends a new receipt to Documents.
+    const payments = read("app/records/page.tsx");
+    assert.ok(!/uploadPolicyDocument\(|type="file"|\/api\/policies\/upload/.test(payments), "Payments has no upload of its own");
+    assert.match(payments, /href="\/policies"/, "Payments links to the upload on Documents");
     const helper = read("components/upload-document.ts");
     assert.match(helper, /\/api\/policies\/upload\/start/);
     assert.match(helper, /\/api\/policies\/upload\/finalize/);
