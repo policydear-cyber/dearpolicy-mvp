@@ -112,9 +112,16 @@ async function main() {
   await t("the audit trail is kept, with who, what and when, and only status keys in its payloads", async () => {
     const audit = (await q<{ action: string; actor: string; occurred_at: unknown; previous_value: unknown; new_value: unknown; reason: string | null }>(
       `SELECT action, actor, occurred_at, previous_value, new_value, reason FROM policy_document_audit_log WHERE policy_id=$1 ORDER BY id`, [takaful.id])).rows;
-    assert.deepEqual(audit.map((a) => a.action), ["scan_result_recorded", "deleted"]);
+    // Both entries stay, once each. Another content-free entry a later deletion step adds (for example a marker that
+    // it ran) is allowed; every entry, whatever its action, keeps only who/what/when and status keys.
+    const only = (action: string) => { const xs = audit.filter((a) => a.action === action); assert.equal(xs.length, 1, action + " entries: " + audit.map((a) => a.action).join(",")); return xs[0]; };
+    assert.deepEqual(only("scan_result_recorded").new_value, { quarantineStatus: "scan_clean" });
+    assert.deepEqual(only("deleted").new_value, { quarantineStatus: "deleted" });
     assert.ok(audit.every((a) => a.actor && a.occurred_at && a.reason == null));
-    assert.deepEqual(audit[0].new_value, { quarantineStatus: "scan_clean" }); assert.deepEqual(audit[1].new_value, { quarantineStatus: "deleted" });
+    const statusKeys = new Set(["quarantineStatus", "status", "scanStatus"]);
+    for (const a of audit) for (const v of [a.previous_value, a.new_value]) {
+      if (v != null) assert.ok(Object.keys(v as object).every((k) => statusKeys.has(k)), a.action + " keeps " + JSON.stringify(v));
+    }
     const log = (await q(`SELECT resource_id, to_state FROM deletion_audit_log WHERE resource_id=$1`, [takaful.id])).rows;
     assert.ok(log.length >= 1, "the deletion itself stays on record");
   });
