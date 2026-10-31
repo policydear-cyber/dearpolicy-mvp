@@ -19,8 +19,9 @@
  * documents is redacted whole: its totals combined both and are no longer true.
  *
  * It runs right after each deletion finishes and on every request drain (lib/jobs/request-drain.ts), so a failure
- * is retried and snapshots of documents deleted before this existed are caught up. It is idempotent (a redacted
- * snapshot is never picked again), bounded, and never throws.
+ * is retried and documents deleted before this existed are caught up. Each deleted document is handled once and then
+ * marked done with one content-free audit entry (a status key only), so a caught-up drain does almost nothing. It is
+ * bounded and never throws.
  */
 import { pool } from "@/lib/db/client";
 
@@ -31,50 +32,70 @@ const DELETED_STATES = ["pending_deletion", "soft_deleted", "permanently_deleted
 export const SNAPSHOT_REDACTED_REASON = "policy_deleted";
 
 export type ClaimSnapshotScrubOptions = { db?: Db; policyIds?: string[]; limit?: number };
-export type ClaimSnapshotScrubResult = { snapshotsRedacted: number; failed: number };
+export type ClaimSnapshotScrubResult = { documents: number; snapshotsRedacted: number; failed: number };
 
-/** The facts minus every fact whose value refers to one of the deleted documents. */
+/** The done marker: one content-free audit entry per deleted document (a status key only). */
+export const CLAIM_SNAPSHOT_SCRUB_ACTION = "claim_snapshots_scrubbed";
+
+/**
+ * The facts minus everything that refers to one of the deleted documents: a list entry (a policy-specific definition
+ * match), an entry of a per-policy map (keyed by the document's id, or whose value names it), or a single value.
+ * Facts are what the person reported about the event; the only facts tied to a document carry its id.
+ */
 export function factsWithoutDeleted(facts: unknown, deletedIds: string[]): unknown {
   if (!facts || typeof facts !== "object" || Array.isArray(facts)) return facts;
   const ids = deletedIds.map((x) => x.toLowerCase());
   const refers = (v: unknown) => { const t = JSON.stringify(v ?? null).toLowerCase(); return ids.some((id) => t.includes(id)); };
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(facts as Record<string, unknown>)) {
-    if (Array.isArray(v)) out[k] = v.filter((x) => !refers(x));
-    else if (!refers(v)) out[k] = v;
+    if (!refers(v)) out[k] = v;
+    else if (Array.isArray(v)) out[k] = v.filter((x) => !refers(x));
+    else if (v && typeof v === "object") out[k] = Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([kk, vv]) => !refers(kk) && !refers(vv)));
     else out[k] = null;
   }
   return out;
 }
 
+/**
+ * Handles each deleted document once: its household's snapshots that refer to it are redacted, then a done marker is
+ * written. The drain only takes deleted documents without the marker, so a pass is cheap once caught up.
+ */
 export async function scrubDeletedDocumentClaimSnapshots(opts: ClaimSnapshotScrubOptions = {}): Promise<ClaimSnapshotScrubResult> {
   const db = opts.db ?? (pool as unknown as Db);
-  const result: ClaimSnapshotScrubResult = { snapshotsRedacted: 0, failed: 0 };
+  const result: ClaimSnapshotScrubResult = { documents: 0, snapshotsRedacted: 0, failed: 0 };
   try {
-    const exists = await db.query<{ ok: boolean }>(`SELECT to_regclass('public.claim_composition_snapshots') IS NOT NULL AS ok`);
-    if (!exists.rows[0]?.ok) return result;
-    const due = await db.query<{ id: string; account_id: string; facts_snapshot: unknown; deleted: string[] }>(
-      `SELECT s.id::text AS id, s.account_id::text AS account_id, s.facts_snapshot, d.ids AS deleted
-         FROM claim_composition_snapshots s
-         CROSS JOIN LATERAL (
-           SELECT array_agg(p.id::text) AS ids FROM policies p
-            WHERE p.account_id=s.account_id AND p.lifecycle_state=ANY($1::text[])
-              AND ($2::uuid[] IS NULL OR p.id=ANY($2::uuid[]))
-              AND (s.coverage_versions::text ILIKE '%'||p.id::text||'%' OR s.result::text ILIKE '%'||p.id::text||'%'
-                   OR s.facts_snapshot::text ILIKE '%'||p.id::text||'%')
-         ) d
-        WHERE d.ids IS NOT NULL AND s.result->'redacted' IS NULL
-        ORDER BY s.created_at LIMIT $3`,
-      [DELETED_STATES, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 100]);
-    for (const s of due.rows) {
+    const tables = await db.query<{ snapshots: boolean; audit: boolean }>(
+      `SELECT to_regclass('public.claim_composition_snapshots') IS NOT NULL AS snapshots, to_regclass('public.policy_document_audit_log') IS NOT NULL AS audit`);
+    if (!tables.rows[0]?.audit) return result;
+    const docs = await db.query<{ id: string; account_id: string }>(
+      `SELECT p.id::text AS id, p.account_id::text AS account_id FROM policies p
+        WHERE p.lifecycle_state=ANY($1::text[]) AND ($2::uuid[] IS NULL OR p.id=ANY($2::uuid[]))
+          AND NOT EXISTS (SELECT 1 FROM policy_document_audit_log a WHERE a.account_id=p.account_id AND a.policy_id=p.id AND a.action=$3)
+        ORDER BY p.updated_at LIMIT $4`,
+      [DELETED_STATES, opts.policyIds?.length ? opts.policyIds : null, CLAIM_SNAPSHOT_SCRUB_ACTION, opts.limit ?? 25]);
+    for (const doc of docs.rows) {
       try {
-        const r = await db.query(
-          `UPDATE claim_composition_snapshots
-              SET result=jsonb_build_object('redacted', jsonb_build_object('reason', $3::text), 'calculationId', calculation_id, 'engineVersion', engine_version),
-                  coverage_versions='[]'::jsonb, facts_snapshot=$4::jsonb
-            WHERE id=$1 AND account_id=$2 AND result->'redacted' IS NULL`,
-          [s.id, s.account_id, SNAPSHOT_REDACTED_REASON, JSON.stringify(factsWithoutDeleted(s.facts_snapshot, s.deleted) ?? {})]);
-        result.snapshotsRedacted += r.rowCount ?? 0;
+        if (tables.rows[0].snapshots) {
+          const due = await db.query<{ id: string; facts_snapshot: unknown }>(
+            `SELECT id::text AS id, facts_snapshot FROM claim_composition_snapshots
+              WHERE account_id=$1
+                AND (coverage_versions::text ILIKE '%'||$2||'%' OR result::text ILIKE '%'||$2||'%' OR facts_snapshot::text ILIKE '%'||$2||'%')`,
+            [doc.account_id, doc.id]);
+          for (const s of due.rows) {
+            const r = await db.query(
+              `UPDATE claim_composition_snapshots
+                  SET result=jsonb_build_object('redacted', jsonb_build_object('reason', $3::text), 'calculationId', calculation_id, 'engineVersion', engine_version),
+                      coverage_versions='[]'::jsonb, facts_snapshot=$4::jsonb
+                WHERE id=$1 AND account_id=$2`,
+              [s.id, doc.account_id, SNAPSHOT_REDACTED_REASON, JSON.stringify(factsWithoutDeleted(s.facts_snapshot, [doc.id]) ?? {})]);
+            result.snapshotsRedacted += r.rowCount ?? 0;
+          }
+        }
+        await db.query(
+          `INSERT INTO policy_document_audit_log(account_id,actor,action,previous_value,new_value,policy_id,reason,reason_code)
+           VALUES ($1,'system',$2,NULL,$3::jsonb,$4,NULL,'CLAIM_SNAPSHOTS_SCRUBBED')`,
+          [doc.account_id, CLAIM_SNAPSHOT_SCRUB_ACTION, JSON.stringify({ status: CLAIM_SNAPSHOT_SCRUB_ACTION }), doc.id]);
+        result.documents++;
       } catch (error) {
         result.failed++;
         console.warn("claim snapshot scrub will be retried:", error instanceof Error ? error.name : "unknown");

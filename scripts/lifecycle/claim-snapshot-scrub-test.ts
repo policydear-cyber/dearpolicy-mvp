@@ -44,7 +44,7 @@ async function main() {
   const q = <T = Record<string, unknown>>(text: string, params: unknown[] = []) => run(text, params) as Promise<{ rows: T[]; rowCount: number }>;
 
   const { requestPolicyDocumentDeletion, finishPolicyDocumentDeletion } = await import("@/lib/lifecycle/coordinator");
-  const { scrubDeletedDocumentClaimSnapshots, SNAPSHOT_REDACTED_REASON } = await import("@/lib/lifecycle/claim-snapshot-scrub");
+  const { scrubDeletedDocumentClaimSnapshots, SNAPSHOT_REDACTED_REASON, CLAIM_SNAPSHOT_SCRUB_ACTION } = await import("@/lib/lifecycle/claim-snapshot-scrub");
 
   async function household(name: string) {
     const id = randomUUID();
@@ -89,7 +89,8 @@ async function main() {
   const salud = await doc(acc, sofia, "Salud-Total-Sofia.pdf", "Salud Total");
   const c1 = await claim(acc, sofia);
   const personFacts = { eventType: "hospitalisation", eventDate: "2026-09-12", hospitalised: true, hospitalNights: 4, hospitalBill: 38500, injuries: ["fractura de muñeca"] };
-  const factsWithMatch = { ...personFacts, causeOfDeathPolicyMatches: [{ policyId: vida, matched: true, definitionQuote: "muerte accidental: lesión corporal" }, { policyId: salud, matched: false }] };
+  const factsWithMatch = { ...personFacts, causeDefinitionMatches: [{ policyId: vida, matched: true, definitionQuote: "muerte accidental: lesión corporal" }, { policyId: salud, matched: false }],
+    priorPaidAmounts: { [vida]: { amount: 5000, currency: "MXN", recordedAt: "2026-09-01" }, [salud]: { amount: 100, currency: "USD", recordedAt: "2026-09-01" } } };
   const vidaQuote = "Indemnización diaria por hospitalización: MX$ 2,500 por día. Asegurada: Sofía Ruiz Hernández.";
   const onlyVida = await snapshot(acc, sofia, c1, factsWithMatch, [section(vida, "Vida Plena Hospital", 10000, "MXN", vidaQuote)]);
   const both = await snapshot(acc, sofia, c1, personFacts, [section(vida, "Vida Plena Hospital", 10000, "MXN", vidaQuote), section(salud, "Salud Total", 1200, "USD", "Room and board up to US$ 300 a day")]);
@@ -118,7 +119,7 @@ async function main() {
   });
   await t("the person's own facts about the event stay; a fact tied to the deleted document goes", async () => {
     const f = (await row(onlyVida.id)).facts_snapshot;
-    assert.deepEqual(f, { ...personFacts, causeOfDeathPolicyMatches: [{ policyId: salud, matched: false }] });
+    assert.deepEqual(f, { ...personFacts, causeDefinitionMatches: [{ policyId: salud, matched: false }], priorPaidAmounts: { [salud]: { amount: 100, currency: "USD", recordedAt: "2026-09-01" } } });
     assert.deepEqual((await row(both.id)).facts_snapshot, personFacts);
   });
   await t("a calculation that used only the kept document, and another household's, are untouched", async () => {
@@ -128,9 +129,11 @@ async function main() {
     assert.match(JSON.stringify((await row(otherSnap.id)).facts_snapshot), new RegExp(vida));
     assert.match(JSON.stringify((await row(otherSnap.id)).result), /Lagos Shield/);
   });
-  await t("a second pass changes nothing", async () => {
+  await t("each deleted document is handled once and marked done with a content-free entry; a second pass changes nothing", async () => {
+    const marks = (await q<{ new_value: unknown; reason: string | null; previous_value: unknown }>(`SELECT new_value, reason, previous_value FROM policy_document_audit_log WHERE policy_id=$1 AND action=$2`, [vida, CLAIM_SNAPSHOT_SCRUB_ACTION])).rows;
+    assert.equal(marks.length, 1); assert.deepEqual(marks[0].new_value, { status: CLAIM_SNAPSHOT_SCRUB_ACTION }); assert.equal(marks[0].reason, null); assert.equal(marks[0].previous_value, null);
     const before = JSON.stringify(await q(`SELECT * FROM claim_composition_snapshots ORDER BY id`));
-    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots(), { snapshotsRedacted: 0, failed: 0 });
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots(), { documents: 0, snapshotsRedacted: 0, failed: 0 });
     assert.equal(JSON.stringify(await q(`SELECT * FROM claim_composition_snapshots ORDER BY id`)), before);
   });
   await t("a document deleted before this existed is caught up by the next drain pass; one still on file is never handled", async () => {
@@ -144,14 +147,33 @@ async function main() {
     // A calculation that names the document only inside its result (no coverage version recorded) is found too.
     const s3 = await snapshot(acc2, lan, cl, { hospitalNights: 2 }, [section(bao, "An Tâm", 1000000, "VND", "1.000.000 ₫")]);
     await q(`UPDATE claim_composition_snapshots SET coverage_versions='[]'::jsonb WHERE id=$1`, [s3.id]);
-    assert.equal((await scrubDeletedDocumentClaimSnapshots({ policyIds: [kept] })).snapshotsRedacted, 0, "a document on file is never handled");
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots({ policyIds: [kept] }), { documents: 0, snapshotsRedacted: 0, failed: 0 }, "a document on file is never handled");
     await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [bao]);
     const r = await scrubDeletedDocumentClaimSnapshots();
-    assert.deepEqual(r, { snapshotsRedacted: 2, failed: 0 });
+    assert.deepEqual(r, { documents: 1, snapshotsRedacted: 2, failed: 0 });
     assert.deepEqual((await row(s3.id)).result.redacted, { reason: SNAPSHOT_REDACTED_REASON });
     assert.deepEqual((await row(s1.id)).result.redacted, { reason: SNAPSHOT_REDACTED_REASON });
     assert.deepEqual((await row(s1.id)).facts_snapshot, { hospitalNights: 2 });
     assert.match(JSON.stringify((await row(s2.id)).result), /5\.000\.000/);
+  });
+  await t("a second deleted document still cleans the facts of a calculation already redacted for the first", async () => {
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [salud]);
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots(), { documents: 1, snapshotsRedacted: 2, failed: 0 });
+    const f = (await row(onlyVida.id)).facts_snapshot;
+    assert.deepEqual(f, { ...personFacts, causeDefinitionMatches: [], priorPaidAmounts: {} });
+    assert.deepEqual((await row(onlySalud.id)).result.redacted, { reason: SNAPSHOT_REDACTED_REASON });
+  });
+  await t("a failure leaves the document unmarked, so the next pass retries it", async () => {
+    const acc3 = await household("Haddad household (fictitious)");
+    const ali = await member(acc3, "Ali Haddad");
+    const d = await doc(acc3, ali, "Sanad-Care.pdf", "Sanad Care");
+    const s = await snapshot(acc3, ali, await claim(acc3, ali), { hospitalNights: 1 }, [section(d, "Sanad Care", 900, "JOD", "JOD 900 per stay")]);
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [d]);
+    let calls = 0;
+    const flaky = { query: (text: string, params?: unknown[]) => { if (/^\s*UPDATE claim_composition_snapshots/.test(text) && calls++ === 0) return Promise.reject(new Error("lost")); return run(text, params); } };
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots({ db: flaky as never, policyIds: [d] }), { documents: 0, snapshotsRedacted: 0, failed: 1 });
+    assert.match(JSON.stringify((await row(s.id)).result), /JOD 900/);
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots({ db: flaky as never }), { documents: 1, snapshotsRedacted: 1, failed: 0 });
   });
   await t("the request drain runs it", async () => {
     const src = await readFile(path.resolve("lib/jobs/request-drain.ts"), "utf8");
@@ -159,7 +181,7 @@ async function main() {
   });
   await t("a pass never throws, even when the database fails", async () => {
     const broken = { query: async () => { throw new Error("connection lost"); } };
-    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots({ db: broken as never }), { snapshotsRedacted: 0, failed: 0 });
+    assert.deepEqual(await scrubDeletedDocumentClaimSnapshots({ db: broken as never }), { documents: 0, snapshotsRedacted: 0, failed: 0 });
   });
 
   console.log(`\nclaim snapshot scrub: ${passed} passed, ${failed.length} failed`);
