@@ -50,7 +50,11 @@ test("Home shows the caption from the counted items' sources, not a fixed phrase
   const page = readFileSync("app/page.tsx", "utf8"), route = readFileSync("app/api/dashboard/route.ts", "utf8");
   assert.doesNotMatch(page, /latest payment evidence/);
   assert.match(page, /per year \{premiumSourceCaption\(data\.premiums\.items\.map\(i=>i\.source\)\)\}\./);
-  assert.match(route, /premiumSummary\.items\.map\(\(i\)=>\(\{\.\.\.i,source:premiumSourceKind\(i\)\}\)\)/);
+  // #228 moved the counting into lib/policies/counted-premiums.ts, which Home calls: each counted item still carries its source.
+  const counted = readFileSync("lib/policies/counted-premiums.ts", "utf8");
+  assert.match(route, /\bcountedPremiums\(/);
+  assert.match(counted, /summary\.items\.map\(\(i\) => \(\{ \.\.\.i, source: premiumSourceKind\(i\) \}\)\)/);
+  assert.match(counted, /oneOff: summary\.oneOff\.map\(\(i\) => \(\{ \.\.\.i, source: premiumSourceKind\(i\) \}\)\)/);
 });
 
 // Critic H1 / TE: premium_records also hold premiums read off a personalised schedule at upload (lib/rag/ingest.ts "Extracted
