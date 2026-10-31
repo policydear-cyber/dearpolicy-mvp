@@ -11,8 +11,8 @@ import { maskIdentityText } from "@/lib/chat/identity-numbers";
  * leaving deliberate casing (acronyms, PascalCase) alone. */
 export function prettifyFilename(filename:string):string {
   const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"");
-  // Case boundaries become spaces only in a name with no separator of its own ("CareShieldBooklet"): a name a person
-  // already spaced keeps every word as typed, so a brand written as one word ("PruFlexiCash Protection Plus") is not split.
+  // Case boundaries become spaces only in a name with no separator of its own ("HealthGuardBooklet"): a name a person
+  // already spaced keeps every word as typed, so a brand written as one word ("NovaFlexiSave Protection Plus") is not split.
   const separated=/[\s_\-]/.test(base);
   const words=base.replace(/[_\-]+/g," ");
   const spaced=(separated?words:words.replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g,"$1 $2")).replace(/\s+/g," ").trim();
