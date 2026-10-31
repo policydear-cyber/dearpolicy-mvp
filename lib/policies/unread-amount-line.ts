@@ -59,12 +59,16 @@ const VALUE_FILLER = new Set(("pay pays paid payable return returns refund refun
 const LESS_FEES = /\(?\s*less\s+(?:any\s+)?(?:applicable\s+)?(?:fees|charges)(?:\s+and\s+(?:fees|charges))?(?:,?\s*if\s+any)?\s*\)?/giu;
 /** "we will pay the TI benefit as …", "is paid as …": the reason itself, said with a verb of paying. */
 const PAID_AS = /\b(?:(?:we\s+(?:will\s+|shall\s+)?)?pay(?:s|able)?\s+(?:the\s+|this\s+)?(?:[\p{L}/]+\s+){0,3}?benefit\s+as|(?:is|are|will\s+be|shall\s+be)\s+paid\s+as|(?:\bit|\bthis(?:\s+benefit)?|\band)\s+(?:is|will\s+be|shall\s+be)\s+paid(?=\s+(?:within|on|upon|to|when|if)\b)|payable\s+once|once\s+it\s+is\s+paid)\b/giu;
-function onlyFiller(rest: string, extra?: Set<string>): boolean {
-  const words = rest.replace(PAID_AS, " ").split(/[^\p{L}\p{N}%]+/u).filter(Boolean);
+function onlyFiller(rest: string, extra?: Set<string>, paidAs = true): boolean {
+  // A waiver pays nothing, so "it is paid as the TPD Benefit" after it is another payout, never the waiver said again (Critic R469).
+  const words = (paidAs ? rest.replace(PAID_AS, " ") : rest).split(/[^\p{L}\p{N}%]+/u).filter(Boolean);
   const plain = (w: string | undefined) => !!w && w !== "or" && (FILLER.has(w.toLowerCase()) || !!extra?.has(w.toLowerCase()) || /^\p{Ll}$/u.test(w));
   return words.every((w, i) => {
     // "or" joins two filler words ("payor or policyowner"), never an alternative benefit ("or the TPD Benefit", Critic R468).
-    if (w.toLowerCase() === "or") return plain(words[i - 1]) && plain(words[i + 1]) && !words.slice(i + 1, i + 4).some((n) => /^(?:benefits?|manfaat)$/iu.test(n));
+    if (w.toLowerCase() === "or") return plain(words[i - 1]) && plain(words[i + 1]) 
+      // "or (b) …" lists another payout, except in a value passage's "the higher of (a) … or (b) …".
+      && (!!extra || !(words[i + 1].length === 1 && rest.includes("(" + words[i + 1] + ")")))
+      && !words.slice(i + 1, i + 6).some((n) => /^(?:benefits?|manfaat)$/iu.test(n));
     return plain(w) || /^\p{Lu}{2,4}$/u.test(w) || /^\p{Ll}$/u.test(w);
   });
 }
@@ -83,8 +87,8 @@ export function unreadAmountLine(sourcePage: number | null, quote: string | null
   // Each reason takes out only its own words: "waive future premiums and pay the sum insured" keeps "pay the sum insured".
   const base = passage.replace(HARMLESS_FIGURES, " ").replace(IN_A_LUMP_SUM, " ");
   const without = (reason: RegExp) => base.replace(reason, " ");
-  const fits = (reason: RegExp, rest: string, extra?: Set<string>) => whole && says(passage, reason) && !MAY_STATE_AMOUNT.test(rest) && onlyFiller(rest, extra);
-  if (fits(WAIVES_PREMIUMS, without(WAIVES_PREMIUMS))) return `The passage on ${where} waives future premiums. This benefit pays no amount itself.`;
+  const fits = (reason: RegExp, rest: string, extra?: Set<string>, paidAs = true) => whole && says(passage, reason) && !MAY_STATE_AMOUNT.test(rest) && onlyFiller(rest, extra, paidAs);
+  if (fits(WAIVES_PREMIUMS, without(WAIVES_PREMIUMS), undefined, false)) return `The passage on ${where} waives future premiums. This benefit pays no amount itself.`;
   // An advance may name, without a figure, the limit the policy sets for it ("not more than the TI/CI limit").
   if (fits(ADVANCE_OF_DEATH_BENEFIT, without(ADVANCE_OF_DEATH_BENEFIT).replace(NAMED_LIMIT, " ")))
     return `The passage on ${where} pays this in advance from the death benefit, so its amount follows the death benefit, within any limit the policy sets.`;
