@@ -68,7 +68,14 @@ type Named = Pick<Policy, "product_name" | "original_filename" | "insurer" | "do
 function documentName(policy: Named) {
   return documentCardTitle(policy);
 }
-function roleLabel(role: string | null) { const t = (role ?? "document").replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1); }
+/** A document's kind in a household's words; the stored role name is internal ("personal_schedule"). */
+function roleLabel(role: string | null) {
+  if (role === "personal_schedule" || role === "schedule") return "Policy schedule";
+  if (!role || role === "unknown") return "Document";
+  const t = role.replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1);
+}
+/** How much a document says about the household's own cover, in their words: the stored labels are internal. */
+function authorityLabel(label: string) { return label === "Personal proof" ? "Your own policy" : label === "Reference" ? "General wording" : label; }
 /** "a, b and 2 more": what a document was found to pay for, in a line. */
 function foundLine(labels: string[]) {
   const l = labels;
@@ -391,7 +398,7 @@ export default function PoliciesPage() {
 
 
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule or summary. DearPolicy reads it and works out who it covers.</p></div></header>
+    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule, summary, renewal notice or receipt. DearPolicy reads it, works out who it covers and finds any premium paid.</p></div></header>
 
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
@@ -416,14 +423,13 @@ export default function PoliciesPage() {
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
         {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
       </form>
-      <div className="note">Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
     </section>
 
-    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
+    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Reads it</strong><small>Policy, schedule, wording, brochure or receipt</small></span></div><div><b>2</b><span><strong>Finds who it covers</strong><small>From the names printed in it</small></span></div><div><b>3</b><span><strong>Shows the page</strong><small>Every answer says where it comes from</small></span></div></section>
 
     <section className="section">
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
-      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
+      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Your policies <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>General wording <b>{counts.reference}</b></button></div>
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
@@ -445,7 +451,7 @@ export default function PoliciesPage() {
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), authorityLabel(policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference"))].join(" · ")}</span>}
               {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? "Read in part" : "Ready") : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
@@ -596,10 +602,10 @@ function CoversPicker({ policy, family, planChoice, onSave, referenceLinks }: { 
   const linked = covered.length > 0 || referenceLinks.length > 0;
   if (!open) return <div className={`covers-summary${linked ? "" : " empty"}`} data-testid="covers-picker">
     {covered.length
-      ? <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
+      ? <span><b>Applies to</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
       : referenceLinks.length
         ? <span><b>Used for</b> {referenceLinks.join(", ")}<small className="covers-plan-missing"> · as the wording for their plan</small></span>
-        : <span><b>Covers</b> nobody yet<small className="covers-plan-missing"> · choose who it covers so answers can use it</small></span>}
+        : <span><b>Applies to</b> nobody yet<small className="covers-plan-missing"> · choose who it applies to so answers can use it</small></span>}
     {saved && <span className="covers-saved" role="status">Saved</span>}
     <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{linked ? "Change" : "Choose"}</button>
   </div>;
