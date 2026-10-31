@@ -99,7 +99,9 @@ async function main() {
 
   const vidaQuote = "Capital segurado por morte: R$ 500.000,00. Segurada: Ana Beatriz Oliveira.";
   const krankenQuote = "Krankenhaustagegeld bis 20.000 €. Versicherte Person: Lucas Oliveira.";
-  const conv1 = await conversation(acc, ana, { subjects: { [ana]: { facts: [{ policyId: vida, quote: vidaQuote }] } }, ragLoop: { claim: { calcs: { k1: { policyId: vida, amount: 500000 } } } } },
+  const nights = { value: 3, state: "known", quote: "I was in for 3 nights", recordedAt: "2026-10-01T00:00:00Z", source: "user" };
+  const bill = { value: 4200, state: "known", quote: "the bill was R$ 4.200", recordedAt: "2026-10-01T00:00:00Z", source: "user" };
+  const conv1 = await conversation(acc, ana, { intent: "claim", activeClaimQuery: "I was in hospital for 3 nights", subjects: { [ana]: { nights, bill, sumAssured: { value: 500000, state: "known", quote: vidaQuote, recordedAt: "2026-10-01T00:00:00Z", source: "system-derived" }, facts: [{ policyId: vida, quote: vidaQuote }] } }, scenarios: { [ana]: [{ quote: vidaQuote }] }, claimSources: [vida], ragLoop: { claim: { calcs: { k1: { policyId: vida, amount: 500000 } } } } },
     answerOf("Ana is covered for R$ 500.000,00.", vida, "Vida Segura", vidaQuote, 500000, "BRL", "Ana Beatriz Oliveira"));
   const conv2 = await conversation(acc, lucas, { subjects: { [lucas]: { facts: [{ policyId: kranken }] } } }, answerOf("Lucas has hospital cash.", kranken, "Rheinland Komfort", krankenQuote, 20000, "EUR", "Lucas Oliveira"));
   const aboutVida = await turn(acc, ana, conv1, "How much does my life policy pay?", { content: "Ana is covered for R$ 500.000,00 by Vida Segura.", citations: [{ policyId: vida, excerpt: vidaQuote }], answer: answerOf("Ana is covered for R$ 500.000,00.", vida, "Vida Segura", vidaQuote, 500000, "BRL", "Ana Beatriz Oliveira") });
@@ -109,6 +111,9 @@ async function main() {
   const legacy = await turn(acc, ana, null, "Is policy VS-2024-778812 still mine?", { content: "Policy VS-2024-778812 (Vida Segura) insures Ana Beatriz Oliveira for R$ 500.000,00.", citations: null, answer: null });
   // A general reply that cites nothing but still states a figure from the document (an allow-list catches it).
   const general = await turn(acc, ana, null, "Roughly what am I covered for?", { content: "From what I can see, about R$ 500 mil with Seguradora Aurora.", citations: [], answer: { summary: "About R$ 500 mil.", citations: [], confidence: "insufficient_evidence" } });
+  // A fact-finding question that names no document and states no figure is kept; one that states a figure is not.
+  const askAdmitted = await turn(acc, ana, conv1, "I want to claim", { content: "When were you admitted?", citations: [], answer: { mode: "fact_finding", summary: "When were you admitted?", citations: [], questions: [{ text: "When were you admitted?" }], claimItems: [] } });
+  const askWithFigure = await turn(acc, ana, conv1, "Go on", { content: "Your plan pays up to R$ 500.000,00. When were you admitted?", citations: [], answer: { mode: "fact_finding", summary: "Your plan pays up to R$ 500.000,00. When were you admitted?", citations: [], questions: [{ text: "When were you admitted?" }], claimItems: [] } });
   // An answer from before the document was added cannot hold anything from it, and is kept as it is.
   const before = await turn(acc, ana, null, "What is a waiting period?", { content: "A waiting period is the time before a cover starts.", citations: [], answer: null });
   await q(`UPDATE chat_messages SET created_at='2020-01-01' WHERE id=$1`, [before]);
@@ -134,7 +139,7 @@ async function main() {
     const req = await requestPolicyDocumentDeletion({ client: scoped, accountId: acc, actorUserId: randomUUID(), policyId: vida, reasonCategory: "user_requested", idempotencyKey: "derived-1" });
     assert.equal(req.status, "accepted");
     await finishPolicyDocumentDeletion({ accountId: acc, actorUserId: randomUUID(), policyId: vida, deletionRequestId: req.deletionRequestId });
-    for (const id of [aboutVida, aboutBoth, legacy, general]) {
+    for (const id of [aboutVida, aboutBoth, legacy, general, askWithFigure]) {
       const m = await msg(id);
       assert.equal(m.content, STALE_ANSWER_NOTICE);
       const all = m.content + text(m.citations) + text(m.answer_json);
@@ -149,14 +154,17 @@ async function main() {
   });
   await t("answers about the kept document, answers from before it was added, and the person's own questions, are untouched", async () => {
     assert.equal((await msg(before)).content, "A waiting period is the time before a cover starts.");
+    assert.equal((await msg(askAdmitted)).content, "When were you admitted?", "a plain fact-finding question is kept");
     const k = await msg(aboutKranken);
     assert.equal(k.content, "Yes, up to 20.000 €."); assert.match(text(k.answer_json), /Krankenhaustagegeld/);
     const questions = (await q<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND role='user' ORDER BY message_order`, [acc])).rows.map((r) => r.content);
-    assert.deepEqual(questions, ["How much does my life policy pay?", "What do we have together?", "Do I get hospital cash?", "Is policy VS-2024-778812 still mine?", "Roughly what am I covered for?", "What is a waiting period?"]);
+    assert.deepEqual(questions, ["How much does my life policy pay?", "What do we have together?", "Do I get hospital cash?", "Is policy VS-2024-778812 still mine?", "Roughly what am I covered for?", "I want to claim", "Go on", "What is a waiting period?"]);
   });
-  await t("the chat's working state and last answer from the deleted document are cleared; the other chat keeps its own", async () => {
+  await t("the chat keeps only what the person typed (their own facts and question); what came from the document goes; the other chat keeps its own", async () => {
     const c1 = (await q<{ state: unknown; last_answer: unknown; revision: string }>(`SELECT state,last_answer,revision::text FROM chat_conversations WHERE id=$1`, [conv1])).rows[0];
-    assert.deepEqual(c1.state, { subjects: {} }); assert.equal(c1.last_answer, null); assert.equal(c1.revision, "1", "a stale save of the old state is refused");
+    assert.deepEqual(c1.state, { subjects: { [ana]: { nights, bill } }, intent: "claim", activeClaimQuery: "I was in hospital for 3 nights" });
+    assert.ok(!JSON.stringify(c1.state).includes("500") && !JSON.stringify(c1.state).includes(vida), "no figure or reference from the deleted document");
+    assert.equal(c1.last_answer, null); assert.equal(c1.revision, "1", "a stale save of the old state is refused");
     const c2 = (await q<{ state: unknown; last_answer: unknown }>(`SELECT state,last_answer FROM chat_conversations WHERE id=$1`, [conv2])).rows[0];
     assert.match(text(c2.state), new RegExp(kranken)); assert.match(text(c2.last_answer), /Krankenhaustagegeld/);
   });

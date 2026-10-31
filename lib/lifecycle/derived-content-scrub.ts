@@ -19,7 +19,10 @@
  *     citations left. This is an allow-list on purpose: losing an old answer costs the person a re-ask; keeping one
  *     could keep deleted content. The person's own questions are kept: they are the person's words.
  *   - a chat whose saved working state or last answer, changed since the document was added, fails the same test has
- *     them cleared (the chat carries on from a fresh start; its messages stay, with the answers redacted as above).
+ *     its last answer cleared and its state reset to what the person typed themselves (their own facts, such as nights
+ *     in hospital or a bill amount, their question, a planned operation); everything worked out by the system or read
+ *     from documents goes. Its messages stay, with the answers redacted as above.
+ *   - a question DearPolicy asked to gather facts that names no document and states no figure is kept.
  *   - a finished background answer since then that fails the same test loses its result.
  *   - every cached chat analysis of that household is dropped (they are keyed by a hash, so which document each one
  *     came from cannot be told; they are only a 24-hour cache and are rebuilt on the next question).
@@ -47,7 +50,43 @@ export const DERIVED_SCRUB_ACTION = "derived_content_scrubbed";
  * future "cancel deletion" feature must leave pending_deletion out of this list. */
 const DELETED_STATES = ["pending_deletion", "soft_deleted", "permanently_deleted", "audit_tombstone"];
 const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-const FRESH_CHAT_STATE = { subjects: {} };
+
+/** Chat state the person typed themselves (never read from a document), kept when a chat's state is reset. */
+const USER_TEXT_STATE_KEYS = ["intent", "activeQuery", "activeClaimQuery", "personContext", "plannedEvent", "outsideSubject", "propertyEvent", "claimSessionId", "claimSetAside"] as const;
+
+/**
+ * What a chat's saved state keeps when it is reset because of a deleted document: the facts the person told
+ * DearPolicy themselves (source "user": nights in hospital, a bill amount, a date) and the other things they typed (their
+ * question, a planned operation, a what-if and their replies to it). Everything worked out by the system or read from
+ * documents goes: derived facts, event candidates, pending questions, document lists, claim sources.
+ */
+export function userTypedChatState(state: unknown): Record<string, unknown> {
+  const st = (state && typeof state === "object" ? state : {}) as Record<string, unknown>;
+  const subjects: Record<string, Record<string, unknown>> = {};
+  for (const [person, facts] of Object.entries((st.subjects && typeof st.subjects === "object" ? st.subjects : {}) as Record<string, unknown>)) {
+    if (!facts || typeof facts !== "object") continue;
+    const own = Object.fromEntries(Object.entries(facts as Record<string, unknown>).filter(([, f]) => (f as { source?: unknown } | null)?.source === "user"));
+    if (Object.keys(own).length) subjects[person] = own;
+  }
+  const kept: Record<string, unknown> = { subjects };
+  for (const k of USER_TEXT_STATE_KEYS) if (st[k] !== undefined) kept[k] = st[k];
+  const whatIf = st.whatIf as { query?: unknown; answers?: unknown } | undefined;
+  if (whatIf && typeof whatIf.query === "string") kept.whatIf = { query: whatIf.query, answers: whatIf.answers && typeof whatIf.answers === "object" ? whatIf.answers : {} };
+  return kept;
+}
+
+/**
+ * A question DearPolicy asked to gather facts ("When were you admitted?"), which refers to no document and states no
+ * figure, carries nothing from any document and is kept.
+ */
+function isPlainFactFindingQuestion(answer: unknown, content: string, refersToAnyDocument: boolean): boolean {
+  const a = answer as { mode?: unknown; summary?: unknown; details?: unknown; questions?: unknown; claimItems?: unknown; potentialPayoutTotals?: unknown } | null;
+  if (!a || a.mode !== "fact_finding" || refersToAnyDocument) return false;
+  const empty = (x: unknown) => !Array.isArray(x) || x.length === 0;
+  if (!empty(a.claimItems) || !empty(a.potentialPayoutTotals)) return false;
+  const text = [content, a.summary, JSON.stringify(a.details ?? []), JSON.stringify(a.questions ?? [])].join(" ");
+  return !/\d/.test(text);
+}
 
 /** What a saved answer becomes: the chat's own "relied on a deleted document" notice and nothing else from it. */
 export function redactedStoredAnswer(answer: unknown): ChatAnswer {
@@ -109,10 +148,13 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
  * The allow-list test: stored text (an answer, a chat's state, a background result) may stay only when it refers to at
  * least one of the household's documents and every one it refers to is still on file.
  */
+function referencesIn(known: Set<string>, parts: unknown[]): string[] {
+  const text = parts.map((x) => (x == null ? "" : typeof x === "string" ? x : JSON.stringify(x))).join(" ");
+  return [...new Set((text.match(UUID_IN_TEXT) ?? []).map((x) => x.toLowerCase()))].filter((id) => known.has(id));
+}
 function staysWith(active: Set<string>, known: Set<string>) {
   return (...parts: unknown[]) => {
-    const text = parts.map((x) => (x == null ? "" : typeof x === "string" ? x : JSON.stringify(x))).join(" ");
-    const refs = [...new Set((text.match(UUID_IN_TEXT) ?? []).map((x) => x.toLowerCase()))].filter((id) => known.has(id));
+    const refs = referencesIn(known, parts);
     return refs.length > 0 && refs.every((id) => active.has(id));
   };
 }
@@ -136,6 +178,7 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
         FOR UPDATE`, [doc.account_id, doc.added_at, STALE_ANSWER_NOTICE]);
     for (const m of rows.rows) {
       if (stays(m.citations, m.answer_json)) continue;
+      if (isPlainFactFindingQuestion(m.answer_json, m.content ?? "", referencesIn(known, [m.citations, m.answer_json]).length > 0)) continue;
       await tx.query(`UPDATE chat_messages SET content=$1, citations='[]'::jsonb, answer_json=CASE WHEN answer_json IS NULL THEN NULL ELSE $2::jsonb END WHERE id=$3 AND account_id=$4`,
         [STALE_ANSWER_NOTICE, JSON.stringify(redactedStoredAnswer(m.answer_json)), m.id, doc.account_id]);
       counts.answersRedacted++;
@@ -146,10 +189,13 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
       `SELECT id::text AS id, state, last_answer FROM chat_conversations WHERE account_id=$1 AND updated_at >= $2::timestamptz FOR UPDATE`,
       [doc.account_id, doc.added_at]);
     for (const c of rows.rows) {
-      const fresh = JSON.stringify(c.state) === JSON.stringify(FRESH_CHAT_STATE) && c.last_answer == null;
-      if (fresh || stays(c.state, c.last_answer)) continue;
+      if (stays(c.state, c.last_answer)) continue;
+      const kept = userTypedChatState(c.state);
+      // The person's own facts stay only while they name no document that is gone (they never should).
+      if (referencesIn(known, [kept]).some((id) => !active.has(id))) kept.subjects = {};
+      if (JSON.stringify(kept) === JSON.stringify(c.state) && c.last_answer == null) continue;
       await tx.query(`UPDATE chat_conversations SET state=$3::jsonb, last_answer=NULL, revision=revision+1, updated_at=now() WHERE account_id=$1 AND id=$2`,
-        [doc.account_id, c.id, JSON.stringify(FRESH_CHAT_STATE)]);
+        [doc.account_id, c.id, JSON.stringify(kept)]);
       counts.chatsReset++;
     }
   }
