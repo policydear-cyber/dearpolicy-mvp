@@ -126,11 +126,20 @@ test("a second payment, an addition or a change next to a reason keeps 'could no
   ]) assert.match(unreadAmountLine(3, q), /could not be read|describes this in words/, q);
 });
 
-test("a table line cut off before its maximum says so, in any wording; one that prints its maximum does not", async () => {
+test("a table line cut off before its maximum keeps its printed share and says the maximum was not captured, in any wording", async () => {
   const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
-  for (const q of ["(a) Angioplasty and Other Invasive Treatment for : 10% of Prevailing Insured Amount, up to maximum",
-    "Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", "Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum",
-    "Minor surgery 15% of the sum insured, limited to", "Dental 25% of the benefit amount up to a limit of"])
+  const cut = (share: string) => `Pays ${share}, up to a maximum that was not captured from page 34, so no amount is worked out. The maximum is printed further down page 34.`;
+  for (const [q, share] of [
+    ["(a) Angioplasty and Other Invasive Treatment for : 10% of Prevailing Insured Amount, up to maximum", "10% of Prevailing Insured Amount"],
+    ["Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", "20% of the Sum Assured"],
+    ["Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum", "10% of Jumlah Diinsuranskan"],
+    ["Minor surgery 15% of the sum insured, limited to", "15% of the sum insured"],
+    ["Dental 25% of the benefit amount up to a limit of", "25% of the benefit amount"],
+    ["Carcinoma in situ 12.5 % of Basic Coverage Amount, capped at", "12.5% of Basic Coverage Amount"],
+    ["Prothèse: 30% of the Insured Sum (maximum", "30% of the Insured Sum"],
+  ]) assert.equal(unreadAmountLine(34, q), cut(share), q);
+  // No share to keep: a money rate, two percentages (two rows run together), or "of" with no words after it.
+  for (const q of ["Daily cash S$100 per day, up to maximum", "Hip 75% / Knee 50%, up to maximum", "Payout: 10% of the, up to maximum", "Up to 10% of, subject to a maximum of"])
     assert.equal(unreadAmountLine(34, q), "The passage on page 34 stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down page 34.", q);
   for (const q of ["10% of Prevailing Insured Amount, up to maximum of S$25,000", "Pays up to the maximum stated in the schedule.", "Covered up to age 65"])
     assert.doesNotMatch(unreadAmountLine(34, q), /stops before the maximum/, q);

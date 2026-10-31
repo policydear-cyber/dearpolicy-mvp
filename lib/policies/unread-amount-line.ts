@@ -9,6 +9,8 @@
  * tenth of"), or a word that points to an amount printed elsewhere ("the Sum Assured as shown in the Policy Schedule",
  * "an amount equal to the annual premium"), also keeps "could not be read": the amount exists, it is just not in this
  * passage (Critic R400). */
+import { shareOf } from "@/lib/format/share-of";
+
 const MAY_STATE_AMOUNT = new RegExp([
   String.raw`\p{Nd}|\p{Sc}|[一二三四五六七八九十百千万萬亿億两兩零〇壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]`,
   String.raw`\b(?:SGD|USD|MYR|RM|GBP|EUR|HKD|AUD|NZD|CAD|JPY|CNY|RMB|IDR|THB|INR|PHP|BND|TWD|NTD)\b`,
@@ -112,8 +114,13 @@ export function unreadAmountLine(sourcePage: number | null, quote: string | null
     return `The passage on ${where} works this out from the policy's value or the premiums paid at the time, so the document prints no fixed amount for it.`;
   // A table line that stops at its cap ("10% of Prevailing Insured Amount, up to maximum"): the figure wrapped onto the
   // next printed line, which was not read with it.
-  if (STOPS_AT_ITS_CAP.test(passage))
+  // The share it pays is printed in full and is kept, in the row's own words ("10% of Prevailing Insured Amount"); only the
+  // maximum is missing, so no amount is worked out from the share.
+  if (STOPS_AT_ITS_CAP.test(passage)) {
+    const share = shareOf(passage);
+    if (share) return `Pays ${share.percent}% of ${share.of}, up to a maximum that was not captured from ${where}, so no amount is worked out. The maximum is printed further down ${where}.`;
     return `The passage on ${where} stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down ${where}.`;
+  }
   if (whole && !MAY_STATE_AMOUNT.test(passage)) return `The passage on ${where} describes this in words, with no amount in it.`;
   return `The amount on ${where} could not be read.`;
 }

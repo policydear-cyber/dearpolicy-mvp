@@ -20,6 +20,7 @@
     "benefit-table:coverage-premium-test": "node --import tsx scripts/benefit-table/coverage-premium-test.ts",
     "benefit-table:conditions-twice-test": "node --import tsx scripts/benefit-table/conditions-twice-test.ts",
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
+    "benefit-table:share-test": "node --import tsx scripts/benefit-table/share-test.ts",
     "benefit-table:parity-test": "node --import tsx scripts/benefit-table/parity-test.ts",
     "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
     "benefit-table:family-ended-test": "node --import tsx scripts/benefit-table/family-ended-test.ts",
