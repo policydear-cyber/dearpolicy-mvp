@@ -201,6 +201,7 @@
     "r7:claims-test": "node --import tsx scripts/r7-claims-regressions.ts",
     "r8:chaos-test": "node --import tsx scripts/r8-chaos-regressions.ts",
     "r9:ingest-chaos-test": "node --import tsx scripts/r9-ingest-chaos-regressions.ts",
+    "r9:own-notes-test": "node --import tsx scripts/r9/own-notes-test.ts",
     "r8:render-test": "node --import tsx scripts/r8-render-regressions.ts",
     "r9:redteam-test": "node --import tsx scripts/r9-redteam-regressions.ts",
     "r10:messy-docs-test": "node --import tsx scripts/r10-messy-docs-regressions.ts",
