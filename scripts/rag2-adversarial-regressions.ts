@@ -395,12 +395,15 @@ async function main() {
   // ============================ usage limits ============================
   { await H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced,ok) VALUES($1,'chat','openai','gpt-test',1,1,999,true,true)", [ACCOUNT_N]).catch(async () => {
       await H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd) VALUES($1,'chat','openai','gpt-test',1,1,999)", [ACCOUNT_N]); });
-    const r = await converse(ACCOUNT_N, [{ steps: [() => [call("final_answer", { sentences: [{ text: "Hello." }] })]] }], ["What does FamilyFirst cover for Rohan?"], undefined, { metered: true });
+    // Past the limit the chat route refuses before the loop starts (app/api/chat/route.ts): no model call and a reply
+    // that names the limit. The loop's own check before each call is rag2:fix-test F21.
+    const model = new AdvModel([{ steps: [() => [call("final_answer", { sentences: [{ text: "Hello." }] })]] }], { metered: true }); installLoopModel(model);
+    const r = await H.post(ACCOUNT_N, "What does FamilyFirst cover for Rohan?").finally(() => installLoopModel(null));
     await H.db.query("DELETE FROM model_usage WHERE account_id=$1 AND model='gpt-test'", [ACCOUNT_N]);
     await check("U1 household over its monthly spend limit: the loop does not call the model and says so honestly", () => {
-      need(r, 1); const t = r.turns[0];
-      assert.equal(r.model.started, 0, "the loop called the model for a household past its spend limit" + ctxOf(t));
-      assert.match(t.v, /limit/i, ctxOf(t));
+      assert.equal(model.requests.length, 0, "the model was called for a household past its spend limit");
+      assert.equal(r.status, 429, JSON.stringify(r.data).slice(0, 300)); assert.equal(r.data.code, "spend_limit");
+      assert.match(r.data.error, /limit/i); assert.equal(r.data.answer, undefined);
     }); }
   { const before = Number((await H.db.query("SELECT coalesce(sum(input_tokens),0)::int AS n FROM model_usage WHERE account_id=$1", [ACCOUNT_T])).rows[0].n);
     const beforeExec = Number((await H.db.query("SELECT count(*)::int AS n FROM model_executions").catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n);

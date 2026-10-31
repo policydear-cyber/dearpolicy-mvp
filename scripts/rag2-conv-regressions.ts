@@ -309,10 +309,21 @@ async function main() {
     assert.equal(u5.fk.count(), 0); assert.equal(u5.trace.limit.kind, "household_allowance"); assert.equal(u5.answer.summary, LIMIT_TEXT.household_allowance); assert.equal(u5.newRows.length, 0);
   });
   await h.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cached_tokens,cost_usd,priced,duration_ms,ok) VALUES($1,'chat','openai','gpt-x',0,0,0,9,true,1,true)", [RAHMAN]);
-  const u6 = await hostedTurn([resolveMe, finish], { PLAN_HARD_STOP_USD: "5" });
+  // A household already past its plan hard stop is refused by the chat route itself (app/api/chat/route.ts), before
+  // the loop starts: no model call, no answer, and a reply that names the limit. The loop's own check before each call
+  // is tested in rag2:fix-test F21 (the cap reached during a turn).
+  const u6 = await (async () => {
+    restore(); delete process.env.DEARPOLICY_DETERMINISTIC_MODEL; process.env.PLAN_HARD_STOP_USD = "5";
+    const fk = fake([resolveMe, finish]);
+    installLoopModel(new HostedLoopModel({ provider: "openai", model: "gpt-x" }, fk.f));
+    const before = (await rows()).length;
+    try { const r = await h.post(RAHMAN, "Hello, what can you do?"); return { ...r, fk, newRows: (await rows()).slice(before) }; }
+    finally { installLoopModel(null); restore(); }
+  })();
   await h.db.query("DELETE FROM model_usage WHERE account_id=$1 AND cost_usd=9", [RAHMAN]);
-  await check("F6 INTEGRATION the household's plan hard stop (ledger) stops the turn before any call", () => {
-    assert.equal(u6.fk.count(), 0); assert.equal(u6.trace.limit.kind, "household_spend_cap"); assert.equal(u6.answer.summary, LIMIT_TEXT.household_spend_cap);
+  await check("F6 INTEGRATION the household's plan hard stop (ledger) stops the turn before any call: the chat route refuses with the spend-limit reply", () => {
+    assert.equal(u6.status, 429, JSON.stringify(u6.data).slice(0, 300)); assert.equal(u6.data.code, "spend_limit"); assert.match(u6.data.error, /limit/i);
+    assert.equal(u6.fk.count(), 0); assert.equal(u6.newRows.length, 0); assert.equal(u6.data.answer, undefined);
   });
   U.resetLoopRunUsage();
   const u7 = await hostedTurn([resolveMe, finish], { DEARPOLICY_RAG_LOOP_RUN_MAX_CALLS: "1" });

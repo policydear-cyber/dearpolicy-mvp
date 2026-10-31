@@ -378,11 +378,18 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ D21-D23: usage
-  { await H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced,ok) VALUES($1,'chat','openai','gpt-test',1,1,999,true,true)", [ACCOUNT_N]);
-    const r = await converse(ACCOUNT_N, [{ steps: [() => [call("final_answer", { sentences: [{ text: "Hello." }] })]] }], ["What does FamilyFirst cover for Rohan?"]);
+  // The household is under its limit when the turn starts, so the chat route lets it through; the cap is reached
+  // during the turn (the first call's spend lands in the ledger), and the loop must refuse the NEXT call itself.
+  // A household already over its limit is refused by the route before the loop starts (rag2:conv-test F6, adversarial U1).
+  { const spend = () => H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced,ok) VALUES($1,'chat','openai','gpt-test',1,1,999,true,true)", [ACCOUNT_N]);
+    const r = await converse(ACCOUNT_N, [{ steps: [
+      async () => { await spend(); return [call("resolve_person", { mention: "me" })]; },
+      () => [call("final_answer", { sentences: [{ text: "Hello." }] })],
+    ] }], ["What does FamilyFirst cover for Rohan?"]);
     await H.db.query("DELETE FROM model_usage WHERE account_id=$1 AND model='gpt-test'", [ACCOUNT_N]);
     await check("F21 D21: the household spend cap is checked before every loop model call -- the test model too; the reply says a limit was reached", () => {
-      const t = r.turns[0]; assert.equal(r.model.started, 0, info(t)); assert.equal(t.v, LIMIT_TEXT.household_spend_cap); assert.equal(t.trace.limit.kind, "household_spend_cap");
+      const t = r.turns[0]; assert.equal(r.model.requests.length, 1, "the loop made another model call after the household reached its spend limit" + info(t));
+      assert.equal(t.v, LIMIT_TEXT.household_spend_cap, info(t)); assert.equal(t.trace.limit.kind, "household_spend_cap");
     }); }
   { const ref = (await import("@/lib/telemetry/pseudonymize")).pseudonymizeId(ACCOUNT_T);
     const count = async () => (await H.db.query("SELECT count(*)::int AS n, coalesce(sum(input_tokens),0)::int AS i FROM model_executions WHERE household_ref=$1", [ref])).rows[0] as { n: number; i: number };
