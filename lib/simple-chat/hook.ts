@@ -43,7 +43,7 @@ async function liveTable(accountId: string): Promise<BenefitTable | null> {
 /** Opens or continues the conversation; who the question is about is left to the model and the checks. */
 export async function prepareSimpleChat(request: ChatRequest): Promise<ChatContext> {
   const family = (await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [request.accountId])).rows;
-  if (!family.length) throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
+  if (!family.length) throw new ChatConflict("Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.");
   if (request.familyMemberId && !family.some((p) => p.id === request.familyMemberId)) throw new Error("Family profile not found.");
   const previousId = request.conversationId ?? request.claimSessionId;
   const previous = previousId ? await getConversation(request.accountId, previousId) : null;

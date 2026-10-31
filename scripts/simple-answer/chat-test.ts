@@ -347,7 +347,7 @@ async function main() {
       model, household: async () => HOUSE, history: async () => [], save: (async (a: { answer: { bottomLine?: string } }) => { saved.push(a); }) as never,
     });
     assert.equal(model.calls.length, 0);
-    assert.match(result.answer.summary, /Household > Delete this household\. It cannot be undone\./);
+    assert.match(result.answer.summary, /Account settings > Household > Delete this household\. It cannot be undone\./);
     assert.equal(saved.length, 1);
     assert.equal((result.answer as { statements?: unknown[] }).statements?.length ?? 0, 0);
   });

@@ -1269,3 +1269,12 @@ div.answer-point { display: grid; gap: 4px; }
 .cov-unplaced ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .cov-unplaced li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .cov-unplaced small { color: var(--muted); font-size: var(--fs-xs); margin-left: 6px; }
+
+/* Account settings: Household, People and Plan usage as tabs under one title. */
+.account-tabs { display: flex; gap: 4px; margin: 0 0 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.account-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.account-tabs a:hover { color: var(--ink); }
+.account-tabs a.active { color: var(--ink); border-bottom-color: var(--accent); }
+.section-links { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: flex-end; }
+.section + .profile-add-panel { margin-top: 20px; }
+.profile-add-panel > h3 { margin: 0 0 12px; font-size: 1rem; }

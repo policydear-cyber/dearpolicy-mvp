@@ -133,7 +133,7 @@ export async function resolvePerson(args: { accountId: string; mention: string; 
 export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: ConversationContext | null): PersonResolution {
   let people = peopleIn;
   const mention = (mentionRaw ?? "").trim().replace(/[?.!,]+$/g, "");
-  if (!people.length) return { status: "unknown", reason: "the household has no people on file", question: "Who would you like to ask about? You can add them on the Family page." };
+  if (!people.length) return { status: "unknown", reason: "the household has no people on file", question: "Who would you like to ask about? You can add them under Account settings > People." };
   if (!mention) return { status: "ambiguous", options: people, question: `Who do you mean — ${listOf(people)}?`, reason: "no person was named" };
   const byId = (id?: string | null) => (id ? people.find((p) => p.id === id) ?? null : null);
   const speaker = byId(ctx?.speakerId) ?? (people.filter((p) => p.relation === "self").length === 1 ? people.find((p) => p.relation === "self")! : null);

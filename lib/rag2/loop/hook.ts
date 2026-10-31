@@ -107,7 +107,7 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
 
 export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext> {
   const family = (await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [request.accountId])).rows;
-  if (!family.length) throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
+  if (!family.length) throw new ChatConflict("Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.");
   if (request.familyMemberId && !family.some((p) => p.id === request.familyMemberId)) throw new Error("Family profile not found.");
   const previousId = request.conversationId ?? request.claimSessionId;
   const previous = previousId ? await getConversation(request.accountId, previousId) : null;
@@ -122,7 +122,7 @@ export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext
  * exist anywhere else). */
 export function unknownPersonText(mentions: string[]): string {
   const who = mentions.map((m) => `“${m.replace(/[“”"]/g, "")}”`).join(" or ");
-  return `I couldn’t identify ${who} among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.`;
+  return `I couldn’t identify ${who} among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them under Account settings > People.`;
 }
 const label = (p: ClaimPerson) => (p.preferred_name && p.preferred_name !== p.display_name ? `${p.display_name} (${p.preferred_name})` : p.display_name);
 const words = (key: string) => key.replace(/_/g, " ");

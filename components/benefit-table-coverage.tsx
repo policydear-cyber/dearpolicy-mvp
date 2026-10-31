@@ -135,7 +135,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length?<section className="cov-person" data-testid="table-also-found">
       <div className="cov-person-head"><h2>Also in your documents</h2></div>
       <ul className="cov-also">
-        {data.unmatchedCovers.map((c,i)=><li key={"u"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Not in your family. Add them on the <Link className="text-link" href="/family">Family page</Link> if they should be here.</span><PageLink source={c.source}/></li>)}
+        {data.unmatchedCovers.map((c,i)=><li key={"u"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Not in your family. Add them under <Link className="text-link" href="/family">Account settings &gt; People</Link> if they should be here.</span><PageLink source={c.source}/></li>)}
         {data.unlinkedSections.length?<li data-testid="table-unplaced"><details className="cov-unplaced"><summary>{data.unlinkedSections.length===1?"One part":`${data.unlinkedSections.length} parts`} of your documents couldn&rsquo;t be placed under a cover, so {data.unlinkedSections.length===1?"it isn’t":"they aren’t"} in this summary or in the chat.</summary>
           <ul>{data.unlinkedSections.map(u=><li key={u.section.key}><span>{u.section.section??"Untitled part"}{u.section.column?` (${u.section.column})`:""} <small>{u.section.document}</small></span>{u.source?<PageLink source={u.source}/>:null}</li>)}</ul></details></li>:null}
         {data.illustrationCovers.map((c,i)=><li key={"q"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Only in a quotation, which is not proof of cover.</span><PageLink source={c.source}/></li>)}
