@@ -9,6 +9,7 @@ import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isSchedu
 
 import { documentName,loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
+import { inNumberedOrder } from "@/lib/policies/benefit-order";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 import { cutNameSuffix } from "@/lib/policies/cut-name";
@@ -66,6 +67,8 @@ export async function GET(request:NextRequest){
                  WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id AND pm.family_member_id=$2::uuid))
         ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name,b.source_page,to_jsonb(b)->>'tier'`,
       [accountId,member||null]);
+    // A table's numbered rows in number order, not text order ("2." before "10.").
+    rows.rows=inNumberedOrder(rows.rows);
     /** What, if anything, this row needs from the person reading the screen.
      *
      * "Needs review" was an internal flag doing duty as a label, and it lumped
