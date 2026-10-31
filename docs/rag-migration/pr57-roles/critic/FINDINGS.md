@@ -10366,3 +10366,15 @@ Gate for #239 is green: printed-number, share-cap, capped-share, stored-share-sh
 ## R481: #238 5a8dc71 (benefit people once per person): READY
 oncePerPerson keys people by ownerId. The same sum and plan collapse to one entry, two sums are both kept, and an entry with no sum is shown only for someone with no sum at all. ?member= is now honoured. Gate green: benefit-people, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
 Low: a person whose cover was found with no amount loses the plan name (plan null). Neither page shows the plan for an entry with no sum (operator: "no sum insured on file"; schedule filters on amount), so nothing visible changes.
+
+## R482: #237 d1e2d0e and #238 f47b342: READY (re-ack)
+Neither changes code. #237 adds one test assertion (a contract that is only declared shows nothing). #238 moves its package.json line so it merges cleanly with main, #234, #237 and #239 in either order.
+
+## R483: #239 997856e: READY (replaces R480)
+- H1 fixed. Before a scale word, only a dot or comma followed by 1-2 digits is a decimal point, so "US$1.25 MILLION" gives cap 1,250,000. "US$1.250 million", "€1.500 Mio." and "S$1,500 million" are unsure, never a billion.
+- Correct: "€1,5 Mio." 1.5M, "S$0.500 million" 500k, "S$2.25m", "₹1.5 lakh", "₹2 crore", "Rp 2 miliar".
+- M2 fixed: cells followed by a scale word read as null. M3 fixed: "S$0.500" is null. M4 fixed: "€10 000" is null, not 10. L5: CHF is now known. L6: leaving Rs out on purpose is accepted. Lakh grouping applies only beside a rupee or taka marker ("HK$1,50,000" is null; main read it as 150000).
+- Gate green: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Low (safe side): a money figure followed by a space and 3 digits now reads as unsure: capReading("Up to S$5,000 120 days per year") and typedValue("S$500 365 days"). "Up to Rs. 5,00,000" stays unsure on both main and #239, because the sentence splitter breaks at "Rs.".
+- Low: typedValue("S$1.5 million or S$2,000") gives 2000 (main: 1.5). Both are wrong, for a rare cell. "Md" is read as billion, so "S$2 Md" gives a cap of 2,000,000,000.
+Probes: /mnt/project-files/critic/p239b-locales2.mts, p239c-scale.mts.
