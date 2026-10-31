@@ -92,6 +92,7 @@
     "policies:document-filter-test": "node --import tsx scripts/policies/document-filter-test.ts",
     "policies:pack-label-route-test": "node --import tsx scripts/policies/pack-label-route-test.ts",
     "policies:unread-amount-line-test": "node --import tsx scripts/policies/unread-amount-line-test.ts",
+    "documents:wrapped-cell-test": "node --import tsx scripts/documents/wrapped-cell-test.ts",
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",
     "claims:disability-test": "node --import tsx scripts/claim-disability-regressions.ts",
     "claims:travel-test": "node --import tsx scripts/claim-travel-regressions.ts",

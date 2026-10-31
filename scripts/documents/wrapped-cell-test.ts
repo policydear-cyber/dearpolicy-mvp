@@ -1,0 +1,54 @@
+/**
+ * A two-column benefit row whose name and amount both wrap onto the next printed line is read as one row: the left
+ * cell finishes the name, the right one the amount, and the row is quoted cell by cell. Made-up pages from several
+ * markets; no database, no network, no model.
+ */
+import test from "node:test";
+import assert from "node:assert/strict";
+
+for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(k)) delete process.env[k];
+let fetches = 0;
+globalThis.fetch = (async () => { fetches++; throw new Error("no network in this test"); }) as typeof fetch;
+
+test("a wrapped two-column row: the name and the amount each finish on the next line, in any currency", async () => {
+  const { benefitRowsFromText } = await import("@/lib/documents/layout");
+  const cases: [string, string, string][] = [
+    ["(a) Keyhole Surgery and Other Minimally Invasive Treatment for\t:\t10% of Prevailing Insured Amount, up to maximum\nBlocked Arteries\tof S$25,000\n",
+      "(a) Keyhole Surgery and Other Minimally Invasive Treatment for Blocked Arteries", "10% of Prevailing Insured Amount, up to maximum of S$25,000"],
+    ["Early Stage Cancer Benefit payable upon\t20% of the Sum Assured, subject to a maximum\ndiagnosis\tof RM50,000\n",
+      "Early Stage Cancer Benefit payable upon diagnosis", "20% of the Sum Assured, subject to a maximum of RM50,000"],
+    ["Hearing Loss in\t15% of the Sum Insured, up to\nOne Ear\t£10,000\n", "Hearing Loss in One Ear", "15% of the Sum Insured, up to £10,000"],
+  ];
+  for (const [page, label, value] of cases) {
+    const rows = benefitRowsFromText(page);
+    assert.equal(rows.length, 1, page);
+    assert.equal(rows[0].label, label);
+    assert.equal(rows[0].value, value);
+    // Quoted cell by cell: the name, then the whole amount.
+    assert.equal(rows[0].line.replace(/\s+/g, " "), label + " " + value);
+  }
+});
+
+test("a next line that is a row of its own, or a name that does not run on, is not joined; the cap is never lost", async () => {
+  const { benefitRowsFromText } = await import("@/lib/documents/layout");
+  // A new row with its own amount stays its own row.
+  const two = benefitRowsFromText("(a) Angioplasty for\t:\t10% of Sum Insured\n(b) Bypass surgery\t:\t100% of Sum Insured\n");
+  assert.deepEqual(two.map((r) => r.label), ["(a) Angioplasty for", "(b) Bypass surgery"]);
+  // The name is finished: the line below only finishes the amount, and is still quoted with it.
+  const done = benefitRowsFromText("Broken Hip\t10% of the Sum Insured, up to\nper event\tS$5,000\n");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].label, "Broken Hip");
+  assert.match(done[0].value, /S\$5,000/);
+  assert.match(done[0].line, /S\$5,000/);
+  assert.equal(fetches, 0);
+});
+
+test("the row read this way keeps its share only with its printed cap (Critic R416 rules unchanged)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const { benefitRowsFromText } = await import("@/lib/documents/layout");
+  const [row] = benefitRowsFromText("(a) Keyhole Surgery and Other Minimally Invasive Treatment for\t:\t10% of Prevailing Insured Amount, up to maximum\nBlocked Arteries\tof S$25,000\n");
+  assert.deepEqual(shareBound(row.line.replace(/\t/g, " "), row.label), { kind: "cap", amount: 25000, currency: "SGD" });
+  // A name that changes the amount is still read with it.
+  assert.equal(shareBound("Death benefit halved for children 50% of the Sum Insured, up to S$5,000", "Death benefit halved for children").kind, "unsure");
+  assert.equal(shareBound("Other Treatment, for the first claim, 10% of the Sum Insured, up to S$5,000", "Other Treatment").kind, "unsure");
+});

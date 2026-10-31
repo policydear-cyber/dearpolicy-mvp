@@ -75,6 +75,8 @@ function says(passage: string, reason: RegExp): boolean {
   return false;
 }
 
+/** A passage that ends on the words leading into a cap, with the cap itself missing. */
+const STOPS_AT_ITS_CAP = /(?:\b(?:up\s+to(?:\s+(?:a|the))?(?:\s+(?:maximum|max\.?))?|(?:subject\s+to\s+)?(?:a\s+|the\s+)?(?:maximum|max\.?)|limited\s+to|not\s+exceeding|capped\s+at|maksimum|sehingga|hingga)(?:\s+(?:of|amount|sebanyak))?|\blimit\s+of)\s*[,:]?$/iu;
 export function unreadAmountLine(sourcePage: number | null, quote: string | null | undefined): string {
   const where = sourcePage ? `page ${sourcePage}` : "the page";
   const passage = (quote ?? "").normalize("NFKC").trim();
@@ -94,6 +96,10 @@ export function unreadAmountLine(sourcePage: number | null, quote: string | null
   const valueRest = base.replace(FROM_POLICY_VALUE, " \u0000 ").replace(/\b(?:together\s+with|and)\s+(?:any\s+|all\s+)?(?=\u0000)/gu, " ").replace(LESS_FEES, " ");
   if (fits(FROM_POLICY_VALUE, valueRest, VALUE_FILLER))
     return `The passage on ${where} works this out from the policy's value or the premiums paid at the time, so the document prints no fixed amount for it.`;
+  // A table line that stops at its cap ("10% of Prevailing Insured Amount, up to maximum"): the figure wrapped onto the
+  // next printed line, which was not read with it.
+  if (STOPS_AT_ITS_CAP.test(passage))
+    return `The passage on ${where} stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down ${where}.`;
   if (whole && !MAY_STATE_AMOUNT.test(passage)) return `The passage on ${where} describes this in words, with no amount in it.`;
   return `The amount on ${where} could not be read.`;
 }
