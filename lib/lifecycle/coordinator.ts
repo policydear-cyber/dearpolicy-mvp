@@ -99,6 +99,7 @@ async function sweepDeletedDocumentSideChannels(accountId: string, policyId: str
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
+import { scrubDeletedDocumentClaimSnapshots } from "./claim-snapshot-scrub";
 
 /** Round 5: once a document deletion has completed, its stored file is
  * removed -- queued durably first (lib/storage/purge.ts), then removed right
@@ -288,6 +289,8 @@ export async function finishPolicyDocumentDeletion(args: {
     // not an error, transitionDeletionRequest's own CAS already made
     // that determination.
   });
+  // Claim calculations that used the document keep which calculation it was, never what it said (never throws).
+  await scrubDeletedDocumentClaimSnapshots({ policyIds: [args.policyId] });
 
   const correlationId = randomUUID();
 
@@ -898,6 +901,8 @@ export async function finishPolicyDeletion(args: {
   }).catch(() => {
     // A repeat call (idempotent retry) may already be past this state.
   });
+  // Claim calculations that used these documents keep which calculation it was, never what it said (never throws).
+  await scrubDeletedDocumentClaimSnapshots({ policyIds: args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId] });
 
   const correlationId = randomUUID();
 
