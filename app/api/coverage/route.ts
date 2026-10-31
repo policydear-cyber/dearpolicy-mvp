@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { isUuid } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { notABenefitSum } from "@/lib/coverage/benefit-sum-line";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -10,7 +11,6 @@ import { rowDetail, shortFigure } from "@/lib/benefit-table/headline";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
-import { notABenefitSum } from "@/lib/coverage/benefit-sum-line";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
