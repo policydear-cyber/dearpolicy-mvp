@@ -24,16 +24,19 @@ export const PRINTED_FIGURE = String.raw`\d(?:\d|[,.'’](?=\d)|[ \u00a0\u202f](
 /** Put right after a captured PRINTED_FIGURE: the capture is the whole figure, never a shorter part of it. */
 export const FIGURE_END = String.raw`(?![,.'’ \u00a0\u202f]?\d)`;
 /** A word after a figure that multiplies it ("1.5 million", "S$2.250m", "₹2 crore", "Rp 1,5 juta"). */
-const SCALE_WORDS = ["million", "mil", "mio", "mn", "m", "billion", "bn", "mrd", "md", "mld", "miliar", "milyar", "k", "thousand", "lakhs?", "lacs?", "crores?", "juta"];
+const SCALE_WORDS = ["million", "mil", "mio", "mln", "mn", "m", "tsd", "billion", "bn", "mrd", "md", "mld", "miliar", "milyar", "k", "thousand", "lakhs?", "lacs?", "crores?", "juta"];
 /** Each letter in both cases, so the pattern reads "M", "Mio." or "MILLION" with or without the i flag. */
 const anyCase = (word: string) => word.replace(/[a-z]/g, (c) => "[" + c + c.toUpperCase() + "]");
 export const SCALE_WORD = "(?:" + SCALE_WORDS.map(anyCase).join("|") + ")";
+/** NaN for a multiplier that reads two ways: the caller gives no figure. */
 export function scaleOf(word: string | null | undefined): number {
   const w = (word ?? "").toLowerCase();
   if (!w) return 1;
-  if (/^(?:million|mil|mio|mn|m|juta)$/.test(w)) return 1_000_000;
+  // "mil" is a thousand in Spanish and Portuguese ("€5 mil") and a million in Malaysia ("RM5 mil"): it reads two ways.
+  if (w === "mil") return NaN;
+  if (/^(?:million|mio|mln|mn|m|juta)$/.test(w)) return 1_000_000;
   if (/^(?:billion|bn|mrd|md|mld|miliar|milyar)$/.test(w)) return 1_000_000_000;
-  if (/^(?:k|thousand)$/.test(w)) return 1_000;
+  if (/^(?:k|thousand|tsd)$/.test(w)) return 1_000;
   if (/^(?:lakhs?|lacs?)$/.test(w)) return 100_000;
   if (/^crores?$/.test(w)) return 10_000_000;
   return NaN;

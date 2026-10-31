@@ -40,10 +40,12 @@ test("a multiplier is applied where it is read and never left off where it is no
     assert.deepEqual(shareBound("10% of the Sum Insured, up to " + cap, "Angioplasty"), { kind: "cap", amount, currency }, cap);
   assert.deepEqual(capReading({ amount: 1250000, amountBasis: null, quote: "We pay up to S$1.25 million per life." } as never), { kind: "cap", amount: 1250000 });
   // Three digits after the dot before a multiplier read two ways a thousand apart: no cap (TE pr239 D3).
-  for (const cap of ["S$1.125 million", "US$2.250m", "€1.500 Mio.", "HK$1.000 million"])
+  // "mil" is a thousand in Spanish and Portuguese and a million in Malaysia: no cap (TE pr239 D5). "Tsd." is thousands.
+  assert.deepEqual(shareBound("10% of the Sum Insured, up to €1.5 Tsd.", "Angioplasty"), { kind: "cap", amount: 1500, currency: "EUR" });
+  for (const cap of ["S$1.125 million", "US$2.250m", "€1.500 Mio.", "HK$1.000 million", "€5 mil", "RM5 mil"])
     assert.equal(shareBound("10% of the Sum Insured, up to " + cap, "Angioplasty").kind, "unsure", cap);
   // A cell or a check that does not apply the multiplier gives no figure: never S$1.5 or S$1,250.
-  for (const cell of ["S$1.5 million", "Up to S$1.250 million", "US$2m", "₹2 crore", "S$1.5k", "RM 2 juta", "£1.25M", "€1.500 Mio.", "€2 Mrd."]) {
+  for (const cell of ["S$1.5 million", "Up to S$1.250 million", "US$2m", "₹2 crore", "S$1.5k", "RM 2 juta", "£1.25M", "€1.500 Mio.", "€2 Mrd.", "€5 mil", "€1.5 Tsd."]) {
     assert.equal(typedValue("policy_year_limit", cell), null, cell);
     assert.equal(parseBenefitValue(cell, {}), null, cell);
   }

@@ -170,7 +170,8 @@ function figuresIn(sentence:string,share:boolean){
   for(const m of sentence.matchAll(FIGURE)){
     // Before a multiplier one dot is the decimal point: "S$1.125 million" is 1,125,000, never 1,125,000,000 (Critic R478).
     const base=printedNumber(m[2],null,{scaled:!!m[3],lakh:groupsInLakhs(m[0])});if(base==null)continue;
-    out.push({value:base*scaleOf(m[3]),start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
+    const scale=scaleOf(m[3]);if(!Number.isFinite(scale))continue;
+    out.push({value:base*scale,start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
   }
   return out;
 }
@@ -230,7 +231,8 @@ export function shareCapInPassage(quote:string):{amount:number;currency:string|n
     if(!m[1])continue;
     // A money figure grouped in no known way may be the cap: no cap is read rather than another figure taken for it.
     const base=printedNumber(m[2],null,{scaled:!!m[3],lakh:groupsInLakhs(m[0])});if(base==null)return null;if(base<=0)continue;
-    const amount=base*scaleOf(m[3]);
+    const scale=scaleOf(m[3]);if(!Number.isFinite(scale))return null;
+    const amount=base*scale;
     const start=m.index!,end=start+m[0].length;
     const sentenceStart=Math.max(text.lastIndexOf(".",start-1),text.lastIndexOf(";",start-1),text.lastIndexOf("\n",start-1))+1;
     const before=text.slice(Math.max(sentenceStart,start-80),start),after=text.slice(end);
