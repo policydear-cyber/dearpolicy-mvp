@@ -10195,3 +10195,5 @@ Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
 ## R440 — #219 ee535fb (rebased 5575198): READY; known sum needs every priced part to state a currency; home-currency 14/0; gate green.
 
 ## R441 — #214 12796fc (main merged): READY; gate green; no conflict with #219.
+
+## R442 — #221 314db67 (Documents filter): READY; M1 follow-up: linked wording/brochure (ai_name_match/upload_hint) goes to "Your policies" but badge says "General wording" (page.tsx:79); decide by role first.
