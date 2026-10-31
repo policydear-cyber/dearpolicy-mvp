@@ -10197,3 +10197,6 @@ Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
 ## R441 — #214 12796fc (main merged): READY; gate green; no conflict with #219.
 
 ## R442 — #221 314db67 (Documents filter): READY; M1 follow-up: linked wording/brochure (ai_name_match/upload_hint) goes to "Your policies" but badge says "General wording" (page.tsx:79); decide by role first.
+
+## R443 #222 ce55a99b (share follow-ups): not ready
+Gate green (share-cap 2/0, stored-share-shapes 1/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). M1 regression: "reduced to/by" before the share withholds standard loss-of-hearing/speech/sight rows that paid on main; count it only after the share. H1 (old, in scope): deny-list leaks the full share for "minus", "after deducting", "net of", "halved", "doubled", bare "half"/"a quarter"/"twice", a second share before the insured share, and all Malay second shares/deductions (INSURED_AMOUNT is English only). Fix: allow-list the words after the share, as the prevailing-amount rule does. Details: /mnt/project-files/critic/r443-pr222.md
