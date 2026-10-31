@@ -53,7 +53,7 @@ export async function GET(request:NextRequest){
   type Chosen={category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   // A line whose own label names a premium, waiver, fund or surrender value or the person's own share of a bill is no
-  // tile and no part of a total ("TPD Premium Waiver S$3,000" is stored under TPD); a cover whose figure may be a waived
+  // tile and no part of a total (a "TPD Premium Waiver" line is stored under TPD); a cover whose figure may be a waived
   // premium or a value keeps its tile with no figure (lib/coverage/benefit-sum-line.ts).
   coverageRows.rows=coverageRows.rows.flatMap(row=>{const line=asBenefitLine(row,row.evidence_text);return line?[line]:[];});
   for(const row of coverageRows.rows){

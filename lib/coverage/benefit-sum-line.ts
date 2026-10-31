@@ -75,7 +75,8 @@ export function lineLabel(evidenceText: string | null | undefined, amount: numbe
 
 /** The label with brackets, the currency and linking words before the figure taken off. */
 function trimmedLabel(label: string): string {
-  let s = label.replace(/\([^()]*\)|\[[^\[\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+  // Brackets, also the full-width ones Chinese and Japanese schedules print ("身故保险金（保费豁免除外）").
+  let s = label.replace(/\([^()]*\)|\[[^\[\]]*\]|（[^（）]*）|［[^［］]*］|【[^【】]*】/gu, " ").replace(/\s+/g, " ").trim();
   s = s.replace(CURRENCY_AT_END, "").trim();
   for (let prev = ""; prev !== s;) { prev = s; s = s.replace(LINK_AT_END, "").trim(); }
   return s;
