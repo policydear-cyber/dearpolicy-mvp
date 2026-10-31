@@ -53,8 +53,8 @@ for (const x of markets) {
 
   // Nothing on record, or both linked: shown as undecided with both people, never dropped, never given to either.
   for (const [what, fam] of [["nothing on record", [{ id: "a", display_name: x.name }, { id: "b", display_name: x.name }, other]],
-    ["both linked", [{ id: "a", display_name: x.name, documents: [x.doc] }, { id: "b", display_name: x.name, documents: [x.doc] }, other]]] as const) {
-    tb = assembleTable([reading], fam as FamilyMember[], links);
+    ["both linked", [{ id: "a", display_name: x.name, documents: [x.doc] }, { id: "b", display_name: x.name, documents: [x.doc] }, other]]] as [string, FamilyMember[]][]) {
+    tb = assembleTable([reading], fam, links);
     const amb = tb.ambiguousCovers[0];
     t(`${x.m} (${what}): the cover is shown as undecided with both namesakes`, tb.ambiguousCovers.length === 1 && amb.documentId === x.doc
       && amb.candidates.map((c) => c.id).sort().join() === "a,b" && amb.cover.person === x.name, tb.ambiguousCovers);
