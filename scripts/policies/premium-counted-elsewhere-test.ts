@@ -69,7 +69,7 @@ async function main() {
       const s = await summarisePremiums(au.id, child);
       assert.ok(!s.missing.includes("Gold Hospital and Top Extras"), JSON.stringify(s.missing));
       assert.deepEqual(s.countedElsewhere, [{ name: "Gold Hospital and Top Extras", owner: "Linh Nguyen" }]);
-      assert.match(s.note ?? "", /Gold Hospital and Top Extras is on file under Linh Nguyen, so it is counted in that person’s total/);
+      assert.match(s.note ?? "", /Gold Hospital and Top Extras is on file under Linh Nguyen, so it is counted in Linh Nguyen’s total/);
       assert.doesNotMatch(s.note ?? "", /Gold Hospital and Top Extras[^.]*no premium is printed/);
       assert.equal(s.annual, 0, "never counted twice");
     });

@@ -387,9 +387,11 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   if (table) tableLeftOut.push(...unreadPremiumCovers(table.covers, all, documents, inventoryDocumentIds, table.today, missingPolicies));
   if (countedElsewhere.length) { const names = new Set(countedElsewhere.map((c) => c.name)); tableLeftOut = tableLeftOut.filter((x) => !names.has(x.name)); }
   const owners = [...new Set(countedElsewhere.map((c) => c.owner))];
+  const andList = (xs: string[]) => xs.length <= 1 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
+  const elsewhereNames = [...new Set(countedElsewhere.map((c) => c.name))];
   const elsewhereNote = countedElsewhere.length
-    ? (countedElsewhere.length === 1 ? "The premium for " + countedElsewhere[0].name + " is" : "The premiums for " + [...new Set(countedElsewhere.map((c) => c.name))].slice(0, 4).join(", ") + " are") +
-      " on file under " + (owners.length === 1 ? owners[0] : owners.slice(0, -1).join(", ") + " and " + owners.at(-1)) + ", so " + (countedElsewhere.length === 1 ? "it is" : "they are") + " counted in " + (owners.length === 1 ? "that person’s" : "their") + " total, not again here."
+    ? (elsewhereNames.length === 1 ? "The premium for " + elsewhereNames[0] + " is" : "The premiums for " + andList(elsewhereNames.slice(0, 4)) + " are") +
+      " on file under " + andList(owners) + ", so " + (elsewhereNames.length === 1 ? "it is" : "they are") + " counted in " + (owners.length === 1 ? owners[0] + "’s" : "their") + " total, not again here."
     : null;
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
