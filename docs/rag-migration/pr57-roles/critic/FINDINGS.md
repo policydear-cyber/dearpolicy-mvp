@@ -10448,3 +10448,26 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 - 0bc9f44: plan and product names are no longer read (fixed). Still open: an illness word anywhere in the name moves the row (25 probe rows, critic/p252b-ci.mts).
 - Wrong-amount path: a CI cover with no sum insured, "Major Cancer" (See the page) plus "Cancer Screening Benefit S$300", gives a tile of S$300. Fix: every word of the name must be on a closed list. The pays/sum-insured ask was dropped, as the builder's reasons hold.
 - R493 correction: #249 READY is WITHDRAWN. The TE found that with the switch on, existing non-alpha households, which have no table readings yet, drop to "No covers yet" until each document is read again (paid). I missed this: I tested the flag in isolation, not on households whose stored data predates the table. The next head must keep existing households' cover visible with no paid re-read.
+
+## R497 — READY: #248 f3cdb31e, #249 53c1b0fd, #250 33d22027, #251 962fb04b, #252 8366308, #254 0eef6ef, #255 f7cea147
+- #248: M4 is fixed. A condition on the line above the % now gives null, because all text before the % goes through the allow-list (critic/p248c-prefix2.mts).
+- #249: the fallback checks the table first. A household with a benefit reading stays on the table. A household with old documents or coverage_rules keeps its existing Coverage. An error affects only that one request. all-accounts 21, guard green.
+- #252: every word of the row name must be on a closed illness/stage list, and only the section and cover names are read. Probes: critic/p252-ci.mts, p252b-ci.mts.
+- #254: the link tie-break applies only between exact namesakes. Partial name matches go to ambiguousCovers (critic/p254-names.mts).
+- #251, #255: their DB suites skip without a schema, so I ran them by hand with db:setup and benefit-table.sql (5/5 and 4/4).
+
+## R498 — #253 a916c3e then cbc9f10 (NOT ready)
+- The store.ts DELETE of untouched old schedule rows has the right shape. The TPD line seeds its own sum.
+- lifecycle-query-guard was RED at a916c3e (the family_members join). Fixed at cbc9f10.
+- Still open, M1(a): "counted elsewhere" matches by policy number alone across insurers. (c) Assert that the owner's summary includes the record.
+- L1: home country comes from currencies. An expat with only GBP policies gets home = UK.
+- It conflicts with #257 in policy-answer.ts.
+
+## R499 — #256 bb954d7, b966f8e, 2c3c255, 9c3e18d
+- M1: a rejected row did not block the schedule line. Fixed. Then narrowed to "every event of the line's own category rejected" (TE F1), and seed events are used for categories outside the map (TE F2).
+- The predicate matches the dashboard. Gate on 9c3e18d pending.
+
+## R500 — #257 ebebe9a4 (NOT ready)
+- The "ended" state is removed. Only a printed lapse is reported.
+- M1: a passed end date is now "in_force", and the days-left branch prints "ends on <date> — -27 days from today".
+- M2: it conflicts with #253. Suggest also dropping the age-based "not confirmed current" line.
