@@ -175,6 +175,7 @@
     "v11:claims-test": "node --import tsx scripts/v11-claims-regressions.ts && node --import tsx scripts/v11-claims-estimate-regressions.ts",
     "r5:answer-test": "node --import tsx scripts/r5-answer-regressions.ts",
     "policies:te159-test": "node --import tsx scripts/policies/te-pr159-test.ts",
+    "policies:prevailing-amount-test": "node --import tsx scripts/policies/prevailing-amount-test.ts",
     "policies:doc-card-title-test": "node --import tsx scripts/policies/doc-card-title-test.ts",
     "policies:nameless-benefit-test": "node --import tsx scripts/policies/nameless-benefit-test.ts",
     "documents:no-guessed-cover-test": "node --import tsx scripts/documents/no-guessed-cover-test.ts",
