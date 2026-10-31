@@ -9,6 +9,8 @@ export const COVER_KINDS: { id: string; label: string; gapLabel?: string; events
   { id: "accident", label: "Accidents and injuries", gapLabel: "accident cover", core: true, events: ["accidental_death", "fracture", "dismemberment", "accidental_disablement", "accident_medical_expense"] },
   { id: "travel", label: "Travel", events: ["travel_delay", "trip_cancellation", "baggage", "travel_medical"] },
   { id: "property", label: "Home and vehicle", events: ["motor_damage", "home_damage"] },
+  // A plan whose own name or document says it is a savings or investment-linked plan (lib/coverage/plan-type.ts), as Home's tiles.
+  { id: "savings", label: "Savings and investment", events: [] },
   { id: "other", label: "Other", events: [] },
 ];
 export const coverKindOf = (eventType: string) => COVER_KINDS.find((k) => k.events.includes(eventType)) ?? COVER_KINDS[COVER_KINDS.length - 1];
@@ -31,7 +33,7 @@ export const kindOfName = (name: string) => {
 
 /** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
 export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; coverEnded?: string | null };
-export type TableKindCover = { product: string; cover: string; ended?: string | null };
+export type TableKindCover = { product: string; cover: string; ended?: string | null; planType?: { kind: string } | null };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
  * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
@@ -77,6 +79,7 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     else if (!cover) found.add("other");
   }
   for (const c of covers) if (!c.ended && !counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  for (const c of covers) if (!c.ended && c.planType?.kind) found.add("savings");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 

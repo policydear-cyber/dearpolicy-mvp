@@ -8,6 +8,7 @@
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
+import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
@@ -140,7 +141,9 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
-  periodFrom?: string | null; periodTo?: string | null; covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[] };
+  periodFrom?: string | null; periodTo?: string | null; covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[];
+  /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
+  planType?: PlanType | null };
 
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000). */
 export function numbersIn(text: string): number[] {
@@ -437,6 +440,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   // The document's period of cover counts only where a page prints it.
   const printedPeriod = (v: unknown) => doc.pages.map((p) => dateOnPage(str(v), p.text)).find(Boolean) ?? null;
   out.periodFrom = printedPeriod(d.periodFrom); out.periodTo = printedPeriod(d.periodTo);
+  out.planType = planTypeOfPages(doc.pages);
   const household = asHousehold(doc);
   const pageText = (n: number) => doc.pages.find((p) => p.page === n)?.text ?? "";
   // Where on its page each located quote is printed, for reading the row around it.

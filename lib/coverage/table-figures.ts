@@ -4,6 +4,8 @@
 import { rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { MONEY_SIGN, normalizeCurrencyCode } from "@/lib/format/currency";
 import { canonicalInsurer } from "@/lib/policies/insurer-name";
+import type { PlanType } from "@/lib/coverage/plan-type";
+import { printedDay } from "@/lib/benefit-table/dates";
 
 /** Benefit names, as policies in any market print them, for each category. Early critical illness is tested before
  * critical illness. A death or disability benefit paid only on an accident ("Accidental Death", "Death due to
@@ -127,16 +129,54 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
   return category;
 }
 
-/** A premium the person pays, never a benefit (chat.ts's PREMIUM_ROW). */
-const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
+/** One person's cover by whole-policy kind (Travel, Savings, Investment), the one rule Home and the Coverage page use: the
+ * kind belongs to the policy, never to one benefit's name. Travel by the cover's own name (travelName); savings and
+ * investment by the plan type its name or its document's own words state (lib/coverage/plan-type.ts). `current` names
+ * each current policy once; `endedOn` is the latest printed last day when every such policy has ended (a single trip that
+ * is over), so Home says it ended instead of "Not found". A held cover counts even before any row is linked to it. */
+export type KindEntry = { current: string[]; endedOn: string | null; note: string | null };
+type KindCover = CoverNames & { riderOf?: string | null; ended?: string | null; planType?: PlanType | null };
+export function personKinds(covers: KindCover[], rows: (SummaryRow & CoverNames)[]): Map<string, KindEntry> {
+  const out = new Map<string, KindEntry>();
+  const add = (category: string, name: string, ended: string | null, note: string | null = null) => {
+    const e = out.get(category) ?? { current: [], endedOn: null, note: null };
+    if (ended) { if (!e.endedOn || (printedDay(ended) ?? 0) > (printedDay(e.endedOn) ?? 0)) e.endedOn = ended; }
+    else if (!e.current.includes(name)) { e.current.push(name); e.note ??= note; }
+    out.set(category, e);
+  };
+  const travelLabel = (c: CoverNames) => [c.cover || c.product, c.plan && c.plan !== c.cover ? `${c.plan} plan` : null].filter(Boolean).join(" · ") || "Travel policy";
+  for (const c of covers) {
+    if (!c.riderOf && travelName(c)) add("Travel", travelLabel(c), c.ended ?? null);
+    const kind = c.planType?.kind;
+    if (kind) add(kind === "savings" ? "Savings" : "Investment", c.product || c.cover || "Policy", null,
+      c.planType!.page != null ? `${kind === "savings" ? "A savings plan" : "An investment-linked plan"}: its document says "${c.planType!.quote.slice(0, 120)}" (page ${c.planType!.page}).`
+        : `${kind === "savings" ? "A savings plan" : "An investment-linked plan"}, as its name says.`);
+  }
+  // A travel cover only rows name (its schedule line not matched to the person): its paying rows say whether it is current.
+  for (const r of rows) if (travelName(r) && r.pays !== "not_covered" && r.pays !== "value") add("Travel", travelLabel(r), r.coverEnded ?? null);
+  // A policy with one current cover is current, whatever an older trip of the same name did.
+  for (const e of out.values()) if (e.current.length) e.endedOn = null;
+  return out;
+}
+
+/** A premium the person pays, never a benefit (chat.ts uses the same). A benefit worked out from the premiums paid is a
+ * benefit: "Waiver of Premium", "Return of Premium", and a share of them ("Death benefit: higher of 105% of total premiums
+ * paid to date", "sum of all premiums paid"); left out, a Death tile added up the other policies as if they were all of it. */
+export const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*)(?!.*(?:\b\d+(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:total\s+|all\s+)?(?:annual\s+|basic\s+)?premiums?|\b(?:sum|total)\s+of\s+(?:all\s+|the\s+)?(?:the\s+)?premiums?\s+paid)\b).*\bpremiums?\b/i;
 /** The person's rows for the category: rows that pay something the person holds, never a projection, a fund or
  * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). Nor a
  * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
-export function categoryRows<T extends SummaryRow>(category: string, rows: T[]): T[] {
+export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
 }
+
+/** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip
+ * cancellation, baggage and medical expenses abroad are all Travel rows when the cover's own name says it is travel
+ * insurance (travelName below), whatever each benefit is called. A benefit name alone never makes a row travel ("Daily
+ * hospital cash while overseas" in a hospital plan). Its rows still count for their own tiles too. */
+type CoverNames = { cover?: string | null; plan?: string | null; product?: string | null };
 
 /** Travel cover needs two signals together (TE P147-6): the cover's own product, cover or plan name says travel insurance
  * ("Travel insurance", "Single Trip", "Annual Multi-Trip"), and EVERY one of its rows here pays only abroad ("while overseas"):
@@ -298,6 +338,8 @@ export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability
 export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
+/** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
+export type KnownSum = { amount: number; currency: string; without: string[] };
 export type TilePart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean };
 /** A survival or waiting period only decides when a sum is paid, not how much: an allow-list of its words, every word known. */
 const TIMING_WORDS = new Set(["the", "a", "an", "life", "assured", "insured", "person", "survives", "survive", "surviving", "survival", "at", "least",
@@ -345,7 +387,7 @@ const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figur
  * insured where it has one, or, when its rows print no amount at all, its sum insured with its stated currency; else no
  * amount. The total is given only when every part has an amount in one currency and nothing may be one policy counted
  * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
-export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null } {
+export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null; known: KnownSum | null } {
   const covers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
     const own = held.filter((h) => policyOf(h) === key);
     const sums = new Map<string, { amount: number; currency: string }>();
@@ -423,7 +465,13 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     && !!words(a.name) && words(a.name) === words(b.name)))) unsure = true;
   const currencies = new Set(parts.map((p) => p.currency));
   const total = !unsure && parts.length && parts.every((p) => p.amount != null) && currencies.size === 1 ? parts.reduce((t, p) => t + p.amount!, 0) : null;
-  return { parts, total };
+  // The policies with a fixed sum, added up, where another policy's amount is not a fixed sum (a death benefit of "the
+  // higher of 105% of premiums paid or the cash value"): shown as those policies' sum with the other policy named, never
+  // as the whole. Only when nothing may be counted twice and the fixed sums share one currency.
+  const fixed = parts.filter((p) => p.amount != null && p.currency);
+  const known = total == null && !unsure && fixed.length && fixed.length < parts.length && new Set(fixed.map((p) => p.currency)).size === 1
+    ? { amount: fixed.reduce((t, p) => t + p.amount!, 0), currency: fixed[0].currency!, without: parts.filter((p) => p.amount == null).map((p) => p.name) } : null;
+  return { parts, total, known };
 }
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);
