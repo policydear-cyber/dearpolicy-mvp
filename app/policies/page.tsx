@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
-import { failedDocumentAdvice } from "@/lib/documents/failure-advice";
+import { failedDocumentAdvice, readInPartAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
@@ -466,6 +466,12 @@ export default function PoliciesPage() {
               ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div></>
               : <small>You can keep using the app while this finishes.</small>}
           </div>}
+
+          {/* Read in part: which pages, and the next step that can work (lib/documents/failure-advice.ts). */}
+          {!processing && policy.processing_status === "ready" && (() => {
+            const part = readInPartAdvice(policy.processing_message);
+            return part && <div className="accuracy-warning" data-testid="read-in-part"><b>Read in part</b><span>{part.what}</span><small>{part.next}</small></div>;
+          })()}
 
           {!processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
 

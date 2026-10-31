@@ -110,3 +110,22 @@ export function failedDocumentChatAdvice(error: string | null | undefined, { has
         : CHAT_UPLOAD_STEP[advice.kind] ?? CHAT_UPLOAD_STEP.unknown!;
   return { kind: advice.kind, why, step };
 }
+
+/** What the Documents page tells a household about a document read in part (lib/documents/layout-check.ts
+ * uncheckedPagesNote): which pages, what that means, and the next step that can work. The status said only "Read in
+ * part", with no next step (live review on 4103e10, finding 5). Allow-list: only the note DearPolicy writes is shown,
+ * page numbers and all; any other text gets the plain sentence. */
+export type ReadInPartAdvice = { what: string; next: string };
+const NUMBERS = String.raw`\d{1,4}(?:(?:, | and )\d{1,4})*`;
+const WHOLE = new RegExp(String.raw`^Pages? ${NUMBERS} could not be checked: a second reading from the page image did not agree with (?:its|their) text, so no amount on (?:it|them) is used\.$`);
+const PART = new RegExp(String.raw`^Some amounts on pages? ${NUMBERS} could not be checked against the page image, so they are shown as not checked and not used; the rest of (?:that page|those pages) agreed and is used\.$`);
+export function readInPartAdvice(message: string | null | undefined): ReadInPartAdvice | null {
+  const text = (message ?? "").trim();
+  if (!/^Read in part\b/.test(text)) return null;
+  const sentences = text.replace(/^Read in part\.\s*/, "").split(/(?<=\.)\s+(?=(?:Pages?|Some amounts) )/).filter(Boolean);
+  const known = sentences.length > 0 && sentences.every((s) => WHOLE.test(s) || PART.test(s));
+  return {
+    what: known ? sentences.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
+    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it and delete this one. Read again checks those pages once more.",
+  };
+}
