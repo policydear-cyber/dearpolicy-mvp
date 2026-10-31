@@ -199,13 +199,26 @@ const PAID_IN = String.raw`(?:\b(?:${PAID_IN_WORD})\b|${PAID_IN_CJK})`;
  * ("Death benefit: total contributions paid plus profit", "higher of sum assured or premiums paid to date", TE R276 F2);
  * a row that just states it ("Total premiums paid", "Premiums paid to date") is a premium statement. A rebate
  * is money back, never a cover sum, so it stays withheld (Critic R276 H1). */
+/** What was paid in, in total: "total premiums paid", "all contributions paid", "jumlah sumbangan dibayar", "premiums paid to
+ * date". Inside a frame, nothing between the frame word and it may be a figure, ";", ":" or " - " (another label). */
+const TOTAL_PAID = String.raw`(?:(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b)`;
+const FRAME_GAP = String.raw`(?:(?![\d;:]|\s[-–—]\s)[^\n])*?`;
+const PAID_BACK_FRAMES = [
+  // "higher of sum assured or total premiums paid"; "sum assured or premiums paid to date, whichever is higher".
+  String.raw`\b(?:higher|greater)\s+of\b${FRAME_GAP}${TOTAL_PAID}`,
+  String.raw`${TOTAL_PAID}${FRAME_GAP},?\s*whichever\s+is\s+(?:higher|greater)\b`,
+  // A benefit name starts the clause, then ":" or "=": "Death benefit: total contributions paid", "Manfaat kematian: jumlah sumbangan dibayar".
+  String.raw`(?:^|;)\W*(?:[\p{L}']+\s+){0,2}(?:benefits?|(?:manfaat|faedah)(?:\s+[\p{L}']+)?)\s*[:=]\s*${TOTAL_PAID}`,
+  // "total contributions paid plus profit".
+  String.raw`${TOTAL_PAID}\s+plus\s+(?:profits?|bonus(?:es)?|interest|dividends?|keuntungan|hibah)\b`,
+];
 const PAID_BACK = new RegExp([
   String.raw`\b(?:returns?|returned|refunds?|refunded|repaid|repayment|waiv\w*|pengembalian|pemulangan|pengecualian|pembebasan|remboursement|exon[ée]ration|devoluci[óo]n|devolu[çc][ãa]o)\s+(?:(?:of|des?|du|atas|del?|da|do)\s+)?(?:(?:the|all|future|total|your|outstanding|la|las|los|les)\s+)*${PAID_IN}`,
   String.raw`${PAID_IN}\s+(?:(?:is|are|will\s+be|to\s+be)\s+)?(?:waived|waiver|refunded|refunds?|returned|dikembalikan|dikecualikan)\b`,
   String.raw`(?:beitrags|prämien|praemien)(?:befreiung|r[uü]ckgew[aä]hr|r[uü]ckerstattung)|(?:退还|返还|豁免|退還|返還)(?:${PAID_IN_CJK})|(?:${PAID_IN_CJK})(?:豁免|退还|返还|退還|返還)`,
   String.raw`\b\d+(?:\.\d+)?\s?%\s+(?:of|des?|dari)\s+(?:(?:the|total|all|jumlah)\s+)*${PAID_IN}(?:\s+(?:paid|dibayar|payés?|pagad[oa]s?))?`,
-  // The total paid, paid back: only after words that name what pays it, earlier in the same row.
-  String.raw`\b(?:benefits?|manfaat|faedah|sum\s+(?:assured|insured|covered)|higher|greater|whichever|or|plus|payable\s+(?:on|upon)|pays?|upon\s+death|on\s+death)\b.*?\b(?:(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b)`,
+  // The total paid, paid back: only inside a frame that names what pays it, anchored by position (Critic R276 H1 r2).
+  ...PAID_BACK_FRAMES,
 ].join("|"), "iu");
 /** A note in brackets after a figure ("Premium RM300 (refund of premium on cancellation)") says how the figure behaves; the
  * name before the figure says what it is (Critic R276 L). */

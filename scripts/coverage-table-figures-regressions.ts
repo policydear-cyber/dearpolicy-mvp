@@ -179,6 +179,10 @@ test("PREMIUM: a paid-in row in any market is a premium; a pay-back or waiver on
     // A statement of what was paid in is no benefit, and a rebate is money back, never a cover sum (Critic R276 H1).
     "Total premiums paid S$12,000", "Total premium paid to date S$12,000", "Premiums paid to date S$8,400", "Total contributions paid RM3,600",
     "Jumlah sumbangan dibayar RM3,600", "Premium rebate RM50", "Contribution Rebate RM300", "Hibah (contribution-linked) RM50,000",
+    // Benefit-like words in another label of the same row never frame the total (Critic R276 H1 round 2).
+    "Annual or monthly mode: total premiums paid S$12,000", "Benefits statement - total premiums paid to date S$12,000",
+    "Premium payable on renewal: total premiums paid S$12,000", "Sum assured S$500,000; total premiums paid S$12,000",
+    "Benefits statement: total premiums paid S$12,000", "Death benefit higher of S$100,000 or total premiums paid", "Ringkasan manfaat - jumlah sumbangan dibayar RM3,600",
     // A note after the figure never decides when the name before it is a premium (Critic R276 L); named only in the note, a contribution is one.
     "Premium RM300 (refund of premium on cancellation)", "Death cover RM30 (monthly contribution)"];
   for (const t of paidIn) assert.equal(PREMIUM.test(t), true, t);
@@ -191,6 +195,7 @@ test("PREMIUM: a paid-in row in any market is a premium; a pay-back or waiver on
     // What was paid in, paid back (TE R276 F2), and benefits that only name a contribution (TE R276 over-matches).
     "Death benefit: total contributions paid plus profit", "Death benefit: all premiums paid to date", "Death benefit: premiums paid to date",
     "Death benefit higher of sum assured or total premiums paid", "Sum assured or premiums paid to date, whichever is higher", "Manfaat kematian: jumlah sumbangan dibayar",
+    "Maturity benefit = total premiums paid", "Total contributions paid plus profit", "Greater of the account value or all premiums paid",
     "Refunded Premiums upon Death", "Waived Premiums on TPD", "Hospital income contribution RM100/day", "Funeral expenses contribution", "Employer contribution benefit"];
   for (const t of benefit) assert.equal(PREMIUM.test(t), false, t);
 });
