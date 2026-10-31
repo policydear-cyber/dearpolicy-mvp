@@ -1275,3 +1275,4 @@ div.answer-point { display: grid; gap: 4px; }
 .account-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .account-tabs a:hover { color: var(--ink); }
 .account-tabs a.active { color: var(--ink); border-bottom-color: var(--accent); }
+.section-links { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: flex-end; }

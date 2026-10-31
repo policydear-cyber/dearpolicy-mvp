@@ -1466,7 +1466,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   // Round 7: rows a schedule prints per age band ("Deductible (A ward, age 80
   // and below)" / "(age 81 and above)") apply to the person by their age on
-  // the day asked: from their date of birth on the Household page, else the
+  // the day asked: from their date of birth on People (Account settings), else the
   // date of birth the document prints for them. The other band is left out.
   const ages = new Map<string, number>();
   {

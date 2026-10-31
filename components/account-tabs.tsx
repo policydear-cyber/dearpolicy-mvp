@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Account settings is one place in the menu with three pages: the household itself, the people in it (the
- * family profiles DearPolicy matches to documents, and who can sign in), and this month's plan usage. */
+/** Account settings is one place in the menu with three pages: the people in the household (the family
+ * profiles DearPolicy matches to documents, and who can sign in), the household itself, and this month's plan usage. */
 const TABS = [
-  { href: "/household", label: "Household" },
   { href: "/family", label: "People" },
+  { href: "/household", label: "Household" },
   { href: "/usage", label: "Plan usage" },
 ];
 

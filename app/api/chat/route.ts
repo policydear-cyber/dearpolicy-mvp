@@ -13,7 +13,7 @@ import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 import { overSpendCap, SPEND_LIMIT_TEXT } from "@/lib/ai/ledger";
 
-const NO_FAMILY_MESSAGE="Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.";
+const NO_FAMILY_MESSAGE="Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=300;

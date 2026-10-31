@@ -57,9 +57,6 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.goto("/");
     await tabTo(page, (f) => f.tag === "a" && f.text === "Account settings", "the Account settings navigation link");
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/household$/);
-    await tabTo(page, (f) => f.tag === "a" && f.text === "People", "the People tab");
-    await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/family$/);
 
     await tabTo(page, (f) => f.id === "fm-new-name", "the new person's name field");

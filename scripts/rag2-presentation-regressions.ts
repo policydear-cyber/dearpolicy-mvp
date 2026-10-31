@@ -198,7 +198,7 @@ async function main() {
   { const [t] = await run(SC.S1);
     await check("P4c negative: a household member resolves normally (no 'couldn't identify')", () => { assert.doesNotMatch(t.v, /couldn’t identify/, info(t)); assert.match(t.v, /S\$600/); }); }
   await check("P4d unit: the wording names only what the household typed", () => {
-    assert.equal(unknownPersonText(["Grandma Lim"]), "I couldn’t identify “Grandma Lim” among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.");
+    assert.equal(unknownPersonText(["Grandma Lim"]), "I couldn’t identify “Grandma Lim” among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them under Account settings > People.");
   });
 
   // ================================================================ P5 supplied facts are used

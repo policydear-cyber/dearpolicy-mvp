@@ -198,7 +198,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
             WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2) ORDER BY p.created_at, pp.page_number`,
           [args.accountId, person.id]).catch(() => ({ rows: [] }))).rows.find((r) => forms.some((f) => r.text.toLowerCase().includes(f.toLowerCase())));
         const citations: ChatCitation[] = printed ? [{ chunkId: "page:" + printed.id + ":" + printed.page, policyId: printed.id, policyName: printed.product ?? "Policy document", insurer: cleanInsurer(printed.insurer) ?? undefined, pageStart: printed.page, pageEnd: printed.page, documentRole: printed.role }] : [];
-        return { summary: (isSelf(person) ? "You are " : personName(person) + " is ") + age + " (born " + longDate(dob) + (printed ? ", as " + (printed.product ?? "the policy document") + " prints it on page " + printed.page : ", as recorded on the Household page") + ").",
+        return { summary: (isSelf(person) ? "You are " : personName(person) + " is ") + age + " (born " + longDate(dob) + (printed ? ", as " + (printed.product ?? "the policy document") + " prints it on page " + printed.page : ", as recorded under Account settings > People") + ").",
           details: [], citations, personId: person.id };
       }
     }

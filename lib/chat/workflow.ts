@@ -310,7 +310,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   if(simpleChatEnabled(process.env,request.accountId))return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).prepareLoopChat(request);
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
-  if(!family.length)throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
+  if(!family.length)throw new ChatConflict("Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.");
   if(request.familyMemberId&&!family.some(p=>p.id===request.familyMemberId))throw new Error("Family profile not found.");
   // Round 9: the household's own words (Malay, Tamil, Hokkien, numbers as words, a policy number)
   // are read in plain English; the message is still shown as typed (lib/chat/plain-questions.ts).
@@ -1189,7 +1189,7 @@ function outsideHouseholdReply(outside:{relation:string;name:string|null},messag
       return say("Their family can help "+who+" claim from "+whose+" own cover, but can’t claim "+whose+" bills under their own policies. The hospital’s medical social workers can also help them apply for financial assistance.");
     if(earlier.died)return say("For "+who+"’s family, the usual first steps are: get the death certificate, then contact each insurer "+who+" had a policy with (through the agent or the insurer’s claims line), and "+whose+" employer’s HR in case there was group life cover through work.");
     return say(Who+" can claim from "+whose+" own insurance, if there is any — the insurer or agent will say what to send. MediShield Life (for citizens and PRs) helps with large hospital bills, and the hospital’s medical social workers can advise on financial help.",
-      [],["If "+who+" should be part of your household on DearPolicy, add them on the Household page and upload their policy documents."]);
+      [],["If "+who+" should be part of your household on DearPolicy, add them under Account settings > People and upload their policy documents."]);
   }
   const Who=who.charAt(0).toUpperCase()+who.slice(1);
   const died=/\b(?:died|passed away|passed on|was killed|death)\b/i.test(message);
@@ -1202,7 +1202,7 @@ function outsideHouseholdReply(outside:{relation:string;name:string|null},messag
       nextSteps:["If someone in your own household was affected too, tell me who and what happened, and I’ll check their policies."]}
     :{summary:Who+" isn’t in your household on DearPolicy, so I can’t see "+(outside.name?outside.name+"’s":"their")+" policies — and your family’s policies cover only the people named on them.",
       details:["The claim would go to "+(outside.name?outside.name+"’s":"their")+" own insurer, or through an employer’s group insurance if there is one."],
-      nextSteps:["If "+who+" should be part of your household on DearPolicy (for example a parent you support), add them on the Household page and upload their policy documents, then ask again."]};
+      nextSteps:["If "+who+" should be part of your household on DearPolicy (for example a parent you support), add them under Account settings > People and upload their policy documents, then ask again."]};
 }
 /** "My knee surgery is next week": nothing to claim yet; what to do before it. */
 function plannedEventReply(person:ClaimPerson,message:string,earlier?:string){
@@ -1837,7 +1837,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         " in your household, but not as "+unknownName+". Tap the person this is about."
       :unknownName&&/^your /i.test(unknownName)
       ?unknownName.replace(/^your/,"Your")+" isn’t in your household on DearPolicy, so I don’t have their policies — I can only see the policies of the people in your household. I’m not sure which family member you mean."
-      :unknownName?"I can’t find anyone called “"+unknownName+"” in your household, so I’m not sure which family member you mean. If they should be here, add them on the Household page and upload their policy documents."
+      :unknownName?"I can’t find anyone called “"+unknownName+"” in your household, so I’m not sure which family member you mean. If they should be here, add them under Account settings > People and upload their policy documents."
       :resolution.status==="ambiguous"?"I’m not sure which family member you mean — more than one person in your household fits."
       :"I’m not sure which family member this is about.";
     answer.questions=[{id:"claim_person",text:"Who is this about?",type:"choice",why:"Each person’s own policies are the ones that apply."}];

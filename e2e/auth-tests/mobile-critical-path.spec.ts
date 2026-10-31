@@ -53,7 +53,7 @@ test.describe.serial("mobile critical path", () => {
     await expectNoHorizontalScroll(page, "documents with a card");
 
     // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Claims and More;
-    // Payments and Account settings sit in the sheet that More opens, and People is a tab of Account settings.
+    // Payments and Account settings sit in the sheet that More opens, and Account settings opens on People.
     const bar = page.locator(".sidebar .nav");
     await expect(bar.locator('a[href="/chat"]')).toBeVisible();
     await expect(bar.locator('a[href="/records"]')).toBeHidden();
@@ -61,10 +61,8 @@ test.describe.serial("mobile critical path", () => {
     await expect(page).toHaveURL(/\/claims$/);
     await bar.getByRole("button", { name: "More" }).tap();
     await page.locator("#nav-more-sheet").getByRole("menuitem", { name: "Account settings" }).tap();
-    await expect(page).toHaveURL(/\/household$/);
-    await expect(page.locator("#nav-more-sheet")).toHaveCount(0);
-    await page.getByRole("navigation", { name: "Account settings" }).getByRole("link", { name: "People" }).tap();
     await expect(page).toHaveURL(/\/family$/);
+    await expect(page.locator("#nav-more-sheet")).toHaveCount(0);
     await expect(page.locator(`.profile-card input[value="${person}"]`)).toHaveCount(1);
   });
 
