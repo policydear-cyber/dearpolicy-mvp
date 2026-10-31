@@ -6,6 +6,7 @@
  * against the stored pages and assembled from scratch (check.ts, completeness.ts, assemble.ts), so a change to the
  * checks, a re-read, a removed document or a removed person shows at once, and no stored row can go stale. */
 import { assembleTable, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
+import { createHash } from "node:crypto";
 import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
@@ -147,6 +148,22 @@ export function checkStored(doc: SourceDoc, stored: StoredReading): CheckedReadi
   return reading;
 }
 
+/** A stored reading checked against today's pages, remembered for this server instance: the check is the same for the same
+ * reading, pages, names and code, and it is most of the Benefits page's time on a large library. Keyed by a hash of all
+ * of them, so a re-read, an edited page or a renamed person checks afresh; a copy is handed out, so nothing a caller
+ * changes is remembered. At most 200 documents are kept. */
+const checkedCache = new Map<string, CheckedReading>();
+export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReading {
+  const hash = createHash("sha256").update(JSON.stringify([doc.id, doc.name, doc.readable, doc.people ?? null, doc.pages, stored])).digest("base64");
+  let hit = checkedCache.get(hash);
+  if (!hit) {
+    hit = checkStored(doc, stored);
+    if (checkedCache.size >= 200) checkedCache.clear();
+    checkedCache.set(hash, hit);
+  }
+  return structuredClone(hit);
+}
+
 /** Reads one document into the table: the whole document once, then each page whose figures were mostly left unread.
  * Replaces any earlier reading of the document. A document the app could not read is not sent. */
 export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number }> {
@@ -179,7 +196,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   const [people, docs] = await Promise.all([family(db, accountId), documents(db, accountId)]);
   const stored = new Map((await db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId]))
     .map((r) => [String(r.policy_id), (typeof r.reading === "string" ? JSON.parse(r.reading) : r.reading) as StoredReading]));
-  const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [checkStored(d, stored.get(d.id)!)] : []));
+  const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [checkedOnce(d, stored.get(d.id)!)] : []));
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));
