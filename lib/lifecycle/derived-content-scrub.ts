@@ -21,7 +21,7 @@
  *   - every cached chat analysis of that household is dropped (they are keyed by a hash, so which document each one
  *     came from cannot be told; they are only a 24-hour cache and are rebuilt on the next question).
  *   - its ledger rows are deleted.
- *   - one content-free audit entry records that this was done, with counts only. That entry is also what marks the
+ *   - one content-free audit entry records that this was done (who, what, when and a status key; nothing else). That entry is also what marks the
  *     document as done, so each document is handled once.
  *
  * It runs when a deletion finishes (lib/lifecycle/coordinator.ts) and on every request drain
@@ -157,10 +157,11 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
     const r = await tx.query(`DELETE FROM coverage_rules WHERE account_id=$1 AND policy_id=$2`, [doc.account_id, doc.id]);
     counts.ledgerRowsRemoved = r.rowCount ?? 0;
   }
-  // The content-free record: who/what/when and counts only.
+  // The content-free record: who, what and when, and a status key only (the counts are returned, not stored, so the
+  // entry stays as it is when the document's own audit payloads are reduced to status keys).
   await tx.query(
     `INSERT INTO policy_document_audit_log(account_id,actor,action,previous_value,new_value,policy_id,reason,reason_code)
      VALUES($1,'system',$2,NULL,$3::jsonb,$4,NULL,'DERIVED_CONTENT_SCRUBBED')`,
-    [doc.account_id, DERIVED_SCRUB_ACTION, JSON.stringify(counts), doc.id]);
+    [doc.account_id, DERIVED_SCRUB_ACTION, JSON.stringify({ status: DERIVED_SCRUB_ACTION }), doc.id]);
   return counts;
 }

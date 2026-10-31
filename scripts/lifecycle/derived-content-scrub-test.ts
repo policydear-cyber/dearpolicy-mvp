@@ -167,13 +167,28 @@ async function main() {
     const rows = (await q<{ policy_id: string; quote: string }>(`SELECT policy_id::text,quote FROM coverage_rules WHERE account_id=$1`, [acc])).rows;
     assert.deepEqual(rows.map((r) => r.policy_id), [kranken]);
   });
-  await t("one content-free audit entry records it (counts only), and a second pass does nothing", async () => {
-    const audit = (await q<{ new_value: Record<string, number>; reason: string | null; reason_code: string }>(`SELECT new_value,reason,reason_code FROM policy_document_audit_log WHERE policy_id=$1 AND action=$2`, [vida, DERIVED_SCRUB_ACTION])).rows;
-    assert.equal(audit.length, 1); assert.equal(audit[0].reason, null); assert.equal(audit[0].reason_code, "DERIVED_CONTENT_SCRUBBED");
-    // (the document's own catalogue checkpoint already went when the deletion was asked for; the hash-keyed analysis goes here)
-    assert.deepEqual(audit[0].new_value, { answersRedacted: 3, chatsReset: 1, jobsCleared: 1, cacheDropped: 1, ledgerRowsRemoved: 2 });
+  await t("one content-free audit entry records it (a status key only), and a second pass does nothing", async () => {
+    const audit = (await q<{ actor: string; occurred_at: unknown; previous_value: unknown; new_value: unknown; reason: string | null; reason_code: string }>(`SELECT actor,occurred_at,previous_value,new_value,reason,reason_code FROM policy_document_audit_log WHERE policy_id=$1 AND action=$2`, [vida, DERIVED_SCRUB_ACTION])).rows;
+    assert.equal(audit.length, 1); assert.equal(audit[0].actor, "system"); assert.ok(audit[0].occurred_at);
+    assert.equal(audit[0].reason, null); assert.equal(audit[0].previous_value, null); assert.equal(audit[0].reason_code, "DERIVED_CONTENT_SCRUBBED");
+    assert.deepEqual(audit[0].new_value, { status: DERIVED_SCRUB_ACTION });
+    // The deletion's own audit entries are kept as they were.
+    const actions = (await q<{ action: string }>(`SELECT action FROM policy_document_audit_log WHERE policy_id=$1 ORDER BY id`, [vida])).rows.map((r) => r.action);
+    assert.ok(actions.includes("deleted"), actions.join(","));
     const again = await scrubDeletedDocumentDerivedContent();
     assert.equal(again.documents, 0);
+  });
+  await t("the pass reports what it removed (counts are returned, never stored)", async () => {
+    const acc3 = await household("Haddad household (fictitious)");
+    const layla = await member(acc3, "Layla Haddad", "self");
+    const d = await doc(acc3, layla, { file: "Najm-Health.pdf", insurer: "Najm Insurance (fictitious)", product: "Najm Gold", policyNo: "NG-4410-2271" });
+    await ledgerRow(acc3, layla, d, "Najm Gold", 250000, "AED", "Annual limit AED 250,000");
+    const c = await conversation(acc3, layla, { subjects: { x: { policyId: d } } }, null);
+    await turn(acc3, layla, c, "Limit?", { content: "AED 250,000 a year.", citations: [{ policyId: d }], answer: answerOf("AED 250,000 a year.", d, "Najm Gold", "Annual limit AED 250,000", 250000, "AED", "Layla Haddad") });
+    await q(`INSERT INTO policy_analysis_cache(account_id,cache_key,analysis_json) VALUES ($1,$2,'{}')`, [acc3, "c".repeat(64)]);
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [d]);
+    const r = await scrubDeletedDocumentDerivedContent({ policyIds: [d] });
+    assert.deepEqual(r, { documents: 1, answersRedacted: 1, chatsReset: 1, jobsCleared: 0, cacheDropped: 1, ledgerRowsRemoved: 1, failed: 0 });
   });
   await t("another household's chat and cache are never touched", async () => {
     const o = await msg(otherAnswer);
