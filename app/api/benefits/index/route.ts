@@ -9,6 +9,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
 import { BENEFIT_READ_FAILURE_KEY,READ_FAILURE_REASON,noteReadFailure,readFailureNotes } from "@/lib/policies/read-failures";
 import { maskIdentityText,maskShownText } from "@/lib/chat/identity-numbers";
+import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -22,14 +23,18 @@ export const ROUTE_AUTH = "household-member" as const;
  * quicker than a full re-analysis and cannot disturb anything that was
  * extracted from the original file. */
 type Unread={id:string;name:string;product_name:string|null;pages:number};
+/** Never a receipt, statement, letter, bill or note: intake reads no benefits from those (lib/rag/ingest.ts), so one
+ * that was never marked read (uploaded before that rule, or its role changed after) is not "still being read", and
+ * reading it again would pay to find nothing. */
 async function unreadDocuments(accountId:string){
   const result=await query<Unread>(
     `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
             (SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS pages
        FROM policies p
       WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL AND ${activePredicate("p")}
+        AND NOT (coalesce(p.document_role,'')=ANY($2::text[]))
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
-      ORDER BY p.created_at`,[accountId]);
+      ORDER BY p.created_at`,[accountId,[...NO_COVER_READING_ROLES]]);
   return result.rows;
 }
 
