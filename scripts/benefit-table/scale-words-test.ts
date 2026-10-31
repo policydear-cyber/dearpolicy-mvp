@@ -33,10 +33,12 @@ t("milestone", has("Bonus\tS$5,000 milestone", 5_000));
 t("millionaire", has("Plan\tRM 50,000 millionaire", 50_000));
 t("months", has("Waiting period\t10 months", 10) && !has("10 months", 10_000_000));
 t("minutes", has("3 mins", 3));
-// A short word with no currency beside the figure is no scale: a count is read bare (Critic #265 M1).
-t("100 MD consultations is 100", has("Outpatient\t100 MD consultations", 100) && !has("100 MD consultations", 100_000_000_000), numbersIn("100 MD consultations"));
+// A scale word with no allowed currency beside the figure: the figure prints nothing, never bare and never scaled (TE #265 F3).
+t("100 MD consultations prints nothing", numbersIn("Outpatient\t100 MD consultations").length === 0, numbersIn("100 MD consultations"));
+for (const text of ["Cover\t3 Mio.", "Cover\t3 Mio", "Cover\t2 Mrd.", "Santunan\t2 jt", "Cover\t5 Cr", "Quyền lợi\t150 tr", "Excess\t5k", "Limit\t2 bn", "Limit\t3 mn", "Santunan\t500 rb"])
+  t(`${text} prints nothing`, numbersIn(text).length === 0, numbersIn(text));
 t("TPD 2 mn: a code-like word is no currency", !has("Limit\tTPD 2 mn", 2_000_000), numbersIn("TPD 2 mn"));
-t("2 k visits is 2", has("Physio\t2 k visits", 2), numbersIn("2 k visits"));
+t("2 k visits prints nothing", numbersIn("Physio\t2 k visits").length === 0, numbersIn("2 k visits"));
 t("Limit 1.5m (no currency) keeps its old million reading", has("Limit\t1.5m", 1_500_000), numbersIn("Limit 1.5m"));
 t("2 Mio. € reads 2 million", has("Leistung\t2 Mio. €", 2_000_000), numbersIn("2 Mio. €"));
 t("S$ 1.25m reads 1.25 million", has("Limit\tS$ 1.25m", 1_250_000) && !has("S$ 1.25m", 1.25), numbersIn("S$ 1.25m"));
@@ -46,7 +48,7 @@ for (const [text, v, bare] of [["Santunan\tRp 2 jt", 2_000_000, 2], ["Santunan\t
   t(`${text}: reads ${v}`, has(text, v), numbersIn(text));
   t(`${text}: never the bare ${bare}`, !has(text, bare), numbersIn(text));
 }
-t("an abbreviation with no currency is a count", has("Physio\t2 tr sessions", 2) && !has("2 tr sessions", 2_000_000), numbersIn("2 tr sessions"));
+t("an abbreviation with no currency prints nothing", numbersIn("Physio\t2 tr sessions").length === 0, numbersIn("2 tr sessions"));
 t("a word that starts like one is no abbreviation", has("Bonus\tRp 2 jtk", 2) || numbersIn("Rp 2 jtk").includes(2), numbersIn("Rp 2 jtk"));
 // Strict first (coordinator, 31 Oct): a local scale word only with its own currency directly beside the figure.
 for (const [text, wrong] of [["Santunan\tS$2 juta", 2_000_000], ["Cover\tRp 5 lakh", 500_000], ["Cover\tS$2 crore", 20_000_000], ["Cover\tUS$2 Cr", 20_000_000],

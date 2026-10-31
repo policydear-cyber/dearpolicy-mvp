@@ -170,10 +170,8 @@ export function numbersIn(text: string): number[] {
       const v = scaledFigure(m[1], null, { scaled: true });
       if (/^(?:million|m)$/.test(word)) { if (v != null) out.push(v * 1e6); continue; }
       if (allowed && currency && (allowed === "any" || allowed.has(currency))) { if (v != null && Number.isFinite(k)) out.push(v * k); continue; }
-      // No currency beside it: a short word is a count ("100 MD consultations", "10 k steps"), read bare; a
-      // long one ("2 juta", "5 lakh", "150 triệu") is a scale whose amount cannot be told here, so it prints no figure.
-      // A currency beside a word it does not go with ("€5 mil", a thousand or a million; "S$2 juta") prints nothing.
-      if (!currency && /^(?:k|mn|bn|md|mil|mio|mln|mrd|mld|tsd|jt|rb|cr|tr)$/.test(word) && Number.isFinite(n)) out.push(n);
+      // Otherwise the figure prints nothing, never the bare figure: with no currency, or one the word does not go with,
+      // which it scales cannot be told ("Cover 3 Mio.", "2 juta", "S$2 juta", "€5 mil", "100 MD consultations") (TE #265 F3).
       continue;
     }
     if (Number.isFinite(n)) out.push(n);
