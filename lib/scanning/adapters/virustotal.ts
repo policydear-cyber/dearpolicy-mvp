@@ -324,9 +324,8 @@ async function lookupFileHash(sha256: string, config: VirusTotalConfig, trace?: 
   if (response.status === 404) return { known: false };
   const json = (await response.json()) as { data?: { attributes?: { last_analysis_stats?: VirusTotalStats } } };
   const stats = json.data?.attributes?.last_analysis_stats;
-  if (!stats || typeof stats.malicious !== "number" || typeof stats.suspicious !== "number") {
-    throw new VirusTotalAdapterError("VirusTotal hash lookup response included no last_analysis_stats.");
-  }
+  // A reply with no usable verdict is treated like "no record" (not scanned, never clean), so the upload is not held.
+  if (!stats || typeof stats.malicious !== "number" || typeof stats.suspicious !== "number") return { known: false };
   return { known: true, stats };
 }
 
@@ -341,7 +340,12 @@ async function scanByHash(bytes: Uint8Array, config: VirusTotalConfig): Promise<
     // Never "clean": nothing analysed this file, and it is not uploaded to find out (privacy). It goes ahead as not scanned.
     return { status: "not_scanned", detail: "VirusTotal has no record of this file, and files are not uploaded (hash-only lookup), so it was not malware-scanned." };
   }
-  return { status: classifyVirusTotalStats(found.stats), detail: describeVirusTotalStats("hash lookup", found.stats) };
+  const s = found.stats;
+  // Known, but no engine actually judged it (only "type unsupported", timeouts or failures): not scanned, never clean.
+  if (s.malicious === 0 && s.suspicious === 0 && !((s.harmless ?? 0) > 0 || (s.undetected ?? 0) > 0)) {
+    return { status: "not_scanned", detail: "VirusTotal knows this file but no scanner analysed it, and files are not uploaded (hash-only lookup), so it was not malware-scanned." };
+  }
+  return { status: classifyVirusTotalStats(s), detail: describeVirusTotalStats("hash lookup", s) };
 }
 
 async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env): Promise<FileScanResult> {

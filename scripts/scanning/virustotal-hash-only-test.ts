@@ -102,8 +102,12 @@ async function main() {
     assert.equal(result.status, "scan_unavailable"); assert.equal(result.retry?.reason, "rate_limited");
     assert.equal(calls.length, 2); assert.equal(sentContent(calls), false);
   });
-  await t("a lookup reply with no analysis stats is an error, not a verdict", async () => {
-    await assert.rejects(() => scan(medical, [() => json(200, { data: { attributes: {} } })]));
+  await t("a lookup reply with no verdict, or one no engine actually judged, is not_scanned (never clean, never held)", async () => {
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: {} } })])).result.status, "not_scanned");
+    const unjudged = { malicious: 0, suspicious: 0, undetected: 0, harmless: 0, timeout: 3, "confirmed-timeout": 0, failure: 1, "type-unsupported": 60 };
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: unjudged } } })])).result.status, "not_scanned");
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { ...unjudged, harmless: 1 } } } })])).result.status, "clean");
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { ...unjudged, malicious: 1 } } } })])).result.status, "infected");
   });
   await t("other made-up documents (£ home schedule, S$ travel) are looked up by their own hash only", async () => {
     for (const d of [doc("Thames Home (fictitious). Policyholder: Oliver Grant. Buildings £350,000."), doc("Wanderlust Travel (fictitious). Traveller: Tan Wei Ming. Medical S$250,000.")]) {
