@@ -195,30 +195,45 @@ const PAID_IN = String.raw`(?:\b(?:${PAID_IN_WORD})\b|${PAID_IN_CJK})`;
  * ("return of contributions", "refund of premiums", "waiver of future premiums", "contributions waived", "premium
  * rebate", "Beitragsrückgewähr", "pengembalian kontribusi", "退还保费"), or a share of what was paid ("105% of total
  * contributions paid"). Anywhere else they say nothing: "Tabarru' contribution (non-refundable) RM30" is a contribution
- * (Critic R276 M1). A Takaful hibah (a gift paid out) is a benefit, and so is what was paid in, paid back ("Death benefit:
- * total contributions paid plus profit", TE R276 F2). */
+ * (Critic R276 M1). What was paid in, paid back, is a benefit only when the row names what pays it BEFORE the total
+ * ("Death benefit: total contributions paid plus profit", "higher of sum assured or premiums paid to date", TE R276 F2);
+ * a row that just states it ("Total premiums paid", "Premiums paid to date") is a premium statement. A rebate
+ * is money back, never a cover sum, so it stays withheld (Critic R276 H1). */
 const PAID_BACK = new RegExp([
   String.raw`\b(?:returns?|returned|refunds?|refunded|repaid|repayment|waiv\w*|pengembalian|pemulangan|pengecualian|pembebasan|remboursement|exon[ée]ration|devoluci[óo]n|devolu[çc][ãa]o)\s+(?:(?:of|des?|du|atas|del?|da|do)\s+)?(?:(?:the|all|future|total|your|outstanding|la|las|los|les)\s+)*${PAID_IN}`,
-  String.raw`${PAID_IN}\s+(?:(?:is|are|will\s+be|to\s+be)\s+)?(?:waived|waiver|refunded|refunds?|returned|rebates?|rabat|dikembalikan|dikecualikan)\b`,
-  String.raw`(?:beitrags|prämien|praemien)(?:befreiung|r[uü]ckgew[aä]hr|r[uü]ckerstattung)|(?:退还|返还|豁免|退還|返還)(?:${PAID_IN_CJK})`,
+  String.raw`${PAID_IN}\s+(?:(?:is|are|will\s+be|to\s+be)\s+)?(?:waived|waiver|refunded|refunds?|returned|dikembalikan|dikecualikan)\b`,
+  String.raw`(?:beitrags|prämien|praemien)(?:befreiung|r[uü]ckgew[aä]hr|r[uü]ckerstattung)|(?:退还|返还|豁免|退還|返還)(?:${PAID_IN_CJK})|(?:${PAID_IN_CJK})(?:豁免|退还|返还|退還|返還)`,
   String.raw`\b\d+(?:\.\d+)?\s?%\s+(?:of|des?|dari)\s+(?:(?:the|total|all|jumlah)\s+)*${PAID_IN}(?:\s+(?:paid|dibayar|payés?|pagad[oa]s?))?`,
-  String.raw`\b(?:(?:sum|total)\s+of(?:\s+all)?|total|all)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b`, String.raw`${PAID_IN}\s+paid\s+to\s+date\b`,
-  String.raw`^\W*hibah\b`,
+  // The total paid, paid back: only after words that name what pays it, earlier in the same row.
+  String.raw`\b(?:benefits?|manfaat|faedah|sum\s+(?:assured|insured|covered)|higher|greater|whichever|or|plus|payable\s+(?:on|upon)|pays?|upon\s+death|on\s+death)\b.*?\b(?:(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b)`,
 ].join("|"), "iu");
+/** A note in brackets after a figure ("Premium RM300 (refund of premium on cancellation)") says how the figure behaves; the
+ * name before the figure says what it is (Critic R276 L). */
+const NOTE_AFTER_FIGURE = /(\d)\s*\([^)]*\)/gu;
 /** A premium the person pays, never a benefit (chat.ts uses the same). A benefit worked out from the premiums paid is a
  * benefit: "Waiver of Premium", "Return of Premium", and a share of them ("Death benefit: higher of 105% of total premiums
  * paid to date", "sum of all premiums paid"); left out, a Death tile added up the other policies as if they were all of it.
  * Only premiums PAID: a premium priced as a share of another ("rider premium: 12% of basic premium") is a premium (Critic R418 M1). */
 export const PREMIUM: { test(text: string): boolean } = {
-  test: (text: string) => new RegExp(PAID_IN, "iu").test(text) && !PAID_BACK.test(text),
+  test: (text: string) => {
+    if (!new RegExp(PAID_IN, "iu").test(text)) return false;
+    const head = text.replace(NOTE_AFTER_FIGURE, "$1");
+    // Named before the figure: the name decides. Named only in the note: the note decides ("RM30 (monthly contribution)"
+    // is a contribution, "RM100,000 (contributions waived on TPD)" a benefit).
+    return new RegExp(PAID_IN, "iu").test(head) ? !PAID_BACK.test(head) : !PAID_BACK.test(text);
+  },
 };
 /** A section that holds only what the person pays ("Contribution", "Sumbangan / Contribution", "Kontribusi", "Annual
  * premium", "Section 3: Premium details"): every row under it is a premium, whatever the row's own name says ("Death",
  * TE R276 F1). A section that also names benefits ("Benefits and premiums", "Benefit and Premium Schedule") is not one. */
-const SECTION_FILLER = new RegExp(String.raw`\b(?:(?:section|part|bahagian|bagian)\s+[\w.]+|annual|yearly|monthly|quarterly|half[\s-]yearly|total|modal|tahunan|bulanan|annuelle|mensuelle|anual|mensal|mensual|jährlich|monatlich|schedule|details?|table|amount|payable|due|jadual|butiran|rincian|jumlah|the|your|of|and|dan)\b`, "giu");
+const SECTION_FILLER = new RegExp(String.raw`\b(?:(?:section|part|bahagian|bagian)\s+[\w.]+|annual|yearly|monthly|quarterly|half[\s-]yearly|total|modal|tahunan|bulanan|annuelle|mensuelle|anual|mensal|mensual|jährlich|monatlich|schedule|details?|table|amount|payable|due|jadual|butiran|rincian|jumlah|the|your|of|and|dan|per|a|an|each|month|months|year|years|day|days|week|weeks|bulan|tahun|sebulan|setahun|tabarru)\b`, "giu");
+/** A currency or unit printed in the heading ("Contribution (RM)", "Premium payable (SGD)", "Kontribusi (Rp)", TE R276
+ * R2-F1): a closed list of currency codes and markers, never any three letters (that would also strip "TPD"). */
+const SECTION_CURRENCY = new RegExp(String.raw`\b(?:S|US|HK|NT|NZ|A|C|R)\$|\b(?:RM|Rp|SGD|MYR|IDR|USD|EUR|GBP|CNY|RMB|HKD|JPY|AUD|NZD|THB|PHP|VND|INR|CHF|CAD|BRL|TWD|KRW|AED|BND)\b|[$€£¥₫₱฿₹円元]`, "giu");
 export function isPremiumSection(section: string | null | undefined): boolean {
   if (!section || !PREMIUM.test(section)) return false;
-  const rest = section.replace(new RegExp(PAID_IN, "giu"), " ").replace(SECTION_FILLER, " ").replace(/[\s\d\W_]+/gu, "");
+  // Letters of any script are what is left; CJK and accented letters count (an ASCII \W would strip them all).
+  const rest = section.replace(new RegExp(PAID_IN, "giu"), " ").replace(SECTION_CURRENCY, " ").replace(SECTION_FILLER, " ").replace(/[^\p{L}]+/gu, "");
   return rest.length === 0;
 }
 

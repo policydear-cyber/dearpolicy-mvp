@@ -171,20 +171,26 @@ test("what the person pays in is never a benefit, by whatever name the market us
   assert.deepEqual(categoryRows("Critical Illness", ci).map((r) => r.benefit), ["Critical Illness Benefit"]);
 });
 
-test("PREMIUM: a paid-in row in any market is a premium; a pay-back, waiver, rebate or hibah only when its word sits beside it (Critic R276)", () => {
+test("PREMIUM: a paid-in row in any market is a premium; a pay-back or waiver only when its word sits beside it, a rebate never (Critic R276)", () => {
   const paidIn = ["Tabarru' contribution (non-refundable) RM30", "Premium (non-refundable) S$300", "Contribution, not refundable RM40", "Sumbangan bulanan RM50",
     "Premi Rp 500.000", "Prima anual €200", "Prêmio mensal R$ 150", "Prémio anual 90 €", "Phí bảo hiểm 5.000.000 ₫", "保険料 ¥5,000", "保费 HK$3,000", "保費 NT$2,000",
     "Kontribusi Rp 200.000", "Beitrag 50 €", "Prämie CHF 80", "Cotisation annuelle 120 €", "Prime annuelle 300 €", "rider premium: 12% of basic premium",
-    "Premium refundable on cancellation S$50", "Premi tahunan Death Rp3,000,000", "保险费 ¥2,000", "保險費 HK$800", "Prima de seguro 300 €"];
+    "Premium refundable on cancellation S$50", "Premi tahunan Death Rp3,000,000", "保险费 ¥2,000", "保險費 HK$800", "Prima de seguro 300 €",
+    // A statement of what was paid in is no benefit, and a rebate is money back, never a cover sum (Critic R276 H1).
+    "Total premiums paid S$12,000", "Total premium paid to date S$12,000", "Premiums paid to date S$8,400", "Total contributions paid RM3,600",
+    "Jumlah sumbangan dibayar RM3,600", "Premium rebate RM50", "Contribution Rebate RM300", "Hibah (contribution-linked) RM50,000",
+    // A note after the figure never decides when the name before it is a premium (Critic R276 L); named only in the note, a contribution is one.
+    "Premium RM300 (refund of premium on cancellation)", "Death cover RM30 (monthly contribution)"];
   for (const t of paidIn) assert.equal(PREMIUM.test(t), true, t);
   const benefit = ["Contribution towards funeral costs RM5,000", "Funeral contribution RM5,000", "Waiver of contribution on TPD", "Waiver of future premiums",
-    "Premium waiver on death", "Death benefit 105% of total contributions paid", "Return of contributions RM2,000", "Refund of premiums paid", "Hibah (contribution-linked) RM50,000",
-    "Pengembalian sumbangan RM2,000", "Death benefit RM100,000", "Contribution Rebate RM300", "Death benefit RM100,000 (contributions waived on TPD)",
+    "Premium waiver on death", "Death benefit 105% of total contributions paid", "Return of contributions RM2,000", "Refund of premiums paid", "Hibah RM5,000",
+    "Pengembalian sumbangan RM2,000", "Death benefit RM100,000", "Death benefit RM100,000 (contributions waived on TPD)", "保费豁免",
     "Beitragsrückgewähr 4.000 €", "Beitragsbefreiung bei Berufsunfähigkeit", "退还保费 HK$10,000",
     // A product name is never a premium word.
     "Sehat Prima Rawat Inap Rp 1.000.000", "Prima Health Plan", "Premier Life Death Benefit", "Premia Shield",
     // What was paid in, paid back (TE R276 F2), and benefits that only name a contribution (TE R276 over-matches).
     "Death benefit: total contributions paid plus profit", "Death benefit: all premiums paid to date", "Death benefit: premiums paid to date",
+    "Death benefit higher of sum assured or total premiums paid", "Sum assured or premiums paid to date, whichever is higher", "Manfaat kematian: jumlah sumbangan dibayar",
     "Refunded Premiums upon Death", "Waived Premiums on TPD", "Hospital income contribution RM100/day", "Funeral expenses contribution", "Employer contribution benefit"];
   for (const t of benefit) assert.equal(PREMIUM.test(t), false, t);
 });
@@ -192,12 +198,17 @@ test("PREMIUM: a paid-in row in any market is a premium; a pay-back, waiver, reb
 test("a row under a section that holds only what the person pays is a premium, whatever its own name says (TE R276 F1)", () => {
   const under = (section: string, benefit: string, amount: number, currency: string) => ({ ...row(benefit, { section, figure: { kind: "printed", amount, currency, unit: "lump_sum" } }), coverKey: "k" });
   for (const [section, benefit, amount, currency] of [["Contribution", "Death", 30, "MYR"], ["Sumbangan / Contribution", "Kematian / Death", 45, "MYR"],
-    ["Kontribusi", "Death", 350000, "IDR"], ["Section 3: Premium details", "Death Benefit", 120, "GBP"], ["Annual premium", "Total Permanent Disability", 90, "EUR"], ["Prämie", "Todesfall / Death", 25, "EUR"]] as const) {
+    ["Kontribusi", "Death", 350000, "IDR"], ["Section 3: Premium details", "Death Benefit", 120, "GBP"], ["Annual premium", "Total Permanent Disability", 90, "EUR"], ["Prämie", "Todesfall / Death", 25, "EUR"],
+    // A currency or unit in the heading (TE R276 R2-F1).
+    ["Contribution (RM)", "Death", 30, "MYR"], ["Premium (S$)", "Death", 30, "SGD"], ["Sumbangan (RM) / Contribution", "Death", 30, "MYR"], ["Kontribusi (Rp)", "Death", 30000, "IDR"],
+    ["Contribution per month", "Death", 30, "MYR"], ["Contribution Amount (MYR)", "Death", 30, "MYR"], ["Tabarru' contribution", "Death", 30, "MYR"],
+    ["Premium payable (SGD)", "Death", 30, "SGD"], ["保费 (元)", "Death", 300, "CNY"], ["Prime annuelle (€)", "Death", 30, "EUR"]] as const) {
     const parts = lumpSumParts(tileRows(categoryRows(benefit.includes("Disability") ? "Total Permanent Disability" : "Death", [under(section, benefit, amount, currency)])), [], [], "Death");
     assert.equal(parts.total, null, section);
   }
   // A section that also names benefits, or a waiver, is no premium section.
-  for (const section of ["Benefits and premiums", "Benefit and Premium Schedule", "Premium waiver", "Return of contributions", "Death benefit"]) {
+  for (const section of ["Benefits and premiums", "Benefit and Premium Schedule", "Premium waiver", "Return of contributions", "Death benefit",
+    "Sum Covered / Contribution", "Ringkasan Manfaat dan Kontribusi", "Premium TPD", "保费 身故保障", "Contribution & Coverage Details (RM)"]) {
     assert.deepEqual(categoryRows("Death", [under(section, "Death Benefit", 200000, "MYR")]).map((r) => r.benefit), ["Death Benefit"], section);
   }
 });
