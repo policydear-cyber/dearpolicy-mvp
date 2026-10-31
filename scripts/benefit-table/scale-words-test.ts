@@ -33,6 +33,13 @@ t("milestone", has("Bonus\tS$5,000 milestone", 5_000));
 t("millionaire", has("Plan\tRM 50,000 millionaire", 50_000));
 t("months", has("Waiting period\t10 months", 10) && !has("10 months", 10_000_000));
 t("minutes", has("3 mins", 3));
+// A short word with no currency beside the figure is no scale: a count is read bare (Critic #265 M1).
+t("100 MD consultations is 100", has("Outpatient\t100 MD consultations", 100) && !has("100 MD consultations", 100_000_000_000), numbersIn("100 MD consultations"));
+t("10 m is still 10", has("Distance\t10 m", 10), numbersIn("10 m"));
+t("2 k visits is 2", has("Physio\t2 k visits", 2), numbersIn("2 k visits"));
+t("Limit 1.5m (no currency) keeps its old million reading", has("Limit\t1.5m", 1_500_000), numbersIn("Limit 1.5m"));
+t("2 Mio. € reads 2 million", has("Leistung\t2 Mio. €", 2_000_000), numbersIn("2 Mio. €"));
+t("S$ 1.25m reads 1.25 million", has("Limit\tS$ 1.25m", 1_250_000) && !has("S$ 1.25m", 1.25), numbersIn("S$ 1.25m"));
 t("comma grouping unchanged", has("Sum assured\tS$600,000", 600_000) && has("S$2,000,000.00", 2_000_000));
 t("a rate unchanged", has("Rate\t1.375%", 1.375));
 // Words in other languages, once the shared reader knows them (they are in its list from #262): never the bare figure.

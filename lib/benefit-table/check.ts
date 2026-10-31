@@ -151,6 +151,9 @@ export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
   const scaleAfter = new RegExp(String.raw`^\s*(${SCALE_WORD})(?![A-Za-z0-9])`);
+  // A currency printed right before a figure ("S$", "Rp ", "€", "USD "), or right after its scale word ("2 Mio. €").
+  const MONEY_BEFORE = /(?:(?<![A-Za-z])[A-Z]{3}|(?<![A-Za-z])[A-Z]{1,2}\$|R\$|Rp\.?|RM|Rs\.?|\$|\p{Sc})\s?$/u;
+  const MONEY_AFTER = /^\.?\s?(?:\p{Sc}|[A-Z]{3}(?![A-Za-z]))/u;
   for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)/g)) {
     // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
     // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
@@ -159,13 +162,23 @@ export function numbersIn(text: string): number[] {
     // A scale word after the figure ("1.5 million", "Rp 2 juta", "S$3 mn", "€ 3 millones", "150 triệu") multiplies it,
     // read by the shared reader: a figure that reads two ways before it ("1.500 Mio.", "2.500 milioni") or a word that
     // reads two ways ("mil") prints no figure at all, and never the bare one (TE #262 P1: "Rp 2 juta" printed 2).
-    const scale = scaleAfter.exec(text.slice(m.index! + m[1].length));
+    // A short word ("m", "k", "md", "mn", "mil", "mrd", "mld", "tsd") is a scale only beside a currency: "100 MD
+    // consultations" and "10 m" are counts, read bare (Critic #265 M1). "m" with no currency also keeps its old reading
+    // as a million ("Limit 1.5m"), so nothing that matched before stops matching.
+    const after = text.slice(m.index! + m[1].length), scale = scaleAfter.exec(after);
+    const n = Number(m[1].replace(/,/g, ""));
     if (scale) {
       const v = scaledFigure(m[1], null, { scaled: true }), k = scaleOf(scale[1]);
+      const short = /^(?:m|k|md|mn|mil|mrd|mld|tsd)$/i.test(scale[1]);
+      const money = MONEY_BEFORE.test(text.slice(Math.max(0, m.index! - 8), m.index!)) || MONEY_AFTER.test(after.slice(scale[0].length));
+      if (short && !money) {
+        if (Number.isFinite(n)) out.push(n);
+        if (/^m$/i.test(scale[1]) && v != null) out.push(v * 1e6);
+        continue;
+      }
       if (v != null && Number.isFinite(k)) out.push(v * k);
       continue;
     }
-    const n = Number(m[1].replace(/,/g, ""));
     if (Number.isFinite(n)) out.push(n);
   }
   return out;
