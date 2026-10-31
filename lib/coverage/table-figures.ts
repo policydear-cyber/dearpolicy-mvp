@@ -142,19 +142,52 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
  * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
 const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|penyakit\s+(?:kritikal|kritis|berbahaya)|major\s+illness(?:es)?)\b|危疾|重大疾病|重疾`, "iu");
 const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
-const CONDITION = new RegExp([
-  // English
-  String.raw`\b(?:cancers?|carcinoma\w*|malignan\w*|tumou?rs?|leuka?emia|lymphoma|sarcoma|melanoma|heart|myocardial|coronary|by-?pass|angioplasty|cardiomyopathy|aort(?:a|ic)|pulmonary|strokes?|cerebrovascular|kidney|renal|organ\s+transplants?|transplant\w*|bone\s+marrow|blindness|loss\s+of\s+(?:sight|hearing|speech|limbs?|independent\s+existence)|deafness|dementia|alzheimer\w*|parkinson\w*|motor\s+neuron\w*|multiple\s+sclerosis|muscular\s+dystrophy|paralysis|coma|encephalitis|meningitis|brain|head\s+trauma|burns?|liver|lungs?|respiratory|hepatitis|aplastic\s+an(?:a)?emia|lupus|hiv|poliomyelitis|apallic|neurological|endocarditis|myasthenia)\b`,
+/** The words a covered illness is named with, and nothing else (Critic R on #252 H1a): every word of the row's name must be
+ * one of them, so "Cancer Screening Benefit", "Child Cancer Benefit", "Kematian akibat Kanser", "癌症身故保险金" or "Liver
+ * function test" (a word outside the list) never move. Illness, organ and procedure words, then severity and stage words,
+ * then joining words, in English and Malay; Chinese names are read phrase by phrase. */
+const CONDITION_WORDS = new Set((
+  // English illnesses, organs and procedures
+  "cancer cancers carcinoma malignant malignancy tumour tumor tumours tumors leukaemia leukemia lymphoma sarcoma melanoma heart attack myocardial "
+  + "infarction coronary artery arteries bypass by-pass angioplasty valve valves cardiomyopathy aorta aortic pulmonary hypertension arterial stroke strokes "
+  + "cerebrovascular kidney kidneys renal failure organ organs transplant transplantation bone marrow blindness loss sight hearing speech limb limbs "
+  + "independent existence deafness dementia alzheimer alzheimer's alzheimers parkinson parkinson's parkinsons motor neurone neuron multiple sclerosis "
+  + "muscular dystrophy paralysis coma encephalitis meningitis bacterial viral brain head trauma burns burn liver lung lungs respiratory hepatitis "
+  + "fulminant aplastic anaemia anemia lupus systemic erythematosus hiv aids poliomyelitis apallic syndrome neurological deficit endocarditis infective "
+  + "myasthenia gravis surgery disease diseases "
+  // body sites a cancer or condition is named by (never enough alone)
+  + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+  + "payudara prostat serviks kulit darah rahim pankreas usus "
+  // severity and stage
+  + "major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total "
+  + "permanent in situ excluding less cases "
+  // joining words
+  + "of with the to and or a an "
   // Malay
-  String.raw`\b(?:kanser|barah|tumor|serangan\s+jantung|jantung|koronari|strok|angin\s+ahmar|buah\s+pinggang|ginjal|pemindahan\s+organ|sumsum\s+tulang|buta|kebutaan|pekak|bisu|lumpuh|kelumpuhan|koma|otak|hati|paru-paru|lecur|demensia|nyanyuk)\b`,
-  // Chinese
-  String.raw`癌|肿瘤|白血病|心脏|心肌|冠状动脉|中风|脑|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化`,
-].join("|"), "iu");
+  + "kanser barah tumor serangan jantung koronari arteri pembedahan strok angin ahmar buah pinggang ginjal kegagalan pemindahan organ sumsum tulang "
+  + "buta kebutaan pekak bisu kehilangan penglihatan pendengaran pertuturan lumpuh kelumpuhan koma otak hati paru paru-paru lecur demensia nyanyuk "
+  + "penyakit tahap akhir peringkat awal teruk utama kritikal kritis yang dan atau"
+).split(" "));
+const CHINESE_CONDITION = /恶性肿瘤|肿瘤|癌症|癌|白血病|心脏病|心脏|心肌梗塞|心肌|冠状动脉|搭桥|手术|脑中风|中风|肾衰竭|肾|衰竭|器官移植|器官|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化|严重|末期|早期|重大|疾病|病|发作|症|的|性/gu;
+/** Whether the row's whole name is an illness: at least one illness word, and no word from outside the list. */
+function namesOnlyAnIllness(benefit: string): boolean {
+  const cjk = /\p{Script=Han}/u.test(benefit);
+  if (cjk && /\p{Script=Han}/u.test(benefit.replace(CHINESE_CONDITION, ""))) return false;
+  const words = benefit.replace(/\p{Script=Han}+/gu, " ").toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
+    .filter((w) => !/^(?:\d+|[ivx]+|[a-z])$/.test(w));
+  if (!words.every((w) => CONDITION_WORDS.has(w))) return false;
+  const joining = new Set("of with the to and or a an yang dan atau in situ excluding less cases".split(" "));
+  const generic = new Set(("loss failure attack disease diseases surgery syndrome deficit penyakit kegagalan serangan pembedahan kehilangan "
+    + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+    + "payudara prostat serviks kulit darah rahim pankreas usus").split(" "));
+  const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent tahap akhir peringkat awal teruk utama kritikal kritis".split(" "));
+  return (cjk && /癌|肿瘤|白血病|心|冠状动脉|中风|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化/u.test(benefit)) || words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
+}
 const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
 const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;
 export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
   const own = categoryOfBenefit(r.benefit, r.section);
-  if (own || !CONDITION.test(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
+  if (own || !namesOnlyAnIllness(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
     || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim())))) return own;
   // The row's own section and its own cover's name (Critic R on #252 H1a). The product names the whole policy, base plan and
   // riders together ("LifeGuard Saver with Critical Illness Rider"), so it is read only when it is that cover's own name

@@ -91,6 +91,30 @@ for (const benefit of ["Santunan Meninggal Dunia", "Pembebasan Premi", "Bantuan 
   const got = categoryOfRow(row("kestrel", { product: "Acme CritiCare Critical Illness Plan", cover: "Acme CritiCare Critical Illness Plan" }, benefit, 5000, "SGD"));
   t(`in a critical illness plan, "${benefit}" is not critical illness`, got === null, got);
 }
+// Critic H1 round 3 and TE F2/F3 on #252: a row whose name has any word outside the illness list (a service, a payout,
+// another person, a death or waiver in another language, a treatment bill) is never critical illness.
+for (const benefit of ["Cancer Screening Benefit", "Heart Health Check-up", "Second Medical Opinion for Cancer", "Cancer Vaccination", "Child Cancer Benefit",
+  "Juvenile Heart Conditions", "Spouse's Cancer Benefit", "Kanser Kanak-kanak", "子女癌症保险金", "Kematian akibat Kanser", "癌症身故保险金", "癌症身故",
+  "Pengecualian Caruman selepas Kanser", "癌症豁免保费", "Nilai Tunai Kanser", "Cancer Cash Payout", "Annual payout after Cancer", "Cancer Monthly Payout",
+  "Cancer Survival Payout", "Cancer Relapse Benefit", "Kidney Dialysis Treatment", "Cancer Treatment (Chemotherapy, Radiotherapy)", "Cancer drug list treatment",
+  "Brain Health Wellness Programme", "Cancer Care Concierge", "Liver function test", "Cancer Booster", "Cancer Treatment", "Juvenile stroke", "Spouse cancer cover",
+  "Pre-existing cancer exclusion", "Cancer care allowance daily", "Total loss", "Breast"]) {
+  const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
+  t(`in a critical illness plan, "${benefit}" is not critical illness`, got === null, got);
+}
+for (const [benefit, want] of [["Kanser Tahap Akhir", "Critical Illness"], ["Kanser Tahap Kritikal", "Critical Illness"], ["Heart Attack", "Critical Illness"],
+  ["Carcinoma in situ of the breast", "Early Critical Illness"], ["Loss of hearing", "Critical Illness"], ["End-stage liver failure", "Critical Illness"]] as const) {
+  const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
+  t(`in a critical illness plan, "${benefit}" is ${want}`, got === want, got);
+}
+// The tile path the Critic traced: a screening or a child's benefit with an amount beside an illness with none never gives
+// the tile that amount.
+for (const other of ["Cancer Screening Benefit", "Child Cancer Benefit"]) {
+  const rows = [{ ...row("kestrel", ci, "Major Cancer", 0, "SGD"), figure: { kind: "none" as const, why: "see the page" } }, row("kestrel", ci, other, 25000, "SGD")];
+  const tile = lumpSumParts(tileRows(categoryRows("Critical Illness", rows)), [], [], "Critical Illness");
+  t(`"${other}" S$25,000 beside "Major Cancer" (no figure) never becomes the CI amount`, tile.total === null && tile.parts.every((p) => p.amount == null), tile);
+}
+
 // The product names the whole policy: a base plan's row is never critical illness because a rider's name is in the product;
 // the rider's own row is.
 t("a base savings plan's illness-named row is not critical illness because the product names a CI rider",
