@@ -28,6 +28,21 @@ t("BHD 1.500 is one and a half, never 1500", has("Benefit\tBHD 1.500", 1.5) && !
 t("a rate 1.375% is never 1375", !has("Rate\t1.375%", 1375));
 t("1.500 million is no 1.5 billion", !has("Limit\t€1.500 million", 1_500_000_000));
 t("a date is no figure of a million", !has("Tanggal\t01.02.2026", 1_022_026));
+// Read whole only where the grouping is certain (Critic #262 H1, the #260 rule): a lone dot group with no currency beside
+// it is a section, table, multiplier, year or count, never fifteen hundred; with a scale word, nothing is guessed.
+t("€1.500 million is never 1,500", !has("Limit\t€1.500 million", 1_500));
+t("Rp 1.500 juta is never 1,500", !has("Batas\tRp 1.500 juta", 1_500));
+t("Section 1.500 is no figure", !has("Section 1.500 Benefits", 1_500));
+t("Multiplier 1.250 is no figure", !has("Multiplier 1.250", 1_250));
+t("Table 2.000 is no figure", !has("Table 2.000", 2_000));
+t("3.500 times salary is no figure", !has("Up to 3.500 times monthly salary", 3_500));
+t("Policy year 2.026 is no figure", !has("Policy year 2.026", 2_026));
+t("a lone dot group with no currency is no figure", !has("Benefit\t1.500", 1_500));
+t("a three-letter word is no currency", !has("TPD 1.500", 1_500));
+t("KD 1.250 is one and a quarter dinars", has("Benefit\tKD 1.250", 1.25) && !has("Benefit\tKD 1.250", 1_250));
+t("a code after the figure counts", has("Leistung\t1.500 EUR", 1_500));
+t("two dot groups need no currency", has("Uang Pertanggungan\t500.000.000", 500_000_000));
+t("a decimal comma needs no currency", has("Capitale\t1.000,00", 1_000));
 
 // Whole households, through the intake check and the table.
 type Case = { market: string; person: string; product: string; cover: string; text: string; quote: string; sum: number; currency: string; kind: string; extra?: { name: string; quote: string; value: number; pays: string } };

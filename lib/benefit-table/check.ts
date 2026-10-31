@@ -13,7 +13,7 @@ import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { printedNumber } from "@/lib/format/printed-number";
+import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -146,6 +146,13 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
   planType?: PlanType | null };
 
+// The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
+// figure that make it a number other than money.
+const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
+const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|₫|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
+// A three-letter code counts only when it is a currency on this closed list: "TPD 1.500" is no money sign.
+const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|ARS|CLP|COP|PEN|PLN|CZK|HUF|RON|BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
+const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped
  * with dots read whole ("Rp 500.000.000" -> 500000000). */
 export function numbersIn(text: string): number[] {
@@ -160,11 +167,20 @@ export function numbersIn(text: string): number[] {
     if (Number.isFinite(n)) out.push(m[2] ? n * 1e6 : n);
   }
   // A market that groups thousands with dots ("Rp 500.000.000", "€50.000", "2.400,00") prints its figure whole: read by
-  // the one shared figure reader (lib/format/printed-number.ts), which reads only a grouping with one meaning. Before,
-  // such a quote printed no figure, so the whole cover was dropped (cross-page check, 31 Oct). Never a rate ("1.375%").
-  for (const m of text.matchAll(/(?<![\d.,])(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)(?![\d]|[.,]\d)(?!\s*%)/g)) {
-    // A three-decimal currency printed before it ("BHD 1.500") reads it as a decimal (printedNumber).
-    const n = printedNumber(m[1], /[A-Z]{3}(?=[^A-Za-z\d]{0,2}$)/.exec(text.slice(Math.max(0, m.index! - 6), m.index!))?.[0] ?? null);
+  // the one shared figure reader (lib/format/printed-number.ts). Before, such a quote printed no figure, so the whole cover
+  // was dropped (cross-page check, 31 Oct). Read only where the quote makes the grouping certain, the rule #260 settled
+  // for evidence.ts (Critic #262 H1: "Section 1.500", "Multiplier 1.250", "Policy year 2.026" are no fifteen hundred):
+  // a currency printed right beside the figure, or a figure that shows its grouping itself (two or more dot groups, or a
+  // ",dd" decimal). Never before a percent sign, "times" or a scale word ("€1.500 million" is no 1,500, and which of
+  // 1.5 or 1,500 million is meant is not known, so nothing is read), nor after a section, table, year, rate or factor word.
+  for (const m of text.matchAll(new RegExp(String.raw`(?<![\d.,'’])(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)(?![\d]|[.,]\d)` + NO_SCALE_AFTER, "g"))) {
+    const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
+    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    const sign = (m: RegExpMatchArray | null) => (!m ? null : m[1] ? (DOT_CODES.test(m[1]) ? m[1] : null) : m[0].trim() === "KD" ? "KWD" : m[0].trim() === "BD" ? "BHD" : m[0].trim());
+    const code = sign(before.match(SIGN_BEFORE)) ?? sign(after.match(SIGN_AFTER));
+    if (!code && !/^\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?$/.test(raw) && !/,\d{1,2}$/.test(raw)) continue;
+    // A three-decimal currency beside it ("BHD 1.500", "KD 1.500") reads it as a decimal (printedNumber).
+    const n = printedNumber(raw, code);
     if (n != null && !out.includes(n)) out.push(n);
   }
   return out;
