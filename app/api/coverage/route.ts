@@ -29,8 +29,10 @@ async function tableRows(accountId:string,member:string,category:string,seen:{do
     // A document that also covers other people in the household (a group certificate, a family plan): who else, and this
     // person's own sum on it, so a figure it prints for someone else is not read as theirs (lib/policies/shared-policy.ts).
     const holders=(documentId:string)=>table.people.filter(p=>p.covers.some(c=>c.source?.documentId===documentId));
-    const ownSum=(documentId:string)=>{const c=(person?.covers??[]).find(x=>x.source?.documentId===documentId&&(x.confirmation?.status==="corrected"?x.confirmation.sumInsured:x.sumInsured)!=null);
-      const sum=c?(c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured):null;return c&&sum!=null?formatMoney(sum,c.currency):null;};
+    // One sum only when this person's covers on the document carry one sum (after corrections) in one currency: a base plan
+    // and a rider on one certificate give no one "own sum" (Critic M1).
+    const ownSum=(documentId:string)=>{const sums=new Set((person?.covers??[]).filter(x=>x.source?.documentId===documentId).map(x=>{const sum=x.confirmation?.status==="corrected"?x.confirmation.sumInsured:x.sumInsured;return sum!=null?formatMoney(sum,x.currency):null;}).filter((x):x is string=>!!x));
+      return sums.size===1?[...sums][0]:null;};
     return categoryRows(category,person?.rows??[]).map(r=>{const f=shortFigure(r);const others=holders(r.source.documentId).filter(p=>p.id!==member).map(p=>p.name);
       return{benefit:r.benefit,product:r.product,cover:r.cover,plan:r.plan,figure:f.text,note:f.note,detail:rowDetail(r)||null,document:name(r.source.documentId,r.source.document),page:r.source.page,excerpt:r.source.excerpt,
         shared:others.length?{others,ownSum:ownSum(r.source.documentId)}:null};});

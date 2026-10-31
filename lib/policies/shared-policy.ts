@@ -17,7 +17,10 @@ export function sharedPolicyNote(owners: string[], selected: { id: string; name:
   if (at < 0) return null;
   const others = owners.filter((_, i) => i !== at);
   if (!others.length) return null;
-  const ownSum = against.flatMap((a) => a ?? []).find((c) => (c.ownerId ? c.ownerId === selected.id : c.owner === selected.name) && c.amount)?.amount ?? null;
+  // One sum only when every sum this person has on the policy is the same: a person with two covers on it (a base plan and
+  // a rider) has no one "own sum", and the safe sentence is shown instead (Critic M1).
+  const sums = new Set(against.flatMap((a) => a ?? []).filter((c) => (c.ownerId ? c.ownerId === selected.id : c.owner === selected.name) && c.amount).map((c) => c.amount!));
+  const ownSum = sums.size === 1 ? [...sums][0] : null;
   return { others, ownSum };
 }
 

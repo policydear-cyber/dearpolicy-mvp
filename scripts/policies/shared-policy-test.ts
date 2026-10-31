@@ -26,6 +26,11 @@ test("a shared policy names the others and this person's own sum, by name or by 
     { others: ["Ama Owusu", "Kofi Owusu"], ownSum: "GH₵ 80,000" });
   assert.deepEqual(sharedPolicyNote(["Siti Aminah", "Rahul Menon"], rahul, [[{ owner: "Siti Aminah", amount: "RM 50,000" }]]), { others: ["Siti Aminah"], ownSum: null }, "another person's sum is never this person's");
 });
+test("a person with two different sums on the policy (a base plan and a rider) gets no one sum", () => {
+  assert.equal(sharedPolicyNote(["Ana", "Ben"], { id: "a", name: "Ana" }, [[{ owner: "Ana", amount: "S$100,000" }], [{ owner: "Ana", amount: "S$50,000" }]])?.ownSum, null);
+  assert.equal(sharedPolicyNote(["Ana", "Ben"], { id: "a", name: "Ana" }, [[{ owner: "Ana", amount: "S$100,000" }], [{ owner: "Ana", amount: "S$100,000" }], [{ owner: "Ana", amount: null }]])?.ownSum, "S$100,000");
+  assert.equal(sharedPolicyNote(["Ana", "Ben"], { id: "a", name: "Ana" }, [[{ owner: "Ana", amount: "S$100,000" }], [{ owner: "Ana", amount: "RM 100,000" }]])?.ownSum, null);
+});
 test("two members with the same name: one is this person, the other is still named", () => {
   assert.deepEqual(sharedPolicyNote(["Rahul Menon", "Rahul Menon"], rahul, [])?.others, ["Rahul Menon"]);
 });

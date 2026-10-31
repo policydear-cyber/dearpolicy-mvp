@@ -43,16 +43,16 @@ async function main() {
   const P: Record<string, string> = {};
   for (const [name, rel] of [["Siti Aminah", "self"], ["Faiz Rahman", "spouse"], ["Nur Faiz", "child"]])
     P[name] = (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,$3) RETURNING id", [ACCOUNT, name, rel])).rows[0].id;
-  async function doc(product: string, covers: [string, number][], line: [string, number]) {
+  async function doc(product: string, covers: [string, number, string?][], line: [string, number]) {
     const id = randomUUID();
-    const text = `SIJIL KUMPULAN\n` + covers.map(([p, s]) => `Life Assured\t${p}\n${product}\tSum Assured RM${s.toLocaleString("en-US")}`).join("\n") + `\n${line[0]}\tRM${line[1].toLocaleString("en-US")}`;
+    const text = `SIJIL KUMPULAN\n` + covers.map(([p, s, c]) => `Life Assured\t${p}\n${c ?? product}\tSum Assured RM${s.toLocaleString("en-US")}`).join("\n") + `\n${line[0]}\tRM${line[1].toLocaleString("en-US")}`;
     await query(`INSERT INTO policies(id,account_id,family_member_id,product_name,original_filename,storage_key,processing_status,processing_stage,quarantine_status,personal_coverage_confirmed,document_role)
       VALUES($1,$2,$3,$4,$5,$6,'ready','ready','scan_clean',true,'certificate')`, [id, ACCOUNT, P[covers[0][0]], product, `${product}.pdf`, `test/${id}`]);
     await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [ACCOUNT, id, text]);
-    for (const [p] of covers) await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [id, P[p], ACCOUNT]);
+    for (const p of new Set(covers.map(([q]) => q))) await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [id, P[p], ACCOUNT]);
     const reading = { document: { kind: "personal_proof", product, insurer: null, namedPeople: covers.map(([p]) => p), plan: null, periodFrom: null, periodTo: null },
-      covers: covers.map(([p, s]) => ({ person: p, product, cover: product, plan: null, riderOf: null, policyNumber: null, sumInsured: s, premium: null, premiumFrequency: null, asOf: null,
-        startDate: null, endDate: null, page: 1, quote: `${product}\tSum Assured RM${s.toLocaleString("en-US")}` })),
+      covers: covers.map(([p, s, c]) => ({ person: p, product, cover: c ?? product, plan: null, riderOf: null, policyNumber: null, sumInsured: s, premium: null, premiumFrequency: null, asOf: null,
+        startDate: null, endDate: null, page: 1, quote: `${c ?? product}\tSum Assured RM${s.toLocaleString("en-US")}` })),
       benefits: [{ section: null, column: null, benefit: line[0], pays: "amount", value: line[1], period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
         cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: `${line[0]}\tRM${line[1].toLocaleString("en-US")}` }] };
     assert.ok((await readDocument(appDb, model(reading), ACCOUNT, id)).read);
@@ -79,9 +79,15 @@ async function main() {
     await test("a policy only one person holds has no note", async () => {
       assert.equal(faiz.find((r) => r.product === "Faiz Term Life")?.shared, null);
     });
-    await test("a person the certificate does not cover never gets its rows", async () => {
+    await test("a person with a base plan and a rider on one shared certificate gets no one sum", async () => {
+      await doc("Seri Family Plan", [["Nur Faiz", 80000], ["Nur Faiz", 30000, "Seri Child Rider"], ["Siti Aminah", 90000]], ["Death benefit", 90000]);
       const r = await GET(new NextRequest(`http://localhost/api/coverage?familyMemberId=${P["Nur Faiz"]}&category=Death`));
-      assert.deepEqual(((await r.json()) as { table: unknown[] }).table, []);
+      const row = ((await r.json()) as { table: { product: string; shared: { others: string[]; ownSum: string | null } | null }[] }).table.find((x) => x.product === "Seri Family Plan");
+      assert.deepEqual(row?.shared, { others: ["Siti Aminah"], ownSum: null }, JSON.stringify(row));
+    });
+    await test("a person the certificate does not cover never gets its rows", async () => {
+      const r = await GET(new NextRequest(`http://localhost/api/coverage?familyMemberId=${P["Faiz Rahman"]}&category=Death`));
+      assert.ok(!((await r.json()) as { table: { product: string }[] }).table.some((x) => x.product === "Seri Family Plan"));
     });
     await test("no request left this machine", async () => assert.deepEqual(outbound, []));
   } finally {
