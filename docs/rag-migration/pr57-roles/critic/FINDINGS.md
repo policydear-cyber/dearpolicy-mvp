@@ -10415,3 +10415,9 @@ New scripted test with no network, no keys, and no product change. 4/4 pass. Wit
   - red on both: rag2:conv and rag2:fix (crash on the route's 429; #242 fixes them), adversarial U1 (#242 fixes it), and rag2:tools F4 and C4 (#241 fixes F4; C4 is held for DC)
 - Gate green.
 - Low: workflow.ts:1888 tells the household only about SpendCapReached. If interpretation fails with SpendCheckUnavailable, the turn falls back to rule interpretation instead of saying "try again shortly". Any later hosted call is still refused, so no money is spent. The route check runs first, so this needs the ledger to fail between the two checks.
+
+## R491: #245 af1cb1b (shared policy note in person view): one Medium
+- M1 (lib/policies/shared-policy.ts:19): ownSum is the first amount found for the person across all of the group's benefits. A person with base life S$100,000 and a CI rider S$50,000 gets "own sum insured on it is S$100,000" above the CI rows too. Fix: show ownSum only when the person's amounts agree, otherwise null (the safe sentence).
+- Low: since #238 strips ownerId, matching is by display name, so two members sharing a name would both match.
+- Gate green: shared-policy 6/6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+Probe: /mnt/project-files/critic/p245-shared.mts.
