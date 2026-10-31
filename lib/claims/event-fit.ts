@@ -5,9 +5,11 @@
  * test keeps its card, labelled with the reason, and is never named as a
  * possible benefit (lib/chat/fact-finding-chat.ts, finalizeClaimAnswer).
  *
- *  - Dates: never. Every policy on file is treated as in force (DC, 31 Oct:
- *    "ignore all expiry dates"), so a printed expiry or start date never
- *    rules a benefit out.
+ *  - Expiry: never. Every policy on file is treated as in force (DC, 31 Oct:
+ *    "ignore all expiry dates"), so a printed expiry date never rules a
+ *    benefit out.
+ *  - Not started: an event before the cover's own start date (as the death
+ *    and critical illness calculators check).
  *  - Location: cover that pays only for events overseas (travel policies,
  *    overseas / evacuation / repatriation benefits) is not a possible benefit
  *    for an event in Singapore.
@@ -64,6 +66,10 @@ export function eventFitIssue(args: {
   tripEnd?: string | null;
 }): EventFitIssue | null {
   const eventDay = isoDay(meaningfulFact(args.eventDate));
+  const effective = isoDay(args.effectiveDate);
+  if (effective && eventDay && eventDay < effective)
+    return { kind: "not_started", text: "Not a possible benefit on the document on file: " + (args.policyName ? args.policyName + "’s" : "the") + " cover on file starts on " + plainDate(effective) +
+      ", after the event on " + plainDate(eventDay) + ". If the policy was in force before then, the earlier certificate or renewal notice will show it." };
   if (!args.travelEvent && happenedInSingapore(meaningfulFact(args.eventLocation)) && overseasOnly(args.benefitTitle, args.policyType))
     return { kind: "location", text: "Not a possible benefit: this cover is for events overseas, and this happened in Singapore." };
   // Travel cover needs a trip: an event overseas, within the trip's dates. A

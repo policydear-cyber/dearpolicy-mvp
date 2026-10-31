@@ -158,15 +158,14 @@ function samePolicy(a: PolicyHint, b: PolicyHint): "same" | "maybe" | "different
 /** Why a table premium was left out, for the note: its document may not show what is paid now, it may be a policy whose
  * premium is already counted, two documents give it a premium, or how often or in what currency it is paid is not plain. */
 export type TableLeftOut = { name: string; why: "not_current" | "maybe_counted" | "two_documents" | "unclear" | "unread" | "unread_old" };
-const DOCUMENT_CURRENT_DAYS = 396;
 
 /** Premiums the household's own policy documents print, for policies no premium record covers (28 Oct: a schedule printing
  * its instalment premium and "Payment Frequency : Monthly" had no premium record, so Home said "Not known yet"). Only a
  * premium the benefit table has checked against its page is used (one plain premium line for this life, check.ts), and only
  * when what is paid now is certain; anything unsure is left out, never guessed:
  * - a stated currency, and a payment frequency from an exact list (premiumsPerYear);
- * - a current document: the cover's or document's printed period runs to today or later, or, with no end printed, starts
- *   within about thirteen months; never a document whose pages say the policy lapsed or ended (Critic R284 H2, M1);
+ * - never a document whose pages say the policy lapsed or ended (Critic R284 H2, M1); a printed period that has ended, or an
+ *   old start, never drops it: every policy on file is in force (DC, 31 Oct);
  * - a page that prints a different first-year premium gives the first-year figure while today is in the first policy year,
  *   and the other figure after, counted from the cover's own start date or the policy start that page labels; with neither
  *   it is left out, as a document's period may start at a renewal or a letter (Critic R284 M3, TE pr158 Y4);
@@ -200,14 +199,10 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     const currency = statedCurrencyCode(c.premiumCurrency === undefined ? c.currency : c.premiumCurrency);
     const perYear = premiumsPerYear(c.premiumFrequency);
     if (!currency || !perYear || !c.premiumFrequency) { leftOut.push({ name, why: "unclear" }); continue; }
-    // With no end printed, the latest printed start counts: a renewal's period may start years after the policy (TE Y6).
-    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
-    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
-    const from = starts.length ? Math.max(...starts) : null;
-    const current = to != null ? to >= today : from != null && today - from <= DOCUMENT_CURRENT_DAYS;
+    // A printed period that has ended, or an old start, never drops a premium: every policy on file is in force (DC, 31 Oct).
     // Only a personal schedule or certificate shows what is paid now: never a letter, a wording or a bill (Critic R293 H1).
     const page = (c.premiumSource ?? c.source).page;
-    if (!current || doc?.lapsedOrEnded || doc?.endedPages?.includes(page) || c.documentKind !== "personal_proof") { leftOut.push({ name, why: "not_current" }); continue; }
+    if (doc?.lapsedOrEnded || doc?.endedPages?.includes(page) || c.documentKind !== "personal_proof") { leftOut.push({ name, why: "not_current" }); continue; }
     let amount = c.premium, detail: string | null = null;
     if (c.premiumNote || c.firstYearPremium != null) {
       const start = printedDay(c.startDate ?? c.firstYearFrom ?? null);
@@ -262,12 +257,10 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
     const documentId = c.source?.documentId, doc = documentId ? documents.get(documentId) : undefined;
     if (!documentId || !doc || c.ended || c.documentKind !== "personal_proof" || doc.lapsedOrEnded) continue;
     if (premiumRead(c) || namedDocumentIds.has(documentId)) continue;
-    // Only a proven end (c.ended, doc.lapsedOrEnded, above) drops a policy. A printed period that has run out, an old start with
-    // no end (whole life), or a page with an ending word ("will be terminated if ...") may still be a held policy: named, with
-    // its document perhaps out of date (TE pr163 N6-N8, Critic R301 H3).
-    const to = printedDay(c.endDate ?? c.documentPeriodTo ?? null);
-    const starts = [printedDay(c.startDate ?? null), printedDay(c.documentPeriodFrom ?? null)].filter((x): x is number => x != null);
-    const old = !!doc.endedPages?.includes(c.source.page) || (to != null ? to < today : starts.length > 0 && today - Math.max(...starts) > DOCUMENT_CURRENT_DAYS);
+    // Only a proven end (c.ended, doc.lapsedOrEnded, above) drops a policy. A page with an ending word ("will be terminated
+    // if ...") may still be a held policy: named, with its document perhaps out of date (TE pr163 N6-N8, Critic R301 H3). A
+    // printed period that has run out, or an old start, says nothing: every policy on file is in force (DC, 31 Oct).
+    const old = !!doc.endedPages?.includes(c.source.page);
     const key = policyOf(c);
     groups.set(key, [...(groups.get(key) ?? []), { cover: c, doc, old }]);
   }

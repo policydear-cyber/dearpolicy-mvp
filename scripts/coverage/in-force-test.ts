@@ -43,11 +43,14 @@ for (const expiry of ["2025-01-15", "2010-12-31", "2026-10-30"]) {
 for (const [what, args] of [
   ["expiry passed, event after it", { expiryDate: "2025-01-15", expiryPassed: true, eventDate: "2026-10-20" }],
   ["expiry passed, no event date", { expiryDate: "2025-01-15", expiryPassed: true }],
-  ["cover starts after the event", { effectiveDate: "2026-06-01", expiryPassed: false, eventDate: "2026-01-10" }],
 ] as const) {
   const issue = eventFitIssue({ benefitTitle: "Accidental death benefit", policyName: "Harbour Accident Plan", ...args });
   t(`claims: ${what} gives no date issue`, issue === null, issue);
 }
+// An event before the cover's own start date is still not a possible benefit (a start date, not an expiry), as the death
+// and critical illness calculators check.
+t("claims: an event before the cover starts is still flagged (not_started)",
+  eventFitIssue({ benefitTitle: "Accidental death benefit", policyName: "Harbour Accident Plan", effectiveDate: "2026-06-01", expiryPassed: false, eventDate: "2026-01-10" })?.kind === "not_started");
 // Location still matters (not a date): overseas-only cover for an event in Singapore.
 t("claims: overseas-only cover for an event in Singapore is still flagged (location, not date)",
   eventFitIssue({ benefitTitle: "Overseas medical expenses", policyType: "travel", expiryPassed: false, eventLocation: "Singapore" })?.kind === "location");
