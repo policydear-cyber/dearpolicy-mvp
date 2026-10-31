@@ -13,6 +13,7 @@ import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
+import { printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -145,7 +146,8 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
   planType?: PlanType | null };
 
-/** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000). */
+/** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped
+ * with dots read whole ("Rp 500.000.000" -> 500000000). */
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
@@ -156,6 +158,14 @@ export function numbersIn(text: string): number[] {
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
     const n = Number(m[1].replace(/,/g, ""));
     if (Number.isFinite(n)) out.push(m[2] ? n * 1e6 : n);
+  }
+  // A market that groups thousands with dots ("Rp 500.000.000", "€50.000", "2.400,00") prints its figure whole: read by
+  // the one shared figure reader (lib/format/printed-number.ts), which reads only a grouping with one meaning. Before,
+  // such a quote printed no figure, so the whole cover was dropped (cross-page check, 31 Oct). Never a rate ("1.375%").
+  for (const m of text.matchAll(/(?<![\d.,])(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)(?![\d]|[.,]\d)(?!\s*%)/g)) {
+    // A three-decimal currency printed before it ("BHD 1.500") reads it as a decimal (printedNumber).
+    const n = printedNumber(m[1], /[A-Z]{3}(?=[^A-Za-z\d]{0,2}$)/.exec(text.slice(Math.max(0, m.index! - 6), m.index!))?.[0] ?? null);
+    if (n != null && !out.includes(n)) out.push(n);
   }
   return out;
 }
