@@ -52,7 +52,7 @@ export default function SignupPage() {
   return (
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
       <h1>Create your household</h1>
-      <p className="lead">DearPolicy keeps every family member&apos;s coverage in one place.</p>
+      <p className="lead">Upload your family&apos;s insurance policies. DearPolicy shows what each person is covered for and answers your questions, with the page each answer comes from.</p>
       <form onSubmit={submit} className="field">
         <label htmlFor="su-household">Household name (optional)</label>
         <input id="su-household" suppressHydrationWarning type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />

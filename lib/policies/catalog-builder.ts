@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { structuredCompletion } from "@/lib/ai/llm";
-import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
+import { clearCatalogCheckpoints,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
 import { CURRENCY_MARKER,benefitRowsFromText,costSharingRowsFromText } from "@/lib/documents/layout";
@@ -231,6 +231,9 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // Round 9: pages whose model read failed this time; what an earlier read of
   // the same page established (and verified) is kept for them below.
   const failedPages=new Set<number>();
+  // Pages this run sent to the model, and the first reason one failed: a read in which every one failed and nothing
+  // was found is a failed read, never "read, nothing found" (TE pr212 N1).
+  let modelPages=0,firstFailure:unknown;
   for(let start=startIndex;start<pages.length;start+=concurrentPages){
     const end=Math.min(start+concurrentPages,pages.length);
     const launched:Promise<void>[]=[];
@@ -336,6 +339,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     const modelPayload={page:page.page_number,
       tableRows:benefitRowsFromText(page.text).slice(0,12).map(row=>({label:row.label,amount:row.value})),
       text:page.text.slice(0,3200)};
+    modelPages++;
     try{
       // Cached by the exact page read: a retried job, a resumed drain or a
       // re-upload of identical bytes never pays to read this page again.
@@ -348,7 +352,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         system:SYSTEM,
         user:JSON.stringify(modelPayload),
       }));
-    }catch{failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
+    }catch(error){firstFailure??=error;failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
     for(const found of extraction.benefits){
       // The quote must be present on this page, verbatim.
       if(!hasQuote(page.text,found.quote))continue;
@@ -386,6 +390,13 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // The tier and row-kind columns are evidence columns.
   await ensureEvidenceSchema();
   if(failedPages.size)benefits.push(...await previouslyReadRows(args.accountId,args.policyId,failedPages,benefits,args.pages));
+  // Every page that needed the model failed and nothing was read: the document is not marked read (it stays on the
+  // Benefits page's list, with the reason, and Try again reads it), and its checkpoint is cleared so that read starts
+  // again from page 1 rather than skipping a pass that read nothing. Callers record the failure (noteReadFailure).
+  if(modelPages>0&&failedPages.size>=modelPages&&!benefits.length){
+    await clearCatalogCheckpoints(args.accountId,args.policyId);
+    throw firstFailure instanceof Error?firstFailure:new Error("benefit_read_failed");
+  }
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
   // Evidence for every stored row (span, method, code verification) and any
   // contradiction with another page or a current version of the same plan.
