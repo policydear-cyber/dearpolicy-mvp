@@ -15,7 +15,7 @@ import type { LoopMessage, LoopModel, LoopToolSpec, ModelTurnInput, ModelTurnOut
 export type Obs = { name: string; args: Record<string, unknown>; ok: boolean; result: Record<string, any> };
 export type View = { user: string; last: Obs[]; turn: Obs[]; system: string; tools: LoopToolSpec[]; find: (name: string, where?: (o: Obs) => boolean) => Obs | undefined; data: (name: string, where?: (o: Obs) => boolean) => any };
 export type Call = { name: string; arguments: Record<string, unknown> };
-export type Step = (v: View) => Call[];
+export type Step = (v: View) => Call[] | Promise<Call[]>;
 export type Turn = { user?: string | RegExp; steps: Step[]; usage?: { input: number; output: number } };
 export const call = (name: string, args: Record<string, unknown>): Call => ({ name, arguments: args });
 
@@ -66,7 +66,7 @@ export class AdvModel implements LoopModel {
     const view: View = { user, last, turn: obs, system, tools: input.tools, find, data };
     // Past the scripted steps the model keeps "thinking" (calls a harmless tool) -- the loop's own budget must stop it.
     const fn = turn.steps[step] ?? (() => [call("resolve_person", { mention: "me" })]);
-    const out = fn(view).map((c, i) => ({ id: `adv_${this.turnIndex + 1}_${step + 1}_${i + 1}`, name: c.name, arguments: c.arguments }));
+    const out = (await fn(view)).map((c, i) => ({ id: `adv_${this.turnIndex + 1}_${step + 1}_${i + 1}`, name: c.name, arguments: c.arguments }));
     return { toolCalls: out, text: null, usage: turn.usage ?? { input: 0, output: 0 }, modelId: this.id, latencyMs: 1 };
   }
 }

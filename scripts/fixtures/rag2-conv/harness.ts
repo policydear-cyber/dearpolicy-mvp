@@ -24,6 +24,8 @@ export function setConvEnv() {
 export type ConvHarness = {
   db: any; networkCalls: string[];
   send: (account: string, question: string, conv?: { id?: string; rev?: number }) => Promise<ChatAnswer>;
+  /** The chat route's raw reply (any status), for checks of a refusal the route gives before an answer. */
+  post: (account: string, question: string) => Promise<{ status: number; data: any }>;
   saved: (account: string, conversationId: string) => Promise<{ answer: ChatAnswer; state: any }>;
 };
 
@@ -67,10 +69,16 @@ export async function startConvHarness(): Promise<ConvHarness> {
     if (response.status !== 200) throw new Error("chat returned " + response.status + " " + JSON.stringify(data).slice(0, 400));
     return data.answer as ChatAnswer;
   };
+  const post = async (account: string, question: string) => {
+    process.env.DEV_ACCOUNT_ID = account;
+    const response = await POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ familyMemberId: null, scope: "family", question, asynchronous: false, timeZone: "Asia/Singapore" }) }));
+    return { status: response.status, data: await response.json() };
+  };
   const saved = async (account: string, conversationId: string) => {
     const m = (await db.query("SELECT answer_json FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role='assistant' ORDER BY created_at DESC, message_order DESC LIMIT 1", [account, conversationId])).rows[0] as { answer_json: ChatAnswer };
     const c = (await db.query("SELECT state FROM chat_conversations WHERE id=$1", [conversationId])).rows[0] as { state: any };
     return { answer: m.answer_json, state: c.state };
   };
-  return { db, networkCalls, send, saved };
+  return { db, networkCalls, send, post, saved };
 }
