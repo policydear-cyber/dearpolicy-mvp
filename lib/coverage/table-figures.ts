@@ -129,6 +129,27 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
   return category;
 }
 
+/** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified
+ * severity", "Kanser", "Stroke") with no "critical illness" word in the row: the section it is printed under or the cover it
+ * belongs to says what it is ("Critical Illness Benefits", "Acme CritiCare Critical Illness Plan", "Dread Disease Takaful").
+ * Such a row is critical illness cover (or early critical illness, where the row or the cover names an early or
+ * intermediate stage). Only these two categories are read from a section or cover name: a cover's name never makes a row
+ * death, disability, accident or hospital cover. The row's own name decides first; a row whose name places it in another
+ * category, or names another kind of payment (a waiver, premium, refund, cash or fund value, bonus, maturity, terminal
+ * illness, death, disability, accident, hospital or medical bill, funeral), or cover for other people, keeps that and is
+ * never moved to critical illness. The same for any insurer, market, language or currency. */
+const CI_NAMES = NAMES.filter(([name]) => name === "Early Critical Illness" || name === "Critical Illness");
+const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b/i;
+const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|units?|bonus\w*|dividends?|maturity|matures?|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|dies|died|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|surg\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily)\b/i;
+const ciOf = (text: string | null | undefined) => (text ? CI_NAMES.find(([, re]) => re.test(text))?.[0] ?? null : null);
+export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
+  const own = categoryOfBenefit(r.benefit, r.section);
+  if (own || isLiability(r.benefit) || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim()))) || OTHER_PAYMENT.test(r.benefit)) return own;
+  const named = ciOf(r.section) ?? ciOf(r.cover) ?? ciOf(r.plan) ?? ciOf(r.product);
+  if (!named) return null;
+  return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : named;
+}
+
 /** One person's cover by whole-policy kind (Travel, Savings, Investment), the one rule Home and the Coverage page use: the
  * kind belongs to the policy, never to one benefit's name. Travel by the cover's own name (travelName); savings and
  * investment by the plan type its name or its document's own words state (lib/coverage/plan-type.ts). `current` names
@@ -192,7 +213,7 @@ export const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*)(?!.*(?:\b\d+(?:\.\d+)
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfRow(r) === category));
 }
 
 /** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip
