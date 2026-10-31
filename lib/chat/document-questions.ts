@@ -118,6 +118,15 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
   ["personal_notes", /\b(?:my|our|the) (?:own )?notes\b|\b(?:typed|wrote|written|made|jotted) (?:up |down )?(?:some |the |my |our )?notes\b|\bnotes? (?:i|we) (?:wrote|typed|made)\b|\bword (?:file|document|doc)\b|\.docx\b/i],
 ];
 
+/** A document's own title or heading ("Income Protection - Policy schedule") answers nothing: every word of it is the
+ * plan's name or the kind of document, and it prints no figure (UK walkthrough, 31 Oct). */
+const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members"]);
+export function titleLine(line: string, product: string | null | undefined) {
+  if (/\d/.test(line)) return false;
+  const name = new Set(String(product ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const words = line.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return words.length > 0 && name.size > 0 && words.some((w) => name.has(w)) && words.every((w) => name.has(w) || DOCUMENT_KIND_WORDS.has(w));
+}
 // Gate R17: each line's figures are read from the page it cites (resolved on that page at save time).
 export async function documentQuestionAnswer(args: Parameters<typeof documentQuestionAnswerInner>[0]): Promise<DocumentAnswer | null> {
   const r = await documentQuestionAnswerInner(args);
@@ -593,7 +602,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
       let best: { d: Doc; lines: ReturnType<typeof bestLines> } | null = null;
       for (const d of pool) {
         const own = new Set(productWords(d).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
-        const lines = bestLines(pages.get(d.id) ?? [], asked, { limit: 3, min: args.min ?? 1.5 }).filter((l) => l.hits.some((h) => !own.has(h) && !GENERIC_WORDS.has(h)));
+        const lines = bestLines(pages.get(d.id) ?? [], asked, { limit: 3, min: args.min ?? 1.5 }).filter((l) => l.hits.some((h) => !own.has(h) && !GENERIC_WORDS.has(h)) && !titleLine(l.line, d.product));
         // The lines must say at least half of what the question turns on ("my CPF MediSave balance" is not a premium line that mentions MediSave).
         const { distinct, covered } = askedCoverage(asked, lines.flatMap((l) => l.hits), new Set([...GENERIC_WORDS, ...all.flatMap((x) => productWords(x).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")))]
           .concat([...PRODUCT_COMMON_WORDS])));

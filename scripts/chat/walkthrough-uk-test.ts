@@ -62,6 +62,17 @@ async function main() {
     for (const m of ["Joe is not covered?", "It was not Ada's fault", "Ada broke her arm, not her leg", "sorry, not Ada"]) assert.equal(withoutCorrectedPerson(m, fam), m);
   });
 
+  await test("a document's own title is not a line that answers anything; a benefit line is (any market)", async () => {
+    const { titleLine } = await import("@/lib/chat/document-questions");
+    assert.equal(titleLine("Income Protection - Policy schedule", "Income Protection"), true);
+    assert.equal(titleLine("Takaful Keluarga Certificate of Takaful", "Takaful Keluarga"), true);
+    assert.equal(titleLine("Takaful Keluarga waiting period", "Takaful Keluarga"), false);
+    assert.equal(titleLine("Gold Hospital and Top Extras Policy Summary", "Gold Hospital and Top Extras"), true);
+    assert.equal(titleLine("Monthly benefit\t£2,400", "Income Protection"), false);
+    assert.equal(titleLine("Hospital cash benefit", "Hospital Cash Plan"), false);
+    assert.equal(titleLine("Hospital cash\tS$100 per day", "Hospital Cash Plan"), false);
+  });
+
   const url = process.env.DATABASE_URL ?? "";
   if (process.env.DEARPOLICY_DISPOSABLE_DB === "1" && /@(localhost|127\.0\.0\.1)[:/]|host=\//.test(url)) {
     const { query } = await import("@/lib/db/client");
@@ -85,7 +96,7 @@ async function main() {
       const all = ["Amara Okafor", "Tom Bennett", "Ada Bennett", "Joe Bennett"];
       await doc("Amara Okafor", ["Amara Okafor"], "Example Life plc", "Level Term Life", "TL 0098", "Life", "Policy schedule\nLife assured: Amara Okafor\nLife cover (level)\t£250,000.00\nMonthly premium\t£32.18", [32.18, "monthly"]);
       await doc("Amara Okafor", all, "Example Health Ltd", "Family Health", "HH-552", "Health", "Membership certificate\nMembers: Amara Okafor, Tom Bennett, Ada Bennett, Joe Bennett\nIn-patient treatment\tFull cover\nMonthly subscription\t£148.60", [148.6, "monthly"]);
-      await doc("Tom Bennett", ["Tom Bennett"], "Example Mutual Friendly Society", "Income Protection", "KM/IP/77", "Disability", "Income Protection schedule\nMember: Tom Bennett\nMonthly benefit\t£2,400\nMonthly contribution\t£41.20", [41.2, "monthly"]);
+      await doc("Tom Bennett", ["Tom Bennett"], "Example Mutual Friendly Society", "Income Protection", "KM/IP/77", "Disability", "Income Protection - Policy schedule\nMember: Tom Bennett\nMonthly benefit\t£2,400\nDeferred period\t13 weeks\nBenefit payment period\tTo age 67\nMonthly contribution\t£41.20", [41.2, "monthly"]);
       const ask = (question: string, conversationId?: string) => askContextualDearPolicy({ accountId: A, familyMemberId: null, scope: "family", question, ...(conversationId ? { conversationId } : {}) });
 
       await test("database: the household's monthly total is answered, with subscription and contribution rows counted", async () => {
@@ -121,6 +132,21 @@ async function main() {
         assert.ok(joe, "Joe has the chat now");
         assert.equal(joe.intent, "claim");
         assert.match(joe.claim ?? "", /broke her arm/);
+      });
+      await test("database: 'how much income protection does Tom get' is answered from its schedule, not its title or its contribution", async () => {
+        for (const q of ["How much income protection does Tom get and when does it start?", "What does Tom's income protection cover?"]) {
+          const r = await ask(q);
+          const text = [r.answer.summary, ...(r.answer.details ?? [])].join("\n");
+          assert.match(text, /Monthly benefit: £2,400/, q + "\n" + text);
+          assert.match(text, /Deferred period: 13 weeks/, q + "\n" + text);
+          assert.doesNotMatch(text, /Monthly contribution|renewal and expiry|Policy schedule”/, q + "\n" + text);
+        }
+      });
+      await test("database: 'when does it start paying' is the deferred period", async () => {
+        const r = await ask("When does Tom's income protection start paying?");
+        const text = [r.answer.summary, ...(r.answer.details ?? [])].join("\n");
+        assert.match(text, /Deferred period: 13 weeks/, text);
+        assert.doesNotMatch(text, /could not find|Monthly contribution/, text);
       });
     } finally {
       await query("DELETE FROM accounts WHERE id=$1", [A]).catch(() => undefined);
