@@ -10301,3 +10301,9 @@ Cause: each reason strips only its own words and then checks the rest for figure
 
 ## R467: #230 a1394d5: R466 still open
 This head adds negation, Malay "semua premi" and policy-year durations. It does not touch the R466 cause, and all 15 misleading rows from p230-reasons.mts give the same line as on 44028cc (waiver "pays no amount itself" while also paying the sum insured, the advance line hiding a second payment, "pays the whole sum insured" with "and the policy value", "otherwise", "payable over 5 years", "adjusted ..."). Gate not re-run, since nothing it covers changed. Fix as in R466: give a reason only when the rest of the passage passes a filler-word allow-list.
+
+## R468: #230 796058a / 427f03f (filler allow-list): 2 misleading rows left
+Gate green on 427f03f (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). All 40 R466 rows now get no reason, and 22 of 24 new wordings (/mnt/project-files/critic/p230b-reasons2.mts, p230c-reasons3.mts) are fine.
+M1 (same shape as R466 H1, narrower): "We waive future premiums. CI benefit is paid within 30 days." still says "This benefit pays no amount itself". The filler "<abbreviation> benefit is paid within" lets a second payout through.
+M2: "We pay the death benefit in advance, or the TPD Benefit." gets the advance line. The new filler "or" joins an alternative payout.
+Fix: "is paid ..." is filler only when its subject is it/this benefit (never another named benefit), and "or" is filler only between two filler words (for example "payor or policyowner"). Neither may come before a word naming a benefit. With those two closed, READY.
