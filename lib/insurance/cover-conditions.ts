@@ -1,4 +1,4 @@
-import { PRINTED_FIGURE, printedNumber } from "@/lib/format/printed-number";
+import { FIGURE_END, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber, scaleOf } from "@/lib/format/printed-number";
 import { knownValue } from "@/lib/chat/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ClaimItem } from "@/types";
@@ -153,7 +153,7 @@ const COUNT_AFTER=/^\s*(?:claims?|visits?|times|sessions?|treatments?|consultati
 const CURRENCY=String.raw`(?:S\$|US\$|A\$|HK\$|NZ\$|£|€|¥|₹|\$|(?<![\p{L}])(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|NZD|JPY|CNY|RMB|INR|Rs\.?|PHP|IDR|Rp\.?|THB)\s?)`;
 // The figure is taken whole, separators and all, and read in its own grouping (printedNumber): "€25.000" is twenty-five
 // thousand, never twenty-five, and "Rp50.000.000" is never fifty.
-const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(${PRINTED_FIGURE})\s*(million|mil|m|k|thousand)?(?![\d\p{L}])`,"giu");
+const FIGURE=new RegExp(String.raw`(${CURRENCY})?\s*(${PRINTED_FIGURE})${FIGURE_END}(?:\s*(${SCALE_WORD}))?(?![\d\p{L}])`,"giu");
 const WORD_FRACTIONS:Record<string,number>={half:0.5,"one half":0.5,"a half":0.5,quarter:0.25,"one quarter":0.25,"a quarter":0.25,"one third":1/3,"a third":1/3,"two thirds":2/3,"three quarters":0.75};
 const TENS:Record<string,number>={ten:10,twenty:20,"twenty-five":25,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,"seventy-five":75,eighty:80,ninety:90,"one hundred":100,hundred:100};
 /** Each figure a sentence prints, with where it is. A share is a fraction (50% = 0.5). */
@@ -168,9 +168,9 @@ function figuresIn(sentence:string,share:boolean){
     return out;
   }
   for(const m of sentence.matchAll(FIGURE)){
-    const base=printedNumber(m[2]);if(base==null)continue;
-    const unit=(m[3]??"").toLowerCase();
-    out.push({value:base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1),start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
+    // Before a multiplier one dot is the decimal point: "S$1.125 million" is 1,125,000, never 1,125,000,000 (Critic R478).
+    const base=printedNumber(m[2],null,{scaled:!!m[3],lakh:groupsInLakhs(m[0])});if(base==null)continue;
+    out.push({value:base*scaleOf(m[3]),start:m.index!,end:m.index!+m[0].length,money:!!m[1]});
   }
   return out;
 }
@@ -229,9 +229,8 @@ export function shareCapInPassage(quote:string):{amount:number;currency:string|n
   for(const m of text.matchAll(FIGURE)){
     if(!m[1])continue;
     // A money figure grouped in no known way may be the cap: no cap is read rather than another figure taken for it.
-    const base=printedNumber(m[2]);if(base==null)return null;if(base<=0)continue;
-    const unit=(m[3]??"").toLowerCase();
-    const amount=base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1);
+    const base=printedNumber(m[2],null,{scaled:!!m[3],lakh:groupsInLakhs(m[0])});if(base==null)return null;if(base<=0)continue;
+    const amount=base*scaleOf(m[3]);
     const start=m.index!,end=start+m[0].length;
     const sentenceStart=Math.max(text.lastIndexOf(".",start-1),text.lastIndexOf(";",start-1),text.lastIndexOf("\n",start-1))+1;
     const before=text.slice(Math.max(sentenceStart,start-80),start),after=text.slice(end);

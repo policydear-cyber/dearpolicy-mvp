@@ -1,4 +1,4 @@
-import { PRINTED_FIGURE, printedNumber } from "@/lib/format/printed-number";
+import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { replacedFigures } from "./amendments";
 import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-failures";
 import { knownValue,normalText } from "@/lib/chat/facts";
@@ -1040,8 +1040,8 @@ export function validateCatalogFormula(input:{
   }
   if(!numericTokens(quote).includes(String(value)))return none;
   // The printed figure is read whole and in its own grouping, so "€50.000" proves fifty thousand and never fifty.
-  const money=quote.match(new RegExp(String.raw`\b(?:sgd|usd|myr|php|eur|gbp)\s*(${PRINTED_FIGURE})|(?:s\$|us\$|\$|€|£)\s*(${PRINTED_FIGURE})`,"i"));
-  if(!money||printedNumber(money[1]??money[2])!==value)return none;
+  const money=quote.match(new RegExp(String.raw`\b(?:sgd|usd|myr|php|eur|gbp)\s*(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}|(?:s\$|us\$|\$|€|£)\s*(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}`,"iu"));
+  if(!money||printedNumber(money[1]??money[2],null,{lakh:groupsInLakhs(quote)})!==value)return none;
   if(input.kind==="fixed"){
     if(/\bup to\b|maximum|limit|cap|per day|daily|reimburs|expense|actual cost/.test(quote))return none;
     if(!/\b(?:pay|pays|payable|benefit)\b/.test(quote))return none;

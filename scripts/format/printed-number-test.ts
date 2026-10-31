@@ -12,13 +12,45 @@ globalThis.fetch = (async () => { fetches++; throw new Error("no network in this
 
 test("every common grouping reads as printed; an ambiguous one reads as nothing", async () => {
   const { printedNumber } = await import("@/lib/format/printed-number");
-  for (const [raw, value] of [["1500", 1500], ["12.5", 12.5], ["1,500,000.00", 1500000], ["5,00,000", 500000], ["1,50,00,000", 15000000],
-    ["1.500.000", 1500000], ["50.000", 50000], ["2.500,50", 2500.5], ["10'000", 10000], ["10 000", 10000]] as const)
+  for (const [raw, value] of [["1500", 1500], ["12.5", 12.5], ["1,500,000.00", 1500000],
+    ["1.500.000", 1500000], ["50.000", 50000], ["2.500,50", 2500.5], ["10'000", 10000]] as const)
     assert.equal(printedNumber(raw), value, raw);
-  for (const raw of ["12,50", "1,5", "1.2345", "1,50,000.0.0", "", "1.500,000"]) assert.equal(printedNumber(raw), null, raw);
+  for (const raw of ["12,50", "1,5", "1.2345", "1,50,000.0.0", "", "1.500,000", "10 000", "500 365", "0.500", "0,250"]) assert.equal(printedNumber(raw), null, raw);
   // A three-decimal currency: "BHD 1.500" is one and a half dinars.
   assert.equal(printedNumber("1.500", "BHD"), 1.5);
   assert.equal(printedNumber("1.500", "EUR"), 1500);
+  // Lakh grouping only beside a rupee or taka sign (TE pr239 M29); before a multiplier one dot is a decimal (Critic R478 H1).
+  assert.equal(printedNumber("1,50,000"), null);
+  assert.equal(printedNumber("5,00,000", null, { lakh: true }), 500000);
+  assert.equal(printedNumber("1,50,00,000", "INR"), 15000000);
+  assert.equal(printedNumber("1.250", null, { scaled: true }), 1.25);
+  assert.equal(printedNumber("2,5", null, { scaled: true }), 2.5);
+  assert.equal(printedNumber("1,500", null, { scaled: true }), null);
+  assert.equal(printedNumber("1.000.000", null, { scaled: true }), null);
+});
+
+test("a multiplier is applied where it is read and never left off where it is not", async () => {
+  const { typedValue } = await import("@/lib/policies/catalog-builder");
+  const { parseBenefitValue } = await import("@/lib/policies/benefit-rows");
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const { capReading } = await import("@/lib/insurance/cover-conditions");
+  for (const [cap, amount, currency] of [["US$1.250 million", 1250000, "USD"], ["S$1.125 million", 1125000, "SGD"], ["US$2.250m", 2250000, "USD"],
+    ["₹2 crore", 20000000, "INR"], ["Rs. 5 lakh", 500000, "INR"], ["RM1.5 juta", 1500000, "MYR"], ["S$1.5k", 1500, "SGD"]] as const)
+    assert.deepEqual(shareBound("10% of the Sum Insured, up to " + cap, "Angioplasty"), { kind: "cap", amount, currency }, cap);
+  assert.deepEqual(capReading({ amount: 1250000, amountBasis: null, quote: "We pay up to S$1.250 million per life." } as never), { kind: "cap", amount: 1250000 });
+  // A cell or a check that does not apply the multiplier gives no figure: never S$1.5 or S$1,250.
+  for (const cell of ["S$1.5 million", "Up to S$1.250 million", "US$2m", "₹2 crore", "S$1.5k", "RM 2 juta"]) {
+    assert.equal(typedValue("policy_year_limit", cell), null, cell);
+    assert.equal(parseBenefitValue(cell, {}), null, cell);
+  }
+  // Space grouping and lakh grouping outside a rupee market read as nothing, never as their first group.
+  for (const cell of ["€10 000", "S$500 365", "HK$1,50,000"]) {
+    assert.equal(typedValue("policy_year_limit", cell), null, cell);
+    assert.equal(parseBenefitValue(cell, {}), null, cell);
+  }
+  assert.equal(shareBound("10% of the Sum Insured, up to HK$1,50,000", "Angioplasty").kind, "unsure");
+  assert.equal(shareBound("10% of the Sum Insured, up to €10 000", "Angioplasty").kind, "unsure");
+  assert.equal(parseBenefitValue("CHF 10'000", {})?.currency, "CHF");
 });
 
 test("a table cell, a stored limit and a share's cap keep the whole figure in any market", async () => {
