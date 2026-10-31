@@ -32,6 +32,15 @@ t("a draft never goes live: while unpublished the page is 'not found' (unless th
 t("says what deleting a document really does, and names Pinecone and the hash-only malware check", () => {
   for (const w of [/Pinecone/, /everything read from it is deleted/, /none of its content/, /retried automatically/, /The file itself is not sent/]) assert.match(page, w, String(w));
   assert.doesNotMatch(page, /it is no longer used for anything/);
+  assert.match(page, /<ToConfirm>that answers DearPolicy already gave you which quoted the document/, "past answers and summaries are not claimed as removed until that fix lands");
+  assert.match(page, /not malware-scanned/);
+  assert.match(readFileSync("lib/privacy/notice-status.ts", "utf8"), /Do not flip it before the deletion work it describes is live/);
+});
+t("promises that are not yet checked stay To confirm (encryption, telling you about a breach or a change)", () => {
+  for (const w of [/<ToConfirm>information is encrypted/, /<ToConfirm>if something goes wrong/, /<ToConfirm>if this notice changes/]) assert.match(page, w, String(w));
+});
+t("the public page shows no Sign out button or app navigation to a signed-out visitor", () => {
+  assert.match(readFileSync("components/AppShell.tsx", "utf8"), /SIGNED_OUT_PATHS = new Set\(\[[^\]]*"\/privacy"/);
 });
 t("names what is kept, every service that receives it, and how to remove it", () => {
   for (const w of [/Anthropic/, /Supabase/, /Vercel/, /Pinecone/, /VirusTotal/, /identity numbers/, /Permanently delete household/, /export/, /do not sell/, /not an insurer/])

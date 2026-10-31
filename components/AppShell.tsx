@@ -58,7 +58,8 @@ const operatorNav: NavItem[] = [
 ];
 
 /** Pages a signed-out person uses; no sign-out control there. */
-const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password"]);
+// /privacy is public and read before signing in, so it gets no app navigation and no Sign out button.
+const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password", "/privacy"]);
 /** Signed in, but with no household to navigate. */
 const NO_NAV_PATHS = new Set(["/household/deleted", "/privacy"]);
 

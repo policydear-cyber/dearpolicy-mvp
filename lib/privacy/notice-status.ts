@@ -4,6 +4,10 @@
  * DC flips PRIVACY_NOTICE_FINAL to true once every passage is settled (scripts/privacy/notice-test.ts refuses a final
  * notice with any passage still marked). DEARPOLICY_PRIVACY_PREVIEW=true shows the draft page for review (for example
  * on a local run); it never adds the links.
+ *
+ * Do not flip it before the deletion work it describes is live: "Removing your information" relies on #267 (deleting a
+ * document removes its file and everything read from it) and on the follow-up that removes what stored chat answers
+ * and coverage summaries took from a deleted document. Until both are merged, those passages are not true.
  */
 export const PRIVACY_NOTICE_FINAL = false;
 

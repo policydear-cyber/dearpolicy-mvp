@@ -63,7 +63,7 @@ export default function PrivacyPage() {
           <li><strong>Supabase</strong> stores your records and files and handles signing in.</li>
           <li><strong>Vercel</strong> hosts the website.</li>
           <li><strong>Pinecone</strong> keeps passages of your documents, as search entries, so the right page can be found when you ask a question. This is used only when that search is switched on, and a document&rsquo;s passages are removed from it when you delete the document.</li>
-          <li><strong>Checking uploads for malware:</strong> when this is switched on, only a fingerprint of each file (a code worked out from the file, from which the file cannot be rebuilt) is checked with VirusTotal. The file itself is not sent. <ToConfirm>whether malware checking is switched on for the beta (it is off today), and that files are never uploaded to VirusTotal.</ToConfirm></li>
+          <li><strong>Checking uploads for malware:</strong> when this is switched on, only a fingerprint of each file (a code worked out from the file, from which the file cannot be rebuilt) is checked with VirusTotal. The file itself is not sent. A file VirusTotal flags is refused; a file it has no record of is marked &ldquo;not malware-scanned&rdquo;. <ToConfirm>whether malware checking is switched on for the beta (it is off today, so every file is marked not malware-scanned), and which scanner is used.</ToConfirm></li>
         </ul>
         <p>Your information is kept in <ToConfirm>the country or region where the database and files are hosted.</ToConfirm></p>
       </section>
@@ -80,7 +80,7 @@ export default function PrivacyPage() {
       <section className="section">
         <h2>Removing your information</h2>
         <ul>
-          <li><strong>A document:</strong> delete it from Documents. Its file is removed from storage, and everything read from it is deleted: its page text, the passages used to search it (in our database and in Pinecone), and the covers, amounts, names and policy numbers taken from it. We keep only a record that a document was deleted and when, with none of its content. If a step cannot finish straight away, it is retried automatically until it does.</li>
+          <li><strong>A document:</strong> delete it from Documents. Its file is removed from storage, and everything read from it is deleted: its page text, the passages used to search it (in our database and in Pinecone), and the covers, amounts, names and policy numbers taken from it. We keep only a record that a document was deleted and when, with none of its content. If a step cannot finish straight away, it is retried automatically until it does. <ToConfirm>that answers DearPolicy already gave you which quoted the document, and coverage summaries worked out from it, are removed or recalculated too. Today they can still keep what they took from it; a fix is being built.</ToConfirm></li>
           <li><strong>Your whole household:</strong> the owner can choose &ldquo;Permanently delete household&rdquo;. Its family profiles, documents, claims and chats are removed, and their files are deleted from storage straight after.</li>
           <li><strong>A copy first:</strong> the owner can download an export of the household before deleting it.</li>
           <li><strong>Your sign-in:</strong> to close the account itself, contact us at the address above.</li>
@@ -91,8 +91,9 @@ export default function PrivacyPage() {
       <section className="section">
         <h2>How we protect it</h2>
         <p>
-          Information is encrypted while it travels and where it is stored. Every request is checked against your own household, so one household cannot read another&rsquo;s records.
-          No system is perfectly safe; if something goes wrong that affects your information, we will tell you.
+          <ToConfirm>information is encrypted while it travels and where it is stored (check the hosting and database settings).</ToConfirm>{" "}
+          Every request is checked against your own household, so one household cannot read another&rsquo;s records.
+          No system is perfectly safe. <ToConfirm>if something goes wrong that affects your information, how and how quickly we tell you.</ToConfirm>
         </p>
       </section>
 
@@ -108,7 +109,7 @@ export default function PrivacyPage() {
         <h2>This is a beta</h2>
         <p>
           DearPolicy is in an invite-only beta and still changing. DearPolicy explains your documents; it is not an insurer or a financial adviser, and your insurer decides every claim.
-          If this notice changes in a way that matters, we will tell you in the app before it applies.
+          <ToConfirm>if this notice changes in a way that matters, how we tell you before it applies.</ToConfirm>
         </p>
       </section>
 
