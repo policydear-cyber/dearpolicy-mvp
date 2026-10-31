@@ -92,7 +92,15 @@ export type ScrubResult = { finished: number; scrubbed: number; searchIndexPendi
 const defaultPinecone: PineconeCleanup = { enabled: pineconeEnabled, deletePassages: deletePolicyPassages };
 const defaultTransaction = <T>(fn: (db: Db) => Promise<T>) => withServiceTransaction((client) => fn(client as unknown as Db));
 
-/** Moves documents whose deletion has finished from pending_deletion to soft_deleted (step 1). */
+/**
+ * Moves documents whose deletion has finished from pending_deletion to soft_deleted (step 1).
+ *
+ * The "stuck over STUCK_PENDING_MINUTES" rule is safe only because no code today moves a document from
+ * pending_deletion back to active (lib/lifecycle/types.ts allows that transition, but nothing performs it). If a
+ * "cancel deletion", restore or undo feature is ever added, it must also change this
+ * rule (for example, only finish rows whose deletion request is not cancelled), or a cancelled deletion an hour old
+ * would still be scrubbed.
+ */
 export async function finishDeletedDocuments(db: Db, policyIds?: string[], deletionFinished = false): Promise<number> {
   const r = await db.query(
     `UPDATE policies p SET lifecycle_state='soft_deleted', lifecycle_version=lifecycle_version+1, updated_at=now()
