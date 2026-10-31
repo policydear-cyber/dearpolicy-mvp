@@ -79,6 +79,15 @@ function says(passage: string, reason: RegExp): boolean {
   return false;
 }
 
+/** Whether a passage read for a benefit pays the whole sum insured in words and nothing else that may change it ("Get one
+ * lump sum payment of the coverage amount upon diagnosis"): the same test the line below uses for its whole-sum reason. */
+export function paysWholeSum(quote: string | null | undefined): boolean {
+  const passage = (quote ?? "").normalize("NFKC").trim();
+  if (!(passage.length > 0 && passage.length < 255) || !says(passage, WHOLE_SUM_IN_WORDS)) return false;
+  const rest = passage.replace(HARMLESS_FIGURES, " ").replace(IN_A_LUMP_SUM, " ").replace(WHOLE_SUM_IN_WORDS, " ");
+  return !MAY_STATE_AMOUNT.test(rest) && onlyFiller(rest) && !CHANGES_THE_SUM.test(rest);
+}
+
 export function unreadAmountLine(sourcePage: number | null, quote: string | null | undefined): string {
   const where = sourcePage ? `page ${sourcePage}` : "the page";
   const passage = (quote ?? "").normalize("NFKC").trim();

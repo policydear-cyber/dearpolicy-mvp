@@ -30,6 +30,8 @@ type Benefit={
   /** For such a row, the household's own plan column, when its documents settle the plan: that column's printed figure. */
   planFigure?:{plan:string;figureText:string}|null;
   calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
+  /** A benefit that pays the whole sum insured in words: each person's own sum of the cover named the same (whole-sum.ts). */
+  wholeSum?:{owner:string;plan:string;amount:string;source:string}[]|null;
   documentName:string;insurer:string|null;owners:string[];
   /** Two documents print different amounts for this benefit: drawn as one either/or block, never a total. */
   alternatives?:AlternativeAmounts|null;
@@ -42,6 +44,7 @@ type Member={id:string;display_name:string;relationship:string};
 function paysLine(b:Benefit):{text:string;established:boolean}{
   if(b.planColumns&&b.planFigure)return {text:`For your ${b.planFigure.plan} plan: ${b.planFigure.figureText}. The document prints a different amount for each plan.`,established:true};
   if(b.planColumns)return {text:"The document prints a different amount for each plan, and which plan is yours is not shown, so no amount is used for it.",established:false};
+  if(b.attention==="unreadable"&&b.wholeSum?.length)return {text:"Pays the whole sum insured, as each person's own policy document gives it:",established:true};
   if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote),established:false};
   if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. The amount has not been verified against the page yet, so it is not used in answers.",established:false};
   if(b.formulaKind==="none")return {text:b.pays||"As stated in the document.",established:true};
@@ -176,6 +179,7 @@ export default function BenefitsPage(){
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
                 {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
+                {line.established&&benefit.attention==="unreadable"&&benefit.wholeSum?.map((c,i)=><small key={i} className="pays-basis" data-testid="whole-sum">{c.owner}: {c.amount} ({c.plan}, from {c.source})</small>)}
               </>}
               {benefit.attention==="unreadable"&&CLARIFIABLE.has(benefit.formulaKind)&&<UnreadableAmount benefit={benefit} onSaved={async(message)=>{setStatus(message);await load();}} />}
               <details className="source-details">
