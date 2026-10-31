@@ -58,3 +58,34 @@ test("nothing is shown when it is not certain: another name, two sums, an unwrit
   assert.equal(wholeSumAgainst([], { benefitName: "Serious Illness Cover", quote: WHOLE }), null);
   assert.equal(fetches, 0);
 });
+
+test("a person's second document that holds no cover (their own wording or letter) never hides the sum; anything else still does", async () => {
+  const { wholeSumAgainst } = await import("@/lib/policies/whole-sum");
+  const declared = (owner: string, covers: Cover[]) => {
+    const c = contract(owner, covers) as unknown as Record<string, unknown>;
+    return { ...c, id: "declared-" + owner, ownershipBasis: "declared", documents: [doc("w-" + owner, "Policy wording")] } as never;
+  };
+  const evidence = (owner: string, amount: number, currency = "SGD") => contract(owner, [{ productName: "Kritische Krankheit", amount, currency }]);
+  const ask = (contracts: never[]) => wholeSumAgainst(contracts, { benefitName: "Kritische Krankheit", quote: WHOLE });
+  // A wording or letter the person declared, read for no cover, linked to the same booklet: the certificate's sum stands.
+  const lines = ask([evidence("Ana", 350000, "EUR"), declared("Ana", []), evidence("Ben", 300000, "EUR")]);
+  assert.equal(lines?.length, 2);
+  assert.match(lines![0].amount, /350,000/); assert.equal(lines![0].owner, "Ana"); assert.match(lines![1].amount, /300,000/);
+  // The declared document has a cover of its own (another policy, read): it may pay this too, so nothing is shown.
+  assert.equal(ask([evidence("Ana", 350000), declared("Ana", [{ productName: "Comprehensive CI II", amount: 100000, currency: "SGD" }])]), null);
+  assert.equal(ask([evidence("Ana", 350000), declared("Ana", [{ productName: "Kritische Krankheit", amount: 100000, currency: "SGD" }])]), null);
+  // A person with only a declared document, or an evidenced contract without the cover, still shows nothing.
+  assert.equal(ask([declared("Ana", [])]), null);
+  // Declared only, even with the cover read from it: no evidenced contract, no sum (TE pr237 P13).
+  assert.equal(ask([declared("Ana", [{ productName: "Kritische Krankheit", amount: 350000, currency: "EUR" }])]), null);
+  assert.equal(ask([evidence("Ana", 350000), contract("Ana", [])]), null);
+  assert.equal(ask([evidence("Ana", 350000), declared("Ben", [])]), null);
+  // Two evidenced documents of one person printing two sums: never one of them.
+  assert.equal(ask([evidence("Ana", 350000), evidence("Ana", 200000)]), null);
+  assert.equal(ask([evidence("Ana", 350000), evidence("Ana", 350000)])?.length, 1);
+  // A variant's sum is never borrowed: "Plus", "II" and "+" are other covers even beside an empty declared document.
+  for (const other of ["Kritische Krankheit Plus", "Kritische Krankheit II", "Kritische Krankheit+"])
+    assert.equal(wholeSumAgainst([contract("Ana", [{ productName: other, amount: 90000, currency: "EUR" }]), declared("Ana", [])],
+      { benefitName: "Kritische Krankheit", quote: WHOLE }), null, other);
+  assert.equal(fetches, 0);
+});

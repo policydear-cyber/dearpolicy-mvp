@@ -18,12 +18,25 @@ export function wholeSumAgainst(contracts:PolicyContract[],benefit:{benefitName:
   const wanted=identity(benefit.benefitName);
   if(!wanted)return null;
   const lines:WholeSumLine[]=[];
-  for(const contract of contracts){
-    const named=contract.coverages.filter(c=>identity(c.productName??c.policyName)===wanted);
-    // The same cover on two of the person's documents is one cover when both print the same written amount.
-    const usable=named.filter(c=>c.amount!=null&&c.amount>0&&!!c.currency&&c.currencyVerified===true);
-    if(!named.length||usable.length!==named.length||new Set(usable.map(c=>c.currency+" "+c.amount)).size!==1)return null;
-    const cover=usable[0];
+  // Person by person, not contract by contract: one person may have a second, declared document linked to the same
+  // scheme booklet (their own wording or letter) that no cover was read from. It holds no sum to compare, so it is left
+  // out, but only when it holds no cover at all and the same person's evidenced contract has the cover. A contract
+  // evidenced for the person, or one with any cover read from it, that lacks the cover still leaves nothing shown.
+  const people=[...new Set(contracts.map(c=>c.ownerId))];
+  for(const ownerId of people){
+    const own=contracts.filter(c=>c.ownerId===ownerId);
+    const counted=own.filter(c=>!(c.ownershipBasis==="declared"&&c.coverages.length===0));
+    if(!counted.length||!counted.some(c=>c.ownershipBasis==="evidence"))return null;
+    const covers:{contract:PolicyContract;cover:PolicyContract["coverages"][number]}[]=[];
+    for(const contract of counted){
+      const named=contract.coverages.filter(c=>identity(c.productName??c.policyName)===wanted);
+      // The same cover on two of the person's documents is one cover when both print the same written amount.
+      const usable=named.filter(c=>c.amount!=null&&c.amount>0&&!!c.currency&&c.currencyVerified===true);
+      if(!named.length||usable.length!==named.length)return null;
+      covers.push(...usable.map(cover=>({contract,cover})));
+    }
+    if(new Set(covers.map(({cover})=>cover.currency+" "+cover.amount)).size!==1)return null;
+    const {contract,cover}=covers[0];
     const doc=[...contract.documents,...contract.references].find(d=>d.id===cover.policyId);
     const source=(doc?documentName(doc):"your policy schedule")+(cover.sourcePage?`, page ${cover.sourcePage}`:"");
     lines.push({owner:contract.ownerName,plan:cover.productName??cover.policyName??contract.name,amount:formatMoney(cover.amount!,cover.currency!),source});
