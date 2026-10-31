@@ -10167,3 +10167,9 @@ Root cause: a negation window is still a deny-list. Structural fix:
     or right after if/where/when/whose + a subject that is not it/this/the amount/benefit/payment/we.
 (b) Independently, a second percentage in the passage that is not the threshold's own number (here "reduced to 25%") means unsure.
     This is the same rule as R416 H2 on #211.
+
+## R431 — #217 21aea6d
+- R423 M1 fixed: the page numbers are kept when other notes follow (probed: 5 of 5 note shapes keep "Page 3" / "Pages 3 and 5"; the old word-for-word variant falls back to the generic sentence).
+- R423 M2 mostly fixed: "with the same copy the result may not change" is honest. Low: Read again re-reads the whole document, not only "those pages". "Read again reads the document once more" is more exact.
+- R423 M3 OPEN (one-line wording): "upload it and delete this one". Say delete only once the new copy shows as read, e.g. "upload it, and once it shows as read, delete this one". Otherwise a household that deletes first and then gets a failed read has no copy of that cover on file.
+- R423 L1 OPEN (inferred from page.tsx): a doc with needs_review also shows "Not fully confirmed" right under the Read in part card, which says the same thing twice. Hide that card when the Read in part card shows.
