@@ -811,7 +811,7 @@ const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du
 const SHARE_CONDITION=/(?:^|[\s,])(?:if|when|where|for|once|provided|within|upon|on|following|to|after|before|during|until|as\s+certified|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of|apabila|jika|bila|semasa|sekiranya|kepada)\b/u;
 /** Words that change, split or scope the amount, in English and Malay: a deduction, a multiple or part, another class of
  * person, or an alternative. */
-const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|shared?|proportion\w*|pro[\s-]?rata|rateabl\w*|apportion\w*|divid\w*|split|equally|times|multipl\w*|offset|basis|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
+const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|dibahagi\w*|dipotong|potong|baki|ansuran|pro[\s-]?rat\w*|scaled?|according\s+to|depend\w*|degree|extent|instal+ments?|remain\w*|balance|outstanding|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|shared?|proportion\w*|pro[\s-]?rata|rateabl\w*|apportion\w*|divid\w*|split|equally|times|multipl\w*|offset|basis|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
 /** Words before the share that change it rather than describe the event: a deduction, a multiple, an alternative (Critic
  * R450 H1c). "reduced" is left out: "hearing reduced by more than 80 decibels" is the event (R443 M1). */
 const CHANGER_BEFORE_SHARE=/\b(?:deduct\w*|minus|net\s+of|offset|less\s+(?:any|the|all|amounts?)|twice|double[sd]?|triple[sd]?|otherwise|else|instead|ditolak|separuh)\b/u;
@@ -819,6 +819,40 @@ const CHANGER_BEFORE_SHARE=/\b(?:deduct\w*|minus|net\s+of|offset|less\s+(?:any|t
  * R450 H1a: "if other insurance applies, we pay only our rateable proportion"). */
 const PAY_WORD=/\b(?:pay|pays|paid|payable|paying|amount|amounts|benefit|benefits|sum)\b/u;
 const PER_BODY_PART=/\b(?:per|for\s+each|for\s+one)\s+(?:eye|ear|limb|arm|leg|hand|foot|finger|toe|thumb|tooth)\b/gu;
+/** What a condition on when or to whom a share is paid may say (allow-list, Critic R454): who is paid, what happens, when,
+ * and who certifies it, in English and Malay. Any other word ("in five equal instalments", "to the extent not paid by any
+ * other insurer", "dibahagi sama rata") may change what is paid, so the share is not used. */
+const CONDITION_WORDS=new Set(("if when where for once provided that within upon on following to after before during until as "
+  +"due caused by resulting from result of the a an any one this that his her their your you our its it we us he she they "
+  +"is are was were be been being has have had becomes become becoming occurs occur occurred happens happen happened "
+  +"and in at least more than or equal with from date event "
+  +"diagnosis diagnosed diagnose death dies die died dying accident accidental accidents injury injuries illness illnesses "
+  +"disease diseases condition conditions disability disabled disablement permanent permanently total totally "
+  +"hospital hospitalisation hospitalization admission admitted intensive care coma surgery operation qualifying critical covered "
+  +"terminal terminally major paralysis loss lost sight hearing speech limb limbs eye eyes both "
+  +"policy owner owners policyowner policyholder holder estate beneficiary beneficiaries nominee nominees trustee trustees "
+  +"insured life assured person persons member participant "
+  +"age aged under over survival period term cover approval approve approved claim claims receipt proof notification notice "
+  +"certified certification confirmed registered medical practitioner doctor specialist physician singapore overseas abroad "
+  +"apabila jika bila semasa sekiranya kepada selepas sebelum dalam tempoh oleh dengan yang mana akibat daripada dari "
+  +"didiagnosis diagnosis kematian meninggal mati berlaku kemalangan kecederaan penyakit kritikal dilindungi hilang upaya kekal "
+  +"menyeluruh hospital pemilik polisi peserta penama waris benefisiari orang diinsuranskan dijamin hayat doktor perubatan berdaftar "
+  +"pengesahan tuntutan diluluskan kelulusan umur berumur").split(" "));
+/** Durations and ages are allowed as figures: "within 30 days", "for 5 consecutive days", "under age 65", "96 hours". */
+const CONDITION_FIGURES=/\b\d{1,4}\s+(?:consecutive\s+|calendar\s+|berturut[\s-]turut\s+)?(?:hours?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\b|\b(?:age|aged|umur|berumur)\s+\d{1,3}\b|\b(?:two|both|one)\s+(?:limbs?|eyes?|ears?|hands?|feet|foot|arms?|legs?)\b/gu;
+/** The named illness after "diagnosis of" ("carcinoma in situ", "Early Stage Cancer"), up to six words, as long as none
+ * of them says how much, how or how often (CONDITION_NAME_DENY). */
+const CONDITION_NAME=/\b(?:diagnosis\s+of|diagnosed\s+with|diagnosed\s+as\s+having|didiagnosis\s+(?:dengan|menghidap))((?:\s+[\p{L}'’-]+){1,6}?)(?=\s*(?:[,;.]|$|\s(?:if|when|within|before|after|during|as|provided|by|while)\b))/gu;
+const CONDITION_NAME_DENY=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|double[sd]?|twice|triple[sd]?|times|instal+ments?|ansuran|weekly|monthly|yearly|annual\w*|balance|baki|remain\w*|outstanding|extent|place|instead|already|insurer|other|limit\w*|maximum|cap\w*|exceed\w*|most|share\w*|proportion\w*|pro[\s-]?rat\w*|divid\w*|dibahagi\w*|dipotong|potong|equal\w*|split|one|two|three|four|five|six|seven|eight|nine|ten|first|second|each|pay\w*|paid|amount\w*|benefit\w*|sum|child\w*|adult\w*|or|and|but|except|plus|after|then)\b/u;
+/** The share itself paid again, said in other words: "and we pay it within 14 days". */
+const PAID_AS_SAID=/\b(?:we\s+(?:will\s+|shall\s+)?pay\s+it|it\s+(?:is|will\s+be|shall\s+be)\s+paid)\b/gu;
+function conditionHarmless(condition:string,benefitName:string|null|undefined){
+  const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
+  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ")
+    .replace(CONDITION_NAME,(m,name:string)=>CONDITION_NAME_DENY.test(name)?m:" diagnosis ");
+  const words=text.replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
+  return words.every(w=>CONDITION_WORDS.has(w)||own.has(w));
+}
 function shareStandsAlone(text:string,benefitName:string|null|undefined){
   const rest=withoutEventBands(text);
   const main=SHARE_OF_INSURED.exec(rest)??[...rest.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu"))].at(-1)??null;
@@ -832,7 +866,7 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   // A second share anywhere after it ("50% of the Sum Insured. 25% for children.") is another rule for some claims.
   if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
   // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
-  const sentence=after.split(/\.(?:\s|$)/u)[0];
+  const sentence=after.split(/[.;](?:\s|$)/u)[0];
   // The words before the first condition or payee ("is payable", "will be paid in one lump sum") must be harmless; the
   // condition itself ("within 30 days of approval", "to your estate upon your death") may say anything but change the amount.
   // Every later sentence may still change it ("For children this amount is halved.", Critic R450 H1b).
@@ -840,7 +874,7 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   const at=SHARE_CONDITION.exec(sentence);
   if(!at)return capPassageHarmless(sentence,benefitName);
   const condition=sentence.slice(at.index+at[0].length);
-  return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(condition)&&!PAY_WORD.test(condition);
+  return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(condition)&&conditionHarmless(condition,benefitName);
 }
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount or other words, which may cap or change what is paid.";
 /** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one
@@ -851,7 +885,7 @@ export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|
  * neither change the amount nor narrow who or what the cap is for. Anything else ("for children 50% of that", "in total",
  * "doubled if overseas", "for a child under 18", a figure) leaves the share unsure. The benefit's own name words count too. */
 const CAP_PASSAGE_WORDS=new Set(("a an the this that it its we will shall be is are was pay pays paid payable paying receive "
-  +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only").split(" "));
+  +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only akan dibayar dibayarkan").split(" "));
 const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
 /** The share's own trigger when it names every covered condition, never one of them: "upon diagnosis of any one of the 27
  * conditions covered", "on the diagnosis of any of the covered illnesses". It narrows nothing, so it does not unsettle the

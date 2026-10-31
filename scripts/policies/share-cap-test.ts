@@ -186,3 +186,27 @@ test("a condition that goes on to change the amount, a later sentence that does,
     "Head - Equals to or greater than 2% but less than 5% 50%"])
     assert.equal(shareBound(quote, "Loss").kind, "none", quote);
 });
+
+test("after 'when' or 'to whom', only words that say who, what, when or who certifies keep the share; any other wording gives no figure", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const S = "50% of the Sum Insured is payable";
+  // Critic R454: wordings no change-word list names, in English and Malay; TE round 3 W7/W8.
+  for (const quote of [
+    "50% of the Sum Insured jika berlaku di luar negara, dibahagikan dua", "50% daripada Jumlah Diinsuranskan jika tuntutan dibayar, dipotong",
+    S + " to the extent not paid by any other insurer.", S + " after any amount already paid has been taken off.",
+    S + " for the remaining balance of the sum insured after earlier claims.", S + " on each policy anniversary in five equal instalments.",
+    S + " upon diagnosis in place of the death benefit.", S + " upon diagnosis as a weekly sum.", S + " upon death, the balance after any debt owed to us.",
+    "50% daripada Jumlah Diinsuranskan dibayar kepada pemilik polisi, dibahagi sama rata.",
+    "50% daripada Jumlah Diinsuranskan dibayar apabila didiagnosis, setelah dipotong hutang.",
+    S + " upon diagnosis of cancer in five equal instalments.", S + " upon diagnosis for a child under age 18.",
+    "100% of the Sum Insured is payable on death, pro-rated by the number of days insured.",
+    "100% of the Sum Insured is payable on disability, proportionate to the degree of the loss.",
+  ]) assert.equal(shareBound(quote, "Critical Illness").kind, "unsure", quote);
+  for (const quote of [S + " upon diagnosis of carcinoma in situ.", "100% of the Sum Assured is payable within 30 days of diagnosis.",
+    "100% of the Sum Insured if diagnosed under age 65.", "We will pay the benefit of 100% of the sum insured to your estate upon your death.",
+    "100% of the Sum Assured will be paid in one lump sum to the beneficiary in the event of death.",
+    "Sekiranya didiagnosis, 50% daripada Jumlah Diinsuranskan akan dibayar kepada Peserta.",
+    "We pay 100% of the Sum Assured in one lump sum; payment is made by bank transfer.",
+    "100% of the Sum Assured is payable to the policyowner upon death of the life assured, and we pay it within 14 days."])
+    assert.equal(shareBound(quote, "Critical Illness").kind, "none", quote);
+});
