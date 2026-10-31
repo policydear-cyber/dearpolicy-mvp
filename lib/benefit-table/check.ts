@@ -7,6 +7,7 @@
  * bare "$" stays unresolved. A condition is kept only when its words are printed in this document. Everything dropped
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
+import { SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
@@ -149,13 +150,23 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
-  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)(\s*(?:million|m)\b)?/gi)) {
+  const scaleAfter = new RegExp(String.raw`^\s*(${SCALE_WORD})(?![A-Za-z0-9])`);
+  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)/g)) {
     // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
     // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
+    // A scale word after the figure ("1.5 million", "Rp 2 juta", "S$3 mn", "€ 3 millones", "150 triệu") multiplies it,
+    // read by the shared reader: a figure that reads two ways before it ("1.500 Mio.", "2.500 milioni") or a word that
+    // reads two ways ("mil") prints no figure at all, and never the bare one (TE #262 P1: "Rp 2 juta" printed 2).
+    const scale = scaleAfter.exec(text.slice(m.index! + m[1].length));
+    if (scale) {
+      const v = scaledFigure(m[1], null, { scaled: true }), k = scaleOf(scale[1]);
+      if (v != null && Number.isFinite(k)) out.push(v * k);
+      continue;
+    }
     const n = Number(m[1].replace(/,/g, ""));
-    if (Number.isFinite(n)) out.push(m[2] ? n * 1e6 : n);
+    if (Number.isFinite(n)) out.push(n);
   }
   return out;
 }
