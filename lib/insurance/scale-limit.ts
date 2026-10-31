@@ -377,3 +377,24 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const [plan,figureText]=JSON.parse([...picks][0]) as [string,string];
   return {plan,figureText};
 }
+/** A plan-table row's name as shown, without the first plan's empty cell the reader ran into it ("Reinstatement fees
+ * for frequent flyer miles Not Applicable", quote "… miles Not Applicable S$1,000 S$1,500"): beside the household's plan
+ * figure, the name would say the benefit does not apply. Taken off only when the quote prints the name's words, then
+ * that cell opening its one run of plan cells, the run prints a money cell, and the household's own plan has a figure
+ * in it; any other name is shown as stored. Display only: the stored name is
+ * what rules and links key on. */
+export function nameWithoutPlanCell(name:string,quote:string|null|undefined,o:{householdFigure:boolean}={householdFigure:false}):string{
+  // Only beside a figure of the household's own plan: if their plan's cell is the empty one, the cell is what the name
+  // should say (Critic R394 M2).
+  if(!o.householdFigure)return name;
+  const n=name.replace(/\s+/g," ").trim(),q=String(quote??"").replace(/\s+/g," ").trim();
+  const cell=n.match(new RegExp(`\\s(${NONE_CELL})$`))?.[1];
+  if(!cell)return name;
+  const words=n.slice(0,n.length-cell.length).trim();
+  const runs=q.match(PLAN_ROW)??[];
+  if(!words||runs.length!==1||!runs[0].startsWith(cell)||q!==`${words} ${runs[0]}`)return name;
+  // A row of empty cells only ("Cosmetic surgery Excluded Excluded Excluded") keeps its cell: without it the name reads as
+  // covered (TE pr204 K1/K2).
+  if(!(runs[0].match(new RegExp(PLAN_CELL,"g"))??[]).some(c=>/\d/.test(c)))return name;
+  return words;
+}

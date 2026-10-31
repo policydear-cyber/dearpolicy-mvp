@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
+import { nameWithoutPlanCell } from "@/lib/insurance/scale-limit";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,isRulelessCoverLine,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -182,7 +183,8 @@ export async function GET(request:NextRequest){
         productName:row.product_name??row.document_product,
         // For a "% of Sum Insured" rule: whose sum insured, from which plan.
         calculatedAgainst,
-        benefitName:row.benefit_name,
+        // Without a plan cell run into the name only beside this household's own plan figure (Critic R394 M2).
+        benefitName:nameWithoutPlanCell(row.benefit_name,row.quote,{householdFigure:planFigure!=null}),
         traits:Array.isArray(row.traits)?row.traits:[],
         ...formula,
         // The whole point of the screen: the rule as a sentence, not a schema.
@@ -280,11 +282,16 @@ export async function PATCH(request:NextRequest){
     const body=Patch.parse(await request.json().catch(()=>({})));
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
-    const existing=await query<{id:string;benefit_name:string}>("SELECT id,benefit_name FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
+    const existing=await query<{id:string;benefit_name:string;quote:string|null}>("SELECT id,benefit_name,quote FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
     if(!existing.rows[0])return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
     // The GET shows names masked (maskShownText), and the Schedule pages send the name they were shown back with an
     // amount: that masked copy of the stored name is no new name, so the stored name is kept (TE pr181 F1).
     body.benefitName=sentName(body.benefitName,existing.rows[0].benefit_name);
+    // The GET may also show the name without a plan cell the reader ran into it (nameWithoutPlanCell): sent back, that
+    // shown name is no new name either, so the stored name the rules and links key on is kept (TE pr204 Z8, Critic R394 M1).
+    const stored=existing.rows[0].benefit_name,shownName=nameWithoutPlanCell(stored,existing.rows[0].quote,{householdFigure:true});
+    const even=(t:string)=>t.replace(/\s+/g," ").trim();
+    if(body.benefitName!=null&&shownName!==stored&&(even(body.benefitName)===even(shownName)||sentName(body.benefitName,shownName)===undefined))body.benefitName=undefined;
     if(body.formula){
       const checked=reviewedBenefitFormula(body.formula);
       if(!checked.ok)return NextResponse.json({error:checked.error},{status:400});
