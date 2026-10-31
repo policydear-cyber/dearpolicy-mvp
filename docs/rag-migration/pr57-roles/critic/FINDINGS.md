@@ -10381,3 +10381,21 @@ Probes: /mnt/project-files/critic/p239b-locales2.mts, p239c-scale.mts.
 
 ## R484: #239 9b50743: READY (replaces R483)
 Changes since 997856e: "mil" now gives nothing (it means a thousand in some markets and a million in others), so "RM5 mil" and "€5 mil" are unsure. "€50 Tsd." gives 50,000 and "US$2 mln" gives 2,000,000. typedValue returns null for any cell where a money figure carries a multiplier, which fixes R483's Low ("S$1.5 million or S$2,000" no longer stores 2000). All changes are on the safe side. The full gate is green at 1f7f561 and at 9b50743: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. Probe: /mnt/project-files/critic/p239c-scale.mts.
+
+## R485: #240 4d2d181 (benefit tables classified): READY
+I ran all 56 security:* suites on #240 and on main 63e0ad2:
+- infrastructure-tables and launch-check-verifier go from red on main to green (52 tables, 7 household read-only, 855 checks).
+- 53 suites are green on both.
+- launch-guard and tls fail identically on both because of this env (DATABASE_SSL=off), not #240.
+The inventory rows match sql/benefit-table.sql (RLS, SELECT-only is_household_member policy, REVOKE ALL + GRANT SELECT). Gate green.
+
+## R486: #241 9b65a8c (two out-of-date checks): READY
+- v11:customer-screens goes from 8 passing with failures on main to 11/11. rag2:tools goes from 36/38 to 37/38; C4 stays red, held for DC.
+- Mutants caught: a /usage href in the household menu fails the nav check, and a production file importing lib/rag2/search fails F4.
+- The only product file change is a reworded comment.
+- Neither is a registered grader. Gate green.
+
+## R487: #242 eb7906e (spend cap at both layers): READY
+- On main, rag2:conv crashes on the route's 429, adversarial is 46/47 (U1 fails) and fix crashes on the 429. On #242 they are 22/22, 47/47 and 35/35.
+- F6/U1 now assert the route's 429 spend_limit reply with zero model calls. F21 starts under the cap, writes an over-cap row during the first call, and asserts the loop makes no second call.
+- These suites are not registered graders. Gate green.
