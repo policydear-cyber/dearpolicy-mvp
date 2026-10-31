@@ -32,6 +32,10 @@ test("a file whose kind is not known stays with their own documents", () => {
 test("general product documents with nobody linked are General wording", () => {
   for (const role of ["policy_wording", "product_summary", "benefit_guide", "brochure", "policy_illustration", "claim_form"]) assert.ok(!isOwnDocument(doc({ document_role: role })), role);
 });
+test("a wording whose reading confirmed the household's cover is their own, even with nobody linked yet", () => {
+  assert.ok(isOwnDocument(doc({ personal_coverage_confirmed: true, document_role: "policy_wording" })));
+  assert.ok(isOwnDocument(doc({ personal_coverage_confirmed: true, document_role: "product_summary", linked_people: schemeOnly })));
+});
 test("a wording used only as matching wording for someone's plan is still General wording", () => {
   assert.ok(!isOwnDocument(doc({ document_role: "policy_wording", linked_people: schemeOnly })));
 });
