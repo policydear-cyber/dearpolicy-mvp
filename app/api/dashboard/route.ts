@@ -8,9 +8,8 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/format/currency";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { summarisePremiums, type TablePremiumCover } from "@/lib/policies/premium-summary";
-import { singaporeDay } from "@/lib/benefit-table/dates";
-import { premiumSourceKind } from "@/lib/format/premium-source";
+import type { TablePremiumCover } from "@/lib/policies/premium-summary";
+import { countedPremiums } from "@/lib/policies/counted-premiums";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
@@ -152,28 +151,9 @@ export async function GET(request:NextRequest){
 
   const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,endedOn:row?null:endedOn.get(category)??null,undated:row?null:undatedTrip.get(category)??null};});
 
-  // Every premium component (plan and rider under one policy number), with
-  // the MediSave portion added back where the evidence prints it, and the
-  // policies with no premium evidence named -- never the rider alone.
-  // A policy with no premium record is counted from the premium its own document prints (the benefit table's checked line).
-  const premiumSummary=await summarisePremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers?{covers:tableCovers,today:singaporeDay(new Date())}:undefined);
-  // Each counted premium says where it was read (a policy schedule, or a payment record by its source document's role;
-  // null when not known), so Home names the real source or the neutral "from your documents".
-  const premiumItems=premiumSummary.items.map((i)=>({...i,source:premiumSourceKind(i)}));
-  // Premiums are added up only within one stated currency (a ringgit premium is not Singapore dollars; RM + £ is no total):
-  // one total per currency, and a premium whose record does not state its currency is listed but left out of every total.
-  const totals=new Map<string,{currency:string;monthly:number;annual:number}>(),unstated:string[]=[];
-  for(const i of premiumItems){
-    if(!i.currencyStated){unstated.push(i.product_name??i.insurer??"One policy");continue;}
-    const t=totals.get(i.currency)??{currency:i.currency,monthly:0,annual:0};t.monthly+=i.monthly;t.annual+=i.annual;totals.set(i.currency,t);
-  }
-  const premiumTotals=[...totals.values()].sort((a,b)=>b.annual-a.annual);
-  const one=premiumTotals.length===1?premiumTotals[0]:null;
-  // Nothing on file is 0; premiums in two currencies, or none with a stated currency, have no one figure (null).
-  const none=!premiumItems.length;
-  const annual=one?.annual??(none?0:null),monthly=one?.monthly??(none?0:null),premiumCurrency=one?.currency??null;
-  const unstatedNote=unstated.length?`The total ${premiumSummary.note?"also ":""}leaves out ${[...new Set(unstated)].slice(0,4).join(", ")}: ${unstated.length===1?"its record does not say":"their records do not say"} which currency the premium is in.`:null;
-  const premiumNote=[premiumSummary.note,unstatedNote].filter(Boolean).join(" ")||null;
+  // The premiums Home counts, from the same computation Payments shows (lib/policies/counted-premiums.ts).
+  const premiums=await countedPremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers);
+  const premiumItems=premiums.items;
 
   const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true${await notDismissedClause("pd")}`,[accountId]);
   const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND ${activePredicate("p")} AND pm.family_member_id=$2`,[accountId,active.id]);
@@ -200,12 +180,12 @@ export async function GET(request:NextRequest){
   if(unconfirmed>0)reminders.push({kind:"coverage",title:unconfirmed===1?"Some details in a document are not confirmed":"Some details in documents are not confirmed",detail:`${unconfirmed===1?"One document has":`${unconfirmed} documents have`} details that could not be matched to the page they came from, so DearPolicy does not use them in answers yet. Documents shows which.`,href:"/policies"});
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
-  if(premiumNote&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumNote,href:"/records"});
+  if(premiums.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiums.note,href:"/records"});
   if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums:{monthly,annual,currency:premiumCurrency,totals:premiumTotals,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete&&!unstated.length,note:premiumNote},reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
+  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums,reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});

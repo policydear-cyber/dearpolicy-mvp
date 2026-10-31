@@ -4,7 +4,7 @@
  * Made-up rows only. Pure: no database, no network, no model.
  *   node --import tsx scripts/policies/document-filter-test.ts */
 import assert from "node:assert/strict";
-import { authorityLabel, isOwnDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -55,6 +55,23 @@ test("the badge always agrees with the filter the card sits under", () => {
     const c = card({ document_role: role, linked_people, document_authority_label: label });
     assert.equal(authorityLabel(c) === "General wording", !isOwnDocument(c), `${role}/${label}/${linked_people.map((l) => l.source)}`);
   }
+});
+test("a pack filed as a letter whose own reading found the insured people is never called Correspondence", () => {
+  const card = (o: Partial<Row> & { document_authority_label?: string | null; reading_kind?: string | null }) => ({ document_authority_label: null, ...doc(o), ...o });
+  // Any correspondence role, any insurer: the benefit reading's kind decides, never a name.
+  for (const role of ["insurer_letter", "claim_decision", "medical_bill", "app_screenshot", "personal_notes"]) {
+    assert.ok(readAsPolicyDocument({ document_role: role, reading_kind: "personal_proof" }), role);
+    for (const linked_people of [[], chosen]) assert.notEqual(authorityLabel(card({ document_role: role, document_authority_label: "Correspondence", reading_kind: "personal_proof", linked_people })), "Correspondence", role);
+  }
+  assert.equal(authorityLabel(card({ document_role: "insurer_letter", document_authority_label: "Correspondence", reading_kind: "personal_proof", linked_people: chosen })), "Linked to your cover");
+  // A real letter (read as a letter, or not read for benefits) keeps its label.
+  for (const reading_kind of ["letter", "other", null, undefined]) {
+    assert.ok(!readAsPolicyDocument({ document_role: "insurer_letter", reading_kind }));
+    assert.equal(authorityLabel(card({ document_role: "insurer_letter", document_authority_label: "Correspondence", reading_kind, linked_people: chosen })), "Correspondence");
+  }
+  // Only correspondence roles are re-read: a wording whose reading says personal proof is still filed by its role.
+  assert.ok(!readAsPolicyDocument({ document_role: "policy_wording", reading_kind: "personal_proof" }));
+  assert.ok(!readAsPolicyDocument({ document_role: null, reading_kind: "personal_proof" }));
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`document-filter: ${passed} passed, fetches 0`);

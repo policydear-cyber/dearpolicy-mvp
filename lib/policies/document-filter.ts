@@ -1,4 +1,13 @@
 import { REFERENCE_ROLES } from "@/lib/documents/intelligence";
+import { NON_COVER_ROLES } from "@/lib/documents/messy";
+
+/** A document filed as correspondence (a letter, a claim decision, a bill, a screenshot, notes) whose own benefit reading
+ * found the people it insures and what they hold: a policy pack that opens with a cover letter is filed by its first pages,
+ * but its later, page-by-page reading shows it is a policy document. The reading wins for what the card calls it; nothing
+ * here names an insurer or a product. `reading_kind` is the benefit reading's document kind (null: not read for benefits). */
+export function readAsPolicyDocument(p: { document_role: string | null; reading_kind?: string | null }) {
+  return !!p.document_role && NON_COVER_ROLES.has(p.document_role) && p.reading_kind === "personal_proof";
+}
 
 /** Which filter a document sits under, in a household's terms, decided by what the document is. A general document about a
  * product (wording, summary, benefit guide, brochure, illustration, a blank claim form) is "General wording" even when
@@ -14,9 +23,9 @@ export function isOwnDocument(p: { personal_coverage_confirmed: boolean; documen
 /** The card's badge, in the household's words and always agreeing with the filter the card sits under (isOwnDocument):
  * a general document says "General wording"; one of their own never does, whatever the reading's stored label. */
 const GENERAL_LABELS = new Set(["Reference", "Contract wording", "Reference information", "Supporting document"]);
-export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { document_authority_label: string | null; linked_people: { source: string }[] }) {
+export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { document_authority_label: string | null; reading_kind?: string | null; linked_people: { source: string }[] }) {
   if (!isOwnDocument(policy)) return "General wording";
-  const label = policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : null);
+  const label = readAsPolicyDocument(policy) ? null : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : null);
   if (label === "Personal proof") return "Your own policy";
   if (label && !GENERAL_LABELS.has(label)) return label;
   return policy.linked_people.some((l) => l.source !== "scheme_reference_match") ? "Linked to your cover" : "Your document";

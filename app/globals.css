@@ -1278,3 +1278,4 @@ div.answer-point { display: grid; gap: 4px; }
 .section-links { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: flex-end; }
 .section + .profile-add-panel { margin-top: 20px; }
 .profile-add-panel > h3 { margin: 0 0 12px; font-size: 1rem; }
+.section-heading .premium-cost-line { margin-top: 4px; font-size: var(--fs-sm); }
