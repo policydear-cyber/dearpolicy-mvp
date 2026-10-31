@@ -142,9 +142,13 @@ export function claimBattery(): ClaimConversation[] {
   c.push({ name: "acc: fracture admitted overnight", member: XINYI, opening: "Xin Yi fell at the playground on 2026-09-26 and broke her right wrist, admitted overnight at KKH",
     replies: [[ACC, "An accident"], [WHERE, "Singapore"], [/confirmed by a doctor/i, "Yes"], [/what treatment/i, "Admitted to hospital"], [/how many nights/i, "1"], [/other insur|employer/i, "No"], [/lasting impairment/i, "No"]],
     after: TAIL, person: XINYI, want: [/Fracture/], deny: /Baggage|Travel|Critical|Accidental death/i, group: true, neverAsk: /when did it happen|what kind of injury/i });
-  c.push({ name: "acc: after cover lapsed", member: WEIMING, opening: "Wei Ming fractured his wrist playing football on 2026-09-10",
+  // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in
+  // force"; Critic R451): this used to expect SafeGuard PA to be ruled out because its printed expiry (30 June 2026) is
+  // before the event. The fixture has only that printed date, no lapse notice, so the policy is treated as in force and
+  // its fracture benefit is offered.
+  c.push({ name: "acc: printed expiry before the event, still offered", member: WEIMING, opening: "Wei Ming fractured his wrist playing football on 2026-09-10",
     replies: [[ACC, "An accident"], [WHERE, "Singapore"], [/confirmed by a doctor/i, "Yes"], [/what treatment/i, "Outpatient or clinic"], [/other insur|employer/i, "No"], [/lasting impairment/i, "No"]],
-    after: T2, person: WEIMING, deny: /Fracture benefit|Accidental medical|Baggage|Travel|Critical/i, group: false, finalMentions: /ended|30 June 2026|lapsed|no longer/i, concludes: false });
+    after: T2, person: WEIMING, want: [/Fracture/], deny: /Baggage|Travel|Critical/i, group: false });
   c.push({ name: "acc: contradicts accident/illness", member: XINYI, opening: "Xin Yi hurt her arm on 2026-09-29",
     replies: [[/what kind of injury/i, "A broken bone"], [ACC, "An accident"], [WHERE, "Singapore"], [/confirmed by a doctor/i, "Yes"], [/what treatment/i, "Emergency department"], [/other insur|employer/i, "No"], [/lasting impairment/i, "No"]],
     interject: { 3: "actually it was not an accident, she has brittle bones, it just broke" }, after: T2, person: XINYI, deny: /Baggage|Travel|Critical/i, group: false });

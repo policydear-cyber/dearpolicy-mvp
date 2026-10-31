@@ -377,10 +377,12 @@ async function main() {
     const stored = (await db.query<{ event_summary: string }>("SELECT event_summary FROM claim_sessions WHERE id=$1", [first.id])).rows[0]?.event_summary;
     if (stored !== "Ivy: broken leg") f.push("recordClaim renamed the event after a reply: " + stored);
     await db.query("DELETE FROM claim_sessions WHERE id=$1", [first.id]);
-    // Event fit (eval Q14): expired on the event date, and overseas-only cover for a Singapore event.
+    // Event fit (eval Q14): overseas-only cover for a Singapore event. Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z:
+    // "ignore all expiry dates ... assume all policies are still in force"; Critic R451): a policy whose printed expiry has
+    // passed used to be ruled out for a later or undated event. It is in force now, so no date issue is raised.
     const fit = (x: Partial<Parameters<typeof eventFitIssue>[0]>) => eventFitIssue({ benefitTitle: "Overseas medical expenses", expiryPassed: false, ...x });
-    if (fit({ expiryDate: "2024-12-31", expiryPassed: true, eventDate: "2026-09-18" })?.kind !== "expired") f.push("an expired policy's benefit is offered for a later event");
-    if (fit({ expiryDate: "2024-12-31", expiryPassed: true, eventDate: "Not sure" })?.kind !== "expired") f.push("an expired policy's benefit is offered when the event date is unknown");
+    if (fit({ expiryDate: "2024-12-31", expiryPassed: true, eventDate: "2026-09-18", eventLocation: "Overseas" }) !== null) f.push("a policy whose printed expiry passed is ruled out for a later event");
+    if (fit({ expiryDate: "2024-12-31", expiryPassed: true, eventDate: "Not sure", eventLocation: "Overseas" }) !== null) f.push("a policy whose printed expiry passed is ruled out when the event date is unknown");
     if (fit({ benefitTitle: "Accident medical reimbursement", expiryDate: "2024-12-31", expiryPassed: true, eventDate: "2024-11-02" }) !== null) f.push("positive control: cover current on the event date is ruled out");
     if (fit({ benefitTitle: "Accident medical reimbursement", expiryDate: "2024-12-31", expiryPassed: false, eventDate: "2026-09-18" }) !== null) f.push("positive control: a renewed policy (premium evidence after its printed date) is ruled out");
     if (fit({ eventLocation: "Singapore" })?.kind !== "location") f.push("overseas-only cover is offered for an event in Singapore");
@@ -412,11 +414,12 @@ async function main() {
     { eventType: "An accident", eventLocation: "Singapore", eventDate: "2026-09-18", fractureConfirmed: "Yes", treatmentType: "Admitted to hospital", hospitalNights: "3", surgery: "No", outOfPocket: "Not sure" },
     { benefits: [/Fracture of leg/], forbiddenBenefits: [/Overseas|evacuation|JetSure|TripCare/i], labelledNotOffered: /Overseas|evacuation/i, documents: [/doctor|x-ray/i],
       forbiddenDocuments: [/death|coroner/i], eventName: /broken leg|broke her leg|fracture/i, maxQuestions: 10 });
-  // Positive control: overseas, the CURRENT travel policy's overseas medical
-  // cover is a possible benefit; the expired one still is not.
-  await conversation("Injury overseas with a hospital stay: current travel cover offered, expired not", JOSEPHINE, "Josephine fell and broke her leg on holiday.",
+  // Positive control: overseas, the travel policies' overseas medical cover is a possible benefit. Changed 31 Oct with
+  // DC's yes (DC rule 31 Oct 05:38Z: every policy on file is in force; Critic R451): JetSure, whose printed expiry passed,
+  // used to be forbidden here. It is in force now, so it may be offered beside TripCare.
+  await conversation("Injury overseas with a hospital stay: travel cover offered, whatever its printed expiry", JOSEPHINE, "Josephine fell and broke her leg on holiday.",
     { eventType: "An accident", eventLocation: "Overseas", eventDate: "2026-09-18", fractureConfirmed: "Yes", treatmentType: "Admitted to hospital", hospitalNights: "3", surgery: "No", outOfPocket: "Not sure" },
-    { benefits: [/Fracture of leg/, /TripCare — Overseas accident medical/], forbiddenBenefits: [/JetSure/i], documents: [/doctor|x-ray/i],
+    { benefits: [/Fracture of leg/, /TripCare — Overseas accident medical/, /JetSure/i], documents: [/doctor|x-ray/i],
       forbiddenDocuments: [/death|coroner/i], eventName: /broken leg|broke her leg|fracture/i, maxQuestions: 10 });
   await conversation("Death: Raymond died in a road accident", RAYMOND, "Raymond died in a road accident on 2026-09-12.",
     { accidentCircumstances: "He was hit by a car while crossing the road", eventLocation: "Singapore" },

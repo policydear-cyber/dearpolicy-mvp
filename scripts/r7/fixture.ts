@@ -13,10 +13,10 @@
  * PGlite with the deterministic model stand-in (scripts/fixtures/r7/make.py).
  *
  *   Rahman bin Yusof          (self)    MediGuard IP + Co-Pay Rider, Lion Gateway ILP, HomeShield, DriveSafe car,
- *                                       AssureTerm 65 (LAPSED), Wanderlust Japan travel (EXPIRED, with Aisyah)
+ *                                       AssureTerm 65 (LAPSED), Wanderlust Japan travel (printed period passed, treated as in force; with Aisyah)
  *   Aminah binte Ismail       (parent)  ElderShield 400 (Malay/English), Silver Years premium notice only
  *   Muhammad Irfan bin Rahman (child)   Golden Lotus endowment (Chinese/English), SafeGuard Junior PA
- *   Nur Aisyah binte Rahman   (child)   HerCare CI (in its grace period), named driver on the car, expired travel
+ *   Nur Aisyah binte Rahman   (child)   HerCare CI (in its grace period), named driver on the car, travel (period passed, in force)
  *   Muhammad Hafiz bin Yusof  (sibling) nothing on file (shares "Muhammad" with Irfan)
  *   Maria Luz D'Souza-Reyes   (helper)  HelperCare FDW insurance
  */
@@ -100,5 +100,7 @@ export async function buildHousehold(): Promise<Household> {
 /** What the documents print about policies that no longer cover anyone (for the detectors). */
 export const INACTIVE: { key: string; name: string; state: "lapsed" | "expired"; date: string }[] = [
   { key: "lapsed", name: "AssureTerm 65", state: "lapsed", date: "2026-03-17" },
-  { key: "travel", name: "Wanderlust Single Trip", state: "expired", date: "2025-12-14" },
+  // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in force"; Critic R451): Wanderlust Single Trip used to be listed
+  // here as "expired" because its printed period ends 14 December 2025. The document has no lapse or end notice, only that
+  // date, so it is in force and no longer treated as inactive by the detectors.
 ];
