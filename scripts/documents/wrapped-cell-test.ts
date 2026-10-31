@@ -72,3 +72,26 @@ test("a name that names a limit or a scope is read with its share, never taken o
     assert.equal(shareBound(name + " 10% of the Sum Insured, up to S$25,000", name).kind, "unsure", name);
   }
 });
+
+test("a name | amount row under an amount that stops mid-phrase is never swallowed; every cover keeps its own row (Critic H1)", async () => {
+  const { benefitRowsFromText } = await import("@/lib/documents/layout");
+  for (const [page, count] of [
+    ["Hearing Loss\t15% of the Sum Insured, up to\nChild Benefit\tS$5,000\nDeath Benefit\t100% of the Sum Insured\n", 3],
+    ["Loss of Sight\t50% of the Sum Insured or\nLoss of Speech\t50% of the Sum Insured\n", 2],
+    ["Fracture of Leg\t10% of the Sum Insured, up to maximum\nFracture of Arm\tS$5,000\n", 2],
+    ["Burns\t20% of the Sum Insured, subject to a maximum\nComa\tS$50,000\n", 2],
+    ["Hearing Loss in\t15% of the Sum Insured, up to\nBoth Ears\tS$20,000\nOne Ear\tS$10,000\n", 3],
+    ["Kehilangan Pendengaran dalam\t15% daripada Jumlah, sehingga\nKedua-dua Telinga\tRM20,000\nSatu Telinga\tRM10,000\n", 3],
+    ["Accidental Death\t100% of the Sum Insured and\nPermanent Disability\tS$100,000\n", 2],
+  ] as const) {
+    const rows = benefitRowsFromText(page);
+    assert.equal(rows.length, count, page);
+    for (const row of rows) assert.ok(!/\t/.test(row.label), page);
+  }
+  // Words that cannot start an amount still finish the one above, whatever row follows.
+  const rows = benefitRowsFromText("Angioplasty for\t10% of the Sum Insured, up to maximum\nCoronary Artery\tof £25,000\nHeart Attack\t£50,000\n");
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].label, "Angioplasty for Coronary Artery");
+  assert.match(rows[0].value, /of £25,000$/);
+  assert.equal(fetches, 0);
+});

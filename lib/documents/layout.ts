@@ -316,6 +316,12 @@ function wrappedLine(label:string,value:string){return label+"\t"+value.trim();}
 const VALUE_UNFINISHED=/\b(?:of|to|up\s+to|maximum|max\.?|limit\s+of|limited\s+to|not\s+exceeding|subject\s+to|sehingga(?:\s+maksimum)?|maksimum|hingga)$/i;
 /** The rest of an amount on its own: a bare sum ("£10,000", "RM20,000") or words that cannot start an amount ("of S$25,000"). */
 const AMOUNT_REST=/^(?:[a-z]|(?:[A-Z]{1,3}\s?)?[$£€¥₹]?\s?\d[\d,.]*(?:\s?(?:k|m|million|thousand))?$|(?:S\$|RM|HK\$|US\$|A\$|Rp|Rs\.?|£|€|¥|₹)\s?\d[\d,.]*$)/u;
+/** A line printed as a row of its own: a name in the left cell and an amount in the right one. */
+function labelAmountRow(line:PageLine|undefined){
+  if(!line||line.cells.length!==2)return false;
+  const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
+  return !!left&&!AMOUNT.test(left)&&AMOUNT.test(right);
+}
 function withContinuation(label:string,lines:PageLine[],index:number,value=""){
   let text=label,valueSuffix="",valueLine:string|null=null,consumed:number|null=null;
   for(let next=index+1;next<lines.length&&next<=index+2;next++){
@@ -326,7 +332,11 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
     // cell runs on in lower case, and the right cell is only the rest of the amount, never a new amount ("S$200 per day").
     const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
     const dangling=next===index+1&&VALUE_UNFINISHED.test(value.trim())&&line.cells.length===2&&AMOUNT.test(right)&&!AMOUNT.test(left)
-      &&!/^(?:\(?[a-z0-9]{1,3}[.)]|\d)/i.test(left)&&(UNFINISHED.test(text)||/^[a-z]/.test(left))&&AMOUNT_REST.test(right);
+      &&!/^(?:\(?[a-z0-9]{1,3}[.)]|\d)/i.test(left)&&(UNFINISHED.test(text)||/^[a-z]/.test(left))&&AMOUNT_REST.test(right)
+      // A bare sum ("S$20,000") reads as a row of its own when another name | amount row follows it ("Both Ears |
+      // S$20,000" / "One Ear | S$10,000" is a list under the name above, not the rest of its amount): left unjoined.
+      // Only words that cannot start an amount ("of S$25,000") finish the amount above whatever follows (Critic H1).
+      &&(/^[a-z]/.test(right)||!labelAmountRow(lines[next+1]));
     if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;
