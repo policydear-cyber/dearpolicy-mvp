@@ -10,6 +10,9 @@
  *   3. "Sorry, it was Joe, not Ada." was taken as an answer for Ada while her claim waited on a question. When the person
  *      was resolved, the claim was lost: the background job prepares the message again from the new chat, so it never
  *      read what should carry over (the open claim). Now the person meant is resolved and the claim moves to them.
+ *   4. "What's the excess on our health insurance?" listed the travel plan's excess too ("health insurance" named no
+ *      plan kind), and showed each excess on a "Policy-stated coverage limit" card. An excess is what the household pays,
+ *      so it is said in the answer's own words.
  * The pure checks always run. The real chat (the deterministic stand-in model, no network) also runs when a disposable
  * database is set.
  *   npm run -s chat:walkthrough-uk-test   (DEARPOLICY_DISPOSABLE_DB=1 DATABASE_URL=postgres://... adds the database checks) */
@@ -90,6 +93,19 @@ async function main() {
         const text = [r.answer.summary, ...(r.answer.details ?? [])].join("\n");
         assert.match(text, /£221\.98 a month/, text);
         assert.doesNotMatch(text, /left out an amount/);
+      });
+
+      await test("database: 'the excess on our health insurance' is the health plan's, said in words, never a coverage-limit card", async () => {
+        await doc("Amara Okafor", all, "Example Travel Ltd", "Annual Multi-Trip", "PT-300", "Travel", "Annual multi-trip\nInsured: Amara Okafor, Tom Bennett, Ada Bennett, Joe Bennett\nEmergency medical expenses\t£10,000,000\nExcess\t£75 per person per claim\nAnnual premium\t£96.00", [96, "annual"]);
+        await query("UPDATE policy_pages SET text=text||$2 WHERE account_id=$1 AND text LIKE 'Membership certificate%'", [A, "\nExcess\t£250 per member per year"]);
+        // As intake records it: the health plan's in-patient line is hospital cover.
+        await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,confirmed,evidence_verified,evidence_text)
+          SELECT $1,p.id,pm.family_member_id,'Hospitalisation',NULL,'GBP',p.product_name,1,true,true,'In-patient treatment	Full cover' FROM policies p JOIN policy_members pm ON pm.policy_id=p.id WHERE p.account_id=$1 AND p.product_name='Family Health'`, [A]);
+        const r = await ask("What's the excess on our health insurance?");
+        const text = [r.answer.summary, ...(r.answer.details ?? [])].join("\n");
+        assert.match(text, /£250 per member per year/, text);
+        assert.doesNotMatch(text, /£75/, "the travel plan's excess is not the health plan's");
+        assert.deepEqual((r.answer.policyStatedLimits ?? []).map((l) => l.amountText), []);
       });
 
       await test("database: 'Sorry, it was Joe, not Ada' moves the open claim to Joe, through the background job", async () => {

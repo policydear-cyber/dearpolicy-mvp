@@ -457,7 +457,7 @@ async function documentPages(accountId: string, docs: Map<string, DocRow>) {
 const CONDITION_QUESTION = /\bwaiting period|\bsurvival period|\bgrace period|\bexclu\w*|\bpre-existing|\bboth\b[^?]*\b(?:paid|payable|pay)\b|\balternative benefits?|\bonly the higher\b/i;
 const SUBJECTS = /\b(dental|maternity|pregnan\w*|cosmetic|mental|psychiatric|hiv|war|terroris\w*|suicide|self-inflicted|professional sports?|pre-existing)\b/i;
 export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
-  { re: /\bhospital (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
+  { re: /\b(?:hospital|health|medical|private medical) (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
   { re: /\btravel (?:plan|policy|insurance|cover|premium)\b/i, kind: "travel" },
   { re: /\b(?:personal )?accident (?:plan|policy|insurance|premium)\b|\bpa (?:plan|policy|cover|premium)\b/i, kind: "accident" },
   { re: /\b(?:group |term )?life (?:plan|policy|insurance|cover)\b|\bterm (?:plan|policy)\b/i, kind: "death" },
@@ -1675,7 +1675,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
+    // An excess, deductible or co-payment is what the household pays, not a limit on what the policy pays: it is said in
+    // the answer's own lines, never on a "Policy-stated coverage limit" card (UK walkthrough, 31 Oct: "Excess £75").
+    if (a.source !== "premium" && a.source !== "expiry" && a.topic !== "excess" && a.topic !== "cost_sharing" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
