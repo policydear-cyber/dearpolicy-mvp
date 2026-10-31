@@ -2,7 +2,7 @@
  * in a few seconds: the Benefits page builds its table on every visit. Before page text was squashed once per page this
  * took about 21 s. Nothing is read from a database or a model. */
 import assert from "node:assert/strict";
-import { checkStored } from "../../lib/benefit-table/service";
+import { checkStored, checkedOnce } from "../../lib/benefit-table/service";
 import { assembleTable } from "../../lib/benefit-table/assemble";
 const names=["Aisha Rahman","Ben Carter"];
 const words="the insured person shall be entitled to benefits subject to the terms conditions and exclusions of this policy where applicable".split(" ");
@@ -33,4 +33,15 @@ const q=stored[0].document.benefits.find((b:any)=>!b.quote.startsWith("this quot
 for(const p of docs[0].pages)p.text=p.text.replace(q,"");
 const edited=checkStored(docs[0],stored[0]);
 assert.ok(edited.benefits.length<kept,"a quote removed from its page is no longer found");
+// Remembered checks (checkedOnce): the same rows as checking afresh, a copy each time, and a changed page checked afresh.
+const fresh=JSON.parse(JSON.stringify(checkStored(docs[1],stored[1])));
+const first=checkedOnce(docs[1],stored[1]);
+assert.deepEqual(JSON.parse(JSON.stringify(first)),fresh);
+first.benefits.length=0;
+t=performance.now();const second=checkedOnce(docs[1],stored[1]);const t3=performance.now()-t;
+assert.deepEqual(JSON.parse(JSON.stringify(second)),fresh,"what a caller changes is not remembered");
+assert.ok(t3<50,`a remembered check took ${t3.toFixed(0)} ms`);
+const q1=stored[1].document.benefits.find((b:any)=>!b.quote.startsWith("this quote")).quote;
+const editedDoc={...docs[1],pages:docs[1].pages.map((p:any)=>({...p,text:p.text.replace(q1,"")}))};
+assert.ok(checkedOnce(editedDoc,stored[1]).benefits.length<fresh.benefits.length,"an edited page is checked afresh");
 console.log("benefit-table speed: ok");

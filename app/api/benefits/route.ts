@@ -42,7 +42,21 @@ export async function GET(request:NextRequest){
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
     if(member&&!isUuid(member))return NextResponse.json({benefits:[],summary:{total:0,needsYou:0,unreadable:0,usable:0,documents:0,unclaimed:0}});
+    // How long each part took, sent as Server-Timing so a slow load on the live site can be told apart (sign-in, the
+    // stored rows, the documents' cover, the benefit table, conditions). Durations only, nothing about the household.
+    const started=performance.now(),timings:string[]=[];let mark=started;
+    const lap=(name:string)=>{const now=performance.now();timings.push(`${name};dur=${(now-mark).toFixed(0)}`);mark=now;};
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    lap("auth");
+    // The household's benefit table, built at most once per request and started now, so its page checks run while the
+    // stored rows below are fetched. Both uses below share it; without the table nothing is built.
+    const tableTimer=performance.now();let tableMs:number|null=null;
+    const tableOnce=import("@/lib/benefit-table/app").then(async({ benefitTableLive,appDb })=>{
+      if(!(await benefitTableLive(accountId)))return null;
+      const { tableFor }=await import("@/lib/benefit-table/service");
+      return tableFor(appDb,accountId);
+    }).finally(()=>{tableMs=performance.now()-tableTimer;});
+    tableOnce.catch(()=>undefined);
     await ensureBenefitSchema();
     const rows=await query<Row>(
       `SELECT b.id,b.policy_id,b.product_name,b.benefit_name,b.traits,b.formula_kind,b.formula_value::text,
@@ -70,6 +84,7 @@ export async function GET(request:NextRequest){
       [accountId,member||null]);
     // A table's numbered rows in number order, not text order ("2." before "10.").
     rows.rows=inNumberedOrder(rows.rows);
+    lap("rows");
     /** What, if anything, this row needs from the person reading the screen.
      *
      * "Needs review" was an internal flag doing duty as a label, and it lumped
@@ -91,6 +106,7 @@ export async function GET(request:NextRequest){
     // wrong or missing join is a thing a person can see and fix.
     const inventory=await loadPolicyInventory(accountId,(await query<{id:string;display_name:string;preferred_name:string|null;relationship:string}>(
       `SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()}`,[accountId])).rows).catch(()=>null);
+    lap("inventory");
     const contractsByDocument=new Map<string,typeof inventory extends null?never:NonNullable<typeof inventory>["contracts"]>();
     for(const contract of inventory?.contracts??[])
       for(const doc of [...contract.documents,...contract.references])contractsByDocument.set(doc.id,[...(contractsByDocument.get(doc.id)??[]),contract]);
@@ -134,18 +150,14 @@ export async function GET(request:NextRequest){
     // "Plan Business"): that column's checked figure, said with its plan. Read from stored readings only; nothing is read.
     // Each person's own readings, and who holds each document: a row's figure is taken only when every person who holds
     // its document (or the one person asked about) has the same plan column for it (Critic R370 M1).
-    // The household's benefit table, built at most once per request: both uses below share it.
-    let tableOnce:ReturnType<typeof import("@/lib/benefit-table/service").tableFor>|null=null;
-    const householdTable=async(db:Parameters<typeof import("@/lib/benefit-table/service").tableFor>[0])=>
-      tableOnce??=import("@/lib/benefit-table/service").then(({ tableFor })=>tableFor(db,accountId));
     const planReadings=new Map<string,PlanColumnReading[]>();
     const holders=new Map<string,string[]>();
     if(usableRows.some(row=>resolved.get(row.id)?.conditions.includes(PLAN_COLUMNS_NOTE))){
       try{
-        const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
-        if(await benefitTableLive(accountId)){
+        const built=await tableOnce;
+        if(built){
           const { figureText }=await import("@/lib/benefit-table/assemble");
-          const { table }=await householdTable(appDb);
+          const { table }=built;
           for(const person of table.people)planReadings.set(person.id,person.rows.map(r=>
             ({documentId:r.source.documentId,page:r.source.page,excerpt:r.source.excerpt,column:r.column,qualifier:r.qualifier,figure:r.figure,figureText:figureText(r.figure),benefit:r.benefit})));
           const held=await query<{policy_id:string;family_member_id:string}>(
@@ -255,9 +267,12 @@ export async function GET(request:NextRequest){
     // says the same. Optional: without the benefit table, nothing is said.
     let documentKindsById:Record<string,DocumentKind>={};
     try{
-      const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
-      if(await benefitTableLive(accountId))documentKindsById=documentKinds((await householdTable(appDb)).table.people);
+      const built=await tableOnce;
+      if(built)documentKindsById=documentKinds(built.table.people);
     }catch{/* No table: no kind is said. */}
+    lap("rest");
+    if(tableMs!=null)timings.push(`table;dur=${(tableMs as number).toFixed(0)}`);
+    timings.push(`total;dur=${(performance.now()-started).toFixed(0)}`);
     return NextResponse.json(maskShownText({
       benefits,
       conditions,
@@ -273,7 +288,7 @@ export async function GET(request:NextRequest){
         documents:new Set(benefits.map(b=>b.policyId)).size,
         unclaimed:benefits.filter(b=>!b.owners.length).length,
       },
-    }));
+    }),{headers:{"Server-Timing":timings.join(", ")}});
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});
