@@ -306,18 +306,53 @@ function namesABenefit(label:string){
  * wrist)" — and a label cut off mid-phrase is not something a person can check
  * against their policy. Only a line with no amount of its own, that clearly
  * continues the one above, is pulled in. */
-const UNFINISHED=/[,&]$|\b(?:and|or|of|to|the|in|for|with|upon|between|from|at|due)$/i;
-function withContinuation(label:string,lines:PageLine[],index:number){
-  let text=label,valueSuffix="";
+const UNFINISHED=/[,&]$|\b(?:and|or|of|to|the|in|for|with|upon|between|from|at|due|untuk|dan|atau|bagi|dari|daripada|kepada|dengan|pada|akibat)$/i;
+/** A row whose cells wrapped onto the next line, quoted cell by cell: the name, then the amount, each in the document's
+ * own words. Quoting the two printed lines as they run ("up to maximum Coronary Artery of S$25,000") would put the
+ * name in the middle of the amount. */
+function wrappedLine(label:string,value:string){return label+"\t"+value.trim();}
+/** An amount cell that stops on the words leading into its cap or its second half: "up to maximum", "subject to a
+ * maximum", "up to", "or". The rest of the amount is on the next line. */
+const VALUE_UNFINISHED=/\b(?:of|to|up\s+to|maximum|max\.?|limit\s+of|limited\s+to|not\s+exceeding|subject\s+to|sehingga(?:\s+maksimum)?|maksimum|hingga)$/i;
+/** The rest of an amount on its own: a bare sum ("£10,000", "RM20,000") or words that cannot start an amount ("of S$25,000"). */
+const AMOUNT_REST=/^(?:[a-z]|(?:[A-Z]{1,3}\s?)?[$£€¥₹]?\s?\d[\d,.]*(?:\s?(?:k|m|million|thousand))?$|(?:S\$|RM|HK\$|US\$|A\$|Rp|Rs\.?|£|€|¥|₹)\s?\d[\d,.]*$)/u;
+/** A line printed as a row of its own: a name in the left cell and an amount in the right one. */
+function labelAmountRow(line:PageLine|undefined){
+  if(!line||line.cells.length!==2)return false;
+  const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
+  return !!left&&!AMOUNT.test(left)&&AMOUNT.test(right);
+}
+function withContinuation(label:string,lines:PageLine[],index:number,value=""){
+  let text=label,valueSuffix="",valueLine:string|null=null,consumed:number|null=null;
   for(let next=index+1;next<lines.length&&next<=index+2;next++){
     const line=lines[next];
-    if(line.cells.some(isValueCell))break;
+    // The amount stops mid-phrase and the line below prints the rest of it in the amount's column, even when that rest
+    // reads as an amount on its own ("Hearing Loss in | 15% of the Sum Insured, up to" / "One Ear | £10,000").
+    // Only when the line below cannot be a row of its own (TE pr234 D1): the name above stops mid-phrase or the left
+    // cell runs on in lower case, and the right cell is only the rest of the amount, never a new amount ("S$200 per day").
+    const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
+    const dangling=next===index+1&&VALUE_UNFINISHED.test(value.trim())&&line.cells.length===2&&AMOUNT.test(right)&&!AMOUNT.test(left)
+      &&!/^(?:\(?[a-z0-9]{1,3}[.)]|\d)/i.test(left)&&(UNFINISHED.test(text)||/^[a-z]/.test(left))&&AMOUNT_REST.test(right)
+      // A bare sum ("S$20,000") reads as a row of its own when another name | amount row follows it ("Both Ears |
+      // S$20,000" / "One Ear | S$10,000" is a list under the name above, not the rest of its amount): left unjoined.
+      // Only words that cannot start an amount ("of S$25,000") finish the amount above whatever follows (Critic H1).
+      &&(/^[a-z]/.test(right)||!labelAmountRow(lines[next+1]));
+    if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;
     // "15% of Sum Insured or" / "up to S$50,000, whichever is lesser": the
     // second line finishes the AMOUNT, not the name. Reading it as part of the
     // name would leave a half-stated rule looking complete.
-    if(AMOUNT.test(piece)||/whichever/i.test(piece)){valueSuffix=" "+piece;break;}
+    // The line is printed with the rest of the row, so it is quoted with it: half a rule quoted is a wrong rule.
+    // In a two-column row both cells wrap ("Angioplasty … for | … up to maximum" / "Coronary Artery | of S$25,000"):
+    // the left cell finishes the name and the right one the amount, never one run into the other.
+    if(AMOUNT.test(piece)||/whichever/i.test(piece)){
+      valueLine=line.text;consumed=next;
+      const cells=line.cells.map(cell=>cell.replace(/\s+/g," ").trim()).filter(Boolean);
+      if(cells.length===2&&UNFINISHED.test(text)&&!AMOUNT.test(cells[0])&&text.length+cells[0].length+1<=140){text=text+" "+cells[0];valueSuffix=" "+cells[1];}
+      else valueSuffix=" "+piece;
+      break;
+    }
     // Either this line opened mid-phrase, or the next one starts mid-phrase.
     // A short or code-like label is never extended by the line below it: on a
     // two-column page that line belongs to the other column.
@@ -326,7 +361,7 @@ function withContinuation(label:string,lines:PageLine[],index:number){
     if(text.length+piece.length+1>140)break;
     text=text+" "+piece;
   }
-  return {label:text,valueSuffix};
+  return {label:text,valueSuffix,valueLine,consumed};
 }
 /** Some tables of percentages are not benefit schedules at all. A pro-ration
  * factor says how a bill is scaled before a claim is computed; "Class B1 34%"
@@ -456,8 +491,10 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
   // greater than 5% but less than 8%", which belongs to no part of the body and
   // to neither burns table, so nothing downstream could tell them apart.
   let area:string|null=null,section:string|null=null;
+  // A line that finished the amount of the row above it is part of that row, never a row of its own.
+  const consumedLines=new Set<number>();
   for(const [index,line] of lines.entries()){
-    if(inTable.has(index))continue;
+    if(inTable.has(index)||consumedLines.has(index))continue;
     const whole=line.text.replace(/\s+/g," ").trim();
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
     else if(suppressed&&NEW_TABLE.test(whole))suppressed=false;
@@ -472,11 +509,13 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
       continue;
     }
     if(valueIndex<1)continue;
-    const stated=line.cells.slice(0,valueIndex).join(" ").replace(/\s+/g," ").trim();
+    // A lone ":" printed between the name and its amount ("Treatment for : 10% of …") is not part of the name.
+    const stated=line.cells.slice(0,valueIndex).filter(cell=>!/^[:：]$/u.test(cell.trim())).join(" ").replace(/\s+/g," ").trim();
     // Judge what the row itself says before anything is appended to it, so a
     // premium rate table's "50-54" cannot be rescued by the prose beside it.
     if(stated.length<2||stated.length>140||!namesABenefit(stated))continue;
-    const continued=withContinuation(stated,lines,index);
+    const continued=withContinuation(stated,lines,index,line.cells[valueIndex]);
+    if(continued.consumed!=null)consumedLines.add(continued.consumed);
     let label=continued.label;
     if(label.length<2||label.length>140)continue;
     if(BURN_BAND.test(label)){
@@ -495,7 +534,7 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     else if(stem&&SUB_ROW.test(label)&&!/^\d/.test(label))label=stem+" "+label;
     else if(/^\d+[.)]/.test(label))stem=null;
     if(label.length>140||!namesABenefit(label))continue;
-    rows.push({label,value:(line.cells[valueIndex].trim()+continued.valueSuffix).trim(),line:line.text,index});
+    rows.push({label,value:(line.cells[valueIndex].trim()+continued.valueSuffix).trim(),line:continued.valueLine?wrappedLine(label,line.cells[valueIndex].trim()+continued.valueSuffix):line.text,index});
   }
   return rows.sort((a,b)=>a.index-b.index);
 }

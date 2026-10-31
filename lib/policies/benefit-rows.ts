@@ -147,7 +147,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
         basis:ofLimit[1]+"% of the "+moneyLabel(currency,limit)+" limit printed in the schedule"};
   }
   // "100% of the Sum Insured" — needs the person's own schedule to become money.
-  const ofSum=text.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?(?:relevant\s+|applicable\s+|full\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|benefit\s+amount|insured\s+amount)`,"i"));
+  const ofSum=text.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?(?:relevant\s+|applicable\s+|full\s+|prevailing\s+|current\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|benefit\s+amount|insured\s+amount)`,"i"));
   if(ofSum){
     const percent=amount(ofSum[1]);
     if(percent!=null&&percent<=200)return {kind:"sum_insured",value:percent/100,currency,basis:ofSum[1]+"% of the sum insured on the schedule"};

@@ -126,6 +126,16 @@ test("a second payment, an addition or a change next to a reason keeps 'could no
   ]) assert.match(unreadAmountLine(3, q), /could not be read|describes this in words/, q);
 });
 
+test("a table line cut off before its maximum says so, in any wording; one that prints its maximum does not", async () => {
+  const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
+  for (const q of ["(a) Angioplasty and Other Invasive Treatment for : 10% of Prevailing Insured Amount, up to maximum",
+    "Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", "Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum",
+    "Minor surgery 15% of the sum insured, limited to", "Dental 25% of the benefit amount up to a limit of"])
+    assert.equal(unreadAmountLine(34, q), "The passage on page 34 stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down page 34.", q);
+  for (const q of ["10% of Prevailing Insured Amount, up to maximum of S$25,000", "Pays up to the maximum stated in the schedule.", "Covered up to age 65"])
+    assert.doesNotMatch(unreadAmountLine(34, q), /stops before the maximum/, q);
+});
+
 test("a waiver never takes another payout as itself, and 'or (b)' lists another payout (Critic R469)", async () => {
   const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
   for (const q of ["Premium waiver; it is paid as the TPD Benefit.", "We waive future premiums and this benefit is paid within 30 days."])
