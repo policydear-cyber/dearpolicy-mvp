@@ -10055,3 +10055,39 @@ and judge by the cover's own name (cover, plan) before the product.
 - SELF sentence: "long/medium/short term savings plan" -> savings; "is not a" no match; whole life + endowment-benefit -> null;
   the savings + investment conflict -> null; a protection statement elsewhere -> null. Good allow-list shape.
 - Travel/ended: endedOn shows only when no current cover for the category; Coverage heading "Ended on <date>".
+
+## R419 — #214 2e410bf (menu / Account settings)
+Viewed as a new household on a phone and on a desktop. Code reading plus link grep at the PR head; gate: r5:ux-test 14, chat 85, replay 22/22, bt 107/107, r5 21, tsc 0, next build 0, merges clean into main.
+
+## H1 From Portfolio there is no way to reach Coverage (the per-person benefit table) or Benefits (each policy's benefits and exclusions)
+AppShell.tsx:36 says "Portfolio ... its cards, Family and Documents link to those pages". At the head:
+- app/page.tsx has no link to /ledger or /schedule. Each tile goes to /coverage?member&category, and that page links only back to Portfolio (app/coverage/page.tsx).
+- /ledger is reachable only from People cards ("See coverage", app/family/page.tsx:147) and from the Documents "Found" line (app/policies/page.tsx:486).
+- /schedule is reachable only from /ledger (ledger/page.tsx:162), two hops through pages that are no longer in the menu.
+So a household looking for "what does my policy pay and what does it exclude" from Portfolio hits a dead end. The corrections and
+"Something looks wrong? Tell us" on Coverage are hidden the same way. On main both were menu items.
+Fix: Portfolio gets a visible "See everything each of us is covered for →" (/ledger?member=<active>) under the tiles, and a
+"Each policy's benefits and exclusions →" (/schedule). The /coverage category page also links to /ledger?member=. Better still, fold
+them in as Portfolio tabs (Overview · By person · By policy), like Account settings, so they keep a visible place.
+
+## M1 Words that send people to a menu item that no longer exists (user-facing copy)
+- "add them on the Household page" in app/api/chat/route.ts:16 and lib/chat/workflow.ts:313, :1192, :1205, :1840. Adding a person is now on Account settings > People; the Household tab cannot add anyone.
+- "add them on the Family page" in app/api/policies/link-person/route.ts:207 and components/benefit-table-coverage.tsx:133 (the link works, but the label is gone).
+- "recorded on the Household page" in lib/chat/registry-answers.ts:201.
+- "see Coverage" / "amount on Coverage" on Portfolio tiles (app/page.tsx:19, :87), "See in Coverage" on Documents, and "the Benefits page" in lib/chat/workflow.ts:2918, :2925. None of these is a menu item any more.
+Fix: one wording, "Account settings > People" for people, and either link the Coverage/Benefits mentions or rename them to whatever Portfolio calls them after H1.
+(Some of the "Household page" lines were already stale on main. This PR is the right place to make them consistent.)
+
+## Low
+- Account settings opens on the Household tab (rename, export, delete). A non-owner sees only a disabled name box, the export
+  and delete sections are hidden, and the People tab, which is what they came for, is one tap away. Consider opening Account settings at People.
+- household-access.tsx:125 "delete the household on the Household tab": OK now. Re-check it if H1 adds more tabs.
+
+## Checked, OK
+- Add a person, invite, revoke, leave or remove: all on People (HouseholdAccess), same confirm-twice pattern, sole-owner guard kept.
+- Delete household: still on the Household tab for owners, with re-auth.
+- /invite and /household/deleted redirects still land on existing pages. Active-menu highlight for /family, /usage, /coverage,
+  /ledger and /schedule works through `also`. Browser tab titles are kept.
+- Phone bar: Portfolio, Documents, Ask, Claims. More: Payments, Account settings.
+
+R420 — #213 04cc7f2: diff does not touch R418 M1-M3; still NOT READY.
