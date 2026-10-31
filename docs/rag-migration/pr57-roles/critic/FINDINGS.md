@@ -10213,3 +10213,13 @@ Gate green. speed-test passed (checkStored 373 ms on 360 pages). service 22/0, u
 M1 (memory): text built with += is a rope, and at is a JS number array. A standalone probe at the 8M-char cap held about 294 MB of heap. The same probe with parts.join("") and an Int32Array (sliced to length) held about 16 MB heap plus 27 MB external. Recommendation: make this change (verify.ts:44-54), or lower the cap.
 
 Low: tableOnce also caches a rejected promise, so the second use does not retry. Both uses are inside try blocks, so this is harmless.
+
+## R446: #224 41ee626 (no verdict before data loads: cover detail and Payments): READY
+Gate green: r5:ux 15, r8:render 6, simple-chat 85, replay 22/22, benefit-table 107/107 and 107/107, r5:answer 21/21; tsc, next build and merge clean.
+
+M1 (old, small): in app/coverage/page.tsx the fetch has no r.ok check and no .catch.
+- A network failure, or a non-JSON 5xx (for example a function-timeout HTML page), leaves the page on "Loading…" forever.
+- A JSON error body without an `error` key would read as ready, which shows "Not found".
+- Fix: `.then(r=>r.ok?r.json():{error:true}).catch(()=>setData({error:true} as never))`. This matches what the PR already does for Payments.
+
+Note: the header and the ANSWER section still show "Ended on <date>". That breaks DC's ignore-expiry rule, and the Portfolio thread is reverting it. That revert changes the same line, so expect a conflict with whichever merges second.
