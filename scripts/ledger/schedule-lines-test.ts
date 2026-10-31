@@ -102,6 +102,21 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
   const other = scheduleOnlyLines([line(p, "pol-other", "Critical Illness")], rows);
   t("a rejection on one policy never hides another policy's line", other.length === 1, other);
 }
+// Only a rejection of the row the line itself is hides it: a misread narrower row of the same kind does not (TE F1).
+{
+  const k = "m-kofi";
+  const rows = [row({ familyMemberId: k, policyId: "pol-h", eventType: "icu_daily_cash", status: "rejected" })];
+  const lines = scheduleOnlyLines([line(k, "pol-h", "Hospitalisation")], rows);
+  t("rejected ICU cash row + Hospitalisation line: the line is kept", lines.length === 1, lines);
+  t("... and Family shows hospital cover", JSON.stringify(ledgerKindsByPerson(rows, lines)[k]) === JSON.stringify(["Hospital and medical"]), ledgerKindsByPerson(rows, lines));
+  const hosp = scheduleOnlyLines([line(k, "pol-h", "Hospitalisation")], [row({ familyMemberId: k, policyId: "pol-h", eventType: "hospital_medical_expense", status: "rejected" })]);
+  t("rejected hospital-bills row + Hospitalisation line: hidden", hosp.length === 0, hosp);
+  const travelRows = (events: string[]) => events.map((e) => row({ familyMemberId: k, policyId: "pol-t", eventType: e, status: "rejected" }));
+  t("one rejected travel row (baggage) keeps the Travel line", scheduleOnlyLines([line(k, "pol-t", "Travel")], travelRows(["baggage"])).length === 1);
+  t("every travel row rejected hides the Travel line", scheduleOnlyLines([line(k, "pol-t", "Travel")], travelRows(["travel_delay", "trip_cancellation", "travel_medical", "baggage"])).length === 0);
+  const di = scheduleOnlyLines([line(k, "pol-ip", "Disability Income")], [row({ familyMemberId: k, policyId: "pol-ip", eventType: "tpd", status: "rejected" })]);
+  t("rejected TPD row keeps a Disability Income line", di.length === 1, di);
+}
 
 // SG household: a line makes a kind confirmed on Family even when the only row of that kind is a plan type's guess.
 {

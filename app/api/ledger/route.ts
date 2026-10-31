@@ -60,9 +60,9 @@ export async function GET(request:NextRequest){
     };
     const pending=await pendingDocumentCount(accountId);
     // Optional: the page works without it, as before.
-    // Rows the household rejected are left out of `rows` (loadLedger), yet a rejection is their word that the plan doesn't pay
-    // that kind: it keeps the schedule line out too (Critic M1 on #256). Without them, no line is sent (never cover the
-    // household said it doesn't have).
+    // Rows the household rejected are left out of `rows` (loadLedger), yet rejecting the row a line itself is, is their word
+    // that the plan doesn't pay it: that keeps the line out too (scheduleOnlyLines; Critic M1, TE F1 on #256). Without them,
+    // no line is sent (never cover the household said it doesn't have).
     const rejected=await loadLedger(accountId).then(all=>all.filter(r=>r.status==="rejected").map(r=>({...r,eventLabel:EVENTS[r.eventType]?.label??r.eventType}))).catch(()=>null);
     const lines=rejected==null?[]:scheduleOnlyLines((await scheduleLines(accountId).catch(()=>[])).filter(l=>!member||l.familyMemberId===member),[...rows,...rejected])
       .map(l=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
