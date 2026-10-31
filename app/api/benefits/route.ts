@@ -14,6 +14,7 @@ import { conditionEffect,describeCondition,type CoverCondition,type CoverConditi
 import { formatMoney } from "@/lib/format/currency";
 import { cutNameSuffix } from "@/lib/policies/cut-name";
 import { wholeSumAgainst } from "@/lib/policies/whole-sum";
+import { oncePerPerson } from "@/lib/policies/benefit-people";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
@@ -216,11 +217,12 @@ export async function GET(request:NextRequest){
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
-      const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
+      // Each person once, and only the person asked for: one person is often linked to a booklet by several documents.
+      const calculatedAgainst=oncePerPerson((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
-        return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
-          :{owner:contract.ownerName,plan:null,amount:null};
-      });
+        return coverage?{ownerId:contract.ownerId,owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
+          :{ownerId:contract.ownerId,owner:contract.ownerName,plan:null,amount:null};
+      }));
       // A row that pays the whole sum insured in words: each person's own sum of the cover named the same, with its source.
       const wholeSum=attention==="unreadable"&&stub.formulaKind==="none"
         ?wholeSumAgainst((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member),{benefitName:row.benefit_name,quote:row.quote})
