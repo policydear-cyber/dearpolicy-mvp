@@ -3,7 +3,7 @@
  * cover is taken only when its name is the benefit's own name, each person has it, on one document or several that print the same sum, and its amount and
  * currency are written in that person's own evidence. Anything less gives nothing, and the page keeps saying the amount
  * is on the person's own schedule. Never a guess between two covers ("Living Care" and "Living Care Plus"). */
-import { productIdentity,documentName,type PolicyContract } from "@/lib/policies/inventory";
+import { documentName,type PolicyContract } from "@/lib/policies/inventory";
 import { formatMoney } from "@/lib/format/currency";
 import { paysWholeSum } from "@/lib/policies/unread-amount-line";
 
@@ -11,8 +11,10 @@ export type WholeSumLine={owner:string;plan:string;amount:string;source:string};
 
 export function wholeSumAgainst(contracts:PolicyContract[],benefit:{benefitName:string;quote:string|null}):WholeSumLine[]|null{
   if(!contracts.length||!paysWholeSum(benefit.quote))return null;
-  // "Group Living Care" on a certificate is the scheme's "Living Care".
-  const identity=(name:string|null|undefined)=>productIdentity(name).replace(/^group\s+/u,"");
+  // "Group Living Care" on a certificate is the scheme's "Living Care". Every letter and digit in any script counts, and
+  // "+" is "plus": "Heart Cover" is never "Heart Cover+", "CI Cover 加强" or "Heart Cover Ⅱ" (TE pr233 D1).
+  const identity=(name:string|null|undefined)=>(name??"").normalize("NFKC").toLowerCase().replace(/\+/gu," plus ")
+    .replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/^group\s+/u,"");
   const wanted=identity(benefit.benefitName);
   if(!wanted)return null;
   const lines:WholeSumLine[]=[];

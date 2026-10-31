@@ -41,6 +41,11 @@ test("nothing is shown when it is not certain: another name, two sums, an unwrit
   // "Plus" is another cover, and a category alone is never a match.
   assert.equal(one([{ productName: "Serious Illness Cover Plus", amount: 90000, currency: "SGD" }]), null);
   assert.equal(one([{ productName: "Critical Illness", amount: 90000, currency: "SGD" }]), null);
+  // Names that differ only outside a-z0-9 are other covers (TE pr233 D1).
+  for (const other of ["Serious Illness Cover+", "Serious Illness Cover 加强", "Serious Illness Cover Ⅱ", "Serious Illness Cover II"])
+    assert.equal(one([{ productName: other, amount: 90000, currency: "SGD" }]), null, other);
+  assert.equal(wholeSumAgainst([contract("Ana", [{ productName: "Couverture Santé+", amount: 50000, currency: "EUR" }])], { benefitName: "Couverture Santé", quote: WHOLE }), null);
+  assert.equal(wholeSumAgainst([contract("Ana", [{ productName: "Couverture Santé", amount: 50000, currency: "EUR" }])], { benefitName: "Couverture Santé", quote: WHOLE })?.length, 1);
   assert.equal(one([{ productName: "Serious Illness Cover", amount: 90000, currency: "SGD" }, { productName: "Serious Illness Cover", amount: 80000, currency: "SGD" }]), null);
   assert.equal(one([{ productName: "Serious Illness Cover", amount: 90000, currency: "SGD", currencyVerified: false }]), null);
   assert.equal(one([{ productName: "Serious Illness Cover", amount: null, currency: "SGD" }]), null);
