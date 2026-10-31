@@ -46,6 +46,15 @@ const KEPT: [string, number, string][] = [
   ["Hearing loss", 0.5, "Hearing loss of higher than 80 decibels in one ear 50%"],
   ["Luka bakar", 0.5, "Luka bakar: lower than 20% of body surface but at least 10% 50%"],
   ["Scarring", 0.25, "Facial scarring greater than 5 cm in length: 25% of the Sum Insured"],
+  ["Burns", 0.5, "Burns Greater Than 5%, Less Than 8% of the body 50%"],
+  ["Burns", 1, "Burns covering more than 30% of the body surface: 100% of the Sum Insured"],
+  ["Coma", 0.5, "Coma lasting longer than 96 hours 50% of the Sum Insured"],
+  ["Fall", 0.2, "Injury from a fall higher than 3 metres 20%"],
+  ["ICU", 0.1, "Stay in intensive care of more than 5 days 10% of the Sum Insured"],
+  ["Child", 0.5, "If the insured's age is lower than 18: 50% of the Sum Insured"],
+  ["Weight", 0.1, "Weight loss of more than 10 kg 10% of the Sum Insured"],
+  ["Burns", 0.25, "Burns greater than or equal to 20% of body surface: 25% of Sum Insured"],
+  ["ICU", 0.1, "Intensive care for greater than 7 consecutive days: 10% of Sum Assured"],
 ];
 // Passages that print a cap: withheld (or, once read, capped), never the full share.
 const CAPPED: [string, number, string][] = [
@@ -59,6 +68,19 @@ const CAPPED: [string, number, string][] = [
   ["Early stage", 0.25, "25% of the Sum Insured, no greater than 10% of the total Sum Insured of all policies"],
   ["Angioplasty", 0.1, "10% of the Sum Insured or the amount shown below, if lower"],
   ["Angioplasty", 0.1, "10% of the Sum Insured or RM 20,000, whichever is greater"],
+  // A comparative that compares the payout with an amount, however it is negated (Critic R421, TE pr215 C1-C9).
+  ...["but never greater than the amount in force", "but the payout cannot be higher than the outstanding loan", "or the outstanding loan if smaller than that",
+    "reduced where this is greater than the hospital bill", "and it isn't greater than the overall benefit", "but at no time higher than the amount shown",
+    "so long as this is lower than the remaining sum insured", "or the actual charges if lower than that", "but shall not in any event be greater than the amount shown",
+    "but this may not be greater than the amount shown", "not larger than the amount shown", "no higher than the amount shown"]
+    .map((tail): [string, number, string] => ["Benefit", 0.1, "10% of Sum Insured, " + tail]),
+  ["Benefit", 0.25, "25% of the Sum Insured, which shall not be greater than 10% of the Sum Insured of all policies combined"],
+  ["Benefit", 0.5, "50% of the Sum Insured, but never greater than 20% of the Sum Insured for all claims together"],
+  ["Benefit", 0.05, "5% of the Sum Insured per finger, which cannot be higher than 20% of the Sum Insured in total"],
+  ["Benefit", 0.1, "10% of the Sum Insured or 50% of the bill, if smaller than that"],
+  ["Benefit", 0.2, "20% of the Sum Insured, provided this is not to be greater than the base plan's death benefit"],
+  ["Benefit", 0.25, "25% of the Sum Insured but must be lower than the amount of the main claim"],
+  ["Benefit", 0.1, "10% of the Sum Insured, but not more than 5% of the total benefits greater than 5% of the premium"],
 ];
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
