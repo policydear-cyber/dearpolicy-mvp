@@ -152,6 +152,9 @@ const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|�
 const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|₫|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
 // A three-letter code counts only when it is a currency on this closed list: "TPD 1.500" is no money sign.
 const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|ARS|CLP|COP|PEN|PLN|CZK|HUF|RON|BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
+// Currencies whose market groups thousands with dots, and the three-decimal ones (KD, BHD): the only signs beside which a
+// lone dot group is read whole.
+const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped
  * with dots read whole ("Rp 500.000.000" -> 500000000). */
@@ -178,7 +181,10 @@ export function numbersIn(text: string): number[] {
     if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
     const sign = (m: RegExpMatchArray | null) => (!m ? null : m[1] ? (DOT_CODES.test(m[1]) ? m[1] : null) : m[0].trim() === "KD" ? "KWD" : m[0].trim() === "BD" ? "BHD" : m[0].trim());
     const code = sign(before.match(SIGN_BEFORE)) ?? sign(after.match(SIGN_AFTER));
-    if (!code && !/^\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?$/.test(raw) && !/,\d{1,2}$/.test(raw)) continue;
+    // A lone group ("1.500") is thousands only beside a currency of a market that groups with dots, or a three-decimal one
+    // (read as a decimal below): beside S$, US$, RM, £, ₹, HK$ or A$ the dot is a decimal point, so "S$1.500" is no
+    // fifteen hundred (TE #262 F1). Two or more groups, or a ",dd" decimal, show their grouping wherever they stand.
+    if (!/^\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?$/.test(raw) && !/,\d{1,2}$/.test(raw) && !(code && DOT_MARKET.test(code))) continue;
     // A three-decimal currency beside it ("BHD 1.500", "KD 1.500") reads it as a decimal (printedNumber).
     const n = printedNumber(raw, code);
     if (n != null && !out.includes(n)) out.push(n);

@@ -43,6 +43,15 @@ t("KD 1.250 is one and a quarter dinars", has("Benefit\tKD 1.250", 1.25) && !has
 t("a code after the figure counts", has("Leistung\t1.500 EUR", 1_500));
 t("two dot groups need no currency", has("Uang Pertanggungan\t500.000.000", 500_000_000));
 t("a decimal comma needs no currency", has("Capitale\t1.000,00", 1_000));
+// Beside the sign of a market that groups with commas, a lone dot group is a decimal point (TE #262 F1).
+for (const [text, v] of [["S$1.500", 1500], ["US$1.500", 1500], ["RM1.500", 1500], ["£1.500", 1500], ["₹1.500", 1500], ["HK$12.500", 12500], ["A$2.250", 2250], ["SGD 1.500", 1500]] as const)
+  t(`${text} is never ${v}`, !has(`Benefit\t${text}`, v));
+t("R$ 1.500 is fifteen hundred reais", has("Benefício\tR$ 1.500", 1500));
+t("1.500 ₫ is fifteen hundred dong", has("Quyền lợi\t1.500 ₫", 1500));
+t("S$1.500.000 is still 1.5 million", has("Sum assured\tS$1.500.000", 1_500_000));
+// A scale word in another language: never the bare figure (TE #262 F2).
+for (const text of ["Limite € 2.500 milioni", "Limite € 2.500 MILIONI", "Capital R$ 2.500 milhões", "Límite € 2.500 millones", "Hạn mức 2.500 triệu ₫", "Hạn mức 2.500 tỷ ₫", "Batas Rp 2.500 triliun", "Limite € 2.500 miliardi"])
+  t(`${text}: never 2,500`, !has(text, 2500));
 
 // Whole households, through the intake check and the table.
 type Case = { market: string; person: string; product: string; cover: string; text: string; quote: string; sum: number; currency: string; kind: string; extra?: { name: string; quote: string; value: number; pays: string } };
