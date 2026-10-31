@@ -840,7 +840,25 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"apabila jika bila semasa sekiranya kepada selepas sebelum dalam tempoh oleh dengan yang mana akibat daripada dari "
   +"didiagnosis diagnosis kematian meninggal dunia mati berlaku kemalangan kecederaan penyakit kritikal dilindungi hilang upaya kekal "
   +"menyeluruh hospital pemilik polisi peserta penama waris benefisiari orang diinsuranskan dijamin hayat doktor perubatan berdaftar "
-  +"pengesahan tuntutan diluluskan kelulusan umur berumur").split(" "));
+  +"pengesahan tuntutan diluluskan kelulusan umur berumur atau menderita "
+  // Who is paid, as a closed list of payee nouns: never an open slot for any words (Critic R461).
+  +"executor executors administrator administrators assignee assignees assignment valid legal personal representative "
+  +"representatives trust nominated appointed designated heirs heir failing "
+  // What happens, as a closed list of medical words: an illness's name says when the share is paid, never how much.
+  +"cancer cancers carcinoma situ tumour tumor benign malignant specified severity neurological deficit end stage kidney renal "
+  +"liver lung failure requiring dialysis alzheimer dementia severe motor neurone neuron als parkinson multiple sclerosis "
+  +"muscular dystrophy diabetes mellitus heart valve open coronary artery bypass graft angioplasty organ transplant "
+  +"paraplegia quadriplegia tetraplegia hemiplegia systemic lupus erythematosus nephritis pulmonary hypertension primary hiv transfusion blood blindness deafness burns encephalitis meningitis aplastic anaemia anemia "
+  +"cervix uteri breast prostate brain early intermediate advanced kanser barah strok jantung serangan kegagalan buah pinggang "
+  +"kanker stadium peringkat type akhir gagal ginjal cardiaque crise vasculaire cérébral").split(" "));
+/** A period the share is paid over, not a time it is paid in ("payable for 5 years", "for 12 months", "for life", Critic
+ * R465): each payment may be the share, so the amount is not one share. A period that measures the event is the condition
+ * ("if hospitalised for 5 consecutive days", "disabled for 6 months"), and "within", "before", "after" or "until" say when. */
+const PAYMENT_PERIOD=/(?<!\b(?:hospitali[sz]ed|confined|warded|admitted|disabled|incapacitated|bedridden|unconscious|coma|lasting|lasts|lasted|continu\w*|persist\w*|surviv\w*|hospital|intensive\s+care|dimasukkan\s+ke\s+hospital|dirawat)\s+)\b(?:for|over|selama)\s+(?:a\s+(?:period|total)\s+of\s+)?(?:up\s+to\s+)?\d{1,4}\s+(?:consecutive\s+|calendar\s+|berturut[\s-]turut\s+)?(?:hours?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\b|\bfor\s+(?:the\s+rest\s+of\s+)?(?:his\s+|her\s+|their\s+|your\s+)?life(?:time)?\b(?!\s+(?:assured|insured))|\bseumur\s+hidup\b/u;
+/** A cancer stage or diabetes type: "Stage 3 cancer or above", "Type 1 Diabetes". A count that names the illness; "or
+ * above" after a stage is the stage again (STAGE_OR_ABOVE). The words between are still read. */
+const STAGE_OR_ABOVE=/\bor\s+(?:above|higher|worse)\b/gu;
+const ILLNESS_NUMBER=/\b(stage|stadium|peringkat)\s+(?:[0-4]|i{1,3}|iv)\b|\b(type)\s+(?:[12]|i{1,2})(?=\s+diabetes\b)/gu;
 /** Durations and ages are allowed as figures: "within 30 days", "for 5 consecutive days", "under age 65", "96 hours". */
 const CONDITION_FIGURES=/\b\d{1,3}\s+(?:covered\s+|specified\s+|listed\s+)?(?:critical\s+|major\s+)?(?:conditions|illnesses|diseases|penyakit)\b|\b\d{1,4}\s+(?:consecutive\s+|calendar\s+|berturut[\s-]turut\s+)?(?:hours?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\b|\b(?:age|aged|umur|berumur)\s+\d{1,3}\b|\b(?:two|both|one)\s+(?:limbs?|eyes?|ears?|hands?|feet|foot|arms?|legs?)\b/gu;
 /** The share itself paid again, said in other words: "and we pay it within 14 days". */
@@ -851,7 +869,9 @@ const LUMP_SUM=/\b(?:as|in)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b/gu;
 const COVER_PERIOD=/\b(?:benefit|policy|cover(?:age)?|insurance)\s+(?:term|period|year|anniversary)\b/gu;
 function conditionHarmless(condition:string,benefitName:string|null|undefined){
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(LUMP_SUM," ").replace(COVER_PERIOD," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ");
+  if(PAYMENT_PERIOD.test(normalText(condition)))return false;
+  const text=normalText(condition).replace(/\(s\)|['’]s\b/gu," ")
+    .replace(/\b(?:stage|stadium|peringkat)\s/u.test(normalText(condition))?STAGE_OR_ABOVE:/$^/gu," ").replace(ILLNESS_NUMBER,"$1$2").replace(PAID_AS_SAID," ").replace(LUMP_SUM," ").replace(COVER_PERIOD," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ");
   const words=text.replace(/[,.;:()\-–—'’"“”/]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CONDITION_WORDS.has(w)||own.has(w));
 }
@@ -926,7 +946,7 @@ function withoutLeadingName(quote:string,benefitName:string|null|undefined){
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
   const text=withoutLeadingName(quote??"",benefitName);
   // "subject to the terms and conditions of this policy" refers to the whole policy, not to a cap (TE pr222 S15).
-  const plain=normalText(text).replace(SUBJECT_TO_THE_POLICY," ").replace(HARMLESS_REFERENCE," ");
+  const plain=normalText(text).replace(SUBJECT_TO_THE_POLICY," ").replace(HARMLESS_REFERENCE," ").replace(ILLNESS_NUMBER,"$1$2");
   if(!printsAnAmount(plain))return shareStandsAlone(plain,benefitName)?{kind:"none"}:{kind:"unsure"};
   const cap=shareCapInPassage(text);
   if(!cap||!cap.currency||cap.shares!==1)return {kind:"unsure"};

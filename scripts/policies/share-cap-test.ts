@@ -230,3 +230,39 @@ test("ordinary conditions, payees and periods from other insurers keep the share
     "upon diagnosis of one of the 37 covered critical illnesses", "upon Total and Permanent Disability lasting at least 6 consecutive months",
   ]) assert.equal(shareBound("Benefit: 50% of the Sum Insured " + tail, "Benefit").kind, "none", tail);
 });
+
+test("payees and illnesses from closed word lists keep the share; a period the share is paid over gives no figure (Critic R465)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  // Made-up wordings from several markets: who is paid, and which illness, never how much.
+  for (const quote of [
+    "100% of the Sum Assured is payable to the nominee(s) named in the policy, or to the legal personal representative.",
+    "100% of the Sum Assured is payable to the policyholder's estate or executors.",
+    "100% of the Sum Assured will be paid to the assignee under a valid assignment.",
+    "Upon the death of the Life Assured, 100% of the Sum Assured is paid to the trustees of the policy trust.",
+    "100% of the Sum Insured is payable to the Policy Owner (or the beneficiary nominated by the Policy Owner).",
+    "100% daripada Jumlah Diinsuranskan akan dibayar kepada penama atau waris apabila Orang Yang Diinsuranskan meninggal dunia.",
+    "100% dari Uang Pertanggungan dibayarkan kepada Tertanggung apabila didiagnosis menderita Kanker Stadium Akhir.",
+    "100% of the Sum Assured is payable upon diagnosis of end-stage kidney failure requiring dialysis.",
+    "We pay 100% of the Sum Assured upon the diagnosis of Alzheimer's disease / severe dementia.",
+    "25% of the Sum Assured is payable upon diagnosis of carcinoma-in-situ of the cervix uteri.",
+    "100% of the Sum Assured is payable upon diagnosis of Type 1 Diabetes Mellitus in the Life Assured.",
+    "100% of the Sum Assured is payable upon diagnosis of Stage 3 cancer or above.",
+    "100% of the Sum Insured shall be paid upon permanent and total loss of use of both legs (paraplegia).",
+    "100% of the Sum Assured is payable to the nominee or, failing that, to the legal heirs.",
+    "100% of the Sum Insured is payable upon diagnosis of Systemic Lupus Erythematosus with lupus nephritis.",
+    "100% of the Sum Insured is payable upon diagnosis of Primary Pulmonary Hypertension.",
+    "100% of the Sum Insured is payable upon diagnosis of HIV due to blood transfusion.",
+    "50% of the Sum Insured if hospitalised for 5 consecutive days",
+    "50% of the Sum Insured after 2 years",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
+  const S = "50% of the Sum Insured ";
+  for (const quote of [
+    S + "for 12 months, payable monthly", S + "upon death before age 18, to the policy owner, for 5 years", S + "for 5 years after diagnosis",
+    S + "upon diagnosis, for up to 5 years", S + "to the policy owner for 10 years", S + "upon diagnosis of a Critical Illness for life",
+    S + "within 30 days, for 12 months", S + "upon diagnosis for 3 years only", "50% daripada Jumlah Diinsuranskan selama 5 tahun",
+    "100% of the Sum Assured is payable upon diagnosis of cancer or above.", "100% of the Sum Assured is payable for type 2 claims.",
+    "100% of the Sum Assured is payable to the Life Assured's spouse or children as nominees.",
+    // "dependants" shares its stem with "depending on", a changer: held back, the safe side (TE pr232).
+    "100% of the Sum Assured is payable to your dependants or your legal personal representative.",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
+});

@@ -135,3 +135,10 @@ test("a table line cut off before its maximum says so, in any wording; one that 
   for (const q of ["10% of Prevailing Insured Amount, up to maximum of S$25,000", "Pays up to the maximum stated in the schedule.", "Covered up to age 65"])
     assert.doesNotMatch(unreadAmountLine(34, q), /stops before the maximum/, q);
 });
+
+test("a waiver never takes another payout as itself, and 'or (b)' lists another payout (Critic R469)", async () => {
+  const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
+  for (const q of ["Premium waiver; it is paid as the TPD Benefit.", "We waive future premiums and this benefit is paid within 30 days."])
+    assert.doesNotMatch(unreadAmountLine(7, q), /waives future premiums/, q);
+  assert.doesNotMatch(unreadAmountLine(7, "We pay the death benefit in advance, or (b) the ADB Benefit."), /in advance from the death benefit/);
+});
