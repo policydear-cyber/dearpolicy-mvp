@@ -811,7 +811,7 @@ const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du
 const SHARE_CONDITION=/(?:^|[\s,])(?:if|when|where|for|once|provided|within|upon|on|following|to|after|before|during|until|as\s+certified|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of|apabila|jika|bila|semasa|sekiranya|kepada)\b/u;
 /** Words that change, split or scope the amount, in English and Malay: a deduction, a multiple or part, another class of
  * person, or an alternative. */
-const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|dibahagi\w*|dipotong|potong|baki|ansuran|pro[\s-]?rat\w*|scaled?|according\s+to|depend\w*|degree|extent|instal+ments?|remain\w*|balance|outstanding|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|shared?|proportion\w*|pro[\s-]?rata|rateabl\w*|apportion\w*|divid\w*|split|equally|times|multipl\w*|offset|basis|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
+const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|dibahagi\w*|dipotong|potong|baki|ansuran|pro[\s-]?rat\w*|scaled?|according\s+to|depend\w*|degree|extent|instal+ments?|remain\w*|balance|outstanding|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|shared?|proportion\w*|pro[\s-]?rata|rateabl\w*|apportion\w*|divid\w*|split|equally|times|multipl\w*|offset|basis|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
 /** Words before the share that change it rather than describe the event: a deduction, a multiple, an alternative (Critic
  * R450 H1c). "reduced" is left out: "hearing reduced by more than 80 decibels" is the event (R443 M1). */
 const CHANGER_BEFORE_SHARE=/\b(?:deduct\w*|minus|net\s+of|offset|less\s+(?:any|the|all|amounts?)|twice|double[sd]?|triple[sd]?|otherwise|else|instead|ditolak|separuh)\b/u;
@@ -825,7 +825,7 @@ const PER_BODY_PART=/\b(?:per|for\s+each|for\s+one)\s+(?:eye|ear|limb|arm|leg|ha
 const CONDITION_WORDS=new Set(("if when where for once provided that within upon on following to after before during until as "
   +"due caused by resulting from result of the a an any one this that his her their your you our its it we us he she they "
   +"is are was were be been being has have had becomes become becoming occurs occur occurred happens happen happened "
-  +"and in at least more than or equal with from date event "
+  +"and in at least more than or equal with from date event direct directly expected use anniversary legs arms hands feet "
   +"diagnosis diagnosed diagnose death dies die died dying accident accidental accidents injury injuries illness illnesses "
   +"disease diseases condition conditions disability disabled disablement permanent permanently total totally "
   +"hospital hospitalisation hospitalization admission admitted intensive care coma surgery operation qualifying critical covered "
@@ -835,22 +835,35 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"age aged under over survival period term cover approval approve approved claim claims receipt proof notification notice "
   +"certified certification confirmed registered medical practitioner doctor specialist physician singapore overseas abroad "
   +"apabila jika bila semasa sekiranya kepada selepas sebelum dalam tempoh oleh dengan yang mana akibat daripada dari "
-  +"didiagnosis diagnosis kematian meninggal mati berlaku kemalangan kecederaan penyakit kritikal dilindungi hilang upaya kekal "
+  +"didiagnosis diagnosis kematian meninggal dunia mati berlaku kemalangan kecederaan penyakit kritikal dilindungi hilang upaya kekal "
   +"menyeluruh hospital pemilik polisi peserta penama waris benefisiari orang diinsuranskan dijamin hayat doktor perubatan berdaftar "
   +"pengesahan tuntutan diluluskan kelulusan umur berumur").split(" "));
 /** Durations and ages are allowed as figures: "within 30 days", "for 5 consecutive days", "under age 65", "96 hours". */
 const CONDITION_FIGURES=/\b\d{1,4}\s+(?:consecutive\s+|calendar\s+|berturut[\s-]turut\s+)?(?:hours?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\b|\b(?:age|aged|umur|berumur)\s+\d{1,3}\b|\b(?:two|both|one)\s+(?:limbs?|eyes?|ears?|hands?|feet|foot|arms?|legs?)\b/gu;
-/** The named illness after "diagnosis of" ("carcinoma in situ", "Early Stage Cancer"), up to six words, as long as none
- * of them says how much, how or how often (CONDITION_NAME_DENY). */
-const CONDITION_NAME=/\b(?:diagnosis\s+of|diagnosed\s+with|diagnosed\s+as\s+having|didiagnosis\s+(?:dengan|menghidap))((?:\s+[\p{L}'’-]+){1,6}?)(?=\s*(?:[,;.]|$|\s(?:if|when|within|before|after|during|as|provided|by|while)\b))/gu;
-const CONDITION_NAME_DENY=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|double[sd]?|twice|triple[sd]?|times|instal+ments?|ansuran|weekly|monthly|yearly|annual\w*|balance|baki|remain\w*|outstanding|extent|place|instead|already|insurer|other|limit\w*|maximum|cap\w*|exceed\w*|most|share\w*|proportion\w*|pro[\s-]?rat\w*|divid\w*|dibahagi\w*|dipotong|potong|equal\w*|split|one|two|three|four|five|six|seven|eight|nine|ten|first|second|each|pay\w*|paid|amount\w*|benefit\w*|sum|child\w*|adult\w*|or|and|but|except|plus|after|then)\b/u;
+/** Where an open-ended name goes, which no word list can hold: the illness after "diagnosis of" ("Heart Attack of Specified
+ * Severity or Stroke", "Type 1 Diabetes Mellitus", "Kanker Stadium Akhir"), who is paid after "to" or "kepada" ("the
+ * nominee(s) named in the policy", "the assignee under a valid assignment", "penama atau waris"), and words in brackets
+ * ("(paraplegia)"). Each runs to the next comma (for an illness, the next full stop), or condition word, and is accepted only when none of its words
+ * says how much, how or how often (MONEY_OR_MANNER, TE pr222 round 5). Everything outside them stays on CONDITION_WORDS. */
+const SLOT_END=String.raw`(?=\s*(?:[,;.]|$|\s(?:if|when|where|within|before|after|during|upon|on|as|provided|while|unless|until|apabila|jika|bila|semasa|sekiranya|selepas|sebelum|dalam)\b))`;
+const ILLNESS_SLOT=new RegExp(String.raw`\b(?:diagnosis\s+of|diagnosed\s+with|diagnosed\s+as\s+having|suffering\s+from|didiagnosis(?:\s+(?:dengan|menghidap|menderita))?|terdiagnosis(?:\s+menderita)?)((?:,?\s+[^\s,;.]+){1,16}?)`+SLOT_END.replace("[,;.]","[;.]"),"gu");
+const PAYEE_SLOT=new RegExp(String.raw`(?<!\bup\s)\b(?:to|kepada)((?:\s+[^\s,;.]+){1,10}?)`+SLOT_END,"gu");
+const BRACKET_SLOT=/\(([^()]{1,60})\)/gu;
+/** Closed: words about money, its size or how it is paid. Any one of them in a slot leaves the share unsure. */
+const MONEY_OR_MANNER=/^(?:minus|less|lesser|greater|net|deduct\w*|reduc\w*|half|halved|quarters?|thirds?|double[sd]?|twice|triple[sd]?|times|multipl\w*|instal+ments?|ansuran|daily|weekly|monthly|yearly|annual\w*|per|rate|balance|baki|sisa|remain\w*|outstanding|extent|place|instead|already|used|insurer|other|limit\w*|maximum|max|cap\w*|exceed\w*|most|share\w*|proportion\w*|pro[\s-]?rat\w*|rateabl\w*|apportion\w*|divid\w*|dibahagi\w*|dipotong|potong\w*|ditolak|dikurang\w*|kurang|separuh|setengah|sebanyak|equal\w*|split|refund\w*|debt\w*|loan\w*|owed|owing|hutang|pinjaman|one|two|three|four|five|six|seven|eight|nine|ten|first|second|each|pay\w*|paid|dibayar\w*|amount\w*|jumlah|benefit\w*|sum|child\w*|adult\w*|kanak|dewasa|but|except|plus|then|offset|subtract\w*|taken|bonus\w*|together|addition\w*|extra|top|lieu|replac\w*|substitut\w*|waiv\w*|forfeit\w*|scaled?|according|depend\w*|degree|tambahan|bersama)$/u;
+const OPEN_WORDS=/[^\p{L}\p{N}%]+/u;
 /** The share itself paid again, said in other words: "and we pay it within 14 days". */
 const PAID_AS_SAID=/\b(?:we\s+(?:will\s+|shall\s+)?pay\s+it|it\s+(?:is|will\s+be|shall\s+be)\s+paid)\b/gu;
+/** A period of cover named as such: "during the Benefit Term", "within the policy year". */
+const COVER_PERIOD=/\b(?:benefit|policy|cover(?:age)?|insurance)\s+(?:term|period|year|anniversary)\b/gu;
+function slotHarmless(words:string){return words.split(OPEN_WORDS).every(w=>!w||(!/%/.test(w)&&!MONEY_OR_MANNER.test(w)));}
 function conditionHarmless(condition:string,benefitName:string|null|undefined){
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ")
-    .replace(CONDITION_NAME,(m,name:string)=>CONDITION_NAME_DENY.test(name)?m:" diagnosis ");
-  const words=text.replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
+  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(COVER_PERIOD," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ")
+    .replace(BRACKET_SLOT,(m,inner:string)=>slotHarmless(inner)?" ":m)
+    .replace(ILLNESS_SLOT,(m,name:string)=>slotHarmless(name)?" diagnosis ":m)
+    .replace(PAYEE_SLOT,(m,payee:string)=>slotHarmless(payee)?" to ":m);
+  const words=text.replace(/[,.;:()\-–—'’"“”/]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CONDITION_WORDS.has(w)||own.has(w));
 }
 function shareStandsAlone(text:string,benefitName:string|null|undefined){
@@ -874,7 +887,7 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   const at=SHARE_CONDITION.exec(sentence);
   if(!at)return capPassageHarmless(sentence,benefitName);
   const condition=sentence.slice(at.index+at[0].length);
-  return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(condition)&&conditionHarmless(condition,benefitName);
+  return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(condition)&&conditionHarmless(sentence.slice(at.index),benefitName);
 }
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount or other words, which may cap or change what is paid.";
 /** What bounds a share of the sum insured. "none": the passage prints no amount or bound. "cap": it prints exactly one
@@ -886,7 +899,7 @@ export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|
  * "doubled if overseas", "for a child under 18", a figure) leaves the share unsure. The benefit's own name words count too. */
 const CAP_PASSAGE_WORDS=new Set(("a an the this that it its we will shall be is are was pay pays paid payable paying receive "
   +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only akan dibayar dibayarkan").split(" "));
-const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
+const CAP_PASSAGE_PHRASES=/\bin\s+advance\b|\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
 /** The share's own trigger when it names every covered condition, never one of them: "upon diagnosis of any one of the 27
  * conditions covered", "on the diagnosis of any of the covered illnesses". It narrows nothing, so it does not unsettle the
  * cap. A named condition, a person, a place or a time ("upon diagnosis of carcinoma in situ", "in the first year") is not

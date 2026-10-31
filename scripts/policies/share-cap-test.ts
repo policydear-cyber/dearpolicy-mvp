@@ -199,6 +199,10 @@ test("after 'when' or 'to whom', only words that say who, what, when or who cert
     "50% daripada Jumlah Diinsuranskan dibayar kepada pemilik polisi, dibahagi sama rata.",
     "50% daripada Jumlah Diinsuranskan dibayar apabila didiagnosis, setelah dipotong hutang.",
     S + " upon diagnosis of cancer in five equal instalments.", S + " upon diagnosis for a child under age 18.",
+    // TE round 5: inside an illness name or a payee, any word about money or how it is paid still gives no figure.
+    S + " to the policy owner in five equal instalments.", S + " to each child of the insured.", S + " upon diagnosis of cancer, together with any bonus.",
+    S + " to the nominee in lieu of the death benefit.", S + " upon diagnosis of Stroke, limited to the remaining Sum Assured.",
+    "100% of the Sum Assured is payable to the nominee, net of any policy loan.",
     "100% of the Sum Insured is payable on death, pro-rated by the number of days insured.",
     "100% of the Sum Insured is payable on disability, proportionate to the degree of the loss.",
   ]) assert.equal(shareBound(quote, "Critical Illness").kind, "unsure", quote);
@@ -207,6 +211,14 @@ test("after 'when' or 'to whom', only words that say who, what, when or who cert
     "100% of the Sum Assured will be paid in one lump sum to the beneficiary in the event of death.",
     "Sekiranya didiagnosis, 50% daripada Jumlah Diinsuranskan akan dibayar kepada Peserta.",
     "We pay 100% of the Sum Assured in one lump sum; payment is made by bank transfer.",
-    "100% of the Sum Assured is payable to the policyowner upon death of the life assured, and we pay it within 14 days."])
+    "100% of the Sum Assured is payable to the policyowner upon death of the life assured, and we pay it within 14 days.",
+    // TE round 5: illness names, payees and periods other insurers print.
+    "100% of the Sum Assured is payable upon diagnosis of Major Cancer, Heart Attack of Specified Severity or Stroke with Permanent Neurological Deficit.",
+    "100% of the Sum Assured is payable to the nominee(s) named in the policy, or to the legal personal representative.",
+    "100% daripada Jumlah Diinsuranskan akan dibayar kepada penama atau waris apabila Orang Yang Diinsuranskan meninggal dunia.",
+    "100% dari Uang Pertanggungan dibayarkan kepada Tertanggung apabila didiagnosis menderita Kanker Stadium Akhir.",
+    "100% of the Sum Insured is payable to the beneficiary upon the death of the Insured during the Benefit Term.",
+    "100% of the Sum Insured shall be paid upon permanent and total loss of use of both legs (paraplegia).",
+    "100% of the Sum Assured is payable upon diagnosis of Type 1 Diabetes Mellitus in the Life Assured."])
     assert.equal(shareBound(quote, "Critical Illness").kind, "none", quote);
 });
