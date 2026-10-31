@@ -137,18 +137,42 @@ function moneyPattern(value: number) {
   // Round 10: never part of a figure a scan printed unclearly ("S$1,O36.00" is not 36).
   // The figure is read whole: it ends where the printed figure ends, so 1,936 is not printed by "S$1,936.50" and 4,250 is
   // not printed by "Rp4.250.000" (a separator followed by a digit carries the figure on).
-  return new RegExp("(?<![\\d.,])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.'’]\\d|[,.]?[OoIl|])");
+  // Nor the last group of a figure grouped with spaces or apostrophes ("1 250 €", "CHF 1'250.00" never print 250: TE #260 F1).
+  return new RegExp("(?<![\\d.,])(?<!\\d[ \\u00a0\\u202f'’])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.'’]\\d|[,.]?[OoIl|])");
 }
-/** Every figure the passage prints, each read whole (printed-number.ts), so a figure is never found inside a longer one.
- *  Two forms printed-number.ts leaves alone, because elsewhere they can be two figures, are read here as one: a comma
- *  decimal with no grouping ("150,75 EUR") and space thousands closed by a comma decimal ("1 250,00 €"). A figure an
- *  unclear scan printed ("1,O36") or one with a scale word after it ("1.5 million") is not read. */
+/** A currency printed right beside a figure: before it ("Rp4.250.000", "€ 18.500,50", "CHF 1'250.00", "KWD 1.250") or after
+ * it ("1.250,00 €", "150,75 EUR"). The code is returned (or the sign) so a three-decimal currency reads "1.250" as 1.25. */
+const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
+const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
+/** Words before a figure that make it a number of something else: a section, table, version, clause, page, year or age. */
+const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
+const THREE_DECIMAL_CODES = /^(?:BHD|KWD|OMR|JOD|TND|LYD|IQD|KD|BD)$/;
+
+/** The figures a passage prints in a grouping the money pattern above does not read (dot thousands, a comma decimal,
+ * apostrophe thousands, lakh, space thousands closed by a comma decimal), each read whole with printedNumber. Read only
+ * where the passage makes the grouping certain (Critic #260 H1: "2.500%" is a rate, "Section 1.500" a section number,
+ * neither S$2,500 or 1,500):
+ *  - a currency is printed right beside the figure, or
+ *  - the figure itself shows the grouping: two or more dot or apostrophe groups ("4.250.000"), a dot group closed by a
+ *    comma decimal ("18.500,50"), space groups closed by a comma decimal ("1 250,00"), or lakh beside a rupee sign;
+ * and never when a percent sign follows or a section, table, version, year, age, rate or factor word comes before.
+ * A three-decimal currency (KWD, BHD, OMR...) reads "1.250" as 1.25, never 1,250 (TE #260 F2). */
 function printedFigures(text: string): number[] {
   const lakh = groupsInLakhs(text), out: number[] = [];
-  const re = new RegExp(String.raw`(?<![\d.,'’]|\d[,.]?[OoIl|]+[,.]?)(` + PRINTED_FIGURE + ")" + FIGURE_END + String.raw`(?![,.]?[OoIl|])` + NO_SCALE_AFTER, "g");
+  const re = new RegExp(String.raw`(?<![\d.,'’]|\d[ \u00a0\u202f]|\d[,.]?[OoIl|]+[,.]?)(` + PRINTED_FIGURE + ")" + FIGURE_END + String.raw`(?![,.]?[OoIl|])` + NO_SCALE_AFTER, "g");
   for (const m of text.matchAll(re)) {
-    const raw = m[1];
-    let v = printedNumber(raw, null, { lakh });
+    const raw = m[1], at = m.index ?? 0, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 8);
+    // Plain digits, a point decimal and comma thousands are the money pattern's: nothing more is read here.
+    if (/^\d+(?:\.\d{1,2})?$/.test(raw) || /^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(raw)) continue;
+    if (/^\s*(?:%|per\s*cent|percent|pct)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    const signBefore = before.match(SIGN_BEFORE), signAfter = after.match(SIGN_AFTER);
+    const code = (signBefore?.[1] ?? signAfter?.[1] ?? (signBefore?.[0].trim() || signAfter?.[0].trim() || "")).toUpperCase();
+    const certain = !!(signBefore || signAfter) || /^\d{1,3}(?:[.'’]\d{3}){2,}(?:,\d{1,2})?$/.test(raw) || /^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(raw)
+      || /^\d{1,3}(?:[ \u00a0\u202f]\d{3})+,\d{2}$/.test(raw) || (lakh && /^\d{1,2}(?:,\d{2})+,\d{3}(?:\.\d{1,2})?$/.test(raw));
+    if (!certain) continue;
+    let v: number | null;
+    if (THREE_DECIMAL_CODES.test(code)) v = /^\d+\.\d{3}$/.test(raw) ? Number(raw) : printedNumber(raw, "KWD", { lakh });
+    else v = printedNumber(raw, null, { lakh });
     if (v === null && /^\d+,\d{2}$/.test(raw)) v = Number(raw.replace(",", "."));
     if (v === null && /^\d{1,3}(?:[ \u00a0\u202f]\d{3})+,\d{2}$/.test(raw)) v = Number(raw.replace(/[ \u00a0\u202f]/g, "").replace(",", "."));
     if (v !== null && Number.isFinite(v)) out.push(v);

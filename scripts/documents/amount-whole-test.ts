@@ -57,6 +57,18 @@ async function main() {
   t("a share of a printed base is read on the whole base (€ dot thousands, S$)", () => {
     yes("25% of S$5,000", 1250); no("25% of €5.000", 1.25); yes("10% of S$100,000 up to maximum", 10000);
   });
+  t("a rate, factor, section, version, table or year number is never a dot-thousand amount (Critic #260 H1)", () => {
+    no("Interest 2.500% p.a.", 2500); no("Multiplier 1.250 applies", 1250); no("Section 1.500 Benefits", 1500);
+    no("Version 3.100", 3100); no("Table 2.000 Sum Insured 500", 2000); no("Policy year 2.026", 2026);
+    no("Rate: 0.750 per mille", 750); no("Loading factor 1,250", 1.25); no("Up to 3.5 times", 3500);
+  });
+  t("the last group of a space- or apostrophe-grouped figure is never the figure (TE #260 F1)", () => {
+    no("Montant 1 250 €", 250); no("Sum S$ 1 250", 250); no("Betrag CHF 1'250.00", 250); no("Montant 1 250,00 €", 250);
+    yes("Montant 1 250 €", 1250); yes("Sum S$ 1 250", 1250);
+  });
+  t("a three-decimal currency reads a dot and three digits as its decimal (KWD, BHD, OMR) (TE #260 F2)", () => {
+    no("Benefit KWD 1.250", 1250); yes("Benefit KWD 1.250", 1.25); no("Benefit BHD 0.500", 500); yes("Limit OMR 2.500 per day", 2.5);
+  });
   t("fractions are unchanged", () => { yes("Pays 25% of the sum assured", 0.25, "fraction"); no("Pays 25% of the sum assured", 0.2, "fraction"); });
   t("no request left this machine", () => assert.equal(fetches, 0));
 
