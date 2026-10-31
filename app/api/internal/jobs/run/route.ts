@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
 import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
+import { scrubDeletedDocuments } from "@/lib/lifecycle/content-scrub";
+import { purgeSoon } from "@/lib/storage/purge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +25,10 @@ export async function GET(request: NextRequest) {
       { status: auth.status, headers: NO_STORE },
     );
   }
+  // The daily pass also finishes any document deletion whose cleanup failed
+  // earlier: content scrubbed, files removed (both bounded, never throw).
+  await scrubDeletedDocuments();
+  await purgeSoon();
   try {
     const summary = await runJobBatch({ jobTypes: PRODUCTION_JOB_TYPES });
     return NextResponse.json({ ok: true, ...summary }, { headers: NO_STORE });

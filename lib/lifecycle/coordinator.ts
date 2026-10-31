@@ -50,7 +50,8 @@ import { pool } from "@/lib/db/client";
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
 import { enqueueStoragePurge, purgeSoon } from "@/lib/storage/purge";
-import { deleteHouseholdPassages, deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
+import { deleteHouseholdPassages, pineconeEnabled } from "@/lib/rag/pinecone";
+import { scrubDeletedDocuments } from "./content-scrub";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
@@ -113,6 +114,15 @@ async function purgeDeletedObjects(table: "policies" | "claim_evidence_documents
   } catch (error) {
     console.warn("storage purge after deletion was not completed now; it will be retried:", error instanceof Error ? error.name : "unknown");
   }
+}
+
+/** Once a policy deletion request has completed, the documents' content really goes (lib/lifecycle/content-scrub.ts):
+ * the rows become soft_deleted, their search passages leave Pinecone, everything read from them is hard-deleted, and
+ * their stored files are queued and removed now. Whatever fails here is retried by the request drain. Never throws. */
+async function scrubAndPurgeDeletedPolicies(policyIds: string[]): Promise<string | null> {
+  const scrub = await scrubDeletedDocuments({ policyIds, deletionFinished: true });
+  await purgeSoon();
+  return scrub.searchIndexPending.length || scrub.failed ? "Search-index cleanup is still catching up for this document" : null;
 }
 
 export type DeletionOutcome = {
@@ -271,13 +281,6 @@ export async function finishPolicyDocumentDeletion(args: {
 }): Promise<{ storageWarning: string | null }> {
   let storageWarning: string | null = null;
 
-  if (pineconeEnabled()) {
-    await deletePolicyPassages({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
-      console.warn("Pinecone cleanup failed for deleted policy " + args.policyId + ":", error instanceof Error ? error.message : error);
-      storageWarning = "Search-index cleanup is still catching up for this document";
-    });
-  }
-
   await transitionDeletionRequest(pool, {
     id: args.deletionRequestId,
     fromStates: ["pending_deletion"],
@@ -313,7 +316,7 @@ export async function finishPolicyDocumentDeletion(args: {
     extra: { resourceType: "policy_document" },
   });
 
-  await purgeDeletedObjects("policies", args.accountId, [args.policyId]);
+  storageWarning = await scrubAndPurgeDeletedPolicies([args.policyId]);
   return { storageWarning };
 }
 
@@ -881,15 +884,6 @@ export async function finishPolicyDeletion(args: {
 }): Promise<{ storageWarning: string | null }> {
   let storageWarning: string | null = null;
 
-  if (pineconeEnabled()) {
-    for (const id of args.chainPolicyIds) {
-      await deletePolicyPassages({ accountId: args.accountId, policyId: id }).catch((error) => {
-        console.warn("Pinecone cleanup failed for deleted policy " + id + ":", error instanceof Error ? error.message : error);
-        storageWarning = "Search-index cleanup is still catching up for this document";
-      });
-    }
-  }
-
   await transitionDeletionRequest(pool, {
     id: args.deletionRequestId,
     fromStates: ["pending_deletion"],
@@ -923,7 +917,7 @@ export async function finishPolicyDeletion(args: {
     extra: { resourceType: "policy", chainSize: args.chainPolicyIds.length },
   });
 
-  await purgeDeletedObjects("policies", args.accountId, args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId]);
+  storageWarning = await scrubAndPurgeDeletedPolicies(args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId]);
   return { storageWarning };
 }
 
