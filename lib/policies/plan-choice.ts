@@ -2,7 +2,7 @@
  * Whether the Documents page asks which plan (cover tier) each covered person is on.
  *
  * The plan a person is on (policy_members.benefit_tier) narrows a multi-column table to that person's column in the
- * older answer paths: the contextual chat (lib/chat/workflow.ts, lib/chat/policy-answer.ts, lib/rag2) and the ledger
+ * older answer paths: the contextual chat (lib/chat/workflow.ts, lib/chat/policy-answer.ts, the tool-loop chat) and the ledger
  * Coverage view (lib/ledger/store.ts seedLedger). A household whose Coverage, Home and chat all run on the benefit
  * table (lib/benefit-table with the simple chat, lib/simple-chat) never reads it: the table links each person to their
  * cover itself. Asking such a household to pick a plan is a manual step that changes nothing they see, and the only
