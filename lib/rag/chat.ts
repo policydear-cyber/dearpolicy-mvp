@@ -3,7 +3,7 @@ import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { answerFromEvidence } from "./answer";
 import { query } from "@/lib/db/client";
-import { notABenefitSum } from "@/lib/coverage/benefit-sum-line";
+import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import type { StructuredCoverageFact } from "@/types";
 import { handleClaimTurn, looksLikeClaimIntent } from "@/lib/claims/orchestrator";
 import { answerPortfolioQuestion, looksLikePortfolioQuestion } from "@/lib/coverage/answer";
@@ -29,8 +29,9 @@ async function confirmedCoverageFacts(accountId: string, familyMemberId: string)
      ORDER BY p.document_authority DESC,p.effective_date DESC NULLS LAST,p.created_at DESC`,
     [accountId, familyMemberId],
   );
-  // A premium, waiver, fund or surrender value line is no cover fact (lib/coverage/benefit-sum-line.ts).
-  return result.rows.filter((r) => !notABenefitSum({ evidenceText: r.evidence_text, amount: r.amount == null ? null : Number(r.amount) })).map((r) => ({
+  // A premium, waiver, fund or surrender value line is no cover fact; a cover whose figure may be one keeps no figure
+  // (lib/coverage/benefit-sum-line.ts).
+  return result.rows.flatMap((row) => { const line = asBenefitLine(row, row.evidence_text); return line ? [line] : []; }).map((r) => ({
     id: r.id, policyId: r.policy_id, category: r.category, amount: r.amount == null ? null : Number(r.amount), currency: r.currency,
     productName: r.product_name, sourcePage: r.source_page, evidenceText: r.evidence_text, insurer: r.insurer, policyName: r.policy_name,
     policyNumber: r.policy_number, documentRole: r.document_role,

@@ -73,11 +73,17 @@ export function lineLabel(evidenceText: string | null | undefined, amount: numbe
   return before.slice(start + 1).trim();
 }
 
-/** The noun phrase directly before the figure (see above), or "" when the figure stands on its own. */
-export function labelHead(label: string): string {
+/** The label with brackets, the currency and linking words before the figure taken off. */
+function trimmedLabel(label: string): string {
   let s = label.replace(/\([^()]*\)|\[[^\[\]]*\]/g, " ").replace(/\s+/g, " ").trim();
   s = s.replace(CURRENCY_AT_END, "").trim();
   for (let prev = ""; prev !== s;) { prev = s; s = s.replace(LINK_AT_END, "").trim(); }
+  return s;
+}
+
+/** The noun phrase directly before the figure (see above), or "" when the figure stands on its own. */
+export function labelHead(label: string): string {
+  let s = trimmedLabel(label);
   // A figure after a comma stands on its own: the comma ends the phrase before it ("Hospital & Surgical, 10% co-insurance, up to").
   if (/[,;]$/.test(s) || !s) return "";
   // Qualifiers and dates never decide ("Annual limit after deductible", "Fund value as at 30 Sep 2026").
@@ -87,12 +93,61 @@ export function labelHead(label: string): string {
   return (clauses.pop() ?? "").trim();
 }
 
-/** True when the line's own label says its amount is no benefit sum (see above). A line with no printed label is a sum. */
-export function notABenefitSum(line: { evidenceText?: string | null; amount?: number | null }): boolean {
-  const head = labelHead(lineLabel(line.evidenceText, line.amount ?? null));
-  if (!head || EXCESS_COVER.test(head) || RETURN_OF_PREMIUM.test(head)) return false;
+/**
+ * A premium, waiver, contribution, value or share word INSIDE the head, with a cover word after it ("Waiver of premium
+ * benefit", "Premium waiver cover", "Fund value benefit", "Excess Waiver Benefit"): the figure may be the premium it waives
+ * or the value it holds, so the line stays but its amount is withheld. A plan tier ("Premium Plan", "Premium ward",
+ * "Contribution Takaful Plan") is a product's name, not a premium. Loans and fees decide only at the head's end, since a
+ * mortgage cover's sum is the "outstanding loan balance covered".
+ */
+const HOLDS_NOT_A_SUM = new RegExp([
+  String.raw`\bpremi(?:um|ums|a)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)`,
+  String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
+  String.raw`\bwaiver\b|\bpayor\b|\bpayer\s+benefit\b`,
+  String.raw`\b(?:fund|surrender|cash|account|policy|units?|investment)\s+values?\b|\bnilai\s+(?:tunai|serahan|dana|akaun|penyerahan)\b|\bvaleur\s+de\s+rachat\b|r[uü]ckkaufswert|现金价值|現金價值`,
+  String.raw`\bdeductibles?\b|\bexcess\b|\bco-?(?:payments?|pay|insurance)\b|\bfranchise\b|selbstbeteiligung|selbstbehalt`,
+].join("|"), "iu");
+/** A value term, then "of the policy/plan" ("Surrender value of the policy"): still the value. */
+const OF_THE_POLICY = /\s+of\s+(?:the|this|your)\s+(?:policy|plan|contract|certificate)$/i;
+
+export type BenefitSumKind = "sum" | "not_a_sum" | "withhold";
+
+/**
+ * "not_a_sum": the line's own label names a premium, waiver, value, loan, fee, tax or share, so it is no cover at all.
+ * "withhold": the line is a cover, but its figure may be something else (see HOLDS_NOT_A_SUM), so it shows no figure.
+ * "sum": the figure is the cover's sum. Anything doubtful is kept as a cover, never dropped on a guess.
+ */
+export function benefitSumKind(line: { evidenceText?: string | null; amount?: number | null }): BenefitSumKind {
+  const label = lineLabel(line.evidenceText, line.amount ?? null);
+  if (!label) return "sum";
+  const head = labelHead(label);
+  if (!head) {
+    // A figure on its own after a comma belongs to the row's first words: a share or premium named there withholds it
+    // ("Co-insurance 10%, capped at S$3,000"); a cover named there keeps it ("Hospital & Surgical, 10% co-insurance, up to").
+    const first = trimmedLabel(label).split(/\s*[,;:—–]\s*/u)[0] ?? "";
+    return new RegExp("^(?:" + HOLDS_NOT_A_SUM.source + ")", "iu").test(first.trim()) ? "withhold" : "sum";
+  }
+  if (EXCESS_COVER.test(head) || RETURN_OF_PREMIUM.test(head)) return "sum";
   const alternatives = head.split(/\s+(?:or|atau|ou|oder)\s+|或/iu);
-  const last = alternatives.pop() ?? "";
-  if (alternatives.some((a) => NAMES_A_SUM.test(a))) return false;
-  return ENDS_NOT_A_SUM.test(last.replace(/[.\s]+$/, ""));
+  const last = (alternatives.pop() ?? "").replace(/[.\s]+$/, "").replace(OF_THE_POLICY, "");
+  const ends = ENDS_NOT_A_SUM.test(last);
+  // A sum named as the other choice ("higher of sum assured or fund value"): the cover stays, the figure is withheld.
+  if (alternatives.some((a) => NAMES_A_SUM.test(a))) return ends || HOLDS_NOT_A_SUM.test(last) ? "withhold" : "sum";
+  if (ends) return "not_a_sum";
+  return HOLDS_NOT_A_SUM.test(last) ? "withhold" : "sum";
+}
+
+/** True when the line is no cover at all (see benefitSumKind). */
+export function notABenefitSum(line: { evidenceText?: string | null; amount?: number | null }): boolean {
+  return benefitSumKind(line) === "not_a_sum";
+}
+
+/**
+ * For a reader of stored lines: null when the line is no cover (leave it out), else the line with its amount withheld
+ * when the figure may not be the cover's sum. The amount keeps the reader's own type (text from SQL, or a number).
+ */
+export function asBenefitLine<T extends { amount: string | number | null }>(row: T, evidenceText: string | null | undefined): T | null {
+  const kind = benefitSumKind({ evidenceText, amount: row.amount == null ? null : Number(row.amount) });
+  if (kind === "not_a_sum") return null;
+  return kind === "withhold" ? { ...row, amount: null } : row;
 }

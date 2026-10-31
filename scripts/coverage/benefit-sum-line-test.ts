@@ -18,7 +18,10 @@ const failed: string[] = [];
 const t = (name: string, fn: () => void) => { try { fn(); passed++; console.log("  ok  " + name); } catch (e) { failed.push(name); console.error("  FAIL " + name + ": " + (e instanceof Error ? e.message.split("\n")[0] : String(e))); } };
 
 async function main() {
-  const { notABenefitSum, lineLabel } = await import("@/lib/coverage/benefit-sum-line");
+  const { notABenefitSum, lineLabel, benefitSumKind, asBenefitLine } = await import("@/lib/coverage/benefit-sum-line");
+  const kind = (evidenceText: string, amount: number) => benefitSumKind({ evidenceText, amount });
+  const held = (evidenceText: string, amount: number) => assert.equal(kind(evidenceText, amount), "withhold", `«${evidenceText}» ${amount}: the cover stays, its figure is withheld`);
+  const whole = (evidenceText: string, amount: number) => assert.equal(kind(evidenceText, amount), "sum", `«${evidenceText}» ${amount} is the cover's sum`);
   const not = (evidenceText: string, amount: number) => assert.equal(notABenefitSum({ evidenceText, amount }), true, `«${evidenceText}» ${amount} is no benefit sum`);
   const sum = (evidenceText: string, amount: number) => assert.equal(notABenefitSum({ evidenceText, amount }), false, `«${evidenceText}» ${amount} is a benefit sum`);
 
@@ -79,15 +82,31 @@ async function main() {
     sum("Im Todesfall zahlen wir eine Leistung von 200.000 €", 200000); sum("The policy pays a death benefit of A$850,000 to your estate", 850000);
     sum("Waiting period 30 days; Critical illness S$200,000", 200000); sum("Premium ward hospital cash S$300/day", 300);
   });
-  t("anything doubtful stays a sum: a figure on its own after a comma, a figure not printed, no label (nothing is removed on a guess)", () => {
-    sum("Hospital & Surgical, 10% co-insurance, up to S$1,000,000 per year", 1000000); sum("Co-insurance 10%, capped at S$3,000", 3000);
-    sum("Payor Waiver Benefit RM1,200", 1200);
+  t("a cover whose figure may be a waived premium, a value or a share keeps its line and shows no figure (TE F2)", () => {
+    held("Waiver of premium benefit S$3,000", 3000); held("Premium waiver cover S$3,000", 3000); held("Fund value benefit S$45,000", 45000);
+    held("Payor Waiver Benefit RM1,200", 1200); held("Excess Waiver Benefit A$5,000", 5000); held("Co-insurance 10%, capped at S$3,000", 3000);
+    held("Death benefit: higher of sum assured or fund value S$150,000", 150000); not("Manfaat pengecualian caruman RM2,400", 2400);
+    not("Surrender value of the policy (guaranteed) S$12,000", 12000);
+    // Controls: a plan tier, a mortgage cover's loan balance and a sum named after a premium alternative are whole sums.
+    whole("Premium Plan Death Benefit S$500,000", 500000); whole("Contribution Takaful Plan Death Benefit RM200,000", 200000);
+    whole("Mortgage loan protection — outstanding loan balance covered up to S$300,000", 300000); whole("Hospital & Surgical, 10% co-insurance, up to S$1,000,000 per year", 1000000);
+    whole("Death Benefit: 101% of premiums paid or Sum Assured of S$200,000, whichever is higher", 200000); whole("Return of Premium Benefit S$12,000", 12000);
+    whole("Car Rental Excess Cover £2,000", 2000); whole("Premium ward hospital cash S$300/day", 300); whole("Death\tS$500,000", 500000);
+  });
+  t("a reader leaves a non-sum line out, withholds a doubtful figure, and passes a sum through unchanged", () => {
+    assert.equal(asBenefitLine({ amount: "1200.00" }, "Term Life Premium S$1,200"), null);
+    assert.deepEqual(asBenefitLine({ id: "a", amount: "3000" }, "Waiver of premium benefit S$3,000"), { id: "a", amount: null });
+    assert.deepEqual(asBenefitLine({ id: "b", amount: 500000 }, "Death benefit S$500,000"), { id: "b", amount: 500000 });
+    assert.deepEqual(asBenefitLine({ id: "c", amount: null }, "Premium S$100"), { id: "c", amount: null }, "a line with no amount has no figure to judge");
+  });
+  t("anything doubtful is never dropped: a figure on its own after a comma, a figure not printed, no label (nothing is removed on a guess)", () => {
+    sum("Hospital & Surgical, 10% co-insurance, up to S$1,000,000 per year", 1000000);
     sum("Annual premium S$1,200", 999); assert.equal(lineLabel("Annual premium S$1,200", 999), "", "a stored figure the line does not print gives no label");
     sum("", 1000); sum("S$1,000", 1000);
   });
   t("every reader of stored schedule lines leaves such a line out", () => {
     for (const f of ["lib/coverage/facts.ts", "app/api/dashboard/route.ts", "app/api/coverage/route.ts", "lib/rag/chat.ts"])
-      assert.match(readFileSync(f, "utf8"), /notABenefitSum\(/, f + " applies the rule");
+      assert.match(readFileSync(f, "utf8"), /asBenefitLine\(/, f + " applies the rule");
   });
   t("no request left this machine", () => assert.equal(fetches, 0));
 

@@ -3,7 +3,7 @@ import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { currenciesStatedIn, currencyStatedIn, statedCurrency } from "@/lib/claims/currency-evidence";
-import { notABenefitSum } from "@/lib/coverage/benefit-sum-line";
+import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 
 export type OwnedCoverage = {
   id: string;
@@ -89,8 +89,9 @@ export async function confirmedOwnedCoverages(accountId: string, familyMemberId:
     [accountId, familyMemberId],
   );
   // A line whose own label names a premium, waiver, fund or surrender value or the person's own share is no cover: not a
-  // claim amount, a ledger row or an inventory sum (lib/coverage/benefit-sum-line.ts).
-  return result.rows.filter((r) => !notABenefitSum({ evidenceText: r.evidence_text, amount: r.amount == null ? null : Number(r.amount) })).map((r) => ({
+  // claim amount, a ledger row or an inventory sum; a cover whose figure may be a waived premium or a value keeps no figure
+  // (lib/coverage/benefit-sum-line.ts).
+  return result.rows.flatMap((row) => { const line = asBenefitLine(row, row.evidence_text); return line ? [line] : []; }).map((r) => ({
     id:r.id, policyId:r.policy_id, familyMemberId:r.family_member_id, category:r.category,
     amount:r.amount == null ? null : Number(r.amount), currency:r.currency?normalizeCurrencyCode(r.currency):null, productName:r.coverage_product_name,
     sourcePage:r.source_page, evidenceText:r.evidence_text, insurer:r.insurer, policyName:r.policy_name, policyNumber:r.policy_number,
