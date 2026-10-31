@@ -1579,6 +1579,27 @@ async function main(){
       assert.equal((await db.query<{n:unknown}>("SELECT reading_cache->'benefit_read_failure' AS n FROM policies WHERE id=$1",[failed])).rows[0].n,null);
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[waiting,failed,resting]]);
     });
+    await test("A schedule's list of covers shows the amount it lists, never 'could not be read'",async()=>{
+      // Live review on 4103e10 (finding 2): a rider listed on the schedule with its amount and dates showed "The amount
+      // on page 1 could not be read" on Benefits while Home showed the same figure.
+      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
+      const [sched,wording]=[uuid(701900),uuid(701901)];
+      for(const [id,role] of [[sched,"personal_schedule"],[wording,"policy_wording"]]){
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status,benefits_indexed_at) VALUES($1,$2,$3,'Example Assurance','Example Shield','Life',$4,60,'ready',$5,$5,'scan_clean',now())",[id,account,people[0].id,role,id+".pdf"]);
+        await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')",[id,people[0].id,account]);
+      }
+      const row=(policy:string,name:string,quote:string)=>db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'Example Shield',$3,ARRAY[]::text[],'none',NULL,NULL,1,$4,'[]'::jsonb,'[]'::jsonb,false)",[account,policy,name,quote]);
+      await row(sched,"CANCER CARE RIDER 4410C","CANCER CARE RIDER 4410C RM 80,000.00 2 Mei 2024 2 Mei 2054");
+      await row(sched,"EXAMPLE SHIELD ---","EXAMPLE SHIELD --- RM 80,000.00 2 Mei 2024 2 Mei 2054 RM 310.00 30");
+      await row(wording,"CANCER CARE RIDER 4410C","CANCER CARE RIDER 4410C RM 80,000.00 2 Mei 2024 2 Mei 2054");
+      const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json()).benefits as {policyId:string;benefitName:string;attention:string|null;pays:string}[];
+      const rider=listed.find(b=>b.policyId===sched&&b.benefitName.startsWith("CANCER"));
+      assert.equal(rider?.attention,null,"The listed cover is not unreadable");
+      assert.equal(rider?.pays,"The schedule lists this cover at RM 80,000.00.");
+      assert.equal(listed.find(b=>b.benefitName.startsWith("EXAMPLE SHIELD"))?.attention,"unreadable","A row with a premium beside the amount is left as it was");
+      assert.equal(listed.find(b=>b.policyId===wording)?.attention,"unreadable","A wording's table is not a list of the person's covers");
+      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
+    });
     await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.

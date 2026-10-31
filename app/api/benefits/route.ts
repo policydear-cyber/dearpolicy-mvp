@@ -13,6 +13,7 @@ import { formatMoney } from "@/lib/format/currency";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
+import { coverLineText,scheduleCoverLine } from "@/lib/policies/cover-line";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -170,7 +171,11 @@ export async function GET(request:NextRequest){
           {runIsUnique:runIsUnique(row)}));
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;
-      const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
+      // A schedule's list of covers ("Rider name, amount, start and end dates"): said as the schedule prints it, not as
+      // an amount that could not be read (cover-line.ts).
+      const coverLine=stub.formulaKind==="none"&&!term&&!planColumns
+        ?scheduleCoverLine({benefitName:row.benefit_name,quote:row.quote,documentRole:row.document_role}):null;
+      const attention=term||planColumns||coverLine?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
         return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
@@ -185,7 +190,7 @@ export async function GET(request:NextRequest){
         traits:Array.isArray(row.traits)?row.traits:[],
         ...formula,
         // The whole point of the screen: the rule as a sentence, not a schema.
-        pays:term?describeScheduleTerm(row.row_kind!,stub.formulaValue,stub.currency):describeBenefitFormula(formula),
+        pays:term?describeScheduleTerm(row.row_kind!,stub.formulaValue,stub.currency):coverLine?coverLineText(coverLine.figure):describeBenefitFormula(formula),
         // The column of a multi-column table: the plan tier or person class.
         tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
