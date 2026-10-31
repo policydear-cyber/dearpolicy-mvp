@@ -107,6 +107,11 @@ async function main() {
   const aboutKranken = await turn(acc, lucas, conv2, "Do I get hospital cash?", { content: "Yes, up to 20.000 €.", citations: [{ policyId: kranken, excerpt: krankenQuote }], answer: answerOf("Yes, up to 20.000 €.", kranken, "Rheinland Komfort", krankenQuote, 20000, "EUR", "Lucas Oliveira") });
   // An older-style answer with no citations, which names the deleted document by its policy number only.
   const legacy = await turn(acc, ana, null, "Is policy VS-2024-778812 still mine?", { content: "Policy VS-2024-778812 (Vida Segura) insures Ana Beatriz Oliveira for R$ 500.000,00.", citations: null, answer: null });
+  // A general reply that cites nothing but still states a figure from the document (an allow-list catches it).
+  const general = await turn(acc, ana, null, "Roughly what am I covered for?", { content: "From what I can see, about R$ 500 mil with Seguradora Aurora.", citations: [], answer: { summary: "About R$ 500 mil.", citations: [], confidence: "insufficient_evidence" } });
+  // An answer from before the document was added cannot hold anything from it, and is kept as it is.
+  const before = await turn(acc, ana, null, "What is a waiting period?", { content: "A waiting period is the time before a cover starts.", citations: [], answer: null });
+  await q(`UPDATE chat_messages SET created_at='2020-01-01' WHERE id=$1`, [before]);
   await q(`INSERT INTO chat_analysis_jobs(account_id,family_member_id,conversation_id,status,request_json,result_json) VALUES
       ($1,$2,$3,'completed','{"question":"life cover?"}',$4::jsonb), ($1,$2,$3,'queued','{"question":"again?"}',$4::jsonb), ($1,$5,$6,'completed','{"question":"hospital?"}',$7::jsonb)`,
     [acc, ana, conv1, JSON.stringify({ answer: { summary: vidaQuote }, retrieved: [{ policyId: vida, text: vidaQuote }] }), lucas, conv2, JSON.stringify({ retrieved: [{ policyId: kranken, text: krankenQuote }] })]);
@@ -129,11 +134,11 @@ async function main() {
     const req = await requestPolicyDocumentDeletion({ client: scoped, accountId: acc, actorUserId: randomUUID(), policyId: vida, reasonCategory: "user_requested", idempotencyKey: "derived-1" });
     assert.equal(req.status, "accepted");
     await finishPolicyDocumentDeletion({ accountId: acc, actorUserId: randomUUID(), policyId: vida, deletionRequestId: req.deletionRequestId });
-    for (const id of [aboutVida, aboutBoth, legacy]) {
+    for (const id of [aboutVida, aboutBoth, legacy, general]) {
       const m = await msg(id);
       assert.equal(m.content, STALE_ANSWER_NOTICE);
       const all = m.content + text(m.citations) + text(m.answer_json);
-      for (const w of ["500.000", "Ana Beatriz", "Vida Segura", "VS-2024-778812", vida, "Segurada", "Lucas Oliveira", "20.000"]) assert.ok(!all.includes(w), `${w} left in ${id}`);
+      for (const w of ["500.000", "500 mil", "Aurora", "Ana Beatriz", "Vida Segura", "VS-2024-778812", vida, "Segurada", "Lucas Oliveira", "20.000"]) assert.ok(!all.includes(w), `${w} left in ${id}`);
       assert.deepEqual(m.citations, []);
     }
     const a = (await msg(aboutVida)).answer_json as Record<string, unknown>;
@@ -142,11 +147,12 @@ async function main() {
     assert.equal(a.knownFacts, undefined); assert.equal(a.policyReview, undefined);
     assert.equal((await msg(legacy)).answer_json, null, "an older answer with no saved answer stays without one");
   });
-  await t("answers about the kept document, and the person's own questions, are untouched", async () => {
+  await t("answers about the kept document, answers from before it was added, and the person's own questions, are untouched", async () => {
+    assert.equal((await msg(before)).content, "A waiting period is the time before a cover starts.");
     const k = await msg(aboutKranken);
     assert.equal(k.content, "Yes, up to 20.000 €."); assert.match(text(k.answer_json), /Krankenhaustagegeld/);
     const questions = (await q<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND role='user' ORDER BY message_order`, [acc])).rows.map((r) => r.content);
-    assert.deepEqual(questions, ["How much does my life policy pay?", "What do we have together?", "Do I get hospital cash?", "Is policy VS-2024-778812 still mine?"]);
+    assert.deepEqual(questions, ["How much does my life policy pay?", "What do we have together?", "Do I get hospital cash?", "Is policy VS-2024-778812 still mine?", "Roughly what am I covered for?", "What is a waiting period?"]);
   });
   await t("the chat's working state and last answer from the deleted document are cleared; the other chat keeps its own", async () => {
     const c1 = (await q<{ state: unknown; last_answer: unknown; revision: string }>(`SELECT state,last_answer,revision::text FROM chat_conversations WHERE id=$1`, [conv1])).rows[0];
@@ -202,7 +208,7 @@ async function main() {
     const renewal = await doc(acc2, ewa, { file: "Zycie-Plus-2026.pdf", insurer: "Wisła Ubezpieczenia (fictitious)", product: "Życie Plus", policyNo: "ZP-30-771203" });
     await ledgerRow(acc2, ewa, zycie, "Życie Plus", 300000, "PLN", "Suma ubezpieczenia: 300 000 zł");
     const byId = await turn(acc2, ewa, null, "Ile?", { content: "300 000 zł.", citations: [{ policyId: zycie }], answer: null });
-    // The renewal shares the policy number, so an answer naming only the number is about the policy still on file.
+    // An answer that cites only the renewal (still on file) is kept, even though it shares the policy number.
     const byNumber = await turn(acc2, ewa, null, "Numer?", { content: "Polisa ZP-30-771203 jest aktywna.", citations: [{ policyId: renewal }], answer: null });
     await q(`UPDATE policies SET lifecycle_state='pending_deletion' WHERE id=$1`, [zycie]);
     let calls = 0;

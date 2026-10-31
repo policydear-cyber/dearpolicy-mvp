@@ -12,12 +12,15 @@
  *     (lib/chat/stale-answers.ts), but the stored row kept every quote, amount and name.
  *
  * scrubDeletedDocumentDerivedContent() makes that removal real, for any household:
- *   - a saved answer that mentions the deleted document anywhere (its id in its citations or answer, or the
- *     document's policy number in its text) is replaced by the same notice the chat already shows for it, with no
- *     quotes, figures, people or citations left. The person's own questions are kept: they are the person's words.
- *   - a chat whose saved working state or last answer mentions the document has them cleared (the chat carries on
- *     from a fresh start; its messages stay, with the answers redacted as above).
- *   - a finished background answer that mentions it loses its result.
+ *   - a saved answer made since the deleted document was added is kept ONLY when every document it refers to (any
+ *     document id in its citations or saved answer) is still on file in this household, and it refers to at least
+ *     one. Anything else (it cites the deleted document, cites nothing, or names it some other way) is replaced by the
+ *     notice the chat already shows for an answer about a deleted document, with no quotes, figures, people or
+ *     citations left. This is an allow-list on purpose: losing an old answer costs the person a re-ask; keeping one
+ *     could keep deleted content. The person's own questions are kept: they are the person's words.
+ *   - a chat whose saved working state or last answer, changed since the document was added, fails the same test has
+ *     them cleared (the chat carries on from a fresh start; its messages stay, with the answers redacted as above).
+ *   - a finished background answer since then that fails the same test loses its result.
  *   - every cached chat analysis of that household is dropped (they are keyed by a hash, so which document each one
  *     came from cannot be told; they are only a 24-hour cache and are rebuilt on the next question).
  *   - its ledger rows are deleted.
@@ -28,7 +31,8 @@
  * (lib/jobs/request-drain.ts), so a failure is retried and documents deleted before this existed are caught up.
  * It never throws.
  *
- * Not covered here: claim calculation snapshots (claim_composition_snapshots), which are the claim's own record.
+ * Not covered here: claim calculation snapshots (claim_composition_snapshots), which are the claim's own record and
+ * carry amounts and names from the documents they used (an open privacy-notice item).
  */
 import { pool } from "@/lib/db/client";
 import { withServiceTransaction } from "@/lib/db/authz-client";
@@ -42,8 +46,7 @@ export const DERIVED_SCRUB_ACTION = "derived_content_scrubbed";
 /** Every state a document is in once its deletion was asked for. Nothing moves a document back to active today; a
  * future "cancel deletion" feature must leave pending_deletion out of this list. */
 const DELETED_STATES = ["pending_deletion", "soft_deleted", "permanently_deleted", "audit_tombstone"];
-/** Shortest policy number matched in answer text; shorter strings could be ordinary words or figures. */
-const MIN_POLICY_NUMBER_LENGTH = 6;
+const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const FRESH_CHAT_STATE = { subjects: {} };
 
 /** What a saved answer becomes: the chat's own "relied on a deleted document" notice and nothing else from it. */
@@ -79,8 +82,8 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
   try {
     const tables = await present(db, ["chat_messages", "chat_conversations", "chat_analysis_jobs", "policy_analysis_cache", "coverage_rules", "policy_document_audit_log"]);
     if (!tables.has("policy_document_audit_log")) return result;
-    const due = await db.query<{ id: string; account_id: string; policy_number: string | null }>(
-      `SELECT p.id::text AS id, p.account_id::text AS account_id, to_jsonb(p)->>'policy_number' AS policy_number FROM policies p
+    const due = await db.query<{ id: string; account_id: string; added_at: string }>(
+      `SELECT p.id::text AS id, p.account_id::text AS account_id, p.created_at::text AS added_at FROM policies p
         WHERE p.lifecycle_state=ANY($1::text[]) AND ($2::uuid[] IS NULL OR p.id=ANY($2::uuid[]))
           AND NOT EXISTS (SELECT 1 FROM policy_document_audit_log a WHERE a.account_id=p.account_id AND a.policy_id=p.id AND a.action=$3)
         ORDER BY p.updated_at LIMIT $4`,
@@ -102,55 +105,70 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
   return result;
 }
 
-async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_id: string; policy_number: string | null }) {
+/**
+ * The allow-list test: stored text (an answer, a chat's state, a background result) may stay only when it refers to at
+ * least one of the household's documents and every one it refers to is still on file.
+ */
+function staysWith(active: Set<string>, known: Set<string>) {
+  return (...parts: unknown[]) => {
+    const text = parts.map((x) => (x == null ? "" : typeof x === "string" ? x : JSON.stringify(x))).join(" ");
+    const refs = [...new Set((text.match(UUID_IN_TEXT) ?? []).map((x) => x.toLowerCase()))].filter((id) => known.has(id));
+    return refs.length > 0 && refs.every((id) => active.has(id));
+  };
+}
+
+async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_id: string; added_at: string }) {
   const counts = { answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0 };
-  // A policy number another active document of this household still carries (a renewal, a replacement) is not a sign
-  // that an answer came from the deleted one, so then only the document's id is matched.
-  let policyNumber = doc.policy_number?.trim() ?? "";
-  if (policyNumber) {
-    const shared = await tx.query(`SELECT 1 FROM policies WHERE account_id=$1 AND id<>$2 AND lifecycle_state='active' AND lower(btrim(to_jsonb(policies)->>'policy_number'))=lower($3) LIMIT 1`,
-      [doc.account_id, doc.id, policyNumber]);
-    if (shared.rows.length) policyNumber = "";
-  }
-  const numberPattern = policyNumber.length >= MIN_POLICY_NUMBER_LENGTH ? "%" + policyNumber.replace(/[\\%_]/g, (c) => "\\" + c) + "%" : null;
-  const idPattern = "%" + doc.id + "%";
+  const docs = await tx.query<{ id: string; active: boolean }>(
+    `SELECT id::text AS id, lifecycle_state='active' AS active FROM policies WHERE account_id=$1`, [doc.account_id]);
+  const known = new Set(docs.rows.map((r) => r.id.toLowerCase()));
+  const active = new Set(docs.rows.filter((r) => r.active).map((r) => r.id.toLowerCase()));
+  active.delete(doc.id.toLowerCase());
+  const stays = staysWith(active, known);
 
   if (tables.has("chat_messages")) {
-    const hits = await tx.query<{ id: string; answer_json: unknown }>(
-      `SELECT id::text AS id, answer_json FROM chat_messages
-        WHERE account_id=$1 AND role='assistant'
-          AND (coalesce(citations::text,'') LIKE $2 OR coalesce(answer_json::text,'') LIKE $2
-               OR ($3::text IS NOT NULL AND (content ILIKE $3 OR coalesce(answer_json::text,'') ILIKE $3)))
-        FOR UPDATE`, [doc.account_id, idPattern, numberPattern]);
-    for (const m of hits.rows) {
+    const rows = await tx.query<{ id: string; citations: unknown; answer_json: unknown; content: string }>(
+      `SELECT id::text AS id, citations, answer_json, content FROM chat_messages
+        WHERE account_id=$1 AND role='assistant' AND created_at >= $2::timestamptz AND content IS DISTINCT FROM $3
+        FOR UPDATE`, [doc.account_id, doc.added_at, STALE_ANSWER_NOTICE]);
+    for (const m of rows.rows) {
+      if (stays(m.citations, m.answer_json)) continue;
       await tx.query(`UPDATE chat_messages SET content=$1, citations='[]'::jsonb, answer_json=CASE WHEN answer_json IS NULL THEN NULL ELSE $2::jsonb END WHERE id=$3 AND account_id=$4`,
         [STALE_ANSWER_NOTICE, JSON.stringify(redactedStoredAnswer(m.answer_json)), m.id, doc.account_id]);
       counts.answersRedacted++;
     }
   }
   if (tables.has("chat_conversations")) {
-    const r = await tx.query(
-      `UPDATE chat_conversations SET state=$3::jsonb, last_answer=NULL, revision=revision+1, updated_at=now()
-        WHERE account_id=$1 AND (coalesce(state::text,'') LIKE $2 OR coalesce(last_answer::text,'') LIKE $2
-              OR ($4::text IS NOT NULL AND (coalesce(state::text,'') ILIKE $4 OR coalesce(last_answer::text,'') ILIKE $4)))`,
-      [doc.account_id, idPattern, JSON.stringify(FRESH_CHAT_STATE), numberPattern]);
-    counts.chatsReset = r.rowCount ?? 0;
+    const rows = await tx.query<{ id: string; state: unknown; last_answer: unknown }>(
+      `SELECT id::text AS id, state, last_answer FROM chat_conversations WHERE account_id=$1 AND updated_at >= $2::timestamptz FOR UPDATE`,
+      [doc.account_id, doc.added_at]);
+    for (const c of rows.rows) {
+      const fresh = JSON.stringify(c.state) === JSON.stringify(FRESH_CHAT_STATE) && c.last_answer == null;
+      if (fresh || stays(c.state, c.last_answer)) continue;
+      await tx.query(`UPDATE chat_conversations SET state=$3::jsonb, last_answer=NULL, revision=revision+1, updated_at=now() WHERE account_id=$1 AND id=$2`,
+        [doc.account_id, c.id, JSON.stringify(FRESH_CHAT_STATE)]);
+      counts.chatsReset++;
+    }
   }
   if (tables.has("chat_analysis_jobs")) {
-    // A job still waiting or running is left to finish; its result is cleared on the next pass once it has.
-    const r = await tx.query(
-      `UPDATE chat_analysis_jobs SET result_json=NULL, request_json='{}'::jsonb, updated_at=now()
-        WHERE account_id=$1 AND status NOT IN ('queued','running')
-          AND (coalesce(result_json::text,'') LIKE $2 OR ($3::text IS NOT NULL AND coalesce(result_json::text,'') ILIKE $3))`,
-      [doc.account_id, idPattern, numberPattern]);
-    counts.jobsCleared = r.rowCount ?? 0;
+    // A job still waiting or running is left alone: it reads the household's documents when it runs, and a deleted
+    // document is no longer among them (every chat read filters to active documents).
+    const rows = await tx.query<{ id: string; result_json: unknown }>(
+      `SELECT id::text AS id, result_json FROM chat_analysis_jobs
+        WHERE account_id=$1 AND status NOT IN ('queued','running') AND result_json IS NOT NULL AND updated_at >= $2::timestamptz FOR UPDATE`,
+      [doc.account_id, doc.added_at]);
+    for (const j of rows.rows) {
+      if (stays(j.result_json)) continue;
+      await tx.query(`UPDATE chat_analysis_jobs SET result_json=NULL, request_json='{}'::jsonb, updated_at=now() WHERE account_id=$1 AND id=$2`, [doc.account_id, j.id]);
+      counts.jobsCleared++;
+    }
   }
   if (tables.has("policy_analysis_cache")) {
     // Hash-keyed chat analyses can't be traced to a document, so all of this household's are dropped. The document's
     // own catalogue checkpoints (keyed by its id) go too.
     const r = await tx.query(
       `DELETE FROM policy_analysis_cache WHERE account_id=$1 AND (cache_key ~ '^[0-9a-f]{64}$' OR cache_key LIKE $2)`,
-      [doc.account_id, idPattern]);
+      [doc.account_id, "%" + doc.id + "%"]);
     counts.cacheDropped = r.rowCount ?? 0;
   }
   if (tables.has("coverage_rules")) {
