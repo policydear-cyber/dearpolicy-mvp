@@ -193,7 +193,7 @@ export async function GET(request:NextRequest){
         traits:Array.isArray(row.traits)?row.traits:[],
         ...formula,
         // The whole point of the screen: the rule as a sentence, not a schema.
-        pays:term?describeScheduleTerm(row.row_kind!,stub.formulaValue,stub.currency):describeBenefitFormula(formula),
+        pays:term?describeScheduleTerm(row.row_kind!,stub.formulaValue,stub.currency):describeBenefitFormula({...formula,quote:stub.quote,benefitName:stub.benefitName,reviewedAt:stub.reviewedAt}),
         // The column of a multi-column table: the plan tier or person class.
         tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
