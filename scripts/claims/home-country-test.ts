@@ -7,7 +7,9 @@
  *   - the chat's reading of the family's own words records the place that way;
  *   - travel (overseas-only) cover is not a possible benefit for an event at home, and is kept for an event overseas;
  *   - the where-did-it-happen question names the household's own country, or "where you live" when unknown;
- *   - with no home given, the older Singapore behaviour is unchanged.
+ *   - with no home given, the older Singapore behaviour is unchanged;
+ *   - Singapore's schemes and bodies (MediShield Life, MediSave, MediFund, CPF, FIDReC, NRIC, the Ministry of Health) are
+ *     named only to a Singapore household or one whose home is unknown; others get the same advice in general words.
  * Pure logic, plus the stored-currency read on a disposable database when one is set. No network, no model.
  *   npm run -s claims:home-country-test   (DEARPOLICY_DISPOSABLE_DB=1 DATABASE_URL=postgres://... adds the database check) */
 import assert from "node:assert/strict";
@@ -124,6 +126,32 @@ async function main() {
   await test("a Singapore household, and no home given, keep the wording as it was", () => {
     assert.deepEqual(question("accidental_injury", "Singapore")!.options, ["Singapore", "Overseas", "Not sure"]);
     assert.deepEqual(question("accidental_injury", undefined)!.options, ["Singapore", "Overseas", "Not sure"]);
+  });
+
+  // Singapore's public schemes and bodies are named only to a Singapore household, or one whose home is unknown.
+  const SG_ONLY = /MediShield|MediSave|MediFund|\bCPF\b|FIDReC|NRIC|Ministry of Health/;
+  const { outsideHouseholdReply, plannedEventReply } = await import("@/lib/chat/workflow");
+  const { conversationalReply } = await import("@/lib/chat/conversational");
+  const allText = (r: { summary: string; details?: string[]; nextSteps?: string[] } | null) => r ? [r.summary, ...(r.details ?? []), ...(r.nextSteps ?? [])].join("\n") : "";
+  const uncle = { relation: "uncle", name: null }, mai = { id: "m1", display_name: "Mai Walsh", preferred_name: null, relationship: "child" };
+  const asks: [string, (home: string | null | undefined) => string][] = [
+    ["help with an uncle's hospital bill", (home) => allText(outsideHouseholdReply(uncle, "how can he get help with the bill?", uncle, home))],
+    ["an uncle with no insurance", (home) => allText(outsideHouseholdReply(uncle, "he has no insurance", uncle, home))],
+    ["finding a late uncle's policies", (home) => allText(outsideHouseholdReply(uncle, "how do we find out if he had any policies?", { ...uncle, died: true }, home))],
+    ["what to bring to a planned operation", (home) => allText(plannedEventReply(mai, "what should we bring?", "knee surgery", home))],
+    ["hospital prices before an operation", (home) => allText(plannedEventReply(mai, "which hospital is cheaper?", "knee surgery", home))],
+    ["a legal question about a refused claim", (home) => allText(conversationalReply({ message: "can I sue the insurer?", selected: null, hasTopic: false, pending: false, home }))],
+  ];
+  await test("an Australian or Malaysian household is never sent to Singapore's schemes (MediShield, MediSave, CPF, FIDReC, NRIC, MOH)", () => {
+    for (const [what, ask] of asks) for (const home of ["Australia", "Malaysia"]) {
+      const t = ask(home);
+      assert.ok(t.length > 0, what + ": answered");
+      assert.doesNotMatch(t, SG_ONLY, what + " (" + home + ")");
+    }
+  });
+  await test("a Singapore household, and one whose home is unknown, keep the Singapore advice", () => {
+    const sg = asks.map(([, ask]) => ask("Singapore")).join("\n"), unknown = asks.map(([, ask]) => ask(null)).join("\n");
+    for (const t of [sg, unknown]) for (const word of ["MediFund", "MediShield", "CPF", "NRIC", "FIDReC", "Ministry of Health"]) assert.ok(t.includes(word), word);
   });
 
   const url = process.env.DATABASE_URL ?? "";
