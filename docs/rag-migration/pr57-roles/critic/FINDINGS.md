@@ -10250,3 +10250,7 @@ Gate green (in-force 18/0, premium:table, policy-status, 85, 22/22, 107/107, 107
 
 ## R454 — #222 c790cdf: not ready
 Gate green. Regression vs 915a313: Malay "jika ... dibahagikan dua" / "dipotong" pay in full again ("jika" became a connector). All 24 new suffix attacks (pro-rata, offset, apportioned, rateable proportion, multiplied, three times, shared, divided, to the extent of the loan, taken off, subtracted, instalments, in place of the death benefit, balance after debt, Malay dibahagi/dipotong) and the R450 later-sentence and before-share rows still pay 0.5. Fix: allow-list the suffix after the connector (event/payee words, name words, durations), unsure otherwise. /mnt/project-files/critic/r454-pr222.md
+
+## R455: #226 5fa8454 (renewal pair): code READY
+R453 M1 is fixed. The probe gives [doc-2026, 100] with nothing left out, matching main. Gate is green: premium:table 0 fail, in-force 18/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge all pass. The five registered graders still wait on DC's decision (R451).
+Low: the quiet drop also applies when samePolicy says only "maybe" (same product, no number). That can be two real policies, such as two single trips, and the older premium would vanish without a note. Consider keeping "two_documents" unless the match is "same".
