@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
-import { failedDocumentAdvice } from "@/lib/documents/failure-advice";
+import { failedDocumentAdvice, readInPartAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
@@ -467,7 +467,15 @@ export default function PoliciesPage() {
               : <small>You can keep using the app while this finishes.</small>}
           </div>}
 
-          {!processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
+          {/* Read in part: which pages, and the next step that can work (lib/documents/failure-advice.ts). It already says
+              that those amounts are not used, so "Not fully confirmed" is not shown under it as well. */}
+          {(() => {
+            const part = !processing && policy.processing_status === "ready" ? readInPartAdvice(policy.processing_message) : null;
+            return <>
+              {part && <div className="accuracy-warning" data-testid="read-in-part"><b>Read in part</b><span>{part.what}</span><small>{part.next}</small></div>}
+              {!part && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
+            </>;
+          })()}
 
           {!processing && policy.personal_coverage_confirmed ? <>
             {/* Names printed in it: matched ones in one quiet line; each unmatched one asks who it is. */}

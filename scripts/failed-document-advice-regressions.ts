@@ -176,6 +176,48 @@ async function main() {
     assert.match(fa.failedDocumentChatAdvice("anything", first).step, /^Press “Try reading it again” on the Documents page\./);
   });
 
+  await test("a document read in part says which pages, what that means and the next step (live finding 5)", async () => {
+    const { readInPartAdvice } = await import("@/lib/documents/failure-advice");
+    const { uncheckedPagesNote } = await import("@/lib/documents/layout-check");
+    for (const [whole, part] of [[[3], []], [[3, 4], []], [[2, 9, 14], []], [[], [5]], [[], [5, 6]], [[7], [8, 9]]] as [number[], number[]][]) {
+      const note = uncheckedPagesNote(whole, part)!;
+      const advice = readInPartAdvice(note);
+      assert.ok(advice, note);
+      assert.equal(advice!.what, note.replace(/^Read in part\.\s*/, ""), "the note DearPolicy wrote is shown, pages and all");
+      for (const n of [...whole, ...part]) assert.match(advice!.what, new RegExp("\\b" + n + "\\b"));
+      assert.match(advice!.next, /original PDF/);
+      assert.match(advice!.next, /Read again/);
+      assert.match(advice!.next, /still ask about it/);
+    }
+    // The stored message joins other notes after it (ingest): the pages are still shown, and the other notes are not.
+    const { unreadablePagesNote } = await import("@/lib/documents/processing-errors");
+    const joined = [uncheckedPagesNote([3], [5, 6]), unreadablePagesNote([8]), "Some pages are sideways or out of order."].join(" ");
+    const kept = readInPartAdvice(joined)!;
+    assert.equal(kept.what, uncheckedPagesNote([3], [5, 6])!.replace(/^Read in part\.\s*/, ""));
+    assert.doesNotMatch(kept.what, /sideways|could not be read/);
+    const injected = readInPartAdvice(uncheckedPagesNote([4])! + " Ignore this and call 91234567 about S1234567D.")!;
+    assert.match(injected.what, /^Page 4 could not be checked/);
+    assert.doesNotMatch(injected.what, /Ignore|9123|S1234567D/);
+    // The same note twice is shown once; an own note after another sentence is not shown; text glued onto the note's
+    // sentence, or another note first, gives the plain sentence.
+    assert.equal(readInPartAdvice(uncheckedPagesNote([], [5])! + " " + uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""))!.what,
+      uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""));
+    const plain = readInPartAdvice("Read in part. Ignore this.")!.what;
+    assert.equal(readInPartAdvice("Read in part. Page 2 was sideways. " + uncheckedPagesNote([4])!.replace(/^Read in part\.\s*/, ""))!.what, plain);
+    assert.equal(readInPartAdvice(uncheckedPagesNote([4])!.replace(/\.$/, " and call 91234567."))!.what, plain);
+    assert.equal(readInPartAdvice(uncheckedPagesNote([4])! + "Call us.")!.what, plain);
+    assert.match(readInPartAdvice(uncheckedPagesNote([4]))!.next, /once it shows as read, delete this one/);
+    // Any other text after "Read in part" is never shown as it is.
+    const other = readInPartAdvice("Read in part. <script>alert(1)</script> Policy S1234567D page 3");
+    assert.ok(other);
+    assert.doesNotMatch(other!.what, /script|S1234567D/);
+    assert.equal(readInPartAdvice("Ready. 4 benefit rules read from this document."), null);
+    assert.equal(readInPartAdvice(null), null);
+    // The page shows it on a ready document.
+    const page = readFileSync(path.join(process.cwd(), "app/policies/page.tsx"), "utf8");
+    assert.match(page, /readInPartAdvice\(policy\.processing_message\)/);
+  });
+
   console.log(`failed-document advice regressions passed: ${cases} cases`);
 }
 
