@@ -365,7 +365,8 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     const unpaidNumbers = unpaid.flatMap((c) => c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean)) as string[];
     const elsewhere = unpaidIds.length || unpaidNumbers.length ? (await query<{ doc_id: string | null; policy_id_text: string | null; policy_number: string | null; owner: string }>(
       `SELECT coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.policy_id::text AS policy_id_text,pr.policy_number,fm.display_name AS owner
-         FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id
+         FROM premium_records pr JOIN family_members fm ON fm.id=pr.family_member_id AND fm.account_id=pr.account_id AND ${activePredicate("fm")}
+         JOIN policies sp ON sp.id=coalesce(pr.source_document_id,pr.policy_id) AND sp.account_id=pr.account_id AND ${activePredicate("sp")}
         WHERE pr.account_id=$1 AND pr.family_member_id<>$2
           AND (pr.policy_id::text=ANY($3::text[]) OR pr.source_document_id::text=ANY($3::text[]) OR pr.policy_number IS NOT NULL)`,
       [accountId, member.id, unpaidIds])).rows : [];
