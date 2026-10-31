@@ -755,17 +755,18 @@ const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger
  * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after
  * a share qualifies that share ("50% of Sum Insured, but the amount we pay will not under any circumstances be higher
  * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
-const SHARE_FIGURE=/\d\s?%|\bper\s?cent\b/iu;
-function withoutEventThresholds(text:string){
+// A share in any form: a percentage, a fraction in words ("one half") or the insured amount itself (Critic R434).
+const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|`+INSURED_AMOUNT,"iu");
+function printsAnAmount(text:string){
   let out="",at=0;
   for(const match of text.matchAll(EVENT_THRESHOLD)){
     const before=text.slice(at,match.index);
-    if(SHARE_FIGURE.test(before))break;
+    // A comparative after the share, "less than" and "more than" included, may bound it.
+    if(SHARE_FIGURE.test(before))return true;
     out+=before+" ";at=match.index+match[0].length;
   }
-  return out+text.slice(at);
+  return PRINTS_AN_AMOUNT.test(out+text.slice(at));
 }
-const printsAnAmount=(text:string)=>PRINTS_AN_AMOUNT.test(withoutEventThresholds(text));
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *

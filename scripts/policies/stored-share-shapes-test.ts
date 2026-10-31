@@ -100,6 +100,9 @@ const CAPPED: [string, number, string][] = [
   ["Major burns", 0.5, "Major burns: 50% of Sum Insured, without being higher than 25%"],
   ["Major burns", 0.5, "Major burns: 50% of Sum Insured, reduced to 25% if the burn is smaller than 10%"],
   ["Hospital", 0.01, "1 per cent of the Sum Insured for each day, for a stay longer than 3 days, but at no point more than 90 days"],
+  ["Disability", 1, "Disability: loss greater than 50%, Sum Insured, reduced to one half if less than 10%"],
+  ["Disability", 0.5, "Disability: one half of the Sum Assured, reduced to one quarter if the loss is less than 10%"],
+  ["Burns", 0.5, "Burns: 50 % of the Sum Insured, reduced to 25 % if the burn is smaller than 10%"],
 ];
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
