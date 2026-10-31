@@ -212,7 +212,7 @@ function readCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):
  * as a cap with its currency, when more than one is, or when the figure is a count, minimum, excess or premium. A bare
  * figure ("up to 25,000") is not read: its currency is not printed. Works for any currency the figure reader knows. */
 const SHARE_PHRASE=/\d+(?:\.\d+)?\s*(?:%|per\s?cent\b)\s*(?:of\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|insured\s+amount|sum\s+covered)/giu;
-const CAP_LEAD=/(?:\b(?:subject\s+to|but|and|or|which\s+is|that\s+is)\s+(?:an?\s+|the\s+)?)$/iu;
+const CAP_LEAD=/(?:\b(?:subject\s+to|but|and|or|which\s+is|that\s+is|up\s+to)\s+(?:an?\s+|the\s+)?)+$/iu;
 // Only a scope that keeps the cap whole for each claim: an aggregate ("in total", "lifetime", "across all policies") is a
 // cap earlier claims may have used, so it stays in the rest and makes the share unsure (Critic R416 H1).
 const CAP_TAIL=/^\s*(?:(?:per|for\s+(?:each|any|the|one))\s+(?:claim|life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person|event|incident|occurrence|condition)\b|for\s+this\s+benefit\b|only\b)?/iu;

@@ -36,6 +36,9 @@ test("one printed cap in the cover's currency: the lower of the share and the ca
     ["An additional 20% of the Sum Assured will be payable, subject to a maximum amount of S$25,000 (or equivalent currency) per life per condition.", 1_000_000, "SGD", 25_000],
     ["we will, subject to the provisions of this Policy, pay 20% of the Insured Amount under this Supplementary Agreement, subject to a limit of S$25,000", 1_000_000, "SGD", 25_000],
     ["10% of the sum insured, no more than €8,000", 200_000, "EUR", 8_000],
+    ["10% of Sum Insured, up to a maximum of S$25,000", 1_000_000, "SGD", 25_000],
+    ["10% of Sum Insured, up to S$25,000, payable only once", 1_000_000, "SGD", 25_000],
+    ["10% of the sum insured, but up to a maximum of RM20,000 per claim", 1_000_000, "MYR", 20_000],
   ] as const) {
     assert.equal(pay(quote, sumInsured, currency, true), expected, "stored: " + quote);
     assert.equal(pay(quote, sumInsured, currency, false), expected, "read: " + quote);
@@ -55,6 +58,8 @@ test("anything less sure than one cap in the cover's currency gives no figure, n
     ["10% of the sum insured, after an excess of S$500", "SGD"], // not a cap
     ["10% of the sum insured, up to S$25,000 less any amount paid before", "SGD"], // another bound
     ["10% of the sum insured, up to the limit in the Schedule", "SGD"], // a cap with no figure
+    ["10% of Sum Insured, up to S$25,000 per additional claim", "SGD"], // a later claim may follow another rule
+    ["10% of Sum Insured, up to S$25,000 for the first claim", "SGD"],
     ["10% of the sum insured, up to S$25,000 or the amount in the table, whichever is lower", "SGD"],
     // Critic R416 and TE pr211: a cap for some claims only, an aggregate, a second share, another sentence's cap, a change.
     ["10% of the sum insured, up to S$25,000 for adults; for children 50% of that", "SGD"],
@@ -117,4 +122,111 @@ test("a trigger that names every covered condition keeps the cap; one that names
     "20% of the sum insured upon diagnosis of any one of the conditions covered in the first policy year, up to S$25,000",
     "100% of the Sum Assured, up to a maximum of S$400,000 in the event that an Insured Person is diagnosed with any disease",
   ]) assert.equal(shareBound(quote, "Special Benefit").kind, "unsure", quote);
+});
+
+test("words after a share that change it, or a second share before it, give no figure; words before it that describe the event do not", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  // The event, then the share (Critic R443 M1): paid as printed.
+  for (const quote of [
+    "Loss of hearing: hearing reduced by more than 80 decibels in one ear, 50% of Sum Insured",
+    "Loss of speech: speech reduced to unintelligible sounds, 50% of Sum Insured",
+    "Burns: 20% of body surface, 50% of Sum Insured",
+    "Luka bakar lebih daripada 15% permukaan badan: 50% daripada Jumlah Diinsuranskan",
+    "100% of the Sum Assured will be payable in one lump sum.",
+    "100% of the Sum Assured upon diagnosis of a Critical Illness",
+    "10% of the sum insured if diagnosed under age 65",
+    "We pay 100% of Sum Insured for qualifying critical illness.",
+    "100% of the Sum Assured is payable within 30 days of our approval of the claim.",
+    "On the death of the Life Assured, we will pay 100% of the Sum Assured to the policy owner.",
+    "100% of the Sum Insured shall be paid upon permanent paralysis of two limbs, subject to the terms and conditions of this policy.",
+    "Kami akan membayar 100% daripada Jumlah Diinsuranskan apabila didiagnosis dengan mana-mana penyakit kritikal yang dilindungi.",
+    "50% of the Sum Insured for each eye",
+    "10% of the sum insured. We won't pay for a pre-existing condition.",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
+  // Anything after the share that may change it, in any language, and a second share before it (Critic R443 H1).
+  for (const quote of [
+    "50% of the Sum Insured minus any amount paid before",
+    "50% of the Sum Insured after deducting any amount paid under Benefit 2",
+    "50% of the Sum Insured net of any earlier payment",
+    "50% of the Sum Insured, halved for children",
+    "50% of the Sum Insured, doubled if the accident happens overseas",
+    "50% of the Sum Insured, or half that for children",
+    "50% of the Sum Insured, or a quarter for children",
+    "Children 25%, adults 50% of the Sum Insured",
+    "25% for a child, otherwise 50% of the Sum Insured",
+    "50% daripada Jumlah Diinsuranskan, atau 25% bagi kanak-kanak",
+    "50% daripada Jumlah Diinsuranskan, ditolak sebarang jumlah yang telah dibayar",
+    "50% daripada Jumlah Diinsuranskan, separuh bagi kanak-kanak",
+    "50% dari Uang Pertanggungan, dikurangi pembayaran sebelumnya",
+    "50% of the Sum Insured. 25% for children.",
+    "50% of the Sum Insured if the insured is a child",
+    "50% of the Sum Insured for the first claim",
+    "50% of the Sum Insured for each child",
+    "50% of the Sum Insured if overseas, otherwise 25%",
+    "50% of the Sum Insured, payable after deducting any earlier claim",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
+});
+
+test("a condition that goes on to change the amount, a later sentence that does, and a change before the share give no figure", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const S = "50% of the Sum Insured";
+  // Critic R450 H1a-c.
+  for (const quote of [
+    S + " on a pro-rata basis", S + " if a claim has been paid under Benefit 2 it will be offset", S + " where it is apportioned among all insured persons",
+    S + " if other insurance applies, we pay only our rateable proportion", S + " when hospitalised overseas, multiplied by two",
+    S + " if the accident happens overseas, three times the amount", S + " if diagnosed after age 70, payable proportionately",
+    S + " when shared equally between the insured persons", S + " if two lives are covered, divided between them",
+    S + ". Any amount paid under Benefit 2 will be deducted.", S + ". For children this amount is halved.", S + ". This is reduced by any earlier payment.",
+    "After deducting any amount paid under Benefit 2, we pay 50% of the Sum Insured", "Less any amount paid under Benefit 2, 50% of the Sum Insured",
+    "Twice the amount if overseas, else 50% of the Sum Insured", "For a child, half of the amount; for an adult 50% of the Sum Insured",
+    "Reduced to 25% for children, otherwise 50% of the Sum Insured", "Equal to 25% for a child, and 50% of the Sum Insured",
+  ]) assert.equal(shareBound(quote, "Loss").kind, "unsure", quote);
+  for (const quote of [S + " due to an accident", S + " if the insured dies within 12 months of the accident", S + " per eye",
+    "Head - Equals to or greater than 2% but less than 5% 50%"])
+    assert.equal(shareBound(quote, "Loss").kind, "none", quote);
+});
+
+test("after 'when' or 'to whom', only words that say who, what, when or who certifies keep the share; any other wording gives no figure", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  const S = "50% of the Sum Insured is payable";
+  // Critic R454: wordings no change-word list names, in English and Malay; TE round 3 W7/W8.
+  for (const quote of [
+    "50% of the Sum Insured jika berlaku di luar negara, dibahagikan dua", "50% daripada Jumlah Diinsuranskan jika tuntutan dibayar, dipotong",
+    S + " to the extent not paid by any other insurer.", S + " after any amount already paid has been taken off.",
+    S + " for the remaining balance of the sum insured after earlier claims.", S + " on each policy anniversary in five equal instalments.",
+    S + " upon diagnosis in place of the death benefit.", S + " upon diagnosis as a weekly sum.", S + " upon death, the balance after any debt owed to us.",
+    "50% daripada Jumlah Diinsuranskan dibayar kepada pemilik polisi, dibahagi sama rata.",
+    "50% daripada Jumlah Diinsuranskan dibayar apabila didiagnosis, setelah dipotong hutang.",
+    S + " upon diagnosis of cancer in five equal instalments.", S + " upon diagnosis for a child under age 18.",
+    // TE round 5: inside an illness name or a payee, any word about money or how it is paid still gives no figure.
+    S + " to the policy owner in five equal instalments.", S + " to each child of the insured.", S + " upon diagnosis of cancer, together with any bonus.",
+    S + " to the nominee in lieu of the death benefit.", S + " upon diagnosis of Stroke, limited to the remaining Sum Assured.",
+    "100% of the Sum Assured is payable to the nominee, net of any policy loan.",
+    "100% of the Sum Insured is payable on death, pro-rated by the number of days insured.",
+    "100% of the Sum Insured is payable on disability, proportionate to the degree of the loss.",
+  ]) assert.equal(shareBound(quote, "Critical Illness").kind, "unsure", quote);
+  for (const quote of ["100% of the Sum Assured is payable within 30 days of diagnosis.",
+    "100% of the Sum Insured if diagnosed under age 65.", "We will pay the benefit of 100% of the sum insured to your estate upon your death.",
+    "100% of the Sum Assured will be paid in one lump sum to the beneficiary in the event of death.",
+    "Sekiranya didiagnosis, 50% daripada Jumlah Diinsuranskan akan dibayar kepada Peserta.",
+    "We pay 100% of the Sum Assured in one lump sum; payment is made by bank transfer.",
+    "100% of the Sum Assured is payable to the policyowner upon death of the life assured, and we pay it within 14 days.",
+    "100% of the Sum Insured is payable to the beneficiary upon the death of the Insured during the Benefit Term."])
+    assert.equal(shareBound(quote, "Critical Illness").kind, "none", quote);
+});
+
+// Illness names, payees and bracketed words that are not in the condition word list ("upon diagnosis of carcinoma in
+// situ", "to the assignee under a valid assignment") give no figure for now: an open-ended slot reopened leaks in review,
+// so they are won back later with their own gate.
+test("ordinary conditions, payees and periods from other insurers keep the share (Critic R460 keep corpus)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  for (const tail of [
+    "upon diagnosis of any one of the 27 conditions covered", "upon diagnosis of any one of the covered conditions",     "payable to the beneficiary named in the policy", "if death occurs within 90 days of the accident",
+    "if the Life Insured is diagnosed with cancer before age 65", "when the insured is hospitalised for at least 3 consecutive days", "as a lump sum",
+    "upon confirmation by a registered medical practitioner", "in one lump sum to the policyholder",
+    "provided the diagnosis is made after the waiting period of 90 days", "for Total and Permanent Loss of Sight of one eye", "subject to the terms and conditions of this policy",
+    "if the insured person dies as a result of an accident", "upon diagnosis of Major Cancer", "upon diagnosis of a covered Critical Illness, subject to a survival period of 14 days",
+    "apabila berlaku kematian akibat kemalangan", "kepada penama", "en cas de décès accidentel",
+    "upon diagnosis of one of the 37 covered critical illnesses", "upon Total and Permanent Disability lasting at least 6 consecutive months",
+  ]) assert.equal(shareBound("Benefit: 50% of the Sum Insured " + tail, "Benefit").kind, "none", tail);
 });
