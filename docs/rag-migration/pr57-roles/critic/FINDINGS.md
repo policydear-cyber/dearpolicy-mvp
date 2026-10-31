@@ -10226,3 +10226,9 @@ Note: the header and the ANSWER section still show "Ended on <date>". That break
 
 ## R447 — #225 3c6d5d6 (cap in the pays line; ANY_COVERED_CONDITION): READY
 Gate green (share-cap, stored-share-shapes, capped-share 0 fail; 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). (2) held under 25 attack phrasings: every narrowing (for children, first policy year, under the Early Stage benefit, in total, only once, other than, by this rider, or juvenile conditions, and the life assured is a child, before age 18, excluding, a named condition, a trigger "for a child" before the share) gives unsure. Only harmless remainders keep the cap. Low: "any one of the 3 conditions covered" keeps the cap; that only narrows eligibility, not the amount. (1) All describeBenefitFormula callers (route, assessCatalogBenefit fallbacks, chat candidates) get the same cap, so pages agree. Low: a cap in another currency is described ("up to MYR 25,000") while assess withholds the figure; the condition note also repeats the cap. Conflict: #225 and #222 both edit CAP_PASSAGE_PHRASES/capPassageHarmless; whichever merges second needs a rebase.
+
+## R448: #224 29963f9 READY
+R446 M1 is fixed: the fetch now catches errors and checks r.ok. The gate is green: r5:ux 15, r8 6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge.
+
+## R449: #223 28ec467 READY
+R445 M1 is fixed: the text is joined once and `at` is an Int32Array slice. The gate is green: speed 372 ms, service 22/0, coverage-recovery 11/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge.
