@@ -42,7 +42,7 @@ export function SourceList({ citations, files }: { citations: ChatCitation[]; fi
       ? <details className="citation source-doc" key={doc.key}><summary>{head}</summary>
           {/* Shown whole: cutting a passage could drop the qualifier at its end. */}
           {doc.excerpts.map((e, i) => <blockquote key={i}>“{e}”</blockquote>)}
-          {doc.notConfirmedCurrent && doc.documentDate ? <small className="source-date">{`Dated ${doc.documentDate}.`}</small> : null}
+          {doc.notConfirmedCurrent && doc.documentDate ? <small className="source-date">Dated {doc.documentDate}.</small> : null}
           <a className="source-open" href={`/policies#doc-${doc.policyId}`}>Open in Documents</a>
         </details>
       : <div className="citation source-doc" key={doc.key}>{head}</div>;
