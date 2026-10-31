@@ -134,15 +134,18 @@ export async function GET(request:NextRequest){
     // "Plan Business"): that column's checked figure, said with its plan. Read from stored readings only; nothing is read.
     // Each person's own readings, and who holds each document: a row's figure is taken only when every person who holds
     // its document (or the one person asked about) has the same plan column for it (Critic R370 M1).
+    // The household's benefit table, built at most once per request: both uses below share it.
+    let tableOnce:ReturnType<typeof import("@/lib/benefit-table/service").tableFor>|null=null;
+    const householdTable=async(db:Parameters<typeof import("@/lib/benefit-table/service").tableFor>[0])=>
+      tableOnce??=import("@/lib/benefit-table/service").then(({ tableFor })=>tableFor(db,accountId));
     const planReadings=new Map<string,PlanColumnReading[]>();
     const holders=new Map<string,string[]>();
     if(usableRows.some(row=>resolved.get(row.id)?.conditions.includes(PLAN_COLUMNS_NOTE))){
       try{
         const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
         if(await benefitTableLive(accountId)){
-          const { tableFor }=await import("@/lib/benefit-table/service");
           const { figureText }=await import("@/lib/benefit-table/assemble");
-          const { table }=await tableFor(appDb,accountId);
+          const { table }=await householdTable(appDb);
           for(const person of table.people)planReadings.set(person.id,person.rows.map(r=>
             ({documentId:r.source.documentId,page:r.source.page,excerpt:r.source.excerpt,column:r.column,qualifier:r.qualifier,figure:r.figure,figureText:figureText(r.figure),benefit:r.benefit})));
           const held=await query<{policy_id:string;family_member_id:string}>(
@@ -253,7 +256,7 @@ export async function GET(request:NextRequest){
     let documentKindsById:Record<string,DocumentKind>={};
     try{
       const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
-      if(await benefitTableLive(accountId)){const { tableFor }=await import("@/lib/benefit-table/service");documentKindsById=documentKinds((await tableFor(appDb,accountId)).table.people);}
+      if(await benefitTableLive(accountId))documentKindsById=documentKinds((await householdTable(appDb)).table.people);
     }catch{/* No table: no kind is said. */}
     return NextResponse.json(maskShownText({
       benefits,

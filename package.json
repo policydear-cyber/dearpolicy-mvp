@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
+    "benefit-table:speed-test": "node --import tsx scripts/benefit-table/speed-test.ts",
     "benefit-table:unread-notice-test": "node --import tsx scripts/benefit-table/unread-notice-test.ts",
     "benefit-table:misfiled-letter-test": "node --import tsx scripts/benefit-table/misfiled-letter-test.ts",
     "benefit-table:coverage-recovery-test": "node --import tsx scripts/benefit-table/coverage-recovery-test.ts",

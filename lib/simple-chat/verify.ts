@@ -52,6 +52,19 @@ function squash(s: string): { text: string; at: number[] } {
   }
   return { text, at };
 }
+/** A stored page's squashed text, made once: every quote of a household is looked for on every page, so squashing the
+ * page again for each quote made the Benefits page take seconds on a large library. The page text is the key, so an
+ * edited or re-read page is squashed afresh; the cache is emptied once it holds about 8 million characters. */
+const squashedPages = new Map<string, { text: string; at: number[] }>();
+let squashedChars = 0;
+function squashPage(s: string): { text: string; at: number[] } {
+  const hit = squashedPages.get(s);
+  if (hit) return hit;
+  if (squashedChars + s.length > 8_000_000) { squashedPages.clear(); squashedChars = 0; }
+  const sq = squash(s);
+  squashedPages.set(s, sq); squashedChars += s.length;
+  return sq;
+}
 const fragmentsOf = (quote: string) => quote.split(/\s*(?:\.{3}|…)\s*/).map((f) => squash(f).text).filter((f) => f.length >= 4);
 
 /** Where a quote was found: the document, the stored page, the stored words, and where on the page they start. */
@@ -68,7 +81,7 @@ export function locateQuote(household: Household, quote: string, preferred: numb
     // Text of a file the app could not read is never sent to the model, so nothing may be quoted from it.
     if (unreadable(household.documents[di])) continue;
     for (const page of household.documents[di].pages) {
-      const sq = squash(page.text);
+      const sq = squashPage(page.text);
       let from = 0, start = -1, end = -1, ok = true;
       for (const f of frags) {
         const i = sq.text.indexOf(f, from);
