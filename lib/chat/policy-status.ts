@@ -42,6 +42,18 @@ export function longDate(iso: string) { const [y, m, d] = iso.slice(0, 10).split
 export function todayIso(now = new Date()) { return new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10); }
 export function daysBetween(fromIso: string, toIso: string) { return Math.round((Date.parse(toIso + "T00:00:00Z") - Date.parse(fromIso + "T00:00:00Z")) / 86400_000); }
 
+/** "How many days left?": the days from today to the date a document prints. A printed end date that has passed gives no
+ *  countdown and no "ended": every policy on file is taken as in force (DC, 31 Oct), so the answer only says what the
+ *  document prints. A grace period comes from an unpaid premium, not an end date, and is still counted. */
+export function countdownLine(name: string, st: Pick<PrintedStatus, "state" | "date" | "printed">, today: string): string | null {
+  if (!st.date || !st.printed) return null;
+  const n = daysBetween(today, st.date), days = (k: number) => k + " day" + (k === 1 ? "" : "s");
+  if (st.state === "in_force") return name + (n < 0 ? "’s printed period runs to " + st.printed + "." : n === 0 ? " ends today, " + st.printed + "." : " ends on " + st.printed + " — " + days(n) + " from today.");
+  if (st.state === "grace") return name + "’s grace period ends on " + st.printed + " — " + days(n) + " from today.";
+  if (st.state === "grace_passed") return name + "’s grace period ended on " + st.printed + ", " + days(-n) + " ago.";
+  return null;
+}
+
 type Page = { page: number; text: string };
 const lines = (pages: Page[]) => pages.flatMap((p) => p.text.split(/\r?\n/).map((l, i) => ({ page: p.page, i, l: l.replace(/\t+/g, " ").trim() })));
 /** A sentence-sized window around a match, joined across wrapped lines. */
