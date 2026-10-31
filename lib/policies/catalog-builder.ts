@@ -4,7 +4,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { clearCatalogCheckpoints,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
-import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
+import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { CURRENCY_MARKER,benefitRowsFromText,costSharingRowsFromText } from "@/lib/documents/layout";
 import { deterministicConditions } from "@/lib/policies/condition-catalog";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode } from "./benefit-rows";
@@ -147,6 +147,8 @@ export function typedValue(kind:TableRowKind,value:string):number|null{
   if((kind==="co_insurance"||kind==="pro_ration")&&percent)return Math.round(Number(percent[1])*100)/10000;
   // Read whole and in its own grouping: "€50.000" is fifty thousand, never fifty; a figure that could be read two ways
   // is no figure.
+  // A figure with a multiplier anywhere in the cell ("S$1.5 million or S$2,000") leaves it unread: never the other figure.
+  if(new RegExp(CURRENCY_MARKER+String.raw`\s?${PRINTED_FIGURE}\s*${SCALE_WORD}(?![A-Za-z0-9])`,"u").test(value))return null;
   const money=value.match(new RegExp(CURRENCY_MARKER+String.raw`\s?(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}(?![,.]?[OoIl|])`,"u"));
   if(money)return printedNumber(money[1],null,{lakh:groupsInLakhs(value)});
   if(percent)return Math.round(Number(percent[1])*100)/10000;

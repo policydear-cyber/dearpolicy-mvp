@@ -49,6 +49,8 @@ test("a multiplier is applied where it is read and never left off where it is no
     assert.equal(typedValue("policy_year_limit", cell), null, cell);
     assert.equal(parseBenefitValue(cell, {}), null, cell);
   }
+  // A multiplied figure beside another: the cell is unread, never the other figure (Critic R479).
+  assert.equal(typedValue("policy_year_limit", "S$1.5 million or S$2,000"), null);
   // Space grouping and lakh grouping outside a rupee market read as nothing, never as their first group.
   for (const cell of ["€10 000", "S$500 365", "HK$1,50,000"]) {
     assert.equal(typedValue("policy_year_limit", cell), null, cell);
