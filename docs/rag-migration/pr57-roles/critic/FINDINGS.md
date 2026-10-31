@@ -10405,3 +10405,13 @@ Test-only change: href is now read in any quote style, in both the menu and acco
 
 ## R489: #243 917ecf0 (read spend-cap test): READY
 New scripted test with no network, no keys, and no product change. 4/4 pass. With llm.ts:147 (assertUnderSpendCap) removed, 3 checks fail (named household, runWithModelHousehold, exactly at the cap) and the control still passes. Gate green.
+
+## R490: #244 adbd292 (spend cap fails closed): READY
+- The spend check now throws SpendCheckUnavailable when the ledger cannot be read or the figure is not a number. Every hosted path still checks the cap before calling the provider: structuredCompletion :147, ocr-hosted :55, simple-chat :246 and the loop's usage-meter :173 (non-cap errors are re-thrown).
+- The route answers 503 spend_check_unavailable. The pipeline treats the error as transient, and its message avoids the quota, billing and spend-cap words, so it is not misread as non-retryable.
+- ai:spend-check-fails-closed-test passes 5/5. With fail-open restored (catch then return false), 3 checks fail.
+- Suites vs main 63e0ad2 have identical status:
+  - green on both: pipeline-worker, worker-runtime, dead-letter, scan-retry, live-chat-monetary-boundary, deterministic-model-guard, telemetry, background-jobs, processing-failure-storage, simple chat 85
+  - red on both: rag2:conv and rag2:fix (crash on the route's 429; #242 fixes them), adversarial U1 (#242 fixes it), and rag2:tools F4 and C4 (#241 fixes F4; C4 is held for DC)
+- Gate green.
+- Low: workflow.ts:1888 tells the household only about SpendCapReached. If interpretation fails with SpendCheckUnavailable, the turn falls back to rule interpretation instead of saying "try again shortly". Any later hosted call is still refused, so no money is spent. The route check runs first, so this needs the ledger to fail between the two checks.
