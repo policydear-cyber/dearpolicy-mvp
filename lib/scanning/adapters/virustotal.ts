@@ -12,6 +12,16 @@
  * set to anything this registry does not recognise (see
  * currentFileScanAdapter()'s `?? nullFileScanAdapter` fallback).
  *
+ * PRIVACY (31 Oct): by default NO FILE CONTENT LEAVES DEARPOLICY. Uploads are
+ * people's policy documents (health and identity details), and VirusTotal
+ * shares submitted files with its partners. So scanFile() only looks up the
+ * file's SHA-256 (GET {baseUrl}/files/{sha256}): a file VirusTotal already
+ * knows is judged by its last analysis; a file it has never seen (almost
+ * every personal document) is "scan_unavailable", never "clean", because a
+ * hash lookup cannot clear an unseen file. Uploading the whole file, the
+ * flow described below, happens ONLY when VIRUSTOTAL_UPLOAD_FILES is set to
+ * true; it is off by default.
+ *
  * API contract (https://docs.virustotal.com/reference/files-scan and
  * .../reference/analysis, fetched and verified against VirusTotal's own
  * docs while building this):
@@ -57,6 +67,7 @@
  * that IS webhook-based (recordPolicyScanResult()'s idempotent CAS write
  * doesn't care which path produced the verdict).
  */
+import { createHash } from "node:crypto";
 import type { FileScanAdapter, FileScanResult, FileScanStatus, ScanRetryHint } from "../adapter";
 
 export const VIRUSTOTAL_DEFAULT_BASE_URL = "https://www.virustotal.com/api/v3";
@@ -87,6 +98,8 @@ export type VirusTotalConfig = {
   pollBudgetMs: number;
   maxTransientRetries: number;
   retryBackoffBaseMs: number;
+  /** Upload the whole file for analysis. Off by default: only the file's hash is looked up (see the module note). */
+  uploadFiles: boolean;
 };
 
 /** Thrown for anything scanFile() cannot recover from by itself: a missing
@@ -122,6 +135,8 @@ export function readVirusTotalConfig(env: NodeJS.ProcessEnv = process.env): Viru
     pollBudgetMs: intOr(env.VIRUSTOTAL_POLL_BUDGET_MS, VIRUSTOTAL_DEFAULT_POLL_BUDGET_MS),
     maxTransientRetries: intOr(env.VIRUSTOTAL_MAX_TRANSIENT_RETRIES, VIRUSTOTAL_DEFAULT_MAX_TRANSIENT_RETRIES),
     retryBackoffBaseMs: intOr(env.VIRUSTOTAL_RETRY_BACKOFF_BASE_MS, VIRUSTOTAL_DEFAULT_RETRY_BACKOFF_BASE_MS),
+    // Only an explicit "true" turns uploads on; anything else (unset, "1", "yes", a typo) keeps hash-only.
+    uploadFiles: env.VIRUSTOTAL_UPLOAD_FILES?.trim().toLowerCase() === "true",
   };
 }
 
@@ -215,12 +230,13 @@ async function callWithTransientRetry(
   attempt: () => Promise<Response>,
   config: VirusTotalConfig,
   trace: TransientTrace = { reason: null, retryAfterSeconds: null },
+  passThroughStatuses: number[] = [],
 ): Promise<Response | null> {
   let lastError: unknown = null;
   for (let attemptNumber = 0; attemptNumber <= config.maxTransientRetries; attemptNumber++) {
     try {
       const response = await attempt();
-      if (response.ok) return response;
+      if (response.ok || passThroughStatuses.includes(response.status)) return response;
       const bodyText = await response.text();
       const parsed = parseVirusTotalErrorBody(bodyText);
       const classification = classifyVirusTotalErrorResponse(response.status, parsed.code);
@@ -288,6 +304,44 @@ async function fetchAnalysis(analysisId: string, config: VirusTotalConfig, trace
   return { status, stats: stats as VirusTotalStats };
 }
 
+export function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Hash-only lookup: GET /files/{sha256}, no file content sent. "unknown" when VirusTotal has never seen the file
+ * (404 NotFoundError); null when transient failures exhausted the retries. */
+async function lookupFileHash(sha256: string, config: VirusTotalConfig, trace?: TransientTrace): Promise<{ known: true; stats: VirusTotalStats } | { known: false } | null> {
+  const response = await callWithTransientRetry(
+    "hash lookup",
+    () => fetchWithTimeout(`${config.baseUrl}/files/${encodeURIComponent(sha256)}`, { method: "GET", headers: { "x-apikey": config.apiKey } }, config.requestTimeoutMs),
+    config,
+    trace,
+    [404],
+  );
+  if (!response) return null;
+  if (response.status === 404) return { known: false };
+  const json = (await response.json()) as { data?: { attributes?: { last_analysis_stats?: VirusTotalStats } } };
+  const stats = json.data?.attributes?.last_analysis_stats;
+  if (!stats || typeof stats.malicious !== "number" || typeof stats.suspicious !== "number") {
+    throw new VirusTotalAdapterError("VirusTotal hash lookup response included no last_analysis_stats.");
+  }
+  return { known: true, stats };
+}
+
+async function scanByHash(bytes: Uint8Array, config: VirusTotalConfig): Promise<FileScanResult> {
+  const trace: TransientTrace = { reason: null, retryAfterSeconds: null };
+  const sha256 = sha256Hex(bytes);
+  const found = await lookupFileHash(sha256, config, trace);
+  if (!found) {
+    return { status: "scan_unavailable", detail: "VirusTotal hash lookup did not succeed after retrying transient failures.", retry: { reason: trace.reason ?? "provider_unavailable", retryAfterSeconds: trace.retryAfterSeconds } };
+  }
+  if (!found.known) {
+    // Never "clean": a lookup cannot clear a file nobody has analysed, and the file is not uploaded (privacy).
+    return { status: "scan_unavailable", detail: "VirusTotal has no record of this file, and files are not uploaded (hash-only lookup), so it could not be cleared." };
+  }
+  return { status: classifyVirusTotalStats(found.stats), detail: describeVirusTotalStats("hash lookup", found.stats) };
+}
+
 async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env): Promise<FileScanResult> {
   const config = readVirusTotalConfig(env);
   if (!config) {
@@ -296,6 +350,8 @@ async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env)
         "misconfiguration, not provider unavailability -- fix it rather than leaving documents stuck in quarantine.",
     );
   }
+
+  if (!config.uploadFiles) return scanByHash(bytes, config);
 
   const trace: TransientTrace = { reason: null, retryAfterSeconds: null };
   const hint = (): ScanRetryHint => ({ reason: trace.reason ?? "provider_unavailable", retryAfterSeconds: trace.retryAfterSeconds });
