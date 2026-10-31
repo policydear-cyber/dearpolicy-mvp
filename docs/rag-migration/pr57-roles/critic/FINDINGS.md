@@ -10187,3 +10187,5 @@ Root cause: a negation window is still a deny-list. Structural fix:
 ## R437 — #213 e02128e: READY (undated single trip neither current nor ended; family-ended 10/0; own 106/0; gate green).
 
 Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
+
+## R438 — #220 be502a3: READY (all-pages-failed benefits read throws, clears checkpoints; resumed/table/previous rows prevent throw; all 3 callers noteReadFailure; unread = benefits_indexed_at NULL). Low: add resumed-with-rows and table-plus-failed cases to the test.
