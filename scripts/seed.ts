@@ -10,7 +10,7 @@ async function main() {
   if (Number(existing.rows[0].count) === 0) {
     await pool.query(`INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,$3)`, [accountId, "My profile", "self"]);
   }
-  console.log("DearPolicy local account is ready. Add real family names from the Family page.");
+  console.log("DearPolicy local account is ready. Add real family names under Account settings > People.");
   await pool.end();
 }
 

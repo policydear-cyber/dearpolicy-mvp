@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof NameLinked) return NextResponse.json({ error: "That name is linked to someone in your family. Change who this document covers instead." }, { status: 409 });
     if (error instanceof NameNotFound) return NextResponse.json({ error: "That name isn't on this document" }, { status: 404 });
     if (error instanceof FamilyMemberNotFound) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers (add them on the Family page first if they aren't listed), or delete the document if it isn't your family's." }, { status: 409 });
+    if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers (add them under Account settings > People first if they aren't listed), or delete the document if it isn't your family's." }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Link failed" }, { status: 500 });
     return authResponse;

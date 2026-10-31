@@ -28,9 +28,9 @@ const HELPS: Help[] = [
     // P118-2, Critic R188-2).
     test: new RegExp(String.raw`\b(?:delete|close|remove|erase|deactivate|terminate)\s+(?:my\s+|our\s+|the\s+|this\s+)?(?:${APP}\s+)?(?:account|household|profile|data|everything)\b(?!\s+(?:for|of|on|about|member|members|helper|photo|picture|access|details)\b)`, "i"),
     answer: {
-      bottomLine: "The household's owner can permanently delete the household, with every policy, claim, family member and document it owns, under Household > Delete this household. It cannot be undone.",
+      bottomLine: "The household's owner can permanently delete the household, with every policy, claim, family member and document it owns, under Account settings > Household > Delete this household. It cannot be undone.",
       nextSteps: [
-        "Open Household and type the household's exact name to confirm the delete.",
+        "Open Account settings > Household and type the household's exact name to confirm the delete.",
         "If you are a member but not the owner, you can leave the household there instead.",
       ],
     },
@@ -39,7 +39,7 @@ const HELPS: Help[] = [
     id: "rename",
     test: /\b(?:change|rename|update|edit|correct|fix)\b[^?.!]*\bname\b|\brename\s+(?:my|our)\s+(?:son|daughter|child|kid|wife|husband|mum|mom|mother|dad|father)\b|\bname\b[^?.!]*\b(?:wrong|misspelt|misspelled|typo)\b/i,
     answer: {
-      bottomLine: "You can change a family member's name on the Family page: choose Edit details for that person, then change Full name or Preferred name. This changes the name in DearPolicy only, not with the insurer.",
+      bottomLine: "You can change a family member's name under Account settings > People: choose Edit details for that person, then change Full name or Preferred name. This changes the name in DearPolicy only, not with the insurer.",
       nextSteps: ["To change a name the insurer holds, contact the insurer using the details printed on the policy."],
     },
   },
@@ -49,8 +49,8 @@ const HELPS: Help[] = [
     policyWords: true,
     test: /\bwho\b[^?.!]*\b(?:see|view|access|read|look\s+at)\b[^?.!]*\b(?:documents?|policies|files?|data|info(?:rmation)?|uploads?)\b/i,
     answer: {
-      bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
-      nextSteps: ["Check Household > Members to see who is in your household."],
+      bottomLine: "Within DearPolicy, the people in your household are listed under Account settings > People, in Who can sign in, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
+      nextSteps: ["Check Account settings > People to see who is in your household."],
     },
   },
   {
@@ -58,8 +58,8 @@ const HELPS: Help[] = [
     policyWords: true,
     test: new RegExp(String.raw`\b(?:is|are)\s+(?:my|our|the)\s+(?:data|documents?|info(?:rmation)?|files?|details)\s+(?:safe|secure|private|protected)\b|\b(?:is|are)\s+${APP}\s+(?:safe|secure|private)\b|\bhow\s+(?:safe|secure|private)\s+is\s+(?:${APP}|my\s+data)\b|\bis\s+it\s+(?:safe|secure)\s+to\s+upload\b`, "i"),
     answer: {
-      bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
-      nextSteps: ["Check Household > Members to see who has access.", "To remove everything, the owner can use Delete this household on the Household page."],
+      bottomLine: "Within DearPolicy, the people in your household are listed under Account settings > People, in Who can sign in, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
+      nextSteps: ["Check Account settings > People to see who has access.", "To remove everything, the owner can use Delete this household under Account settings > Household."],
     },
   },
   {
@@ -67,7 +67,7 @@ const HELPS: Help[] = [
     test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+${APP}\s+free\b|\bfree\s+to\s+use\b|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b`, "i"),
     answer: {
       bottomLine: "The app doesn't show a price. Your household's plan, and how much of it you have used this month, are on the Plan usage page.",
-      nextSteps: ["Open Household, then Plan usage."],
+      nextSteps: ["Open Account settings, then Plan usage."],
     },
   },
   {
@@ -78,7 +78,7 @@ const HELPS: Help[] = [
     test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:questions?|messages?|documents?\s+read|${APP})\b|\bhow\s+many\s+(?:questions|messages)\b|\bhow\s+much\s+(?:have|has|did|do)\s+(?:i|we|my\s+household|our\s+household|the\s+household)\s+(?:used|use)\s+this\s+month\b|\b(?:questions?|documents?)\b[^?.!]*\bleft\b`, "i"),
     answer: {
       bottomLine: "How much of your plan your household has used this month, in questions asked and documents read, is on the Plan usage page.",
-      nextSteps: ["Open Household, then Plan usage."],
+      nextSteps: ["Open Account settings, then Plan usage."],
     },
   },
 ];

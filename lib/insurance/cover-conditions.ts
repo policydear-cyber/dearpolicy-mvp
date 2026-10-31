@@ -206,6 +206,53 @@ function readCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):
   }
   return notCap?{kind:"not_cap"}:{kind:"unsure"};
 }
+/** The one money cap a passage prints for a share of the sum insured ("10% of Sum Insured, up to S$25,000", "or RM5,000,
+ * whichever is lower", "subject to a maximum of £10k per life"), read with the same cap phrases as a stored cap, and the
+ * passage with that cap taken out, so the caller can check nothing else bounds the share. Null when no figure is printed
+ * as a cap with its currency, when more than one is, or when the figure is a count, minimum, excess or premium. A bare
+ * figure ("up to 25,000") is not read: its currency is not printed. Works for any currency the figure reader knows. */
+const SHARE_PHRASE=/\d+(?:\.\d+)?\s*(?:%|per\s?cent\b)\s*(?:of\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|insured\s+amount|sum\s+covered)/giu;
+const CAP_LEAD=/(?:\b(?:subject\s+to|but|and|or|which\s+is|that\s+is)\s+(?:an?\s+|the\s+)?)$/iu;
+// Only a scope that keeps the cap whole for each claim: an aggregate ("in total", "lifetime", "across all policies") is a
+// cap earlier claims may have used, so it stays in the rest and makes the share unsure (Critic R416 H1).
+const CAP_TAIL=/^\s*(?:(?:per|for\s+(?:each|any|the|one))\s+(?:claim|life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person|event|incident|occurrence|condition)\b|for\s+this\s+benefit\b|only\b)?/iu;
+export function shareCapInPassage(quote:string):{amount:number;currency:string|null;rest:string;shares:number;shareAt:number;capAt:number}|null{
+  // The share itself is blanked out first (same length, so positions hold): "of the sum insured" right before "up to S$"
+  // is the share's own wording, not a sum-insured figure. How many shares there are is returned: a second one is a
+  // different rule for some claims, and the caller never caps it (Critic R416 H2).
+  const shares=[...(quote??"").normalize("NFKC").matchAll(SHARE_PHRASE)];
+  const text=(quote??"").normalize("NFKC").replace(SHARE_PHRASE,(m)=>" ".repeat(m.length));
+  const found:{amount:number;currency:string|null;cut:[number,number]}[]=[];
+  for(const m of text.matchAll(FIGURE)){
+    if(!m[1])continue;
+    const base=Number(m[2].replace(/,/g,""));if(!Number.isFinite(base)||base<=0)continue;
+    const unit=(m[3]??"").toLowerCase();
+    const amount=base*(unit==="million"||unit==="mil"||unit==="m"?1_000_000:unit==="k"||unit==="thousand"?1_000:1);
+    const start=m.index!,end=start+m[0].length;
+    const sentenceStart=Math.max(text.lastIndexOf(".",start-1),text.lastIndexOf(";",start-1),text.lastIndexOf("\n",start-1))+1;
+    const before=text.slice(Math.max(sentenceStart,start-80),start),after=text.slice(end);
+    if(COUNT_AFTER.test(after)||NOT_CAP_BEFORE.test(before))return null;
+    const phrase=before.match(CAP_BEFORE)??before.match(MOST_WE_PAY);
+    const trailing=phrase?null:after.match(CAP_AFTER);
+    if(!phrase&&!trailing)return null;
+    let from=phrase?start-before.length+phrase.index!:start;
+    // The words that lead into the cap phrase go with it: "subject to a maximum of", ", but up to", "and limited to".
+    from-=text.slice(0,from).match(CAP_LEAD)?.[0].length??0;
+    let to=end+(trailing?trailing[0].length:0);
+    to+=(text.slice(to).match(CAP_TAIL)?.[0].length??0);
+    found.push({amount,currency:normalizeCapCurrency(m[1]),cut:[from,to]});
+  }
+  if(found.length!==1)return null;
+  const [cap]=found;
+  return {amount:cap.amount,currency:cap.currency,rest:text.slice(0,cap.cut[0])+" "+text.slice(cap.cut[1]),
+    shares:shares.length,shareAt:shares[0]?.index??-1,capAt:cap.cut[0]};
+}
+const CAP_CURRENCY:Record<string,string>={"S$":"SGD","US$":"USD","A$":"AUD","HK$":"HKD","NZ$":"NZD","£":"GBP","€":"EUR","₹":"INR",RM:"MYR",RS:"INR","RS.":"INR",RP:"IDR","RP.":"IDR",RMB:"CNY"};
+function normalizeCapCurrency(sign:string):string|null{
+  const s=sign.trim().toUpperCase();
+  if(s==="$"||s==="¥")return null;
+  return CAP_CURRENCY[s]??(/^[A-Z]{3}$/.test(s)?s:null);
+}
 /** The cap's figure when its sentence prints it as a cap, otherwise null (see capReading). */
 export function printedCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):number|null{
   const r=capReading(condition);

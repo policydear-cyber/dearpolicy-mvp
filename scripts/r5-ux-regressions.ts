@@ -132,7 +132,8 @@ async function main() {
     assert.ok(!/Josephine|endowment/.test(chat), "no other family's names or products in the starter prompts");
   });
   await test("household roster: names, no sole-owner Leave; dates in Singapore format", async () => {
-    const page = read("app/household/page.tsx");
+    // The roster moved from the Household page to People (Account settings), as this shared component.
+    const page = read("components/household-access.tsx");
     assert.ok(!/Member \$\{member\.userId/.test(page));
     assert.match(page, /soleOwner/);
     const { sgDate } = await import("../components/format-date");

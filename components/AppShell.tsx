@@ -32,17 +32,18 @@ function NavIcon({ name }: { name: IconName }) {
  * the middle where the thumb rests); every other item sits under "More".
  * Eight tabs never fit a phone, and the ones that scrolled off the edge
  * included Ask DearPolicy itself. */
-type NavItem = { href: string; label: string; icon: IconName; tab?: number; short?: string };
+type NavItem = { href: string; label: string; icon: IconName; tab?: number; short?: string; also?: string[] };
+/** Five places a household goes, plus Account settings. Coverage (/ledger) and Benefits (/schedule) are not in the
+ * menu: Portfolio answers "what is each of us covered for" and links to both ("Coverage, by person", "Benefits, by
+ * policy"), as do its cover pages, so they count as Portfolio. Account settings opens on People (the family and who
+ * can sign in), which every member can use; Household and Plan usage are its other tabs. */
 const nav: NavItem[] = [
-  { href: "/", label: "Portfolio", icon: "home", tab: 1 },
-  { href: "/family", label: "Family", icon: "family" },
+  { href: "/", label: "Portfolio", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
   { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
-  { href: "/records", label: "Payments", icon: "payments" },
-  { href: "/ledger", label: "Coverage", icon: "ledger", tab: 4 },
-  { href: "/schedule", label: "Benefits", icon: "benefits" },
-  { href: "/claims", label: "Claims", icon: "claims" },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask" },
-  { href: "/household", label: "Household", icon: "household" },
+  { href: "/claims", label: "Claims", icon: "claims", tab: 4 },
+  { href: "/records", label: "Payments", icon: "payments" },
+  { href: "/family", label: "Account settings", icon: "household", also: ["/household", "/usage"] },
 ];
 
 /** DearPolicy's operator area (diagnostics, extraction review, model usage
@@ -139,7 +140,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // only bounce to sign-in or fail for want of a household.
   const noNav = signedOutPage || NO_NAV_PATHS.has(pathname);
   const items: NavItem[] = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" }] : operatorArea ? operatorNav : nav;
-  const isActive = (href: string) => href === "/" || href === "/operator" ? pathname === href : pathname.startsWith(href);
+  const under = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) => {
+    const item = items.find((i) => i.href === href);
+    if (item?.also?.some(under)) return true;
+    return href === "/" || href === "/operator" ? pathname === href : pathname.startsWith(href);
+  };
   // Only the household navigation is too long for a phone's bottom bar.
   const tabbed = items.some((item) => item.tab);
   const moreItems = tabbed ? items.filter((item) => !item.tab) : [];
@@ -149,7 +155,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // and the browser history can be told apart. React places <title> in the head.
   const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
     ?? (pathname === "/" && items.length ? items[0] : null);
-  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password" };
+  // Pages reached through another menu item still name themselves in the browser tab.
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password",
+    "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";
   useEffect(() => { setMoreOpen(false); }, [pathname]);
