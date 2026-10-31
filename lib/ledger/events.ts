@@ -200,7 +200,10 @@ const SCHEDULE_LINE_WORDS:[RegExp,string][]=[
 /** The whole category is a cover's name: the cover words, plus only words that name a sum ("Life Cover", "TPD Benefit",
  * "Critical Illness Sum Assured"). A line that says anything else is a different thing with a cover's name in it: "TPD
  * Premium Waiver", "Life Cover Premium" and "Life Insurance Fund Value" are not a TPD or death sum (TE, 31 Oct). */
-const COVER_NAME_FILLER=new Set(["cover","coverage","benefit","benefits","sum","assured","insured","amount","insurance","assurance","plan","protection","lump","basic","main","and","&","the","of","on","upon","for"]);
+// Words that say what kind of the same cover it is ("Group Term Life", "Level Life Cover", "Accelerated Critical
+// Illness Rider") are part of its name too.
+const COVER_NAME_FILLER=new Set(["cover","coverage","benefit","benefits","sum","assured","insured","amount","insurance","assurance","plan","protection","lump","basic","main","and","&","the","of","on","upon","for",
+  "group","individual","family","joint","single","level","decreasing","increasing","accelerated","standalone","stand","alone","additional","supplementary","enhanced","rider","policy"]);
 function wholeCoverName(category:string,re:RegExp):boolean{
   const m=re.exec(category);
   if(!m)return false;

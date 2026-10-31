@@ -71,6 +71,12 @@ async function main() {
     { category: "Life Cover", amount: 300000, currency: "GBP", quote: "Life cover (level)\t£300,000.00" },
     { category: "TPD Cover", amount: 100000, currency: "GBP", quote: "Total permanent disability\t£100,000.00" },
   ]);
+  // A kind of the same cover is still that cover: "Group Term Life", "Group Personal Accident" (S$).
+  const grp = await person("Raymond Lim", "sibling");
+  await schedule(grp, "Example Group Insurance", [
+    { category: "Group Term Life", amount: 1000000, currency: "SGD", quote: "Group Term Life\tS$1,000,000" },
+    { category: "Group Personal Accident", amount: 600000, currency: "SGD", quote: "Group Personal Accident\tS$600,000" },
+  ]);
   // Lines whose category has a cover's name in it but is something else: a premium waiver, a premium, a fund value.
   const notSums = await person("Rohan Mehta", "sibling");
   await schedule(notSums, "Harbour Protector", [
@@ -138,6 +144,10 @@ async function main() {
     await test("a premium waiver, a premium or a fund value is never a TPD or death sum (S$, A$, RM)", async () => {
       assert.deepEqual(figures(await rows(notSums)).filter((x) => x[1] != null), []);
       assert.deepEqual(figures(await rows(stored)).filter((x) => x[1] != null), [], "stored under the cover it names");
+    });
+    await test("'Group Term Life' and 'Group Personal Accident' keep their own sums (S$)", async () => {
+      const got = figures(await rows(grp)).filter((x) => x[1] != null);
+      assert.deepEqual(got, [["accidental_death", 600000, "SGD"], ["death", 1000000, "SGD"]]);
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);
