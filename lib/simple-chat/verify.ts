@@ -40,24 +40,26 @@ export const DISCLAIMER = "Answers come from the documents you uploaded. The ins
 
 // ------------------------------------------------------------------ finding a quote in the stored pages
 /** Text for matching: case, spacing, quote marks and dashes do not count. `at[i]` is where character i came from. */
-function squash(s: string): { text: string; at: number[] } {
-  let text = ""; const at: number[] = [];
+function squash(s: string): { text: string; at: Int32Array } {
+  // Characters are joined once and positions kept in a typed array: a cached page then holds a flat string and 4 bytes a
+  // character, not a rope and a boxed array (Critic R445 M1).
+  const chars: string[] = []; const at = new Int32Array(s.length); let n = 0;
   for (let i = 0; i < s.length; i++) {
     let c = s[i];
     if (/\s/.test(c)) continue;
     if (/[“”„"]/.test(c)) c = "\"";
     else if (/[‘’‚`´]/.test(c)) c = "'";
     else if (/[‐‑‒–—―−]/.test(c)) c = "-";
-    text += c.toLowerCase(); at.push(i);
+    chars.push(c.toLowerCase()); at[n++] = i;
   }
-  return { text, at };
+  return { text: chars.join(""), at: at.slice(0, n) };
 }
 /** A stored page's squashed text, made once: every quote of a household is looked for on every page, so squashing the
  * page again for each quote made the Benefits page take seconds on a large library. The page text is the key, so an
  * edited or re-read page is squashed afresh; the cache is emptied once it holds about 8 million characters. */
-const squashedPages = new Map<string, { text: string; at: number[] }>();
+const squashedPages = new Map<string, { text: string; at: Int32Array }>();
 let squashedChars = 0;
-function squashPage(s: string): { text: string; at: number[] } {
+function squashPage(s: string): { text: string; at: Int32Array } {
   const hit = squashedPages.get(s);
   if (hit) return hit;
   if (squashedChars + s.length > 8_000_000) { squashedPages.clear(); squashedChars = 0; }
