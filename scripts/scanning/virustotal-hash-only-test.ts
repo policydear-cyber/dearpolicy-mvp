@@ -108,6 +108,9 @@ async function main() {
     assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: unjudged } } })])).result.status, "not_scanned");
     assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { ...unjudged, harmless: 1 } } } })])).result.status, "clean");
     assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { ...unjudged, malicious: 1 } } } })])).result.status, "infected");
+    // A flag counts even when the reply is missing the other count.
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { malicious: 2 } } } })])).result.status, "infected");
+    assert.equal((await scan(medical, [() => json(200, { data: { attributes: { last_analysis_stats: { suspicious: 1 } } } })])).result.status, "infected");
   });
   await t("other made-up documents (£ home schedule, S$ travel) are looked up by their own hash only", async () => {
     for (const d of [doc("Thames Home (fictitious). Policyholder: Oliver Grant. Buildings £350,000."), doc("Wanderlust Travel (fictitious). Traveller: Tan Wei Ming. Medical S$250,000.")]) {

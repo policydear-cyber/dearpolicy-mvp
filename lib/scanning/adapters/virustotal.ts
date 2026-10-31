@@ -324,6 +324,11 @@ async function lookupFileHash(sha256: string, config: VirusTotalConfig, trace?: 
   if (response.status === 404) return { known: false };
   const json = (await response.json()) as { data?: { attributes?: { last_analysis_stats?: VirusTotalStats } } };
   const stats = json.data?.attributes?.last_analysis_stats;
+  // Any engine flagging it is a verdict, whatever else the reply is missing: the file is rejected.
+  const flagged = (n: unknown) => typeof n === "number" && n > 0;
+  if (stats && (flagged(stats.malicious) || flagged(stats.suspicious))) {
+    return { known: true, stats: { ...stats, malicious: typeof stats.malicious === "number" ? stats.malicious : 0, suspicious: typeof stats.suspicious === "number" ? stats.suspicious : 0 } };
+  }
   // A reply with no usable verdict is treated like "no record" (not scanned, never clean), so the upload is not held.
   if (!stats || typeof stats.malicious !== "number" || typeof stats.suspicious !== "number") return { known: false };
   return { known: true, stats };
