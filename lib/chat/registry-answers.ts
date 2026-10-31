@@ -29,6 +29,7 @@ import { replacedFigures } from "@/lib/policies/amendments";
 import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { amountAppears, namesBenefit, verifyAssertion, type AssertionDocument } from "./assertions";
 import { nameAppears } from "@/lib/documents/evidence";
+import { linePeriodWords, printedLinePeriod } from "@/lib/coverage/line-period";
 import { attachOperand, bindFigure, boundOperand, citeAnswerLines, printedRowFor, rowBenefit, sumOperands } from "./answer-verification";
 
 let flagColumns: Promise<Set<string>> | null = null;
@@ -360,7 +361,9 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
           : r.passage_verified === false && !nameOnPage ? "the stored figure could not be re-found in its passage" : null;
         // (A misread figure the document does not print at all is not said: that is not an item, it is an error.)
         if (!at) continue;
-        const problem = !cur ? "the currency of the amount is not stated" : verify(p, d, amount, cur, at, flagsOk, r.conflict_note ?? null);
+        // A figure paid per day, week, month or year is an income, never a sum to add up, in any language the line is printed in.
+        const period = printedLinePeriod(r.evidence_text, amount) ?? printedLinePeriod(at.passage, amount);
+        const problem = !cur ? "the currency of the amount is not stated" : period ? `period (paid ${linePeriodWords(period)})` : verify(p, d, amount, cur, at, flagsOk, r.conflict_note ?? null);
         const item: Item = { d, amount, cur, joint, note: r.notes, page: at.page, problem, passage: at.passage };
         const prev = mine.get(k);
         // One figure per policy: a verified one over an unverified one, then the current document's (a later endorsement's).

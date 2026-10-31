@@ -29,6 +29,17 @@ async function readerTests() {
   ] as const) await test(`"${text}" prints ${want}`, () => assert.equal(printedLinePeriod(text), want));
   for (const text of ["Death benefit S$500,000", "Sum assured £250,000", "TPD 100% of sum assured", "Daydream Plan S$50,000", "Monthly premium S$120 for Death S$500,000", "Prémio mensal R$ 80", ""])
     await test(`"${text}" prints no cover period`, () => assert.equal(printedLinePeriod(text), null));
+  // Strict first (coordinator, 31 Oct): a period counts only attached to the figure, never anywhere on the line.
+  for (const [text, amount] of [
+    ["Hospital cash S$100 (max 30 days per year)", 100], ["Disability income A$7,500, paid monthly after the waiting period", 7500],
+    ["Death S$500,000 payable in instalments over 10 years", 500000], ["Income benefit S$3,000; waiting period 30 days per claim", 3000],
+    ["Monthly review: Sum assured S$200,000 for 90 days", 200000], ["Hospital income benefit after 3 days S$150", 150],
+    ["Santunan Rp 500.000 untuk rawat inap, maksimal 30 hari per tahun", 500000],
+  ] as const) await test(`"${text}" has no period attached to its figure`, () => assert.equal(printedLinePeriod(text, amount), null));
+  for (const [text, amount, want] of [
+    ["S$150/day", 150, "day"], ["S$2,000 per month", 2000, "month"], ["Monthly benefit S$2,000", 2000, "month"], ["2,000 SGD a month", 2000, "month"],
+    ["Waiting period 30 days; Monthly benefit A$7,500", 7500, "month"],
+  ] as const) await test(`"${text}" has its figure's period`, () => assert.equal(printedLinePeriod(text, amount), want));
   await test("two periods on a line: the clause that prints the amount decides", () => {
     assert.equal(printedLinePeriod("Daily S$100, max S$3,000 per year", 100), "day");
     assert.equal(printedLinePeriod("Daily S$100, max S$3,000 per year", 3000), "year");
