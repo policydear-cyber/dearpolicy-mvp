@@ -10399,3 +10399,6 @@ The inventory rows match sql/benefit-table.sql (RLS, SELECT-only is_household_me
 - On main, rag2:conv crashes on the route's 429, adversarial is 46/47 (U1 fails) and fix crashes on the 429. On #242 they are 22/22, 47/47 and 35/35.
 - F6/U1 now assert the route's 429 spend_limit reply with zero model calls. F21 starts under the cap, writes an over-cap row during the first call, and asserts the loop makes no second call.
 - These suites are not registered graders. Gate green.
+
+## R488: #241 da7b215: READY (re-ack)
+Test-only change: href is now read in any quote style, in both the menu and account-tabs checks. customer-screens passes 11/11, a single-quoted /usage mutant fails the nav check, and tsc is clean.
