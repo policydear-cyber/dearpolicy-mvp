@@ -5,7 +5,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
-import { categoryRows, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryRows, personKinds, wordingDescribes, type KindEntry } from "@/lib/coverage/table-figures";
 import { rowDetail, shortFigure } from "@/lib/benefit-table/headline";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { documentCardTitle } from "@/lib/policies/document-name";
@@ -15,12 +15,14 @@ export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 /** The person's benefit-table rows for this category, each with the figure and page its document prints: the same rows
  * the Family page and the chat use. Empty where the benefit table is off or names nothing for the category. */
-async function tableRows(accountId:string,member:string,category:string,seen:{documents:{id:string;state:string}[]}={documents:[]}){
+async function tableRows(accountId:string,member:string,category:string,seen:{documents:{id:string;state:string}[];kind?:KindEntry|null}={documents:[]}){
   try{
     const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
     if(!(await benefitTableLive(accountId)))return [];
     const { tableFor }=await import("@/lib/benefit-table/service");
     const { table,documents }=await tableFor(appDb,accountId);seen.documents=documents;const person=table.people.find(p=>p.id===member);
+    // The whole-policy kind (travel, savings, investment) by the rule Home uses, so both pages say the same.
+    seen.kind=personKinds(person?.covers??[],person?.rows??[]).get(category)??null;
     // The source document is named as its Documents card names it, never by a machine-made file name (TE P179 F1).
     const name=(id:string,fallback:string)=>documentCardTitle(documents.find(d=>d.id===id)?.file??{product_name:null,original_filename:fallback});
     return categoryRows(category,person?.rows??[]).map(r=>{const f=shortFigure(r);return{benefit:r.benefit,product:r.product,cover:r.cover,plan:r.plan,figure:f.text,note:f.note,detail:rowDetail(r)||null,document:name(r.source.documentId,r.source.document),page:r.source.page,excerpt:r.source.excerpt};});
@@ -31,7 +33,7 @@ export async function GET(request:NextRequest){
   const ctx = await requireHouseholdContext(request);
   const url=new URL(request.url);const member=url.searchParams.get("familyMemberId");const category=normalizeCoverageCategory(url.searchParams.get("category")??"");if(!member||!category)return NextResponse.json({error:"familyMemberId and category are required"},{status:400});if(!isUuid(member))return NextResponse.json({error:"Family member not found"},{status:404});
   const accountId = ctx.householdId;
-  const seen:{documents:{id:string;state:string}[]}={documents:[]};
+  const seen:{documents:{id:string;state:string}[];kind?:KindEntry|null}={documents:[]};
   const payload = await createUserSupabaseClient(ctx.userId, async (client) => {
     const memberRow=await client.query<{display_name:string}>(`SELECT display_name FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[member,accountId]);if(!memberRow.rows[0])return null;
     const confirmed=await client.query(`SELECT pc.id,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,pc.notes,pc.source_page,pc.evidence_text,pc.evidence_verified,p.id AS policy_id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.document_role,p.document_authority_label,p.effective_date::text,p.original_filename FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.category=$3 ORDER BY pc.confirmed DESC,pc.evidence_verified DESC,p.document_authority DESC,p.effective_date DESC NULLS LAST,p.created_at DESC`,[accountId,member,category]);
@@ -47,6 +49,6 @@ export async function GET(request:NextRequest){
   // A failed or partly read document of this person may hold this cover: "not found" says so (see lib/policies/not-fully-read).
   const notRead=notFullyReadNote(await notFullyRead(accountId,member,seen.documents),payload.member.name);
   // ID numbers in quotes, excerpts and evidence are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({...payload,notFullyRead:notRead}));
+  return NextResponse.json(maskShownText({...payload,kind:seen.kind??null,notFullyRead:notRead}));
  }catch(error){return routeErrorResponse(error);}
 }

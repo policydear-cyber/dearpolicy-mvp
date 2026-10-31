@@ -12,7 +12,7 @@ import { summarisePremiums, type TablePremiumCover } from "@/lib/policies/premiu
 import { singaporeDay } from "@/lib/benefit-table/dates";
 import { premiumSourceKind } from "@/lib/format/premium-source";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
-import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type TilePart } from "@/lib/coverage/table-figures";
+import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
 
@@ -63,7 +63,11 @@ export async function GET(request:NextRequest){
     list.sort((a,b)=>b.authority-a.authority+((b.effectiveDate?Date.parse(b.effectiveDate):Date.parse(b.createdAt))-(a.effectiveDate?Date.parse(a.effectiveDate):Date.parse(a.createdAt)))/1e15);
     const top=list[0]; selected.push(top); const sameAuthority=list.filter(x=>x.authority===top.authority); const amounts=new Set(sameAuthority.map(x=>x.amount).filter(x=>x!=null)); if(amounts.size>1)conflictCategories.add(top.category);
   }
-  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[]}>();
+  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[];known?:KnownSum|null;planNote?:string|null}>();
+  // A category whose only cover has ended (a single trip that is over): its last day, so the tile says so, never "Not found".
+  const endedOn=new Map<string,string>();
+  // A single trip whose last day was not read: neither current nor ended (its names).
+  const undatedTrip=new Map<string,string>();
   for(const row of selected){
     const cur=coverageMap.get(row.category)??{total:null,currency:row.currency,count:0,policyNames:[],displayAmount:null,derived:false};
     if(row.amount!=null)cur.total=(cur.total??0)+row.amount; cur.count+=1; if(row.productName&&!cur.policyNames.includes(row.productName))cur.policyNames.push(row.productName); coverageMap.set(row.category,cur);
@@ -82,6 +86,7 @@ export async function GET(request:NextRequest){
       const person=loaded.table.people.find(p=>p.id===active.id);
       tableCovers=person?.covers??[];
       const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency}));
+      const kinds=personKinds(person?.covers??[],person?.rows??[]);
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
         const lines=selected.filter(x=>x.category===category).map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)}));
@@ -89,10 +94,19 @@ export async function GET(request:NextRequest){
         // (a scheme's sum only its summary prints). A policy whose sum is not read is named with no amount, and there is
         // then no total, never a part sum (DC 27 Oct).
         if(LUMP_SUM_CATEGORIES.has(category)&&(rows.length||lines.length)){
-          const {parts,total}=lumpSumParts(rows,lines,held,category); const cur=coverageMap.get(category);
+          const {parts,total,known}=lumpSumParts(rows,lines,held,category); const cur=coverageMap.get(category);
           const entry=cur??{total:null,currency:"SGD",count:0,policyNames:[],displayAmount:null,derived:false,fromTable:true};
-          entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.count=parts.length; entry.currency=normalizeCurrencyCode(parts.find(p=>p.currency)?.currency??entry.currency,"SGD");
+          entry.total=total; entry.displayAmount=null; entry.parts=parts; entry.known=known; entry.count=parts.length; entry.currency=normalizeCurrencyCode(parts.find(p=>p.currency)?.currency??entry.currency,"SGD");
           entry.policyNames=[...new Set(parts.map(p=>p.name))]; coverageMap.set(category,entry); continue;
+        }
+        // A whole-policy kind (travel, savings, investment) is decided by the cover, not by a benefit's name: the same rule
+        // for every page (lib/coverage/table-figures personKinds). A held cover with no linked row still counts.
+        const kind=kinds.get(category);
+        if(kind&&!coverageMap.has(category)){
+          if(kind.current.length)coverageMap.set(category,{total:null,currency:"SGD",count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
+          else if(kind.undated.length)undatedTrip.set(category,kind.undated.join(", "));
+          else if(kind.endedOn)endedOn.set(category,kind.endedOn);
+          continue;
         }
         if(!rows.length)continue;
         const cur=coverageMap.get(category); const display=tableDisplay(rows);
@@ -129,7 +143,7 @@ export async function GET(request:NextRequest){
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,endedOn:row?null:endedOn.get(category)??null,undated:row?null:undatedTrip.get(category)??null};});
 
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the

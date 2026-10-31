@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
-import { COVER_KINDS, isToConfirm, kindOfRow, kindsOfTable, type KindRow, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { COVER_KINDS, endedKinds, isToConfirm, kindOfRow, kindsOfTable, type KindRow, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -40,6 +40,7 @@ export default function FamilyPage() {
   const [editing, setEditing] = useState<string | null>(null);
   /** What each person is covered for, by kind, from the Coverage rows. Optional: the page works without it. */
   const [kinds, setKinds] = useState<Record<string, string[]>>({});
+  const [ended, setEnded] = useState<Record<string, string[]>>({});
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
@@ -52,7 +53,7 @@ export default function FamilyPage() {
       .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
         if (!table) return;
-        if (table.enabled) return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])])));
+        if (table.enabled) { setEnded(Object.fromEntries((table.people ?? []).map((p) => [p.id, endedKinds(p.rows ?? [], p.covers ?? [])]))); return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])]))); }
         return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[] } | null) => {
           if (!l) return;
           // Per person, each kind found and whether any of its rows is confirmed; a kind only a schedule line suggests is "to confirm".
@@ -142,7 +143,8 @@ export default function FamilyPage() {
               <div className="profile-glance">
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
                 {kinds[member.id]?.length ? <p><b>Covered for</b> {kinds[member.id].join(" · ")}. <a className="text-link" href={`/ledger?member=${member.id}`}>See {baseline[member.id]?.display_name ?? member.display_name}&rsquo;s cover →</a></p>
-                  : member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
+                  : member.policy_count ? <p>{ended[member.id]?.length ? "No current cover found in your uploaded documents." : "Nothing found in your uploaded documents for them yet."} <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
+                {ended[member.id]?.length ? <p className="muted">{ended[member.id].join(" · ")}.</p> : null}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
