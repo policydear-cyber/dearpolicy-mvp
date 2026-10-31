@@ -10179,3 +10179,11 @@ Root cause: a negation window is still a deny-list. Structural fix:
 ## R433 — #214 3d796d7: READY (People list before add form; gate green).
 
 ## R434 — #215 c96306e: one regression left: "Disability: loss greater than 50%, Sum Insured, reduced to one half if less than 10%" (main none, head share); threshold freed after a worded share. Fix: free only before first share mention of any kind (digit %, WORD_FRACTIONS, INSURED_AMOUNT). Gate green.
+
+## R435 — #217 2763edd: READY (M3, Read again wording, L1 done; gate green).
+
+## R436 — #215 397bc13: READY (all R421-R434 rows withheld; remaining share rows identical on main; follow-up: "less", "reduced to").
+
+## R437 — #213 e02128e: READY (undated single trip neither current nor ended; family-ended 10/0; own 106/0; gate green).
+
+Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
