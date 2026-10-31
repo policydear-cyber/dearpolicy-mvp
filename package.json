@@ -40,6 +40,7 @@
     "coverage:te149b-test": "node --import tsx scripts/coverage/te-pr149b-test.ts",
     "coverage:cover-holdings-test": "node --import tsx scripts/coverage/cover-holdings-test.ts",
     "coverage:te152-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/te-pr152-test.ts",
+    "coverage:benefit-sum-line-test": "node --import tsx scripts/coverage/benefit-sum-line-test.ts",
     "coverage:dashboard-dynamic-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/dashboard-dynamic-test.ts",
     "coverage:home-currency-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/home-currency-test.ts",
     "coverage:te151-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/coverage/te-pr151-test.ts",
