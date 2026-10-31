@@ -9,9 +9,10 @@ type RecordRow = { id: string; family_member_name: string | null; insurer: strin
 function money(amount: string, currency: string) { return formatMoney(amount,currency); }
 
 export default function RecordsPage() {
-  const [records,setRecords] = useState<RecordRow[]>([]);
+  const [records,setRecords] = useState<RecordRow[]|null>(null); const [failed,setFailed] = useState(false);
 
-  useEffect(()=>{ void fetch("/api/premiums").then((x)=>x.json()).then((r)=>setRecords(r.records ?? [])); },[]);
+  // Nothing is said about payments until they have loaded: "No payments found yet" before the list arrives is wrong.
+  useEffect(()=>{ void fetch("/api/premiums").then((x)=>{ if(!x.ok) throw new Error(); return x.json(); }).then((r)=>setRecords(r.records ?? [])).catch(()=>setFailed(true)); },[]);
 
   return (
     <div className="page">
@@ -21,8 +22,10 @@ export default function RecordsPage() {
       <section className="section">
         <div className="section-heading"><div><div className="eyebrow">HISTORY</div><h2>Payments found</h2></div></div>
         <div className="payment-list">
-          {records.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared / family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
-          {!records.length && <div className="empty-card">No payments found yet. Upload the latest receipt or renewal notice from an insurer on <Link href="/policies" className="text-link">Documents</Link>.</div>}
+          {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
+          {!records && !failed && <div className="empty-card" role="status">Loading your payments…</div>}
+          {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared / family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
+          {records && !records.length && <div className="empty-card">No payments found yet. Upload the latest receipt or renewal notice from an insurer on <Link href="/policies" className="text-link">Documents</Link>.</div>}
         </div>
       </section>
     </div>
