@@ -144,6 +144,44 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
   return result;
 }
 
+/** Shortest product or plan name, and policy number, matched in kept text (shorter ones are ordinary words or figures). */
+const MIN_NAME_LENGTH = 4;
+const MIN_NUMBER_LENGTH = 5;
+const escapeRegExp = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * True when the text names the deleted document: its product name, a plan name on it, or its policy number, as a whole
+ * word (no letter or digit right before or after), ignoring case. Names another document still on file shares (a
+ * renewal) are not counted.
+ */
+export function namesDocumentMatcher(names: string[], numbers: string[], sharedWithKept: Set<string>): (...parts: unknown[]) => boolean {
+  const norm = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
+  const wanted = [...new Set([
+    ...names.map(norm).filter((n) => n.length >= MIN_NAME_LENGTH),
+    ...numbers.map(norm).filter((n) => n.length >= MIN_NUMBER_LENGTH),
+  ])].filter((n) => !sharedWithKept.has(n));
+  if (!wanted.length) return () => false;
+  const re = new RegExp("(?<![\\p{L}\\p{N}])(?:" + wanted.map((n) => escapeRegExp(n).replace(/ /g, "\\s+")).join("|") + ")(?![\\p{L}\\p{N}])", "iu");
+  return (...parts: unknown[]) => re.test(parts.map((x) => (x == null ? "" : typeof x === "string" ? x : JSON.stringify(x))).join(" "));
+}
+
+/** Removes from the person's typed chat state anything that names the deleted document. */
+function withoutNamed(state: Record<string, unknown>, names: (...parts: unknown[]) => boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(state)) {
+    if (k === "subjects") {
+      const subjects: Record<string, Record<string, unknown>> = {};
+      for (const [person, facts] of Object.entries((v ?? {}) as Record<string, unknown>)) {
+        if (!facts || typeof facts !== "object" || Array.isArray(facts)) { if (!names(facts)) subjects[person] = facts as Record<string, unknown>; continue; }
+        const keptFacts = Object.fromEntries(Object.entries(facts).filter(([, f]) => !names(f)));
+        if (Object.keys(keptFacts).length) subjects[person] = keptFacts;
+      }
+      out.subjects = subjects;
+    } else if (!names(v)) out[k] = v;
+  }
+  return out;
+}
+
 /**
  * The allow-list test: stored text (an answer, a chat's state, a background result) may stay only when it refers to at
  * least one of the household's documents and every one it refers to is still on file.
@@ -169,7 +207,21 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
   const known = new Set(docs.rows.map((r) => r.id.toLowerCase()));
   const active = new Set(docs.rows.filter((r) => r.active).map((r) => r.id.toLowerCase()));
   active.delete(doc.id.toLowerCase());
-  const stays = staysWith(active, known);
+  const refsStay = staysWith(active, known);
+  // What names the deleted document in words (read before its own fields may be cleared by the content scrub).
+  const own = await tx.query<{ product: string | null; number: string | null; plans: string[] | null }>(
+    `SELECT to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS number,
+            (SELECT array_agg(DISTINCT c.product_name) FROM policy_coverages c WHERE c.policy_id=p.id AND c.product_name IS NOT NULL) AS plans
+       FROM policies p WHERE p.id=$1 AND p.account_id=$2 AND p.lifecycle_state=ANY($3::text[])`, [doc.id, doc.account_id, DELETED_STATES]);
+  const kept = await tx.query<{ name: string }>(
+    `SELECT lower(regexp_replace(btrim(n), '\\s+', ' ', 'g')) AS name FROM (
+       SELECT to_jsonb(p)->>'product_name' AS n FROM policies p WHERE p.account_id=$1 AND p.id<>$2 AND p.lifecycle_state='active'
+       UNION SELECT to_jsonb(p)->>'policy_number' FROM policies p WHERE p.account_id=$1 AND p.id<>$2 AND p.lifecycle_state='active'
+       UNION SELECT c.product_name FROM policy_coverages c JOIN policies p ON p.id=c.policy_id AND p.lifecycle_state='active' WHERE c.account_id=$1 AND c.policy_id<>$2
+     ) x WHERE n IS NOT NULL`, [doc.account_id, doc.id]);
+  const o = own.rows[0];
+  const namesDoc = namesDocumentMatcher([o?.product ?? "", ...(o?.plans ?? [])].filter(Boolean), [o?.number ?? ""].filter(Boolean), new Set(kept.rows.map((r) => r.name)));
+  const stays = (...parts: unknown[]) => refsStay(...parts) && !namesDoc(...parts);
 
   if (tables.has("chat_messages")) {
     const rows = await tx.query<{ id: string; citations: unknown; answer_json: unknown; content: string }>(
@@ -177,8 +229,8 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
         WHERE account_id=$1 AND role='assistant' AND created_at >= $2::timestamptz AND content IS DISTINCT FROM $3
         FOR UPDATE`, [doc.account_id, doc.added_at, STALE_ANSWER_NOTICE]);
     for (const m of rows.rows) {
-      if (stays(m.citations, m.answer_json)) continue;
-      if (isPlainFactFindingQuestion(m.answer_json, m.content ?? "", referencesIn(known, [m.citations, m.answer_json]).length > 0)) continue;
+      if (refsStay(m.citations, m.answer_json) && !namesDoc(m.content, m.citations, m.answer_json)) continue;
+      if (isPlainFactFindingQuestion(m.answer_json, m.content ?? "", referencesIn(known, [m.citations, m.answer_json]).length > 0) && !namesDoc(m.content, m.answer_json)) continue;
       await tx.query(`UPDATE chat_messages SET content=$1, citations='[]'::jsonb, answer_json=CASE WHEN answer_json IS NULL THEN NULL ELSE $2::jsonb END WHERE id=$3 AND account_id=$4`,
         [STALE_ANSWER_NOTICE, JSON.stringify(redactedStoredAnswer(m.answer_json)), m.id, doc.account_id]);
       counts.answersRedacted++;
@@ -190,12 +242,12 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
       [doc.account_id, doc.added_at]);
     for (const c of rows.rows) {
       if (stays(c.state, c.last_answer)) continue;
-      const kept = userTypedChatState(c.state);
-      // The person's own facts stay only while they name no document that is gone (they never should).
-      if (referencesIn(known, [kept]).some((id) => !active.has(id))) kept.subjects = {};
-      if (JSON.stringify(kept) === JSON.stringify(c.state) && c.last_answer == null) continue;
+      // The person's own facts stay, less anything that names the deleted document (by id or in words).
+      let typed = withoutNamed(userTypedChatState(c.state), namesDoc);
+      if (referencesIn(known, [typed]).some((id) => !active.has(id))) typed = { ...typed, subjects: {} };
+      if (JSON.stringify(typed) === JSON.stringify(c.state) && c.last_answer == null) continue;
       await tx.query(`UPDATE chat_conversations SET state=$3::jsonb, last_answer=NULL, revision=revision+1, updated_at=now() WHERE account_id=$1 AND id=$2`,
-        [doc.account_id, c.id, JSON.stringify(kept)]);
+        [doc.account_id, c.id, JSON.stringify(typed)]);
       counts.chatsReset++;
     }
   }

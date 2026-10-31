@@ -229,6 +229,34 @@ async function main() {
     assert.equal((await msg(byNumber)).content, "Polisa ZP-30-771203 jest aktywna.");
     assert.equal((await q(`SELECT 1 FROM coverage_rules WHERE policy_id=$1`, [zycie])).rows.length, 0);
   });
+  await t("kept text that names the deleted document in words (product, plan or policy number, whole words only) goes too", async () => {
+    const acc4 = await household("Santoso household (fictitious)");
+    const budi = await member(acc4, "Budi Santoso", "self");
+    const gone = await doc(acc4, budi, { file: "Sehat-Prima.pdf", insurer: "Nusantara Insurance (fictitious)", product: "Sehat Prima", policyNo: "SP-77120931" });
+    const keep = await doc(acc4, budi, { file: "Jiwa-Abadi.pdf", insurer: "Nusantara Insurance (fictitious)", product: "Jiwa Abadi", policyNo: "JA-55102288" });
+    await q(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name) VALUES ($1,$2,$3,'hospital',75000000,'IDR','Rawat Inap Platinum'),($1,$4,$3,'life',1000000000,'IDR','Jiwa Abadi')`, [acc4, gone, budi, keep]);
+    const ff = (summary: string) => ({ content: summary, citations: [], answer: { mode: "fact_finding", summary, citations: [], questions: [{ text: summary }], claimItems: [] } });
+    const byProduct = await turn(acc4, budi, null, "I want to claim", ff("Is this claim under your sehat  prima policy?"));
+    const byPlan = await turn(acc4, budi, null, "Claim", ff("Were you admitted as an in-patient under Rawat Inap Platinum?"));
+    const byNumber = await turn(acc4, budi, null, "Claim", ff("Is the policy number on your card SP-77120931?"));
+    const partial = await turn(acc4, budi, null, "Claim", ff("Did you first see a Sehat Primary care doctor?"));
+    const plain = await turn(acc4, budi, null, "Claim", ff("Which hospital were you admitted to?"));
+    const longerRef = await turn(acc4, budi, null, "Claim", ff("Did you register at the KlinikSehat Prima desk?"));
+    // An answer about the kept document that also names the deleted one in words.
+    const mixed = await turn(acc4, budi, null, "Life?", { content: "Jiwa Abadi pays on death; Sehat Prima was your hospital plan.", citations: [{ policyId: keep }], answer: null });
+    const keptOnly = await turn(acc4, budi, null, "Life?", { content: "Jiwa Abadi pays on death.", citations: [{ policyId: keep }], answer: null });
+    const typed = (value: string) => ({ value, state: "known", quote: value, recordedAt: "2026-10-01T00:00:00Z", source: "user" });
+    const conv = await conversation(acc4, budi, { intent: "claim", activeClaimQuery: "claim on SP-77120931 for my stay", subjects: { [budi]: { card: typed("my Sehat Prima card"), ward: typed("I was in ward 3"), plan: typed("Rawat Inap Platinum") } }, facts: [{ policyId: keep }] }, null);
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [gone]);
+    await scrubDeletedDocumentDerivedContent({ policyIds: [gone] });
+    for (const id of [byProduct, byPlan, byNumber, mixed]) assert.equal((await msg(id)).content, STALE_ANSWER_NOTICE, id);
+    assert.equal((await msg(partial)).content, "Did you first see a Sehat Primary care doctor?", "a name inside a longer word is not a match");
+    assert.equal((await msg(plain)).content, "Which hospital were you admitted to?");
+    assert.equal((await msg(longerRef)).content, "Did you register at the KlinikSehat Prima desk?", "a name at the end of a longer word is not a match");
+    assert.equal((await msg(keptOnly)).content, "Jiwa Abadi pays on death.");
+    const c = (await q<{ state: unknown }>(`SELECT state FROM chat_conversations WHERE id=$1`, [conv])).rows[0];
+    assert.deepEqual(c.state, { intent: "claim", subjects: { [budi]: { ward: typed("I was in ward 3") } } });
+  });
   await t("a document still on file is never handled", async () => {
     assert.equal((await q(`SELECT 1 FROM policy_document_audit_log WHERE policy_id=ANY($1::uuid[]) AND action=$2`, [[kranken, otherDoc], DERIVED_SCRUB_ACTION])).rows.length, 0);
     assert.equal((await scrubDeletedDocumentDerivedContent({ policyIds: [kranken] })).documents, 0);
