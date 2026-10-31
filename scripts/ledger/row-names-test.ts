@@ -43,6 +43,18 @@ const rows: [string, string][] = [
   ["Liabiliti Pihak Ketiga (Kematian)", "other"], ["Responsabilidad civil", "other"], ["Responsabilité civile décès", "other"], ["第三者责任 身故", "other"],
   // Words that only look alike stay "other"
   ["Had tahunan", "other"], ["Bilik dan Makan", "other"],
+  // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
+  ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
+  ["Pembebasan Premi karena Penyakit Kritis", "other"], ["Exención de primas por invalidez total y permanente", "other"], ["身故豁免保费", "other"],
+  ["Exonération des cotisations en cas de décès", "other"], ["Nilai Tunai Kematian", "other"], ["Pengembalian Premi Kematian", "other"],
+  ["身故退还保费", "other"], ["Rückkaufswert bei Todesfall", "other"], ["Beitragsbefreiung bei Berufsunfähigkeit", "other"], ["Waiver of premium on death", "other"],
+  // ...but a plan tier or a reimbursement of costs is still a cover
+  ["Premium Plan death benefit", "death"], ["Premier Death Benefit", "death"], ["Contribution Takaful death benefit", "death"],
+  ["Remboursement des frais médicaux", "hospital_medical_expense"], ["Rückerstattung der Behandlungskosten", "hospital_medical_expense"],
+  // A negated accident is death from any other cause, never accidental death (TE #270 F2)
+  ["Kematian bukan akibat kemalangan", "death"], ["Muerte no accidental", "death"], ["非意外身故", "death"], ["Non-accidental death", "death"],
+  ["Death not caused by an accident", "death"], ["Death (other than by accident)", "death"], ["Kematian selain kemalangan", "death"],
+  ["No claim bonus accidental death", "accidental_death"], ["Kematian akibat kemalangan", "accidental_death"], ["意外身故", "accidental_death"],
 ];
 for (const [name, want] of rows) eq(name, ev(name), want);
 

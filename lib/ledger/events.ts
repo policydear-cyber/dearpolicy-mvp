@@ -253,7 +253,14 @@ const GLOSSES:[string,string[],string[]][]=[
   ["third party liability",["pihak ketiga","liabiliti","tanggung gugat","responsabilidad civil","responsabilidade civil","responsabilité civile","haftpflicht","responsabilità civile","trách nhiệm dân sự","bên thứ ba"],["第三者","第三方"]],
 ];
 const GLOSS_PATTERNS=GLOSSES.map(([en,ws,cjk])=>[en,new RegExp(B+"(?:"+ws.map(w=>w.replace(/ /g,"\\s+")).join("|")+")"+E+(cjk.length?"|"+cjk.join("|"):""),"iu")] as const);
+/** An accident word with a negation right before it ("non-accidental", "bukan akibat kemalangan", "no accidental", "非意外")
+ * says the benefit is NOT for an accident: the phrase is dropped before the name is read, so it never makes an accident
+ * benefit (TE #270 F2). Up to three linking words may sit between ("not caused by an accident", "bukan akibat kemalangan"). */
+const ACCIDENT_WORDS="accident(?:al(?:ly)?|s)?|"+GLOSSES.find(([en])=>en==="accident")![1].join("|");
+const NEGATED_ACCIDENT=new RegExp(B+"(?:not|non|no(?![\\s-]+claims?)|other than|except|excluding|bukan|tidak|tanpa|selain|sin|sans|nicht|kein(?:e[mnrs]?)?|ohne|außer|não|nao|senza)(?:[\\s-]+[\\p{L}]+){0,3}?[\\s-]+(?:"+ACCIDENT_WORDS+")"+E+"|(?:非|不是|不属于|不屬於|无关|無關)\\s*意外","giu");
+export function withoutNegatedAccident(name:string):string{return name.replace(NEGATED_ACCIDENT," ").replace(/\s{2,}/g," ").trim();}
 export function glossedName(name:string):string{
+  name=withoutNegatedAccident(name);
   const extra=GLOSS_PATTERNS.filter(([,re])=>re.test(name)).map(([en])=>en);
   return extra.length?name+" ("+extra.join(", ")+")":name;
 }
@@ -283,7 +290,22 @@ function planEvent(productName:string|null|undefined):EventType|null{
 
 /** Maps a benefit-table row's own name to an event. A row whose name only says it is the plan's sum takes the plan's own
  * main benefit from the plan's name (productName), when exactly one plan kind fits it. */
+/** A row whose own name holds a premium, contribution, waiver, refund or value word, in any language, is no cover sum:
+ * "Pengecualian Sumbangan atas Kematian" waives contributions on death, "Nilai Tunai Kematian" is a cash value, "身故退还保费"
+ * returns premiums. Its figure is never seeded as the death, TPD or CI amount it names (TE #270 F1; the same closed list
+ * as the cover-line reader's HOLDS_NOT_A_SUM, #261). A plan tier ("Premium Plan", "Contribution Takaful") is a name, not a premium. */
+const NOT_A_SUM_NAME=new RegExp([
+  String.raw`\bpremi(?:um|ums|a|o|os|e|en)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)`,
+  String.raw`\bprimas?\b|\bcontributions?\b(?!\s+(?:takaful|plans?)\b)|\bcaruman\b|\biuran\b|\bsumbangan\b|\bcotisations?\b|\bcontribuiç(?:ão|ões)\b|prämie|\bbeitr[aä]g|\bbeitragsbefreiung`,
+  String.raw`\bwaiver\b|\bwaive[ds]?\b|\bpayor\b|\bpayer\s+benefit\b|\bpengecualian\b|\bpembebasan\b|\bexenci[oó]n\b|\bexonération\b|\bexoneration\b|\bisenção\b|\bisencao\b|\bbefreiung\b|\besonero\b`,
+  // A refund word decides only with a premium word ("Pengembalian Premi", "Remboursement des primes"): alone it is often a
+  // reimbursement of costs ("Pengembalian biaya", "Remboursement des frais médicaux"), which is a cover.
+  String.raw`\b(?:remboursement|restitution)\s+des\s+primes\b|\bprimes?\s+(?:rembours|restitu)`,
+  String.raw`\b(?:fund|surrender|cash|account|policy|units?|investment)\s+values?\b|\bnilai\s+(?:tunai|serahan|dana|akaun|penyerahan)\b|\bvalor\s+de\s+rescate\b|\bvalor\s+de\s+resgate\b|\bvaleur\s+de\s+rachat\b|r[uü]ckkaufswert|\bvalore\s+di\s+riscatto\b`,
+  String.raw`保费|保費|保険料|豁免|払込免除|现金价值|現金價值|解約返戻金`,
+].join("|"),"iu");
 export function eventForBenefitName(name:string,productName?:string|null):{event:EventType;detail:string|null}{
+  if(NOT_A_SUM_NAME.test(name))return {event:"other",detail:name};
   const own=eventForOwnName(name);
   if(own.event!=="other"||THIRD_PARTY_LIABILITY.test(glossedName(name)))return own;
   const m=GENERIC_SUM.exec(name);
@@ -325,7 +347,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
 /** Whether a benefit row is restricted to one cause. "Accidental Hospital
  * Recuperation" pays for a hospital stay, but only one an accident caused. */
 export function causeForBenefit(name:string,requires:string[]=[]):"accident"|"illness"|null{
-  const n=name.toLowerCase();
+  const n=withoutNegatedAccident(name).toLowerCase();
   if(requires.includes("accident")||/\baccident/.test(n))return "accident";
   if(requires.includes("illness")||/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n))return "illness";
   return null;
