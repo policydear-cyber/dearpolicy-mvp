@@ -136,6 +136,12 @@ test("words after a share that change it, or a second share before it, give no f
     "100% of the Sum Assured upon diagnosis of a Critical Illness",
     "100% of the Sum Assured upon diagnosis of carcinoma in situ",
     "10% of the sum insured if diagnosed under age 65",
+    "We pay 100% of Sum Insured for qualifying critical illness.",
+    "100% of the Sum Assured is payable within 30 days of our approval of the claim.",
+    "On the death of the Life Assured, we will pay 100% of the Sum Assured to the policy owner.",
+    "100% of the Sum Insured shall be paid upon permanent paralysis of two limbs, subject to the terms and conditions of this policy.",
+    "Kami akan membayar 100% daripada Jumlah Diinsuranskan apabila didiagnosis dengan mana-mana penyakit kritikal yang dilindungi.",
+    "50% of the Sum Insured for each eye",
     "10% of the sum insured. We won't pay for a pre-existing condition.",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
   // Anything after the share that may change it, in any language, and a second share before it (Critic R443 H1).
@@ -155,6 +161,8 @@ test("words after a share that change it, or a second share before it, give no f
     "50% dari Uang Pertanggungan, dikurangi pembayaran sebelumnya",
     "50% of the Sum Insured. 25% for children.",
     "50% of the Sum Insured if the insured is a child",
+    "50% of the Sum Insured for the first claim",
+    "50% of the Sum Insured for each child",
     "50% of the Sum Insured if overseas, otherwise 25%",
     "50% of the Sum Insured, payable after deducting any earlier claim",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);

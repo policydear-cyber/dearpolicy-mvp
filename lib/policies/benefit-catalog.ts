@@ -804,13 +804,14 @@ const EVENT_PERCENT_AFTER=/^\s*(?:(?:of|de|daripada|dari)\s+)?(?:the\s+|la\s+|du
  * bagi kanak-kanak", "ditolak sebarang jumlah") may change what is paid. Before the share, a second share ("Children 25%,
  * adults 50% of the Sum Insured") does too; a figure that measures the event does not. Words before the share describe
  * the event ("hearing reduced by more than 80 decibels in one ear, 50%", Critic R443 M1) and are not read. */
-/** A condition on when the share is paid, after it: "if Total and Permanent Disability is due to an accident", "payable
+/** A condition on when or to whom the share is paid, after it: "for qualifying critical illness", "to the policy owner", "if Total and Permanent Disability is due to an accident", "payable
  * within 30 days of diagnosis", "if diagnosed under age 65", "upon diagnosis of a Critical Illness". It says when, not how
- * much, unless it holds a word that changes or splits the amount (SHARE_CHANGER). */
-const SHARE_CONDITION=/^[\s,]*(?:(?:payable|paid)\s+)?(?:if|when|where|provided|within|upon|on|following|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of)\b/u;
+ * much, unless it holds a word that changes, splits or orders the amount (SHARE_CHANGER: "for children", "for the first
+ * claim"). */
+const SHARE_CONDITION=/(?:^|[\s,])(?:if|when|where|for|once|provided|within|upon|on|following|to|after|before|during|until|as\s+certified|due\s+to|caused\s+by|resulting\s+from|as\s+a\s+result\s+of|apabila|jika|bila|semasa|sekiranya|kepada)\b/u;
 /** Words that change, split or scope the amount, in English and Malay: a deduction, a multiple or part, another class of
  * person, or an alternative. */
-const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher)\b/u;
+const SHARE_CHANGER=/\b(?:minus|less|net|deduct\w*|reduc\w*|half|halved|halves|double[sd]?|twice|triple[sd]?|quarters?|thirds?|otherwise|instead|children|child|juvenile|minor|adults?|ditolak|dikurang\w*|kurang|separuh|atau|kanak|dewasa|tetapi|but|except|excluding|plus|increase\w*|decrease\w*|lower|higher|first|second|subsequent|additional|further|later|next|each\s+(?:child|adult|person|insured))\b/u;
 function shareStandsAlone(text:string,benefitName:string|null|undefined){
   const rest=withoutEventBands(text);
   const main=SHARE_OF_INSURED.exec(rest)??[...rest.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu"))].at(-1)??null;
@@ -823,7 +824,10 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
   // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
   const sentence=after.split(/\.(?:\s|$)/u)[0];
-  if(SHARE_CONDITION.test(sentence))return !SHARE_CHANGER.test(sentence);
+  // The words before the first condition or payee ("is payable", "will be paid in one lump sum") must be harmless; the
+  // condition itself ("within 30 days of approval", "to your estate upon your death") may say anything but change the amount.
+  const at=SHARE_CONDITION.exec(sentence);
+  if(at)return capPassageHarmless(sentence.slice(0,at.index),benefitName)&&!SHARE_CHANGER.test(sentence.slice(at.index));
   return capPassageHarmless(sentence,benefitName);
 }
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount or other words, which may cap or change what is paid.";
@@ -842,6 +846,7 @@ const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+othe
  * cap. A named condition, a person, a place or a time ("upon diagnosis of carcinoma in situ", "in the first year") is not
  * this phrase and still leaves the share unsure. */
 const ANY_COVERED_CONDITION=/\b(?:up)?on\s+(?:the\s+)?diagnosis\s+of\s+any\s+(?:one\s+)?of\s+the\s+(?:\d{1,3}\s+)?(?:covered\s+)?(?:conditions|illnesses|diseases|critical\s+illnesses)(?:\s+covered)?\b/giu;
+const SUBJECT_TO_THE_POLICY=/\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)(?:\s+and\s+conditions)?\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b/giu;
 const CAP_SCOPE_WORD=/^(?:total|aggregate|all|across|lifetime|combined|overall|child|children|adult|adults|juvenile|minor|plus|double|doubled|triple|half|halved|increase\w*|decrease\w*|reduc\w*|less|more|maximum|minimum|limit\w*|any|other|each)$/u;
 function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   // The name's words, but never one that scopes or changes a cap, whatever the name ("Total and Permanent Disability").
@@ -852,7 +857,9 @@ function capPassageHarmless(rest:string,benefitName:string|null|undefined){
 const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)\s+(?:claims?|events?|conditions?|diagnos[ie]s)\b/iu;
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
   const text=quote??"";
-  if(!printsAnAmount(normalText(text)))return shareStandsAlone(normalText(text),benefitName)?{kind:"none"}:{kind:"unsure"};
+  // "subject to the terms and conditions of this policy" refers to the whole policy, not to a cap (TE pr222 S15).
+  const plain=normalText(text).replace(SUBJECT_TO_THE_POLICY," ");
+  if(!printsAnAmount(plain))return shareStandsAlone(plain,benefitName)?{kind:"none"}:{kind:"unsure"};
   const cap=shareCapInPassage(text);
   if(!cap||!cap.currency||cap.shares!==1)return {kind:"unsure"};
   // The cap is in the share's own sentence: "Ambulance fees up to S$500." after it is another benefit's (R416 M1).
