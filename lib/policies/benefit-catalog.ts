@@ -787,11 +787,16 @@ export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|
 const CAP_PASSAGE_WORDS=new Set(("a an the this that it its we will shall be is are was pay pays paid payable paying receive "
   +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only").split(" "));
 const CAP_PASSAGE_PHRASES=/\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\bin\s+one\s+lump\s+sum\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
+/** The share's own trigger when it names every covered condition, never one of them: "upon diagnosis of any one of the 27
+ * conditions covered", "on the diagnosis of any of the covered illnesses". It narrows nothing, so it does not unsettle the
+ * cap. A named condition, a person, a place or a time ("upon diagnosis of carcinoma in situ", "in the first year") is not
+ * this phrase and still leaves the share unsure. */
+const ANY_COVERED_CONDITION=/\b(?:up)?on\s+(?:the\s+)?diagnosis\s+of\s+any\s+(?:one\s+)?of\s+the\s+(?:\d{1,3}\s+)?(?:covered\s+)?(?:conditions|illnesses|diseases|critical\s+illnesses)(?:\s+covered)?\b/giu;
 const CAP_SCOPE_WORD=/^(?:total|aggregate|all|across|lifetime|combined|overall|child|children|adult|adults|juvenile|minor|plus|double|doubled|triple|half|halved|increase\w*|decrease\w*|reduc\w*|less|more|maximum|minimum|limit\w*|any|other|each)$/u;
 function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   // The name's words, but never one that scopes or changes a cap, whatever the name ("Total and Permanent Disability").
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const words=normalText(rest).replace(CAP_PASSAGE_PHRASES," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
+  const words=normalText(rest).replace(CAP_PASSAGE_PHRASES," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CAP_PASSAGE_WORDS.has(w)||own.has(w));
 }
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
@@ -1047,12 +1052,17 @@ const SPECIFIC_BENEFITS:[RegExp,RegExp][]=[
 export function benefitIsForAnotherKindOfEvent(benefitName:string,eventText:string){
   return SPECIFIC_BENEFITS.some(([row,event])=>row.test(benefitName)&&!event.test(eventText));
 }
-export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">){
+export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">
+  &Partial<Pick<CatalogBenefit,"quote"|"benefitName"|"reviewedAt">>){
   const currency=benefit.currency?normalizeCurrencyCode(benefit.currency):null;
   const value=benefit.formulaValue;
   const money=(amount:number,code:string|null)=>code?formatMoney(amount,code):amount.toLocaleString("en-US")+" (currency not stated in the policy wording)";
-  if(benefit.formulaKind==="sum_insured"&&value!=null)
-    return (Math.round(value*1000)/10)+"% of the sum insured on your schedule";
+  if(benefit.formulaKind==="sum_insured"&&value!=null){
+    // A share its passage caps is said with the cap in the same line: "20% of the sum insured" alone reads as 20% of a
+    // large plan, when the passage pays at most its printed cap (the same cap assessCatalogBenefit pays up to).
+    const bound=benefit.reviewedAt||benefit.quote==null?{kind:"none" as const}:shareBound(benefit.quote,benefit.benefitName);
+    return (Math.round(value*1000)/10)+"% of the sum insured on your schedule"+(bound.kind==="cap"?", up to "+formatMoney(bound.amount,bound.currency):"");
+  }
   if(benefit.formulaKind==="fixed"&&value!=null)
     return money(value,currency);
   if(benefit.formulaKind==="expense_cap"&&value!=null)

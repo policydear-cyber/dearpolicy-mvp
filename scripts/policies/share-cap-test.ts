@@ -83,3 +83,38 @@ test("anything less sure than one cap in the cover's currency gives no figure, n
     }
   }
 });
+
+test("a capped share says its cap in the line people read, not only in the details", async () => {
+  const { repairStoredRules, describeBenefitFormula } = await import("@/lib/policies/benefit-catalog");
+  for (const [quote, share, line] of [
+    ["Angioplasty: 20% of Sum Insured, up to S$25,000", 0.2, "20% of the sum insured on your schedule, up to S$25,000"],
+    ["10% of the sum assured, subject to a maximum of SGD 25,000 per life assured", 0.1, "10% of the sum insured on your schedule, up to S$25,000"],
+    ["10% of the sum insured or RM5,000, whichever is lower", 0.1, "10% of the sum insured on your schedule, up to MYR 5,000"],
+    ["25% of the sum insured, limited to £10,000", 0.25, "25% of the sum insured on your schedule, up to £10,000"],
+    ["Angioplasty: 20% of the Sum Insured.", 0.2, "20% of the sum insured on your schedule"],
+  ] as const) {
+    const [b] = repairStoredRules([{ ...base, id: "x", benefitName: "Angioplasty", quote, formulaKind: "sum_insured", formulaValue: share }] as never);
+    assert.equal(describeBenefitFormula(b as never), line, quote);
+  }
+  // A person-confirmed row says what was confirmed; a passage with any other bound gives no share to describe.
+  assert.equal(describeBenefitFormula({ ...base, benefitName: "Angioplasty", quote: "20% of Sum Insured, up to S$25,000", formulaKind: "sum_insured", formulaValue: 0.2, reviewedAt: "2026-10-01" } as never),
+    "20% of the sum insured on your schedule");
+  const [held] = repairStoredRules([{ ...base, id: "x", benefitName: "Angioplasty", quote: "10% of the sum insured, up to S$25,000 in the first policy year", formulaKind: "sum_insured", formulaValue: 0.1 }] as never);
+  assert.doesNotMatch(describeBenefitFormula(held as never), /% of the sum insured/);
+});
+
+test("a trigger that names every covered condition keeps the cap; one that names a single condition, a person or a total does not", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  for (const [quote, amount, currency] of [
+    ["Pays a Special Benefit of an additional 20% of the Sum Assured upon diagnosis of any one of the 27 conditions covered, up to S$25,000 (or equivalent currency) per life per condition.", 25_000, "SGD"],
+    ["20% of the sum insured on the diagnosis of any of the covered illnesses, subject to a maximum of RM20,000", 20_000, "MYR"],
+    ["25% of the Sum Assured upon diagnosis of any one of the 40 critical illnesses, limited to £30,000 per life", 30_000, "GBP"],
+  ] as const) assert.deepEqual(shareBound(quote, "Special Benefit"), { kind: "cap", amount, currency }, quote);
+  for (const quote of [
+    "20% of the Sum Assured upon diagnosis of carcinoma in situ, up to S$25,000",
+    "20% of the sum insured upon diagnosis of any one of the 27 conditions covered for a child, up to S$25,000",
+    "20% of the sum insured upon diagnosis of any one of the conditions covered, up to S$25,000 in total",
+    "20% of the sum insured upon diagnosis of any one of the conditions covered in the first policy year, up to S$25,000",
+    "100% of the Sum Assured, up to a maximum of S$400,000 in the event that an Insured Person is diagnosed with any disease",
+  ]) assert.equal(shareBound(quote, "Special Benefit").kind, "unsure", quote);
+});
