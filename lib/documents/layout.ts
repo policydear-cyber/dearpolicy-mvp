@@ -306,22 +306,27 @@ function namesABenefit(label:string){
  * wrist)" — and a label cut off mid-phrase is not something a person can check
  * against their policy. Only a line with no amount of its own, that clearly
  * continues the one above, is pulled in. */
-const UNFINISHED=/[,&]$|\b(?:and|or|of|to|the|in|for|with|upon|between|from|at|due)$/i;
+const UNFINISHED=/[,&]$|\b(?:and|or|of|to|the|in|for|with|upon|between|from|at|due|untuk|dan|atau|bagi|dari|daripada|kepada|dengan|pada|akibat)$/i;
 /** A row whose cells wrapped onto the next line, quoted cell by cell: the name, then the amount, each in the document's
  * own words. Quoting the two printed lines as they run ("up to maximum Coronary Artery of S$25,000") would put the
  * name in the middle of the amount. */
 function wrappedLine(label:string,value:string){return label+"\t"+value.trim();}
 /** An amount cell that stops on the words leading into its cap or its second half: "up to maximum", "subject to a
  * maximum", "up to", "or". The rest of the amount is on the next line. */
-const VALUE_UNFINISHED=/(?:[,&]|\b(?:and|or|of|to|up\s+to|maximum|max\.?|limit\s+of|limited\s+to|not\s+exceeding|subject\s+to|whichever))$/i;
+const VALUE_UNFINISHED=/\b(?:of|to|up\s+to|maximum|max\.?|limit\s+of|limited\s+to|not\s+exceeding|subject\s+to|sehingga(?:\s+maksimum)?|maksimum|hingga)$/i;
+/** The rest of an amount on its own: a bare sum ("£10,000", "RM20,000") or words that cannot start an amount ("of S$25,000"). */
+const AMOUNT_REST=/^(?:[a-z]|(?:[A-Z]{1,3}\s?)?[$£€¥₹]?\s?\d[\d,.]*(?:\s?(?:k|m|million|thousand))?$|(?:S\$|RM|HK\$|US\$|A\$|Rp|Rs\.?|£|€|¥|₹)\s?\d[\d,.]*$)/u;
 function withContinuation(label:string,lines:PageLine[],index:number,value=""){
   let text=label,valueSuffix="",valueLine:string|null=null,consumed:number|null=null;
   for(let next=index+1;next<lines.length&&next<=index+2;next++){
     const line=lines[next];
     // The amount stops mid-phrase and the line below prints the rest of it in the amount's column, even when that rest
     // reads as an amount on its own ("Hearing Loss in | 15% of the Sum Insured, up to" / "One Ear | £10,000").
-    const dangling=next===index+1&&VALUE_UNFINISHED.test(value.trim())&&line.cells.length===2&&AMOUNT.test(line.cells[1])&&!AMOUNT.test(line.cells[0])
-      &&!/^(?:\(?[a-z0-9]{1,3}[.)]|\d)/i.test(line.cells[0].trim());
+    // Only when the line below cannot be a row of its own (TE pr234 D1): the name above stops mid-phrase or the left
+    // cell runs on in lower case, and the right cell is only the rest of the amount, never a new amount ("S$200 per day").
+    const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
+    const dangling=next===index+1&&VALUE_UNFINISHED.test(value.trim())&&line.cells.length===2&&AMOUNT.test(right)&&!AMOUNT.test(left)
+      &&!/^(?:\(?[a-z0-9]{1,3}[.)]|\d)/i.test(left)&&(UNFINISHED.test(text)||/^[a-z]/.test(left))&&AMOUNT_REST.test(right);
     if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;

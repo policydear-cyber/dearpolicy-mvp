@@ -52,3 +52,23 @@ test("the row read this way keeps its share only with its printed cap (Critic R4
   assert.equal(shareBound("Death benefit halved for children 50% of the Sum Insured, up to S$5,000", "Death benefit halved for children").kind, "unsure");
   assert.equal(shareBound("Other Treatment, for the first claim, 10% of the Sum Insured, up to S$5,000", "Other Treatment").kind, "unsure");
 });
+
+test("a row of its own below an amount that ends in ',', 'and' or 'up to' stays its own row (TE pr234 D1)", async () => {
+  const { benefitRowsFromText } = await import("@/lib/documents/layout");
+  for (const page of ["Broken Arm\tS$2,000 and\nBroken Leg\tup to S$3,000\n", "Loss of Speech\t50% of the Sum Insured,\nLoss of Hearing\t50% of the Sum Insured\n",
+    "Hospital Cash for\tS$100 per day, up to\nIntensive Care Unit\tS$200 per day\n"])
+    assert.equal(benefitRowsFromText(page).length, 2, page);
+  // Malay: the name runs on after "untuk", the cap after "sehingga maksimum".
+  const [row, ...rest] = benefitRowsFromText("Rawatan Angioplasti untuk\t10% daripada Jumlah Diinsuranskan, sehingga maksimum\nArteri Koronari\tRM20,000\n");
+  assert.equal(rest.length, 0);
+  assert.equal(row.label, "Rawatan Angioplasti untuk Arteri Koronari");
+  assert.match(row.value, /RM20,000$/);
+});
+
+test("a name that names a limit or a scope is read with its share, never taken off (TE pr234 D2)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  for (const name of ["Combined Limit with Surgery", "Lifetime Limit", "Per Policy Year Limit", "Maximum Aggregate", "Benefit within Plan Limit", "Benefit up to Age Limit"]) {
+    assert.equal(shareBound(name + " 50% of the Sum Insured", name).kind, "unsure", name);
+    assert.equal(shareBound(name + " 10% of the Sum Insured, up to S$25,000", name).kind, "unsure", name);
+  }
+});

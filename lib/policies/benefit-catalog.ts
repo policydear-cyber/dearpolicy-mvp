@@ -909,10 +909,14 @@ const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)
 /** The row's own name printed at the start of its quote ("(a) Angioplasty and Other Invasive Treatment for Coronary Artery
  * 10% of …"): the label of the row, not words of its rule. Taken off only when the share follows it straight away, and
  * only a name with no figure and no word that changes an amount. */
+const NAME_NAMES_A_LIMIT=/\b(?:limit(?:s|ed)?|max(?:imum|ima)?|maksimum|aggregate\w*|combined|shared?|within|caps?|capped|ceiling|up\s+to|lifetime|per|each|total|overall|annual\w*|yearly|year|sublimit\w*|across|all|min(?:imum)?|had|terhad|sehingga)\b/u;
 function withoutLeadingName(quote:string,benefitName:string|null|undefined){
   const name=(benefitName??"").normalize("NFKC");
   // A name that itself changes an amount ("halved for children", "less any loan") stays in the passage and is read.
-  if(!name||/[\p{Nd}\p{Sc}]/u.test(name)||SHARE_CHANGER.test(normalText(name))||CHANGER_BEFORE_SHARE.test(normalText(name)))return quote;
+  if(!name||/[\p{Nd}\p{Sc}]/u.test(name)||SHARE_CHANGER.test(normalText(name))||CHANGER_BEFORE_SHARE.test(normalText(name))
+    // A name that names a limit or a scope ("Combined Limit with Surgery", "Lifetime Limit", "Benefit within Plan Limit")
+    // may be what bounds the share, so it is read with the passage (TE pr234 D2).
+    ||NAME_NAMES_A_LIMIT.test(normalText(name)))return quote;
   const words=name.match(/[\p{L}]+/gu);
   if(!words||words.length<2)return quote;
   const lead=new RegExp("^[^\\p{L}]*"+words.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("[^\\p{L}\\p{Nd}]+")+"[\\s:：\\-–—]*(?=\\p{Nd})","iu");
