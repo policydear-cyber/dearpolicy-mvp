@@ -46,6 +46,11 @@ import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendme
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
 
+/** A row that prints what is paid for the cover. Insurers call it a premium; health funds and cash plans a
+ * "subscription"; friendly societies and takaful operators a "contribution". Those two words count only as the
+ * payment ("Monthly subscription £148.60", "Annual contribution RM1,200", "Contribution payable"), never a
+ * benefit row that mentions one ("the employer's contribution to your pension"). */
+export const PREMIUM_ROW = /\bpremiums?\b|\b(?:monthly|annual|yearly|quarterly|half[- ]yearly|weekly|fortnightly|total|modal|regular|single|first|renewal)\s+(?:subscriptions?|contributions?)\b|\b(?:subscriptions?|contributions?)\s*(?:payable|due|amount|paid|per\s+(?:month|year|annum))\b|\btakaful contributions?\b/i;
 export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t match to your documents.";
 export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 
@@ -979,7 +984,7 @@ function compute(r: ComputationRecord, sentence: string, ctx: Ctx, depth: number
       if (printed.some((p) => p != null) && !printed.includes(declared)) return { error: "an operand’s period is not the one its passage prints" };
       // A premium is a premium on its own row; a benefit never is.
       const row = passageRows(o.binding.passage).filter((x) => amountAppears(o.value, x)).join(" ") + " " + o.binding.benefit;
-      if ((o.role === "premium") !== /\bpremiums?\b/i.test(row)) return { error: "an operand’s role is not what its passage prints" };
+      if ((o.role === "premium") !== PREMIUM_ROW.test(row)) return { error: "an operand’s role is not what its passage prints" };
       subjects.add(o.binding.subjectId); roles.add(o.role); vals.push(o.value); periods.push(declared);
     } else if (o.user) {
       if (o.role !== "user") return { error: "the household’s own figure cannot be a policy figure" };

@@ -159,7 +159,8 @@ export function questionTopics(question: string): Topic[] {
     // A topic word inside a plan-naming phrase ("my car insurance", "her shield plan") only says which plan.
     const attribute = asked.some((t) => ["premium", "renewal", "cost_sharing", "excess", "rider", "ward", "dental", "maternity", "outpatient", "status"].includes(t.key));
     const planSpans = attribute ? PLAN_KINDS.flatMap((p) => [...question.matchAll(new RegExp(p.re.source, "gi"))].filter((m) => /\b(?:plan|policy|insurance|claims?|excess|premium)$/i.test(m[0]) || /^(?:eldershield|careshield|ilps?|invest-link|endowment)$/i.test(m[0])).map((m) => [m.index ?? 0, (m.index ?? 0) + m[0].replace(/\s+(?:excess|premium)$/i, "").length])) : [];
-    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (attribute && (t.key === "hospital" && /^(?:integrated )?shield$/i.test(m[0]) || t.key === "accident" && /^(?:pa|personal accident)$/i.test(m[0])) || /^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
+    // ("how much do we pay for insurance each month?": a phrase ending in "for" asks about what follows; it names no plan.)
+    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (attribute && (t.key === "hospital" && /^(?:integrated )?shield$/i.test(m[0]) || t.key === "accident" && /^(?:pa|personal accident)$/i.test(m[0])) || !/\b(?:for|of|on|towards?)\s*$/i.test(m[0]) && /^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
     const specific = asked.filter((t) => !namingOnly(t));
     if (specific.length) asked = specific;
   }
