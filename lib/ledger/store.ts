@@ -231,10 +231,12 @@ const ACCIDENT_EVENTS=new Set(["accidental_death","fracture","dismemberment","ac
 const PAID_PER_PERIOD=new Set<EventType>(["disability_income","hospital_daily_cash","icu_daily_cash","long_term_care"]);
 export function fixedPays(event:EventType,benefit:Pick<CatalogBenefit,"benefitName"|"quote"|"formulaValue">):PaysKind{
   const period=printedLinePeriod(benefit.benefitName,benefit.formulaValue)??printedLinePeriod(benefit.quote,benefit.formulaValue);
+  // Only a benefit paid per period by its nature takes a period (an allow-list): a death or accident sum printed beside
+  // a period word is no income, so it gives no figure rather than one paid per day (Critic #270 H1).
+  if(!PAID_PER_PERIOD.has(event))return period?"stated":"lump_sum";
   if(period==="day")return "per_day";
   if(period==="month")return "per_month";
-  if(period||PAID_PER_PERIOD.has(event))return "stated";
-  return "lump_sum";
+  return "stated";
 }
 /** The cover a ledger row's "percentage of the sum insured" applies to, or null when that cannot be told. */
 export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:string;detail:string|null;cause:string|null;note:string|null}){

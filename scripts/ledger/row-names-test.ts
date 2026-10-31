@@ -56,6 +56,7 @@ const plans: [string, string, string][] = [
   ["保额", "安心人寿定期寿险", "death"],
   ["Basic sum insured", "Kestrel Personal Accident Plan", "accidental_death"],
   ["Monthly benefit", "Larkfield Income Protection", "disability_income"],
+  ["Monthly benefit", "Income Protection Plan", "disability_income"],
   ["Monthly benefit", "CareShield Life", "long_term_care"],
   // No guess when the plan's name fits no kind, or more than one, or only a kind whose sum is not its main benefit
   ["Sum assured", "Teratai Family Takaful", "other"],
@@ -82,6 +83,11 @@ const pays: [string, string, string, number, string][] = [
   // A premium's period is not the cover's
   ["death", "Death", "Death\tS$500,000 (monthly premium S$50)", 500000, "lump_sum"],
   ["critical_illness", "Penyakit Kritis", "Penyakit Kritis\tRp 200.000.000", 200000000, "lump_sum"],
+  // Only a benefit paid per period by its nature takes a period (Critic #270 H1); "24 hours a day" is never one.
+  ["death", "死亡保险金", "死亡保险金 HK$1,000,000 每日24小时保障", 1000000, "lump_sum"],
+  ["accidental_death", "Accidental Death (24 hours a day)", "Accidental Death (24 hours a day) S$100,000", 100000, "lump_sum"],
+  ["death", "Death benefit", "Death benefit S$2,000 per month", 2000, "stated"],
+  ["other", "Monthly allowance", "Monthly allowance S$500", 500, "stated"],
 ];
 for (const [event, benefitName, quote, formulaValue, want] of pays)
   eq(`pays ${quote}`, fixedPays(event as never, { benefitName, quote, formulaValue } as never), want);
