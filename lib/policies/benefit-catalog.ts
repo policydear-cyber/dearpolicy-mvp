@@ -751,8 +751,21 @@ const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(
 const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
 const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
   +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
-/** PRINTS_AN_AMOUNT, with event thresholds taken out first. */
-const printsAnAmount=(text:string)=>PRINTS_AN_AMOUNT.test(text.replace(EVENT_THRESHOLD," "));
+/** PRINTS_AN_AMOUNT, with event thresholds taken out first. Only a threshold that comes before any share is taken out:
+ * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after
+ * a share qualifies that share ("50% of Sum Insured, but the amount we pay will not under any circumstances be higher
+ * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
+const SHARE_FIGURE=/\d\s?%|\bper\s?cent\b/iu;
+function withoutEventThresholds(text:string){
+  let out="",at=0;
+  for(const match of text.matchAll(EVENT_THRESHOLD)){
+    const before=text.slice(at,match.index);
+    if(SHARE_FIGURE.test(before))break;
+    out+=before+" ";at=match.index+match[0].length;
+  }
+  return out+text.slice(at);
+}
+const printsAnAmount=(text:string)=>PRINTS_AN_AMOUNT.test(withoutEventThresholds(text));
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *

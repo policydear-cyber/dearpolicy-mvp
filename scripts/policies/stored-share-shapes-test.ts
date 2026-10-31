@@ -95,6 +95,11 @@ const CAPPED: [string, number, string][] = [
   ["Benefit", 0.1, "10% of Sum Insured, which isn't more than 20% in total"],
   ["Benefit", 0.1, "10% of Sum Insured, which shall not be more than 20% in total"],
   ["Benefit", 0.02, "2% of the Sum Insured a month, paid for a period not longer than 24 months"],
+  // A comparative after the share qualifies the share, however far back its negation is (Critic R430).
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, but the amount we pay will not under any circumstances be higher than 25%"],
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, without being higher than 25%"],
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, reduced to 25% if the burn is smaller than 10%"],
+  ["Hospital", 0.01, "1 per cent of the Sum Insured for each day, for a stay longer than 3 days, but at no point more than 90 days"],
 ];
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
