@@ -19,6 +19,8 @@ import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from 
  * readable. */
 type Benefit={
   id:string;policyId:string;productName:string|null;benefitName:string;
+  /** Added after a name cut at its stored length: ")" or "…" (lib/policies/cut-name). */
+  nameSuffix?:string;
   formulaKind:"none"|"sum_insured"|"fixed"|"expense_cap"|"daily";formulaValue:number|null;
   currency:string|null;factKey:string|null;offsetDays:number|null;maximumDays:number|null;
   pays:string;sourcePage:number|null;quote:string;conditions:string[];
@@ -163,7 +165,7 @@ export default function BenefitsPage(){
             <small>{rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
-              <div className="benefit-head"><strong>{benefit.benefitName}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>
+              <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
                 {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
