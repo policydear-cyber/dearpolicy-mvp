@@ -85,12 +85,22 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
   t("shared policy: the spouse's line is kept", lines.length === 1, lines);
 }
 
-// A rejected row hides nothing; a row the household added (no policy) hides nothing; two lines of one kind from one policy are one.
+// A row the household added (no policy) hides nothing; two lines of one kind from one policy are one.
 {
   const p = "m-p";
-  const rows = [row({ familyMemberId: p, policyId: "pol-1", eventType: "travel_medical", status: "rejected" }), row({ familyMemberId: p, policyId: null, eventType: "travel_medical", origin: "person" })];
+  const rows = [row({ familyMemberId: p, policyId: null, eventType: "travel_medical", origin: "person" })];
   const lines = scheduleOnlyLines([line(p, "pol-1", "Travel"), line(p, "pol-1", "Travel", { sourcePage: 4 })], rows);
-  t("rejected row and own entry hide nothing; duplicate lines are one", lines.length === 1 && lines[0].sourcePage === 1, lines);
+  t("own entry hides nothing; duplicate lines are one", lines.length === 1 && lines[0].sourcePage === 1, lines);
+}
+// A row the household rejected (they said this plan doesn't pay it) is never brought back by the schedule line (Critic M1).
+{
+  const p = "m-r";
+  const rows = [row({ familyMemberId: p, policyId: "pol-ci", eventType: "critical_illness", status: "rejected" }), row({ familyMemberId: p, policyId: "pol-ci", eventType: "death" })];
+  const lines = scheduleOnlyLines([line(p, "pol-ci", "Critical Illness"), line(p, "pol-ci", "Death")], rows);
+  t("rejected CI row + CI line: no line comes back", lines.length === 0, lines);
+  t("rejected CI row + CI line: Family shows no CI", JSON.stringify(ledgerKindsByPerson(rows, lines)[p]) === JSON.stringify(["Death"]), ledgerKindsByPerson(rows, lines));
+  const other = scheduleOnlyLines([line(p, "pol-other", "Critical Illness")], rows);
+  t("a rejection on one policy never hides another policy's line", other.length === 1, other);
 }
 
 // SG household: a line makes a kind confirmed on Family even when the only row of that kind is a plan type's guess.

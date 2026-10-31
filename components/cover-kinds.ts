@@ -182,12 +182,14 @@ export const kindOfCategory = (category: string) => {
 /** A line of cover a schedule or certificate lists for a person (GET /api/ledger scheduleLines): confirmed and checked
  * against its page, the same lines Home's tiles count. */
 export type ScheduleLine = { familyMemberId: string; policyId: string; category: string; planName: string | null; insurer: string | null; sourcePage: number | null };
-/** The schedule lines Coverage rows don't already show: a line is left out only when the same person has a Coverage row
- * (not rejected) of the same kind from the same policy. A line with no amount, or an amount with no stated currency,
+/** The schedule lines Coverage rows don't already show: a line is left out when the same person has a Coverage row of
+ * the same kind from the same policy, shown or rejected. A line with no amount, or an amount with no stated currency,
  * never becomes a Coverage row (lib/ledger/store.ts scheduleSeeds), so without this a person Home lists as covered was
  * called uncovered on Family and Coverage (new-user walkthrough, 31 Oct). One line per person, policy and kind. */
 export function scheduleOnlyLines<L extends ScheduleLine>(lines: L[], rows: (KindRow & { familyMemberId: string; policyId: string | null })[]): L[] {
-  const shown = new Set(rows.filter((r) => r.status !== "rejected" && r.policyId).map((r) => `${r.familyMemberId}\u0000${r.policyId}\u0000${kindOfRow(r).id}`));
+  // A row the household rejected for that person, policy and kind is their word that the plan doesn't pay it: the line
+  // never brings it back (Critic M1 on #256).
+  const shown = new Set(rows.filter((r) => r.policyId).map((r) => `${r.familyMemberId}\u0000${r.policyId}\u0000${kindOfRow(r).id}`));
   const out: L[] = [];
   for (const l of lines) {
     const key = `${l.familyMemberId}\u0000${l.policyId}\u0000${kindOfCategory(l.category).id}`;

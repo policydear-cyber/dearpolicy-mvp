@@ -8,7 +8,7 @@ import { scheduleOnlyLines,type ScheduleLine } from "@/components/cover-kinds";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
-import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedgerRow,refreshLedgerOnOpen,seedLedger,sentPlanName,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
+import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedger,loadLedgerRow,refreshLedgerOnOpen,seedLedger,sentPlanName,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
 import { maskShownText } from "@/lib/chat/identity-numbers";
@@ -60,7 +60,11 @@ export async function GET(request:NextRequest){
     };
     const pending=await pendingDocumentCount(accountId);
     // Optional: the page works without it, as before.
-    const lines=scheduleOnlyLines((await scheduleLines(accountId).catch(()=>[])).filter(l=>!member||l.familyMemberId===member),rows)
+    // Rows the household rejected are left out of `rows` (loadLedger), yet a rejection is their word that the plan doesn't pay
+    // that kind: it keeps the schedule line out too (Critic M1 on #256). Without them, no line is sent (never cover the
+    // household said it doesn't have).
+    const rejected=await loadLedger(accountId).then(all=>all.filter(r=>r.status==="rejected").map(r=>({...r,eventLabel:EVENTS[r.eventType]?.label??r.eventType}))).catch(()=>null);
+    const lines=rejected==null?[]:scheduleOnlyLines((await scheduleLines(accountId).catch(()=>[])).filter(l=>!member||l.familyMemberId===member),[...rows,...rejected])
       .map(l=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
     return NextResponse.json({rows:shown,scheduleLines:lines,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       // documents: which document is waiting, being read, or failed and why.
