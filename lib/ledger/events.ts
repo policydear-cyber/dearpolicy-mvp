@@ -187,6 +187,8 @@ export const PRODUCT_DEFAULTS:{pattern:RegExp;exclude?:RegExp;events:{event:Even
    events:[{event:"long_term_care",pays:"per_month",note:"CareShield/ElderShield pays a monthly amount while the person cannot perform the required activities of daily living"}]},
   {pattern:/\b(?:medishield|integrated shield|shield plan|hospital(?:isation)? (?:plan|insurance)|medical (?:plan|insurance)|health insurance)\b/i,
    events:[{event:"hospital_medical_expense",pays:"stated",note:"a hospital plan reimburses eligible hospital bills subject to its deductible, co-insurance and limits"}]},
+  {pattern:/\b(?:income protection|disability income|income replacement|salary continuance)\b/i,
+   events:[{event:"disability_income",pays:"per_month",note:"an income protection plan pays a monthly income while the person cannot work, after its waiting period"}]},
   {pattern:/\b(?:hospital (?:cash|income)|daily cash)\b/i,
    events:[{event:"hospital_daily_cash",pays:"per_day",note:"a hospital cash plan pays a fixed amount per night in hospital"}]},
   {pattern:/\b(?:travel)\b/i,
@@ -216,10 +218,84 @@ export function rowFiguresDependOnPlan(text:string|null|undefined){
   return new RegExp(`${money}\\s+${money}|\\bnot covered\\s+${money}|${money}\\s+not covered\\b`,"i").test(t);
 }
 
-/** Maps a benefit-table row's own name to an event. */
-export function eventForBenefitName(name:string):{event:EventType;detail:string|null}{
-  const n=name.toLowerCase();
+/** Row names printed in other languages, glossed to the English words the rules below read ("Kanser Tahap Kritikal" is
+ * read as "cancer critical illness", "Kematian atau Hilang Upaya Menyeluruh dan Kekal" as "death ... total and permanent
+ * disability"). A closed list of whole phrases per language: Malay/Indonesian, Chinese, Spanish, Portuguese, French,
+ * German, Italian and Vietnamese (cross-page check, 31 Oct: a Malaysian takaful's every row landed on "Other benefit").
+ * A gloss is appended, never substituted, so a name's own words still decide too. */
+const B=String.raw`(?<![\p{L}\p{N}])`,E=String.raw`(?![\p{L}\p{N}])`;
+const GLOSSES:[string,string[],string[]][]=[
+  // [English words, whole-word phrases, Chinese/Japanese phrases matched anywhere]
+  ["death",["unfalltod","kematian","meninggal(?: dunia)?","muerte","fallecimiento","morte","óbito","obito","falecimento","décès","deces","todesfall","decesso","tử vong","tu vong"],["死亡","身故"]],
+  ["accident",["kemalangan","kecelakaan","accidente","acidente","accidentel(?:le)?","acidental","acidentais","unfall","unfalltod","infortunio","infortuni","tai nạn","tai nan"],["意外"]],
+  ["total and permanent disability",["hilang upaya (?:menyeluruh dan kekal|kekal dan menyeluruh)","cacat (?:tetap total|total (?:dan )?tetap)","invalidez (?:total|absoluta) y permanente",
+    "invalidez total e permanente","invalidité (?:totale et )?(?:définitive|permanente)(?: totale)?","invalidita totale e permanente","invalidità totale e permanente","thương tật toàn bộ (?:và )?vĩnh viễn"],["完全残疾","完全殘疾","全残","全殘","完全殘廢"]],
+  ["critical illness",["penyakit (?:kritikal|kritis)","enfermedad(?:es)? graves?","doenças? graves?","maladies? graves?","maladies? redoutées?","schwere(?:n)? krankheit(?:en)?","malattie? gravi","malattia grave","bệnh hiểm nghèo","benh hiem ngheo"],["重大疾病","重疾","危疾"]],
+  ["cancer",["kanser","kanker","cáncer","câncer","cancro","krebs","ung thư","ung thu"],["癌症"]],
+  ["heart attack",["serangan jantung","infarto(?: (?:de|do) miocárdio| de miocardio| agudo)?","crise cardiaque","herzinfarkt","nhồi máu cơ tim"],["心脏病发作","心臟病發作","心肌梗塞"]],
+  ["stroke",["strok","accidente cerebrovascular","derrame cerebral","acidente vascular cerebral","avc","schlaganfall","ictus","đột quỵ","dot quy"],["中风","中風"]],
+  ["early stage",["(?:tahap|peringkat) awal","etapa temprana","estágio inicial","fase inicial","stade précoce","frühstadium","stadio iniziale","giai đoạn sớm"],["早期"]],
+  ["intensive care",["unit rawatan rapi","rawatan rapi","perawatan intensif","cuidados intensivos","terapia intensiva","soins intensifs","intensivstation","terapia intensiva","hồi sức tích cực"],["重症监护","深切治疗","深切治療","加護病房"]],
+  ["per day",["sehari","per hari","harian","setiap hari","por día","por dia","diari[oa]s?","diári[oa]s?","par jour","journali(?:er|ère)s?","pro tag","täglich(?:e[nrs]?)?","tagegeld","krankenhaustagegeld","al giorno","giornalier[oa]","mỗi ngày","hằng ngày","hàng ngày"],["每日","每天","日額","日额"]],
+  ["hospital",["rawat inap","rawatan hospital","kemasukan hospital","hospitalización","hospitalizacion","internación","hospitalização","internação","krankenhaus","krankenhaustagegeld","ricovero","nằm viện"],["住院"]],
+  ["surgery",["pembedahan","operasi","cirugía","cirugia","cirurgia","chirurgie","chirurgia","phẫu thuật"],["手术","手術"]],
+  ["ambulance",["ambulans","ambulancia","ambulância","krankenwagen","rettungswagen","ambulanza","xe cứu thương"],["救护车","救護車"]],
+  ["medical expenses",["perbelanjaan perubatan","kos perubatan","biaya (?:pengobatan|medis|perawatan)","gastos médicos","despesas médicas","frais médicaux","behandlungskosten","spese mediche","chi phí y tế"],["医疗费用","醫療費用"]],
+  ["overseas",["luar negara","luar negeri","en el extranjero","no exterior","à l'étranger","im ausland","all'estero","ở nước ngoài"],["海外","境外"]],
+  ["fracture",["patah tulang","fractura","fratura","knochenbruch","fraktur","frattura","gãy xương"],["骨折"]],
+  ["dismemberment",["kehilangan anggota(?: badan)?","pérdida de miembros?","perda de membros?","perte de membres?","verlust von gliedmaßen","perdita di arti"],["断肢","斷肢"]],
+  ["disability income",["perlindungan pendapatan","pendapatan hilang upaya","renta por invalidez","renda por invalidez","rente d'invalidité","berufsunfähigkeitsrente","erwerbsunfähigkeitsrente","rendita (?:da|per) invalidità","thu nhập thương tật"],["收入保障","失能收入","残疾收入","殘疾收入"]],
+  ["long-term care",["(?:penjagaan|perawatan) jangka panjang","cuidados de larga duración","cuidados de longa duração","soins de longue durée","dépendance","pflegebedürftigkeit","pflegerente","assistenza a lungo termine","chăm sóc dài hạn"],["长期护理","長期護理"]],
+  ["maturity",["faedah matang","nilai matang","jatuh tempo","đáo hạn"],["满期","滿期"]],
+  ["baggage",["bagasi","equipaje","bagagem","bagages","gepäck","bagaglio","hành lý"],["行李"]],
+  ["delay",["kelewatan","penundaan","keterlambatan","retraso","atraso","retard","verspätung","ritardo","chậm trễ","trì hoãn"],["延误","延誤"]],
+  ["cancel",["pembatalan","cancelación","cancelamento","annulation","stornierung","rücktritt","annullamento","hủy chuyến"],["取消"]],
+  ["third party liability",["pihak ketiga","liabiliti","tanggung gugat","responsabilidad civil","responsabilidade civil","responsabilité civile","haftpflicht","responsabilità civile","trách nhiệm dân sự","bên thứ ba"],["第三者","第三方"]],
+];
+const GLOSS_PATTERNS=GLOSSES.map(([en,ws,cjk])=>[en,new RegExp(B+"(?:"+ws.map(w=>w.replace(/ /g,"\\s+")).join("|")+")"+E+(cjk.length?"|"+cjk.join("|"):""),"iu")] as const);
+export function glossedName(name:string):string{
+  const extra=GLOSS_PATTERNS.filter(([,re])=>re.test(name)).map(([en])=>en);
+  return extra.length?name+" ("+extra.join(", ")+")":name;
+}
+/** A row whose own name only says it is the policy's sum ("Sum assured", "Uang Pertanggungan", "Monthly benefit") names no
+ * event: what it pays is the plan's own main benefit, read from the plan's name when exactly one plan kind fits it. */
+const GENERIC_SUM=new RegExp(B+"(?:(?:basic |main )?(?:sum (?:assured|insured|covered)|face amount|benefit amount|amount (?:of cover|insured|assured)|cover amount|monthly (?:benefit|income)|benefit per month|"+
+  "jumlah (?:yang )?(?:diinsuranskan|dilindungi|perlindungan|takaful)|uang pertanggungan|nilai pertanggungan|suma asegurada|capital asegurado|capital segurado|importância segurada|"+
+  "capital assuré|somme assurée|versicherungssumme|somma assicurata|capitale assicurato|số tiền bảo hiểm))"+E+"|保额|保額|基本保额|基本保額","iu");
+const GENERIC_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|cover|amount|of|dan|and|y|e|et|und|\W)*$/iu;
+/** A plan's name glossed to the English words PRODUCT_DEFAULTS reads ("Proteksi Jiwa" is a life plan). */
+const PLAN_GLOSSES:[RegExp,string][]=[
+  [new RegExp(B+"(?:asuransi jiwa|proteksi jiwa|insurans hayat|takaful hayat|seguro de vida|seguro de vida inteira|assurance décès|lebensversicherung|risikolebensversicherung|assicurazione (?:sulla )?vita|bảo hiểm nhân thọ)"+E+"|人寿|人壽|寿险|壽險|定期寿险|終身壽險","iu"),"life insurance"],
+  [new RegExp(B+"(?:penyakit (?:kritikal|kritis)|enfermedades graves|doenças graves|maladies graves|schwere krankheiten|malattie gravi|bệnh hiểm nghèo)"+E+"|重大疾病|重疾|危疾","iu"),"critical illness"],
+  [new RegExp(B+"(?:kemalangan diri|kecelakaan diri|accidentes personales|acidentes pessoais|individuelle accident|unfallversicherung|infortuni|tai nạn cá nhân)"+E+"|意外伤害|意外傷害","iu"),"personal accident"],
+  [new RegExp(B+"(?:perlindungan pendapatan|renta por invalidez|renda por invalidez|berufsunfähigkeit(?:sversicherung)?|prévoyance invalidité)"+E+"|收入保障|失能收入","iu"),"income protection"],
+];
+function planEvent(productName:string|null|undefined):EventType|null{
+  if(!productName)return null;
+  const name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName)).map(([,en])=>en).join(" ");
+  // A plan naming two covers ("Life and Critical Illness Plan") does not say which one its sum is.
+  if(/\s(?:and|&|\+|with|plus|dan|y|e|et|und)\s/i.test(productName))return null;
+  const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
+  // Only a plan kind whose main benefit is its sum or its monthly income: an endowment's sum is not its maturity value.
+  const main=kinds.length===1?kinds[0].events[0]:null;
+  return main&&(main.pays==="lump_sum"||main.pays==="per_month")?main.event:null;
+}
+
+/** Maps a benefit-table row's own name to an event. A row whose name only says it is the plan's sum takes the plan's own
+ * main benefit from the plan's name (productName), when exactly one plan kind fits it. */
+export function eventForBenefitName(name:string,productName?:string|null):{event:EventType;detail:string|null}{
+  const own=eventForOwnName(name);
+  if(own.event!=="other"||THIRD_PARTY_LIABILITY.test(glossedName(name)))return own;
+  const m=GENERIC_SUM.exec(name);
+  if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length)))return own;
+  const event=planEvent(productName);
+  return event?{event,detail:null}:own;
+}
+function eventForOwnName(name:string):{event:EventType;detail:string|null}{
+  const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
+  // An income paid while unable to work is its own benefit, not the total and permanent disability lump sum.
+  if(/disability income|income (?:protection|replacement)|loss of income|salary continuance/.test(n))return {event:"disability_income",detail:name};
   const accident=/\baccident/.test(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
