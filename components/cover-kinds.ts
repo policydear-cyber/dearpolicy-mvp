@@ -85,14 +85,17 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   // current travel cover.
   const whole = personKinds(covers, rows);
   if (whole.get("Savings")?.current.length || whole.get("Investment")?.current.length) found.add("savings");
-  if (whole.get("Travel")?.current.length) found.add("travel");
+  // Travel is listed exactly when Home's rule finds a current trip: never for one that ended or whose dates were not read.
+  if (whole.get("Travel")?.current.length) found.add("travel"); else found.delete("travel");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
-/** Whole-policy cover a person held that has ended (a single trip whose printed period is over), in Home's words and by
- * its rule (personKinds): "Travel cover ended on 04/10/2026". Empty when a current one is held. */
+/** Whole-policy cover a person held that has ended (a single trip whose printed period is over), or a single trip whose
+ * dates were not read, in Home's words and by its rule (personKinds): "Travel cover ended on 04/10/2026", "Travel: trip
+ * dates not found". Empty when a current one is held. */
 export function endedKinds(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
-  return [...personKinds(covers, rows)].filter(([, e]) => !e.current.length && e.endedOn).map(([category, e]) => `${category} cover ended on ${e.endedOn}`);
+  return [...personKinds(covers, rows)].filter(([, e]) => !e.current.length && (e.undated.length || e.endedOn))
+    .map(([category, e]) => e.undated.length ? `${category}: trip dates not found` : `${category} cover ended on ${e.endedOn}`);
 }
 
 /** What each document was found to pay for (Documents page), for a household on the benefit table: the kinds of cover

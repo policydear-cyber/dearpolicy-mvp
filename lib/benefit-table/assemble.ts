@@ -107,7 +107,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null) });
+    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).

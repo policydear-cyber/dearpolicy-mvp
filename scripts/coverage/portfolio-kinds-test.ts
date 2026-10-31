@@ -43,6 +43,22 @@ for (const [name, want] of N) t(`plan name: ${name}`, planKindOfName(name) === w
 t("a rider is never a savings plan", planTypeOf({ product: "Maju Endowment Plan", cover: "Waiver of premium", riderOf: "Maju Endowment Plan" }, null) === null, null);
 t("the name decides before the pages", planTypeOf({ product: "Growth Investment-Linked Plan", cover: "Growth Investment-Linked Plan" }, { kind: "savings", page: 3, quote: "x" })?.kind === "investment", null);
 
+// Review findings (Critic R418, TE #213).
+t("non-savings term plan is not savings (TE F5)", planTypeOfPages(pg("This is a non-savings, term plan.")) === null, planTypeOfPages(pg("This is a non-savings, term plan.")));
+t("a health plan named Health Savings Plan is not savings (TE F2)", planKindOfName("Prairie Health Savings Plan") === null, null);
+const endowSentence = planTypeOfPages(pg("This is a regular premium participating endowment insurance policy."));
+t("a Shield plan never takes a cross-sell page's savings sentence (TE F2)", planTypeOf({ product: "Kestrel Shield Plan A", cover: "Kestrel Shield Plan A" }, endowSentence, { product: "Kestrel Shield Plan A", baseCovers: 1 }) === null, null);
+t("a second base plan in the pack takes no savings (Critic M2)", planTypeOf({ product: "Maju Term Guard", cover: "Maju Term Guard" }, endowSentence, { product: "Maju Endow 10", baseCovers: 2 }) === null, null);
+t("the pack's own base plan takes its sentence", planTypeOf({ product: "Maju Endow 10", cover: "Maju Endow 10", plan: "Maju Endow 10" }, endowSentence, { product: "Maju Endow 10", baseCovers: 3 })?.kind === "savings", null);
+t("an unlinked cover of the pack takes nothing (Critic M2)", planTypeOf({ product: "Maju Endow 10", cover: "Terminal Illness Benefit" }, endowSentence, { product: "Maju Endow 10", baseCovers: 3 }) === null, null);
+t("a rider named as one takes no savings from its plan's name (Critic M3)", planTypeOf({ product: "Great Endowment Plan", cover: "Great Endowment Term Rider" }, null) === null, null);
+t("a CI cover under an endowment product takes none (Critic M3)", planTypeOf({ product: "Great Endowment Plan", cover: "Critical Illness Benefit" }, null) === null, null);
+const rp = (benefit: string) => ({ benefit, section: null, pays: "words", figure: { kind: "none", why: "words" }, qualifier: null, fromDay: null, maxDays: null, conditions: [], product: "Cedar Life", cover: "Cedar Life", plan: null }) as never;
+for (const b of ["Critical illness rider premium: 12% of basic premium", "Accidental death rider premium: 5% of the basic premium", "Hospital cash rider premium 10% of the basic premium", "Total and permanent disability premium 3% of basic premium"])
+  t(`a rider premium line is on no tile (Critic M1, TE F1): ${b}`, ["Critical Illness", "Personal Accident", "Hospital Cash", "Total Permanent Disability", "Death"].every((c) => categoryRows(c, [rp(b)]).length === 0), null);
+const acc = lumpSumParts([], [{ name: "Group Term Life", documentIds: ["a"], amount: 500000, currency: "SGD" }, { name: "Accidental Death Benefit", documentIds: ["b"], amount: 300000, currency: "SGD" }, { name: "Maju Endow 10", documentIds: ["c"], amount: null, currency: "SGD" }], [], "Death");
+t("an accident-only sum is not called 'no fixed sum' (TE F4)", acc.known?.amount === 500000 && JSON.stringify(acc.known.without) === JSON.stringify(["Maju Endow 10"]) && JSON.stringify(acc.known.otherTile) === JSON.stringify(["Accidental Death Benefit"]), acc.known);
+
 // Through checkReading and assembleTable: the document's sentence reaches the person's cover, in three markets.
 const family: FamilyMember[] = [{ id: "p-ana", display_name: "Ana Reyes" }, { id: "p-ben", display_name: "Ben Okafor" }];
 for (const { m, sign, cur } of [{ m: "SG", sign: "S$", cur: "SGD" }, { m: "MY", sign: "RM", cur: "MYR" }, { m: "UK", sign: "£", cur: "GBP" }]) {
@@ -67,15 +83,19 @@ for (const { m, sign, cur } of [{ m: "SG", sign: "S$", cur: "SGD" }, { m: "MY", 
 
 // Travel by policy: current, ended, renewed, annual, and never a group scheme named after a hotel.
 type KC = Parameters<typeof personKinds>[0][number];
-const tc = (o: Partial<KC>): KC => ({ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, ended: null, ...o });
+const tc = (o: Partial<KC>): KC => ({ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", riderOf: null, ended: null, endDate: "20/11/2026", ...o });
 const k1 = personKinds([tc({})], []);
-t("current single trip is current Travel", JSON.stringify(k1.get("Travel")) === JSON.stringify({ current: ["Single Trip · Gold plan"], endedOn: null, note: null }), k1.get("Travel"));
+t("current single trip is current Travel", JSON.stringify(k1.get("Travel")) === JSON.stringify({ current: ["Single Trip · Gold plan"], endedOn: null, note: null, undated: [] }), k1.get("Travel"));
 const k2 = personKinds([tc({ ended: "04/10/2026" })], []);
 t("an ended trip gives its last day", k2.get("Travel")?.current.length === 0 && k2.get("Travel")?.endedOn === "04/10/2026", k2.get("Travel"));
 const k3 = personKinds([tc({ ended: "04/10/2026" }), tc({ ended: "12/09/2026" })], []);
 t("two ended trips give the later day (day first)", k3.get("Travel")?.endedOn === "04/10/2026", k3.get("Travel"));
 const k4 = personKinds([tc({ ended: "04/10/2026" }), tc({ plan: "Silver" })], []);
 t("a renewed trip beside an ended one is current", k4.get("Travel")?.current.length === 1 && k4.get("Travel")?.endedOn === null, k4.get("Travel"));
+const k5 = personKinds([tc({ endDate: null })], []);
+t("a single trip whose dates were not read is neither current nor ended", k5.get("Travel")?.current.length === 0 && !k5.get("Travel")?.endedOn && k5.get("Travel")?.undated.length === 1, k5.get("Travel"));
+t("a single trip dated by its document's period is current", personKinds([tc({ endDate: null, documentPeriodTo: "2026-12-01" })], []).get("Travel")?.current.length === 1, null);
+t("Family and Documents say the dates were not found", JSON.stringify(endedKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold" }])) === JSON.stringify(["Travel: trip dates not found"]), null);
 t("annual multi-trip with no end is current", personKinds([tc({ product: "Osprey Cover", cover: "Annual Multi-Trip", plan: null })], []).get("Travel")?.current.length === 1, null);
 t("a hotel's group scheme is not travel", !personKinds([tc({ product: "Holiday Inn Group Insurance", cover: "Group Term Life", plan: null })], []).has("Travel"), null);
 t("a life plan with a journey name is not travel", !personKinds([tc({ product: "Life Journey Saver", cover: "Life Journey Saver", plan: null })], []).has("Travel"), null);
