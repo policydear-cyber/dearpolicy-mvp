@@ -10,3 +10,14 @@ export function isOwnDocument(p: { personal_coverage_confirmed: boolean; documen
   // A welcome letter is a reference role for reading, but it is sent about the household's own policy.
   return !(p.document_role && p.document_role !== "welcome_letter" && REFERENCE_ROLES.has(p.document_role));
 }
+
+/** The card's badge, in the household's words and always agreeing with the filter the card sits under (isOwnDocument):
+ * a general document says "General wording"; one of their own never does, whatever the reading's stored label. */
+const GENERAL_LABELS = new Set(["Reference", "Contract wording", "Reference information", "Supporting document"]);
+export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { document_authority_label: string | null; linked_people: { source: string }[] }) {
+  if (!isOwnDocument(policy)) return "General wording";
+  const label = policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : null);
+  if (label === "Personal proof") return "Your own policy";
+  if (label && !GENERAL_LABELS.has(label)) return label;
+  return policy.linked_people.some((l) => l.source !== "scheme_reference_match") ? "Linked to your cover" : "Your document";
+}

@@ -4,7 +4,7 @@
  * Made-up rows only. Pure: no database, no network, no model.
  *   node --import tsx scripts/policies/document-filter-test.ts */
 import assert from "node:assert/strict";
-import { isOwnDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument } from "@/lib/policies/document-filter";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -40,5 +40,17 @@ test("a wording used only as matching wording for someone's plan is still Genera
   assert.ok(!isOwnDocument(doc({ document_role: "policy_wording", linked_people: schemeOnly })));
 });
 
+test("the badge always agrees with the filter the card sits under", () => {
+  const card = (o: Partial<Row> & { document_authority_label?: string | null }) => ({ document_authority_label: null, ...doc(o), ...o });
+  assert.equal(authorityLabel(card({ document_role: "brochure", document_authority_label: "Reference information" })), "General wording");
+  assert.equal(authorityLabel(card({ document_role: "policy_wording", document_authority_label: "Contract wording", linked_people: chosen })), "Linked to your cover");
+  assert.equal(authorityLabel(card({ document_role: "personal_schedule", personal_coverage_confirmed: true, document_authority_label: "Personal proof" })), "Your own policy");
+  assert.equal(authorityLabel(card({ document_role: "premium_receipt", document_authority_label: "Current account record" })), "Current account record");
+  assert.equal(authorityLabel(card({ document_role: null })), "Your document");
+  for (const role of ["policy_wording", "brochure", "premium_receipt", "personal_schedule", null]) for (const linked_people of [[], chosen, schemeOnly]) for (const label of [null, "Reference", "Contract wording", "Supporting document"]) {
+    const c = card({ document_role: role, linked_people, document_authority_label: label });
+    assert.equal(authorityLabel(c) === "General wording", !isOwnDocument(c), `${role}/${label}/${linked_people.map((l) => l.source)}`);
+  }
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`document-filter: ${passed} passed, fetches 0`);
