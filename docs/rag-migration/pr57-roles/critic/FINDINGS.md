@@ -10091,3 +10091,59 @@ Fix: one wording, "Account settings > People" for people, and either link the Co
 - Phone bar: Portfolio, Documents, Ask, Claims. More: Payments, Account settings.
 
 R420 — #213 04cc7f2: diff does not touch R418 M1-M3; still NOT READY.
+
+## R421/R425 — #215 07e7f65, e6f2743
+NOT READY. The fix frees the burns rows, but it re-opens word-only caps that main withholds. Probe: repairStoredRules on stored
+sum_insured 0.1 rows (made-up wording), PR vs main 16be49a:
+
+| quote tail after "10% of Sum Insured," | main | #215 |
+|---|---|---|
+| but never greater than the amount in force | none | **0.1** |
+| but the payout cannot be higher than the outstanding loan | none | **0.1** |
+| or the outstanding loan if smaller than that | none | **0.1** |
+| reduced where this is greater than the hospital bill | none | **0.1** |
+| and it isn't greater than the overall benefit | none | **0.1** |
+| but at no time higher than the amount shown | none | **0.1** |
+| so long as this is lower than the remaining sum insured | none | **0.1** |
+| or the actual charges if lower than that | none | **0.1** |
+| but shall not in any event be greater than the amount shown | none | **0.1** |
+| but this may not be greater than the amount shown | none | **0.1** |
+| Burns: Equals to or greater than 15% but less than 25% 30% | none | 0.1 (intended) |
+| not larger than / no higher than / not greater than / cannot exceed | none | none (OK) |
+| never more than the remaining balance, but less than the amount shown | 0.1 | 0.1 (old leaks) |
+
+Answering your question: yes, "than" introduces a payout cap whenever the thing compared is an amount ("the outstanding loan",
+"the hospital bill", "the actual charges", "the amount shown", "the remaining sum insured"). A negation list (no/not) cannot
+cover never, cannot, isn't, at no time, may not, shall not in any event, if smaller, so long as.
+
+## H1 Fix: allow-list the event-threshold shape instead of deny-listing negations
+Free a comparative only when what follows "than" is a measure of the event: a percentage or plain number with no money sign
+(`(?:equals?\s+to\s+or\s+)?(?:greater|more|higher|less|lower|smaller)\s+than\s+\d+(?:\.\d+)?\s*%`, optionally
+"... but less than N%"). Every other comparative + than stays an amount, so the unsure case shows no figure.
+Burns-table rows pass, and every cap above stays withheld. "if the bill is greater than the deductible" stays withheld (safe side).
+Add the table above to stored-share-shapes-test as must-withhold cases.
+
+## Note
+validateCatalogFormula (benefit-catalog.ts:819) still refuses greater/lower/less at intake, so only read-time repair changes.
+That is consistent.
+
+## R425 — re-gate at e6f2743
+The 10 R421 rows are now withheld. That part is fixed. New regression vs main (repairStoredRules, stored share row):
+| quote | main | e6f2743 |
+|---|---|---|
+| Major burns: 50% of Sum Insured, but not higher than 25% for children | none | **share** |
+| Major burns: 50% of Sum Insured, but no more than 25% if under 18 | none | **share** |
+| Major burns: 50% of Sum Insured, never higher than 25% | none | **share** |
+| 10% of Sum Insured, but not higher than 25% | none | **share** |
+EVENT_THRESHOLD is removed before the cap words are tested, so a negated comparative followed by a bare % (a cap on the share itself)
+is eaten, and even "no more than", which main lists, stops matching. Fix: test the cap phrases (no|not|never|cannot|n't|at no time|
+may not|shall not ... more/greater/higher/larger than) on the full text before EVENT_THRESHOLD is removed, or make EVENT_THRESHOLD
+refuse to match after a negation. Add these 4 rows as must-withhold cases.
+OK: burns band, "greater than 15% of body surface", "loss greater than 80 dB", "longer than 3 consecutive days" are freed;
+"% of the annual premium / of Sum Insured / of total benefits" stay withheld.
+
+## R422 — #216 883ad6b: READY (gate green; Low: no-separator one-word brands still split, e.g. eShield → e Shield).
+
+## R423 — #217 67ac4eb: NOT READY. M1 page numbers lost when other notes follow uncheckedPagesNote (ingest.ts:969); M2 'Read again checks those pages once more' overstates (whole re-read, same copy may disagree again); M3 delete old copy only after new one reads; L1 duplicate 'Not fully confirmed'.
+
+## R424 — #213 a4193da: READY (R418 M1-M3 fixed, own 104/0, gate green).
