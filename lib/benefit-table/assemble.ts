@@ -110,15 +110,19 @@ const money = (amount: number, currency: string | null) =>
   `${currency === "SGD" ? "S$" : currency ? currency + " " : "$"}${amount.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 /** Whom a printed name is when several family members share it: the one the household matched this printed name to on
- * this document, else the one of them this document is linked to by their own record. Nobody on record, or several,
+ * this document, else, between people with the very same name, the one of them this document is linked to by their own
+ * record. Nobody on record, or several,
  * gives the candidates (never a guess). A name nobody in the family has gives null. */
 function sharedNameMatch(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | { candidates: { id: string; name: string }[] } | null {
-  const candidates = familyNameCandidates(name, family);
+  const { members: candidates, exact } = familyNameCandidates(name, family);
   if (candidates.length < 2) return null;
   const key = nameKey(name);
   const printed = candidates.filter((m) => (m.printedAs ?? []).some((p) => p.documentId === documentId && nameKey(p.name) === key));
   if (printed.length === 1) return { member: printed[0] };
-  const linked = candidates.filter((m) => (m.documents ?? []).includes(documentId));
+  // A document link decides only between true namesakes. People whose different names each fit part of the printed name
+  // ("Wei Jie" and his son "Wei" for "Tan Wei Jie") are never told apart by it: the document may be linked to the son for
+  // his own cover while this line is the father's (Critic H1 on #254).
+  const linked = exact ? candidates.filter((m) => (m.documents ?? []).includes(documentId)) : [];
   if (linked.length === 1) return { member: linked[0] };
   return { candidates: candidates.map((m) => ({ id: m.id, name: m.display_name })) };
 }

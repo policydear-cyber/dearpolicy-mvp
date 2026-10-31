@@ -79,9 +79,28 @@ for (const x of markets) {
       benefits: [b({ section: "CERTIFICATE", benefit: "Main benefit", pays: "amount", value: 100000, quote: "Main benefit\tS$100,000" })] } as never);
   const tb = assembleTable([reading], [{ id: "a", display_name: "Wei Ling" }, { id: "b", display_name: "Tan Wei Ling" }], []);
   t("an exact name match still wins over a partial one", tb.people.find((p) => p.id === "b")!.covers.length === 1 && tb.ambiguousCovers.length === 0);
-  // Two partial fits and no exact one: decided by the document's link.
+  // Two partial fits and no exact one: a document link never decides (Critic H1 on #254); shown as undecided.
   const tb2 = assembleTable([reading], [{ id: "a", display_name: "Wei Ling" }, { id: "b", display_name: "Tan Ling", documents: [doc] }], []);
-  t("two partial fits are decided by the document's own link", tb2.people.find((p) => p.id === "b")!.covers.length === 1 && tb2.ambiguousCovers.length === 0);
+  t("two partial fits are never decided by a document link", tb2.people.every((p) => p.covers.length === 0) && tb2.ambiguousCovers.length === 1);
+}
+
+// Critic H1 on #254: people with DIFFERENT names that each fit part of the printed name (a father "Wei Jie" and his son
+// "Wei" for "Tan Wei Jie"; a mother "Mei Ling" and her daughter "Ling" for "Lim Mei Ling") are never told apart by a
+// document link: the document may be linked to the child for the child's own cover. Only the household's own match of this
+// printed name decides; otherwise the cover is shown as undecided.
+for (const [printedName, parent, child, ccy] of [["Tan Wei Jie", "Wei Jie", "Wei", "S$"], ["Lim Mei Ling", "Mei Ling", "Ling", "RM"]] as const) {
+  const doc = "aaaaaaaa-0000-0000-0000-0000000a00" + (printedName.length % 90 + 10);
+  const amount = `${ccy}200,000`;
+  const reading = checkReading({ id: doc, name: "family plan.pdf", readable: true, pages: [{ page: 1, text: `CERTIFICATE\nKestrel Family Life\nLife assured\t${printedName}\tSum assured ${amount}\nDeath benefit\t${amount}` }] },
+    { document: { kind: "personal_proof", product: "Kestrel Family Life", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+      covers: [{ person: printedName, product: "Kestrel Family Life", cover: "Term Life", plan: null, sumInsured: 200000, asOf: null, page: 1, quote: `Life assured\t${printedName}\tSum assured ${amount}` }],
+      benefits: [b({ section: "CERTIFICATE", benefit: "Death benefit", pays: "amount", value: 200000, quote: `Death benefit\t${amount}` })] } as never);
+  const links: SectionLink[] = [{ section: sectionKeyOf(doc, { section: "CERTIFICATE", column: null }), cover: coverKeyOf({ product: "Kestrel Family Life", cover: "Term Life", plan: null }), why: "the plan" }];
+  let tb = assembleTable([reading], [{ id: "p", display_name: parent }, { id: "c", display_name: child, documents: [doc] }], links);
+  t(`"${printedName}" with the document linked only to the child "${child}": the child never gets the parent's cover`, tb.people.find((p) => p.id === "c")!.covers.length === 0, tb.people.map((p) => [p.id, p.covers.length]));
+  t(`"${printedName}": shown as undecided between "${parent}" and "${child}"`, tb.ambiguousCovers.length === 1 && tb.ambiguousCovers[0].candidates.map((c) => c.id).sort().join() === "c,p", tb.ambiguousCovers);
+  tb = assembleTable([reading], [{ id: "p", display_name: parent, printedAs: [{ documentId: doc, name: printedName }] }, { id: "c", display_name: child, documents: [doc] }], links);
+  t(`"${printedName}": the household's own match of the printed name decides`, tb.people.find((p) => p.id === "p")!.covers.length === 1 && tb.people.find((p) => p.id === "c")!.covers.length === 0 && tb.ambiguousCovers.length === 0);
 }
 
 t("no outbound fetch", fetches === 0, fetches);

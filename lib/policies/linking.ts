@@ -47,18 +47,18 @@ export function findFamilyMatchWithKind<T extends FamilyCandidate>(name: string,
 }
 /** Everyone in the family a printed name could be, by the same rule as findFamilyMatchWithKind: every exact match, or
  * when none, every profile whose name words all appear in the printed name. Two or more means the name alone cannot
- * tell them apart (two people with one display name), and the caller decides by the document's own links, never by
- * guessing. */
-export function familyNameCandidates<T extends FamilyCandidate>(name: string, family: T[]): T[] {
+ * tell them apart; `exact` says they all carry the printed name itself (true namesakes), rather than each fitting part of
+ * it ("Wei Jie" and "Wei" for "Tan Wei Jie"). The caller decides by the household's own records, never by guessing. */
+export function familyNameCandidates<T extends FamilyCandidate>(name: string, family: T[]): { members: T[]; exact: boolean } {
   const normalized = normalizePersonName(name);
-  if (!normalized) return [];
+  if (!normalized) return { members: [], exact: false };
   const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
-  if (exact.length) return exact;
+  if (exact.length) return { members: exact, exact: true };
   const printed = new Set(normalized.split(" "));
-  return family.filter((member) => memberNames(member).some((n) => {
+  return { members: family.filter((member) => memberNames(member).some((n) => {
     const words = normalizePersonName(n).split(" ").filter((w) => w.length >= 2);
     return words.length > 0 && words.every((w) => printed.has(w));
-  }));
+  })), exact: false };
 }
 export function findFamilyMatch<T extends FamilyCandidate>(name: string, family: T[]): T | null {
   return findFamilyMatchWithKind(name, family)?.member ?? null;
