@@ -26,6 +26,7 @@ import { pool } from "@/lib/db/client";
 import { withServiceTransaction } from "@/lib/db/authz-client";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { enqueueStoragePurge } from "@/lib/storage/purge";
+import { DERIVED_SCRUB_ACTION } from "./derived-content-scrub";
 
 type Db = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number | null }> };
 
@@ -35,6 +36,13 @@ export const DELETED_FILENAME = "(deleted document)";
 const DELETED_STATES = ["soft_deleted", "permanently_deleted", "audit_tombstone"];
 /** How long a document may sit in pending_deletion before its deletion counts as finished anyway (a crashed request). */
 export const STUCK_PENDING_MINUTES = 60;
+/**
+ * A deleted document's content is scrubbed only once lib/lifecycle/derived-content-scrub.ts has finished with it (its
+ * done marker exists): that scrub reads the document's product name, plans and policy number to find chat text that
+ * names it, and this scrub clears them. If the derived scrub keeps failing, content goes anyway after this long, so a
+ * failure there never keeps deleted content on file.
+ */
+export const DERIVED_SCRUB_WAIT_MINUTES = 60;
 
 /**
  * Every table holding rows read from a document, with the column naming the document. Each is deleted for a scrubbed
@@ -128,8 +136,10 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
       `SELECT id::text AS id, account_id::text AS account_id, storage_key FROM policies
         WHERE lifecycle_state=ANY($1::text[]) AND original_filename<>$2 AND ($3::uuid[] IS NULL OR id=ANY($3::uuid[]))
+          AND (EXISTS (SELECT 1 FROM policy_document_audit_log a WHERE a.account_id=policies.account_id AND a.policy_id=policies.id AND a.action=$5)
+               OR updated_at < now() - make_interval(mins => $6::int))
         ORDER BY updated_at LIMIT $4`,
-      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
+      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25, DERIVED_SCRUB_ACTION, DERIVED_SCRUB_WAIT_MINUTES]);
     const tables = due.rows.length ? await existingTables(db) : new Set<string>();
     const scrubRow = due.rows.length ? await scrubPolicyRowSql(db) : "";
     for (const doc of due.rows) {

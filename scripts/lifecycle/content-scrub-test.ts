@@ -51,6 +51,9 @@ async function main() {
 
   const { requestPolicyDocumentDeletion, finishPolicyDocumentDeletion } = await import("@/lib/lifecycle/coordinator");
   const { scrubDeletedDocuments, DELETED_FILENAME } = await import("@/lib/lifecycle/content-scrub");
+  const { scrubDeletedDocumentDerivedContent } = await import("@/lib/lifecycle/derived-content-scrub");
+  // One request-drain pass, in the drain's order: what chat took from deleted documents first, then their content.
+  const drainPass = async (opts: Parameters<typeof scrubDeletedDocuments>[0] = {}) => { await scrubDeletedDocumentDerivedContent({ policyIds: opts.policyIds }); return scrubDeletedDocuments(opts); };
   const { drainStoragePurge } = await import("@/lib/storage/purge");
 
   // A made-up household: Rahman family, Kuala Lumpur.
@@ -142,16 +145,16 @@ async function main() {
     await q(`UPDATE deletion_requests SET lifecycle_state='soft_deleted' WHERE id=$1`, [req.deletionRequestId]);
     const calls: string[] = [];
     const down = { enabled: () => true, deletePassages: async (a: { policyId: string }) => { calls.push(a.policyId); throw new Error("index unavailable"); } };
-    const first = await scrubDeletedDocuments({ pinecone: down });
+    const first = await drainPass({ pinecone: down });
     assert.deepEqual(first.searchIndexPending, [travel.id]); assert.equal(first.scrubbed, 0);
     assert.equal(await contentCount(travel.id), 5, "content stays until its passages are gone, so the retry can find them");
     const up = { enabled: () => true, deletePassages: async (a: { accountId: string; policyId: string }) => { calls.push(a.policyId); assert.equal(a.accountId, accountId); } };
-    const second = await scrubDeletedDocuments({ pinecone: up });
+    const second = await drainPass({ pinecone: up });
     assert.equal(second.scrubbed, 1); assert.deepEqual(calls, [travel.id, travel.id]);
     assert.equal(await contentCount(travel.id), 0);
     await drainStoragePurge();
     assert.equal(await exists(fileOf(travel.key)), false);
-    assert.equal((await scrubDeletedDocuments({ pinecone: up })).scrubbed, 0, "a scrubbed document is never picked again");
+    assert.equal((await drainPass({ pinecone: up })).scrubbed, 0, "a scrubbed document is never picked again");
   });
 
   await t("a deletion that crashed half-way (stuck in pending_deletion over an hour) is finished by the next pass; a fresh one and active ones are not", async () => {
@@ -159,7 +162,7 @@ async function main() {
     const fresh = await upload(aisyah, { filename: "New-Card-Aisyah.pdf", insurer: "Sihat Takaful (fictitious)", product: "Kad Baru", policyNo: "SM-2", hash: "h-fresh", pages: ["Had tahunan RM200,000."], amount: 200000, currency: "MYR" });
     await q(`UPDATE policies SET lifecycle_state='pending_deletion', updated_at=now()-interval '2 hours' WHERE id=$1`, [stuck.id]);
     await q(`UPDATE policies SET lifecycle_state='pending_deletion' WHERE id=$1`, [fresh.id]);
-    const r = await scrubDeletedDocuments({ pinecone: { enabled: () => false, deletePassages: async () => { throw new Error("not called"); } } });
+    const r = await drainPass({ pinecone: { enabled: () => false, deletePassages: async () => { throw new Error("not called"); } } });
     assert.equal(r.scrubbed, 1);
     assert.equal(await contentCount(stuck.id), 0); assert.equal(await contentCount(fresh.id), 5, "a deletion still in progress is left to finish");
     assert.equal(await contentCount(home.id), 5, "an active document is never touched");
@@ -174,12 +177,24 @@ async function main() {
       await fn({ query: async (text: string, params: unknown[] = []) => { const res = await tx.query(text, params); return { rows: res.rows, rowCount: res.affectedRows ?? 0 }; } } as never);
       throw new Error("connection lost");
     }) as Promise<T>;
-    const r = await scrubDeletedDocuments({ policyIds: [doc.id], transaction: failing });
+    const r = await drainPass({ policyIds: [doc.id], transaction: failing });
     assert.equal(r.failed, 1); assert.equal(r.scrubbed, 0);
     assert.equal(await contentCount(doc.id), 5);
     assert.equal((await q<{ original_filename: string }>(`SELECT original_filename FROM policies WHERE id=$1`, [doc.id])).rows[0].original_filename, "Motor-Haziq.pdf");
-    assert.equal((await scrubDeletedDocuments({ policyIds: [doc.id] })).scrubbed, 1);
+    assert.equal((await drainPass({ policyIds: [doc.id] })).scrubbed, 1);
     assert.equal(await contentCount(doc.id), 0);
+  });
+
+  await t("content waits until chat's derived-content scrub has finished with the document (it reads the names this clears), or an hour at most", async () => {
+    const doc = await upload(aisyah, { filename: "Wait-Aisyah.pdf", insurer: "Sihat Takaful (fictitious)", product: "Kad Tunggu", policyNo: "SM-WAIT-3", hash: "h-wait", pages: ["Had tahunan RM90,000."], amount: 90000, currency: "MYR" });
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted', updated_at=now() WHERE id=$1`, [doc.id]);
+    const off = { enabled: () => false, deletePassages: async () => { throw new Error("not called"); } };
+    assert.equal((await scrubDeletedDocuments({ policyIds: [doc.id], pinecone: off })).scrubbed, 0, "not before the derived scrub's marker");
+    assert.equal(await contentCount(doc.id), 5);
+    assert.equal((await drainPass({ policyIds: [doc.id], pinecone: off })).scrubbed, 1, "right after it, in the same pass");
+    const late = await upload(aisyah, { filename: "Late-Aisyah.pdf", insurer: "Sihat Takaful (fictitious)", product: "Kad Lewat", policyNo: "SM-LATE-4", hash: "h-late", pages: ["Had tahunan RM80,000."], amount: 80000, currency: "MYR" });
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted', updated_at=now()-interval '61 minutes' WHERE id=$1`, [late.id]);
+    assert.equal((await scrubDeletedDocuments({ policyIds: [late.id], pinecone: off })).scrubbed, 1, "a derived scrub that never finishes holds content back an hour at most");
   });
 
   await t("the request drain and the daily job both run the scrub, so a failed cleanup is retried without anyone asking", async () => {
