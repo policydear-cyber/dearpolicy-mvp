@@ -6,7 +6,7 @@ import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
-import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,resolveStoredRules } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,namesOnlyAPlanCell,resolveStoredRules } from "@/lib/insurance/scale-limit";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -752,7 +752,9 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
  * way is held back, and a rule stated in a sentence is read from that
  * sentence. */
 export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)))
+  // A row named only by a plan's empty cell is dropped here too; the not-a-benefit shapes (readsAsNoBenefit) are hidden
+  // only on the Benefits page.
+  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)&&!namesOnlyAPlanCell(benefit.benefitName,benefit.quote)))
     .map(benefit=>{
       // A stored share whose passage also prints an amount is withheld when read, unless a person confirmed it.
       if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&PRINTS_AN_AMOUNT.test(normalText(benefit.quote??"")))
@@ -1088,8 +1090,46 @@ const JOINING_START=/^(?:and|or|but|only|of|the|to|for|with|by|in|on|at|percent|
 const JOINING_END=/(?:^|\s)(?:and|or|of|the|to|for|with|by|a|an|dan|atau|untuk)\s*$/u;
 const EMPTY_CELL=/^(?:n\/a|nil|not applicable|tba|tbc|as charged|-+|—)$/i;
 const MONEY_OR_FIGURE=/\((?:[a-z]|[ivx]{1,4})\)|\bN\/A\b|(?:\b(?:SGD|USD|MYR|GBP|RM)\s*|S\$|US\$|£|\$)?\s*\d[\d,.]*(?:%|st|nd|rd|th)?/giu;
-export function namesNoBenefit(benefitName:string){
+/** A stored row whose own words show it is not a benefit at all, read from a page of an investment-linked plan or a
+ * page's footer. Each is an allow-list of the whole row's shape, name and quote together, so a benefit that mentions a
+ * fund's value, a share or a page count is kept (Critic R393 H1, TE pr201 round 2):
+ * - a fund's charge: the name is a fund ("AIA Regional Fixed Income Fund") and the quote is that name, then only its
+ *   charge "0.85% (max 2.50%) p.a. of its Net Asset Value";
+ * - an asset-class row of a fund's mix: the name is an asset class other than cash or property (both are also benefits),
+ *   then only three or more percentages ("Fixed Income 65.0% 58.0% 72.0% 70.3%");
+ * - an illustration's footer: a known footer sentence with no figure, then only its page count and reference.
+ * Shown rows only: the Benefits route hides them, and claim answers and the ledger read the stored rows as before. */
+const FUND_NAME=/^(?!.*\b(?:bonus|benefit|payout|reward|pays?|payable|income\s+benefit)\b)[A-Za-z][\w&'().,\- ]{2,80}\bfund$/i;
+const FUND_CHARGE_TAIL=/^\d{1,2}(?:\.\d{1,2})?\s?%(?:\s*\((?:max(?:imum)?\.?\s*)?\d{1,2}(?:\.\d{1,2})?\s?%\))?\s+(?:p\.\s?a\.|per\s+annum|a\s+year)\s+of\s+(?:its|the)\s+(?:fund'?s?\s+)?(?:net\s+asset\s+value|NAV)\.?$/i;
+const ASSET_CLASS=/^(?:fixed\s+income|equit(?:y|ies)|bonds?|money\s+market|alternatives?)$/i;
+const FOOTER_NAME=/^(?:this\s+(?:policy\s+)?illustra\S{0,3}on\s+is\s+only\s+valid\s+when\s+all\s+(?:the\s+)?pages\s+are\s+included|(?:this\s+(?:illustration|document|summary)\s+is\s+)?for\s+illustration\s+(?:purposes\s+)?only)\.?$/i;
+const FOOTER_TAIL=/^page\s+\d{1,3}\s+of\s+\d{1,3}(?:\s+reference\s+(?:number|no\.?)\s*:?\s*[A-Za-z0-9_\-/]+)?$/i;
+function readsAsNoBenefit(name:string,quote:string){
+  const n=name.replace(/\s+/g," ").trim(),q=quote.replace(/\s+/g," ").trim();
+  if(!q.startsWith(n))return false;
+  const rest=q.slice(n.length).trim();
+  if(FUND_NAME.test(n)&&FUND_CHARGE_TAIL.test(rest))return true;
+  if(ASSET_CLASS.test(n)&&/^(?:\d{1,3}(?:\.\d+)?\s?%\s*){3,}$/.test(rest))return true;
+  return FOOTER_NAME.test(n)&&FOOTER_TAIL.test(rest);
+}
+/** A schedule's cover line, its sum assured with the dates it runs between ("DOUBLE CRITICAL COVER 2217S $100,000.00
+ * 21 Sep 2020 21 Sep 2092", optionally its premium and term after), stored with no rule of what a claim pays: the sum is
+ * the cover itself, already on the Coverage page. A row stored with a formula is what a claim pays and is kept (Critic
+ * R395 H2). Benefits route display only. */
+const COVER_DATE=String.raw`(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})`;
+const COVER_MONEY=String.raw`(?:S\$|SGD\s?|US\$|RM\s?|£|\$)\s?\d[\d,]*(?:\.\d{2})?`;
+const COVER_LINE_TAIL=new RegExp(String.raw`^\s*${COVER_MONEY}\s+${COVER_DATE}\s+${COVER_DATE}(?:\s+${COVER_MONEY}(?:\s+\d{1,3})?)?\s*$`,"i");
+export function isRulelessCoverLine(row:{benefitName:string;quote:string|null;formulaKind:string|null;formulaValue:unknown}):boolean{
+  if(row.formulaKind&&row.formulaKind!=="none")return false;
+  if(row.formulaValue!=null&&row.formulaValue!=="")return false;
+  const n=row.benefitName.replace(/\s+/g," ").trim(),q=String(row.quote??"").replace(/\s+/g," ").trim();
+  return !!n&&q.startsWith(n)&&COVER_LINE_TAIL.test(q.slice(n.length));
+}
+/** namesNoBenefit, plus (with the quote) a row named only by a plan's empty cell or one whose shape reads as no
+ * benefit (readsAsNoBenefit). The Benefits route's display filter. */
+export function namesNoBenefit(benefitName:string,quote?:string|null){
   const name=(benefitName??"").trim();
+  if(quote!=null&&(namesOnlyAPlanCell(name,quote)||readsAsNoBenefit(name,quote)))return true;
   if(EMPTY_CELL.test(name.replace(/[.:]+$/,"").trim()))return true;
   const words=name.replace(MONEY_OR_FIGURE," ").replace(/\b(?:nd|rd|st|th)\b/giu," ");
   const hasWord=/\p{L}{3}/u.test(words)||/\p{Script=Han}/u.test(words)||/(?:(?!\p{Script=Latin})\p{L}){2}/u.test(words)||/(?:^|[^\p{L}])\p{Lu}{2,}(?:[&/]\p{Lu}+)*(?![\p{Ll}])/u.test(words)||/\p{Lu}&\p{Lu}/u.test(words);

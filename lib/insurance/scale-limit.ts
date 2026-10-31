@@ -296,6 +296,17 @@ export function figuresDifferByPlan(quote:string|null|undefined):boolean{
   for(const run of String(quote??"").match(BARE_ROW)??[])if(new Set(run.split(/\s+/).map(v=>v.replace(/\.00$/,""))).size>1)return true;
   return false;
 }
+/** A "benefit" whose name is only a plan's empty cell ("Not covered", "N/A") and whose quote begins with that name
+ * followed by the other plans' cells ("Not covered S$500 S$1,000"): the reader took the first cell of a plan-table row
+ * as its name, so the row's own name is lost and it names nothing. A name like this with any other quote is kept. */
+export function namesOnlyAPlanCell(name:string|null|undefined,quote:string|null|undefined):boolean{
+  const n=spaced(String(name??"")).replace(/[.:]+$/,"");
+  if(!n||!new RegExp(`^${NONE_CELL}$`).test(n))return false;
+  const q=spaced(String(quote??""));
+  if(!q.startsWith(n))return false;
+  const runs=q.match(PLAN_ROW)??[];
+  return runs.length===1&&runs[0]===q;
+}
 export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&benefit.formulaKind!=="none"&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
     ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}

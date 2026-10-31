@@ -49,3 +49,79 @@ test("stored rules with such names are left out of what the Benefits page and ch
   const kept = repairStoredRules([row("1", "2027", 717), row("2", "only", 100), row("3", "Kidney dialysis", 1000), row("4", "nd", null), row("5", "and Merdeka", 448.23)]);
   assert.deepEqual(kept.map((b) => b.benefitName), ["Kidney dialysis"]);
 });
+
+test("a plan's empty cell read as the name of its row names nothing; the same words with any other quote are kept", async () => {
+  const { namesNoBenefit } = await import("@/lib/policies/benefit-catalog");
+  const { namesOnlyAPlanCell } = await import("@/lib/insurance/scale-limit");
+  for (const [name, quote] of [["Not covered", "Not covered S$500 S$1,000"], ["Not covered", "Not covered\tS$500\tS$1,000"], ["N/A", "N/A RM 300 RM 500"],
+    ["Not applicable", "Not applicable £1,000 £1,500"], ["Nil", "Nil S$100 per day S$200 per day"], ["Not covered.", "Not covered S$500 S$1,000"],
+    ["Tidak dilindungi", "Tidak dilindungi RM300 RM500"], ["Excluded", "Excluded S$500"]]) {
+    assert.equal(namesOnlyAPlanCell(name, quote), true, quote);
+    assert.equal(namesNoBenefit(name, quote), true, quote);
+  }
+  // A heading over what a policy does not pay, a sentence, a row with its own words, a single cell, or no quote: kept.
+  for (const [name, quote] of [["Not covered", "Not covered: pre-existing conditions, cosmetic surgery"], ["Not covered", "Not covered S$500 S$1,000 if you travel against advice"],
+    ["Not covered", "Mobility aids Not covered S$500 S$1,000"], ["Not covered", "Not covered"], ["Not covered", null], ["Not covered", "S$500 S$1,000"],
+    ["Overall limit^", "Overall limit^ S$300 S$800 S$1,500"], ["Mobility aids", "Not covered S$500 S$1,000"]] as [string, string | null][]) {
+    assert.equal(namesOnlyAPlanCell(name, quote), false, String(quote));
+    if (quote != null) assert.equal(namesNoBenefit(name, quote), false, quote);
+  }
+  assert.equal(namesNoBenefit("Not covered"), false, "with no quote the name is kept, as before");
+});
+
+test("a fund's charge, a fund's asset mix and an illustration's footer are not benefits; real benefits with the same words are kept", async () => {
+  const { namesNoBenefit } = await import("@/lib/policies/benefit-catalog");
+  for (const [name, quote] of [
+    ["Example Regional Bond Fund", "Example Regional Bond Fund 0.85% (max 2.50%) p.a. of its Net Asset Value"],
+    ["Global Equity Fund", "Global Equity Fund 1.5% per annum of the fund's NAV"],
+    ["Fixed Income", "Fixed Income 65.0% 58.0% 72.0% 70.3%"], ["Equities", "Equities 35% 42% 40%"],
+    ["This illustration is only valid when all pages are included.", "This illustration is only valid when all pages are included. Page 2 of 14 Reference Number: X-1"],
+    ["This illustra)on is only valid when all pages are included.", "This illustra)on is only valid when all pages are included. Page 2 of 14"],
+    ["For illustration purposes only.", "For illustration purposes only. Page 3 of 9"],
+  ]) assert.equal(namesNoBenefit(name, quote), true, quote);
+  for (const [name, quote] of [
+    // A benefit paid as a share of the fund, a cash benefit, a fund's own benefit, and sentences with no page count: kept.
+    ["Death Benefit", "Death Benefit: 105% of the value of units in the fund"], ["Cash", "Cash benefit S$5,000"], ["Cash", "Cash 5% of sum assured"],
+    ["Fixed Income", "Fixed Income benefit S$200 a month"], ["Monthly Income", "Monthly Income 5% 5%"],
+    ["This benefit pays a lump sum.", "This benefit pays a lump sum. S$10,000"], ["Note", "Note Page 2 of 14"],
+    ["Hospital Cash", "Hospital Cash S$100 a day, Page 2 of 14"], ["Equities", "Equities 35%"],
+    // A benefit with one date, a benefit paid between dates in words, a cover line with other words after it: kept.
+    ["Maturity Benefit", "Maturity Benefit $100,000.00 21 Sep 2092"], ["Death Benefit", "Death Benefit $100,000.00 from 21 Sep 2020 to 21 Sep 2092"],
+    ["Example Rider", "Example Rider $100,000.00 21 Sep 2020 21 Sep 2092 payable on diagnosis"],
+    // Real benefits that mention a fund's value, a share or a page count (Critic R393 H1, TE pr201 FK1-FK13).
+    ["Loyalty Bonus", "Loyalty Bonus of 0.50% p.a. of the Net Asset Value of your policy, paid yearly from year 10"],
+    ["Welcome bonus", "Welcome bonus of 1% per annum of the fund's NAV for the first 5 years"],
+    ["Death Benefit", "Death Benefit: higher of 105% of premiums paid or the Net Asset Value; a charge of 1% p.a. of the NAV applies"],
+    ["Income benefit", "Income benefit 3% p.a. of the NAV of units held, paid monthly"], ["Loyalty Bonus Fund", "Loyalty Bonus Fund 0.5% p.a. of the NAV"],
+    ["This rider pays 100% of the sum assured on diagnosis.", "This rider pays 100% of the sum assured on diagnosis. Page 2 of 14"],
+    ["Please note the hospital cash benefit is S$200 per day.", "Please note the hospital cash benefit is S$200 per day. Page 3 of 10"],
+    ["This benefit pays S$100 for each day in hospital.", "This benefit pays S$100 for each day in hospital. Page 3 of 10"],
+    ["This illustration is only valid when all pages are included.", "This illustration is only valid when all pages are included. Page 2 of 14 Hospital cash S$100 per day"],
+    ["Please read this together with your policy contract.", "Please read this together with your policy contract. Page 3 of 9"],
+    ["Cash", "Cash 10% 20%"], ["Cash", "Cash 5.0% 3.5% 4.0%"], ["Property", "Property 10% 20% 30%"], ["Equities", "Equities 35% 42%"],
+  ]) assert.equal(namesNoBenefit(name, quote), false, quote);
+});
+
+test("a schedule's cover line stored with no rule is hidden on the Benefits page only; one stored with a rule is kept", async () => {
+  const { isRulelessCoverLine, repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  const none = { formulaKind: "none", formulaValue: null };
+  for (const [benefitName, quote] of [
+    ["EXAMPLE CRITICAL COVER 1234X", "EXAMPLE CRITICAL COVER 1234X $100,000.00 21 Sep 2020 21 Sep 2092"],
+    ["EXAMPLE LIFE PLAN ---", "EXAMPLE LIFE PLAN --- $100,000.00 21 Sep 2020 21 Sep 2092 $200.00 72"],
+    ["Example Rider", "Example Rider S$50,000 01/03/2021 01/03/2041"], ["Example Rider", "Example Rider RM 50,000 1 March 2021 1 March 2041 RM 120.00"],
+  ]) assert.equal(isRulelessCoverLine({ benefitName, quote, ...none }), true, quote);
+  // A cover line stored with a fixed formula is what a claim pays (Critic R395 H2).
+  for (const [benefitName, quote] of [["Accidental Death Benefit", "Accidental Death Benefit S$200,000 01/01/2020 01/01/2060"],
+    ["Hospital Cash", "Hospital Cash S$200 01 Jan 2024 31 Dec 2024"], ["Death", "Death $500,000.00 21 Sep 2020 21 Sep 2092 $1,234.50 72"]])
+    assert.equal(isRulelessCoverLine({ benefitName, quote, formulaKind: "fixed", formulaValue: "200000" }), false, quote);
+  assert.equal(isRulelessCoverLine({ benefitName: "Maturity Benefit", quote: "Maturity Benefit $100,000.00 21 Sep 2092", ...none }), false);
+  // Claim answers and the ledger read the stored rows: repairStoredRules keeps the cover line, the fund charge and the footer.
+  const base = { id: "", policyId: "p", productName: null, traits: [], formulaKind: "none", formulaValue: null, currency: null, factKey: null, offsetDays: null,
+    maximumDays: null, conditions: [], needsReview: false, basisInferred: false, sourcePage: 1 };
+  const kept = repairStoredRules([
+    { ...base, id: "a", benefitName: "Accidental Death Benefit", quote: "Accidental Death Benefit S$200,000 01/01/2020 01/01/2060", formulaKind: "fixed", formulaValue: 200000, currency: "SGD" },
+    { ...base, id: "b", benefitName: "Example Regional Bond Fund", quote: "Example Regional Bond Fund 0.85% (max 2.50%) p.a. of its Net Asset Value" },
+    { ...base, id: "c", benefitName: "Not covered", quote: "Not covered S$500 S$1,000" },
+  ] as never).map((b) => b.id);
+  assert.deepEqual(kept.sort(), ["a", "b"]);
+});
