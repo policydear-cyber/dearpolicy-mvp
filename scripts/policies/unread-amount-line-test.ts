@@ -125,3 +125,10 @@ test("a second payment, an addition or a change next to a reason keeps 'could no
     "We waive future premiums or pay the CI benefit.", "Advance payment of the death benefit, or the ADB Benefit is paid.",
   ]) assert.match(unreadAmountLine(3, q), /could not be read|describes this in words/, q);
 });
+
+test("a waiver never takes another payout as itself, and 'or (b)' lists another payout (Critic R469)", async () => {
+  const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
+  for (const q of ["Premium waiver; it is paid as the TPD Benefit.", "We waive future premiums and this benefit is paid within 30 days."])
+    assert.doesNotMatch(unreadAmountLine(7, q), /waives future premiums/, q);
+  assert.doesNotMatch(unreadAmountLine(7, "We pay the death benefit in advance, or (b) the ADB Benefit."), /in advance from the death benefit/);
+});
