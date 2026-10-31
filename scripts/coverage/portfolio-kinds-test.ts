@@ -95,7 +95,9 @@ t("a renewed trip beside an ended one is current", k4.get("Travel")?.current.len
 const k5 = personKinds([tc({ endDate: null })], []);
 t("a single trip whose dates were not read is neither current nor ended", k5.get("Travel")?.current.length === 0 && !k5.get("Travel")?.endedOn && k5.get("Travel")?.undated.length === 1, k5.get("Travel"));
 t("a single trip dated by its document's period is current", personKinds([tc({ endDate: null, documentPeriodTo: "2026-12-01" })], []).get("Travel")?.current.length === 1, null);
-t("Family and Documents say the dates were not found", JSON.stringify(endedKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold" }])) === JSON.stringify(["Travel: trip dates not found"]), null);
+t("Family and Documents say the dates were not found", JSON.stringify(endedKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", endDate: null, documentPeriodTo: null }])) === JSON.stringify(["Travel: trip dates not found"]), null);
+t("a cover sent without date fields (older callers) is current, as before", personKinds([{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold" }], []).get("Travel")?.current.length === 1, null);
+t("a row cannot say its dates were not read: an unmatched single trip's row is current unless it ended", personKinds([], [{ product: "Kestrel Travel Insurance", cover: "Single Trip", plan: "Gold", pays: "up_to", coverEnded: null }]).get("Travel")?.current.length === 1, null);
 t("annual multi-trip with no end is current", personKinds([tc({ product: "Osprey Cover", cover: "Annual Multi-Trip", plan: null })], []).get("Travel")?.current.length === 1, null);
 t("a hotel's group scheme is not travel", !personKinds([tc({ product: "Holiday Inn Group Insurance", cover: "Group Term Life", plan: null })], []).has("Travel"), null);
 t("a life plan with a journey name is not travel", !personKinds([tc({ product: "Life Journey Saver", cover: "Life Journey Saver", plan: null })], []).has("Travel"), null);

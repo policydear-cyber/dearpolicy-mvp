@@ -140,7 +140,8 @@ type KindCover = CoverNames & { coverKey?: string; riderOf?: string | null; ende
 type KindRow = CoverNames & { coverKey?: string; pays: string; coverEnded?: string | null };
 /** A single trip is current only while its printed term runs: one whose last day was not read may be long over, so it is
  * neither current nor ended, and Home says its dates were not found (TE #213 F3). An annual or multi-trip plan has no such
- * short term and stays current. */
+ * short term and stays current. Only a cover that carries its date fields (endDate, documentPeriodTo) can say its dates
+ * were not read: a row, or a cover from a caller that sends no dates, has no way to tell, and is listed as before. */
 const SINGLE_TRIP = /\bsingle[\s-]*trips?\b/i;
 export function personKinds(covers: KindCover[], rows: KindRow[]): Map<string, KindEntry> {
   const out = new Map<string, KindEntry>();
@@ -155,7 +156,8 @@ export function personKinds(covers: KindCover[], rows: KindRow[]): Map<string, K
   const single = (c: CoverNames) => SINGLE_TRIP.test([c.cover, c.plan, c.product].filter(Boolean).join(" "));
   for (const c of covers) {
     if (!c.riderOf && travelName(c)) {
-      if (!c.ended && single(c) && printedDay(c.endDate ?? c.documentPeriodTo ?? null) == null) undated(travelLabel(c));
+      const dated = c.endDate !== undefined || c.documentPeriodTo !== undefined;
+      if (!c.ended && dated && single(c) && printedDay(c.endDate ?? c.documentPeriodTo ?? null) == null) undated(travelLabel(c));
       else add("Travel", travelLabel(c), c.ended ?? null);
     }
     const kind = c.planType?.kind;
@@ -168,7 +170,7 @@ export function personKinds(covers: KindCover[], rows: KindRow[]): Map<string, K
   const held = new Set(covers.map((c) => c.coverKey).filter(Boolean));
   for (const r of rows) {
     if (!travelName(r) || r.pays === "not_covered" || r.pays === "value" || (r.coverKey && held.has(r.coverKey))) continue;
-    if (!r.coverEnded && single(r)) undated(travelLabel(r)); else add("Travel", travelLabel(r), r.coverEnded ?? null);
+    add("Travel", travelLabel(r), r.coverEnded ?? null);
   }
   // A policy with one current cover is current, whatever an older trip of the same name did.
   for (const e of out.values()) if (e.current.length) { e.endedOn = null; e.undated = []; }

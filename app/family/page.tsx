@@ -143,7 +143,7 @@ export default function FamilyPage() {
               <div className="profile-glance">
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
                 {kinds[member.id]?.length ? <p><b>Covered for</b> {kinds[member.id].join(" · ")}. <a className="text-link" href={`/ledger?member=${member.id}`}>See {baseline[member.id]?.display_name ?? member.display_name}&rsquo;s cover →</a></p>
-                  : member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
+                  : member.policy_count ? <p>{ended[member.id]?.length ? "No current cover found in your uploaded documents." : "Nothing found in your uploaded documents for them yet."} <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
                 {ended[member.id]?.length ? <p className="muted">{ended[member.id].join(" · ")}.</p> : null}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>

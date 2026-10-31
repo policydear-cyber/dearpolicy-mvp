@@ -35,7 +35,8 @@ export const kindOfName = (name: string) => {
 
 /** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
 export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; plan?: string | null; coverEnded?: string | null };
-export type TableKindCover = { product: string; cover: string; plan?: string | null; riderOf?: string | null; ended?: string | null; planType?: PlanType | null };
+export type TableKindCover = { product: string; cover: string; plan?: string | null; riderOf?: string | null; ended?: string | null; planType?: PlanType | null;
+  endDate?: string | null; documentPeriodTo?: string | null };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
  * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
@@ -85,8 +86,9 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   // current travel cover.
   const whole = personKinds(covers, rows);
   if (whole.get("Savings")?.current.length || whole.get("Investment")?.current.length) found.add("savings");
-  // Travel is listed exactly when Home's rule finds a current trip: never for one that ended or whose dates were not read.
-  if (whole.get("Travel")?.current.length) found.add("travel"); else found.delete("travel");
+  // Travel as Home's rule finds it: listed for a current trip, never for one that ended or whose dates were not read.
+  const travel = whole.get("Travel");
+  if (travel?.current.length) found.add("travel"); else if (travel) found.delete("travel");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 
