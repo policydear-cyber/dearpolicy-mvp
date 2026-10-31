@@ -4,9 +4,10 @@ import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { documentName } from "@/lib/policies/document-name";
 import { scheduleOnlyLines,type ScheduleLine } from "@/components/cover-kinds";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { EVENTS,PRODUCT_DEFAULTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
 import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedger,loadLedgerRow,refreshLedgerOnOpen,seedLedger,sentPlanName,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -28,8 +29,16 @@ function family(accountId:string){
  * (app/api/dashboard: confirmed, checked against the page, on an active and trusted policy). Coverage rows are seeded only
  * from a line with an amount and a stated currency, so a line without one is shown from here (scheduleOnlyLines). No
  * amount is sent: a line's figure has no stated basis (per month, per day, or a sum) on this path. */
-async function scheduleLines(accountId:string){
-  return (await query<ScheduleLine>(`SELECT pc.family_member_id::text AS "familyMemberId",p.id::text AS "policyId",pc.category,coalesce(pc.product_name,p.product_name) AS "planName",p.insurer,pc.source_page AS "sourcePage" FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} JOIN family_members f ON f.id=pc.family_member_id AND f.account_id=pc.account_id AND ${activePredicate("f")} WHERE pc.account_id=$1 AND pc.confirmed=true AND pc.evidence_verified=true ORDER BY p.created_at,pc.created_at`,[accountId])).rows;
+async function scheduleLines(accountId:string):Promise<ScheduleLine[]>{
+  const r=await query<ScheduleLine&{lineProduct:string|null;policyProduct:string|null;original_filename:string;document_role:string|null;policy_number:string|null}>(`SELECT pc.family_member_id::text AS "familyMemberId",p.id::text AS "policyId",pc.category,coalesce(pc.product_name,p.product_name) AS "planName",p.insurer,pc.source_page AS "sourcePage",pc.product_name AS "lineProduct",p.product_name AS "policyProduct",p.original_filename,p.document_role::text,p.policy_number FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} JOIN family_members f ON f.id=pc.family_member_id AND f.account_id=pc.account_id AND ${activePredicate("f")} WHERE pc.account_id=$1 AND pc.confirmed=true AND pc.evidence_verified=true ORDER BY p.created_at,pc.created_at`,[accountId]);
+  // The events a line would seed, by the rule seeding uses (lib/ledger/store.ts scheduleSeeds: category, the line's own
+  // product name and the document's name), so a rejection of all of them keeps any printed wording's line out (TE F2 on #256).
+  return r.rows.map(({lineProduct,policyProduct,original_filename,document_role,policy_number,...line})=>{
+    const doc=documentName({product_name:policyProduct,original_filename,insurer:line.insurer,document_role,policy_number});
+    const name=`${line.category} ${lineProduct??""} ${doc}`.trim();
+    const seeds=PRODUCT_DEFAULTS.find(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
+    return {...line,events:seeds?seeds.events.map(e=>e.event):null};
+  });
 }
 /** A row as the page shows it, with ID numbers masked as on every other screen (a short plan a person named after a file
  * can carry one: TE pr187 a). Row ids are kept. */
@@ -65,7 +74,7 @@ export async function GET(request:NextRequest){
     // no line is sent (never cover the household said it doesn't have).
     const rejected=await loadLedger(accountId).then(all=>all.filter(r=>r.status==="rejected").map(r=>({...r,eventLabel:EVENTS[r.eventType]?.label??r.eventType}))).catch(()=>null);
     const lines=rejected==null?[]:scheduleOnlyLines((await scheduleLines(accountId).catch(()=>[])).filter(l=>!member||l.familyMemberId===member),[...rows,...rejected])
-      .map(l=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
+      .map(({events:_events,...l})=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
     return NextResponse.json({rows:shown,scheduleLines:lines,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       // documents: which document is waiting, being read, or failed and why.
       reading:{pending,inProgress:ledgerReadingInProgress(accountId),documents:await ledgerReadDocuments(accountId)}});

@@ -117,6 +117,20 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
   const di = scheduleOnlyLines([line(k, "pol-ip", "Disability Income")], [row({ familyMemberId: k, policyId: "pol-ip", eventType: "tpd", status: "rejected" })]);
   t("rejected TPD row keeps a Disability Income line", di.length === 1, di);
 }
+// A printed wording outside the category list ("Life Cover", "Lebensversicherung"): the events the server would seed from
+// it decide (TE F2). Rejecting all of them keeps it out; rejecting some does not; a line with no seeds is never hidden.
+{
+  const w = "m-w";
+  const life = (category: string) => line(w, "pol-l", category, { events: ["death", "tpd", "terminal_illness"] });
+  const rej = (events: string[]) => events.map((e) => row({ familyMemberId: w, policyId: "pol-l", eventType: e, status: "rejected" }));
+  t("'Life Cover' with all three seeds rejected: hidden", scheduleOnlyLines([life("Life Cover")], rej(["death", "tpd", "terminal_illness"])).length === 0);
+  t("'Life Insurance' with all three seeds rejected: hidden", scheduleOnlyLines([life("Life Insurance")], rej(["death", "tpd", "terminal_illness"])).length === 0);
+  t("'Life Cover' with only TPD rejected: kept", scheduleOnlyLines([life("Life Cover")], rej(["tpd"])).length === 1);
+  t("'Life Cover' kind is Death", kindOfCategory("Life Cover").id === "death");
+  t("a wording with no seeds is never hidden by a rejection", scheduleOnlyLines([line(w, "pol-l", "Cobertura dental")], rej(["death"])).length === 1);
+  t("a listed category ignores the line's seed list (its own event decides)",
+    scheduleOnlyLines([line(w, "pol-l", "Death", { events: ["death", "tpd", "terminal_illness"] })], rej(["death"])).length === 0);
+}
 
 // SG household: a line makes a kind confirmed on Family even when the only row of that kind is a plan type's guess.
 {

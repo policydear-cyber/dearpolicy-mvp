@@ -181,7 +181,9 @@ export const kindOfCategory = (category: string) => {
 
 /** A line of cover a schedule or certificate lists for a person (GET /api/ledger scheduleLines): confirmed and checked
  * against its page, the same lines Home's tiles count. */
-export type ScheduleLine = { familyMemberId: string; policyId: string; category: string; planName: string | null; insurer: string | null; sourcePage: number | null };
+/** `events`: the Coverage events the server would seed from this line (lib/ledger/events.ts PRODUCT_DEFAULTS), for a
+ * category CATEGORY_EVENTS does not list ("Life Cover", any other printed wording). */
+export type ScheduleLine = { familyMemberId: string; policyId: string; category: string; planName: string | null; insurer: string | null; sourcePage: number | null; events?: string[] | null };
 /** The Coverage event(s) a schedule category itself is: the row the line would have become. A rejection of every one of
  * them is the household's word that this plan doesn't pay it (Critic M1 on #256); a rejection of a narrower row of the
  * same kind (a misread ICU cash row on a hospital plan) is not (TE F1 on #256). */
@@ -194,7 +196,7 @@ const CATEGORY_EVENTS: Record<string, string[]> = {
 };
 /** The schedule lines Coverage rows don't already show. A line is left out when the same person has a Coverage row (not
  * rejected) of the same kind from the same policy, or has rejected, on that policy, every event the line's category
- * itself is (CATEGORY_EVENTS). A line with no amount, or an amount with no stated currency, never becomes a Coverage
+ * itself is (CATEGORY_EVENTS; for a category not listed there, the events the line would seed: TE F2 on #256). A line with no amount, or an amount with no stated currency, never becomes a Coverage
  * row (lib/ledger/store.ts scheduleSeeds), so without this a person Home lists as covered was called uncovered on Family
  * and Coverage (new-user walkthrough, 31 Oct). One line per person, policy and kind. */
 export function scheduleOnlyLines<L extends ScheduleLine>(lines: L[], rows: (KindRow & { familyMemberId: string; policyId: string | null })[]): L[] {
@@ -204,7 +206,7 @@ export function scheduleOnlyLines<L extends ScheduleLine>(lines: L[], rows: (Kin
   const out: L[] = [];
   for (const l of lines) {
     const key = `${at(l)}\u0000${kindOfCategory(l.category).id}`;
-    const own = CATEGORY_EVENTS[l.category.trim().toLowerCase()];
+    const own = CATEGORY_EVENTS[l.category.trim().toLowerCase()] ?? (l.events?.length ? l.events : undefined);
     if (shown.has(key) || (own && own.every((e) => rejected.has(`${at(l)}\u0000${e}`)))) continue;
     shown.add(key);
     out.push(l);
