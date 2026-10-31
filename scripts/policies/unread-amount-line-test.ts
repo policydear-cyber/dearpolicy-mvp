@@ -27,7 +27,7 @@ test("a passage with no figure is described in words; one with a figure could no
     "subject to the overall limit",
     // A reason below never hides a printed amount, a cut quote, or a sum that something changes.
     "We will waive premiums and pay S$5,000.", "We pay the Sum Assured less any outstanding loan.",
-    "the policy value of RM10,000", "advance of the death benefit up to S$500,000", "We pay the sum insured. ".repeat(12), "x".repeat(255), "We pay this benefit ".repeat(13)])
+    "We pay the Sum Insured or the policy value, whichever is higher.", "the policy value of RM10,000", "advance of the death benefit up to S$500,000", "We pay the sum insured. ".repeat(12), "x".repeat(255), "We pay this benefit ".repeat(13)])
     assert.equal(unreadAmountLine(13, q), "The amount on page 13 could not be read.", String(q));
 });
 
@@ -41,7 +41,7 @@ test("a passage with no fixed amount says why, for any policy: a premium waiver,
   const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
   const why = (q: string) => unreadAmountLine(7, q);
   for (const q of ["We will not charge future premiums due under the basic benefit contract beginning from the date the life insured is diagnosed with total and permanent disability (TPD).",
-    "Premiums will be waived for 12 months after the diagnosis.", "Kami akan mengecualikan premium; the waiver of premium applies from the 2nd year."])
+    "Premiums will be waived from the date of diagnosis.", "Kami akan mengecualikan premium; the waiver of premium applies from the 2nd year."])
     assert.equal(why(q), "The passage on page 7 waives future premiums. This benefit pays no amount itself.", q);
   for (const q of ["we will pay the TI benefit as an advancement of the death benefit. However, this will not be more than the TI/Critical Illness (CI) limit.",
     "This benefit is an acceleration of the death benefit and is paid within 30 days."])
@@ -53,7 +53,7 @@ test("a passage with no fixed amount says why, for any policy: a premium waiver,
     "You may choose to either fully or partially withdraw the cash-in value of any accumulated reversionary bonus and cash-in bonus.",
     "If the life insured dies during the policy term, we will pay the higher of following in one lump sum. (a) 105% of (the total premiums paid on the basic plan, less any advance premiums); or (b) 101% of the cash-in value",
     "The Maturity Benefit shall be determined by reference to the Bid Price prevailing as at the Valuation Day immediately following the Maturity Date.",
-    "the cash value of the policy", "We pay the Sum Insured or the policy value, whichever is higher.", "Nilai tunai: we pay the surrender value of the policy."])
+    "the cash value of the policy", "Nilai tunai: we pay the surrender value of the policy."])
     assert.equal(why(q), "The passage on page 7 works this out from the policy's value or the premiums paid at the time, so the document prints no fixed amount for it.", q);
 });
 
@@ -75,4 +75,50 @@ test("a reason is never given when it would mislead: a waiver not of premiums, a
     ["We pay the sum assured in ten yearly instalments.", /whole sum insured/],
     ["We pay the sum assured of the base plan only, if the rider sum is higher.", /whole sum insured/],
   ] as const) assert.doesNotMatch(unreadAmountLine(12, q), bad, q);
+});
+
+test("a second payment, an addition or a change next to a reason keeps 'could not be read' (Critic R466)", async () => {
+  const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
+  for (const q of [
+"We will waive all future premiums and pay the sum insured.",
+"On diagnosis we pay the sum insured and waive future premiums.",
+"Premiums are waived and we also pay the sum assured in one lump sum.",
+"We waive future premiums and refund the premiums paid.",
+"An advance of the death benefit is paid, and we also pay the sum insured on diagnosis.",
+"An advance of the death benefit, together with a lump sum of the sum insured.",
+"We pay the policy value or the sum insured, whichever is higher.",
+"We pay the policy value and the sum insured.",
+"We pay the higher of the policy value and the sum insured.",
+"We return the premiums paid plus the sum insured.",
+"We pay the sum insured and the policy value.",
+"We pay the sum insured, whichever is higher, or the policy value.",
+"We return the premiums paid, together with interest.",
+"We return the premiums paid with compound interest.",
+"We pay the sum insured, doubled for accidents.",
+"We pay the sum insured for each insured child.",
+"We pay the sum insured to each beneficiary.",
+"We pay the sum insured, reduced by the advance already paid.",
+"We pay the sum insured if death happens within 12 months; otherwise we refund the premiums paid.",
+"We pay the sum insured, minus the cash value already withdrawn.",
+"We pay the coverage amount upon diagnosis, payable over 5 years.",
+"Get one lump sum payment of the coverage amount, then the policy ends.",
+"We pay the sum insured, but nothing if within the waiting period.",
+"We pay the sum insured, decreasing by 10% yearly.",
+"We pay the sum insured, decreasing yearly.",
+"We pay the sum insured, lowered after age 70.",
+"We pay the sum insured, adjusted for inflation.",
+"We pay the sum insured, adjusted by any indebtedness.",
+"We pay the sum insured less any outstanding premium.",
+"We pay the policy value, which is not the sum insured.",
+"We pay the policy value, guaranteed at least the premiums paid.",
+"We pay the surrender value, plus a bonus.",
+"We pay the surrender value, plus a loyalty bonus of a fixed sum.",
+"Kami akan mengecualikan premium masa depan dan membayar jumlah diinsuranskan.",
+"Kami membayar jumlah diinsuranskan dan premium dibebaskan.",
+"The death benefit is not accelerated; we pay the sum insured.",
+"This benefit is an advance of the death benefit, increased by 25 per cent.",
+"This benefit is an advance of the death benefit, increased by a quarter.",
+"This benefit is an advance of the death benefit, together with an extra payment.",
+"This benefit is an advance of the death benefit, plus the funeral grant.",
+  ]) assert.match(unreadAmountLine(3, q), /could not be read|describes this in words/, q);
 });
