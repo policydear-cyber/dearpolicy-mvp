@@ -10147,3 +10147,5 @@ OK: burns band, "greater than 15% of body surface", "loss greater than 80 dB", "
 ## R423 — #217 67ac4eb: NOT READY. M1 page numbers lost when other notes follow uncheckedPagesNote (ingest.ts:969); M2 'Read again checks those pages once more' overstates (whole re-read, same copy may disagree again); M3 delete old copy only after new one reads; L1 duplicate 'Not fully confirmed'.
 
 ## R424 — #213 a4193da: READY (R418 M1-M3 fixed, own 104/0, gate green).
+
+## R426 — #214 8e3de1b: READY (H1 Portfolio links to /ledger?member and /schedule; M1 copy now says Account settings > People/Household; tests copy-only; gate green).
