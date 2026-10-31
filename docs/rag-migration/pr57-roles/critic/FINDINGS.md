@@ -10149,3 +10149,7 @@ OK: burns band, "greater than 15% of body surface", "loss greater than 80 dB", "
 ## R424 — #213 a4193da: READY (R418 M1-M3 fixed, own 104/0, gate green).
 
 ## R426 — #214 8e3de1b: READY (H1 Portfolio links to /ledger?member and /schedule; M1 copy now says Account settings > People/Household; tests copy-only; gate green).
+
+## R427/R429 — #219 d570331 -> 6797d87 (Home currency): R427 H1 r5 E1 empty household premiums null vs registered 0 (E2 cascade); fixed in route at 6797d87. READY. M1 conflicts with #213; known sum must refuse 2+ unstated-currency parts.
+
+## R428 — #211 40e93b6: READY. All R416 attacks unsure; follow-up over-withholding: "up to a maximum of", "per policy year", "payable only once", wrapped newline; Low "per additional claim" caps.
