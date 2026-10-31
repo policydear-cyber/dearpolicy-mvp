@@ -136,6 +136,7 @@ import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } fro
 // module is loaded only when the flag is on (lib/rag2/loop/hook.ts).
 import { ragLoopEnabled } from "@/lib/rag2/loop/flag";
 import { simpleChatEnabled } from "@/lib/simple-chat/flag";
+import { householdHomeCountry } from "@/lib/claims/household-home";
 
 
 export type ChatRequest={
@@ -1000,7 +1001,7 @@ function applyEventFit(answer:ChatAnswer,state:ConversationState,person:ClaimPer
       policyType:contract?.documents.map(d=>d.policy_type).find(Boolean)??null,
       expiryDate:status?.renewalOrExpiryDate??contract?.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null,
       expiryPassed:status?.state==="expiry_date_passed",eventDate,eventLocation,travelEvent:category==="travel",
-      tripStart:meaningfulFact(knownValue(facts,"tripStartDate")),tripEnd:meaningfulFact(knownValue(facts,"tripEndDate"))});
+      tripStart:meaningfulFact(knownValue(facts,"tripStartDate")),tripEnd:meaningfulFact(knownValue(facts,"tripEndDate")),home:state.home??null});
     if(issue)return {...item,status:"not_applicable" as const,reason:issue.text,conditions:[]};
     // Travel cover for an event that is not itself a travel claim (an accidental death abroad): it applies only within an insured trip.
     const policyType=contract?.documents.map(d=>d.policy_type).find(Boolean)??null;
@@ -1594,6 +1595,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   const check=options?.check??(async()=>undefined);
   await check();
   const answer=blankAnswer();let state=conversation.state;
+  // Overseas is relative to where this household lives (lib/claims/home-country.ts), read fresh every turn.
+  state={...state,home:await householdHomeCountry(request.accountId)};
   // Round 7 (port): "never mind the claim. How much is her hospital cash?" sets the
   // open claim aside -- its question is not asked again and the rest of the
   // message is answered as the question it is. The facts stay on record.
@@ -1909,7 +1912,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // nights", "delayed 13 hours") and corrections ("her right arm not
       // left") are recorded now, so the interview never asks for them again.
       if(context.people.length===1&&(state.intent==="claim"||pendingBefore)&&!/\b(?:if|suppose|supposing|what if|were to|in case)\b/i.test(request.submittedQuestion??request.question)){
-        const read=applyMessageFacts({message:request.submittedQuestion??request.question,facts:(state.subjects[context.people[0].id]??={}),now});
+        const read=applyMessageFacts({message:request.submittedQuestion??request.question,facts:(state.subjects[context.people[0].id]??={}),now,home:state.home??null});
         if(read.correction)TURN_CORRECTION.set(answer,read.correction);
         // Someone telling DearPolicy about their own diagnosis is alive: the
         // survival question is never put to them.
