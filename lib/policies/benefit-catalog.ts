@@ -735,7 +735,7 @@ const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
   String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
-  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
+  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|(?:\b(?:no|not|never|cannot|nor)|n['’]t)(?:\s+\p{L}+){0,3}?\s+(?:more|longer)\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
   // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited.
   String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
 ].join("|"),"iu");
@@ -745,7 +745,11 @@ const PRINTS_AN_AMOUNT=new RegExp([
  * "cannot be higher than 20% of the Sum Insured") stays a possible cap (Critic R421, TE pr215). */
 const SHARE_OF_AN_AMOUNT=String.raw`\s*(?:of|daripada|de)\s+(?:the\s+|your\s+|this\s+|that\s+|any\s+|all\s+)?(?:\p{L}+\s+){0,2}?(?:sum|insured|assured|benefits?|premiums?|amounts?|bills?|claims?|limits?|basic|base|death|totals?|polic(?:y|ies)|charges?|loans?|expenses?|costs?|cover(?:age)?|jumlah|faedah)\b`;
 const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(?:years?|yrs?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?|db|decibels?|cm|mm|centimet(?:re|er)s?|millimet(?:re|er)s?|met(?:re|er)s?|m|feet|ft|inch(?:es)?|kg|kilograms?|lbs?|pounds?\s+in\s+weight)\b)`;
-const EVENT_THRESHOLD=new RegExp(String.raw`\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
+/** A negation up to three words before the comparative ("not more than 60 days", "never higher than 25%", "which shall
+ * not be greater than", "isn't more than") makes it a cap on what is paid, never a threshold of the event (TE pr215 C11,
+ * C18, C19; Critic R425). */
+const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
+const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
   +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
 /** PRINTS_AN_AMOUNT, with event thresholds taken out first. */
 const printsAnAmount=(text:string)=>PRINTS_AN_AMOUNT.test(text.replace(EVENT_THRESHOLD," "));

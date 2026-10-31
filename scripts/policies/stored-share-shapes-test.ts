@@ -55,6 +55,9 @@ const KEPT: [string, number, string][] = [
   ["Weight", 0.1, "Weight loss of more than 10 kg 10% of the Sum Insured"],
   ["Burns", 0.25, "Burns greater than or equal to 20% of body surface: 25% of Sum Insured"],
   ["ICU", 0.1, "Intensive care for greater than 7 consecutive days: 10% of Sum Assured"],
+  // A word that only looks like a negation keeps the threshold free.
+  ["Burns", 0.5, "Burns, nothing paid below this; greater than 20% of the body surface 50%"],
+  ["Note", 0.3, "Third degree burns, not less than 30 days in hospital, more than 20% of body 30%"],
 ];
 // Passages that print a cap: withheld (or, once read, capped), never the full share.
 const CAPPED: [string, number, string][] = [
@@ -81,6 +84,17 @@ const CAPPED: [string, number, string][] = [
   ["Benefit", 0.2, "20% of the Sum Insured, provided this is not to be greater than the base plan's death benefit"],
   ["Benefit", 0.25, "25% of the Sum Insured but must be lower than the amount of the main claim"],
   ["Benefit", 0.1, "10% of the Sum Insured, but not more than 5% of the total benefits greater than 5% of the premium"],
+  // A negated comparative caps the payout even before a measure of the event (TE pr215 C11, C18, C19; Critic R425).
+  ["Hospital", 0.01, "1% of the Sum Insured for each day in hospital, but not greater than 60 days in total"],
+  ["Hospital", 0.01, "1% of the Sum Insured for each day in hospital, for not more than 60 days"],
+  ["Disability", 0.02, "2% of the Sum Insured a week, for no more than 26 weeks"],
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, but not higher than 25% for children"],
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, but no more than 25% if under 18"],
+  ["Major burns", 0.5, "Major burns: 50% of Sum Insured, never higher than 25%"],
+  ["Benefit", 0.1, "10% of Sum Insured, but not higher than 25%"],
+  ["Benefit", 0.1, "10% of Sum Insured, which isn't more than 20% in total"],
+  ["Benefit", 0.1, "10% of Sum Insured, which shall not be more than 20% in total"],
+  ["Benefit", 0.02, "2% of the Sum Insured a month, paid for a period not longer than 24 months"],
 ];
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
