@@ -218,8 +218,20 @@ export function printedLabelIsNotASum(evidenceText:string|null|undefined):boolea
   const label=String(evidenceText??"").split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"";
   return NOT_A_SUM.test(label);
 }
+/** A travel schedule's lines are limits for one benefit each, named by the printed label (intake stores them all as
+ * "Travel"): emergency medical expenses, cancellation, baggage. Delay pays per block of hours, so it is not read here. */
+const TRAVEL_LINES:[RegExp,EventType][]=[
+  [/\b(?:medical|hospital|emergency treatment)\b/i,"travel_medical"],
+  [/\b(?:cancell?ation|curtailment|cutting short)\b/i,"trip_cancellation"],
+  [/\b(?:baggage|luggage|personal (?:belongings|possessions|effects))\b/i,"baggage"],
+];
 export function scheduleLineEvent(category:string,name:string,printed?:string|null):{event:EventType;pays:PaysKind}|null{
   if(printedLabelIsNotASum(printed))return null;
+  if(/^travel$/i.test(category.trim())){
+    const label=String(printed??"").split(/\t/)[0]??"";
+    const travel=TRAVEL_LINES.find(([re])=>re.test(label))?.[1];
+    return travel?{event:travel,pays:"stated"}:null;
+  }
   const said=category.trim();
   const own=SCHEDULE_LINE_EVENTS[said]??SCHEDULE_LINE_EVENTS[SCHEDULE_LINE_WORDS.find(([re])=>wholeCoverName(said,re))?.[1]??""];
   if(!own)return null;
@@ -227,6 +239,22 @@ export function scheduleLineEvent(category:string,name:string,printed?:string|nu
   return own;
 }
 
+/** How a line the list calls "stated" pays, when its own printed words say so, with its printed amount: "Monthly benefit
+ * £2,400" pays £2,400 a month, "Hospital cash S$200 per day" pays per day, and a travel or hospital line printed as a
+ * limit ("Emergency medical expenses £10,000,000", "Overall limit S$1,000,000") reimburses up to it. A line whose words
+ * don't say which is kept with no figure, never shown as a lump sum (new-user walkthrough round 3, 31 Oct). */
+export function scheduleLinePays(event:EventType,printed:string|null|undefined):PaysKind|null{
+  const text=String(printed??"");
+  const per=/\bper\b|\/\s?(?:day|month|year|annum)|\b(?:a|each) (?:day|month|year)\b|\bp\.?\s?[mad]\.?(?:\s|$)/i;
+  if(event==="disability_income"||event==="long_term_care")
+    return /\bmonthly\b|\bper (?:calendar )?month\b|\b(?:a|each) month\b|\/\s?month\b|\bbulanan\b/i.test(text)&&!/\b(?:annual|yearly|per (?:year|annum)|weekly|per week)\b/i.test(text)?"per_month":null;
+  if(event==="hospital_daily_cash"||event==="icu_daily_cash")
+    return /\bdaily\b|\bper day\b|\b(?:a|each) day\b|\/\s?day\b|\bper night\b|\bharian\b/i.test(text)?"per_day":null;
+  if(event==="travel_medical"||event==="trip_cancellation"||event==="baggage")return per.test(text)?null:"reimbursement_cap";
+  if(event==="hospital_medical_expense")
+    return /\b(?:overall|annual|policy[- ]year|lifetime)?\s*(?:limit|maximum|sum insured)\b|\bup to\b/i.test(text)&&!per.test(text)?"reimbursement_cap":null;
+  return null;
+}
 /** What a plan of a given kind pays, when only its schedule line is on file.
  * These are the industry's standard shapes, and every row seeded from them
  * says so: they are proposals for the person to confirm, never the wording. */

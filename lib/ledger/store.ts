@@ -25,6 +25,7 @@ import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 import { scheduleLineEvent } from "@/lib/ledger/events";
+import { scheduleLinePays } from "@/lib/ledger/events";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
@@ -223,7 +224,9 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
     const own=scheduleLineEvent(coverage.category,named(coverage),coverage.evidenceText);
     if(!own||given.has(own.event))continue; // the wording already says what this pays
     const note=PRODUCT_DEFAULTS.flatMap(d=>d.events).find(e=>e.event===own.event)?.note??null;
-    out.push(seed(coverage,own.event,own.pays,own.pays==="lump_sum"?coverage.amount:null,note));
+    // A rate or limit the line itself prints keeps its amount with how it pays; otherwise no figure (never a lump sum).
+    const pays=own.pays==="stated"?scheduleLinePays(own.event,coverage.evidenceText)??"stated":own.pays;
+    out.push(seed(coverage,own.event,pays,pays==="stated"?null:coverage.amount,note));
     given.add(own.event);
   }
   // What a plan of that kind usually also pays is a proposal with no figure: a line's sum is never another benefit's

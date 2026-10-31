@@ -91,6 +91,16 @@ async function main() {
     { category: "Death", amount: 1200, currency: "AUD", quote: "Term Life Premium A$1,200" },
     { category: "Death", amount: 45000, currency: "MYR", quote: "Nilai tunai / Cash value\tRM45,000" },
   ]);
+  // Lines that pay a rate or reimburse up to a limit, printed as such (£, RM, S$).
+  const rates = await person("Femi Adeyemi", "sibling");
+  await schedule(rates, "Kestrel Income Protection", [{ category: "Disability Income", amount: 2400, currency: "GBP", quote: "Monthly benefit\t£2,400" }]);
+  await schedule(rates, "Puffin Annual Multi-Trip", [
+    { category: "Travel", amount: 10000000, currency: "GBP", quote: "Emergency medical expenses\t£10,000,000" },
+    { category: "Travel", amount: 1500, currency: "GBP", quote: "Baggage\t£1,500 per person" },
+  ]);
+  await schedule(rates, "Selasih Hospital Cash", [{ category: "Hospital Cash", amount: 200, currency: "MYR", quote: "Elaun hospital harian / Daily hospital allowance\tRM200" }]);
+  const yearly = await person("Wei Ling Ong", "sibling");
+  await schedule(yearly, "Merlion Disability Income", [{ category: "Disability Income", amount: 30000, currency: "SGD", quote: "Annual disability benefit\tS$30,000" }]);
   const unstated = await schedule(sg, "Lighthouse Term Plan", [{ category: "Death", amount: 150000, currency: null, quote: "Sum assured\t$150,000" }]);
 
   // Rows an older rule seeded beside the £ life line: one untouched, one a person changed, one a person rejected.
@@ -103,8 +113,8 @@ async function main() {
   const rejected = (await old("critical_illness", null)).rows[0].id;
   await query("UPDATE coverage_rules SET status='rejected' WHERE id=$1", [rejected]);
 
-  const rows = async (member: string) => (await query<{ id: string; event_type: string; amount: string | null; currency: string; origin: string; status: string }>(
-    "SELECT id,event_type,amount::text,currency,origin,status FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 ORDER BY event_type", [ACCOUNT, member])).rows;
+  const rows = async (member: string) => (await query<{ id: string; event_type: string; amount: string | null; currency: string; origin: string; status: string; pays_kind: string }>(
+    "SELECT id,event_type,amount::text,currency,origin,status,pays_kind FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 ORDER BY event_type", [ACCOUNT, member])).rows;
 
   try {
     await seedLedger(ACCOUNT);
@@ -148,6 +158,14 @@ async function main() {
     await test("'Group Term Life' and 'Group Personal Accident' keep their own sums (S$)", async () => {
       const got = figures(await rows(grp)).filter((x) => x[1] != null);
       assert.deepEqual(got, [["accidental_death", 600000, "SGD"], ["death", 1000000, "SGD"]]);
+    });
+    await test("a printed monthly benefit, daily allowance or travel limit keeps its amount with how it pays (£, RM)", async () => {
+      const got = (await rows(rates)).filter((x) => x.amount != null).map((x) => [x.event_type, x.pays_kind, Number(x.amount), x.currency]);
+      assert.deepEqual(got, [["disability_income", "per_month", 2400, "GBP"], ["hospital_daily_cash", "per_day", 200, "MYR"], ["travel_medical", "reimbursement_cap", 10000000, "GBP"]]);
+    });
+    await test("a rate the line doesn't state as monthly, or a limit per person, keeps no figure, never a lump sum (S$, £)", async () => {
+      assert.deepEqual((await rows(yearly)).filter((x) => x.amount != null), []);
+      assert.ok(!(await rows(rates)).some((x) => x.event_type === "baggage" && x.amount != null));
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);
