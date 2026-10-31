@@ -162,7 +162,10 @@ export function battery(): Conv[] {
     c("rh-29", "rh", "cover", [t("How much is Aisyah's CI cover?", { must: [$("100,000")], person: ["AI"], cite: [{ doc: HER, page: 3 }] })]),
     c("rh-30", "rh", "false-premise", [t("Aisyah is in Melbourne, her hospital bills there are covered by her Shield right?", { must: [NOTFOUND], person: ["AI"], not: [/^\s*yes\b/i] })]),
     c("rh-31", "rh", "claims", [t("Our flight back from Japan last December was delayed 8 hours, can I still claim?", { askOk: true, notAsk: /what happened|how long|who is this/i, must: [/Wanderlust/i], any: [$("100"), /6 hours/i] })]),
-    c("rh-32", "rh", "status", [t("Is our Japan travel insurance still valid for next month's trip?", { must: [/expired|ended|14 December 2025|14 Dec 2025/i], not: [/^\s*yes\b/i] })]),
+    // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in
+    // force"; Critic R451): this used to expect the Japan travel cover to be called expired or ended from its printed period
+    // (to 14 December 2025). It has no lapse notice, so the answer shows the travel cover and never calls it expired.
+    c("rh-32", "rh", "status", [t("Is our Japan travel insurance still valid for next month's trip?", { must: [/Wanderlust/], not: [/\b(?:ended|expired|lapsed|no longer|not (?:valid|covered|in force|active)|run out|out of date|no current|invalid)\b/i] })]),
     c("rh-33", "rh", "what-if", [t("Mum can't walk or bathe on her own anymore, how much would ElderShield pay?", { must: [$("400"), /3 of (?:the )?6|three of (?:the )?six|at least 3/i], person: ["AM"], cite: [{ doc: ES, page: 2 }] })]),
     c("rh-34", "rh", "money", [t("Does mum still need to pay ElderShield premiums?", { must: [/no further premium|completed|no longer/i], person: ["AM"], cite: [{ doc: ES, page: 2 }] })]),
     c("rh-35", "rh", "cover", [t("Does Mum have an ElderShield supplement?", { must: [/none|no supplement|not on record|tiada/i], person: ["AM"] })]),

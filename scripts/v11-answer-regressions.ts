@@ -220,11 +220,14 @@ async function main() {
     });
 
     // ================================================================ C currentness / not found
-    await check("C1 an expired 2019 document is answered with its date and marked expired", async () => {
+    // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in
+    // force"; Critic R451): this used to expect the 2019 document to be "marked expired". A printed date never makes a
+    // policy expired now; the answer still gives the amount and the document's date.
+    await check("C1 a 2019 document is answered with its amount and date, and never called expired", async () => {
       const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's accident cover?", people: [ch] });
       assert.equal(r.handled, true, JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /S\$50,000/);
-      assert.match(text(r.answer), /1 Jan 2019/); assert.match(text(r.answer), /expired/); assert.ok(!/is currently active|currently covered/i.test(text(r.answer)));
+      assert.match(text(r.answer), /1 Jan 2019/); assert.doesNotMatch(text(r.answer), /\b(?:expired|ended|lapsed|no longer in force)\b/i); assert.ok(!/is currently active|currently covered/i.test(text(r.answer)));
       assert.ok(r.answer.citations.some((c) => c.notConfirmedCurrent === true));
     });
     await check("C2 maturity (not in stored facts) is handed back, never 'not covered'", async () => {
