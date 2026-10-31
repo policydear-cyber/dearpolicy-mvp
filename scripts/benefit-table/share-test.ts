@@ -84,7 +84,27 @@ async function main() {
     for (const q of ["Hip 75% / Knee 50%, up to maximum", "Payout: 10% of the, up to maximum", "S$100 per day, up to maximum", "Up to 10%", "10 % of"]) assert.equal(shareOf(q), null, q);
     assert.deepEqual(shareOf("Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum"), { percent: 10, of: "Jumlah Diinsuranskan" });
     assert.deepEqual(shareOf("12,5 % of the Insured Sum (maximum"), { percent: 12.5, of: "the Insured Sum" });
-    assert.deepEqual(shareOf("pays 150% of the Death Benefit or"), { percent: 150, of: "the Death Benefit" });
+    // "or" opens an alternative ("150% of the Death Benefit or S$X, whichever is higher"): not a cap opener, so no share.
+    assert.equal(shareOf("pays 150% of the Death Benefit or"), null);
+  });
+
+  await test("a share is read only with closed lists: the whole phrase as printed, then the end or a cap opener (Critic's probes)", () => {
+    // Anything after the phrase that is not a closed cap opener, a figure in the phrase, or more than six words: null.
+    for (const q of ["10% of RM50,000, up to maximum", "10% of S$50,000 up to maximum", "10% of the first S$1,000 of the bill", "10% of first RM5,000",
+      "10% of Sum Insured but not more than S$500", "10% of Sum Insured except Section 3", "10% of Sum Insured, once only",
+      "10% of the Sum Insured multiplied by 2", "10% of Sum Insured times the number of years", "10% of Sum Insured reduced by any prior claim",
+      "10% of USD 10,000", "10% of the Death Benefit Sum Insured Amount Payable Hereunder", "10 % of Sum Insured in excess of S$1,000",
+      "10 per cent of Sum Insured", "10% of Sum Insured minus", "10% of Sum Insured excluding", "10% of Sum Insured or S$5,000, whichever is higher",
+      "10% of Sum Insured\nRoom and board", "Pembedahan 20% dari Jumlah Diinsuranskan atau RM5,000", "10% of Sum Insured, payable once"])
+      assert.equal(shareOf(q), null, q);
+    // The phrase is kept whole, never cut: what is shown is exactly what the row prints.
+    for (const [q, of] of [["10% of Sum Insured upon diagnosis", "Sum Insured upon diagnosis"], ["10% of Sum Insured minus claims paid", "Sum Insured minus claims paid"],
+      ["10% of the reasonable and customary charges", "the reasonable and customary charges"], ["10% of the balance.", "the balance"],
+      ["10% of the Sum Insured (max S$5,000)", "the Sum Insured"], ["10% of the Sum Insured, max. S$5,000", "the Sum Insured"],
+      ["25% daripada Jumlah Diinsuranskan", "Jumlah Diinsuranskan"], ["30% dari Jumlah Diinsuranskan, maksimum RM10,000", "Jumlah Diinsuranskan"],
+      ["15% of the Sum Assured not exceeding £20,000", "the Sum Assured"], ["10% of Annual Limit whichever is lower", "Annual Limit"],
+      ["50% of the sum insured, capped at €40.000", "the sum insured"]] as const)
+      assert.deepEqual(shareOf(q), { percent: Number(q.match(/^\D*(\d+)/)![1]), of }, q);
   });
 
   console.log(`benefit-table share: ${passed} passed, ${failures.length} failed`);
