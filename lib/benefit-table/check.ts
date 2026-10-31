@@ -151,40 +151,29 @@ export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
   const scaleAfter = new RegExp(String.raw`^\s*(${SCALE_WORD})(?![A-Za-z0-9])`);
-  // A currency printed right before a figure ("S$", "Rp ", "€", "USD "), or right after its scale word ("2 Mio. €").
-  const MONEY_BEFORE = /(?:(?<![A-Za-z])[A-Z]{3}|(?<![A-Za-z])[A-Z]{1,2}\$|R\$|Rp\.?|RM|Rs\.?|\$|\p{Sc})\s?$/u;
-  const MONEY_AFTER = /^\.?\s?(?:\p{Sc}|[A-Z]{3}(?![A-Za-z]))/u;
   for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)/g)) {
     // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
     // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
-    // A scale word after the figure ("1.5 million", "Rp 2 juta", "S$3 mn", "€ 3 millones", "150 triệu") multiplies it,
-    // read by the shared reader: a figure that reads two ways before it ("1.500 Mio.", "2.500 milioni") or a word that
-    // reads two ways ("mil") prints no figure at all, and never the bare one (TE #262 P1: "Rp 2 juta" printed 2).
-    // A short word ("m", "k", "md", "mn", "mil", "mrd", "mld", "tsd") is a scale only beside a currency: "100 MD
-    // consultations" and "10 m" are counts, read bare (Critic #265 M1). "m" with no currency also keeps its old reading
-    // as a million ("Limit 1.5m"), so nothing that matched before stops matching.
-    const after = text.slice(m.index! + m[1].length), scale = scaleAfter.exec(after);
+    const after = text.slice(m.index! + m[1].length);
     const n = Number(m[1].replace(/,/g, ""));
+    // A scale word after the figure multiplies it only from a closed list per currency, with that currency printed
+    // directly beside the figure (coordinator, 31 Oct: strict first). "1.5 million" and "1.5m" read as before (a million,
+    // never the bare figure), except that a figure reading two ways ("2.500 m", "1,5 million" read as 15) gives none.
+    const scale = scaleAfter.exec(after) ?? ABBREVIATION_AFTER.exec(after);
     if (scale) {
-      const v = scaledFigure(m[1], null, { scaled: true }), k = scaleOf(scale[1]);
-      const short = /^(?:m|k|md|mn|mil|mrd|mld|tsd)$/i.test(scale[1]);
-      const money = MONEY_BEFORE.test(text.slice(Math.max(0, m.index! - 8), m.index!)) || MONEY_AFTER.test(after.slice(scale[0].length));
-      if (short && !money) {
-        if (Number.isFinite(n)) out.push(n);
-        if (/^m$/i.test(scale[1]) && v != null) out.push(v * 1e6);
-        continue;
-      }
-      if (v != null && Number.isFinite(k)) out.push(v * k);
-      continue;
-    }
-    // Abbreviations the shared list does not hold ("Rp 2 jt" juta, "Rp 500 rb" ribu, "₹2 Cr" crore, "150 tr ₫" triệu):
-    // short, so a scale only beside a currency, like the short words above; with none, the bare figure (a count).
-    const abbr = ABBREVIATION_AFTER.exec(after);
-    if (abbr && (MONEY_BEFORE.test(text.slice(Math.max(0, m.index! - 8), m.index!)) || MONEY_AFTER.test(after.slice(abbr[0].length)))) {
+      const word = scale[1].toLowerCase();
+      const k = ABBREVIATIONS[word] ?? scaleOf(scale[1]);
+      const currency = currencyBeside(text.slice(Math.max(0, m.index! - 8), m.index!), after.slice(scale[0].length));
+      const allowed = SCALE_CURRENCIES[word.replace(/s$/, "")] ?? SCALE_CURRENCIES[word];
       const v = scaledFigure(m[1], null, { scaled: true });
-      if (v != null) out.push(v * ABBREVIATIONS[abbr[1].toLowerCase()]);
+      if (/^(?:million|m)$/.test(word)) { if (v != null) out.push(v * 1e6); continue; }
+      if (allowed && currency && (allowed === "any" || allowed.has(currency))) { if (v != null && Number.isFinite(k)) out.push(v * k); continue; }
+      // No currency beside it: a short word is a count ("100 MD consultations", "10 k steps"), read bare; a
+      // long one ("2 juta", "5 lakh", "150 triệu") is a scale whose amount cannot be told here, so it prints no figure.
+      // A currency beside a word it does not go with ("€5 mil", a thousand or a million; "S$2 juta") prints nothing.
+      if (!currency && /^(?:k|mn|bn|md|mil|mio|mln|mrd|mld|tsd|jt|rb|cr|tr)$/.test(word) && Number.isFinite(n)) out.push(n);
       continue;
     }
     if (Number.isFinite(n)) out.push(n);
@@ -193,6 +182,37 @@ export function numbersIn(text: string): number[] {
 }
 const ABBREVIATIONS: Record<string, number> = { jt: 1_000_000, rb: 1_000, cr: 10_000_000, tr: 1_000_000 };
 const ABBREVIATION_AFTER = /^\s*(jt|rb|cr|tr)\.?(?![\p{L}\p{N}])/iu;
+/** Which currencies print each scale word: a closed list per word. English words go with any currency. */
+const LAKH = new Set(["INR", "PKR", "NPR", "BDT", "LKR"]), EURO = new Set(["EUR", "CHF"]), ID_MY = new Set(["IDR", "MYR"]);
+const SCALE_CURRENCIES: Record<string, Set<string> | "any"> = {
+  k: "any", mn: "any", bn: "any", billion: "any", thousand: "any",
+  lakh: LAKH, lac: LAKH, crore: LAKH, cr: LAKH,
+  juta: ID_MY, jt: ID_MY, rb: ID_MY, miliar: new Set(["IDR"]), milyar: new Set(["IDR"]),
+  tr: new Set(["VND"]),
+  mio: EURO, tsd: EURO, mrd: EURO, md: EURO, mln: new Set(["EUR", "PLN"]), mld: new Set(["EUR", "PLN"]),
+};
+/** The currency printed directly before a figure ("S$", "Rp ", "€", "USD ") or directly after its scale word ("2 Mio. €"),
+ * from a closed list of signs and three-letter codes; null when none or one several currencies print. */
+const SIGNS: Record<string, string> = { "₹": "INR", "RS": "INR", "RS.": "INR", "৳": "BDT", "TK": "BDT", "RP": "IDR", "RP.": "IDR", "RM": "MYR", "₫": "VND", "Đ": "VND",
+  "€": "EUR", "£": "GBP", "S$": "SGD", "US$": "USD", "A$": "AUD", "HK$": "HKD", "NZ$": "NZD", "R$": "BRL", "¥": "JPY", "₱": "PHP", "₩": "KRW", "฿": "THB", "ZŁ": "PLN" };
+/** The runtime's closed list of ISO 4217 codes; none where the runtime has no list (then only signs count). */
+let isoList: Set<string> | undefined;
+function isoCodes(): Set<string> {
+  if (!isoList) {
+    try { isoList = new Set((Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("currency") ?? []); }
+    catch { isoList = new Set(); }
+    for (const word of ["ALL", "TOP", "CUP", "BOB", "SOS", "GEL", "MAD"]) isoList.delete(word); // codes that are also printed words
+  }
+  return isoList;
+}
+function currencyBeside(before: string, afterScale: string): string | null {
+  const b = /(?:(?<![A-Za-z])([A-Z]{3})|((?<![A-Za-z])[A-Z]{1,3}\$|Rp\.?|RM|Rs\.?|Tk|zł|\p{Sc}))\s?$/u.exec(before);
+  const a = /^\.?\s?(?:([A-Z]{3})(?![A-Za-z])|([A-Z]{1,3}\$|Rp\.?(?![A-Za-z])|RM(?![A-Za-z])|Rs\.?(?![A-Za-z])|Tk(?![A-Za-z])|\p{Sc}|zł|đ(?![\p{L}])))/u.exec(afterScale);
+  const code = b?.[1] ?? a?.[1];
+  if (code) return isoCodes().has(code) ? code : null; // "TPD 2 mn" is no money
+  const sign = (b?.[2] ?? a?.[2])?.toUpperCase();
+  return sign ? SIGNS[sign] ?? null : null;
+}
 /** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
  * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it
  * states more than one, or only a limit ("not payable after the 30th day"). */
