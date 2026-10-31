@@ -142,7 +142,8 @@ test("a table line cut off before its maximum keeps its printed share and says t
   // A condition printed before the share, a share whose name is not given, or a currency named as the base (the figure
   // wrapped onto the next line): no share is said, and the line stays as before (Critic M3, test engineer F1).
   for (const [q, name] of [["After 2 years, 10% of Prevailing Insured Amount, up to maximum", "Angioplasty"], ["If hospitalised overseas, 10% of Sum Insured, up to maximum", "Hospital cash"],
-    ["Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", null], ["Angioplasty : 10% of SGD, up to maximum", "Angioplasty"], ["Rawatan: 10% daripada RM, sehingga maksimum", "Rawatan"]] as const)
+    ["Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", null], ["Angioplasty : 10% of SGD, up to maximum", "Angioplasty"], ["Rawatan: 10% daripada RM, sehingga maksimum", "Rawatan"],
+    ["After 2 years:\n10% of Prevailing Insured Amount, up to maximum", "Wrist"]] as const)
     assert.equal(unreadAmountLine(34, q, name), "The passage on page 34 stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down page 34.", q);
   // No share to keep: a money rate, two percentages (two rows run together), or "of" with no words after it.
   for (const q of ["Daily cash S$100 per day, up to maximum", "Hip 75% / Knee 50%, up to maximum", "Payout: 10% of the, up to maximum", "Up to 10% of, subject to a maximum of"])

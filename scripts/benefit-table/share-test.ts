@@ -118,6 +118,11 @@ async function main() {
       ["Early Critical Illness 25% of Basic Coverage Amount", "Early Critical Illness"]] as const)
       assert.ok(shareOf(q, { name }), q);
     assert.equal(shareOf("Minor surgery 15% of the sum insured", { name: "Dental" }), null, "another benefit's name is not this row's");
+    // A condition on a line above the share is still a condition (Critic M4); the row's own name on the line above is not.
+    assert.equal(shareOf("After 2 years:\n10% of Sum Insured", { name: "Fracture of wrist" }), null);
+    assert.equal(shareOf("Only if hospitalised overseas\n10% of Sum Insured, up to maximum", { name: "Hospital cash" }), null);
+    assert.equal(shareOf("Selepas 2 tahun\n• 10% daripada Jumlah Diinsuranskan", { name: "Patah tulang" }), null);
+    assert.deepEqual(shareOf("Fracture of wrist\n(a) 10% of Sum Insured", { name: "Fracture of wrist" }), { percent: 10, of: "Sum Insured" });
   });
 
   console.log(`benefit-table share: ${passed} passed, ${failures.length} failed`);

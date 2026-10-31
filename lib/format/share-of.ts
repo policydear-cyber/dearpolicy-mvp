@@ -9,7 +9,7 @@
  *   - nothing more (an optional full stop or semicolon), or
  *   - an optional comma or bracket and a cap opener from a closed list ("up to", "max", "maximum", "subject to a
  *     maximum", "limited to", "not exceeding", "capped at", "whichever is lower/less", "sehingga", "maksimum", "hingga").
- * Before the percentage, on its line, there may be only the row's own benefit name or heading (opts.name), a bullet or
+ * Before the percentage, on its line and any line above it, there may be only the row's own benefit name or heading (opts.name), a bullet or
  * numbering, punctuation, or a closed lead-in ("Pays", "We will pay", "Benefit", "Payable", "Bayaran"): a condition printed
  * first ("After 2 years, 10% of Sum Insured") makes the share conditional, so it gives null. A phrase naming a currency
  * ("10% of SGD, up to maximum": the figure wrapped onto the next line) is not what the share is of, so it gives null.
@@ -40,8 +40,9 @@ export function shareOf(text: string | null | undefined, opts: { name?: string |
   if ((t.match(PERCENT) ?? []).length !== 1) return null;
   const m = t.match(SHARE);
   if (!m) return null;
-  // What is printed before the percentage on its line: only the row's own name or heading, numbering or a lead-in.
-  const before = t.slice(t.lastIndexOf("\n", m.index!) + 1, m.index).replace(/^\s*(?:[-–•*·▪]|\(?(?:[a-z]|\d{1,3}|[ivx]{1,4})[.)])\s*/i, "");
+  // Everything printed before the percentage, on its line and on any line above it in the passage: only the row's own
+  // name or heading, numbering, a bullet or a lead-in. A condition on the line above ("After 2 years:") is still a condition.
+  const before = t.slice(0, m.index).split("\n").map((line) => line.replace(/^\s*(?:[-–•*·▪]|\(?(?:[a-z]|\d{1,3}|[ivx]{1,4})[.)])\s*/i, "")).join(" ");
   const named = new Set(wordsOf(opts.name ?? ""));
   if (wordsOf(before).some((w) => !named.has(w) && !LEAD_IN.has(w))) return null;
   const percent = Number(m[1].replace(",", "."));
