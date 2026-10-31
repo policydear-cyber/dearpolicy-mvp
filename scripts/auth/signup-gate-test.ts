@@ -39,8 +39,29 @@ function fakePool(db: Db) {
   return { pool: { connect: async () => client }, log, created: () => log.some((l) => l.startsWith("insert into accounts")) };
 }
 
+/** A made-up auth service: accounts with a password, and sessions that can be signed out. */
+function fakeAuth() {
+  const users = new Map<string, { id: string; password: string }>();
+  const sessions = new Map<number, { email: string; live: boolean }>();
+  let next = 1;
+  const open = (email: string) => { const sid = next++; sessions.set(sid, { email, live: true }); return sid; };
+  return {
+    signUp(email: string, password: string) { users.set(email, { id: `00000000-0000-4000-8000-00000000000${users.size + 2}`, password }); return open(email); },
+    linkSession(email: string) { assert.ok(users.has(email)); return open(email); },
+    signIn(email: string, password: string) { const u = users.get(email); return u && u.password === password ? open(email) : null; },
+    valid(sid: number) { return sessions.get(sid)?.live === true; },
+    userId(email: string) { return users.get(email)!.id; },
+    on(sid: number) {
+      return {
+        async updateUser({ password }: { password: string }) { const s = sessions.get(sid)!; if (!s.live) return { error: new Error("no session") }; users.get(s.email)!.password = password; return { error: null }; },
+        async signOut({ scope }: { scope: "others" }) { assert.equal(scope, "others"); const me = sessions.get(sid)!; for (const [id, s] of sessions) if (id !== sid && s.email === me.email) s.live = false; return { error: null }; },
+      };
+    },
+  };
+}
+
 async function main() {
-  const { signupMode, onInvitedList, mayCreateHousehold, SignupClosedError, confirmedLater } = await import("@/lib/auth/signup-gate");
+  const { signupMode, onInvitedList, mayCreateHousehold, SignupClosedError, secureFirstProof } = await import("@/lib/auth/signup-gate");
   const { ensureDefaultHousehold } = await import("@/lib/household/repo");
   const setEnv = (mode: string | undefined, list?: string) => {
     if (mode === undefined) delete process.env.DEARPOLICY_SIGNUP_MODE; else process.env.DEARPOLICY_SIGNUP_MODE = mode;
@@ -103,26 +124,49 @@ async function main() {
     const stranger = ensure({}, "stranger@example.org", false);
     await assert.rejects(stranger.run, (e: unknown) => e instanceof SignupClosedError && e.reason === "not_invited");
   });
-  await t("a confirmation stamped at sign-up (the auth service's 'Confirm email' off) proves nothing; one made later by a person does", () => {
-    const made = "2026-11-02T03:00:00.000Z";
-    assert.equal(confirmedLater(made, made), false, "stamped at the same moment");
-    assert.equal(confirmedLater("2026-11-02T03:00:02.000Z", made), false, "two seconds later is no person opening an email");
-    assert.equal(confirmedLater("2026-11-02T03:04:10.000Z", made), true);
-    for (const [c, m] of [[null, made], [made, null], ["", made], ["not a date", made], [undefined, undefined]] as const) assert.equal(confirmedLater(c, m), false, String(c));
+  await t("pre-registered address: when its owner proves it by link, the squatter's password stops working and their session is signed out", async () => {
+    setEnv("invite", "victim.tan@family-lim.sg");
+    const auth = fakeAuth();
+    const squatter = auth.signUp("victim.tan@family-lim.sg", "squatter-password");      // before the owner ever opens the link
+    const owner = auth.linkSession("victim.tan@family-lim.sg");                          // the owner opens the emailed link
+    const f = fakePool({});
+    await ensureDefaultHousehold(auth.userId("victim.tan@family-lim.sg"), "Tan household", f.pool as never, {
+      email: "victim.tan@family-lim.sg", emailProven: true, beforeCreate: () => secureFirstProof(auth.on(owner)),
+    });
+    assert.ok(f.created(), "the owner's household is made");
+    assert.equal(auth.valid(squatter), false, "the squatter's session is signed out");
+    assert.equal(auth.signIn("victim.tan@family-lim.sg", "squatter-password"), null, "the squatter's password no longer signs in");
+    assert.equal(auth.valid(owner), true, "the owner stays signed in, to set their own password");
   });
-  await t("every caller says how the address was proven: the emailed-link callback proves it, the others ask the auth service's record", () => {
-    assert.match(readFileSync("app/api/auth/callback/route.ts", "utf8"), /emailProven: true/);
+  await t("fails closed: if the old password cannot be replaced or other sessions cannot be signed out, no household is made", async () => {
+    setEnv("invite", "victim.tan@family-lim.sg");
+    for (const broken of ["updateUser", "signOut", "throws"] as const) {
+      const auth = fakeAuth();
+      auth.signUp("victim.tan@family-lim.sg", "squatter-password");
+      const owner = auth.linkSession("victim.tan@family-lim.sg");
+      const real = auth.on(owner);
+      const failing = {
+        updateUser: broken === "updateUser" ? async () => ({ error: new Error("rejected") }) : broken === "throws" ? async () => { throw new Error("network"); } : real.updateUser,
+        signOut: broken === "signOut" ? async () => ({ error: new Error("rejected") }) : real.signOut,
+      };
+      const f = fakePool({});
+      await assert.rejects(ensureDefaultHousehold(auth.userId("victim.tan@family-lim.sg"), "Tan household", f.pool as never, {
+        email: "victim.tan@family-lim.sg", emailProven: true, beforeCreate: () => secureFirstProof(failing),
+      }), broken);
+      assert.ok(!f.created(), broken + ": no household");
+    }
+  });
+  await t("only the emailed-link callback proves an address, and it secures the account first; a password or a session proves nothing", () => {
+    const callback = readFileSync("app/api/auth/callback/route.ts", "utf8");
+    assert.match(callback, /emailProven: true/);
+    assert.match(callback, /beforeCreate: inviteOnly \? async \(\) => \{ await secureFirstProof\(supabase\.auth\); made = true; \}/);
+    assert.match(callback, /if \(made\) return NextResponse\.redirect\(new URL\("\/update-password/, "the owner sets their own password next");
     for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/household/start/route.ts"]) {
       const src = readFileSync(f, "utf8");
-      assert.match(src, /emailProven: confirmedLater\(/, f);
-      assert.doesNotMatch(src, /emailProven: true/, f + " never takes the address as proven on its own");
+      assert.doesNotMatch(src, /emailProven/, f + " never takes the address as proven");
+      assert.match(src, /signInWithOtp\(\{ email[^}]*emailRedirectTo: `\$\{[^`]*\}\/api\/auth\/callback`, shouldCreateUser: false \} \}\)/, f + " emails a link that proves the address and makes no account");
     }
-    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts"]) {
-      const src = readFileSync(f, "utf8");
-      assert.match(src, /signInWithOtp\(\{ email, options: \{ emailRedirectTo: `\$\{origin\}\/api\/auth\/callback`, shouldCreateUser: false \} \}\)/, f + " emails a link that proves the address and makes no account");
-      assert.match(src, /signOut\(/, f + " leaves no session for an unproven address");
-    }
-    assert.match(readFileSync("lib/auth/session.ts", "utf8"), /createdAt: user\.created_at/);
+    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts"]) assert.match(readFileSync(f, "utf8"), /signOut\(/, f + " leaves no session for an unproven address");
   });
   await t("a person already in a household is never affected by invite mode", async () => {
     setEnv("invite", "");
@@ -133,7 +177,7 @@ async function main() {
   await t("every place that creates a household passes the person's verified email and turns a closed sign-up into a clear refusal", () => {
     for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/auth/callback/route.ts", "app/api/household/start/route.ts"]) {
       const src = readFileSync(f, "utf8");
-      assert.match(src, /ensureDefaultHousehold\([^;]*\{\s*email:/, f + " passes the email");
+      assert.match(src, /ensureDefaultHousehold\([^;]*\{\s*(?:\/\/[^\n]*\n\s*)*email:/, f + " passes the email");
       assert.match(src, /SignupClosedError/, f + " handles a closed sign-up");
     }
     const signup = readFileSync("app/api/auth/signup/route.ts", "utf8");

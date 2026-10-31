@@ -97,7 +97,7 @@ export async function ensureDefaultHousehold(
   userId: string,
   displayName: string,
   poolOverride?: Pick<Pool, "connect">,
-  options: { email?: string | null; emailProven?: boolean } = {},
+  options: { email?: string | null; emailProven?: boolean; beforeCreate?: () => Promise<void> } = {},
 ): Promise<string> {
   return withServiceTransaction(async (client) => {
     const existing = await client.query<{ household_id: string }>(
@@ -111,6 +111,8 @@ export async function ensureDefaultHousehold(
     // affected. Fails closed.
     const gate = await householdGate(options.email, options.emailProven === true, client);
     if (gate !== "ok") throw new SignupClosedError(gate);
+    // Runs only when a household is about to be made; if it throws, nothing is written (the transaction rolls back).
+    if (options.beforeCreate) await options.beforeCreate();
 
     // accounts.id has NO column default in sql/schema.sql (nor in the live
     // database), so the id must be generated here -- relying on a default

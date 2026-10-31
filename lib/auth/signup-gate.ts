@@ -13,9 +13,14 @@
  *
  * The email must also be PROVEN, by this code itself, whatever the auth service's "Confirm email" setting is: an
  * invited address (or any address at an invited domain) is worth nothing if anyone can type it. Proven means the person
- * came back through an emailed link (the callback's code exchange), or the auth service recorded a confirmation at
- * least CONFIRM_GAP_MS after the account was made. With "Confirm email" off the service stamps the confirmation at the
- * moment of sign-up, so that stamp proves nothing and counts as unproven; the person is sent a sign-in link instead.
+ * came back through a link emailed to that address (app/api/auth/callback's code exchange); nothing else counts, not
+ * even the auth service's own confirmation stamp, which "Confirm email" off sets at sign-up. A password sign-in or
+ * sign-up is sent such a link instead.
+ *
+ * And the proof secures the account before a household is made (secureFirstProof): someone could have pre-registered
+ * the invited address with a password of their own before its owner ever opened the link. So the first time an address
+ * is proven, the password set before the proof is replaced and every other session is signed out, then the owner sets
+ * their own password. If either step fails, no household is made.
  *
  * It fails closed: in invite mode, no email, an unproven email, an unreadable setting or an error while checking
  * invitations means no new household. Any value of DEARPOLICY_SIGNUP_MODE other than unset/"open" counts as invite-only.
@@ -33,13 +38,28 @@ export class SignupClosedError extends Error {
 /** What an invited person sees while their email is not yet proven: a link has been (or will be) emailed to them. */
 export const CONFIRM_EMAIL_MESSAGE = "Check your email: we have sent you a link to confirm the address is yours. Open it to finish signing in.";
 
-/** A confirmation stamped within this long of the account being made was not done by a person opening an email. */
-export const CONFIRM_GAP_MS = 10_000;
+/** The auth calls secureFirstProof needs, on the session the emailed link just opened. */
+export type ProofAuth = {
+  updateUser(attributes: { password: string }): Promise<{ error: unknown }>;
+  signOut(options: { scope: "others" }): Promise<{ error: unknown }>;
+};
 
-/** Did the auth service record a real confirmation (see the module note)? Unreadable or missing dates are a no. */
-export function confirmedLater(confirmedAt: string | null | undefined, createdAt: string | null | undefined): boolean {
-  const c = Date.parse(String(confirmedAt ?? "")), m = Date.parse(String(createdAt ?? ""));
-  return Number.isFinite(c) && Number.isFinite(m) && c - m >= CONFIRM_GAP_MS;
+/**
+ * Run when an address is first proven by its emailed link, before its household is made (see the module note):
+ * the password set before the proof is replaced by a random one nobody knows, and every other session is signed out.
+ * Throws when either fails, so no household is made (fails closed). The owner then sets their own password.
+ */
+export async function secureFirstProof(auth: ProofAuth, randomPassword: () => string = defaultRandomPassword): Promise<void> {
+  const rotated = await auth.updateUser({ password: randomPassword() }).catch((error: unknown) => ({ error }));
+  if (rotated.error) throw new Error("Could not replace the password set before the address was proven.");
+  const others = await auth.signOut({ scope: "others" }).catch((error: unknown) => ({ error }));
+  if (others.error) throw new Error("Could not sign out the other sessions of this account.");
+}
+
+function defaultRandomPassword(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** What a person sees when sign-up is closed to them. Says nothing about whether the email exists. */

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { SignupClosedError } from "@/lib/auth/signup-gate";
+import { secureFirstProof, signupMode, SignupClosedError } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -37,15 +37,24 @@ export async function GET(request: Request) {
 
   // Idempotent -- see app/api/auth/signup/route.ts for why this needs to run
   // here too (email-confirmation-required accounts have no household yet).
+  // Invite-only sign-up (lib/auth/signup-gate.ts): the code exchange proves the person opened a link sent to this
+  // address. Before a household is made for it, any password set before this proof is replaced and every other session
+  // signed out (someone may have pre-registered the address), and the owner then sets their own password.
+  const inviteOnly = signupMode() === "invite";
+  let made = false;
   try {
-    // The code exchange itself proves the person opened a link sent to this address.
-    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, { email: data.user.email, emailProven: true });
+    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, {
+      email: data.user.email,
+      emailProven: true,
+      beforeCreate: inviteOnly ? async () => { await secureFirstProof(supabase.auth); made = true; } : undefined,
+    });
   } catch (e) {
-    // Invite-only sign-up (lib/auth/signup-gate.ts): not invited, so no household and no session.
-    if (!(e instanceof SignupClosedError)) throw e;
     await supabase.auth.signOut().catch(() => {});
-    return NextResponse.redirect(new URL("/login?error=invite_only", url.origin));
+    if (e instanceof SignupClosedError) return NextResponse.redirect(new URL("/login?error=invite_only", url.origin));
+    if (inviteOnly) return NextResponse.redirect(new URL("/login?error=invalid_or_expired_link", url.origin));
+    throw e;
   }
 
+  if (made) return NextResponse.redirect(new URL("/update-password?first=1", url.origin));
   return NextResponse.redirect(new URL(next, url.origin));
 }

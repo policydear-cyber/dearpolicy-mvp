@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { confirmedLater, CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
+import { CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 import { isReviewerOnlyAccount } from "@/lib/claims/reviewers/boundary";
@@ -65,8 +65,8 @@ export async function POST(request: Request) {
   }
   try {
     await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`, undefined, {
+      // A password proves nothing about the address (lib/auth/signup-gate.ts): only the emailed link does.
       email: data.user.email ?? email,
-      emailProven: confirmedLater(data.user.email_confirmed_at, data.user.created_at),
     });
   } catch (e) {
     // Invite-only sign-up (lib/auth/signup-gate.ts): an account with no household gets no session unless it is invited
