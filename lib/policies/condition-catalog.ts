@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { hasQuote } from "@/lib/chat/facts";
@@ -361,8 +362,9 @@ export async function readWhateverIsStillUnread(args:{accountId:string;policyIds
        FROM policies p
       WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.processing_status='ready' AND ${activePredicate("p")}
         AND (p.benefits_indexed_at IS NULL OR p.conditions_indexed_at IS NULL)
+        AND NOT (coalesce(p.document_role,'')=ANY($3::text[]))
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
-      ORDER BY p.created_at`,[args.accountId,args.policyIds]);
+      ORDER BY p.created_at`,[args.accountId,args.policyIds,[...NO_COVER_READING_ROLES]]);
   let benefits=0,conditions=0,unread=0,read=0;
   const limit=args.documentsPerTurn??2;
   for(const document of pending.rows){

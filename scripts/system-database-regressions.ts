@@ -1579,6 +1579,33 @@ async function main(){
       assert.equal((await db.query<{n:unknown}>("SELECT reading_cache->'benefit_read_failure' AS n FROM policies WHERE id=$1",[failed])).rows[0].n,null);
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[waiting,failed,resting]]);
     });
+    await test("A receipt, statement, letter or bill never counts as still being read, and is never read again for benefits",async()=>{
+      // Live review on 4103e10 (finding 1): with every document Ready, Benefits said "Some of your documents are
+      // still being read" forever, because one premium receipt had never been marked read. Intake reads no benefits
+      // from these roles, so none of them is waiting, whatever insurer or wording it carries.
+      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
+      const {NO_COVER_READING_ROLES}=await import("@/lib/documents/messy");
+      const quiet=NO_COVER_READING_ROLES.map((role,i)=>({id:uuid(701800+i),role}));
+      const wording=uuid(701799);
+      for(const {id,role} of [...quiet,{id:wording,role:"policy_wording"}]){
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Contoh Takaful Berhad',$4,'Hospital',$5,60,'ready',$6,$6,'scan_clean')",[id,account,people[0].id,"Plan "+role,role,id+".pdf"]);
+        await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'Jumlah premium dibayar RM 1,250.00. Hospital cash RM 150 per day.')",[account,id]);
+        await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')",[id,people[0].id,account]);
+      }
+      const index=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
+      assert.deepEqual(index.unread.map((d:{id:string})=>d.id),[wording],"Only the document that carries benefits is waiting");
+      assert.deepEqual(index.documents.map((d:{policyId:string})=>d.policyId),[wording]);
+      await db.query("UPDATE policies SET benefits_indexed_at=now(),conditions_indexed_at=now() WHERE id=$1",[wording]);
+      const status=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
+      assert.equal(status.unread.length,0,"With the wording read, nothing is left: the page stops saying still being read");
+      const next=await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
+      assert.equal(next.done,true,"Try again has nothing to read, so it spends nothing");
+      const {readWhateverIsStillUnread}=await import("@/lib/policies/condition-catalog");
+      const asked=await readWhateverIsStillUnread({accountId:account,policyIds:quiet.map(q=>q.id),deadline:Date.now()+60_000});
+      assert.deepEqual(asked,{benefits:0,conditions:0,unread:0},"A question never reads them either");
+      assert.equal(Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE id=ANY($1::uuid[]) AND benefits_indexed_at IS NULL",[quiet.map(q=>q.id)])).rows[0].n),quiet.length,"Nothing about them was written");
+      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
+    });
     await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.
