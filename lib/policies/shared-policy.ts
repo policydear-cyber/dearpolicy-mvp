@@ -26,9 +26,10 @@ export function namesList(names: string[]) {
   return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** The sentence the person view shows under a shared policy's heading. */
-export function sharedPolicyText(note: SharedPolicyNote, person: string) {
+/** The sentence a person view shows with a shared policy: under its heading on Benefits ("an amount printed below"),
+ * under one of its figures on a cover's page ("this figure"). */
+export function sharedPolicyText(note: SharedPolicyNote, person: string, what = "an amount printed below") {
   return `This policy also covers ${namesList(note.others)}. ` + (note.ownSum
-    ? `${person}'s own sum insured on it is ${note.ownSum}; an amount printed below may be for another person on it.`
-    : "An amount printed below may be for another person on it.");
+    ? `${person}'s own sum insured on it is ${note.ownSum}; ${what} may be for another person on it.`
+    : `${what.charAt(0).toUpperCase()}${what.slice(1)} may be for another person on it.`);
 }
