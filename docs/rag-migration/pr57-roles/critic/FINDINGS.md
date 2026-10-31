@@ -10421,3 +10421,9 @@ New scripted test with no network, no keys, and no product change. 4/4 pass. Wit
 - Low: since #238 strips ownerId, matching is by display name, so two members sharing a name would both match.
 - Gate green: shared-policy 6/6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
 Probe: /mnt/project-files/critic/p245-shared.mts.
+
+## R492: #245 7198534: READY (replaces R491)
+M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route give ownSum only when the person's sums on the document form one distinct value, formatted with currency so S$ and RM never merge. Otherwise ownSum is null.
+- Tests: shared-policy passes 8/8. shared-policy-route-test passes with db:setup and benefit-table.sql, and asserts null ownSum for base plus rider. coverage:dashboard-dynamic passes on both #245 and main in my env.
+- Gate green: 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Lows: a cover with no sum read is ignored, so base S$100k plus an unread rider still shows S$100k. Matching is by display name (accepted).
