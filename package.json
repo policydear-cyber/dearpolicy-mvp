@@ -87,6 +87,7 @@
     "claims:composition-test": "node --import tsx scripts/claim-composition-regressions.ts",
     "claims:ci-test": "node --import tsx scripts/claim-ci-regressions.ts",
     "policies:benefits-document-name-test": "node --import tsx scripts/policies/benefits-document-name-test.ts",
+    "policies:document-filter-test": "node --import tsx scripts/policies/document-filter-test.ts",
     "policies:unread-amount-line-test": "node --import tsx scripts/policies/unread-amount-line-test.ts",
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",
     "claims:disability-test": "node --import tsx scripts/claim-disability-regressions.ts",

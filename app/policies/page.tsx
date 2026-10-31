@@ -11,6 +11,7 @@ import { documentFoundLabels, documentTableKinds, type KindRow } from "@/compone
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
+import { isOwnDocument } from "@/lib/policies/document-filter";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -388,12 +389,12 @@ export default function PoliciesPage() {
 
   const forPerson = useMemo(() => policies.filter((p) => !personId || p.linked_people.some((l) => l.id === personId)), [policies, personId]);
   const shown = useMemo(
-    () => forPerson.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || false),
+    () => forPerson.filter((p) => filter === "all" || filter === "personal" && isOwnDocument(p) || filter === "reference" && !isOwnDocument(p) || false),
     [forPerson, filter],
   );
   const counts = {
-    personal: forPerson.filter((p) => p.personal_coverage_confirmed).length,
-    reference: forPerson.filter((p) => !p.personal_coverage_confirmed).length,
+    personal: forPerson.filter(isOwnDocument).length,
+    reference: forPerson.filter((p) => !isOwnDocument(p)).length,
   };
 
 
