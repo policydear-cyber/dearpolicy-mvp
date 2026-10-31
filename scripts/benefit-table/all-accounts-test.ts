@@ -174,30 +174,53 @@ async function main() {
   const { benefitTableLiveFor } = await import("@/lib/benefit-table/app");
   const all = env({ ...prod, DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS: "1" });
   const OLD = "3a9c7d21-0b4e-4f6a-8c55-998877665544";
-  const dbWith = (ledgerRows: Record<string, number>, o: { ledgerTable?: boolean; fail?: boolean } = {}) => (async (sql: string, p: unknown[]) => {
+  type Doc = { role: string | null; live: boolean; tableRead: boolean };
+  type Stored = { docs?: Doc[]; ledgerRows?: number; ledgerTable?: boolean; fail?: "readings" | "ledger" };
+  // Answers the statements benefitTableLiveFor sends, from what is stored for OLD; every other household has nothing.
+  const dbWith = (who: string, st: Stored) => (async (sql: string, p: unknown[]) => {
     const q = sql.replace(/\s+/g, " ").trim();
+    const mine = p[0] === who;
+    const docs = mine ? st.docs ?? [] : [];
     if (q.includes("to_regclass('public.benefit_readings')")) return [{ ok: true }];
-    if (o.fail) throw new Error("connection reset");
-    if (q.includes("to_regclass('public.coverage_rules')")) return [{ ok: o.ledgerTable !== false }];
-    if (q.startsWith("SELECT 1 FROM coverage_rules WHERE account_id=$1")) return Array.from({ length: Math.min(1, ledgerRows[String(p[0])] ?? 0) }, () => ({ "?column?": 1 }));
+    if (q.startsWith("SELECT 1 FROM benefit_readings")) { if (st.fail === "readings") throw new Error("connection reset"); return docs.filter((d) => d.tableRead).slice(0, 1).map(() => ({ x: 1 })); }
+    if (q.startsWith("SELECT 1 FROM policies")) {
+      assert.match(q, /processing_status='ready'/); assert.match(q, /background_jobs/, "a document being read now is not 'read before'");
+      const noCover = p[1] as string[];
+      return docs.filter((d) => !d.live && !noCover.includes(d.role ?? "")).slice(0, 1).map(() => ({ x: 1 }));
+    }
+    if (st.fail === "ledger") throw new Error("connection reset");
+    if (q.includes("to_regclass('public.coverage_rules')")) return [{ ok: st.ledgerTable !== false }];
+    if (q.startsWith("SELECT 1 FROM coverage_rules WHERE account_id=$1")) return mine && (st.ledgerRows ?? 0) > 0 ? [{ x: 1 }] : [];
     throw new Error("fake db: unexpected statement " + q.slice(0, 80));
   }) as Parameters<typeof benefitTableLiveFor>[0];
-  await test("existing household (Coverage already read): keeps its existing Coverage when the table is opened to everyone", async () => {
-    assert.equal(await benefitTableLiveFor(dbWith({ [OLD]: 12 }), all, OLD), false);
+  const schedule = (o: Partial<Doc> = {}): Doc => ({ role: "personal_schedule", live: false, tableRead: false, ...o });
+  await test("existing household, documents read the existing way: keeps its existing Coverage", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule(), schedule({ role: "policy_wording" })], ledgerRows: 12 }), all, OLD), false);
   });
-  await test("new household (nothing in the existing Coverage): gets the table", async () => {
-    assert.equal(await benefitTableLiveFor(dbWith({ [OLD]: 12 }), all, NEW), true);
-    assert.equal(await benefitTableLiveFor(dbWith({}, { ledgerTable: false }), all, NEW), true, "no existing Coverage table at all");
+  await test("existing household with read documents but no coverage_rules rows (seeded lazily, or nothing seeded): keeps its existing Coverage (Critic M1)", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule()], ledgerRows: 0 }), all, OLD), false);
+  });
+  await test("existing household with only coverage_rules rows left: keeps its existing Coverage", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [], ledgerRows: 3 }), all, OLD), false);
+  });
+  await test("new household: nothing on file gets the table; its first upload, being read right now, does too", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, {}), all, NEW), true);
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ live: true })] }), all, OLD), true, "a ready document whose read job is live");
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ role: "premium_receipt" })], ledgerTable: false }), all, OLD), true, "only a receipt on file");
+  });
+  await test("a household on the table stays there, even with coverage_rules rows and old documents (Critic M2)", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ tableRead: true }), schedule()], ledgerRows: 9 }), all, OLD), true);
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ tableRead: true })], fail: "ledger" }), all, OLD), true, "a later check failing never moves it");
   });
   await test("an alpha household keeps the table even with an existing Coverage", async () => {
-    assert.equal(await benefitTableLiveFor(dbWith({ [ALPHA]: 40 }), all, ALPHA), true);
-    assert.equal(await benefitTableLiveFor(dbWith({ [ALPHA]: 40 }), env(prod), ALPHA), true);
+    assert.equal(await benefitTableLiveFor(dbWith(ALPHA, { docs: [schedule()], ledgerRows: 40 }), all, ALPHA), true);
+    assert.equal(await benefitTableLiveFor(dbWith(ALPHA, { docs: [schedule()], ledgerRows: 40 }), env(prod), ALPHA), true);
   });
-  await test("the check failing keeps the household on what it has (the existing Coverage), never an empty table", async () => {
-    assert.equal(await benefitTableLiveFor(dbWith({}, { fail: true }), all, NEW), false);
+  await test("the check failing keeps the household on the existing Coverage for that request, never an empty table", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule()], fail: "readings" }), all, OLD), false);
   });
   await test("switch off: nobody gets the table, whatever is stored", async () => {
-    assert.equal(await benefitTableLiveFor(dbWith({}), env(prod), NEW), false);
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ tableRead: true })] }), env(prod), NEW), false);
   });
   // A household on the table whose schedule is uploaded but not in the table yet is never told to upload a schedule.
   const unreadSchedule = await page({ policies: [policy("sched", { product_name: "SihatCare Plus", policy_number: "BJT-MC-40211" })],
