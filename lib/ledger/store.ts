@@ -212,10 +212,18 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
     if(!kind)continue;
     const currency=statedCurrencyCode(coverage.currency);
     if(!currency)continue; // never assume SGD for a schedule line
+    const lineEvent=eventForBenefitName(coverage.category).event;
+    const ownKind=PRODUCT_DEFAULTS.find(d=>d.pattern.test(coverage.category)&&!(d.exclude&&d.exclude.test(coverage.category)));
     for(const ev of kind.events){
       if(eventsFromWording.has(ev.event))continue; // the wording already says what this pays
+      // A line's printed sum belongs only to the benefit the line itself names: its category's own event ("Death" is
+      // death), or, for a category that names only the plan kind ("Personal Accident"), that kind's main benefit. A
+      // benefit the plan type only suggests shows no figure: TPD or terminal illness beside a death line "Manfaat Takaful
+      // (Kematian) RM200,000", death beside an "Accidental Death" or "Total Permanent Disability" line, critical illness
+      // beside an "Early Critical Illness" line. The line never printed a sum for it (cross-page check, 31 Oct).
+      const main=ev.event===lineEvent||(lineEvent==="other"&&ev===kind.events[0]&&ownKind===kind);
       out.push({familyMemberId:contract.ownerId,policyId:coverage.policyId,planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,
-        eventType:ev.event,detail:null,cause:null,paysKind:ev.pays,amount:ev.pays==="lump_sum"?coverage.amount:null,currency,
+        eventType:ev.event,detail:null,cause:null,paysKind:main||ev.pays!=="lump_sum"?ev.pays:"stated",amount:main&&ev.pays==="lump_sum"?coverage.amount:null,currency,
         sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note:ev.note,
         sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
         seedKey:"coverage:"+coverage.id+":"+ev.event+"|member:"+contract.ownerId});
