@@ -122,17 +122,6 @@ export default function FamilyPage() {
       <AccountTabs />
       <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use full legal names where possible: when a certificate names several insured people, DearPolicy uses these names to link it to everyone it covers.</p></div></div>
 
-      <section className="profile-add-panel">
-        <form onSubmit={add} className="profile-add-grid">
-          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alex Chen" required /></div>
-          <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Alex" /></div>
-          <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
-        </form>
-        {status && <div className="upload-status" role="status">{status}</div>}
-      </section>
-
       <section className="section">
         <div className="profile-list">
           {family.map((member) => (
@@ -173,6 +162,19 @@ export default function FamilyPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
+      <section className="profile-add-panel" aria-label="Add a person">
+        {family.length ? <h3>Add someone</h3> : null}
+        <form onSubmit={add} className="profile-add-grid">
+          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alex Chen" required /></div>
+          <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Alex" /></div>
+          <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
+        </form>
+        {status && <div className="upload-status" role="status">{status}</div>}
       </section>
 
       <HouseholdAccess />
