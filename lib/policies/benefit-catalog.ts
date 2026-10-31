@@ -843,31 +843,15 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"pengesahan tuntutan diluluskan kelulusan umur berumur").split(" "));
 /** Durations and ages are allowed as figures: "within 30 days", "for 5 consecutive days", "under age 65", "96 hours". */
 const CONDITION_FIGURES=/\b\d{1,3}\s+(?:covered\s+|specified\s+|listed\s+)?(?:critical\s+|major\s+)?(?:conditions|illnesses|diseases|penyakit)\b|\b\d{1,4}\s+(?:consecutive\s+|calendar\s+|berturut[\s-]turut\s+)?(?:hours?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\b|\b(?:age|aged|umur|berumur)\s+\d{1,3}\b|\b(?:two|both|one)\s+(?:limbs?|eyes?|ears?|hands?|feet|foot|arms?|legs?)\b/gu;
-/** Where an open-ended name goes, which no word list can hold: the illness after "diagnosis of" ("Heart Attack of Specified
- * Severity or Stroke", "Type 1 Diabetes Mellitus", "Kanker Stadium Akhir"), who is paid after "to" or "kepada" ("the
- * nominee(s) named in the policy", "the assignee under a valid assignment", "penama atau waris"), and words in brackets
- * ("(paraplegia)"). Each runs to the next comma (for an illness, the next full stop), or condition word, and is accepted only when none of its words
- * says how much, how or how often (MONEY_OR_MANNER, TE pr222 round 5). Everything outside them stays on CONDITION_WORDS. */
-const SLOT_END=String.raw`(?=\s*(?:[,;.]|$|\s(?:if|when|where|within|before|after|during|upon|on|as|provided|while|unless|until|apabila|jika|bila|semasa|sekiranya|selepas|sebelum|dalam)\b))`;
-const ILLNESS_SLOT=new RegExp(String.raw`\b(?:diagnosis\s+of|diagnosed\s+with|diagnosed\s+as\s+having|suffering\s+from|didiagnosis(?:\s+(?:dengan|menghidap|menderita))?|terdiagnosis(?:\s+menderita)?|suffers|suffering|suffered|sustains|sustained|contracts|develops|for)((?:,?\s+[^\s,;.]+){1,16}?)`+SLOT_END.replace("[,;.]","[;.]"),"gu");
-const PAYEE_SLOT=new RegExp(String.raw`(?<!\bup\s)\b(?:to|kepada)((?:\s+[^\s,;.]+){1,10}?)`+SLOT_END,"gu");
-const BRACKET_SLOT=/\(([^()]{1,60})\)/gu;
-/** Closed: words about money, its size or how it is paid. Any one of them in a slot leaves the share unsure. */
-const MONEY_OR_MANNER=/^(?:minus|less|lesser|greater|net|deduct\w*|reduc\w*|half|halved|quarters?|thirds?|double[sd]?|twice|triple[sd]?|times|multipl\w*|instal+ments?|ansuran|daily|weekly|monthly|yearly|annual\w*|per|rate|balance|baki|sisa|remain\w*|outstanding|extent|place|instead|already|used|insurer|limit\w*|maximum|max|cap\w*|exceed\w*|most|share\w*|proportion\w*|pro[\s-]?rat\w*|rateabl\w*|apportion\w*|divid\w*|dibahagi\w*|dipotong|potong\w*|ditolak|dikurang\w*|kurang|separuh|setengah|sebanyak|equal\w*|split|refund\w*|debt\w*|loan\w*|owed|owing|hutang|pinjaman|two|three|four|five|six|seven|eight|nine|ten|first|second|each|pay\w*|paid|dibayar\w*|amount\w*|jumlah|benefit\w*|sum|child\w*|adult\w*|kanak|dewasa|but|except|plus|then|offset|subtract\w*|taken|bonus\w*|together|addition\w*|extra|top|lieu|replac\w*|substitut\w*|waiv\w*|forfeit\w*|scaled?|according|depend\w*|degree|tambahan|bersama)$/u;
-const OPEN_WORDS=/[^\p{L}\p{N}%]+/u;
 /** The share itself paid again, said in other words: "and we pay it within 14 days". */
 const PAID_AS_SAID=/\b(?:we\s+(?:will\s+|shall\s+)?pay\s+it|it\s+(?:is|will\s+be|shall\s+be)\s+paid)\b/gu;
 /** "as a lump sum", "in one lump sum": how, not how much. */
 const LUMP_SUM=/\b(?:as|in)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b/gu;
 /** A period of cover named as such: "during the Benefit Term", "within the policy year". */
 const COVER_PERIOD=/\b(?:benefit|policy|cover(?:age)?|insurance)\s+(?:term|period|year|anniversary)\b/gu;
-function slotHarmless(words:string){return words.split(OPEN_WORDS).every(w=>!w||(!/%/.test(w)&&!MONEY_OR_MANNER.test(w)));}
 function conditionHarmless(condition:string,benefitName:string|null|undefined){
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(LUMP_SUM," ").replace(COVER_PERIOD," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ")
-    .replace(BRACKET_SLOT,(m,inner:string)=>slotHarmless(inner)?" ":m)
-    .replace(ILLNESS_SLOT,(m,name:string)=>slotHarmless(name)?" diagnosis ":m)
-    .replace(PAYEE_SLOT,(m,payee:string)=>slotHarmless(payee)?" to ":m);
+  const text=normalText(condition).replace(PAID_AS_SAID," ").replace(LUMP_SUM," ").replace(COVER_PERIOD," ").replace(CONDITION_FIGURES," ").replace(ANY_COVERED_CONDITION," ");
   const words=text.replace(/[,.;:()\-–—'’"“”/]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CONDITION_WORDS.has(w)||own.has(w));
 }
