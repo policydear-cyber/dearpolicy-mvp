@@ -10486,3 +10486,24 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 - 13 of 15 real-cover probes dropped, e.g. "Medical Expenses (Excess: S$100) S$500,000", "Deductible S$3,500, Annual Limit S$1,000,000", "101% of premiums paid or Sum Assured of S$200,000", "Krankheitskosten ohne Selbstbeteiligung 100.000 €". Travel benefits also dropped: "Rental Vehicle Excess", "Excess Waiver Benefit".
 - M1: when the stored figure isn't found, the label of the first figure decides.
 - Fix: judge only the label head next to the figure, with a closed keep-list for cover words. Probe: critic/p261-sumline.mts.
+
+## R504 — #261 da2e5ce → 6d38b82c (READY after 3 rounds)
+- Three outcomes now: sum, not a sum, or withhold (cover shown, no figure).
+- My L1 (strip full-width brackets) made "（保费豁免）HK$3,000" a death sum. The TE caught it and I withdrew READY. The final rule: any not-a-sum term inside a bracket withholds.
+- Probes: critic/p261c-brackets.mts, bad 0. Cost: some real covers ("(Excess: S$100) S$500,000") show no figure; that is the safe side.
+
+## R505 — #262 469037f → 45ddd31 (READY)
+- H1: a lone dot group was read as thousands ("€1.500 million" → 1500, "Section 1.500" → 1500). Fixed: only next to a dot-grouping currency, or with an unambiguous grouping.
+- Shared foreign scale words were added (milioni, triệu, milhões…).
+
+## R506 — #263 invite-only sign-up, 498385a → ab0accb2 (READY)
+- M1: proof of the address depended on the Confirm email setting. H1: an attacker who pre-registered an invited address could keep a password into the owner's household.
+- Fixed: only the emailed-link callback counts as proof. First proof rotates the password and signs out other sessions inside the household transaction, then sends the owner to /update-password.
+- Settings (inferred): Supabase "Secure password change" must be OFF. L1: a squatter's existing access token stays valid until it expires.
+
+## R507 — #264 privacy notice cf90aa82 (NOT ready)
+- H1: "a deleted document's file is removed from storage" is false. The file waits for storage:cleanup, which nothing schedules, and the soft-deleted text rows (ID numbers, health details) stay.
+- M1: Pinecone is not listed as a processor.
+
+## R508 — #265 0120507 → 84ec6ef (READY, merge after #262)
+- M1: short scale words scaled counts ("100 MD consultations" → 1e11). Fixed: short words count as scale only next to a currency.
