@@ -10335,3 +10335,10 @@ Fix: join a dangling amount only when the row's own name is unfinished (UNFINISH
 
 ## R474: #235 0ec09c7 (parallel Benefits queries): READY
 The same SQL, now started earlier. query() uses the shared pool and each statement filters by its own account_id, so running them in parallel crosses no household. The failure handling is unchanged: an inventory query failure still fails the route, conditions failures still give [], and `.catch(()=>undefined)` prevents unhandled rejections on early exits. Gate green (85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). The lifecycle guard fails only on the site inherited from main (#231).
+
+## R475: #234 ebda514 (wrapped cell): READY
+R473 H1 is fixed: 5 of the 6 p234b pages give the same rows as main (Child Benefit, Loss of Speech, Fracture of Arm, Coma and Permanent Disability are kept). Gate green (wrapped-cell, unread-amount-line, share-cap, capped-share, printed-cap, prevailing, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge).
+Low: on "Hearing Loss in | 15% …, up to" / "Both Ears | S$20,000" / "One Ear | S$10,000", Both Ears is still joined to the header row, and One Ear stays a row of its own. Main also misread this sub-table (an unfinished header plus two orphans), so it is not a regression.
+
+## R476: #236 0064e16 (premium caption test follows #228): READY
+This is a test-only change to a test that is not a registered grader. The old assertion on app/api/dashboard/route.ts is moved to lib/policies/counted-premiums.ts, where #228 put the same mapping (items, and now oneOff too, carry premiumSourceKind). The route is checked to call countedPremiums. Nothing is loosened. premium:source-caption-test and premium:table-test pass, the rest of the gate is green, and the test fails on main 6b9e814.
