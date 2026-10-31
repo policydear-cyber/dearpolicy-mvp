@@ -10020,3 +10020,38 @@ Probes call shareBound directly on made-up passages. "cap" means the share is pa
 - **R417 #212 0c6c4460: READY.** The gate is green (system:test 0, plus all the standard suites, tsc, next build, merge-tree). The unread list and readWhateverIsStillUnread now skip NO_COVER_READING_ROLES, the same set that dashboard, not-fully-read and benefit-table documentState already use. The only other readers of benefits_indexed_at are the monthly ledger count, which is unaffected, and catalog-builder writes. A deliberate single-policy POST is unchanged.
   - Misfiled pack: documentState still gives "table_unread" for a misfiled NON_COVER pack that has a schedule page. notFullyRead counts it through readAgain whatever its role, so it keeps its route (Read again on Documents).
   - L1 (inferred, not checked): such a pack's benefits and conditions are now read ONLY if Read again re-files it under a cover role. If Read again keeps the stale letter or receipt role, nothing reads its benefits any more; before this PR, the Benefits page's "read the rest" did. Please confirm that the reprocess path re-runs role detection, for example on DC's Singapore Life pack (insurer_letter) after the 1 Nov reset.
+
+## R418 — #213 ded6011 (Portfolio kinds)
+Gate (network-blocked, no model keys): own test 67/0, simple-chat 85, replay 22/22, benefit-table 107, chat 107, r5 21/21, tsc 0, next build 0, merges clean into main 16be49a.
+
+## M1 PREMIUM now lets rider-price rows through as benefit rows (table-figures.ts:165, shared into chat.ts:927)
+The new exception "N% of (annual|basic) premium" is meant for benefits worked out from premiums PAID, but it also matches
+a premium priced as a share of another premium. Probe (categoryOfBenefit / PREMIUM.test):
+- "Critical illness rider premium: 12% of basic premium" -> category Critical Illness, NOT premium -> a CI tile row
+- "Hospital cash rider premium 10% of the basic premium" -> Hospital Cash row
+- "Total and permanent disability premium 3% of basic premium" -> TPD row
+These rows were premium rows on main. Now they count as covers: an extra "no fixed sum" policy blocks or splits a tile, and
+in chat (chat.ts:729) the premium no longer skips the waiting-period/out-of-period rule.
+Fix: the exception requires "premiums paid" (or a benefit head like death/surrender/payable/higher of): e.g. change both
+branches to `...premiums?\s+paid\b`. "105% of total premiums paid", "sum of all premiums paid" still pass; "12% of basic premium" stays a premium.
+
+## M2 A page-level plan type is given to every non-rider cover of the reading (assemble.ts:110 planTypeOf(c, r.planType))
+planTypeOfPages works per document, but a schedule or pack with two base covers (a term plan and an endowment plan, or a
+protection policy bundled with a companion product's summary saying "This plan is a savings plan") gives Savings to the term
+cover too. Home then lists the term plan under "Savings and investment" with a quote that is about another product. (This is
+inferred from code; planTypeOf returns fromPages for any cover whose name says nothing.)
+Fix: use the page type only when the reading has exactly one non-rider cover, or when the quote's page names that cover's
+product or plan. Otherwise it is unsure: null.
+
+## M3 A rider whose riderOf is left out takes the policy's name kind (plan-type.ts:62)
+riderOf is optional in the reading. planKindOfName joins product + cover + plan, so for a cover "Term Rider" or a
+"Critical Illness Rider" under product "XYZ Endowment Plan" with riderOf missing, the name gives savings
+(probe: "GREAT Endowment Term Rider" -> savings). Fix: also treat a cover name with rider/supplementary/add-on as a rider,
+and judge by the cover's own name (cover, plan) before the product.
+
+## Checked, OK
+- Known-sum label (app/page.tsx:87): shows the fixed-sum total only with "Not included: <names> (no fixed sum, see Coverage)".
+  It never presents a part sum as the whole. It is OK against DC 27 Oct. (Low: with one fixed-sum policy, "added up" reads oddly.)
+- SELF sentence: "long/medium/short term savings plan" -> savings; "is not a" no match; whole life + endowment-benefit -> null;
+  the savings + investment conflict -> null; a protection statement elsewhere -> null. Good allow-list shape.
+- Travel/ended: endedOn shows only when no current cover for the category; Coverage heading "Ended on <date>".
