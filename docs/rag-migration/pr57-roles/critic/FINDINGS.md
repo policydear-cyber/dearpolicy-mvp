@@ -10507,3 +10507,32 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 
 ## R508 — #265 0120507 → 84ec6ef (READY, merge after #262)
 - M1: short scale words scaled counts ("100 MD consultations" → 1e11). Fixed: short words count as scale only next to a currency.
+
+## R509 — #261 → d5b10e9 (READY)
+- Earlier READY was withdrawn after my own L1 (strip full-width brackets) turned a bracketed waiver into a sum. Final rule: a not-a-sum term inside a bracket withholds. 払込免除, 保费豁免 and 保費豁免 are added. Bracket probe gives bad 0, and the full gate is green.
+
+## R510 — #266 94127bb → 337963e (probe clean, gate pending)
+- H1: lump sums got periods ("Yearly Renewable Term" → year, "每日24小时" → day). Fixed: lump-sum categories never carry a period, and a lump sum printed with a period withholds its figure.
+- M1–M4: a period anywhere on the line, "/day" after a digit, the CJK premium boundary, and chat summing incomes. All fixed.
+
+## R511 — #269 e453ff5 → 2570400 (probe clean, gate pending)
+- H1: a non-ISO code fell back to SGD. Fixed: it now gives "" or null.
+- M1: an ISO code beside a rate ("IRR 4.25%", "IRR 1,250 bps"). Fixed with a money-shaped lookahead.
+- L: the NTD, NIS and YEN aliases apply to label fields only.
+
+## R512 — #270 ed453e2 → e140530 (probe clean, gate pending)
+- H1: death or accident lump sums printed with "24 hours a day" or 每日 were stored per_day. Fixed: only periodic events (disability income, daily cash, long-term care) take per_day or per_month. Any other event with a period is stored as "stated".
+- M1: add/add conflict with #266 in line-period.ts. Fixed (the file is now identical).
+
+## R513 — #265 → 119978d (probe clean, gate pending)
+- A scale word whose currency rule fails now prints nothing. There are no new wrong readings against main across 25 cases.
+
+## R514 — #268 → 7173ab7 (READY)
+- The local checker had 8 bypasses (long /Length, stream inside a string or comment, GoToR, TargetMode, DDEAUTO, aFChunk). Removed: an unknown or unjudged hash is now not_scanned and goes ahead unscanned. L1: malicious>0 with a missing suspicious field is treated as unknown.
+
+## R515 — #264 → bc473665 (READY, depends on #267/#271)
+- H1 (a false deletion claim) and M1 (Pinecone) are fixed, and ToConfirm marks are added. L1: claim calculation snapshots are not caveated.
+
+## R516 — #267 → 79eed23 (READY); #271 11333d0 (NOT READY)
+- #271 M1: an id or policy-number match misses answers that store neither. Proposed: redact unless the answer is provably from other active documents.
+- #271 M2: if a #271 pass fails and #267 then clears policy_number, the retry can match by id only.
