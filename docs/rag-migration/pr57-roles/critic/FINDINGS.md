@@ -10536,3 +10536,11 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 ## R516 — #267 → 79eed23 (READY); #271 11333d0 (NOT READY)
 - #271 M1: an id or policy-number match misses answers that store neither. Proposed: redact unless the answer is provably from other active documents.
 - #271 M2: if a #271 pass fails and #267 then clears policy_number, the retry can match by id only.
+
+## R517 — final heads, 31 Oct ~21:20Z
+- READY: #251 bd359fb, #265 119978d, #266 337963e, #267 380b2d1, #268 f9e18ee, #269 2570400, #270 e207a59, #271 d128a77, #273 2ca756d.
+- #266: dashboard-dynamic fails one case ("an ended trip is not cover") identically on main. It is waiting on DC's ignore-end-dates grader decision.
+- #271: changed from an id/number match (a deny-list) to an allow-list (redact unless provably from active documents) plus a match on distinctive names. Open: claim snapshots (DC decision), and #267 waiting for #271's marker.
+- #272 5d050ff NOT READY: personName() reads family_members without activePredicate, so lifecycle-query-guard fails.
+- Conflicts: #272 with #266 (answer.ts); #273 with #256; #262 merges before #265.
+- Process: probe worktrees named w_<tag> collided with gate worktrees and wiped the shared node_modules. Probes now use x_*. Turbopack refuses a symlinked node_modules, so e2e runs need a real copy.
