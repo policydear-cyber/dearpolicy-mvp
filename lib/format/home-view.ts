@@ -11,6 +11,9 @@ export type HomeViewInput = {
   family: { policy_count?: number | null }[];
   /** Documents uploaded but not yet linked to anyone. */
   unclaimed: number;
+  /** The chosen person's covered tiles, from any source: a shared certificate linked only to another member can still
+   * cover them through the benefit table, so no linked document is not "nothing on file". */
+  covered: number;
   /** The chosen person's counted premiums. */
   premiums: { product_name: string | null; insurer: string | null }[];
 };
@@ -18,7 +21,7 @@ export type HomeView = { empty: boolean; personEmpty: boolean; paidFor: string[]
 
 export function homeView(v: HomeViewInput): HomeView {
   const householdDocs = v.family.reduce((n, m) => n + (m.policy_count ?? 0), 0) + v.unclaimed;
-  const hasAnything = v.personDocs > 0 || householdDocs > 0 || v.premiums.length > 0;
+  const hasAnything = v.personDocs > 0 || householdDocs > 0 || v.covered > 0 || v.premiums.length > 0;
   const paidFor = [...new Set(v.premiums.map((p) => p.product_name ?? p.insurer).filter((n): n is string => !!n))];
-  return { empty: !hasAnything, personEmpty: hasAnything && v.personDocs === 0, paidFor };
+  return { empty: !hasAnything, personEmpty: hasAnything && v.personDocs === 0 && v.covered === 0, paidFor };
 }

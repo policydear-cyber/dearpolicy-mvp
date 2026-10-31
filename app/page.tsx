@@ -69,7 +69,7 @@ export default function DashboardPage(){
  const documentCount=(data?.quality?.personalDocs??0)+(data?.quality?.referenceDocs??0)+(data?.unclaimed?.length??0);
  // The welcome is for a household with nothing on file. Choosing a person who has nothing yet (a child just added) keeps
  // the household's page, and says so for that person, with any premium already found for them.
- const view=homeView({personDocs:documentCount-(data?.unclaimed?.length??0),family:data?.family??[],unclaimed:data?.unclaimed?.length??0,premiums:data?.premiums?.items??[]});
+ const view=homeView({personDocs:documentCount-(data?.unclaimed?.length??0),family:data?.family??[],unclaimed:data?.unclaimed?.length??0,covered:confirmed.length,premiums:data?.premiums?.items??[]});
  const emptyPortfolio=!loading&&!data?.error&&!!data&&view.empty;
  const returning=!!data&&!data.error&&!view.empty;
  const personEmpty=returning&&view.personEmpty;
