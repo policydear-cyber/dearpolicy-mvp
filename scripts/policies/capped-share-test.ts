@@ -31,7 +31,7 @@ const CAPPED = ["Angioplasty: 10% of Sum Insured, up to S$25,000", "10% of the s
 
 test("a share whose passage prints an amount gives no rule, read or stored; a share alone still stands", async () => {
   const { repairStoredRules, validateCatalogFormula, assessCatalogBenefit, CAPPED_SHARE_NOTE } = await import("@/lib/policies/benefit-catalog");
-  const v = (quote: string) => validateCatalogFormula({ kind: "sum_insured", value: 0.1, currency: null, quote, factKey: null, offsetDays: null, maximumDays: null }).formulaKind;
+  const v = (quote: string) => validateCatalogFormula({ kind: "sum_insured", value: 0.1, currency: null, quote, factKey: null, offsetDays: null, maximumDays: null, benefitName: "Angioplasty" }).formulaKind;
   // Each is either withheld with the note, or (one printed cap in the cover's currency, nothing else) paid up to that cap
   // (share-cap-test.ts); never the full uncapped share.
   for (const q of CAPPED) {

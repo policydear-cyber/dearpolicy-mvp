@@ -212,11 +212,15 @@ function readCap(condition:Pick<CoverCondition,"amount"|"amountBasis"|"quote">):
  * as a cap with its currency, when more than one is, or when the figure is a count, minimum, excess or premium. A bare
  * figure ("up to 25,000") is not read: its currency is not printed. Works for any currency the figure reader knows. */
 const SHARE_PHRASE=/\d+(?:\.\d+)?\s*(?:%|per\s?cent\b)\s*(?:of\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|insured\s+amount|sum\s+covered)/giu;
-const CAP_LEAD=/(?:\b(?:subject\s+to|but|and|which\s+is|that\s+is)\s+(?:an?\s+|the\s+)?)$/iu;
-const CAP_TAIL=/^\s*(?:(?:per|for\s+(?:each|any|the|one))\s+(?:claim|life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person|policy(?:\s+year)?|lifetime|year|event|incident|occurrence)\b|in\s+(?:total|aggregate)\b|for\s+this\s+benefit\b|only\b)?/iu;
-export function shareCapInPassage(quote:string):{amount:number;currency:string|null;rest:string}|null{
+const CAP_LEAD=/(?:\b(?:subject\s+to|but|and|or|which\s+is|that\s+is)\s+(?:an?\s+|the\s+)?)$/iu;
+// Only a scope that keeps the cap whole for each claim: an aggregate ("in total", "lifetime", "across all policies") is a
+// cap earlier claims may have used, so it stays in the rest and makes the share unsure (Critic R416 H1).
+const CAP_TAIL=/^\s*(?:(?:per|for\s+(?:each|any|the|one))\s+(?:claim|life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person|event|incident|occurrence|condition)\b|for\s+this\s+benefit\b|only\b)?/iu;
+export function shareCapInPassage(quote:string):{amount:number;currency:string|null;rest:string;shares:number;shareAt:number;capAt:number}|null{
   // The share itself is blanked out first (same length, so positions hold): "of the sum insured" right before "up to S$"
-  // is the share's own wording, not a sum-insured figure.
+  // is the share's own wording, not a sum-insured figure. How many shares there are is returned: a second one is a
+  // different rule for some claims, and the caller never caps it (Critic R416 H2).
+  const shares=[...(quote??"").normalize("NFKC").matchAll(SHARE_PHRASE)];
   const text=(quote??"").normalize("NFKC").replace(SHARE_PHRASE,(m)=>" ".repeat(m.length));
   const found:{amount:number;currency:string|null;cut:[number,number]}[]=[];
   for(const m of text.matchAll(FIGURE)){
@@ -240,7 +244,8 @@ export function shareCapInPassage(quote:string):{amount:number;currency:string|n
   }
   if(found.length!==1)return null;
   const [cap]=found;
-  return {amount:cap.amount,currency:cap.currency,rest:text.slice(0,cap.cut[0])+" "+text.slice(cap.cut[1])};
+  return {amount:cap.amount,currency:cap.currency,rest:text.slice(0,cap.cut[0])+" "+text.slice(cap.cut[1]),
+    shares:shares.length,shareAt:shares[0]?.index??-1,capAt:cap.cut[0]};
 }
 const CAP_CURRENCY:Record<string,string>={"S$":"SGD","US$":"USD","A$":"AUD","HK$":"HKD","NZ$":"NZD","£":"GBP","€":"EUR","₹":"INR",RM:"MYR",RS:"INR","RS.":"INR",RP:"IDR","RP.":"IDR",RMB:"CNY"};
 function normalizeCapCurrency(sign:string):string|null{

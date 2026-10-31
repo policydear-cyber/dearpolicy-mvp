@@ -29,10 +29,12 @@ test("one printed cap in the cover's currency: the lower of the share and the ca
     ["10% of the sum assured, subject to a maximum of SGD 25,000 per life assured", 1_000_000, "SGD", 25_000],
     ["10% of the sum insured or RM5,000, whichever is lower", 1_000_000, "MYR", 5_000],
     ["10% of the sum insured, subject to a maximum of £10k per life", 500_000, "GBP", 10_000],
-    ["Keyhole surgery: 10% of the Sum Insured, limited to US$20,000 per claim", 400_000, "USD", 20_000],
+    ["Angioplasty: 10% of the Sum Insured, limited to US$20,000 per claim", 400_000, "USD", 20_000],
     ["10% of the coverage amount, capped at HK$50,000", 2_000_000, "HKD", 50_000],
-    ["Benefit is 25% of the sum insured, but no more than A$15,000 in total", 100_000, "AUD", 15_000],
-    ["10% of the sum insured, maximum S$25,000 in total", 1_000_000, "SGD", 25_000],
+    ["The benefit is 25% of the sum insured, but no more than A$15,000 per claim", 100_000, "AUD", 15_000],
+    ["We will pay 10% of the sum insured under this policy, maximum S$25,000 per insured person", 1_000_000, "SGD", 25_000],
+    ["An additional 20% of the Sum Assured will be payable, subject to a maximum amount of S$25,000 (or equivalent currency) per life per condition.", 1_000_000, "SGD", 25_000],
+    ["we will, subject to the provisions of this Policy, pay 20% of the Insured Amount under this Supplementary Agreement, subject to a limit of S$25,000", 1_000_000, "SGD", 25_000],
     ["10% of the sum insured, no more than €8,000", 200_000, "EUR", 8_000],
   ] as const) {
     assert.equal(pay(quote, sumInsured, currency, true), expected, "stored: " + quote);
@@ -54,6 +56,25 @@ test("anything less sure than one cap in the cover's currency gives no figure, n
     ["10% of the sum insured, up to S$25,000 less any amount paid before", "SGD"], // another bound
     ["10% of the sum insured, up to the limit in the Schedule", "SGD"], // a cap with no figure
     ["10% of the sum insured, up to S$25,000 or the amount in the table, whichever is lower", "SGD"],
+    // Critic R416 and TE pr211: a cap for some claims only, an aggregate, a second share, another sentence's cap, a change.
+    ["10% of the sum insured, up to S$25,000 for adults; for children 50% of that", "SGD"],
+    ["10% of the sum insured, up to S$25,000 in total for all early stage claims", "SGD"],
+    ["10% of the sum insured, up to S$25,000 per lifetime across all policies with us", "SGD"],
+    ["10% of the sum insured, maximum S$25,000 in total", "SGD"],
+    ["10% of the sum insured, up to S$25,000; the benefit is 20% of Sum Insured if diagnosed before age 18", "SGD"],
+    ["10% of Sum Insured. Ambulance fees up to S$500.", "SGD"],
+    ["10% of the sum insured, up to S$25,000, plus 5% for each year in force", "SGD"],
+    ["10% of the sum insured (maximum S$25,000), doubled if the event happens overseas", "SGD"],
+    ["10% of the sum insured, up to S$25,000, increased by 10% each year", "SGD"],
+    ["10% of the sum insured, up to S$5,000 for a child under 18", "SGD"],
+    ["10% of the sum insured, up to S$5,000 if aged 70 or above", "SGD"],
+    ["10% of the sum insured, up to S$25,000 if the accident happens overseas", "SGD"],
+    ["10% of the sum insured, up to S$25,000 in the first policy year", "SGD"],
+    ["10% of the sum insured, up to S$25,000 under Plan A", "SGD"],
+    ["10% of the sum insured; dental treatment under this benefit is limited to S$500", "SGD"],
+    ["10% of the sum insured, with cosmetic surgery up to S$2,000", "SGD"],
+    ["10% of the sum insured, up to S$25,000; for each child the benefit is halved", "SGD"],
+    ["Keyhole surgery: 10% of the Sum Insured, limited to S$20,000 per claim", "SGD"], // another benefit's label
   ] as const) {
     for (const stored of [true, false]) {
       const [b] = repairStoredRules([{ ...base, id: "x", benefitName: "Angioplasty", quote, ...(stored ? { formulaKind: "sum_insured", formulaValue: 0.1 } : {}) }] as never);
