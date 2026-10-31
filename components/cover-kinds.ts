@@ -1,3 +1,5 @@
+import { personKinds } from "@/lib/coverage/table-figures";
+import type { PlanType } from "@/lib/coverage/plan-type";
 /** Kinds of cover, in the order a person thinks about them; each Coverage event belongs to one. Used by Coverage (rows
  * grouped by kind, main kinds not found) and Family (what each person is covered for, at a glance). A kind's label names
  * only what its events are, so a single death benefit is "Death", never "Life and disability". */
@@ -9,6 +11,8 @@ export const COVER_KINDS: { id: string; label: string; gapLabel?: string; events
   { id: "accident", label: "Accidents and injuries", gapLabel: "accident cover", core: true, events: ["accidental_death", "fracture", "dismemberment", "accidental_disablement", "accident_medical_expense"] },
   { id: "travel", label: "Travel", events: ["travel_delay", "trip_cancellation", "baggage", "travel_medical"] },
   { id: "property", label: "Home and vehicle", events: ["motor_damage", "home_damage"] },
+  // A plan whose own name or document says it is a savings or investment-linked plan (lib/coverage/plan-type.ts), as Home's tiles.
+  { id: "savings", label: "Savings and investment", events: [] },
   { id: "other", label: "Other", events: [] },
 ];
 export const coverKindOf = (eventType: string) => COVER_KINDS.find((k) => k.events.includes(eventType)) ?? COVER_KINDS[COVER_KINDS.length - 1];
@@ -30,8 +34,9 @@ export const kindOfName = (name: string) => {
 };
 
 /** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
-export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; coverEnded?: string | null };
-export type TableKindCover = { product: string; cover: string; ended?: string | null };
+export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; plan?: string | null; coverEnded?: string | null };
+export type TableKindCover = { product: string; cover: string; plan?: string | null; riderOf?: string | null; ended?: string | null; planType?: PlanType | null;
+  endDate?: string | null; documentPeriodTo?: string | null };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
  * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
@@ -77,7 +82,22 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     else if (!cover) found.add("other");
   }
   for (const c of covers) if (!c.ended && !counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  // Whole-policy kinds by the rule Home's tiles use (personKinds): savings or investment from the plan type, travel from a
+  // current travel cover.
+  const whole = personKinds(covers, rows);
+  if (whole.get("Savings")?.current.length || whole.get("Investment")?.current.length) found.add("savings");
+  // Travel as Home's rule finds it: listed for a current trip, never for one that ended or whose dates were not read.
+  const travel = whole.get("Travel");
+  if (travel?.current.length) found.add("travel"); else if (travel) found.delete("travel");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
+}
+
+/** Whole-policy cover a person held that has ended (a single trip whose printed period is over), or a single trip whose
+ * dates were not read, in Home's words and by its rule (personKinds): "Travel cover ended on 04/10/2026", "Travel: trip
+ * dates not found". Empty when a current one is held. */
+export function endedKinds(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
+  return [...personKinds(covers, rows)].filter(([, e]) => !e.current.length && (e.undated.length || e.endedOn))
+    .map(([category, e]) => e.undated.length ? `${category}: trip dates not found` : `${category} cover ended on ${e.endedOn}`);
 }
 
 /** What each document was found to pay for (Documents page), for a household on the benefit table: the kinds of cover
@@ -103,7 +123,7 @@ export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[
   }
   const out: Record<string, string[]> = {};
   for (const id of new Set([...rows.keys(), ...covers.keys()])) {
-    const kinds = kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? []);
+    const kinds = [...kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? []), ...endedKinds([...(rows.get(id) ?? [])], covers.get(id) ?? [])];
     if (kinds.length) out[id] = kinds;
   }
   return out;

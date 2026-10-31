@@ -726,17 +726,47 @@ const WORD_FRACTIONS=[
  * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover
  * where the cap is S$25,000; Critic R407, TE pr210). Such a share is not used. Counted: a figure with a currency sign,
  * code or word; a grouped, four-digit or "k" figure; a number word for hundreds or more; a figure per day or week; a
- * fraction; any cap word; a choice of the lower; and a pointer to a table or schedule, which may hold the cap. A figure the share does not need ("within 30 days", "under age 65") is left alone, as on
- * main; on the stored rows only the 6 that print a cap change. */
+ * fraction; any cap word; a choice of the lower ("whichever is lower", "if lower", "not greater than"); and a pointer to a
+ * table or schedule, which may hold the cap. A figure the share does not need ("within 30 days", "under age 65") is left
+ * alone, and so is a threshold of the event itself (EVENT_THRESHOLD: "burns equal to or greater than 15% but less than
+ * 25% of the body: 30%"). Stored rows: scripts/policies/stored-share-shapes-test.ts. */
 const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd))\s*\d`,
   String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
   String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
-  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|\b(?:no|not)\s+more\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater)\b|\b(?:table|schedule)\b`,
+  String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|(?:\b(?:no|not|never|cannot|nor)|n['’]t)(?:\s+\p{L}+){0,3}?\s+(?:more|longer)\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
   // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited.
   String.raw`\b(?:melebihi|maksimum|had|jadual|tertakluk|sehingga|terhad)\b`,
 ].join("|"),"iu");
+/** A comparative that measures the event, not the payout: "than" followed by a number with a unit of the event
+ * (a percentage that is not a share of an amount, years, decibels, a length, a weight, a time), or an age compared with a
+ * plain number. Allow-list: any other comparative ("never greater than the amount in force", "if smaller than that",
+ * "cannot be higher than 20% of the Sum Insured") stays a possible cap (Critic R421, TE pr215). */
+const SHARE_OF_AN_AMOUNT=String.raw`\s*(?:of|daripada|de)\s+(?:the\s+|your\s+|this\s+|that\s+|any\s+|all\s+)?(?:\p{L}+\s+){0,2}?(?:sum|insured|assured|benefits?|premiums?|amounts?|bills?|claims?|limits?|basic|base|death|totals?|polic(?:y|ies)|charges?|loans?|expenses?|costs?|cover(?:age)?|jumlah|faedah)\b`;
+const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(?:years?|yrs?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?|db|decibels?|cm|mm|centimet(?:re|er)s?|millimet(?:re|er)s?|met(?:re|er)s?|m|feet|ft|inch(?:es)?|kg|kilograms?|lbs?|pounds?\s+in\s+weight)\b)`;
+/** A negation up to three words before the comparative ("not more than 60 days", "never higher than 25%", "which shall
+ * not be greater than", "isn't more than") makes it a cap on what is paid, never a threshold of the event (TE pr215 C11,
+ * C18, C19; Critic R425). */
+const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
+const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
+  +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
+/** PRINTS_AN_AMOUNT, with event thresholds taken out first. Only a threshold that comes before any share is taken out:
+ * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after
+ * a share qualifies that share ("50% of Sum Insured, but the amount we pay will not under any circumstances be higher
+ * than 25%", "reduced to 25% if the burn is smaller than 10%"), so it stays a possible cap (Critic R430). */
+// A share in any form: a percentage, a fraction in words ("one half") or the insured amount itself (Critic R434).
+const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|`+INSURED_AMOUNT,"iu");
+function printsAnAmount(text:string){
+  let out="",at=0;
+  for(const match of text.matchAll(EVENT_THRESHOLD)){
+    const before=text.slice(at,match.index);
+    // A comparative after the share, "less than" and "more than" included, may bound it.
+    if(SHARE_FIGURE.test(before))return true;
+    out+=before+" ";at=match.index+match[0].length;
+  }
+  return PRINTS_AN_AMOUNT.test(out+text.slice(at));
+}
 export const CAPPED_SHARE_NOTE="DearPolicy did not use this share of the sum insured: the passage also prints an amount, which may cap what is paid.";
 /** A rule the document states in a sentence rather than in a table cell.
  *
@@ -784,7 +814,7 @@ export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
   return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)&&!namesNoBenefit(benefit.benefitName)&&!namesOnlyAPlanCell(benefit.benefitName,benefit.quote)))
     .map(benefit=>{
       // A stored share whose passage also prints an amount is withheld when read, unless a person confirmed it.
-      if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&PRINTS_AN_AMOUNT.test(normalText(benefit.quote??"")))
+      if(benefit.formulaKind==="sum_insured"&&!benefit.reviewedAt&&printsAnAmount(normalText(benefit.quote??"")))
         return {...benefit,formulaKind:"none" as const,formulaValue:null,conditions:[...new Set([...benefit.conditions,CAPPED_SHARE_NOTE])]};
       // A row held for its plan columns, or one stored with no figure whose quote prints one per plan, is never read
       // again from that quote: the sentence names a figure for every plan, and which is the household's is not known
@@ -806,7 +836,7 @@ export function validateCatalogFormula(input:{
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
-  if(input.kind==="sum_insured"&&PRINTS_AN_AMOUNT.test(quote))return none;
+  if(input.kind==="sum_insured"&&printsAnAmount(quote))return none;
   // The currency is what the quoted clause writes. A sum-insured percentage
   // quotes none -- it is paid in the cover's own currency, which is verified
   // against the personal schedule when used. Nothing is defaulted to SGD, and

@@ -119,5 +119,5 @@ test("a summary used as matching wording for someone's plan names them, not \"Co
   await expect(summary).not.toContainText("nobody");
   await expect(summary.getByRole("button", { name: "Change" })).toBeVisible();
   // A reference document linked to nobody at all still says so.
-  await expect(page.locator(".document-card").filter({ hasText: "Travel brochure" }).getByTestId("covers-picker")).toContainText("Covers nobody yet");
+  await expect(page.locator(".document-card").filter({ hasText: "Travel brochure" }).getByTestId("covers-picker")).toContainText("Applies to nobody yet");
 });

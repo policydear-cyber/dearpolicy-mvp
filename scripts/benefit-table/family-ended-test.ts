@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { checkReading } from "@/lib/benefit-table/check";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import type { SectionLink } from "@/lib/benefit-table/reading";
-import { kindsOfTable, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { endedKinds, kindsOfTable, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 let passed = 0;
 const failures: string[] = [];
@@ -77,8 +77,12 @@ test("an ended single trip and a running annual multi-trip plan: Travel", () => 
 test("an annual multi-trip plan past its printed end (no renewal on file) stays Travel", () => {
   assert.deepEqual(familyKinds([annualReading], "2027-06-01"), ["Travel"]);
 });
-test("a single trip with no printed period (missing dates are not an ended cover): Travel", () => {
-  assert.deepEqual(familyKinds([tripReading(null), lifeReading], "2026-10-28"), ["Death", "Travel"]);
+// Changed in #213 (TE F3): a single trip whose printed period was not read may be long over, so it is neither current
+// (no "Travel" in Covered for) nor ended. Missing dates still never make it ended: Family says its dates were not found.
+test("a single trip with no printed period is not listed as current Travel, nor as ended: its dates were not found", () => {
+  assert.deepEqual(familyKinds([tripReading(null), lifeReading], "2026-10-28"), ["Death"]);
+  const p = JSON.parse(JSON.stringify(assembleTable([tripReading(null), lifeReading], family, LINKS, [], sgt("2026-10-28")).people[0])) as { rows: TableKindRow[]; covers: TableKindCover[] };
+  assert.deepEqual(endedKinds(p.rows, p.covers), ["Travel: trip dates not found"]);
 });
 test("rows and covers without an end field (older callers) are listed as before", () => {
   assert.deepEqual(kindsOfTable([{ benefit: "Loss of baggage", pays: "up_to", product: "Example Travel Insurance", cover: "Single Trip" }],

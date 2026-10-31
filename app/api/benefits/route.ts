@@ -16,6 +16,7 @@ import { cutNameSuffix } from "@/lib/policies/cut-name";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
+import { documentKinds,type DocumentKind } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -247,9 +248,17 @@ export async function GET(request:NextRequest){
       });
     }catch{/* A document whose conditions have not been read yet simply has none to show. */}
     // ID numbers in quotes are masked as chat masks them; ids are left as stored.
+    // Each document's whole-policy kind by the rule Home and Coverage use (a trip that has ended, a savings plan), so Benefits
+    // says the same. Optional: without the benefit table, nothing is said.
+    let documentKindsById:Record<string,DocumentKind>={};
+    try{
+      const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
+      if(await benefitTableLive(accountId)){const { tableFor }=await import("@/lib/benefit-table/service");documentKindsById=documentKinds((await tableFor(appDb,accountId)).table.people);}
+    }catch{/* No table: no kind is said. */}
     return NextResponse.json(maskShownText({
       benefits,
       conditions,
+      documentKinds:documentKindsById,
       summary:{
         conditions:conditions.length,
         conditionsThatChangeAmounts:conditions.filter(c=>c.effect==="changes the amount").length,

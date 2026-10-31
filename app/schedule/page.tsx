@@ -1,5 +1,6 @@
 "use client";
 
+import { printedDay } from "@/lib/benefit-table/dates";
 import Link from "next/link";
 import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
@@ -52,6 +53,8 @@ const CLARIFIABLE=new Set<Benefit["formulaKind"]>(["fixed","expense_cap","daily"
 
 export default function BenefitsPage(){
   const [benefits,setBenefits]=useState<Benefit[]>([]);
+  // Each document's whole-policy kind, by the rule Home and Coverage use: a trip that has ended, a savings plan.
+  const [docKinds,setDocKinds]=useState<Record<string,{endedOn:string|null;plan:string|null;note:string|null;undated?:boolean}>>({});
   const [conditions,setConditions]=useState<Condition[]>([]);
   const [family,setFamily]=useState<Member[]>([]);
   const [memberId,setMemberId]=useState("");
@@ -75,7 +78,7 @@ export default function BenefitsPage(){
       const response=await fetch(`/api/benefits${query}`,{cache:"no-store"});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||payload.error)throw new Error("load");
-      setBenefits(payload.benefits??[]);setConditions(payload.conditions??[]);setError(false);
+      setBenefits(payload.benefits??[]);setConditions(payload.conditions??[]);setDocKinds(payload.documentKinds??{});setError(false);
     }catch{setError(true);}
     finally{setLoading(false);}
   }
@@ -163,6 +166,12 @@ export default function BenefitsPage(){
         <section className="section schedule-group" key={product}>
           <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
             <small>{rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
+          {(()=>{const k=[...new Set(rows.map(r=>r.policyId))].map(id=>docKinds[id]).filter(Boolean);
+            // Said only when every document of the group with a kind agrees, as on Home and Coverage.
+            const ended=k.length&&k.every(x=>x.endedOn)?k.map(x=>x.endedOn!).sort((a,b)=>(printedDay(b)??0)-(printedDay(a)??0))[0]:null;const plan=k.length&&k.every(x=>x.plan&&x.plan===k[0].plan)?k[0]:null;
+            const undated=!ended&&k.length&&k.every(x=>x.undated||x.endedOn)&&k.some(x=>x.undated);
+            return <>{undated?<p className="muted" data-testid="group-undated">Trip dates not found: DearPolicy cannot tell whether this trip is still current. Check the dates on the policy.</p>:null}{ended?<p className="muted" data-testid="group-ended">{`Cover ended on ${ended}: its printed period is over, so it is not current cover. The amounts below still answer for an event inside that period.`}</p>:null}
+              {plan?.note?<p className="muted" data-testid="group-plan">{plan.note}</p>:null}</>;})()}
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
               <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>

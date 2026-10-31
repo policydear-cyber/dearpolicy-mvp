@@ -93,7 +93,8 @@ export function anyMoneyFigures(text: string): { value: number; index: number; l
 }
 
 export const CURRENCY_NOT_STATED = "(currency unknown)";
-const plainNumber = (amount: number) => amount.toLocaleString("en-SG", { maximumFractionDigits: Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2 });
+// An amount with cents shows both digits ("41.10", never "41.1"); a whole amount shows none.
+const plainNumber = (amount: number) => { const digits = Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2; return amount.toLocaleString("en-SG", { minimumFractionDigits: digits, maximumFractionDigits: digits }); };
 
 export function formatMoney(value: number | string | null | undefined, currency?: string | null) {
   const numeric = typeof value === "number" ? value : Number(value ?? 0);
