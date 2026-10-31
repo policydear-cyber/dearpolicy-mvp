@@ -4,7 +4,7 @@
  *   npm run coverage:table-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { categoryOfBenefit, categoryRows, confirmedTotalComplete, lumpSumParts, tableDisplay, tileRows, wordingDescribes, type ConfirmedLine } from "@/lib/coverage/table-figures";
+import { categoryOfBenefit, categoryRows, confirmedTotalComplete, lumpSumParts, PREMIUM, tableDisplay, tileRows, wordingDescribes, type ConfirmedLine } from "@/lib/coverage/table-figures";
 import type { SummaryRow } from "@/lib/benefit-table/headline";
 
 let passed = 0;
@@ -171,10 +171,48 @@ test("what the person pays in is never a benefit, by whatever name the market us
   assert.deepEqual(categoryRows("Critical Illness", ci).map((r) => r.benefit), ["Critical Illness Benefit"]);
 });
 
+test("PREMIUM: a paid-in row in any market is a premium; a pay-back, waiver, rebate or hibah only when its word sits beside it (Critic R276)", () => {
+  const paidIn = ["Tabarru' contribution (non-refundable) RM30", "Premium (non-refundable) S$300", "Contribution, not refundable RM40", "Sumbangan bulanan RM50",
+    "Premi Rp 500.000", "Prima anual €200", "Prêmio mensal R$ 150", "Prémio anual 90 €", "Phí bảo hiểm 5.000.000 ₫", "保険料 ¥5,000", "保费 HK$3,000", "保費 NT$2,000",
+    "Kontribusi Rp 200.000", "Beitrag 50 €", "Prämie CHF 80", "Cotisation annuelle 120 €", "Prime annuelle 300 €", "rider premium: 12% of basic premium",
+    "Premium refundable on cancellation S$50", "Premi tahunan Death Rp3,000,000", "保险费 ¥2,000", "保險費 HK$800", "Prima de seguro 300 €"];
+  for (const t of paidIn) assert.equal(PREMIUM.test(t), true, t);
+  const benefit = ["Contribution towards funeral costs RM5,000", "Funeral contribution RM5,000", "Waiver of contribution on TPD", "Waiver of future premiums",
+    "Premium waiver on death", "Death benefit 105% of total contributions paid", "Return of contributions RM2,000", "Refund of premiums paid", "Hibah (contribution-linked) RM50,000",
+    "Pengembalian sumbangan RM2,000", "Death benefit RM100,000", "Contribution Rebate RM300", "Death benefit RM100,000 (contributions waived on TPD)",
+    "Beitragsrückgewähr 4.000 €", "Beitragsbefreiung bei Berufsunfähigkeit", "退还保费 HK$10,000",
+    // A product name is never a premium word.
+    "Sehat Prima Rawat Inap Rp 1.000.000", "Prima Health Plan", "Premier Life Death Benefit", "Premia Shield",
+    // What was paid in, paid back (TE R276 F2), and benefits that only name a contribution (TE R276 over-matches).
+    "Death benefit: total contributions paid plus profit", "Death benefit: all premiums paid to date", "Death benefit: premiums paid to date",
+    "Refunded Premiums upon Death", "Waived Premiums on TPD", "Hospital income contribution RM100/day", "Funeral expenses contribution", "Employer contribution benefit"];
+  for (const t of benefit) assert.equal(PREMIUM.test(t), false, t);
+});
+
+test("a row under a section that holds only what the person pays is a premium, whatever its own name says (TE R276 F1)", () => {
+  const under = (section: string, benefit: string, amount: number, currency: string) => ({ ...row(benefit, { section, figure: { kind: "printed", amount, currency, unit: "lump_sum" } }), coverKey: "k" });
+  for (const [section, benefit, amount, currency] of [["Contribution", "Death", 30, "MYR"], ["Sumbangan / Contribution", "Kematian / Death", 45, "MYR"],
+    ["Kontribusi", "Death", 350000, "IDR"], ["Section 3: Premium details", "Death Benefit", 120, "GBP"], ["Annual premium", "Total Permanent Disability", 90, "EUR"], ["Prämie", "Todesfall / Death", 25, "EUR"]] as const) {
+    const parts = lumpSumParts(tileRows(categoryRows(benefit.includes("Disability") ? "Total Permanent Disability" : "Death", [under(section, benefit, amount, currency)])), [], [], "Death");
+    assert.equal(parts.total, null, section);
+  }
+  // A section that also names benefits, or a waiver, is no premium section.
+  for (const section of ["Benefits and premiums", "Benefit and Premium Schedule", "Premium waiver", "Return of contributions", "Death benefit"]) {
+    assert.deepEqual(categoryRows("Death", [under(section, "Death Benefit", 200000, "MYR")]).map((r) => r.benefit), ["Death Benefit"], section);
+  }
+});
+
+test("a death benefit of the contributions paid back adds to the Death total (TE R276 F2)", () => {
+  const r = (benefit: string, amount: number, key: string) => ({ ...row(benefit, { figure: { kind: "printed", amount, currency: "MYR", unit: "lump_sum" } }), coverKey: key });
+  const parts = lumpSumParts(tileRows(categoryRows("Death", [r("Death Benefit", 200000, "a"), r("Death benefit: total contributions paid plus profit", 12000, "b")])), [], [], "Death");
+  assert.notEqual(parts.total, 200000);
+  assert.deepEqual(categoryRows("Death", [r("Death benefit: total contributions paid plus profit", 12000, "b")]).length, 1);
+});
+
 test("a Death tile never shows a Takaful contribution as the sum: with the sum printed in words only, it gives no figure", () => {
   const r = (benefit: string, amount: number | null) => ({ ...row(benefit, amount == null ? { pays: "words", figure: { kind: "none", why: "no figure printed" } }
     : { figure: { kind: "printed", amount, currency: "MYR", unit: "lump_sum" } }), coverKey: "takaful" });
-  for (const paid of ["Tabarru' contribution for death cover", "Sumbangan bulanan Death Benefit", "Death benefit contribution"]) {
+  for (const paid of ["Tabarru' contribution for death cover", "Sumbangan bulanan Death Benefit", "Death benefit contribution", "Tabarru' contribution for death cover (non-refundable)"]) {
     const parts = lumpSumParts(tileRows(categoryRows("Death", [r("Death Benefit", null), r(paid, 30)])), [], [], "Death");
     assert.equal(parts.total, null, paid); assert.ok(parts.parts.every((p) => p.amount == null), paid);
   }

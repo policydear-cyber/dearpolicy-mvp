@@ -181,26 +181,54 @@ export function documentKinds(people: { covers?: SourcedCover[]; rows?: SourcedR
   return out;
 }
 
-/** What the person pays in, by the names insurers use in any market: a premium, a Takaful "contribution" (Malay
- * "sumbangan", "caruman", Indonesian "kontribusi", "iuran"), a French "cotisation", a German "Prämie" or "Beitrag", Chinese
- * 保费. A contribution TOWARDS something ("contribution towards funeral costs") and a funeral, burial, bereavement or
- * education contribution are benefits the policy pays, never what the person pays. */
-const PAID_IN_WORD = String.raw`premiums?|(?<!\b(?:funeral|burial|bereavement|education)\s)contributions?(?!\s+(?:to|towards)\b)|sumbangan|caruman|kontribusi|iuran|cotisations?|pr[äa]mien?|beitr[äa]ge?`;
-const PAID_IN = String.raw`premiums?|contributions?|sumbangan|caruman|kontribusi|iuran|cotisations?`;
+/** What the person pays in, by the names insurers use in any market (a closed list): a premium, Indonesian "premi",
+ * Spanish "prima anual", Portuguese "prêmio", French "cotisation" or "prime annuelle", German "Prämie" or "Beitrag", a
+ * Takaful "contribution" (Malay "sumbangan", "caruman", Indonesian "kontribusi", "iuran"), Vietnamese "phí bảo hiểm",
+ * Chinese 保费/保費 and Japanese 保険料. A contribution TOWARDS something ("contribution towards funeral costs") and a
+ * funeral, burial, bereavement or education contribution are benefits the policy pays, never what the person pays. */
+const PAID_IN_WORD = String.raw`premiums?|premi|primas?(?=\s+(?:anual|mensual|trimestral|semestral|total|neta|única|unica|de\s+(?:seguro|riesgo)))|pr[êé]mios?`
+  + String.raw`|(?<!\b(?:funeral|burial|bereavement|education|income|expenses?|employer)\s)contributions?(?!\s+(?:to|towards|benefits?)\b)|sumbangan|caruman|kontribusi|iuran|cotisations?`
+  + String.raw`|primes?\s+(?:annuelle|mensuelle|trimestrielle|totale|d['’]assurance|nette|brute)|pr[äa]mien?|beitr[äa]ge?|phí\s+bảo\s+hiểm`;
+const PAID_IN_CJK = "保险费|保險費|保费|保費|保険料";
+const PAID_IN = String.raw`(?:\b(?:${PAID_IN_WORD})\b|${PAID_IN_CJK})`;
+/** A benefit that pays back, waives or rebates what was paid in. Only these words RIGHT BESIDE the paid-in word count
+ * ("return of contributions", "refund of premiums", "waiver of future premiums", "contributions waived", "premium
+ * rebate", "Beitragsrückgewähr", "pengembalian kontribusi", "退还保费"), or a share of what was paid ("105% of total
+ * contributions paid"). Anywhere else they say nothing: "Tabarru' contribution (non-refundable) RM30" is a contribution
+ * (Critic R276 M1). A Takaful hibah (a gift paid out) is a benefit, and so is what was paid in, paid back ("Death benefit:
+ * total contributions paid plus profit", TE R276 F2). */
+const PAID_BACK = new RegExp([
+  String.raw`\b(?:returns?|returned|refunds?|refunded|repaid|repayment|waiv\w*|pengembalian|pemulangan|pengecualian|pembebasan|remboursement|exon[ée]ration|devoluci[óo]n|devolu[çc][ãa]o)\s+(?:(?:of|des?|du|atas|del?|da|do)\s+)?(?:(?:the|all|future|total|your|outstanding|la|las|los|les)\s+)*${PAID_IN}`,
+  String.raw`${PAID_IN}\s+(?:(?:is|are|will\s+be|to\s+be)\s+)?(?:waived|waiver|refunded|refunds?|returned|rebates?|rabat|dikembalikan|dikecualikan)\b`,
+  String.raw`(?:beitrags|prämien|praemien)(?:befreiung|r[uü]ckgew[aä]hr|r[uü]ckerstattung)|(?:退还|返还|豁免|退還|返還)(?:${PAID_IN_CJK})`,
+  String.raw`\b\d+(?:\.\d+)?\s?%\s+(?:of|des?|dari)\s+(?:(?:the|total|all|jumlah)\s+)*${PAID_IN}(?:\s+(?:paid|dibayar|payés?|pagad[oa]s?))?`,
+  String.raw`\b(?:(?:sum|total)\s+of(?:\s+all)?|total|all)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b`, String.raw`${PAID_IN}\s+paid\s+to\s+date\b`,
+  String.raw`^\W*hibah\b`,
+].join("|"), "iu");
 /** A premium the person pays, never a benefit (chat.ts uses the same). A benefit worked out from the premiums paid is a
  * benefit: "Waiver of Premium", "Return of Premium", and a share of them ("Death benefit: higher of 105% of total premiums
  * paid to date", "sum of all premiums paid"); left out, a Death tile added up the other policies as if they were all of it.
  * Only premiums PAID: a premium priced as a share of another ("rider premium: 12% of basic premium") is a premium (Critic R418 M1). */
-export const PREMIUM = new RegExp(String.raw`^(?!.*(?:\b(?:waiv|return|refund|pemulangan|pengembalian|pengecualian|pembebasan|exon[ée]ration|remboursement)\w*|befreiung|r[uü]ckgew[aä]hr|退还|返还|豁免))`
-  + String.raw`(?!.*(?:\b\d+(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:total\s+|all\s+)?(?:${PAID_IN})\s+paid|\b(?:sum|total)\s+of\s+(?:all\s+)?(?:the\s+)?(?:${PAID_IN})\s+paid)\b)`
-  + String.raw`.*(?:\b(?:${PAID_IN_WORD})\b|保费|保費)`, "i");
+export const PREMIUM: { test(text: string): boolean } = {
+  test: (text: string) => new RegExp(PAID_IN, "iu").test(text) && !PAID_BACK.test(text),
+};
+/** A section that holds only what the person pays ("Contribution", "Sumbangan / Contribution", "Kontribusi", "Annual
+ * premium", "Section 3: Premium details"): every row under it is a premium, whatever the row's own name says ("Death",
+ * TE R276 F1). A section that also names benefits ("Benefits and premiums", "Benefit and Premium Schedule") is not one. */
+const SECTION_FILLER = new RegExp(String.raw`\b(?:(?:section|part|bahagian|bagian)\s+[\w.]+|annual|yearly|monthly|quarterly|half[\s-]yearly|total|modal|tahunan|bulanan|annuelle|mensuelle|anual|mensal|mensual|jährlich|monatlich|schedule|details?|table|amount|payable|due|jadual|butiran|rincian|jumlah|the|your|of|and|dan)\b`, "giu");
+export function isPremiumSection(section: string | null | undefined): boolean {
+  if (!section || !PREMIUM.test(section)) return false;
+  const rest = section.replace(new RegExp(PAID_IN, "giu"), " ").replace(SECTION_FILLER, " ").replace(/[\s\d\W_]+/gu, "");
+  return rest.length === 0;
+}
+
 /** The person's rows for the category: rows that pay something the person holds, never a projection, a fund or
  * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). Nor a
  * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && !isPremiumSection(r.section) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
 }
 
 /** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip
