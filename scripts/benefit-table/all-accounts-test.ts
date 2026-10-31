@@ -166,6 +166,53 @@ async function main() {
     assert.match(partial.text, /Iman/, partial.text);
   });
 
+  // ------------------------------------------------------------------ 3. an EXISTING household (test engineer F1)
+  // Its documents were read before the table existed, so it has a Coverage page from the existing reading (coverage_rules)
+  // and no table reading. Opening the table to everyone must not take that page away: it keeps it, and its documents keep
+  // being read the existing way (every reader asks benefitTableLive). A new household, or one with nothing read yet, gets
+  // the table. An alpha household keeps the table either way.
+  const { benefitTableLiveFor } = await import("@/lib/benefit-table/app");
+  const all = env({ ...prod, DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS: "1" });
+  const OLD = "3a9c7d21-0b4e-4f6a-8c55-998877665544";
+  const dbWith = (ledgerRows: Record<string, number>, o: { ledgerTable?: boolean; fail?: boolean } = {}) => (async (sql: string, p: unknown[]) => {
+    const q = sql.replace(/\s+/g, " ").trim();
+    if (q.includes("to_regclass('public.benefit_readings')")) return [{ ok: true }];
+    if (o.fail) throw new Error("connection reset");
+    if (q.includes("to_regclass('public.coverage_rules')")) return [{ ok: o.ledgerTable !== false }];
+    if (q.startsWith("SELECT 1 FROM coverage_rules WHERE account_id=$1")) return Array.from({ length: Math.min(1, ledgerRows[String(p[0])] ?? 0) }, () => ({ "?column?": 1 }));
+    throw new Error("fake db: unexpected statement " + q.slice(0, 80));
+  }) as Parameters<typeof benefitTableLiveFor>[0];
+  await test("existing household (Coverage already read): keeps its existing Coverage when the table is opened to everyone", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith({ [OLD]: 12 }), all, OLD), false);
+  });
+  await test("new household (nothing in the existing Coverage): gets the table", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith({ [OLD]: 12 }), all, NEW), true);
+    assert.equal(await benefitTableLiveFor(dbWith({}, { ledgerTable: false }), all, NEW), true, "no existing Coverage table at all");
+  });
+  await test("an alpha household keeps the table even with an existing Coverage", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith({ [ALPHA]: 40 }), all, ALPHA), true);
+    assert.equal(await benefitTableLiveFor(dbWith({ [ALPHA]: 40 }), env(prod), ALPHA), true);
+  });
+  await test("the check failing keeps the household on what it has (the existing Coverage), never an empty table", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith({}, { fail: true }), all, NEW), false);
+  });
+  await test("switch off: nobody gets the table, whatever is stored", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith({}), env(prod), NEW), false);
+  });
+  // A household on the table whose schedule is uploaded but not in the table yet is never told to upload a schedule.
+  const unreadSchedule = await page({ policies: [policy("sched", { product_name: "SihatCare Plus", policy_number: "BJT-MC-40211" })],
+    pages: [{ policy_id: "sched", page_number: 1, text: "SIHATCARE PLUS - POLICY SCHEDULE\nPolicy number BJT-MC-40211\nInsured person: Nur Iman binti Zakaria\nOverall annual limit RM150,000", extraction_method: "native" }],
+    readings: new Map() });
+  await test("a schedule on file but not in the table: never 'No covers yet. Upload a … schedule'", () => {
+    assert.ok(unreadSchedule.documents.some((d) => d.state === "table_unread"), JSON.stringify(unreadSchedule.documents.map((d) => d.state)));
+    assert.ok(!/Upload a certificate, schedule or policy wording/.test(unreadSchedule.text), unreadSchedule.text);
+    assert.match(unreadSchedule.text, /No covers are shown from your documents yet\./, unreadSchedule.text);
+    assert.deepEqual(figures(unreadSchedule.text), [], unreadSchedule.text);
+  });
+  await test("control: with nothing uploaded the page still says where to upload", () => {
+    assert.match(empty.text, /Upload a certificate, schedule or policy wording/, empty.text);
+  });
+
   console.log(`\n${passed} passed, ${failures.length} failed`);
   if (failures.length) process.exit(1);
 }

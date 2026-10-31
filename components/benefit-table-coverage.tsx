@@ -123,7 +123,9 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
       <span>{tableUnread.map(d=>d.name).join(", ")}. You can use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
     {noTable.length?<p className="muted" data-testid="table-not-shown">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"isn’t shown on this page. You can still ask about it in chat.":"aren’t shown on this page. You can still ask about them in chat."}</p>:null}
-    {!people.length?<div className="empty-card">No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you.</div>:null}
+    {/* "Upload one" only when nothing that could hold cover is on file: a household whose schedule is uploaded but not yet
+        in this table is never told to upload a schedule. */}
+    {!people.length?<div className="empty-card">{data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))?"No covers are shown from your documents yet.":"No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
     {people.length>1?<nav className="cov-people" aria-label="People">{people.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {people.map(person=><section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
