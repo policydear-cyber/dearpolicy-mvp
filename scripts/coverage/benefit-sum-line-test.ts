@@ -98,7 +98,7 @@ async function main() {
     held("Overseas Medical Expenses (Excess: S$100) S$500,000", 500000); held("Hospitalisation (co-insurance 10% applies) S$1,000,000", 1000000);
     held("Overseas medical expenses (no excess applies) S$250,000", 250000); held("Daily room & board (inclusive of GST) S$500", 500);
     held("Critical Illness (Premium Plan) S$200,000", 200000); held("Hospital cash (fund value not affected) RM300", 300); held("Garantie décès (hors cotisations) 150 000 €", 150000);
-    whole("Accidental Death (worldwide, 24 hours) S$600,000", 600000); whole("Death Benefit (Plan B) RM300,000", 300000); whole("身故保险金（基本保额） HK$1,000,000", 1000000); held("死亡保険金【保険料払込免除特約付】 ¥10,000,000", 10000000);
+    whole("Accidental Death (worldwide, 24 hours) S$600,000", 600000); whole("Death Benefit (Plan B) RM300,000", 300000); whole("身故保险金（基本保额） HK$1,000,000", 1000000); held("死亡保険金【保険料払込免除特約付】 ¥10,000,000", 10000000); held("死亡保険金（払込免除特約）¥3,000,000", 3000000); held("死亡保険金 払込免除特約 ¥3,000,000", 3000000);
     whole("Car Rental Excess Cover £2,000", 2000); whole("Premium ward hospital cash S$300/day", 300); whole("Death\tS$500,000", 500000);
   });
   t("a reader leaves a non-sum line out, withholds a doubtful figure, and passes a sum through unchanged", () => {

@@ -104,7 +104,7 @@ export function labelHead(label: string): string {
 const HOLDS_NOT_A_SUM = new RegExp([
   String.raw`\bpremi(?:um|ums|a)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)`,
   String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
-  String.raw`\bwaiver\b|\bpayor\b|\bpayer\s+benefit\b`,
+  String.raw`\bwaiver\b|\bpayor\b|\bpayer\s+benefit\b|払込免除|保费豁免|保費豁免`,
   String.raw`\b(?:fund|surrender|cash|account|policy|units?|investment)\s+values?\b|\bnilai\s+(?:tunai|serahan|dana|akaun|penyerahan)\b|\bvaleur\s+de\s+rachat\b|r[uü]ckkaufswert|现金价值|現金價值`,
   String.raw`\bdeductibles?\b|\bexcess\b|\bco-?(?:payments?|pay|insurance)\b|\bfranchise\b|selbstbeteiligung|selbstbehalt`,
 ].join("|"), "iu");
@@ -131,7 +131,7 @@ export function benefitSumKind(line: { evidenceText?: string | null; amount?: nu
 
 const BRACKETED = /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|［([^［］]*)］|【([^【】]*)】/gu;
 /** The closed not-a-sum list, matched anywhere in a bracket with no exemptions, plus "payor" and Chinese/Japanese forms. */
-const IN_BRACKET_NOT_A_SUM = new RegExp("(?:" + [...NOT_A_SUM_TERM, String.raw`\bpayor`, String.raw`\bpayer\s+benefit`, "豁免", "保険料"].join("|") + ")", "iu");
+const IN_BRACKET_NOT_A_SUM = new RegExp("(?:" + [...NOT_A_SUM_TERM, String.raw`\bpayor`, String.raw`\bpayer\s+benefit`, "豁免", "保険料", "払込免除"].join("|") + ")", "iu");
 function bracketNamesNotASum(label: string): boolean {
   for (const m of label.matchAll(BRACKETED)) {
     const note = m.slice(1).find((g) => g != null) ?? "";
