@@ -18,7 +18,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { currentFileScanAdapter, malwareScanningIntentionallyDisabled, PROTOTYPE_SCANNING_DISABLED_WARNING } from "@/lib/scanning/adapter";
 import { assertValidPolicyQuarantineTransition } from "./state-machine";
 import { appendPolicyDocumentAudit } from "./audit";
-import { persistableScanResultDetail, PROTOTYPE_NOT_SCANNED_DETAIL } from "./ui";
+import { NOT_MALWARE_SCANNED_DETAIL, persistableScanResultDetail, PROTOTYPE_NOT_SCANNED_DETAIL } from "./ui";
 import { recordProcessingFailure, SCAN_ATTEMPT_FAILED_MESSAGE } from "@/lib/diagnostics/processing-failures";
 import { isPolicyQuarantineStatus, type PolicyQuarantineRow, type PolicyQuarantineStatus, type PolicyScanResultOutcome } from "./types";
 import type { ScanRetryHint } from "@/lib/scanning/adapter";
@@ -130,6 +130,8 @@ export function assertPolicyDownloadable(row: Pick<PolicyQuarantineRow, "quarant
 export async function recordPolicyScanResult(args: {
   accountId: string; policyId: string; status: "scan_clean" | "scan_rejected" | "not_scanned_prototype";
   scanProvider: string; scanResultDetail?: string | null; scanEventId?: string | null;
+  /** With not_scanned_prototype: the scanner looked the file up by hash and had no record of it (not that scanning is off). */
+  hashUnknown?: boolean;
 }): Promise<PolicyScanResultOutcome> {
   // Provider-internal detail (an analysis id, engine counts) is logged for
   // operators and never written to the household-readable column.
@@ -138,7 +140,7 @@ export async function recordPolicyScanResult(args: {
     accountId: args.accountId, policyId: args.policyId, from: "scan_pending", to: args.status,
     scanProvider: args.scanProvider,
     scanResultDetail: persistableScanResultDetail(
-      args.status === "scan_rejected" ? "infected" : args.status === "not_scanned_prototype" ? "not_scanned_prototype" : "clean",
+      args.status === "scan_rejected" ? "infected" : args.status === "not_scanned_prototype" ? (args.hashUnknown ? "not_scanned" : "not_scanned_prototype") : "clean",
       args.scanResultDetail,
     ),
     scanEventId: args.scanEventId,
@@ -153,8 +155,8 @@ export async function recordPolicyScanResult(args: {
       policyId: args.policyId,
       previousValue: { quarantineStatus: "scan_pending" },
       newValue: { quarantineStatus: args.status, scanProvider: args.scanProvider, scanEventId: args.scanEventId ?? null },
-      reason: args.status === "not_scanned_prototype" ? PROTOTYPE_NOT_SCANNED_DETAIL : undefined,
-      reasonCode: args.status === "scan_rejected" ? "MALWARE_DETECTED" : args.status === "not_scanned_prototype" ? "NOT_SCANNED_PROTOTYPE" : undefined,
+      reason: args.status === "not_scanned_prototype" ? (args.hashUnknown ? NOT_MALWARE_SCANNED_DETAIL : PROTOTYPE_NOT_SCANNED_DETAIL) : undefined,
+      reasonCode: args.status === "scan_rejected" ? "MALWARE_DETECTED" : args.status === "not_scanned_prototype" ? (args.hashUnknown ? "NOT_MALWARE_SCANNED_HASH_UNKNOWN" : "NOT_SCANNED_PROTOTYPE") : undefined,
     });
     return "applied";
   }
@@ -305,7 +307,10 @@ export async function runPolicyQuarantineGate(args: {
         // the scan_result_detail on an otherwise-still-scan_pending row: no
         // FileScanStatus value here promotes the document past scan_pending
         // except a real "clean" verdict from a real adapter.
-        if (result.status === "clean") {
+        if (result.status === "not_scanned") {
+          // A hash lookup with no record: goes ahead as NOT malware-scanned (never scan_clean, never scanned_at).
+          await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "not_scanned_prototype", scanProvider: adapter.name, scanResultDetail: result.detail ?? null, hashUnknown: true });
+        } else if (result.status === "clean") {
           await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "scan_clean", scanProvider: adapter.name, scanResultDetail: result.detail ?? null });
         } else {
           if (result.detail) {
