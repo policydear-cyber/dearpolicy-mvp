@@ -117,6 +117,26 @@ const limits: [string, string | undefined, string][] = [
 ];
 for (const [name, plan, want] of limits) eq(`limit ${name} / ${plan}`, ev(name, plan as string), want);
 
+// An illness named with its treatment pays the treatment bills, never the illness's lump sum (Critic #281 H: a hospital
+// plan's "Annual limit for outpatient cancer drug" was read as a critical illness sum). The illness alone stays a CI.
+const treatments: [string, string | undefined, string][] = [
+  ["Annual limit for outpatient cancer drug", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Cancer drug treatment", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Outpatient cancer treatment - chemotherapy and radiotherapy", undefined, "hospital_medical_expense"],
+  ["Kidney dialysis", "Shield Plan", "hospital_medical_expense"],
+  ["Rawatan kemoterapi kanser", "Insurans Perubatan", "hospital_medical_expense"],
+  ["Tratamiento de cáncer", "Seguro de Salud Andes", "hospital_medical_expense"],
+  ["癌症化疗", "医疗保险", "hospital_medical_expense"],
+  ["Cancer", "Living Care Plan", "critical_illness"],
+  ["Major cancer", undefined, "critical_illness"],
+  ["Kidney failure", undefined, "critical_illness"],
+  ["Heart attack of specified severity", undefined, "critical_illness"],
+  ["Kanser Tahap Kritikal", undefined, "critical_illness"],
+  ["癌症", undefined, "critical_illness"],
+  ["Early stage cancer", undefined, "early_critical_illness"],
+];
+for (const [name, plan, want] of treatments) eq(`treatment ${name} / ${plan}`, ev(name, plan as string), want);
+
 // A fixed figure printed with a period is paid per period; an income or daily benefit with no period gives no figure.
 const pays: [string, string, string, number, string][] = [
   ["disability_income", "Monthly benefit", "Monthly benefit\t£2,400", 2400, "per_month"],

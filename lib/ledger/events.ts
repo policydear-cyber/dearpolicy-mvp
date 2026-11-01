@@ -330,6 +330,9 @@ export function eventForBenefitName(name:string,productName?:string|null):{event
   const event=planEvent(productName);
   return event?{event,detail:null}:own;
 }
+const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:therap(?:y|ies))?|radio(?:therap(?:y|ies))?|radiation|immunotherap(?:y|ies)|targeted therap(?:y|ies)|"+
+  "outpatient|dialysis|treatments?|reimburse\\w*|expenses?|costs?|ubat(?:an)?|rawatan|kemoterapi|radioterapi|dialisis|pengobatan|obat|tratamientos?|quimioterapia|radioterapia|"+
+  "tratamentos?|traitements?|chimioth[ée]rapie|radioth[ée]rapie|behandlung(?:en)?|chemotherapie|strahlentherapie|trattament[oi]|chemioterapia|điều trị|hóa trị|xạ trị)"+E+"|化疗|化療|放疗|放療|治疗|治療|药物|藥物|洗肾|洗腎|透析","iu");
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
@@ -342,6 +345,9 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   // Round 11: "Loss of a thumb", "Loss of an index finger", "Loss of any other finger" are lines of the same scale.
   if(/dismember|loss of (?:use|sight|hearing|speech|limb|one|two|both)|loss of (?:an? |any (?:other )?|the )?(?:thumbs?|(?:index |other )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot)\b|amputat/.test(n))return {event:"dismemberment",detail:name};
   if(/terminal/.test(n))return {event:"terminal_illness",detail:null};
+  // An illness named with a treatment or a limit ("Annual limit for outpatient cancer drug", "Kidney dialysis", "Rawatan
+  // kemoterapi kanser") pays the bills for treating it, up to a limit: it is a medical expense, never the illness's lump sum.
+  if(/critical illness|major illness|dread disease|cancer|heart attack|stroke|kidney failure|kidney|renal/.test(n)&&CI_TREATMENT.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/early|intermediate/.test(n)&&/illness|stage|critical/.test(n))return {event:"early_critical_illness",detail:name};
   if(/critical illness|major illness|dread disease|cancer|heart attack|stroke|kidney failure/.test(n))return {event:"critical_illness",detail:name};
   if(/\bicu\b|intensive care/.test(n))return {event:"icu_daily_cash",detail:null};
