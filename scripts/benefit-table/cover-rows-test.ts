@@ -18,10 +18,10 @@ const check = (name: string, fn: () => void) => { fn(); passed++; void name; };
 
 const source = { documentId: "00000000-0000-4000-8000-0000000000a1", document: "Policy pack", page: 3, excerpt: "" };
 type C = { coverKey: string; product: string; cover: string; sumInsured: number | null; currency: string | null };
-const cover = (product: string, name: string, sumInsured: number | null, currency = "SGD"): C & Record<string, unknown> => ({
+const cover = (product: string, name: string, sumInsured: number | null, currency = "SGD"): C & { source: typeof source } & Record<string, unknown> => ({
   personId: "p1", coverKey: `${product}|${name}`.toLowerCase(), product, cover: name, plan: null, riderOf: null, policyNumber: null,
   sumInsured, premium: null, premiumFrequency: null, startDate: null, endDate: null, currency, source });
-const row = (c: C, benefit: string, figure: Record<string, unknown> = { kind: "none", why: "words" }, extra: Record<string, unknown> = {}) => ({
+const row = (c: C, benefit: string, figure: { kind: string; amount?: number; currency?: string | null } & Record<string, unknown> = { kind: "none", why: "words" }, extra: Record<string, unknown> = {}) => ({
   coverKey: c.coverKey, product: c.product, cover: c.cover, plan: null, benefit, section: c.product, pays: "words", figure, qualifier: null,
   fromDay: null, maxDays: null, conditions: [], percent: null, base: null, source: { ...source, excerpt: benefit }, ...extra });
 const printed = (amount: number, currency = "SGD") => ({ kind: "printed", amount, currency, unit: "lump_sum" });
@@ -75,10 +75,32 @@ const UPLOAD = /upload it on the Documents page/;
     ci2 = cover("Hong Kong Life Protector", "CI", null, "HKD");
   const worked = row(base, "Critical illness benefit", { kind: "worked_out", amount: 500000, currency: "HKD", how: "100% of sum insured" }, { percent: 100, base: 500000 });
   const [, c, c2] = cards([base, ci, ci2], [worked]);
-  check("different sum: the base's worked-out figure is not borrowed", () => { assert.doesNotMatch(c, /500,000/); assert.match(c, /What it pays is set out with Hong Kong Life Protector/); });
-  check("no sum printed: not borrowed either", () => { assert.doesNotMatch(c2, /500,000/); });
+  check("different sum: the row is shown, the base's worked-out figure is not", () => { assert.doesNotMatch(c, /500,000/); assert.match(c, /Critical illness benefit/); assert.match(c, /See the page/); });
+  check("no sum printed: the worked-out figure is not shown either", () => { assert.doesNotMatch(c2, /500,000/); assert.match(c2, /See the page/); });
   const same = cover("Hong Kong Life Protector", "Critical Illness", 500000, "HKD");
-  check("same sum: shown", () => { assert.equal(rowsForCover(same, [base, same], [worked]).rows.length, 1); });
+  check("same sum: shown with its figure", () => { const r = rowsForCover(same, [base, same], [worked]).rows; assert.equal(r.length, 1); assert.equal(r[0].figure, worked.figure); });
+}
+
+// 5b. TE F1 on #282: a line printing its own sum never shows the plan's different PRINTED figure for that benefit.
+{
+  const base = cover("Lifeguard Max", "Lifeguard Max", 500000), ti = cover("Lifeguard Max", "Terminal Illness", 100000);
+  const [, t] = cards([base, ti], [row(base, "Terminal Illness", printed(500000))]);
+  check("F1 own sum S$100,000: the plan's S$500,000 is not shown", () => { assert.doesNotMatch(t, /500,000/); assert.match(t, /Terminal Illness/); assert.match(t, /See the page/); });
+  const [, t2] = cards([base, ti], [row(base, "Terminal Illness", printed(100000))]);
+  check("F1 control: the same sum is shown", () => assert.match(t2, /class="v">S\$100,000</));
+  const [, t3] = cards([base, ti], [row(base, "Terminal Illness", printed(100000, "MYR"))]);
+  check("F1 another currency is not the same sum", () => assert.doesNotMatch(t3, /MYR 100,000/));
+}
+
+// 5c. TE F2 on #282: two policies of one product share a cover key; a row of the other policy's document is never borrowed.
+{
+  const docA = { ...source, documentId: "00000000-0000-4000-8000-0000000000b1" }, docB = { ...source, documentId: "00000000-0000-4000-8000-0000000000b2" };
+  const baseA = { ...cover("Takaful Hayat", "Takaful Hayat", 300000, "MYR"), source: docA }, baseB = { ...cover("Takaful Hayat", "Takaful Hayat", 80000, "MYR"), source: docB };
+  const tiB = { ...cover("Takaful Hayat", "Penyakit Terminal", null, "MYR"), source: docB };
+  const rowA = { ...row(baseA, "Penyakit Terminal", printed(300000, "MYR")), source: { ...docA, excerpt: "Penyakit Terminal RM300,000" } };
+  const [, , t] = cards([baseA, baseB, tiB], [rowA]);
+  check("F2 policy A's RM300,000 never shows on policy B's line", () => { assert.doesNotMatch(t, /300,000/); assert.doesNotMatch(t, UPLOAD); });
+  check("F2 it points to the plan's card instead", () => assert.match(t, /What it pays is set out with Takaful Hayat/));
 }
 
 // 6. Another product's rows are never borrowed; with nothing of the same product read, the upload ask stays.

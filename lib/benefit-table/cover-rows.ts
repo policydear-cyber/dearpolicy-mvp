@@ -10,10 +10,21 @@
  * "of", "on", in several languages) and reading common short forms (TPD, TI, CI) in full. Exactly, never "contains": an
  * "Accidental death benefit" row is never shown for a "Death" line. A row whose figure was worked out from another
  * cover's sum insured is shown only when this cover prints that same sum: a different sum, or none, shows no figure
- * from it (a wrong amount is worse than none). No match: the card says which card of the same product lists them. */
+ * from it (a wrong amount is worse than none). No match: the card says which card of the same product lists them.
+ *
+ * Only rows read from the very document this line is printed in are borrowed: two policies of one product (two
+ * "Takaful Hayat" plans of different sums) share a cover key, so a row of the other policy never lends its figure (TE F2
+ * on #282). And a line that prints its own sum shows a borrowed row's figure only when it is that same sum in the same
+ * currency; any other figure is left out and the row says to see the page (TE F1 on #282). */
 
-type RowLike = { coverKey: string; product?: string | null; benefit: string; percent?: number | null; base?: number | null };
-type CoverLike = { coverKey: string; product: string; cover: string; sumInsured: number | null };
+type Doc = { documentId?: string | null } | null | undefined;
+type Fig = { kind: string; amount?: number; currency?: string | null };
+type RowLike = { coverKey: string; product?: string | null; benefit: string; percent?: number | null; base?: number | null; figure?: Fig; source?: Doc };
+type CoverLike = { coverKey: string; product: string; cover: string; sumInsured: number | null; currency?: string | null; source?: Doc };
+const sameDocument = (a: Doc, b: Doc) => !!a?.documentId && a.documentId === b?.documentId;
+/** The figure says to see the page instead: a borrowed amount this line does not itself print. */
+const withoutFigure = <R extends RowLike>(r: R): R => ({ ...r, percent: null, base: null,
+  figure: { kind: "none", why: "the amount printed for it elsewhere in the document is not this line's sum: see the page" } });
 
 const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -56,13 +67,22 @@ export function rowsForCover<R extends RowLike, C extends CoverLike>(cover: C, c
   const own = rows.filter((r) => r.coverKey === cover.coverKey);
   if (own.length) return { rows: own, borrowed: false, listedWith: null };
   const product = norm(cover.product);
-  const others = rows.filter((r) => r.coverKey !== cover.coverKey && !!r.product && norm(r.product) === product);
+  const sameProduct = rows.filter((r) => r.coverKey !== cover.coverKey && !!r.product && norm(r.product) === product);
+  const others = sameProduct.filter((r) => sameDocument(r.source, cover.source));
   const words = benefitWords(cover.cover);
-  const same = others.filter((r) => sameWords(words, benefitWords(rowHead(r.benefit))))
-    // A figure worked out from another cover's sum insured is that cover's: kept only when this cover prints that sum.
-    .filter((r) => r.percent == null || r.base == null || (cover.sumInsured != null && Number(cover.sumInsured) === Number(r.base)));
+  const same = others.filter((r) => sameWords(words, benefitWords(rowHead(r.benefit)))).map((r) => {
+    const f = r.figure;
+    if (!f || f.kind === "none" || typeof f.amount !== "number") return r;
+    // This line prints its own sum: only that very sum, in its currency, is shown.
+    if (cover.sumInsured != null) return Number(f.amount) === Number(cover.sumInsured) && (f.currency ?? null) === (cover.currency ?? null) ? r : withoutFigure(r);
+    // No sum of its own: a figure worked out from another cover's sum insured is that cover's, never this line's.
+    return r.percent != null && r.base != null ? withoutFigure(r) : r;
+  });
   if (same.length) return { rows: same, borrowed: true, listedWith: null };
-  const withRows = new Set(others.map((r) => r.coverKey));
-  const listedWith = covers.find((c) => c.coverKey !== cover.coverKey && withRows.has(c.coverKey)) ?? null;
+  // Naming the card that sets them out says no amount, so any card of the same product may be named; one printed in the
+  // same document first.
+  const withRows = new Set(sameProduct.map((r) => r.coverKey));
+  const listed = covers.filter((c) => c.coverKey !== cover.coverKey && withRows.has(c.coverKey));
+  const listedWith = listed.find((c) => sameDocument(c.source, cover.source)) ?? listed[0] ?? null;
   return { rows: [], borrowed: false, listedWith };
 }
