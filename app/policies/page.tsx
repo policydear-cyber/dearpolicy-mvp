@@ -7,7 +7,7 @@ import { customerError } from "@/components/customer-text";
 import { failedDocumentAdvice, readInPartAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
-import { documentFoundLabels, documentTableKinds, type KindRow } from "@/components/cover-kinds";
+import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
@@ -501,7 +501,9 @@ export default function PoliciesPage() {
             const labels = found[policy.id] ?? [];
             if (state && (state.state === "failed" || state.state === "backed_off")) return <p className="document-found warn" data-testid="document-found">Its benefits couldn&rsquo;t be read for Coverage yet{state.reason ? `: ${state.reason.charAt(0).toLowerCase()}${state.reason.slice(1).replace(/\.?\s*$/, ".")}` : "."}{state.state === "backed_off" && state.retryAfter ? " DearPolicy tries again later on its own." : ""} You can still ask about it.</p>;
             if (state) return <p className="document-found" data-testid="document-found">Reading its benefits for Coverage…</p>;
-            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
+            // Only cover whose kind nothing names: said in words, never "Found Other".
+            if (labels.length === 1 && labels[0] === OTHER_LABEL) return <p className="document-found" data-testid="document-found"><b>Found</b> its cover, but not yet what kind of cover it is. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
+            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels.filter((l) => l !== OTHER_LABEL))}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}
