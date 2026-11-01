@@ -143,6 +143,7 @@
     "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
     "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts",
     "security:malware-scanning-virustotal-test": "node --import tsx scripts/malware-scanning-virustotal-regressions.ts",
+    "scanning:virustotal-hash-only-test": "node --import tsx scripts/scanning/virustotal-hash-only-test.ts",
     "security:storage-cleanup-test": "node --import tsx scripts/storage-cleanup-regressions.ts",
     "storage:cleanup": "node --import tsx scripts/storage-cleanup.ts",
     "ai:model-execution-staleness-check": "node --import tsx scripts/model-execution-staleness-check.ts",
