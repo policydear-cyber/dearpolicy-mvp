@@ -102,6 +102,29 @@ async function main() {
     assert.ok(!out[SCHED2].includes("Disability") && !out[SCHED2].includes("Critical illness"));
     assert.deepEqual(out[OTHER], ["Disability"]);
   });
+  // "Found Other" says nothing to a person (live check, 1 Nov). Made-up plans in other markets.
+  const FLEXI = "00000000-0000-0000-0000-00000000f011", MIXED = "00000000-0000-0000-0000-00000000f012", BARE = "00000000-0000-0000-0000-00000000f013";
+  const o1 = [{ id: "p1", rows: [row(MIXED, "Contoh Takaful Keluarga", "Pelan Asas", "Manfaat Kematian")],
+    covers: [{ product: "Example FlexiLink Protector (XK2)", cover: "Example FlexiLink Protector (XK2)", source: src(FLEXI) },
+      { product: "Contoh Takaful Keluarga", cover: "Pelan Asas", source: src(MIXED) }, { product: "Contoh Takaful Keluarga", cover: "Manfaat Khas Wanita", source: src(MIXED) },
+      { product: "Beispiel Vorsorge Plus", cover: "Beispiel Vorsorge Plus", source: src(BARE) }],
+    scheduleLines: [{ policyId: FLEXI, category: "Investment" }] }];
+  await test("O1 a cover its name places nowhere takes the kind its own document's schedule line states", () => {
+    assert.deepEqual(documentTableKinds!(o1 as typeof people)[FLEXI], ["Savings and investment"]);
+  });
+  await test("O2 beside a named kind, Other is left out", () => {
+    assert.deepEqual(documentTableKinds!(o1 as typeof people)[MIXED], ["Death"]);
+  });
+  await test("O2b other languages' death and accident words are sorted, accident first", () => {
+    const k = (b: string) => documentTableKinds!([{ id: "p1", rows: [row(BARE, "Beispiel", "Beispiel", b)], covers: [] }] as unknown as typeof people)[BARE];
+    assert.deepEqual(k("Manfaat Kematian"), ["Death"]); assert.deepEqual(k("Capital décès"), ["Death"]); assert.deepEqual(k("Todesfallleistung"), ["Death"]);
+    assert.deepEqual(k("身故保险金"), ["Death"]);
+    assert.deepEqual(k("Manfaat Kematian Akibat Kemalangan"), ["Accidents and injuries"]); assert.deepEqual(k("Unfalltod"), ["Accidents and injuries"]);
+    assert.deepEqual(k("意外身故"), ["Accidents and injuries"]);
+  });
+  await test("O3 alone, it stays the one Other label the page puts in words; another document's line never places it", () => {
+    assert.deepEqual(documentTableKinds!(o1 as typeof people)[BARE], ["Other"]);
+  });
   // Negative control: a household not on the table keeps its Coverage-row labels.
   await test("C1 a household not on the table: Found from its Coverage rows, unchanged", () => {
     assert.deepEqual(documentFoundLabels(ledgerRows), { [LIFE]: ["Critical illness"], [TRIP]: ["Motor damage"], [EMPTY]: ["Death"] });
@@ -112,6 +135,10 @@ async function main() {
     assert.match(page, /fetch\("\/api\/benefit-table"/, "the page never reads the benefit table");
     // The table branch fills Found from the table and returns before any Coverage-row fill (it may set other state first).
     assert.match(page, /if \(t\?\.enabled\) (?:return setFound\(documentTableKinds\(|\{(?:(?!\n {6}\})[\s\S])*?\n\s*return setFound\(documentTableKinds\()/, "Found is not filled from the table");
+  });
+  await test("O4 the page never prints \"Found Other\": alone it says the kind is not clear yet, beside others it is dropped", () => {
+    assert.match(page, /labels\.length === 1 && labels\[0\] === OTHER_LABEL\) return <p[^>]*><b>Found<\/b> its cover, but not yet what kind of cover it is\./);
+    assert.match(page, /foundLine\(labels\.filter\(\(l\) => l !== OTHER_LABEL\)\)/);
   });
   await test("P2 Coverage rows fill Found only when the table answered that the household is not on it", () => {
     assert.match(page, /if \(t && l\) setFound\(documentFoundLabels\(l\.rows \?\? \[\]\)\)/, "Coverage rows fill Found without the table's answer");

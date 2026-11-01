@@ -15,16 +15,19 @@ export const COVER_KINDS: { id: string; label: string; gapLabel?: string; events
   { id: "savings", label: "Savings and investment", events: [] },
   { id: "other", label: "Other", events: [] },
 ];
+/** The label of the kind a cover takes when nothing places it. Never shown on its own as "Found Other" (Documents page). */
+export const OTHER_LABEL = COVER_KINDS[COVER_KINDS.length - 1].label;
 export const coverKindOf = (eventType: string) => COVER_KINDS.find((k) => k.events.includes(eventType)) ?? COVER_KINDS[COVER_KINDS.length - 1];
 
 /** A benefit's own name, sorted into a kind: for Coverage rows typed "other" and for benefits found only on Benefits.
  * Accident words come first, so "accident medical expenses" stays under Accidents and injuries. */
 const NAME_KINDS: [RegExp, string][] = [
-  [/accident|fractur|dismember|injur|burns?\b/i, "accident"],
+  // Other languages' accident words too, before death: "Manfaat Kematian Akibat Kemalangan" is accidental death.
+  [/accident|fractur|dismember|injur|burns?\b|kemalangan|\bunfall|意外/i, "accident"],
   [/critical illness|cancer|dread disease|heart attack|stroke/i, "ci"],
   [/hospital|surg|\bward|\bicu\b|intensive care|in-?patient|out-?patient|medical|ambulance|clinic|daily cash/i, "hospital"],
   [/disab|\btpd\b|long[- ]term care|careshield|eldershield/i, "disability"],
-  [/death|funeral|terminal|\blife\b/i, "death"],
+  [/death|funeral|terminal|\blife\b|\bkematian\b|\bmeninggal\s+dunia\b|d[ée]c[èe]s|todesfall|身故|死亡/i, "death"],
   [/travel|trip|baggage|flight/i, "travel"],
   [/motor|vehicle|\bcar\b|home|contents/i, "property"],
 ];
@@ -101,8 +104,12 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
  * not listed: nothing is shown for it. */
 type DocRow = TableKindRow & { coverKey?: string | null; source?: { documentId?: string | null } | null };
 type DocCover = TableKindCover & { coverKey?: string | null; source?: { documentId?: string | null } | null };
-export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[] }[]): Record<string, string[]> {
+export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[]; scheduleLines?: { policyId: string; category: string }[] }[]): Record<string, string[]> {
   const rows = new Map<string, Set<DocRow>>(), covers = new Map<string, TableKindCover[]>();
+  // The schedule lines (GET /api/benefit-table scheduleLines, the lines Home's tiles count) printed in each document: a
+  // cover whose own name places it nowhere takes the kind its line in that same document states, as Family does.
+  const lines = new Map<string, { policyId: string; category: string }[]>();
+  for (const p of people) for (const l of p.scheduleLines ?? []) (lines.get(l.policyId) ?? lines.set(l.policyId, []).get(l.policyId)!).push(l);
   const keyOf = (x: { coverKey?: string | null; product: string; cover: string }) => x.coverKey || `${x.product}\u0000${x.cover}`;
   for (const p of people) {
     for (const r of p.rows ?? []) { const id = r.source?.documentId; if (id) (rows.get(id) ?? rows.set(id, new Set()).get(id)!).add(r); }
@@ -116,8 +123,11 @@ export function documentTableKinds(people: { rows?: DocRow[]; covers?: DocCover[
   }
   const out: Record<string, string[]> = {};
   for (const id of new Set([...rows.keys(), ...covers.keys()])) {
-    const kinds = [...kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? [])];
-    if (kinds.length) out[id] = kinds;
+    const kinds = [...kindsOfTable([...(rows.get(id) ?? [])], covers.get(id) ?? [], lines.get(id) ?? [])];
+    // "Other" says nothing to the person reading the card: beside a kind that is named it is left out, and alone the page
+    // says in words that the kind of cover is not clear yet (foundSentence).
+    const named = kinds.filter((k) => k !== OTHER_LABEL);
+    if (kinds.length) out[id] = named.length ? named : [OTHER_LABEL];
   }
   return out;
 }
