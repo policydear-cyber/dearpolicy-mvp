@@ -129,10 +129,11 @@ export default function FamilyPage() {
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
                 {/* Never "Covered for Other": only named kinds are listed, and cover whose kind nothing names yet is said in
                     words, as on Documents (namedCoverKinds). */}
-                {(() => { const { named, unknownOnly } = namedCoverKinds(kinds[member.id] ?? []); const name = baseline[member.id]?.display_name ?? member.display_name;
+                {(() => { const { named, unknownOnly, unknownToConfirm } = namedCoverKinds(kinds[member.id] ?? []); const name = baseline[member.id]?.display_name ?? member.display_name;
                   const see = <a className="text-link" href={`/ledger?member=${member.id}`}>See {name}&rsquo;s cover →</a>;
                   return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
                     : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
+                    : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
                     : null; })() ?? (member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>

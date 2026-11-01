@@ -22,15 +22,21 @@ async function main() {
   const nk = (l: string[]) => { assert.equal(typeof namedCoverKinds, "function", "components/cover-kinds.ts exports namedCoverKinds"); return namedCoverKinds!(l); };
 
   await test("H1 only an unknown kind: nothing named, said in words", () => {
-    assert.deepEqual(nk([OTHER_LABEL]), { named: [], unknownOnly: true });
-    assert.deepEqual(nk([`${OTHER_LABEL} (to confirm)`]), { named: [], unknownOnly: true });
+    assert.deepEqual(nk([OTHER_LABEL]), { named: [], unknownOnly: true, unknownToConfirm: false });
+    assert.deepEqual(nk([OTHER_LABEL, `${OTHER_LABEL} (to confirm)`]), { named: [], unknownOnly: true, unknownToConfirm: false });
   });
   await test("H2 a named kind beside Other lists only the named kind", () => {
-    assert.deepEqual(nk(["Death", OTHER_LABEL]), { named: ["Death"], unknownOnly: false });
-    assert.deepEqual(nk([OTHER_LABEL, "Hospital and medical", `${OTHER_LABEL} (to confirm)`]), { named: ["Hospital and medical"], unknownOnly: false });
+    assert.deepEqual(nk(["Death", OTHER_LABEL]), { named: ["Death"], unknownOnly: false, unknownToConfirm: false });
+    assert.deepEqual(nk([OTHER_LABEL, "Hospital and medical", `${OTHER_LABEL} (to confirm)`]), { named: ["Hospital and medical"], unknownOnly: false, unknownToConfirm: false });
   });
-  await test("H3 nothing found stays nothing (no sentence)", () => assert.deepEqual(nk([]), { named: [], unknownOnly: false }));
-  await test("H4 a named kind still to confirm is kept as it is", () => assert.deepEqual(nk(["Critical illness (to confirm)"]), { named: ["Critical illness (to confirm)"], unknownOnly: false }));
+  await test("H3 nothing found stays nothing (no sentence)", () => assert.deepEqual(nk([]), { named: [], unknownOnly: false, unknownToConfirm: false }));
+  await test("H4 a named kind still to confirm is kept as it is", () => assert.deepEqual(nk(["Critical illness (to confirm)"]), { named: ["Critical illness (to confirm)"], unknownOnly: false, unknownToConfirm: false }));
+  await test("H5 only an unknown kind still to confirm keeps the caveat, never 'Found' (TE #287 P1)", () => {
+    assert.deepEqual(nk([`${OTHER_LABEL} (to confirm)`]), { named: [], unknownOnly: false, unknownToConfirm: true });
+    const by = ledgerKindsByPerson([{ familyMemberId: "c", eventType: "other", eventLabel: "Member benefit", detail: null, origin: "plan_default", status: "proposed" }]);
+    assert.deepEqual(by.c, [`${OTHER_LABEL} (to confirm)`]);
+    assert.deepEqual(nk(by.c), { named: [], unknownOnly: false, unknownToConfirm: true });
+  });
 
   // Benefit-table households: a card that names only its plan (no benefit, no kind) in several markets.
   const card = (product: string, cover: string) => ({ product, cover, source: { documentId: "d-" + product } });
@@ -42,7 +48,7 @@ async function main() {
   ] as const) await test(`T-${market} a plan-only card on the table never reads "Covered for Other"`, () => {
     const kinds = kindsOfTable([], [card(product, cover)], []);
     assert.deepEqual(kinds, [OTHER_LABEL], "fixture: the card's kind is unknown");
-    assert.deepEqual(nk(kinds), { named: [], unknownOnly: true });
+    assert.deepEqual(nk(kinds), { named: [], unknownOnly: true, unknownToConfirm: false });
   });
   await test("T-mixed a named cover beside a plan-only card lists only the named kind", () => {
     const kinds = kindsOfTable([{ benefit: "Death", pays: "lump_sum", product: "Harbour Term Life", cover: "Basic", source: { documentId: "d1" } }], [card("Lion City Member Card", "Plan B")], []);
@@ -53,7 +59,7 @@ async function main() {
   await test("L1 Coverage rows: only an unnamed row gives the unknown sentence", () => {
     const by = ledgerKindsByPerson([{ familyMemberId: "a", eventType: "other", eventLabel: "Member benefit", detail: null, origin: "wording", status: "confirmed" }]);
     assert.deepEqual(by.a, [OTHER_LABEL]);
-    assert.deepEqual(nk(by.a), { named: [], unknownOnly: true });
+    assert.deepEqual(nk(by.a), { named: [], unknownOnly: true, unknownToConfirm: false });
   });
   await test("L2 Coverage rows: named + unnamed lists the named kind only", () => {
     const by = ledgerKindsByPerson([
@@ -69,6 +75,7 @@ async function main() {
     assert.match(src, /namedCoverKinds\(kinds\[member\.id\]/);
     assert.ok(!/kinds\[member\.id\]\.join/.test(src), "Family must not join the raw kinds (that showed \"Other\")");
     assert.match(src, /but not yet what kind of cover it is/);
+    assert.match(src, /unknownToConfirm \? <p[^>]*><b>Possible cover<\/b> for \{name\}, still to confirm/);
   });
   await test("S2 Documents says the same words for a document (Family matches it)", () => {
     const src = read("app/policies/page.tsx");

@@ -19,10 +19,14 @@ export const COVER_KINDS: { id: string; label: string; gapLabel?: string; events
 export const OTHER_LABEL = COVER_KINDS[COVER_KINDS.length - 1].label;
 /** What a person's or a document's cover summary may name: never "Other", which says nothing to the reader. Only the named
  * kinds are listed; when "Other" is all there is (`unknownOnly`), the page says in words that cover was found but not yet
- * what kind, in the words Documents uses for a document (Family). */
-export function namedCoverKinds(labels: readonly string[]): { named: string[]; unknownOnly: boolean } {
-  const named = [...new Set(labels.filter((l) => l.replace(/\s*\(to confirm\)$/, "") !== OTHER_LABEL))];
-  return { named, unknownOnly: named.length === 0 && labels.length > 0 };
+ * what kind, in the words Documents uses for a document (Family). When the only "Other" is still to confirm (a plan type's
+ * usual benefits, never read from a document), `unknownToConfirm`: the page keeps the "to confirm" caveat and never says
+ * cover was found (TE #287 P1). */
+export function namedCoverKinds(labels: readonly string[]): { named: string[]; unknownOnly: boolean; unknownToConfirm: boolean } {
+  const isOther = (l: string) => l.replace(/\s*\(to confirm\)$/, "") === OTHER_LABEL;
+  const named = [...new Set(labels.filter((l) => !isOther(l)))];
+  const found = labels.includes(OTHER_LABEL);
+  return { named, unknownOnly: named.length === 0 && found, unknownToConfirm: named.length === 0 && !found && labels.some(isOther) };
 }
 export const coverKindOf = (eventType: string) => COVER_KINDS.find((k) => k.events.includes(eventType)) ?? COVER_KINDS[COVER_KINDS.length - 1];
 
