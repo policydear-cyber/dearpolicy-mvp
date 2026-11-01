@@ -22,7 +22,10 @@ import { virusTotalFileScanAdapter } from "./adapters/virustotal";
  * actually scanned the bytes. "scan_unavailable" is the null adapter's
  * honest default -- no caller anywhere in this codebase may treat it as
  * equivalent to "clean". */
-export type FileScanStatus = "clean" | "infected" | "scan_unavailable";
+/** "not_scanned": the scanner could not look at the file without receiving its content (a hash lookup with no record
+ * of it). The document goes ahead exactly like the not-scanned path used when scanning is switched off, and is recorded
+ * as NOT malware-scanned, never as clean. */
+export type FileScanStatus = "clean" | "infected" | "scan_unavailable" | "not_scanned";
 
 /** Why a scan did not complete, when that reason is TRANSIENT -- set only by
  * a real adapter, only on "scan_unavailable". Its presence is what makes a

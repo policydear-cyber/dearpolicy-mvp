@@ -6,6 +6,7 @@ import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
 import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
+import { sharedPolicyNote,sharedPolicyText } from "@/lib/policies/shared-policy";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Benefits: what the household's documents say each policy pays.
@@ -29,7 +30,7 @@ type Benefit={
   planColumns?:boolean;
   /** For such a row, the household's own plan column, when its documents settle the plan: that column's printed figure. */
   planFigure?:{plan:string;figureText:string}|null;
-  calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
+  calculatedAgainst:{ownerId?:string;owner:string;plan:string|null;amount:string|null}[];
   /** A benefit that pays the whole sum insured in words: each person's own sum of the cover named the same (whole-sum.ts). */
   wholeSum?:{owner:string;plan:string;amount:string;source:string}[]|null;
   documentName:string;insurer:string|null;owners:string[];
@@ -45,7 +46,7 @@ function paysLine(b:Benefit):{text:string;established:boolean}{
   if(b.planColumns&&b.planFigure)return {text:`For your ${b.planFigure.plan} plan: ${b.planFigure.figureText}. The document prints a different amount for each plan.`,established:true};
   if(b.planColumns)return {text:"The document prints a different amount for each plan, and which plan is yours is not shown, so no amount is used for it.",established:false};
   if(b.attention==="unreadable"&&b.wholeSum?.length)return {text:"Pays the whole sum insured, as each person's own policy document gives it:",established:true};
-  if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote),established:false};
+  if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote,b.benefitName),established:false};
   if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. The amount has not been verified against the page yet, so it is not used in answers.",established:false};
   if(b.formulaKind==="none")return {text:b.pays||"As stated in the document.",established:true};
   return {text:b.pays,established:true};
@@ -72,6 +73,9 @@ export default function BenefitsPage(){
   const stuck=stuckDocuments(readingDocs);
   const [retrying,setRetrying]=useState(false);
   const [status,setStatus]=useState("");
+  // One person's view of a policy that also covers others: say whom else, and this person's own sum on it.
+  const selectedPerson=memberId?(()=>{const m=family.find(f=>f.id===memberId);return m?{id:m.id,name:m.display_name}:null;})():null;
+  const shared=(rows:Benefit[])=>sharedPolicyNote(rows[0]?.owners??[],selectedPerson,rows.map(r=>r.calculatedAgainst));
 
   async function load(member=memberId){
     setLoading(true);
@@ -167,7 +171,8 @@ export default function BenefitsPage(){
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
           <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
-            <small>{rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
+            <small>{shared(rows)?`${selectedPerson!.name} · shared policy`:rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
+          {(()=>{const note=shared(rows);return note?<p className="muted" data-testid="shared-policy">{sharedPolicyText(note,selectedPerson!.name)}</p>:null;})()}
           {(()=>{const k=[...new Set(rows.map(r=>r.policyId))].map(id=>docKinds[id]).filter(Boolean);
             // Said only when every document of the group with a kind agrees, as on Home and Coverage.
             const plan=k.length&&k.every(x=>x.plan&&x.plan===k[0].plan)?k[0]:null;
@@ -175,7 +180,7 @@ export default function BenefitsPage(){
               {plan?.note?<p className="muted" data-testid="group-plan">{plan.note}</p>:null}</>;})()}
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
-              <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>
+              <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&!shared(rows)&&<small>{benefit.owners.join(", ")}</small>}</div>
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
                 {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}

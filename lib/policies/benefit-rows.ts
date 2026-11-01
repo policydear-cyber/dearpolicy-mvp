@@ -1,6 +1,6 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { explicitCurrency } from "@/lib/chat/policy-analysis";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { isIsoCurrency, normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
 
@@ -62,6 +62,10 @@ function statedCode(text:string):string|null{
 }
 /** Markers explicitCurrency() does not know: RM, ₹, ₱, ฿, ₩, ₫, Rp, NT$, HK$, A$/AU$, SG$, NZ$, C$/CA$.
  * A bare "$" is deliberately NOT a currency -- it stays null. */
+/** A figure that reads as money, not a count: thousands groups ("2.000", "1,500,000", "3 000"), three or more digits,
+ * or two decimals. "3" or "10" beside a code-like word is a count. */
+// Never a rate, a multiple or a count: "IRR 4.25%", "IRR 1,250 bps", "SAR 1.5x", "TRY 3 times" (Critic #269 M1).
+const MONEY_SHAPED=String.raw`(?:\d{1,3}(?:[.,' \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2})(?![\d.,])(?!\s?(?:%|x\b|×|times\b|per\s?cent|percent|bps\b|basis\s+points?))`;
 function printedMarker(text:string):string|null{
   if(/(?:^|[^A-Za-z])RM\s?\d/.test(text))return "MYR";
   // Signs of one currency only (TE #145 India parity). "Rs" is left out: rupees of several countries print it.
@@ -78,6 +82,26 @@ function printedMarker(text:string):string|null{
   if(/\bSG\$/i.test(text))return "SGD";
   if(/\bNZ\$/i.test(text))return "NZD";
   if(/\bCA?\$/.test(text))return "CAD";
+  // More signs of one currency only (cross-page check, 31 Oct: "R$ 2.000" had no currency). "Rs", "kr" and "Fr." are left out.
+  if(/(?:^|[^A-Za-z])R\$/.test(text))return "BRL";
+  if(/(?:^|[^A-Za-z])MX\$/.test(text))return "MXN";
+  if(/₺/.test(text))return "TRY";
+  if(/₪/.test(text))return "ILS";
+  if(/₦/.test(text))return "NGN";
+  if(/₴/.test(text))return "UAH";
+  if(/₽/.test(text))return "RUB";
+  if(/৳/.test(text))return "BDT";
+  if(/\d\s?zł|zł\s?\d/i.test(text))return "PLN";
+  if(/\d\s?Kč|Kč\s?\d/.test(text))return "CZK";
+  // "S/" also starts references ("S/ 12345"): only beside a grouped figure or one with two decimals.
+  if(/(?:^|[^A-Za-z])S\/\.?\s?(?:\d{1,3}(?:[.,]\d{3})+|\d+[.,]\d{2})(?![\d%])/.test(text))return "PEN";
+  // Any other ISO 4217 code (the runtime's closed list) only directly beside a money-shaped figure: "BRL 2.000",
+  // "2,500.00 ZAR", never a code-like word near a count ("TRY 3 times", "ALL 3 PLANS").
+  for(const m of text.matchAll(/(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])/g)){
+    if(!isIsoCurrency(m[1])||/^(?:ALL|TOP|CUP|BOB|SOS|GEL|MAD|X..)$/.test(m[1]))continue;
+    const before=text.slice(0,m.index!),after=text.slice(m.index!+3);
+    if(new RegExp(String.raw`^\s?${MONEY_SHAPED}`).test(after)||new RegExp(String.raw`${MONEY_SHAPED}\s?$`).test(before))return m[1];
+  }
   return null;
 }
 /** An amount with its stated currency; without one, the figure is labelled as

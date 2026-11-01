@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
+import { CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 import { isReviewerOnlyAccount } from "@/lib/claims/reviewers/boundary";
@@ -62,7 +63,25 @@ export async function POST(request: Request) {
     if (nativeForm) return formRedirect("/reviewer");
     return NextResponse.json({ ok: true, destination: "/reviewer" });
   }
-  await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`);
+  try {
+    await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`, undefined, {
+      // A password proves nothing about the address (lib/auth/signup-gate.ts): only the emailed link does.
+      email: data.user.email ?? email,
+    });
+  } catch (e) {
+    // Invite-only sign-up (lib/auth/signup-gate.ts): an account with no household gets no session unless it is invited
+    // and its address is proven. An invited person is emailed a link that proves it (app/api/auth/callback).
+    if (!(e instanceof SignupClosedError)) throw e;
+    await supabase.auth.signOut().catch(() => {});
+    if (e.reason === "unproven") {
+      const origin = new URL(request.url).origin;
+      await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback`, shouldCreateUser: false } }).catch(() => {});
+      if (nativeForm) return backToLogin("confirm_email");
+      return NextResponse.json({ error: CONFIRM_EMAIL_MESSAGE }, { status: 403 });
+    }
+    if (nativeForm) return backToLogin("invite_only");
+    return NextResponse.json({ error: SIGNUP_CLOSED_MESSAGE }, { status: 403 });
+  }
   if (nativeForm) return formRedirect(next ?? "/");
   return NextResponse.json({ ok: true, destination: null });
 }

@@ -17,7 +17,7 @@ import { endorsementScope } from "./endorsement-scope";
 
 export type CoverRole = "insured" | "recorded_insured" | "owner_only" | "nominee" | "assignee" | "beneficiary" | "not_named";
 export type InsuredKind = "person" | "motor" | "home" | "pet" | "property";
-export type InForce = { status: "in_force" | "not_started" | "expired" | "lapsed" | "unknown"; from: string | null; to: string | null; basis: string; evidence: EvidenceRef | null };
+export type InForce = { status: "in_force" | "not_started" | "lapsed" | "unknown"; from: string | null; to: string | null; basis: string; evidence: EvidenceRef | null };
 export type Amendment = { policyId: string; productName: string | null; effectiveDate: string | null; inForce: boolean | null; evidence: EvidenceRef | null;
   /** V1.4: whom it applies to (lib/rag2/endorsement-scope.ts): "applies" to this person, or "unresolved" (it does not say). */
   scope?: "applies" | "unresolved"; scopeBasis?: string };
@@ -175,7 +175,7 @@ export async function policiesFor(args: { accountId: string; subjectId: string; 
 
       const inForce = periodOf(d, pages, asOf);
       if (inForce.status === "unknown") und.push(`${d.productName ?? "the document"}: ${inForce.basis}`);
-      if (covered && (inForce.status === "expired" || inForce.status === "lapsed" || inForce.status === "not_started")) reasons.push(inForce.status === "not_started" ? `cover starts on ${inForce.from}` : inForce.status === "expired" ? `cover ended on ${inForce.to}` : `the policy is ${d.status}`);
+      if (covered && (inForce.status === "lapsed" || inForce.status === "not_started")) reasons.push(inForce.status === "not_started" ? `cover starts on ${inForce.from}` : `the policy is ${d.status}`);
 
       // V1.4: an endorsement of the same policy number amends THIS person's cover only when its scope includes them
       // (its amending clause names them, it is scheme-wide, or it has no person-specific clause). One whose amending clause

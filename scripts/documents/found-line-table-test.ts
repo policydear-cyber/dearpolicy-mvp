@@ -110,7 +110,8 @@ async function main() {
   const page = readFileSync(path.resolve("app/policies/page.tsx"), "utf8");
   await test("P1 the Documents page reads the benefit table and fills Found from it for a household on it", () => {
     assert.match(page, /fetch\("\/api\/benefit-table"/, "the page never reads the benefit table");
-    assert.match(page, /if \(t\?\.enabled\) return setFound\(documentTableKinds\(/, "Found is not filled from the table");
+    // The table branch fills Found from the table and returns before any Coverage-row fill (it may set other state first).
+    assert.match(page, /if \(t\?\.enabled\) (?:return setFound\(documentTableKinds\(|\{(?:(?!\n {6}\})[\s\S])*?\n\s*return setFound\(documentTableKinds\()/, "Found is not filled from the table");
   });
   await test("P2 Coverage rows fill Found only when the table answered that the household is not on it", () => {
     assert.match(page, /if \(t && l\) setFound\(documentFoundLabels\(l\.rows \?\? \[\]\)\)/, "Coverage rows fill Found without the table's answer");

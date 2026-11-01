@@ -30,6 +30,11 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
   if (f.kind === "none") {
     if (r.pays === "as_charged") return { text: "As charged", note: null };
     if (r.pays === "not_covered") return { text: "Not covered", note: null };
+    // The share it pays, in the row's own words, never an amount: "10% of Prevailing Insured Amount".
+    if (f.share) return { text: `${f.share.percent}% of ${f.share.of}`,
+      note: f.share.capMissing ? "a maximum applies, but it was not captured from the page: see the document"
+        : f.share.capWords ? `${f.share.capWords} (printed with it on p${f.share.capPage})`
+        : "no amount is worked out: the amount it is a share of is not stated with it" };
     return { text: "See the page", note: f.why };
   }
   if (f.kind === "value") return { text: `${m(f)} value`, note: f.asOf ? `as of ${f.asOf}` : "date not stated" };

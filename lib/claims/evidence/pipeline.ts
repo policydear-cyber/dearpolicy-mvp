@@ -197,11 +197,12 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
         if (moved) await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "rejected", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, reasonCode: "MALWARE_DETECTED", newValue: { status: "rejected", scanStatus: "infected" } });
         return;
       }
-      if (rescan.status === "clean") {
-        const cleared = await markEvidenceRescanClean(args.accountId, current.id);
+      if (rescan.status === "clean" || rescan.status === "not_scanned_prototype") {
+        // not_scanned_prototype: the scanner had no record of the file, so it goes ahead as NOT malware-scanned (never clean).
+        const cleared = await markEvidenceRescanClean(args.accountId, current.id, rescan.status);
         if (cleared) {
           current = cleared;
-          await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "scan_result_recorded", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { scanStatus: "scan_unavailable" }, newValue: { scanStatus: "clean" } });
+          await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "scan_result_recorded", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { scanStatus: "scan_unavailable" }, newValue: { scanStatus: rescan.status } });
         } else {
           current = (await getEvidenceDocument(args.accountId, args.documentId)) ?? current;
         }
