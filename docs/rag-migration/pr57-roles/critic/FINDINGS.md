@@ -10556,3 +10556,4 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - M1: bracket and " - " qualifiers are dropped before the exact-words compare, so "Death benefit (accidental only)" and "Critical illness (second and subsequent claims)" are borrowed into plain Death / CI cards. Fix: compare up to ":" only; drop a bracket part only when it is filler, short forms or the cover's own words.
 - M2: same-name rows from two covers of the product are both borrowed (two different daily amounts on one card). Fix: borrow only from a single coverKey.
 - L1: a percent row with no base is borrowed under a cover printing another sum. Fix: require base === cover.sumInsured.
+- #282 → ce2af8b READY: M1 (compare names up to ":" only), M2 (one coverKey only), L1/M3 (share or percent rows need base = line sum and same currency) fixed; probe p282 24 cases clean; gate + next build green (dashboard-dynamic ended-trip same as main).
