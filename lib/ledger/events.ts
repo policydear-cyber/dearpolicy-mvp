@@ -284,19 +284,27 @@ const PLAN_GLOSSES:[RegExp,string][]=[
   [new RegExp(B+"(?:asuransi jiwa|proteksi jiwa|insurans hayat|takaful hayat|seguro de vida|seguro de vida inteira|assurance décès|lebensversicherung|risikolebensversicherung|assicurazione (?:sulla )?vita|bảo hiểm nhân thọ)"+E+"|人寿|人壽|寿险|壽險|定期寿险|終身壽險","iu"),"life insurance"],
   [new RegExp(B+"(?:penyakit (?:kritikal|kritis)|enfermedades graves|doenças graves|maladies graves|schwere krankheiten|malattie gravi|bệnh hiểm nghèo)"+E+"|重大疾病|重疾|危疾","iu"),"critical illness"],
   [new RegExp(B+"(?:kemalangan diri|kecelakaan diri|accidentes personales|acidentes pessoais|individuelle accident|unfallversicherung|infortuni|tai nạn cá nhân)"+E+"|意外伤害|意外傷害","iu"),"personal accident"],
-  [new RegExp(B+"(?:medi[- ]?care|medi[- ]?cover|insurans perubatan|pelan (?:hospital|perubatan)|takaful perubatan|asuransi kesehatan|seguro (?:de )?(?:salud|saúde|gastos médicos|médico|hospitalización)|plano de saúde|"+
+  [new RegExp(B+"(?:insurans perubatan|pelan (?:hospital|perubatan)|takaful perubatan|asuransi kesehatan|seguro (?:de )?(?:salud|saúde|gastos médicos|médico|hospitalización)|plano de saúde|"+
     "assurance (?:santé|maladie|hospitalisation)|complémentaire santé|mutuelle santé|krankenversicherung|krankenhauszusatzversicherung|assicurazione (?:sanitaria|malattia|ricovero)|bảo hiểm (?:sức khỏe|y tế))"+E+"|医疗保险|醫療保險|住院医疗|住院醫療|医療保険","iu"),"hospital plan"],
   [new RegExp(B+"(?:perlindungan pendapatan|renta por invalidez|renda por invalidez|berufsunfähigkeit(?:sversicherung)?|prévoyance invalidité)"+E+"|收入保障|失能收入","iu"),"income protection"],
 ];
 const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*|vision|optical|eye(?:care|wear)?|eyes|spectacles|maternity|pregnancy|"+
   "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
+/** Words saying a benefit is a cash amount paid to the person, not a limit on a bill (Critic #285 M1): a closed list. */
+const CASH_WORDS="(?:cash|allowances?|income|benefit per (?:day|night)|daily benefit|elaun|tunai|pendapatan|santunan|tunjangan|uang harian|indemnit[ée]s? journali[èe]res?|forfait(?:aire)?|"+
+  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|indennit[àa] giornaliera|tr[ợo] c[ấa]p)";
+const CASH_PAID=new RegExp(B+CASH_WORDS+E+"|津贴|津貼|现金|現金|补贴|補貼|日額|日额","iu");
 /** "Hospital and Surgical", "Hospital & Surgical", "Hospital dan Pembedahan" name one kind of plan, a hospital plan, not two
  * covers (cross-page check, 1 Nov). */
-const HOSPITAL_SURGICAL=new RegExp(B+"(?:hospital(?:i[sz]ation|isasi)?|in-?patient)\\s*(?:and|&|\\+|dan)\\s*(?:surg(?:ical|ery)|pembedahan)"+E,"giu");
+const HOSPITAL_SURGICAL=new RegExp(B+"(?:hospital(?:i[sz]ation|isasi)?|in-?patient)\\s*(?:and|&|\\+|dan)\\s*(?:surg(?:ical|ery)|pembedahan)"+E+"(?!\\s+"+CASH_WORDS+")","giu");
+/** A "MediCare" or "Medicover" plan is a hospital plan only when nothing else in its name says what it is: "Medicare Term
+ * Life" is a life plan, "MediCare Accident Plan" an accident plan (Critic #285 M2). */
+const MEDI_PLAN=new RegExp(B+"medi[- ]?(?:care|cover)"+E,"iu");
 function planEvent(productName:string|null|undefined,limit=false):EventType|null{
   if(!productName)return null;
   productName=productName.replace(HOSPITAL_SURGICAL,"hospital plan");
-  const name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName!)).map(([,en])=>en).join(" ");
+  let name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName!)).map(([,en])=>en).join(" ");
+  if(MEDI_PLAN.test(productName)&&!PRODUCT_DEFAULTS.some(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name))))name+=" hospital plan";
   // A plan naming two covers ("Life and Critical Illness Plan") does not say which one its sum is.
   if(/\s(?:and|&|\+|with|plus|dan|y|e|et|und)\s/i.test(productName))return null;
   const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
@@ -355,6 +363,8 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   const n=glossedName(name);
   if(ci&&CI_TREATMENT.test(n)&&planEvent(productName,true)==="hospital_medical_expense")return {event:"hospital_medical_expense",detail:name};
   if(bill){const kind=planEvent(productName);if(kind==="critical_illness"||kind==="early_critical_illness")return {event:"other",detail:name};}
+  // A room and board line on a hospital cash or income plan is that plan's daily amount, not a bill limit (Critic #285 M1).
+  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&productName&&(CASH_PAID.test(productName)||/\bhospital (?:cash|income)\b|\bdaily cash\b/i.test(productName)))return {event:"other",detail:name};
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board)|"+
@@ -377,7 +387,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   if(/\bicu\b|intensive care/.test(n))return {event:"icu_daily_cash",detail:null};
   // A room and board line ("Room & Board (per day)", "Bilik dan Makan (sehari)", "Zimmer pro Tag") is the most the plan pays
   // towards the room charge each day: a limit on a hospital bill, never a cash amount paid per night (cross-page check, 1 Nov).
-  if(ROOM_AND_BOARD.test(n)&&!/\bcash\b|allowance|\bincome\b/.test(n))return {event:"hospital_medical_expense",detail:name};
+  if(ROOM_AND_BOARD.test(n)&&!CASH_PAID.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/recuperat|daily (?:hospital )?cash|hospital (?:cash|income|allowance)|per day|daily benefit|confinement/.test(n))return {event:"hospital_daily_cash",detail:null};
   if(/surg|operation/.test(n))return {event:"surgery",detail:name};
   if(/ambulance/.test(n))return {event:"ambulance",detail:null};

@@ -48,6 +48,10 @@ const rows: [string, string][] = [
   ["Bilik dan Makan", "hospital_medical_expense"], ["Bilik dan Makan (sehari)", "hospital_medical_expense"], ["Room & Board (per day)", "hospital_medical_expense"],
   ["Daily room charges", "hospital_medical_expense"], ["房间及膳食", "hospital_medical_expense"], ["Zimmerzuschlag pro Tag", "hospital_medical_expense"],
   // ...while a cash amount per day stays daily cash
+  // Cash words in any language keep a room line a cash benefit (Critic #285 M1)
+  ["Bilik dan makan - elaun harian", "hospital_daily_cash"], ["Biaya kamar - santunan harian", "hospital_daily_cash"], ["Kamar dan makan (tunjangan tunai harian)", "hospital_daily_cash"],
+  ["Chambre particulière - indemnité journalière forfaitaire", "hospital_daily_cash"], ["Zimmerzuschlag (Krankenhaustagegeld)", "hospital_daily_cash"],
+  ["Bilik dan Makan (elaun tunai)", "other"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
   ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
@@ -118,13 +122,23 @@ const limits: [string, string | undefined, string][] = [
   ["Annual limit", "Lotus Hospital & Surgical Plan", "hospital_medical_expense"],
   ["Annual limit", "Pelan Hospital dan Pembedahan", "hospital_medical_expense"],
   ["Had tahunan", "Teratai MediCare", "hospital_medical_expense"],
-  ["Sum assured", "Medicover Term Life", "other"],
+  // A Medi* plan is a hospital plan only when nothing else in its name says what it is (Critic #285 M2)
+  ["Sum assured", "Medicover Term Life", "death"],
+  ["Sum insured", "MediCare Accident Plan", "accidental_death"],
+  ["Annual limit", "MediCare Critical Illness Plan", "other"],
+  ["Annual limit", "MediCare Dental", "other"],
+  // "Hospital & Surgical Cash Plan" is a cash plan (Critic #285 L1)
+  ["Annual limit", "Hospital & Surgical Cash Plan", "other"],
   ["Annual limit", "Teratai Family Takaful", "other"],
   ["Annual limit", "Savings Endowment 20", "other"],
   ["Annual limit", undefined, "other"],
   ["Had Tahunan", "Insurans Hayat Bakti", "other"],
   // A room and board limit is a hospital bill limit (cross-page check, 1 Nov)
   ["Room and board limit", "Harbour Hospital Plan", "hospital_medical_expense"],
+  // On a hospital cash or income plan a room line is that plan's daily amount, never a bill limit (Critic #285 M1)
+  ["Room and board", "Hospital Income Plan", "other"],
+  ["Daily room and board benefit", "Hospital Income Plan", "other"],
+  ["房间及膳食津贴", "住院现金计划", "other"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
   ["Deductible", "Harbour Hospital Plan", "other"],
