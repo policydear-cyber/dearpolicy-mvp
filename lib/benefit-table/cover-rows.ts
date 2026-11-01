@@ -57,8 +57,11 @@ export function benefitWords(name: string): Set<string> {
   return out;
 }
 
-/** A row's own name: the words before any ":" or opening bracket ("Death benefit: higher of 105% of ..."). */
-export const rowHead = (benefit: string) => benefit.split(/[:：(（]|\s[-–—]\s/u)[0];
+/** A row's own name: the words before any ":" ("Death benefit: higher of 105% of ..."). Words in brackets or after a dash
+ * stay part of the name, because they narrow the benefit ("Death benefit (accidental only)", "Critical illness (second and
+ * subsequent claims)"): such a row matches only a line that has those words too. A bracket that only repeats the name
+ * ("Total and permanent disability (TPD)") still matches, as its words are the same (Critic M1 on #282). */
+export const rowHead = (benefit: string) => benefit.split(/[:：]/u)[0];
 
 const sameWords = (a: Set<string>, b: Set<string>) => a.size > 0 && a.size === b.size && [...a].every((w) => b.has(w));
 
@@ -70,14 +73,19 @@ export function rowsForCover<R extends RowLike, C extends CoverLike>(cover: C, c
   const sameProduct = rows.filter((r) => r.coverKey !== cover.coverKey && !!r.product && norm(r.product) === product);
   const others = sameProduct.filter((r) => sameDocument(r.source, cover.source));
   const words = benefitWords(cover.cover);
-  const same = others.filter((r) => sameWords(words, benefitWords(rowHead(r.benefit)))).map((r) => {
+  const matching = others.filter((r) => sameWords(words, benefitWords(rowHead(r.benefit))));
+  // Rows of two or more covers of the product ("Room and board" under Plan A and under Plan B) are not one benefit this
+  // line can be said to pay: none is borrowed (Critic M2 on #282).
+  const same = new Set(matching.map((r) => r.coverKey)).size === 1 ? matching.map((r) => {
+    // A share ("50% advance of the death benefit") is this line's only when it is worked out from this line's own printed
+    // sum; otherwise its figure is left out, never read against the sum this card prints (Critic L1 on #282).
+    if (r.percent != null) return r.base != null && cover.sumInsured != null && Number(r.base) === Number(cover.sumInsured) ? r : withoutFigure(r);
     const f = r.figure;
     if (!f || f.kind === "none" || typeof f.amount !== "number") return r;
     // This line prints its own sum: only that very sum, in its currency, is shown.
     if (cover.sumInsured != null) return Number(f.amount) === Number(cover.sumInsured) && (f.currency ?? null) === (cover.currency ?? null) ? r : withoutFigure(r);
-    // No sum of its own: a figure worked out from another cover's sum insured is that cover's, never this line's.
-    return r.percent != null && r.base != null ? withoutFigure(r) : r;
-  });
+    return r;
+  }) : [];
   if (same.length) return { rows: same, borrowed: true, listedWith: null };
   // Naming the card that sets them out says no amount, so any card of the same product may be named; one printed in the
   // same document first.

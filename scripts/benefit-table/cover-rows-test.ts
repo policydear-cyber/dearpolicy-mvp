@@ -57,7 +57,7 @@ const UPLOAD = /upload it on the Documents page/;
 // 3. France: "Exonération des cotisations" line, row of the same product.
 {
   const base = cover("Prévoyance Horizon", "Prévoyance Horizon", 150000, "EUR"), ex = cover("Prévoyance Horizon", "Exonération des cotisations", null, "EUR");
-  const [, e] = cards([base, ex], [row(base, "Exonération des cotisations (invalidité)"), row(base, "Capital décès", printed(150000, "EUR"))]);
+  const [, e] = cards([base, ex], [row(base, "Exonération des cotisations"), row(base, "Capital décès", printed(150000, "EUR"))]);
   check("French waiver line shows its row", () => { assert.match(e, /Exonération des cotisations/); assert.doesNotMatch(e, /Capital décès/); assert.doesNotMatch(e, UPLOAD); });
 }
 
@@ -119,12 +119,42 @@ const UPLOAD = /upload it on the Documents page/;
   check("CJK: row head before a full-width colon matches", () => assert.match(t2, /末期疾病：提前给付/));
 }
 
+// 7b. Critic M1/M2/L1 on #282: words in brackets or after a dash narrow the benefit; rows of two covers; a share with no base.
+{
+  const base = cover("Example Life Plus", "Example Life Plus", 500000), death = cover("Example Life Plus", "Death", 500000);
+  for (const narrowed of ["Death benefit (accidental only)", "Death - accidental causes", "Death benefit (French: décès accidentel)"]) {
+    const [, d] = cards([base, death], [row(base, narrowed, printed(500000))]);
+    check(`M1 "${narrowed}" is not a plain Death line's`, () => { assert.doesNotMatch(d, /accidental|accidentel/); assert.match(d, /What it pays is set out with Example Life Plus/); });
+  }
+  const ciBase = cover("Example CI Cover", "Example CI Cover", 100000), ci = cover("Example CI Cover", "Critical illness", null);
+  const [, c] = cards([ciBase, ci], [row(ciBase, "Critical illness (second and subsequent claims)", { kind: "none", why: "words" }, { percent: 100 })]);
+  check("M1 a later-claims row is not the main claim", () => assert.doesNotMatch(c, /second and subsequent/));
+  const tpd = cover("Example Life Plus", "TPD", null);
+  const [, t] = cards([base, tpd], [row(base, "Total and permanent disability (TPD)")]);
+  check("M1 a bracket that only repeats the name still matches", () => assert.match(t, /Total and permanent disability \(TPD\)/));
+  const ex = cover("Prévoyance Horizon", "Exonération des cotisations", null, "EUR"), exBase = cover("Prévoyance Horizon", "Prévoyance Horizon", 150000, "EUR");
+  const [, e] = cards([exBase, ex], [row(exBase, "Exonération des cotisations (invalidité)")]);
+  check("M1 a narrowing bracket in French is not borrowed", () => assert.doesNotMatch(e, /invalidité/));
+
+  // M2: "Room and board" under Plan A (S$500 a day) and Plan B (S$1,000 a day): neither is this line's.
+  const a = cover("Example Hospital", "Plan A", null), b = cover("Example Hospital", "Plan B", null), rb = cover("Example Hospital", "Room and board", null);
+  const perDay = (n: number) => ({ kind: "printed", amount: n, currency: "SGD", unit: "per_day" });
+  const [, , r] = cards([a, b, rb], [row(a, "Room and board", perDay(500)), row(b, "Room and board", perDay(1000))]);
+  check("M2 rows of two covers are never borrowed", () => { assert.doesNotMatch(r.split("</header>")[1], /S\$500|S\$1,000/); assert.match(r, /What it pays is set out with/); });
+
+  // L1: "Terminal illness: 50% advance of the death benefit" (no base) under a TI line printing S$200,000.
+  const tiBase = cover("Example Life Plus", "Example Life Plus", 500000), ti = cover("Example Life Plus", "Terminal illness", 200000);
+  const share = { kind: "none", why: "share", share: { percent: 50, of: "the death benefit", capWords: null, capPage: null, capMissing: false } };
+  const [, l] = cards([tiBase, ti], [row(tiBase, "Terminal illness: 50% advance of the death benefit", share, { percent: 50, base: null })]);
+  check("L1 a share with no base is shown with no figure", () => { assert.doesNotMatch(l, /50% of/); assert.match(l, /See the page/); });
+}
+
 // 8. Word helpers.
 check("filler and short forms", () => {
   assert.deepEqual([...benefitWords("WAIVER OF PREMIUM ON TPD BENEFIT")].sort(), ["disability", "permanent", "premium", "total", "waiver"]);
   assert.deepEqual([...benefitWords("Premiums waiver for total & permanent disabilities")].sort(), ["disability", "permanent", "premium", "total", "waiver"]);
   assert.equal(rowHead("Death benefit: higher of 105%"), "Death benefit");
-  assert.equal(rowHead("Terminal illness (advance of death benefit)"), "Terminal illness ");
+  assert.equal(rowHead("Terminal illness (advance of death benefit)"), "Terminal illness (advance of death benefit)");
 });
 // A cover with rows of its own keeps exactly those.
 check("own rows win", () => {
