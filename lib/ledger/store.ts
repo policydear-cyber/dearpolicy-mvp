@@ -20,6 +20,7 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
+import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 
@@ -165,7 +166,6 @@ function planLabel(contract:PolicyContract,productName:string|null,category?:str
   if(category&&category.toLowerCase()!==base.toLowerCase()&&!base.toLowerCase().includes(category.toLowerCase()))return base+" · "+category;
   return base;
 }
-const PLAN_COLUMNS_NOTE="The document prints a different figure for each plan, and which plan is yours is not shown, so no figure is taken from it.";
 function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
   const out:Seed[]=[];
   // A row read once per plan column whose plan was not narrowed to this person's (selectTierRows keeps every column when
@@ -190,7 +190,8 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
       eventType:event,detail:detail??(event==="other"?benefit.benefitName:null),cause:causeForBenefit(benefit.benefitName,benefit.requires??[]),paysKind:kind,
       amount:kind==="stated"?null:benefit.formulaValue,currency,sumBasis:kind==="percent_of_sum"?(coverage?.amount??null):null,
       offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays,
-      conditions:[...(perPlan?[PLAN_COLUMNS_NOTE]:[]),...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean).slice(0,6),
+      // One wording for "a figure per plan" (the catalogue may already carry it): the household reads it once.
+      conditions:[...new Set([...(perPlan?[PLAN_COLUMNS_NOTE]:[]),...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean))].slice(0,6),
       note:benefit.benefitName,sourcePage:benefit.sourcePage,quote:benefit.quote,origin:"wording",inferred:!!benefit.basisInferred,
       // The same trust rule the benefit catalogue itself uses: a rule needs a
       // person's confirmation only when its basis was inferred (read from a
