@@ -217,6 +217,7 @@
     "chat:failed-document-test": "node --import tsx scripts/chat-failed-document-regressions.ts",
     "lifecycle:derived-content-scrub-test": "node --import tsx scripts/lifecycle/derived-content-scrub-test.ts",
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",
+    "format:currency-markers-test": "node --import tsx scripts/format/currency-markers-test.ts",
     "policies:plan-choice-test": "node --import tsx scripts/plan-choice-regressions.ts",
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
     "chat:concise-budget-test": "node --import tsx scripts/chat/concise-budget-test.ts",

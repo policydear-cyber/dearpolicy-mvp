@@ -93,7 +93,7 @@ export async function confirmedOwnedCoverages(accountId: string, familyMemberId:
   // (lib/coverage/benefit-sum-line.ts).
   return result.rows.flatMap((row) => { const line = asBenefitLine(row, row.evidence_text); return line ? [line] : []; }).map((r) => ({
     id:r.id, policyId:r.policy_id, familyMemberId:r.family_member_id, category:r.category,
-    amount:r.amount == null ? null : Number(r.amount), currency:r.currency?normalizeCurrencyCode(r.currency):null, productName:r.coverage_product_name,
+    amount:r.amount == null ? null : Number(r.amount), currency:r.currency?normalizeCurrencyCode(r.currency)||null:null, productName:r.coverage_product_name,
     sourcePage:r.source_page, evidenceText:r.evidence_text, insurer:r.insurer, policyName:r.policy_name, policyNumber:r.policy_number,
     groupPolicyNumber:r.group_policy_number, documentRole:r.document_role, effectiveDate:r.effective_date, renewalOrExpiryDate:r.renewal_or_expiry_date,
     currencyVerified:coverageCurrencyVerified(r.currency, r.evidence_text, r.source_page_text), policyDocumentVersion:r.policy_document_version,
