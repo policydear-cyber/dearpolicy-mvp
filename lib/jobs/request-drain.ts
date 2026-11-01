@@ -87,6 +87,10 @@ export async function drainOnce(params: { jobTypes?: WorkerJobTypeConfig[]; now?
   try {
     // Round 5: retry any storage objects of deleted documents/households
     // that could not be removed at deletion time (bounded; never throws).
+    // Deleted documents' content (passages, extracted text, search index) is
+    // removed and their files queued, retrying anything that failed before
+    // (lib/lifecycle/content-scrub.ts; bounded, never throws).
+    await (await import("@/lib/lifecycle/content-scrub")).scrubDeletedDocuments();
     await (await import("@/lib/storage/purge")).purgeSoon();
     if (!(await hasClaimableWork())) return { ran: false, reason: "no_work" };
     // Round 10: a household waiting on a chat answer is waiting now; a
