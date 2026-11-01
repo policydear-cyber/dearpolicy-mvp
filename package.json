@@ -150,6 +150,7 @@
     "security:household-export-worker-test": "node --import tsx scripts/household-export-worker-regressions.ts",
     "security:env-contract-test": "node --import tsx scripts/env-contract-regressions.ts",
     "household-export:cleanup": "node --import tsx scripts/household-export-cleanup.ts",
+    "auth:signup-gate-test": "node --import tsx scripts/auth/signup-gate-test.ts",
     "security:lifecycle-test": "node --import tsx scripts/lifecycle-regressions.ts",
     "security:lifecycle-query-guard-test": "node --import tsx scripts/lifecycle-query-guard-regressions.ts",
     "security:active-read-scopes-test": "node --import tsx scripts/active-read-scopes-regressions.ts",
