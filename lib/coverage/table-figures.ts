@@ -271,17 +271,19 @@ const PAID_IN = String.raw`(?:\b(?:${PAID_IN_WORD})\b|${PAID_IN_CJK})`;
  * is money back, never a cover sum, so it stays withheld (Critic R276 H1). */
 /** What was paid in, in total: "total premiums paid", "all contributions paid", "jumlah sumbangan dibayar", "premiums paid to
  * date". Inside a frame, nothing between the frame word and it may be a figure, ";", ":" or " - " (another label). */
-const TOTAL_PAID = String.raw`(?:(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|(?:yang\s+)?(?:telah\s+|sudah\s+)?dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b)`;
+const TOTAL_PAID = String.raw`(?:(?:(?:the|your)\s+)?(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|(?:yang\s+)?(?:telah\s+|sudah\s+)?dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b`
+  // French "total des cotisations versées", German "der gezahlten Beiträge" (TE R4-3).
+  + String.raw`|\b(?:total|totalit[ée]|somme)\s+des\s+(?:cotisations|primes)\s+(?:vers[ée]es|pay[ée]es)|\b(?:der\s+)?(?:gezahlten|eingezahlten|entrichteten)\s+(?:beitr[äa]ge|pr[äa]mien)\b)`;
 const FRAME_GAP = String.raw`(?:(?![\d;:]|\s[-–—]\s)[^\n])*?`;
 /** A benefit name that may start a clause framing what was paid in, paid back (a closed list). */
-const BENEFIT_NAME = String.raw`(?:benefits?|(?:manfaat|faedah)(?:\s+[\p{L}']+)?|death|kematian|meninggal\s+dunia)`;
+const BENEFIT_NAME = String.raw`(?:benefits?|(?:manfaat|faedah)(?:\s+[\p{L}']+)?|death|kematian|meninggal\s+dunia|capital(?:\s+d[ée]c[èe]s)?|prestations?(?:\s+d[ée]c[èe]s)?|todesfall\w*|leistung\w*)`;
 const PAID_BACK_FRAMES = [
   // "higher of sum assured or total premiums paid"; "sum assured or premiums paid to date, whichever is higher".
   String.raw`\b(?:higher|greater)\s+of\b${FRAME_GAP}${TOTAL_PAID}`,
   String.raw`${TOTAL_PAID}${FRAME_GAP},?\s*whichever\s+is\s+(?:higher|greater)\b`,
   // A benefit name that starts the clause, then "equal to": "Death benefit equal to total premiums paid", "Manfaat
   // kematian sama dengan jumlah sumbangan yang telah dibayar". Without the name ("Premium payable, equal to ...") no frame.
-  String.raw`(?:^|;)\W*(?:[\p{L}']+\s+){0,2}${BENEFIT_NAME}${FRAME_GAP}\b(?:(?:equal|equals|equivalent)\s+to|sama\s+dengan)\b${FRAME_GAP}${TOTAL_PAID}`,
+  String.raw`(?:^|;)\W*(?:[\p{L}']+\s+){0,2}${BENEFIT_NAME}${FRAME_GAP}(?:\b(?:(?:equal|equivalent)\s+to|equals(?:\s+to)?)\b|\bsama\s+dengan\b|\bsetara(?:\s+dengan)?\b|[ée]gale?s?\s+(?:au|aux|à\s+la)\b|\bin\s+h[öo]he\s+(?:der|des)\b)${FRAME_GAP}${TOTAL_PAID}`,
   // A benefit name starts the clause, then ":" or "=": "Death benefit: total contributions paid", "Manfaat kematian: jumlah sumbangan dibayar".
   String.raw`(?:^|;)\W*(?:[\p{L}']+\s+){0,2}${BENEFIT_NAME}\s*[:=]\s*${TOTAL_PAID}`,
   // "total contributions paid plus profit".
