@@ -50,12 +50,14 @@ import { pool } from "@/lib/db/client";
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
 import { enqueueStoragePurge, purgeSoon } from "@/lib/storage/purge";
-import { deleteHouseholdPassages, deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
+import { deleteHouseholdPassages, pineconeEnabled } from "@/lib/rag/pinecone";
+import { scrubDeletedDocuments } from "./content-scrub";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
+import { scrubDeletedDocumentDerivedContent } from "./derived-content-scrub";
 import { recordEvent } from "@/lib/telemetry";
 
 /** Deleting a document must not leave side-channel traces of it behind.
@@ -99,6 +101,7 @@ async function sweepDeletedDocumentSideChannels(accountId: string, policyId: str
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
+import { scrubDeletedDocumentClaimSnapshots } from "./claim-snapshot-scrub";
 
 /** Round 5: once a document deletion has completed, its stored file is
  * removed -- queued durably first (lib/storage/purge.ts), then removed right
@@ -113,6 +116,15 @@ async function purgeDeletedObjects(table: "policies" | "claim_evidence_documents
   } catch (error) {
     console.warn("storage purge after deletion was not completed now; it will be retried:", error instanceof Error ? error.name : "unknown");
   }
+}
+
+/** Once a policy deletion request has completed, the documents' content really goes (lib/lifecycle/content-scrub.ts):
+ * the rows become soft_deleted, their search passages leave Pinecone, everything read from them is hard-deleted, and
+ * their stored files are queued and removed now. Whatever fails here is retried by the request drain. Never throws. */
+async function scrubAndPurgeDeletedPolicies(policyIds: string[]): Promise<string | null> {
+  const scrub = await scrubDeletedDocuments({ policyIds, deletionFinished: true });
+  await purgeSoon();
+  return scrub.searchIndexPending.length || scrub.failed ? "Search-index cleanup is still catching up for this document" : null;
 }
 
 export type DeletionOutcome = {
@@ -271,13 +283,6 @@ export async function finishPolicyDocumentDeletion(args: {
 }): Promise<{ storageWarning: string | null }> {
   let storageWarning: string | null = null;
 
-  if (pineconeEnabled()) {
-    await deletePolicyPassages({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
-      console.warn("Pinecone cleanup failed for deleted policy " + args.policyId + ":", error instanceof Error ? error.message : error);
-      storageWarning = "Search-index cleanup is still catching up for this document";
-    });
-  }
-
   await transitionDeletionRequest(pool, {
     id: args.deletionRequestId,
     fromStates: ["pending_deletion"],
@@ -288,8 +293,12 @@ export async function finishPolicyDocumentDeletion(args: {
     // not an error, transitionDeletionRequest's own CAS already made
     // that determination.
   });
+  // Claim calculations that used the document keep which calculation it was, never what it said (never throws).
+  await scrubDeletedDocumentClaimSnapshots({ policyIds: [args.policyId] });
 
   const correlationId = randomUUID();
+  // What chat answers and the coverage ledger took from the document goes too (never throws; retried by the drain).
+  await scrubDeletedDocumentDerivedContent({ policyIds: [args.policyId] });
 
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
@@ -313,7 +322,7 @@ export async function finishPolicyDocumentDeletion(args: {
     extra: { resourceType: "policy_document" },
   });
 
-  await purgeDeletedObjects("policies", args.accountId, [args.policyId]);
+  storageWarning = await scrubAndPurgeDeletedPolicies([args.policyId]);
   return { storageWarning };
 }
 
@@ -881,15 +890,6 @@ export async function finishPolicyDeletion(args: {
 }): Promise<{ storageWarning: string | null }> {
   let storageWarning: string | null = null;
 
-  if (pineconeEnabled()) {
-    for (const id of args.chainPolicyIds) {
-      await deletePolicyPassages({ accountId: args.accountId, policyId: id }).catch((error) => {
-        console.warn("Pinecone cleanup failed for deleted policy " + id + ":", error instanceof Error ? error.message : error);
-        storageWarning = "Search-index cleanup is still catching up for this document";
-      });
-    }
-  }
-
   await transitionDeletionRequest(pool, {
     id: args.deletionRequestId,
     fromStates: ["pending_deletion"],
@@ -898,8 +898,12 @@ export async function finishPolicyDeletion(args: {
   }).catch(() => {
     // A repeat call (idempotent retry) may already be past this state.
   });
+  // Claim calculations that used these documents keep which calculation it was, never what it said (never throws).
+  await scrubDeletedDocumentClaimSnapshots({ policyIds: args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId] });
 
   const correlationId = randomUUID();
+  // What chat answers and the coverage ledger took from these documents goes too (never throws; retried by the drain).
+  await scrubDeletedDocumentDerivedContent({ policyIds: args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId] });
 
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
@@ -923,7 +927,7 @@ export async function finishPolicyDeletion(args: {
     extra: { resourceType: "policy", chainSize: args.chainPolicyIds.length },
   });
 
-  await purgeDeletedObjects("policies", args.accountId, args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId]);
+  storageWarning = await scrubAndPurgeDeletedPolicies(args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId]);
   return { storageWarning };
 }
 

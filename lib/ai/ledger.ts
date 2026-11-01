@@ -89,12 +89,21 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
 export const SPEND_LIMIT_TEXT="Your household has reached this month’s limit for answers and document reading. It resets at the start of next month.";
 /** Thrown before a hosted call when the household has passed its hard stop. */
 export class SpendCapReached extends Error{constructor(message:string){super(message);this.name="SpendCapReached";}}
-/** Whether the household has passed its hard stop this month. */
+/** What the household reads when this month's use could not be checked: nothing was sent, and it is worth another try. */
+export const SPEND_CHECK_UNAVAILABLE_TEXT="DearPolicy couldn’t check this month’s usage just now, so nothing was sent for reading or answering. Please try again shortly.";
+/** Thrown before a hosted call when this month's spend could not be read: the cap fails closed, never open. */
+export class SpendCheckUnavailable extends Error{constructor(cause?:unknown){super(SPEND_CHECK_UNAVAILABLE_TEXT);this.name="SpendCheckUnavailable";if(cause!==undefined)(this as {cause?:unknown}).cause=cause;}}
+/** Whether the household has passed its hard stop this month. A ledger that cannot be read throws SpendCheckUnavailable:
+ * an unknown spend is never taken as no spend (TE, 31 Oct). */
 export async function overSpendCap(accountId:string){
   const plan=planLimits();
   if(!(plan.hardStopUsd>0))return false;
-  const spent=await query<{cost:string}>(`SELECT coalesce(sum(cost_usd),0)::text AS cost FROM model_usage WHERE account_id=$1 AND at>=date_trunc('month',now())`,[accountId]).catch(()=>({rows:[{cost:"0"}]}));
-  return Number(spent.rows[0]?.cost??0)>=plan.hardStopUsd;
+  let spent:{rows:{cost:string}[]};
+  try{spent=await query<{cost:string}>(`SELECT coalesce(sum(cost_usd),0)::text AS cost FROM model_usage WHERE account_id=$1 AND at>=date_trunc('month',now())`,[accountId]);}
+  catch(error){throw new SpendCheckUnavailable(error);}
+  const cost=Number(spent.rows[0]?.cost??0);
+  if(!Number.isFinite(cost))throw new SpendCheckUnavailable();
+  return cost>=plan.hardStopUsd;
 }
 export async function assertUnderSpendCap(accountId:string){
   if(await overSpendCap(accountId))

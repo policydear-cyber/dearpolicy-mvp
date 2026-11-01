@@ -17,6 +17,7 @@ import { countedPremiums } from "@/lib/policies/counted-premiums";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
+import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
 
 export const runtime="nodejs";
@@ -55,6 +56,10 @@ export async function GET(request:NextRequest){
   const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string;evidence_text:string|null}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.evidence_text,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
   type Chosen={category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
+  // A line whose own label names a premium, waiver, fund or surrender value or the person's own share of a bill is no
+  // tile and no part of a total (a "TPD Premium Waiver" line is stored under TPD); a cover whose figure may be a waived
+  // premium or a value keeps its tile with no figure (lib/coverage/benefit-sum-line.ts).
+  coverageRows.rows=coverageRows.rows.flatMap(row=>{const line=asBenefitLine(row,row.evidence_text);return line?[line]:[];});
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];

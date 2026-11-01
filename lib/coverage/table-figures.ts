@@ -129,6 +129,76 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
   return category;
 }
 
+/** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified
+ * severity", "Kanser", "中风") with no "critical illness" word in the row: the section it is printed under or the cover it
+ * belongs to says what it is ("Critical Illness Benefits", "Acme CritiCare Critical Illness Plan", "Dread Disease Takaful",
+ * "Pelan Penyakit Kritikal", "危疾保障"). Such a row is critical illness cover, or early critical illness where the row
+ * names an early or intermediate stage.
+ *
+ * An allow-list (TE pr252 F1): a row moves only when its own name is an illness, condition or procedure from the closed
+ * list below, in English, Malay or Chinese. Every other row (a death, disability, waiver, surrender value, refund, cash,
+ * or a period such as free-look, grace, waiting or survival, in any language) stays where its own name puts it, or
+ * nowhere. Only these two categories are read from a section or cover name, the row's own name decides first, and a row
+ * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
+const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|penyakit\s+(?:kritikal|kritis|berbahaya)|major\s+illness(?:es)?)\b|危疾|重大疾病|重疾`, "iu");
+const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
+/** The words a covered illness is named with, and nothing else (Critic R on #252 H1a): every word of the row's name must be
+ * one of them, so "Cancer Screening Benefit", "Child Cancer Benefit", "Kematian akibat Kanser", "癌症身故保险金" or "Liver
+ * function test" (a word outside the list) never move. Illness, organ and procedure words, then severity and stage words,
+ * then joining words, in English and Malay; Chinese names are read phrase by phrase. */
+const CONDITION_WORDS = new Set((
+  // English illnesses, organs and procedures
+  "cancer cancers carcinoma malignant malignancy tumour tumor tumours tumors leukaemia leukemia lymphoma sarcoma melanoma heart attack myocardial "
+  + "infarction coronary artery arteries bypass by-pass angioplasty valve valves cardiomyopathy aorta aortic pulmonary hypertension arterial stroke strokes "
+  + "cerebrovascular kidney kidneys renal failure organ organs transplant transplantation bone marrow blindness loss sight hearing speech limb limbs "
+  + "independent existence deafness dementia alzheimer alzheimer's alzheimers parkinson parkinson's parkinsons motor neurone neuron multiple sclerosis "
+  + "muscular dystrophy paralysis coma encephalitis meningitis bacterial viral brain head trauma burns burn liver lung lungs respiratory hepatitis "
+  + "fulminant aplastic anaemia anemia lupus systemic erythematosus hiv aids poliomyelitis apallic syndrome neurological deficit endocarditis infective "
+  + "myasthenia gravis surgery disease diseases "
+  // body sites a cancer or condition is named by (never enough alone)
+  + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+  + "payudara prostat serviks kulit darah rahim pankreas usus "
+  // severity and stage
+  + "major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total "
+  + "permanent in situ excluding less cases "
+  // joining words
+  + "of with the to and or a an "
+  // Malay
+  + "kanser barah tumor serangan jantung koronari arteri pembedahan strok angin ahmar buah pinggang ginjal kegagalan pemindahan organ sumsum tulang "
+  + "buta kebutaan pekak bisu kehilangan penglihatan pendengaran pertuturan lumpuh kelumpuhan koma otak hati paru paru-paru lecur demensia nyanyuk "
+  + "penyakit tahap akhir peringkat awal teruk utama kritikal kritis yang dan atau"
+).split(" "));
+const CHINESE_CONDITION = /恶性肿瘤|肿瘤|癌症|癌|白血病|心脏病|心脏|心肌梗塞|心肌|冠状动脉|搭桥|手术|脑中风|中风|肾衰竭|肾|衰竭|器官移植|器官|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化|严重|末期|早期|重大|疾病|病|发作|症|的|性/gu;
+/** Whether the row's whole name is an illness: at least one illness word, and no word from outside the list. */
+function namesOnlyAnIllness(benefit: string): boolean {
+  const cjk = /\p{Script=Han}/u.test(benefit);
+  if (cjk && /\p{Script=Han}/u.test(benefit.replace(CHINESE_CONDITION, ""))) return false;
+  const words = benefit.replace(/\p{Script=Han}+/gu, " ").toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
+    .filter((w) => !/^(?:\d+|[ivx]+|[a-z])$/.test(w));
+  if (!words.every((w) => CONDITION_WORDS.has(w))) return false;
+  const joining = new Set("of with the to and or a an yang dan atau in situ excluding less cases".split(" "));
+  const generic = new Set(("loss failure attack disease diseases surgery syndrome deficit penyakit kegagalan serangan pembedahan kehilangan "
+    + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+    + "payudara prostat serviks kulit darah rahim pankreas usus").split(" "));
+  const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent tahap akhir peringkat awal teruk utama kritikal kritis".split(" "));
+  return (cjk && /癌|肿瘤|白血病|心|冠状动脉|中风|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化/u.test(benefit)) || words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
+}
+const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
+const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;
+export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
+  const own = categoryOfBenefit(r.benefit, r.section);
+  if (own || !namesOnlyAnIllness(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
+    || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim())))) return own;
+  // The row's own section and its own cover's name (Critic R on #252 H1a). The product names the whole policy, base plan and
+  // riders together ("LifeGuard Saver with Critical Illness Rider"), so it is read only when it is that cover's own name
+  // (a stand-alone plan) or the cover has none. A plan tier ("Plan B") is never read.
+  const own_ = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const names = [r.section, r.cover, !r.cover || own_(r.cover) === own_(r.product) ? r.product : null].filter((x): x is string => !!x);
+  if (names.some((n) => EARLY_COVER.test(n))) return "Early Critical Illness";
+  if (!names.some((n) => CI_COVER.test(n))) return null;
+  return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : "Critical Illness";
+}
+
 /** One person's cover by whole-policy kind (Travel, Savings, Investment), the one rule Home and the Coverage page use: the
  * kind belongs to the policy, never to one benefit's name. Travel by the cover's own name (travelName); savings and
  * investment by the plan type its name or its document's own words state (lib/coverage/plan-type.ts). `current` names
@@ -192,7 +262,7 @@ export const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*)(?!.*(?:\b\d+(?:\.\d+)
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfRow(r) === category));
 }
 
 /** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip

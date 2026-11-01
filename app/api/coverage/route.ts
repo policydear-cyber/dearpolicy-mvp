@@ -3,6 +3,7 @@ import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { lineFigure } from "@/lib/coverage/line-period";
 import { isUuid } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -11,6 +12,7 @@ import { rowDetail, shortFigure } from "@/lib/benefit-table/headline";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
+import { formatMoney } from "@/lib/format/currency";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -26,7 +28,16 @@ async function tableRows(accountId:string,member:string,category:string,seen:{do
     seen.kind=personKinds(person?.covers??[],person?.rows??[]).get(category)??null;
     // The source document is named as its Documents card names it, never by a machine-made file name (TE P179 F1).
     const name=(id:string,fallback:string)=>documentCardTitle(documents.find(d=>d.id===id)?.file??{product_name:null,original_filename:fallback});
-    return categoryRows(category,person?.rows??[]).map(r=>{const f=shortFigure(r);return{benefit:r.benefit,product:r.product,cover:r.cover,plan:r.plan,figure:f.text,note:f.note,detail:rowDetail(r)||null,document:name(r.source.documentId,r.source.document),page:r.source.page,excerpt:r.source.excerpt};});
+    // A document that also covers other people in the household (a group certificate, a family plan): who else, and this
+    // person's own sum on it, so a figure it prints for someone else is not read as theirs (lib/policies/shared-policy.ts).
+    const holders=(documentId:string)=>table.people.filter(p=>p.covers.some(c=>c.source?.documentId===documentId));
+    // One sum only when this person's covers on the document carry one sum (after corrections) in one currency: a base plan
+    // and a rider on one certificate give no one "own sum" (Critic M1).
+    const ownSum=(documentId:string)=>{const sums=new Set((person?.covers??[]).filter(x=>x.source?.documentId===documentId).map(x=>{const sum=x.confirmation?.status==="corrected"?x.confirmation.sumInsured:x.sumInsured;return sum!=null?formatMoney(sum,x.currency):null;}).filter((x):x is string=>!!x));
+      return sums.size===1?[...sums][0]:null;};
+    return categoryRows(category,person?.rows??[]).map(r=>{const f=shortFigure(r);const others=holders(r.source.documentId).filter(p=>p.id!==member).map(p=>p.name);
+      return{benefit:r.benefit,product:r.product,cover:r.cover,plan:r.plan,figure:f.text,note:f.note,detail:rowDetail(r)||null,document:name(r.source.documentId,r.source.document),page:r.source.page,excerpt:r.source.excerpt,
+        shared:others.length?{others,ownSum:ownSum(r.source.documentId)}:null};});
   }catch(error){console.warn("Benefit table unavailable for Coverage:",error instanceof Error?error.message:error);return [];}
 }
 export async function GET(request:NextRequest){
@@ -40,11 +51,16 @@ export async function GET(request:NextRequest){
     const confirmed=await client.query(`SELECT pc.id,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,pc.notes,pc.source_page,pc.evidence_text,pc.evidence_verified,p.id AS policy_id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.document_role,p.document_authority_label,p.effective_date::text,p.original_filename FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.category=$3 ORDER BY pc.confirmed DESC,pc.evidence_verified DESC,p.document_authority DESC,p.effective_date DESC NULLS LAST,p.created_at DESC`,[accountId,member,category]);
     const reference=await client.query(`SELECT prc.id,prc.product_name,prc.notes,prc.source_page,p.id AS policy_id,p.insurer,p.product_name AS document_product,p.policy_number,p.group_policy_number,p.document_role,p.original_filename FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2 AND prc.category=$3 ORDER BY p.document_authority DESC,p.created_at DESC`,[accountId,member,category]);
     const owned=await client.query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;source_page:number|null;evidence_text:string|null;policy_id:string;insurer:string|null;policy_name:string|null;policy_number:string|null;group_policy_number:string|null;document_role:string|null;original_filename:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,pc.source_page,pc.evidence_text,p.id AS policy_id,p.insurer,p.product_name AS policy_name,p.policy_number,p.group_policy_number,p.document_role,p.original_filename FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,member]);
+    // A line whose own label names a premium, waiver, fund or surrender value or the person's own share is no benefit sum
+    // (lib/coverage/benefit-sum-line.ts): it is not this cover's amount, nor the owner a wording is read for. A cover whose
+    // figure may be a waived premium or a value stays, with no figure.
+    const benefitLines=<T extends {evidence_text:string|null;amount:string|null}>(rows:T[])=>rows.flatMap(r=>{const line=asBenefitLine(r,r.evidence_text);return line?[line]:[];});
+    const confirmedRows=benefitLines(confirmed.rows as {evidence_text:string|null;amount:string|null}[]),ownedRows=benefitLines(owned.rows);
     const derived:any[]=[];
-    if(!confirmed.rows.length&&reference.rows.length){
-     for(const ref of reference.rows as any[]){const owner=owned.rows.find(o=>wordingDescribes({productName:o.coverage_product_name??o.policy_name,groupPolicyNumber:o.group_policy_number,insurer:o.insurer},{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}));if(!owner)continue;derived.push({id:`derived:${owner.id}:${ref.id}`,amount:null,currency:owner.currency,display_amount:null,product_name:ref.product_name??owner.coverage_product_name??owner.policy_name,insurer:owner.insurer,policy_number:owner.policy_number,group_policy_number:owner.group_policy_number,ownership_source_page:owner.source_page,ownership_evidence_text:owner.evidence_text,ownership_name:documentCardTitle({product_name:owner.policy_name,original_filename:owner.original_filename,insurer:owner.insurer,document_role:owner.document_role,policy_number:owner.policy_number}),reference_name:documentCardTitle({product_name:ref.document_product,original_filename:ref.original_filename,insurer:ref.insurer,document_role:ref.document_role,policy_number:ref.policy_number}),reference_role:ref.document_role,reference_notes:ref.notes});}
+    if(!confirmedRows.length&&reference.rows.length){
+     for(const ref of reference.rows as any[]){const owner=ownedRows.find(o=>wordingDescribes({productName:o.coverage_product_name??o.policy_name,groupPolicyNumber:o.group_policy_number,insurer:o.insurer},{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}));if(!owner)continue;derived.push({id:`derived:${owner.id}:${ref.id}`,amount:null,currency:owner.currency,display_amount:null,product_name:ref.product_name??owner.coverage_product_name??owner.policy_name,insurer:owner.insurer,policy_number:owner.policy_number,group_policy_number:owner.group_policy_number,ownership_source_page:owner.source_page,ownership_evidence_text:owner.evidence_text,ownership_name:documentCardTitle({product_name:owner.policy_name,original_filename:owner.original_filename,insurer:owner.insurer,document_role:owner.document_role,policy_number:owner.policy_number}),reference_name:documentCardTitle({product_name:ref.document_product,original_filename:ref.original_filename,insurer:ref.insurer,document_role:ref.document_role,policy_number:ref.policy_number}),reference_role:ref.document_role,reference_notes:ref.notes});}
     }
-    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmed.rows,derived,reference:reference.rows.map((r:any)=>({...r,document_name:documentCardTitle({product_name:r.document_product,original_filename:r.original_filename,insurer:r.insurer,document_role:r.document_role,policy_number:r.policy_number})})),table:await tableRows(accountId,member,category,seen)};
+    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmedRows,derived,reference:reference.rows.map((r:any)=>({...r,document_name:documentCardTitle({product_name:r.document_product,original_filename:r.original_filename,insurer:r.insurer,document_role:r.document_role,policy_number:r.policy_number})})),table:await tableRows(accountId,member,category,seen)};
   });
   if(!payload) return NextResponse.json({error:"Family member not found"},{status:404});
   // A failed or partly read document of this person may hold this cover: "not found" says so (see lib/policies/not-fully-read).
