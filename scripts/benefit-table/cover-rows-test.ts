@@ -146,6 +146,16 @@ const UPLOAD = /upload it on the Documents page/;
   const tiBase = cover("Example Life Plus", "Example Life Plus", 500000), ti = cover("Example Life Plus", "Terminal illness", 200000);
   const share = { kind: "none", why: "share", share: { percent: 50, of: "the death benefit", capWords: null, capPage: null, capMissing: false } };
   const [, l] = cards([tiBase, ti], [row(tiBase, "Terminal illness: 50% advance of the death benefit", share, { percent: 50, base: null })]);
+  // M3: a share whose cap was not captured, worked against the main plan's S$500,000, under a TI S$200,000 line and a no-sum line.
+  const m3 = { kind: "none", why: "share", share: { percent: 100, of: "the sum insured", capWords: null, capPage: null, capMissing: true } };
+  const tiNone = cover("Example Life Plus", "Terminal illness", null);
+  for (const line of [ti, tiNone]) {
+    const [, m] = cards([tiBase, line], [row(tiBase, "Terminal illness", m3, { percent: 100, base: 500000 })]);
+    check(`M3 a share of another sum shows no figure (${line.sumInsured ?? "no sum"})`, () => { assert.doesNotMatch(m, /100% of/); assert.match(m, /See the page/); });
+  }
+  const shareOnly = { ...row(tiBase, "Terminal illness", m3), percent: null, base: null };
+  const [, m4] = cards([tiBase, ti], [shareOnly]);
+  check("M3 a share figure with no percent kept is still a share", () => assert.doesNotMatch(m4, /100% of/));
   check("L1 a share with no base is shown with no figure", () => { assert.doesNotMatch(l, /50% of/); assert.match(l, /See the page/); });
 }
 

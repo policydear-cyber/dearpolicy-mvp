@@ -79,8 +79,12 @@ export function rowsForCover<R extends RowLike, C extends CoverLike>(cover: C, c
   const same = new Set(matching.map((r) => r.coverKey)).size === 1 ? matching.map((r) => {
     // A share ("50% advance of the death benefit") is this line's only when it is worked out from this line's own printed
     // sum; otherwise its figure is left out, never read against the sum this card prints (Critic L1 on #282).
-    if (r.percent != null) return r.base != null && cover.sumInsured != null && Number(r.base) === Number(cover.sumInsured) ? r : withoutFigure(r);
+    // A row with a share figure whose percent was not kept counts as a share too (Critic M3 on #282).
     const f = r.figure;
+    if (r.percent != null || (f as { share?: unknown } | undefined)?.share) {
+      const sameCurrency = typeof f?.amount !== "number" || (f.currency ?? null) === (cover.currency ?? null);
+      return r.base != null && cover.sumInsured != null && Number(r.base) === Number(cover.sumInsured) && sameCurrency ? r : withoutFigure(r);
+    }
     if (!f || f.kind === "none" || typeof f.amount !== "number") return r;
     // This line prints its own sum: only that very sum, in its currency, is shown.
     if (cover.sumInsured != null) return Number(f.amount) === Number(cover.sumInsured) && (f.currency ?? null) === (cover.currency ?? null) ? r : withoutFigure(r);
