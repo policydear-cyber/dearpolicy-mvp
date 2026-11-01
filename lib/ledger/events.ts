@@ -362,7 +362,7 @@ const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:thera
  * medical, perubatan, Krankenversicherung, 医疗) is not one, and a cash word that is no plan type ("Cash rebate", "Income
  * Protection") never makes one (Critic #285 M1, round 3). */
 const CASH_PLAN=new RegExp(B+"(?:hospital(?:i[sz]ation)?(?:\\s*(?:and|&)\\s*surgical)?\\s+(?:cash|income|allowance)(?:\\s+(?:plan|insurance|benefit|policy|rider))?|daily (?:hospital )?cash plan|"+
-  "pelan (?:pendapatan|elaun) hospital|santunan harian|krankenhaustagegeld\\w*|indemnit[ée] journali[èe]re d'hospitalisation)"+E+"|住院现金|住院現金|住院津贴|住院津貼","iu");
+  "pelan (?:pendapatan|elaun) hospital|santunan harian|krankenhaustagegeld\\w*|indemnit[ée] journali[èe]re d'hospitalisation)"+E+"|住院\\S{0,3}?(?:现金|現金|津贴|津貼)","iu");
 const REIMBURSEMENT_PLAN=new RegExp(B+"(?:shield|surgical(?!\\s+(?:cash|income|allowance))|perubatan|medical|medic|health|krankenversicherung|krankenhauszusatz\\w*|kesehatan|salud|sa[úu]de|sant[ée]|sanitaria)"+E+"|医疗|醫療","iu");
 function isCashPlan(productName:string|null|undefined){return !!productName&&CASH_PLAN.test(productName)&&!REIMBURSEMENT_PLAN.test(productName);}
 function withPlanKind(own:{event:EventType;detail:string|null},name:string,productName?:string|null):{event:EventType;detail:string|null}{
@@ -375,6 +375,9 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   // A room and board line on a hospital cash or income plan is that plan's daily cash amount, not a bill limit (Critic #285
   // M1, TE #285 G2).
   if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&isCashPlan(productName))return {event:"hospital_daily_cash",detail:null};
+  // A plan named both as a cash plan and as a reimbursement plan ("Medic Hospital Cash Plan") does not settle which a room
+  // line is: unsure, so neither a bill limit nor daily cash (Critic #285 low, round 4).
+  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&!!productName&&CASH_PLAN.test(productName)&&REIMBURSEMENT_PLAN.test(productName))return {event:"other",detail:name};
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board)|"+

@@ -154,6 +154,11 @@ const limits: [string, string | undefined, string][] = [
   ["Room & Board", "Hospital & Surgical Plan with Income Protection", "hospital_medical_expense"],
   ["Room & Board (per day)", "Sentinel Hospital Income Plan", "hospital_daily_cash"],
   ["Room & Board (per day)", "Lion Hospital Cash Plan", "hospital_daily_cash"],
+  // Both a cash-plan phrase and a reimbursement word: unsure, so other (Critic #285 low, round 4)
+  ["Room and board", "Medic Hospital Cash Plan", "other"],
+  ["Room and board", "住院医疗现金", "other"],
+  ["Room and board", "Hospital Cash Plan (with surgical benefit)", "other"],
+  ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
   ["Room and board", "Krankenhaustagegeldversicherung", "hospital_daily_cash"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
