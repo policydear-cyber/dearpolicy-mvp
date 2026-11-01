@@ -195,8 +195,11 @@ async function main() {
     assert.match(summary, /countedPremiums\(accountId,/, "the Payments summary counts through the same helper");
     assert.ok(!/runAfterResponse|readPendingDocuments|seedLedger/.test(summary), "the Payments summary reads only, starting no background work");
     assert.match(payments, /fetch\("\/api\/premiums\/summary"\)/, "Payments loads the counted premiums");
-    assert.match(payments, /policy_schedule:"From the policy schedule",payment_record:"From a payment record"/, "each premium names where it was read");
-    assert.match(payments, /\|\|"From your documents"/, "an unknown source says the neutral words");
+    const source = read("lib/format/premium-source.ts");
+    assert.match(payments, /<span>\{premiumRowDetail\(item\)\}<\/span>/, "each premium names where it was read");
+    assert.match(read("app/page.tsx"), /<span>\{premiumRowDetail\(i\)\}<\/span>/, "in the same words on Home's breakdown");
+    assert.match(source, /policy_schedule: "From the policy schedule", payment_record: "From a payment record"/, "the words for each source");
+    assert.match(source, /: "From your documents";/, "an unknown source says the neutral words");
     assert.match(payments, /p\.oneOff\.map/, "a premium paid once is listed, not hidden");
     assert.match(payments, /p\.note&&<p className="note">\{p\.note\}/, "what the total leaves out is said, as on Home");
   });

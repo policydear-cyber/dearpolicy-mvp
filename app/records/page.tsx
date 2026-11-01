@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
-import { premiumSourceCaption } from "@/lib/format/premium-source";
+import { premiumRowDetail, premiumSourceCaption } from "@/lib/format/premium-source";
 import type { CountedPremium, CountedPremiums } from "@/lib/policies/counted-premiums";
 
 type RecordRow = { id: string; family_member_name: string | null; insurer: string | null; product_name: string | null; policy_number: string | null; amount: string; currency: string; frequency: string | null; payment_date: string | null; period_start: string | null; notes: string | null };
@@ -13,12 +13,9 @@ function money(amount: string, currency: string) { return formatMoney(amount,cur
 // A premium is shown in its record's currency only when the record states one; premiums in two currencies are never added.
 const premiumMoney=(i:CountedPremium,v:number)=>formatMoney(v,i.currencyStated===false?null:i.currency);
 const perCurrency=(totals:CountedPremiums["totals"],k:"monthly"|"annual")=>totals.map(t=>formatMoney(t[k],t.currency)).join(" + ");
-// Where each premium was read, in the words Home's cost caption uses.
-const SOURCE:Record<string,string>={policy_schedule:"From the policy schedule",payment_record:"From a payment record"};
-const sourceText=(i:CountedPremium)=>(i.source&&SOURCE[i.source])||"From your documents";
 
 function PremiumRow({ item, once }: { item: CountedPremium; once?: boolean }) {
-  return <div className="premium-breakdown-row"><div className="payment-brand">{(item.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{item.product_name??item.insurer??"Insurance policy"}</strong><span>{[sourceText(item),item.insurer,item.shared?"shared/family payment":null,item.detail].filter(Boolean).join(" · ")}</span></div>
+  return <div className="premium-breakdown-row"><div className="payment-brand">{(item.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{item.product_name??item.insurer??"Insurance policy"}</strong><span>{premiumRowDetail(item)}</span></div>
     <div className="premium-breakdown-value">{once?<><strong>{premiumMoney(item,item.amount)}</strong><span>paid once</span></>:<><strong>{premiumMoney(item,item.monthly)}<small>/mo</small></strong><span>{premiumMoney(item,item.annual)} / year</span></>}</div></div>;
 }
 
