@@ -149,6 +149,12 @@ const limits: [string, string | undefined, string][] = [
   ["Room & Board (per day)", "Hospital & Surgical Cash Plan", "hospital_daily_cash"],
   ["Bilik dan Makan (sehari)", "Pelan Elaun Hospital", "hospital_daily_cash"],
   ["房间及膳食津贴", "住院现金计划", "other"],
+  // A cash word that is no plan type, or a reimbursement plan word, never makes a cash plan (Critic #285 M1, round 3)
+  ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
+  ["Room & Board", "Hospital & Surgical Plan with Income Protection", "hospital_medical_expense"],
+  ["Room & Board (per day)", "Sentinel Hospital Income Plan", "hospital_daily_cash"],
+  ["Room & Board (per day)", "Lion Hospital Cash Plan", "hospital_daily_cash"],
+  ["Room and board", "Krankenhaustagegeldversicherung", "hospital_daily_cash"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
   ["Deductible", "Harbour Hospital Plan", "other"],

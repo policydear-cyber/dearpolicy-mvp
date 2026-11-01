@@ -357,6 +357,14 @@ const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:thera
  *   "Major organ transplant (treatment received)") is never moved to a reimbursement: it stays the CI it names, or is left
  *   unmapped when its name alone names no illness;
  * - on any other plan, or when the kind is unknown or two kinds fit, the name's own mapping stands. */
+/** A plan whose own kind is a daily cash plan, from a closed list of plan-type phrases ("Hospital Income Plan", "Pelan
+ * Pendapatan Hospital", "Krankenhaustagegeldversicherung", "住院现金"). A name that also names a reimbursement plan (Shield,
+ * medical, perubatan, Krankenversicherung, 医疗) is not one, and a cash word that is no plan type ("Cash rebate", "Income
+ * Protection") never makes one (Critic #285 M1, round 3). */
+const CASH_PLAN=new RegExp(B+"(?:hospital(?:i[sz]ation)?(?:\\s*(?:and|&)\\s*surgical)?\\s+(?:cash|income|allowance)(?:\\s+(?:plan|insurance|benefit|policy|rider))?|daily (?:hospital )?cash plan|"+
+  "pelan (?:pendapatan|elaun) hospital|santunan harian|krankenhaustagegeld\\w*|indemnit[ée] journali[èe]re d'hospitalisation)"+E+"|住院现金|住院現金|住院津贴|住院津貼","iu");
+const REIMBURSEMENT_PLAN=new RegExp(B+"(?:shield|surgical(?!\\s+(?:cash|income|allowance))|perubatan|medical|medic|health|krankenversicherung|krankenhauszusatz\\w*|kesehatan|salud|sa[úu]de|sant[ée]|sanitaria)"+E+"|医疗|醫療","iu");
+function isCashPlan(productName:string|null|undefined){return !!productName&&CASH_PLAN.test(productName)&&!REIMBURSEMENT_PLAN.test(productName);}
 function withPlanKind(own:{event:EventType;detail:string|null},name:string,productName?:string|null):{event:EventType;detail:string|null}{
   const ci=own.event==="critical_illness"||own.event==="early_critical_illness";
   const bill=own.event==="hospital_medical_expense"||own.event==="accident_medical_expense";
@@ -366,7 +374,7 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   if(bill){const kind=planEvent(productName);if(kind==="critical_illness"||kind==="early_critical_illness")return {event:"other",detail:name};}
   // A room and board line on a hospital cash or income plan is that plan's daily cash amount, not a bill limit (Critic #285
   // M1, TE #285 G2).
-  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&productName&&(CASH_PAID.test(productName)||/\bhospital (?:cash|income)\b|\bdaily cash\b/i.test(productName)))return {event:"hospital_daily_cash",detail:null};
+  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&isCashPlan(productName))return {event:"hospital_daily_cash",detail:null};
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board)|"+
