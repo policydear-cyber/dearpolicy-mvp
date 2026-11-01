@@ -5,9 +5,9 @@
  * notice with any passage still marked). DEARPOLICY_PRIVACY_PREVIEW=true shows the draft page for review (for example
  * on a local run); it never adds the links.
  *
- * Do not flip it before the deletion work it describes is live: "Removing your information" relies on #267 (deleting a
- * document removes its file and everything read from it) and on the follow-up that removes what stored chat answers
- * and coverage summaries took from a deleted document. Until both are merged, those passages are not true.
+ * "Removing your information" describes deletion work that is now merged: #267 (deleting a document removes its file
+ * and everything read from it), #271 (stored chat answers and the coverage ledger lose what they took from it) and #275
+ * (claim calculations that used it are redacted). Check those are live on the site before flipping it.
  */
 export const PRIVACY_NOTICE_FINAL = false;
 
