@@ -10544,3 +10544,15 @@ M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route g
 - #272 5d050ff NOT READY: personName() reads family_members without activePredicate, so lifecycle-query-guard fails.
 - Conflicts: #272 with #266 (answer.ts); #273 with #256; #262 merges before #265.
 - Process: probe worktrees named w_<tag> collided with gate worktrees and wiped the shared node_modules. Probes now use x_*. Turbopack refuses a symlinked node_modules, so e2e runs need a real copy.
+
+## R518 — 1 Nov: #266 d314714, #274 896f04f, #281 857ac0c (READY); #272–#280 READY
+- #266 d314714 (main merge): full gate green, plus DB periodic-figures 74 and home-currency 14.
+- #274 896f04f: a bare CAD is a currency only beside a money figure; gate green.
+- #281 857ac0c: generic limits map to hospital expense only on single-kind hospital plans, CI-plan conditions stay CI; probe p281b 24 rows clean; gate green incl. lifecycle-query-guard.
+- Earlier READY on current heads: #272 a783596, #273 b39c76b, #275 7d67585, #276 e2c2672, #277 655b636, #278 d5bcb0a, #279 147f367, #280 a90691f.
+
+## R519 — #282 a987c90 (NOT READY)
+Coverage borrows the same person's same-product rows for a cover with none of its own; Documents drops "Found Other". Probe p282 (made-up): opposite direction clean (Accidental death, WOP on TPD, Early CI, other product, different base: none borrowed); NAME_KINDS for kemalangan/Unfall/décès/身故/意外 correct.
+- M1: bracket and " - " qualifiers are dropped before the exact-words compare, so "Death benefit (accidental only)" and "Critical illness (second and subsequent claims)" are borrowed into plain Death / CI cards. Fix: compare up to ":" only; drop a bracket part only when it is filler, short forms or the cover's own words.
+- M2: same-name rows from two covers of the product are both borrowed (two different daily amounts on one card). Fix: borrow only from a single coverKey.
+- L1: a percent row with no base is borrowed under a cover printing another sum. Fix: require base === cover.sumInsured.
