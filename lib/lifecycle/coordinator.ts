@@ -57,6 +57,7 @@ import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
+import { scrubDeletedDocumentDerivedContent } from "./derived-content-scrub";
 import { recordEvent } from "@/lib/telemetry";
 
 /** Deleting a document must not leave side-channel traces of it behind.
@@ -293,6 +294,8 @@ export async function finishPolicyDocumentDeletion(args: {
   });
 
   const correlationId = randomUUID();
+  // What chat answers and the coverage ledger took from the document goes too (never throws; retried by the drain).
+  await scrubDeletedDocumentDerivedContent({ policyIds: [args.policyId] });
 
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
@@ -894,6 +897,8 @@ export async function finishPolicyDeletion(args: {
   });
 
   const correlationId = randomUUID();
+  // What chat answers and the coverage ledger took from these documents goes too (never throws; retried by the drain).
+  await scrubDeletedDocumentDerivedContent({ policyIds: args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId] });
 
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
