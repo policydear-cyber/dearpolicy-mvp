@@ -102,6 +102,11 @@ const limits: [string, string | undefined, string][] = [
   ["Annual limit", "Kestrel Personal Accident Plan", "other"],
   ["Annual limit", "Wayfarer Travel Plan", "other"],
   ["Annual limit", "Harbour Hospital Cash Plan", "other"],
+  // A dental, vision or maternity health plan is not a hospital plan (TE #281 F2)
+  ["Annual limit", "Pearl Dental Health Insurance", "other"],
+  ["Annual limit", "ClearSight Vision Health Insurance", "other"],
+  ["Had Tahunan", "Asuransi Kesehatan Gigi", "other"],
+  ["Annual limit", "Bloom Maternity Health Insurance", "other"],
   ["Annual limit", "Hospital and Surgical Plan", "other"],
   ["Annual limit", "Teratai Family Takaful", "other"],
   ["Annual limit", "Savings Endowment 20", "other"],
@@ -136,7 +141,15 @@ const treatments: [string, string | undefined, string][] = [
   ["Cancer treatment benefit", "Cancer Care Plan", "critical_illness"],
   ["Outpatient cancer drug", undefined, "critical_illness"],
   ["Major organ transplant (treatment received)", "Critical Illness Plan", "other"],
+  // A treatment alone is a bill benefit on a hospital plan, and never a reimbursement on a CI plan
+  ["Kidney dialysis", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Chemotherapy", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Dialysis", "Critical Illness Plan", "other"],
   ["Cancer drug treatment", "Life and Hospital Plan", "critical_illness"],
+  // TE #281 F1: CI-plan rows named with treatment words stay the CI
+  ["Cancer treatment benefit", "Lion Critical Illness Plan", "critical_illness"],
+  ["Kidney failure treatment benefit", "Lion Critical Illness Plan", "critical_illness"],
+  ["Major cancer - 100% of sum assured; minor cancer treatment 25%", "Lion Critical Illness Plan", "critical_illness"],
   ["Cancer", "Living Care Plan", "critical_illness"],
   ["Major cancer", undefined, "critical_illness"],
   ["Kidney failure", undefined, "critical_illness"],

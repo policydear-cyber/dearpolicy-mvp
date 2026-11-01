@@ -288,6 +288,8 @@ const PLAN_GLOSSES:[RegExp,string][]=[
     "assurance (?:santé|maladie|hospitalisation)|complémentaire santé|mutuelle santé|krankenversicherung|krankenhauszusatzversicherung|assicurazione (?:sanitaria|malattia|ricovero)|bảo hiểm (?:sức khỏe|y tế))"+E+"|医疗保险|醫療保險|住院医疗|住院醫療|医療保険","iu"),"hospital plan"],
   [new RegExp(B+"(?:perlindungan pendapatan|renta por invalidez|renda por invalidez|berufsunfähigkeit(?:sversicherung)?|prévoyance invalidité)"+E+"|收入保障|失能收入","iu"),"income protection"],
 ];
+const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*|vision|optical|eye(?:care|wear)?|eyes|spectacles|maternity|pregnancy|"+
+  "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
 function planEvent(productName:string|null|undefined,limit=false):EventType|null{
   if(!productName)return null;
   const name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName)).map(([,en])=>en).join(" ");
@@ -296,7 +298,8 @@ function planEvent(productName:string|null|undefined,limit=false):EventType|null
   const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
   // Only a plan kind whose main benefit is its sum or its monthly income: an endowment's sum is not its maturity value.
   const main=kinds.length===1?kinds[0].events[0]:null;
-  if(limit)return main&&main.event==="hospital_medical_expense"?main.event:null;
+  // A dental, vision or maternity plan is not a hospital plan, whatever health words its name also holds (TE #281 F2).
+  if(limit)return main&&main.event==="hospital_medical_expense"&&!NARROW_HEALTH_PLAN.test(productName)?main.event:null;
   return main&&(main.pays==="lump_sum"||main.pays==="per_month")?main.event:null;
 }
 
@@ -370,7 +373,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   if(/ambulance/.test(n))return {event:"ambulance",detail:null};
   // Treatment abroad (a travel plan's overseas medical expenses) is not a hospital bill at home.
   if(/overseas|abroad|covid|evacuat|repatriat/.test(n)&&!accident)return {event:"travel_medical",detail:name};
-  if(/medical (?:expense|reimburse|cost)|treatment|clinical|outpatient|physiotherap|tcm|chinese physician/.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
+  if(/medical (?:expense|reimburse|cost)|treatment|clinical|outpatient|physiotherap|tcm|chinese physician|dialysis|chemotherap|radiotherap|immunotherap/.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/mobility aid|wheelchair|home modification/.test(n))return {event:"accidental_disablement",detail:name};
   // "Baggage delay" is a baggage benefit, not a flight delay one.
   if(/baggage|luggage/.test(n))return {event:"baggage",detail:name};
