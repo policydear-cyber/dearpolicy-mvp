@@ -69,7 +69,6 @@
  * that IS webhook-based (recordPolicyScanResult()'s idempotent CAS write
  * doesn't care which path produced the verdict).
  */
-import { createHash } from "node:crypto";
 import type { FileScanAdapter, FileScanResult, FileScanStatus, ScanRetryHint } from "../adapter";
 
 export const VIRUSTOTAL_DEFAULT_BASE_URL = "https://www.virustotal.com/api/v3";
@@ -306,8 +305,11 @@ async function fetchAnalysis(analysisId: string, config: VirusTotalConfig, trace
   return { status, stats: stats as VirusTotalStats };
 }
 
-export function sha256Hex(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
+/** SHA-256 by Web Crypto, never node:crypto: instrumentation.ts imports lib/scanning/adapter.ts (and so this module) in
+ * the Edge runtime too, and a Node.js module there fails the production build (every Vercel build from #268 on). */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Hash-only lookup: GET /files/{sha256}, no file content sent. "unknown" when VirusTotal has never seen the file
@@ -336,7 +338,7 @@ async function lookupFileHash(sha256: string, config: VirusTotalConfig, trace?: 
 
 async function scanByHash(bytes: Uint8Array, config: VirusTotalConfig): Promise<FileScanResult> {
   const trace: TransientTrace = { reason: null, retryAfterSeconds: null };
-  const sha256 = sha256Hex(bytes);
+  const sha256 = await sha256Hex(bytes);
   const found = await lookupFileHash(sha256, config, trace);
   if (!found) {
     return { status: "scan_unavailable", detail: "VirusTotal hash lookup did not succeed after retrying transient failures.", retry: { reason: trace.reason ?? "provider_unavailable", retryAfterSeconds: trace.retryAfterSeconds } };
