@@ -270,14 +270,27 @@ const GENERIC_SUM=new RegExp(B+"(?:(?:basic |main )?(?:sum (?:assured|insured|co
   "jumlah (?:yang )?(?:diinsuranskan|dilindungi|perlindungan|takaful)|uang pertanggungan|nilai pertanggungan|suma asegurada|capital asegurado|capital segurado|importância segurada|"+
   "capital assuré|somme assurée|versicherungssumme|somma assicurata|capitale assicurato|số tiền bảo hiểm))"+E+"|保额|保額|基本保额|基本保額","iu");
 const GENERIC_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|cover|amount|of|dan|and|y|e|et|und|\W)*$/iu;
+/** A row whose own name only says it is the plan's overall limit ("Annual limit", "Overall limit per policy year", "Had
+ * Tahunan", "Límite anual", "Plafond annuel", "年度限额") names no event either. A limit is a reimbursement ceiling, so it is
+ * read as the plan's own main benefit only when that benefit is reimbursed: exactly one plan kind fits the plan's name and
+ * it is a hospital plan (cross-page check, 31 Oct: a hospital plan's "Annual limit" landed on "Other benefit"). A limit on
+ * a life, accident or travel plan, or on a plan naming two covers, stays unmapped. */
+const GENERIC_LIMIT=new RegExp(B+"(?:(?:(?:overall|annual|yearly|lifetime|policy[- ]year|maximum|max\\.?|aggregate|total) )*(?:benefit )?limits?(?: (?:of (?:cover|benefits?|indemnity)|per (?:policy[- ]year|year|annum|lifetime|life)|a year|for (?:the|each) policy year))*|"+
+  "had (?:tahunan|keseluruhan|seumur hidup|maksimum|manfaat tahunan|manfaat)|batas (?:tahunan|maksimum|manfaat tahunan|manfaat)|limit (?:tahunan|keseluruhan)|"+
+  "l[ií]mite (?:anual|m[aá]ximo|global|vital[ií]cio|de por vida)|plafond (?:annuel|global|maximum)|jahreshöchstbetrag|jahreslimit|höchstbetrag|massimale (?:annuo|annuale)|giới hạn (?:hàng năm|tối đa))"+E+"|年度限额|年度限額|年度上限|最高限额|最高限額|終身限額|终身限额","iu");
+const LIMIT_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|overall|amount|of|per|dan|and|y|e|et|und|\W)*$/iu;
 /** A plan's name glossed to the English words PRODUCT_DEFAULTS reads ("Proteksi Jiwa" is a life plan). */
 const PLAN_GLOSSES:[RegExp,string][]=[
   [new RegExp(B+"(?:asuransi jiwa|proteksi jiwa|insurans hayat|takaful hayat|seguro de vida|seguro de vida inteira|assurance décès|lebensversicherung|risikolebensversicherung|assicurazione (?:sulla )?vita|bảo hiểm nhân thọ)"+E+"|人寿|人壽|寿险|壽險|定期寿险|終身壽險","iu"),"life insurance"],
   [new RegExp(B+"(?:penyakit (?:kritikal|kritis)|enfermedades graves|doenças graves|maladies graves|schwere krankheiten|malattie gravi|bệnh hiểm nghèo)"+E+"|重大疾病|重疾|危疾","iu"),"critical illness"],
   [new RegExp(B+"(?:kemalangan diri|kecelakaan diri|accidentes personales|acidentes pessoais|individuelle accident|unfallversicherung|infortuni|tai nạn cá nhân)"+E+"|意外伤害|意外傷害","iu"),"personal accident"],
+  [new RegExp(B+"(?:insurans perubatan|pelan (?:hospital|perubatan)|takaful perubatan|asuransi kesehatan|seguro (?:de )?(?:salud|saúde|gastos médicos|médico|hospitalización)|plano de saúde|"+
+    "assurance (?:santé|maladie|hospitalisation)|complémentaire santé|mutuelle santé|krankenversicherung|krankenhauszusatzversicherung|assicurazione (?:sanitaria|malattia|ricovero)|bảo hiểm (?:sức khỏe|y tế))"+E+"|医疗保险|醫療保險|住院医疗|住院醫療|医療保険","iu"),"hospital plan"],
   [new RegExp(B+"(?:perlindungan pendapatan|renta por invalidez|renda por invalidez|berufsunfähigkeit(?:sversicherung)?|prévoyance invalidité)"+E+"|收入保障|失能收入","iu"),"income protection"],
 ];
-function planEvent(productName:string|null|undefined):EventType|null{
+const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*|vision|optical|eye(?:care|wear)?|eyes|spectacles|maternity|pregnancy|"+
+  "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
+function planEvent(productName:string|null|undefined,limit=false):EventType|null{
   if(!productName)return null;
   const name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName)).map(([,en])=>en).join(" ");
   // A plan naming two covers ("Life and Critical Illness Plan") does not say which one its sum is.
@@ -285,6 +298,8 @@ function planEvent(productName:string|null|undefined):EventType|null{
   const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
   // Only a plan kind whose main benefit is its sum or its monthly income: an endowment's sum is not its maturity value.
   const main=kinds.length===1?kinds[0].events[0]:null;
+  // A dental, vision or maternity plan is not a hospital plan, whatever health words its name also holds (TE #281 F2).
+  if(limit)return main&&main.event==="hospital_medical_expense"&&!NARROW_HEALTH_PLAN.test(productName)?main.event:null;
   return main&&(main.pays==="lump_sum"||main.pays==="per_month")?main.event:null;
 }
 
@@ -306,12 +321,37 @@ const NOT_A_SUM_NAME=new RegExp([
 ].join("|"),"iu");
 export function eventForBenefitName(name:string,productName?:string|null):{event:EventType;detail:string|null}{
   if(NOT_A_SUM_NAME.test(name))return {event:"other",detail:name};
-  const own=eventForOwnName(name);
+  const own=withPlanKind(eventForOwnName(name),name,productName);
   if(own.event!=="other"||THIRD_PARTY_LIABILITY.test(glossedName(name)))return own;
   const m=GENERIC_SUM.exec(name);
-  if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length)))return own;
+  if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length))){
+    const l=GENERIC_LIMIT.exec(name);
+    if(!l||!LIMIT_FILLER.test(name.slice(0,l.index)+" "+name.slice(l.index+l[0].length)))return own;
+    const event=planEvent(productName,true);
+    return event?{event,detail:name}:own;
+  }
   const event=planEvent(productName);
   return event?{event,detail:null}:own;
+}
+const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:therap(?:y|ies))?|radio(?:therap(?:y|ies))?|radiation|immunotherap(?:y|ies)|targeted therap(?:y|ies)|"+
+  "outpatient|dialysis|treatments?|reimburse\\w*|expenses?|costs?|ubat(?:an)?|rawatan|kemoterapi|radioterapi|dialisis|pengobatan|obat|tratamientos?|quimioterapia|radioterapia|"+
+  "tratamentos?|traitements?|chimioth[ée]rapie|radioth[ée]rapie|behandlung(?:en)?|chemotherapie|strahlentherapie|trattament[oi]|chemioterapia|điều trị|hóa trị|xạ trị)"+E+"|化疗|化療|放疗|放療|治疗|治療|药物|藥物|洗肾|洗腎|透析","iu");
+/** The plan's own kind settles a row whose name fits both an illness and its treatment (Critic #281 H, H1):
+ * - on a hospital plan (exactly one plan kind, a hospital plan), an illness named with a treatment or drug word ("Annual
+ *   limit for outpatient cancer drug", "Rawatan kemoterapi kanser") pays the treatment bills: a medical expense, never the
+ *   illness's lump sum;
+ * - on a critical illness plan, a condition named with its definition wording ("Kidney Failure (requiring dialysis)",
+ *   "Major organ transplant (treatment received)") is never moved to a reimbursement: it stays the CI it names, or is left
+ *   unmapped when its name alone names no illness;
+ * - on any other plan, or when the kind is unknown or two kinds fit, the name's own mapping stands. */
+function withPlanKind(own:{event:EventType;detail:string|null},name:string,productName?:string|null):{event:EventType;detail:string|null}{
+  const ci=own.event==="critical_illness"||own.event==="early_critical_illness";
+  const bill=own.event==="hospital_medical_expense"||own.event==="accident_medical_expense";
+  if(!ci&&!bill)return own;
+  const n=glossedName(name);
+  if(ci&&CI_TREATMENT.test(n)&&planEvent(productName,true)==="hospital_medical_expense")return {event:"hospital_medical_expense",detail:name};
+  if(bill){const kind=planEvent(productName);if(kind==="critical_illness"||kind==="early_critical_illness")return {event:"other",detail:name};}
+  return own;
 }
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
@@ -333,7 +373,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   if(/ambulance/.test(n))return {event:"ambulance",detail:null};
   // Treatment abroad (a travel plan's overseas medical expenses) is not a hospital bill at home.
   if(/overseas|abroad|covid|evacuat|repatriat/.test(n)&&!accident)return {event:"travel_medical",detail:name};
-  if(/medical (?:expense|reimburse|cost)|treatment|clinical|outpatient|physiotherap|tcm|chinese physician/.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
+  if(/medical (?:expense|reimburse|cost)|treatment|clinical|outpatient|physiotherap|tcm|chinese physician|dialysis|chemotherap|radiotherap|immunotherap/.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/mobility aid|wheelchair|home modification/.test(n))return {event:"accidental_disablement",detail:name};
   // "Baggage delay" is a baggage benefit, not a flight delay one.
   if(/baggage|luggage/.test(n))return {event:"baggage",detail:name};

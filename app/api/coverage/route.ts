@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { lineFigure } from "@/lib/coverage/line-period";
 import { isUuid } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
@@ -65,6 +66,8 @@ export async function GET(request:NextRequest){
   // A failed or partly read document of this person may hold this cover: "not found" says so (see lib/policies/not-fully-read).
   const notRead=notFullyReadNote(await notFullyRead(accountId,member,seen.documents),payload.member.name);
   // ID numbers in quotes, excerpts and evidence are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({...payload,kind:seen.kind??null,notFullyRead:notRead}));
+  // A figure paid per period carries its printed period; a periodic cover's figure with none is not shown (lib/coverage/line-period.ts).
+  const confirmedShown=(payload.confirmed as {amount:string|null;evidence_text:string|null}[]).map(r=>{const f=lineFigure(category,r.amount==null?null:Number(r.amount),r.evidence_text);return{...r,amount:f.amount==null?null:r.amount,period:f.period};});
+  return NextResponse.json(maskShownText({...payload,confirmed:confirmedShown,kind:seen.kind??null,notFullyRead:notRead}));
  }catch(error){return routeErrorResponse(error);}
 }
