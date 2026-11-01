@@ -130,8 +130,11 @@ const OTHER_LANGUAGE_ACCIDENT = /accident|kemalangan|kecelakaan|unfall|意外|�
 /** A name that starts with the accident words and goes on to the death words: "Unfalltod", "Unfall-Todesfall", "意外伤害身故". */
 const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall\w*[\s-]*tod\w*|意外\S{0,4}(?:身故|死亡))/iu;
 /** A closed list of words saying the death benefit pays whatever the cause, accident included ("toutes causes y compris
- * accident", "termasuk kemalangan", "包括意外"): the accident word there does not make it accident only. */
-const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|任何原因/iu;
+ * accident", "termasuk kemalangan", "包括意外"), or a death NOT by accident ("bukan akibat kemalangan", "non accidentel",
+ * "ohne Unfall", "非意外"): the accident word there does not make it accident only. They are taken out and the rest is
+ * read again, so an accident word elsewhere still makes it accident cover ("Décès accidentel, y compris accident de la
+ * route"; Critic H1 on #283). */
+const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|任何原因|\bbukan\s+(?:akibat\s+|disebabkan\s+(?:oleh\s+)?|karena\s+)?(?:kemalangan|kecelakaan)\b|\bnon[\s-]+accident\p{L}*|\bohne\s+unfall\p{L}*|非意外/giu;
 /** A waiver on death, in those languages: it waives what is paid in, it pays no death benefit (Critic M1 on #283). */
 const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
 /** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
@@ -144,8 +147,19 @@ const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bautrui\b|
 const OTHER_FAMILY_MEMBER = /(?<!\p{L})(?:spouses?|spousal|husbands?|wi(?:fe|ves)|child(?:ren)?|sons?|daughters?|conjoints?|[ée]poux|[ée]pouses?|enfants?|pasangan|suami|isteri|istri|anak(?:-anak)?|ehepartner\p{L}*|ehegatt\p{L}*|ehefrau|ehemann)(?!\p{L})|配偶|子女|孩子|儿童|兒童/iu;
 const GERMAN_KIND = /\bKind(?:es|er)?\b/u;
 /** Who it is paid TO is the beneficiary, not who dies: "Death benefit paid to your spouse", "dibayar kepada isteri", "versé
- * à votre conjoint", "an Ihren Ehepartner", "给配偶". That part never names the one who dies. */
-const PAID_TO = /\b(?:(?:paid|payable|pays?|given|goes)\s+to|to\s+(?:your|the|his|her|their))\b.*$|\b(?:dibayar(?:kan)?\s+)?kepada\b.*$|\b(?:vers[ée]e?s?|pay[ée]e?s?)\s+(?:à|au|aux)(?=\s).*$|(?:^|\s)(?:à|au|aux)\s+(?:votre|vos|son|sa|ses|l['’]\s*[ée]poux)\b.*$|\b(?:an|f[üu]r)\s+(?:Ihre[nm]?|den|die|seine[nm]?)\b.*$|(?:给|付给|支付给).*$/iu;
+ * à votre conjoint", "an Ihren Ehepartner", "给配偶", and a beneficiary label ("Beneficiary: spouse", "Penama: isteri",
+ * "Bénéficiaire : conjoint", "Begünstigte: Ehepartner", "受益人：配偶"; Critic M1 on #283). That part never names the one
+ * who dies. The strip stops at a death word, which names the one who dies again ("payable to the insured on death of a
+ * child", "für den Tod eines Kindes"), so it and what follows are read (Critic L1, TE F3 on #283). */
+const DEATH_WORD = String.raw`(?:(?:on|upon)\s+(?:the\s+)?)?death|kematian|meninggal|d[ée]c[èe]s|todesfall|\bTod\b|身故|死亡`;
+const UNTIL_DEATH = String.raw`(?:(?!${DEATH_WORD}).)*`;
+const PAID_TO = new RegExp(String.raw`(?:\b(?:(?:paid|payable|pays?|given|goes)\s+to|to\s+(?:your|the|his|her|their))\b`
+  + String.raw`|\b(?:beneficiar(?:y|ies)|nominees?|payees?|for\s+the\s+benefit\s+of|penama|waris|penerima(?:\s+manfaat)?|zugunsten|beg[üu]nstigte\p{L}*)(?!\p{L})`
+  + String.raw`|\bb[ée]n[ée]ficiaires?(?!\p{L})|\bau\s+profit\s+d(?:u|e|es|['’])|\b(?:dibayar(?:kan)?\s+)?kepada\b|\b(?:vers[ée]e?s?|pay[ée]e?s?)\s+(?:à|au|aux)(?=\s)`
+  + String.raw`|(?:^|\s)(?:à|au|aux)\s+(?:votre|vos|son|sa|ses|l['’]\s*[ée]poux)\b|\b(?:an|f[üu]r)\s+(?:Ihre[nm]?|den|die|seine[nm]?)\b|受益人|指定)${UNTIL_DEATH}`
+  // Chinese "支付给被保险人的配偶身故保险金": only up to "的", whose next words are the one who dies. "给付" is "payment", never
+  // "paid to" (身故给付（配偶）).
+  + String.raw`|(?:付给|支付给|给(?!付))(?:[^的身死]{0,12}的|${UNTIL_DEATH})`, "giu");
 
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
@@ -165,7 +179,7 @@ function otherLanguageDeath(benefit: string): string | null {
   if (OTHER_LANGUAGE_OTHERS.test(benefit) || OTHER_LANGUAGE_WAIVER.test(benefit)) return null;
   if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)) return "Personal Accident";
   if (!OTHER_LANGUAGE_DEATH.test(benefit) && !GERMAN_TOD.test(benefit)) return null;
-  return OTHER_LANGUAGE_ACCIDENT.test(benefit) && !OTHER_LANGUAGE_ANY_CAUSE.test(benefit) ? "Personal Accident" : "Death";
+  return OTHER_LANGUAGE_ACCIDENT.test(benefit.replace(OTHER_LANGUAGE_ANY_CAUSE, " ")) ? "Personal Accident" : "Death";
 }
 
 /** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified

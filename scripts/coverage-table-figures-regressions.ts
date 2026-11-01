@@ -711,6 +711,21 @@ test("a death benefit named only in another language is Death, an accident-only 
   for (const b of ["Death benefit", "Kematian", "Death benefit paid to your spouse or children", "Death benefit payable to the spouse", "Manfaat kematian dibayar kepada isteri",
     "Capital décès versé à votre conjoint", "Todesfallleistung an Ihren Ehepartner", "身故保险金给配偶"]) assert.equal(categoryOfBenefit(b), "Death", b);
   for (const b of ["Tod", "Tod durch Krankheit", "Décès toutes causes y compris accident", "Kematian termasuk kemalangan", "身故（包括意外）"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  // An any-cause phrase is taken out and the rest read again: an accident word elsewhere still makes it accident cover
+  // (Critic H1 on #283); a death NOT by accident is Death.
+  for (const b of ["Décès accidentel, y compris accident de la route", "Kematian akibat kemalangan, termasuk kemalangan jalan raya",
+    "Todesfall durch Unfall einschließlich Unfall im Straßenverkehr", "意外身故（包括意外交通）"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+  for (const b of ["Kematian bukan akibat kemalangan", "Meninggal dunia bukan karena kecelakaan", "Décès non accidentel", "Décès non-accidentel",
+    "Todesfall ohne Unfall", "身故（非意外）", "Décès toutes causes y compris accident de la route"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  // A beneficiary label names who is paid, not who dies (Critic M1 on #283).
+  for (const b of ["Death benefit (beneficiary: spouse)", "Death benefit - nominee: wife", "Death benefit, payee: children", "Death benefit for the benefit of your children",
+    "Manfaat kematian (penama: isteri)", "Manfaat kematian - waris: anak-anak", "Santunan meninggal dunia (penerima manfaat: istri)",
+    "Capital décès au profit du conjoint", "Capital décès (bénéficiaire : conjoint)", "Todesfallleistung zugunsten der Ehefrau", "Todesfallleistung (Begünstigte: Ehepartner)",
+    "身故保险金（受益人：配偶）", "身故保险金（指定子女）"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  // The strip stops at a death word: the one named after it is the one who dies (Critic L1, TE F3 on #283); 给付 is payment.
+  for (const b of ["Todesfallleistung für den Tod eines Kindes", "身故给付（配偶）", "身故保险金给付 - 子女", "支付给被保险人的配偶身故保险金",
+    "Benefit payable to the insured on death of a child", "Benefit paid to you upon the death of your spouse", "Manfaat dibayar kepada pemegang polisi atas kematian anak",
+    "Capital versé à l'assuré en cas de décès du conjoint", "Death benefit (beneficiary: insured) on death of spouse"]) assert.equal(categoryOfBenefit(b), null, b);
   // Under an accident section it is accident cover, as an English name is.
   assert.equal(categoryOfBenefit("Kematian", "Personal Accident"), "Personal Accident");
   // On the Death tile: a Malay death benefit beside another policy's English one adds up, never shows the other alone.
