@@ -362,8 +362,8 @@ const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:thera
  * medical, perubatan, Krankenversicherung, 医疗) is not one, and a cash word that is no plan type ("Cash rebate", "Income
  * Protection") never makes one (Critic #285 M1, round 3). */
 const CASH_PLAN=new RegExp(B+"(?:hospital(?:i[sz]ation)?(?:\\s*(?:and|&)\\s*surgical)?\\s+(?:cash|income|allowance)(?:\\s+(?:plan|insurance|benefit|policy|rider))?|daily (?:hospital )?cash plan|"+
-  "pelan (?:pendapatan|elaun) hospital|santunan harian|krankenhaustagegeld\\w*|indemnit[ée] journali[èe]re d'hospitalisation)"+E+"|住院\\S{0,3}?(?:现金|現金|津贴|津貼)","iu");
-const REIMBURSEMENT_PLAN=new RegExp(B+"(?:shield|surgical(?!\\s+(?:cash|income|allowance))|perubatan|medical|medic|health|krankenversicherung|krankenhauszusatz\\w*|kesehatan|salud|sa[úu]de|sant[ée]|sanitaria)"+E+"|医疗|醫療","iu");
+  "pelan (?:pendapatan|elaun) hospital|santunan harian|krankenhaustagegeld\\w*|indemnit[ée] journali[èe]re d'hospitalisation)"+E+"|住院\\S{0,4}?(?:现金|現金|津贴|津貼)|每日津贴|每日津貼","iu");
+const REIMBURSEMENT_PLAN=new RegExp(B+"(?:shield|surgical(?!\\s+(?:cash|income|allowance))|perubatan|medical|medic|health|krankenversicherung|krankenhauszusatz\\w*|kesehatan|salud|sa[úu]de|sant[ée]|sanitaria|reimburs\\w*)"+E+"|医疗|醫療|报销|報銷","iu");
 function isCashPlan(productName:string|null|undefined){return !!productName&&CASH_PLAN.test(productName)&&!REIMBURSEMENT_PLAN.test(productName);}
 function withPlanKind(own:{event:EventType;detail:string|null},name:string,productName?:string|null):{event:EventType;detail:string|null}{
   const ci=own.event==="critical_illness"||own.event==="early_critical_illness";
