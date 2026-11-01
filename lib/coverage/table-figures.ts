@@ -134,7 +134,7 @@ const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall\w*[\s-]*tod\w*|(?<!非|非�
  * "ohne Unfall", "非意外"): the accident word there does not make it accident only. They are taken out and the rest is
  * read again, so an accident word elsewhere still makes it accident cover ("Décès accidentel, y compris accident de la
  * route"; Critic H1 on #283). */
-const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|任何原因|\bbukan\s+(?:akibat\s+|disebabkan\s+(?:oleh\s+)?|karena\s+)?(?:kemalangan|kecelakaan)\b|\bnon[\s-]+accident\p{L}*|\bohne\s+unfall\p{L}*|非因?意外/giu;
+const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|(?:不包括|不含|除外)?(?:任何|一切)原因(?:除外)?|\bbukan\s+(?:akibat\s+|disebabkan\s+(?:oleh\s+)?|karena\s+)?(?:kemalangan|kecelakaan)\b|\bnon[\s-]+accident\p{L}*|\bohne\s+unfall\p{L}*|非因?意外/giu;
 /** A death by accident OR by another cause, in those languages ("Décès par accident ou maladie", "Décès accidentel ou non",
  * "Kematian akibat kemalangan atau penyakit", "Tod durch Unfall oder Krankheit", "身故（意外或疾病）", "因疾病或意外身故"): any
  * cause, so Death, as the English "Death by accident or illness" is (Critic M1 on #283 9d942cd). Both sides from closed
@@ -144,16 +144,16 @@ const ACC_WORD = String.raw`(?:accident\p{L}*|kemalangan|kecelakaan|\p{L}*unfall
  * akibat kemalangan atau apa jua sebab") or right after the death words ("Décès toutes causes, doublé en cas d'accident")
  * the name is any-cause Death (TE K2 on #283). Elsewhere ("non cumulable avec décès toutes causes") it is only taken out. */
 const TRUE_ANY_CAUSE = String.raw`(?:toutes\s+causes|tout\s+cause|semua\s+sebab|apa\s+jua\s+sebab|sebarang\s+sebab|jede[rnms]?\s+(?:art|ursache)|aus\s+jedem\s+grund|任何原因|一切原因)`;
-const LEADING_ANY_CAUSE = new RegExp(String.raw`^\W*(?:(?:manfaat|faedah|santunan|capital|prestations?|garantie)\s+)?(?:kematian|meninggal(?:\s+dunia)?|d[ée]c[èe]s|todesfall\p{L}*|tod|身故|死亡)\W*(?:(?:de|à|akibat|karena|oleh|aus|durch|因)\s+)?${TRUE_ANY_CAUSE}`, "iu");
+const LEADING_ANY_CAUSE = new RegExp(String.raw`^\W*(?:(?:manfaat|faedah|santunan|capital|prestations?|garantie)\s+)?(?:kematian|meninggal(?:\s+dunia)?|d[ée]c[èe]s|todesfall\p{L}*|tod|身故|死亡)[\s()（）:：,，-]*(?:(?:de|à|akibat|karena|oleh|aus|durch|因)\s*)?${TRUE_ANY_CAUSE}(?!\s*(?:除外|exclu|excluded|ausgeschlossen|dikecualikan))`, "iu");
 const OTHER_CAUSE = String.raw`(?:${TRUE_ANY_CAUSE}|maladies?|penyakit|sakit|krankheit(?:sfall)?|疾病|(?:non|bukan|nicht|tidak)(?:[\s-]+(?:akibat\s+|karena\s+)?${ACC_WORD})?|非(?:意外|事故)?)`;
 const OR_AND = String.raw`[\s-]*(?:ou|et|atau|dan|oder|und|或|及|和|/)\s*(?:(?:par|d['’]|akibat|karena|durch|infolge|von|因)\s*)?`;
 // Word edges for Latin script only: Chinese runs on with no spaces ("意外或疾病身故"). The pair must end the name, a bracket
 // or a clause, or run into the death words: a cause word that goes on ("maladie tropicale", "maladie professionnelle
 // exclue", "Krankheitskosten") is a narrowed cause or another benefit, never any cause (Critic L1-L3 on #283).
-const CAUSE_END = String.raw`(?=\s*(?:$|[)）\]】,;，；、/]|身故|死亡))(?!\s*[(（]?\s*(?:exclu|excluded|except|ausgeschlossen|ausser|außer|dikecualikan|tidak\s+termasuk|除外|不包括))`;
+const CAUSE_END = String.raw`(?=\s*(?:$|[)）\]】,;，；、/(（:：]|\s-\s|身故|死亡))(?!\s*[(（]?\s*(?:exclu|excluded|except|ausgeschlossen|ausser|außer|dikecualikan|tidak\s+termasuk|除外|不包括))`;
 const ACCIDENT_OR_OTHER = new RegExp(String.raw`(?<!\p{Script=Latin})(?:${ACC_WORD}${OR_AND}${OTHER_CAUSE}|${OTHER_CAUSE}${OR_AND}${ACC_WORD})(?!\p{Script=Latin})${CAUSE_END}`, "iu");
 /** A waiver on death, in those languages: it waives what is paid in, it pays no death benefit (Critic M1 on #283). */
-const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
+const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian\s+(?:sumbangan|caruman|premium|premi|bayaran)|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
 /** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
 const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bautrui\b|\bd['’]une\s+autre\s+personne\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人|别人/iu;
 

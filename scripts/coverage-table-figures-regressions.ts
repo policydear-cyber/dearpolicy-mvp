@@ -724,13 +724,18 @@ test("a death benefit named only in another language is Death, an accident-only 
     "Tod durch Unfall oder Krankheit", "Todesfall (Unfall und Krankheit)", "Todesfall durch Krankheit oder Unfall", "身故（意外或疾病）", "因疾病或意外身故", "死亡（疾病及意外）", "意外或疾病身故",
     "Tod und Invalidität", "Tod ohne Unfall", "非意外身故", "非因意外身故", "非意外死亡", "Décès accidentel ou toutes causes", "Décès toutes causes, doublé en cas d'accident",
     "Kematian akibat kemalangan atau apa jua sebab", "Kematian semua sebab, dua kali ganda jika kemalangan", "Todesfall jeder Ursache, doppelt bei Unfall", "身故（任何原因，意外双倍）",
+    "Décès par accident ou maladie (y compris COVID-19)", "Tod durch Unfall oder Krankheit (Wartezeit 3 Monate)", "身故（意外或疾病，等待期90天）",
+    "Décès (accident ou maladie) : 100 % du capital", "Kematian akibat kemalangan atau penyakit - 100% jumlah",
+    "Kematian akibat kemalangan atau penyakit, tertakluk kepada pengecualian",
     "Death (accidental or non-accidental)", "Death by accident or illness"]) assert.equal(categoryOfBenefit(b), "Death", b);
   for (const b of ["Décès accidentel et invalidité", "Kematian akibat kemalangan dan hilang upaya", "Todesfall durch Unfall und Verkehrsunfall", "意外身故及残疾",
     "Unfalltod oder Invalidität", "Tod oder Invalidität durch Unfall", "Décès accidentel (non cumulable avec décès toutes causes)", "Kematian akibat kemalangan atau kecacatan",
     "Décès accidentel et nonobstant", "Décès par accident ou noyade",
     // A cause word that goes on is a narrowed cause or another benefit (Critic L1-L3 on #283).
     "Décès par accident et maladie professionnelle exclue", "Unfalltod und Krankheitskosten", "Décès par accident ou maladie tropicale (voyage)",
-    "Kematian akibat kemalangan atau penyakit kritikal", "Décès par accident ou maladie (exclue)", "Todesfall durch Unfall oder Krankheit ausgeschlossen"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+    "Kematian akibat kemalangan atau penyakit kritikal", "Décès par accident ou maladie (exclue)", "Todesfall durch Unfall oder Krankheit ausgeschlossen",
+    // Accidental death NOT including any-cause death (TE K3 on #283).
+    "意外身故（不包括任何原因身故）", "意外身故（不含一切原因身故）", "意外身故（任何原因除外）"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   // A beneficiary label names who is paid, not who dies (Critic M1 on #283).
   for (const b of ["Death benefit (beneficiary: spouse)", "Death benefit - nominee: wife", "Death benefit, payee: children", "Death benefit for the benefit of your children",
     "Manfaat kematian (penama: isteri)", "Manfaat kematian - waris: anak-anak", "Santunan meninggal dunia (penerima manfaat: istri)",
