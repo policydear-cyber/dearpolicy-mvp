@@ -17,6 +17,13 @@ export const COVER_KINDS: { id: string; label: string; gapLabel?: string; events
 ];
 /** The label of the kind a cover takes when nothing places it. Never shown on its own as "Found Other" (Documents page). */
 export const OTHER_LABEL = COVER_KINDS[COVER_KINDS.length - 1].label;
+/** What a person's or a document's cover summary may name: never "Other", which says nothing to the reader. Only the named
+ * kinds are listed; when "Other" is all there is (`unknownOnly`), the page says in words that cover was found but not yet
+ * what kind, in the words Documents uses for a document (Family). */
+export function namedCoverKinds(labels: readonly string[]): { named: string[]; unknownOnly: boolean } {
+  const named = [...new Set(labels.filter((l) => l.replace(/\s*\(to confirm\)$/, "") !== OTHER_LABEL))];
+  return { named, unknownOnly: named.length === 0 && labels.length > 0 };
+}
 export const coverKindOf = (eventType: string) => COVER_KINDS.find((k) => k.events.includes(eventType)) ?? COVER_KINDS[COVER_KINDS.length - 1];
 
 /** A benefit's own name, sorted into a kind: for Coverage rows typed "other" and for benefits found only on Benefits.
