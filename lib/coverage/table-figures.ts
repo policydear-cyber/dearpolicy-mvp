@@ -129,6 +129,76 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
   return category;
 }
 
+/** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified
+ * severity", "Kanser", "中风") with no "critical illness" word in the row: the section it is printed under or the cover it
+ * belongs to says what it is ("Critical Illness Benefits", "Acme CritiCare Critical Illness Plan", "Dread Disease Takaful",
+ * "Pelan Penyakit Kritikal", "危疾保障"). Such a row is critical illness cover, or early critical illness where the row
+ * names an early or intermediate stage.
+ *
+ * An allow-list (TE pr252 F1): a row moves only when its own name is an illness, condition or procedure from the closed
+ * list below, in English, Malay or Chinese. Every other row (a death, disability, waiver, surrender value, refund, cash,
+ * or a period such as free-look, grace, waiting or survival, in any language) stays where its own name puts it, or
+ * nowhere. Only these two categories are read from a section or cover name, the row's own name decides first, and a row
+ * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
+const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|penyakit\s+(?:kritikal|kritis|berbahaya)|major\s+illness(?:es)?)\b|危疾|重大疾病|重疾`, "iu");
+const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
+/** The words a covered illness is named with, and nothing else (Critic R on #252 H1a): every word of the row's name must be
+ * one of them, so "Cancer Screening Benefit", "Child Cancer Benefit", "Kematian akibat Kanser", "癌症身故保险金" or "Liver
+ * function test" (a word outside the list) never move. Illness, organ and procedure words, then severity and stage words,
+ * then joining words, in English and Malay; Chinese names are read phrase by phrase. */
+const CONDITION_WORDS = new Set((
+  // English illnesses, organs and procedures
+  "cancer cancers carcinoma malignant malignancy tumour tumor tumours tumors leukaemia leukemia lymphoma sarcoma melanoma heart attack myocardial "
+  + "infarction coronary artery arteries bypass by-pass angioplasty valve valves cardiomyopathy aorta aortic pulmonary hypertension arterial stroke strokes "
+  + "cerebrovascular kidney kidneys renal failure organ organs transplant transplantation bone marrow blindness loss sight hearing speech limb limbs "
+  + "independent existence deafness dementia alzheimer alzheimer's alzheimers parkinson parkinson's parkinsons motor neurone neuron multiple sclerosis "
+  + "muscular dystrophy paralysis coma encephalitis meningitis bacterial viral brain head trauma burns burn liver lung lungs respiratory hepatitis "
+  + "fulminant aplastic anaemia anemia lupus systemic erythematosus hiv aids poliomyelitis apallic syndrome neurological deficit endocarditis infective "
+  + "myasthenia gravis surgery disease diseases "
+  // body sites a cancer or condition is named by (never enough alone)
+  + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+  + "payudara prostat serviks kulit darah rahim pankreas usus "
+  // severity and stage
+  + "major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total "
+  + "permanent in situ excluding less cases "
+  // joining words
+  + "of with the to and or a an "
+  // Malay
+  + "kanser barah tumor serangan jantung koronari arteri pembedahan strok angin ahmar buah pinggang ginjal kegagalan pemindahan organ sumsum tulang "
+  + "buta kebutaan pekak bisu kehilangan penglihatan pendengaran pertuturan lumpuh kelumpuhan koma otak hati paru paru-paru lecur demensia nyanyuk "
+  + "penyakit tahap akhir peringkat awal teruk utama kritikal kritis yang dan atau"
+).split(" "));
+const CHINESE_CONDITION = /恶性肿瘤|肿瘤|癌症|癌|白血病|心脏病|心脏|心肌梗塞|心肌|冠状动脉|搭桥|手术|脑中风|中风|肾衰竭|肾|衰竭|器官移植|器官|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化|严重|末期|早期|重大|疾病|病|发作|症|的|性/gu;
+/** Whether the row's whole name is an illness: at least one illness word, and no word from outside the list. */
+function namesOnlyAnIllness(benefit: string): boolean {
+  const cjk = /\p{Script=Han}/u.test(benefit);
+  if (cjk && /\p{Script=Han}/u.test(benefit.replace(CHINESE_CONDITION, ""))) return false;
+  const words = benefit.replace(/\p{Script=Han}+/gu, " ").toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
+    .filter((w) => !/^(?:\d+|[ivx]+|[a-z])$/.test(w));
+  if (!words.every((w) => CONDITION_WORDS.has(w))) return false;
+  const joining = new Set("of with the to and or a an yang dan atau in situ excluding less cases".split(" "));
+  const generic = new Set(("loss failure attack disease diseases surgery syndrome deficit penyakit kegagalan serangan pembedahan kehilangan "
+    + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+    + "payudara prostat serviks kulit darah rahim pankreas usus").split(" "));
+  const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent tahap akhir peringkat awal teruk utama kritikal kritis".split(" "));
+  return (cjk && /癌|肿瘤|白血病|心|冠状动脉|中风|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化/u.test(benefit)) || words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
+}
+const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
+const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;
+export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
+  const own = categoryOfBenefit(r.benefit, r.section);
+  if (own || !namesOnlyAnIllness(r.benefit) || OTHER_PAYMENT.test(r.benefit) || isLiability(r.benefit)
+    || (r.section && (isLiability(r.section) || LIABILITY_SECTION.test(r.section.trim())))) return own;
+  // The row's own section and its own cover's name (Critic R on #252 H1a). The product names the whole policy, base plan and
+  // riders together ("LifeGuard Saver with Critical Illness Rider"), so it is read only when it is that cover's own name
+  // (a stand-alone plan) or the cover has none. A plan tier ("Plan B") is never read.
+  const own_ = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const names = [r.section, r.cover, !r.cover || own_(r.cover) === own_(r.product) ? r.product : null].filter((x): x is string => !!x);
+  if (names.some((n) => EARLY_COVER.test(n))) return "Early Critical Illness";
+  if (!names.some((n) => CI_COVER.test(n))) return null;
+  return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : "Critical Illness";
+}
+
 /** One person's cover by whole-policy kind (Travel, Savings, Investment), the one rule Home and the Coverage page use: the
  * kind belongs to the policy, never to one benefit's name. Travel by the cover's own name (travelName); savings and
  * investment by the plan type its name or its document's own words state (lib/coverage/plan-type.ts). `current` names
@@ -181,18 +251,84 @@ export function documentKinds(people: { covers?: SourcedCover[]; rows?: SourcedR
   return out;
 }
 
+/** What the person pays in, by the names insurers use in any market (a closed list): a premium, Indonesian "premi",
+ * Spanish "prima anual", Portuguese "prêmio", French "cotisation" or "prime annuelle", German "Prämie" or "Beitrag", a
+ * Takaful "contribution" (Malay "sumbangan", "caruman", Indonesian "kontribusi", "iuran"), Vietnamese "phí bảo hiểm",
+ * Chinese 保费/保費 and Japanese 保険料. A contribution TOWARDS something ("contribution towards funeral costs") and a
+ * funeral, burial, bereavement or education contribution are benefits the policy pays, never what the person pays. */
+const PAID_IN_WORD = String.raw`premiums?|premi|primas?(?=\s+(?:anual|mensual|trimestral|semestral|total|neta|única|unica|de\s+(?:seguro|riesgo)))|pr[êé]mios?`
+  + String.raw`|(?<!\b(?:funeral|burial|bereavement|education|income|expenses?|employer)\s)contributions?(?!\s+(?:to|towards|benefits?)\b)|sumbangan|caruman|kontribusi|iuran|cotisations?`
+  + String.raw`|primes?\s+(?:annuelle|mensuelle|trimestrielle|totale|d['’]assurance|nette|brute)|pr[äa]mien?|beitr[äa]ge?|phí\s+bảo\s+hiểm`;
+const PAID_IN_CJK = "保险费|保險費|保费|保費|保険料";
+const PAID_IN = String.raw`(?:\b(?:${PAID_IN_WORD})\b|${PAID_IN_CJK})`;
+/** A benefit that pays back, waives or rebates what was paid in. Only these words RIGHT BESIDE the paid-in word count
+ * ("return of contributions", "refund of premiums", "waiver of future premiums", "contributions waived", "premium
+ * rebate", "Beitragsrückgewähr", "pengembalian kontribusi", "退还保费"), or a share of what was paid ("105% of total
+ * contributions paid"). Anywhere else they say nothing: "Tabarru' contribution (non-refundable) RM30" is a contribution
+ * (Critic R276 M1). What was paid in, paid back, is a benefit only when the row names what pays it BEFORE the total
+ * ("Death benefit: total contributions paid plus profit", "higher of sum assured or premiums paid to date", TE R276 F2);
+ * a row that just states it ("Total premiums paid", "Premiums paid to date") is a premium statement. A rebate
+ * is money back, never a cover sum, so it stays withheld (Critic R276 H1). */
+/** What was paid in, in total: "total premiums paid", "all contributions paid", "jumlah sumbangan dibayar", "premiums paid to
+ * date". Inside a frame, nothing between the frame word and it may be a figure, ";", ":" or " - " (another label). */
+const TOTAL_PAID = String.raw`(?:(?:(?:sum|total)\s+of(?:\s+all)?|total|all|jumlah)\s+(?:(?:the|your)\s+)?${PAID_IN}\s+(?:paid|dibayar)\b|${PAID_IN}\s+paid\s+to\s+date\b)`;
+const FRAME_GAP = String.raw`(?:(?![\d;:]|\s[-–—]\s)[^\n])*?`;
+const PAID_BACK_FRAMES = [
+  // "higher of sum assured or total premiums paid"; "sum assured or premiums paid to date, whichever is higher".
+  String.raw`\b(?:higher|greater)\s+of\b${FRAME_GAP}${TOTAL_PAID}`,
+  String.raw`${TOTAL_PAID}${FRAME_GAP},?\s*whichever\s+is\s+(?:higher|greater)\b`,
+  // A benefit name starts the clause, then ":" or "=": "Death benefit: total contributions paid", "Manfaat kematian: jumlah sumbangan dibayar".
+  String.raw`(?:^|;)\W*(?:[\p{L}']+\s+){0,2}(?:benefits?|(?:manfaat|faedah)(?:\s+[\p{L}']+)?)\s*[:=]\s*${TOTAL_PAID}`,
+  // "total contributions paid plus profit".
+  String.raw`${TOTAL_PAID}\s+plus\s+(?:profits?|bonus(?:es)?|interest|dividends?|keuntungan|hibah)\b`,
+];
+const PAID_BACK = new RegExp([
+  String.raw`\b(?:returns?|returned|refunds?|refunded|repaid|repayment|waiv\w*|pengembalian|pemulangan|pengecualian|pembebasan|remboursement|exon[ée]ration|devoluci[óo]n|devolu[çc][ãa]o)\s+(?:(?:of|des?|du|atas|del?|da|do)\s+)?(?:(?:the|all|future|total|your|outstanding|la|las|los|les)\s+)*${PAID_IN}`,
+  String.raw`${PAID_IN}\s+(?:(?:is|are|will\s+be|to\s+be)\s+)?(?:waived|waiver|refunded|refunds?|returned|dikembalikan|dikecualikan)\b`,
+  String.raw`(?:beitrags|prämien|praemien)(?:befreiung|r[uü]ckgew[aä]hr|r[uü]ckerstattung)|(?:退还|返还|豁免|退還|返還)(?:${PAID_IN_CJK})|(?:${PAID_IN_CJK})(?:豁免|退还|返还|退還|返還)`,
+  String.raw`\b\d+(?:\.\d+)?\s?%\s+(?:of|des?|dari)\s+(?:(?:the|total|all|jumlah)\s+)*${PAID_IN}(?:\s+(?:paid|dibayar|payés?|pagad[oa]s?))?`,
+  // The total paid, paid back: only inside a frame that names what pays it, anchored by position (Critic R276 H1 r2).
+  ...PAID_BACK_FRAMES,
+].join("|"), "iu");
+/** A note in brackets after a figure ("Premium RM300 (refund of premium on cancellation)") says how the figure behaves; the
+ * name before the figure says what it is (Critic R276 L). */
+const NOTE_AFTER_FIGURE = /(\d)\s*\([^)]*\)/gu;
 /** A premium the person pays, never a benefit (chat.ts uses the same). A benefit worked out from the premiums paid is a
  * benefit: "Waiver of Premium", "Return of Premium", and a share of them ("Death benefit: higher of 105% of total premiums
  * paid to date", "sum of all premiums paid"); left out, a Death tile added up the other policies as if they were all of it.
  * Only premiums PAID: a premium priced as a share of another ("rider premium: 12% of basic premium") is a premium (Critic R418 M1). */
-export const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*)(?!.*(?:\b\d+(?:\.\d+)?\s?%\s+of\s+(?:the\s+)?(?:total\s+|all\s+)?premiums?\s+paid|\b(?:sum|total)\s+of\s+(?:all\s+)?(?:the\s+)?premiums?\s+paid)\b).*\bpremiums?\b/i;
+export const PREMIUM: { test(text: string): boolean } = {
+  test: (text: string) => {
+    if (!new RegExp(PAID_IN, "iu").test(text)) return false;
+    const head = text.replace(NOTE_AFTER_FIGURE, "$1");
+    // Named before the figure: the name decides. Named only in the note: the note decides ("RM30 (monthly contribution)"
+    // is a contribution, "RM100,000 (contributions waived on TPD)" a benefit).
+    return new RegExp(PAID_IN, "iu").test(head) ? !PAID_BACK.test(head) : !PAID_BACK.test(text);
+  },
+};
+/** A section that holds only what the person pays ("Contribution", "Sumbangan / Contribution", "Kontribusi", "Annual
+ * premium", "Section 3: Premium details"): every row under it is a premium, whatever the row's own name says ("Death",
+ * TE R276 F1). A section that also names benefits ("Benefits and premiums", "Benefit and Premium Schedule") is not one. */
+const SECTION_FILLER = new RegExp(String.raw`\b(?:(?:section|part|bahagian|bagian)\s+[\w.]+|annual|yearly|monthly|quarterly|half[\s-]yearly|total|modal|tahunan|bulanan|annuelle|mensuelle|anual|mensal|mensual|jährlich|monatlich|schedule|details?|table|amount|payable|due|jadual|butiran|rincian|jumlah|the|your|of|and|dan|per|a|an|each|month|months|year|years|day|days|week|weeks|bulan|tahun|sebulan|setahun|tabarru)\b`, "giu");
+/** A currency or unit printed in the heading ("Contribution (RM)", "Premium payable (SGD)", "Kontribusi (Rp)", TE R276
+ * R2-F1): a closed list of currency codes and markers, never any three letters (that would also strip "TPD"). */
+const SECTION_CURRENCY = new RegExp(String.raw`\b(?:S|US|HK|NT|NZ|A|C|R)\$|\b(?:RM|Rp|SGD|MYR|IDR|USD|EUR|GBP|CNY|RMB|HKD|JPY|AUD|NZD|THB|PHP|VND|INR|CHF|CAD|BRL|TWD|KRW|AED|BND)\b|[$€£¥₫₱฿₹円元]`, "giu");
+export function isPremiumSection(section: string | null | undefined): boolean {
+  if (!section || !PREMIUM.test(section)) return false;
+  // Letters of any script are what is left; CJK and accented letters count (an ASCII \W would strip them all).
+  const rest = section.replace(new RegExp(PAID_IN, "giu"), " ").replace(SECTION_CURRENCY, " ").replace(SECTION_FILLER, " ").replace(/[^\p{L}]+/gu, "");
+  return rest.length === 0;
+}
+
 /** The person's rows for the category: rows that pay something the person holds, never a projection, a fund or
  * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). Nor a
  * limit on what several benefits pay together, which is no cover of its own, or a row of a short-term cover whose term
  * has ended (a single trip that is over): both are marked when the table is put together (lib/benefit-table/assemble.ts). */
 export function categoryRows<T extends SummaryRow & CoverNames>(category: string, rows: T[]): T[] {
+  // A row under a heading that holds only what the person pays is a premium, whatever its own name says (TE R276 F1).
+  rows = rows.filter((r) => !isPremiumSection(r.section));
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfBenefit(r.benefit, r.section) === category));
+    && !r.combinedLimit && !r.coverEnded && !PREMIUM.test(r.benefit) && (category === "Travel" ? travelName(r) : categoryOfRow(r) === category));
 }
 
 /** The names a row carries of the cover it belongs to. Travel cover is a whole policy, not a benefit name: trip
@@ -223,7 +359,7 @@ const THRESHOLD = String.raw`(?<!\b(?:not|no|at)\s+)\b(?:above|below|over|under|
 const CLAUSE = new RegExp(String.raw`${THRESHOLD}\s+(?:\w+\s+){0,2}?${FIGURE}|${FIGURE}[\d,.]*\s+(?:or\s+(?:less|more|above|below|under|over))\b`, "i");
 /** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out ("Waiver of premium
  * on total and permanent disability benefit"). */
-const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
+const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?(?:premiums?|contributions?)\b|\b(?:premiums?|contributions?)\s+waiv|\b(?:pengecualian|pembebasan)\s+(?:sumbangan|caruman|premium|premi|kontribusi)\b|beitragsbefreiung|\bexon[ée]ration\s+des\s+(?:primes|cotisations)\b|豁免保费/i;
 
 type CoverRow = SummaryRow & { coverKey?: string; holding?: string; product?: string; cover?: string; plan?: string | null };
 /** The policy a row or held cover belongs to: its own holding when the person holds several policies of its cover type

@@ -161,10 +161,14 @@ export function enrolledNames(text: string): string[] {
   return out;
 }
 
-export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]): PolicyExtraction {
+/** `rolePages`: every page of the document, when some of `pages` were left out because they could not be checked.
+ * What kind of document it is follows from all of its pages (a schedule whose particulars page could not be checked is
+ * still the schedule, never the wording its benefit tables and exclusions look like on their own); which facts are kept
+ * follows only from the pages given. */
+export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[], rolePages: PdfPage[] = pages): PolicyExtraction {
   const notes = [...raw.documentNotes];
   const joined = pages.slice(0, 8).map((p) => p.text).join("\n");
-  let role = deterministicDocumentRole(pages, raw.documentRole);
+  let role = deterministicDocumentRole(rolePages, raw.documentRole);
   // Round 10: letters, claim decisions, bills, app screenshots and the family's
   // own notes are never cover: the people they name are kept (so the paper is
   // filed with them), every amount, premium, payment and benefit is not.

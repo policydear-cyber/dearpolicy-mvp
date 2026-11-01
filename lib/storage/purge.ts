@@ -92,6 +92,7 @@ export async function enqueueDeletedDocuments(db?: Db) {
       `INSERT INTO storage_purge_queue(storage_domain,storage_key,reason)
        SELECT DISTINCT $1::text, d.storage_key, 'document_deleted' FROM ${table} d
         WHERE d.storage_key IS NOT NULL AND d.lifecycle_state IN ('soft_deleted','permanently_deleted','audit_tombstone')
+          AND d.storage_key NOT LIKE 'deleted/%'
           AND NOT EXISTS (SELECT 1 FROM storage_purge_queue s WHERE s.storage_domain=$1 AND s.storage_key=d.storage_key)
        ON CONFLICT (storage_domain,storage_key) DO NOTHING`, [domain]).catch(() => ({ rowCount: 0 }));
     added += r.rowCount ?? 0;

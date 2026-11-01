@@ -204,7 +204,7 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
       // A policy that has lapsed or ended costs nothing now; a one-off premium for a cover period is not a yearly one.
       const docId = byId.get(item.id)?.doc_id ?? null;
       const status = docId ? await statusFor(args.accountId, docId, memo) : null;
-      if (status && (status.state === "lapsed" || status.state === "ended")) { if (docId && status.page) uncounted.push({ docId, page: status.page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id }); notCounted.push((item.product_name ?? byId.get(item.id)?.product_name ?? "A policy") + " — it " + (status.state === "lapsed" ? "lapsed" : "ended") + " on " + status.printed); continue; }
+      if (status && status.state === "lapsed") { if (docId && status.page) uncounted.push({ docId, page: status.page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id }); notCounted.push((item.product_name ?? byId.get(item.id)?.product_name ?? "A policy") + " — it " + (status.state === "lapsed" ? "lapsed" : "ended") + " on " + status.printed); continue; }
       if (item.oneOff || item.shortPeriod) {
         const span = (docId ? await periodFor(args.accountId, docId, memo) : null) ?? recordPeriod(item);
         const docPages = docId ? await pagesOf(args.accountId, docId, memo) : [];

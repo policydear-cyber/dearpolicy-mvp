@@ -30,7 +30,7 @@ import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
-import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
+import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, countdownLine, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
 // ---------------------------------------------------------------------------
 // Topics
@@ -778,7 +778,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       new Map(paid.rows.map((r) => [r.policy_id, r.latest])));
   }
 
-  const inactive = (id: string) => ["lapsed", "ended"].includes(statusOf.get(id)?.state ?? "");
+  // Only a document that prints the policy has lapsed: a printed end date that has passed never makes a policy inactive
+  // (DC, 31 Oct: every policy on file is treated as in force).
+  const inactive = (id: string) => statusOf.get(id)?.state === "lapsed";
   const paymentOnly = (id: string) => PAYMENT_ONLY.test(docs.get(id)?.document_role ?? "");
   const tables = new Map([...pagesByDoc].map(([docId, pages]) => [docId, valueTables(pages)]));
   const tablePageOf = (docId: string, page: number | null) => (tables.get(docId) ?? []).some((t) => t.page === page);
@@ -1135,7 +1137,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     for (const docId of docs.keys()) {
       const st = statusOf.get(docId);
       if (paymentOnly(docId) || !st || st.state === "unknown" || st.page == null || !st.line) continue;
-      if (onlyEnded && st.state !== "lapsed" && st.state !== "ended") continue;
+      if (onlyEnded && st.state !== "lapsed") continue;
       // Round 7 (port): reinstated -- said from the reinstatement letter, cited there (once for both documents).
       if (st.state === "reinstated" && st.byDocId && st.byDocId !== docId) continue;
       const text = st.state === "reinstated" ? "Reinstated with effect from " + st.printed + "; in force" : st.state === "lapsed" ? "Lapsed on " + st.printed : st.state === "grace" ? "Grace period ends: " + st.printed : st.state === "grace_passed" ? "Grace period ended: " + st.printed + "; payment since not shown" : st.line.replace(/\t+/g, ": ").replace(/^(period of insurance|policy term)\s+/i, (m, x: string) => x + ": ");
@@ -1249,11 +1251,11 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     }
   }
   // "Why did my term policy lapse?", "Has my term life ended?": the plan whose status is in question, not the others of its kind.
-  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "ended", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "")))
+  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "")))
   {
     const kinds = topics.filter((t) => t.kind).map((t) => t.key);
     const ofKind = (id: string) => !kinds.length || kinds.some((k) => kindsOf(id).includes(k));
-    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "ended", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
+    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
     if (keep.some((c) => c.policyId)) candidates.splice(0, candidates.length, ...keep);
   }
   // "Max co-pay with the rider?": the rider's premium line is not its benefits.
@@ -1588,7 +1590,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const line = (a: Candidate) => {
     const dated = dateOf(a.policyId), who = args.people.length > 1 ? a.ownerName + " · " : "";
     const st = statusOf.get(a.policyId);
-    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : st?.state === "ended" ? "; expired on " + st.printed : "";
+    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : "";
     // A value printed in one column of a table names its column after the benefit ("Deductible (Non-panel provider): ...").
     // A column called just "Value" or "Amount" names nothing the household needs told.
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
@@ -1606,9 +1608,39 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (looksScanned(text)) text = (cleanScannedLine(text) ?? a.title) + " (read from a scanned page; check it against the original)";
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" && outdated(a.policyId) ? ", document dated " + dated : "") + status + ").";
   };
+  // One row of a table read once per column (an employee plan, a ward class) for a person whose own column is not
+  // known: one line naming each column's figure, and saying which is theirs is not shown -- never one line per column,
+  // each reading like that person's own figure.
+  const columnRows = new Map<string, Candidate[]>();
+  for (const a of kept) if (a.tierLabel && a.source === "benefit" && a.page != null) {
+    const k = a.subjectId + "|" + a.policyId + "|" + a.page + "|" + a.title.toLowerCase();
+    (columnRows.get(k) ?? columnRows.set(k, []).get(k)!).push(a);
+  }
+  const inColumns = new Map<Candidate, Candidate | null>();
+  for (const group of columnRows.values()) {
+    const labels = [...new Set(group.map((g) => g.tierLabel!.trim().toLowerCase()))];
+    if (group.length < 2 || labels.length !== group.length) continue;
+    // "the schedule prints “Not covered” in this column" is, beside its column's name, just the printed words.
+    const valueOf = (g: Candidate) => (g.text.startsWith(g.title) ? g.text.slice(g.title.length).replace(/^[:\s]+/, "") : g.text).replace(/[.;:\s]+$/, "")
+      .replace(/^the schedule prints (“[^”]*”) in this column$/, "$1");
+    // In the order the page prints its columns.
+    const printed = ((pagesByDocEarly.get(group[0].policyId) ?? []).find((p) => p.page === group[0].page)?.text ?? "").toLowerCase();
+    const at = (g: Candidate) => { const i = printed.indexOf(g.tierLabel!.trim().toLowerCase()); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+    const parts = [...group].sort((x, y) => at(x) - at(y)).map((g) => g.tierLabel!.trim() + (valueOf(g) ? ": " + valueOf(g) : ""));
+    // One sentence: the same caveat on two lines must not read as a repeated sentence.
+    const whom = group[0].ownerName || "you";
+    const merged: Candidate = { ...group[0], tierLabel: null, amount: null, currency: null,
+      text: group[0].title + " (which applies to " + whom + " isn’t shown): " + parts.join("; ") };
+    inColumns.set(group[0], merged);
+    for (const g of group.slice(1)) inColumns.set(g, null);
+  }
   // One line for a fact several people share (a family travel plan), naming them all.
   const shared = new Map<string, Candidate[]>();
-  for (const a of kept) { const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a); }
+  for (const raw of kept) {
+    const a = inColumns.has(raw) ? inColumns.get(raw) : raw;
+    if (!a) continue;
+    const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a);
+  }
   const listNames = (names: string[]) => names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names.at(-1);
   // Round 11: the same printed line reached twice (a family plan's row for adults and for children) is one line naming everyone once.
   const sameLine = new Map<string, { at: number; names: string[] }>();
@@ -1629,6 +1661,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   for (const a of kept) {
     const citation = cite(a);
+    // A row printed once per column for someone whose column is not known is one line with no amount (above): none of its
+    // columns' figures is a card of the person's own limit, in any currency (TE #259 F1).
+    if (inColumns.has(a)) continue;
     // (Round 7 port: a row of a table with a column per employee plan is not quoted
     // whole as a limit card -- the quote would show another plan's figure.)
     // Round 11: one card for a figure several people share on the same plan (a family travel plan's row), naming them all.
@@ -1639,7 +1674,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}/).filter((cell) => /(?:S\$|US\$|SGD\s?|USD\s?)\s?\d/.test(cell)).length > 1)))
+    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
@@ -1688,7 +1723,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // What each document says about whether it still covers anyone: lapsed, ended, or in its grace period.
   // (A reinstatement is said when the question is about whether the policy is in force, not under every answer from it.)
   const statusAsked = topics.some((t) => t.key === "status") || /\b(?:reinstat\w*|laps\w*|in force|active|valid)\b/i.test(askedText);
-  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "ended", "grace", "grace_passed"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
+  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "grace", "grace_passed"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
   for (const docId of statusDocs) {
     const st = statusOf.get(docId)!, sentence = statusSentence(docName(docId), st);
     if (sentence && !lines.includes(sentence)) lines.push(sentence);
@@ -1713,11 +1748,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     for (const docId of [...new Set(shown.map((a) => a.policyId))]) {
       const st = statusOf.get(docId);
       if (!st?.date || !st.printed) continue;
-      const n = daysBetween(today, st.date), days = (k: number) => k + " day" + (k === 1 ? "" : "s");
-      if (st.state === "in_force") counts.push(docName(docId) + (n === 0 ? " ends today, " + st.printed + "." : " ends on " + st.printed + " — " + days(n) + " from today."));
-      else if (st.state === "grace") counts.push(docName(docId) + "’s grace period ends on " + st.printed + " — " + days(n) + " from today.");
-      else if (st.state === "grace_passed") counts.push(docName(docId) + "’s grace period ended on " + st.printed + ", " + days(-n) + " ago.");
-      else if (st.state === "ended") counts.push(docName(docId) + " expired on " + st.printed + ", " + days(-n) + " ago.");
+      const said = countdownLine(docName(docId), st, today);
+      if (said) counts.push(said);
     }
     if (counts.length) lines.splice(lines.length ? 1 : 0, 0, ...counts);
   }
@@ -1761,7 +1793,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // "Who has hospital cover?": who, and on which plan -- not every row of every plan.
   if (args.people.length > 1 && /^\s*(?:who(?: in (?:the|our|my) (?:family|household))?(?:['’]s| is| are)? (?:has|have|covered|insured|got)\b|(?:does|do|is|are|has) (?:anyone|anybody|any of us|someone|everyone)\b|which of us\b)/i.test(askedText) && shown.length && topics.length) {
     const byOwner = new Map<string, Set<string>>();
-    for (const a of shown) (byOwner.get(a.ownerName) ?? byOwner.set(a.ownerName, new Set()).get(a.ownerName)!).add(docName(a.policyId) + (expired(a.policyId) ? " (" + (statusOf.get(a.policyId)?.state === "lapsed" ? "lapsed" : "ended") + ")" : ""));
+    for (const a of shown) (byOwner.get(a.ownerName) ?? byOwner.set(a.ownerName, new Set()).get(a.ownerName)!).add(docName(a.policyId) + (expired(a.policyId) ? " (lapsed)" : ""));
     const listing = [...byOwner].map(([owner, plans]) => owner + " (" + [...plans].join(", ") + ")");
     const join = (xs: string[]) => xs.length <= 1 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
     details.splice(0, details.length, ...[...byOwner].map(([owner, plans]) => owner + ": " + [...plans].join(", ") + "."));
@@ -1942,15 +1974,31 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
  * is one question away -- "ask for the full list". Every part of a several-part question keeps a line (`keep`).
  * The cards of amounts follow the lines shown.
  */
-export function conciseDetails(details: string[], limits: { benefitTitle: string }[], opts: { cap: number; keep?: RegExp[] }) {
-  if (details.length <= opts.cap + 1) return;
+/** A table cell that prints an amount in any market's money: a sign or code before the figure ("RM100", "HK$ 1,500",
+ * "Rp100.000", "£50", "CHF 1'250") or after it ("100 €", "150,00 EUR"). A row with two or more such cells prints one figure
+ * per column, so no one of them is a person's own limit card. */
+export const MONEY_CELL = /(?:[A-Z]{1,3}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\b[A-Z]{3})\s?\d|\d[\d.,'’ ]*\s?(?:€|£|\b(?:EUR|GBP|USD|SGD|MYR|IDR|HKD|CHF|AUD|INR)\b)/u;
+export function conciseDetails(details: string[], limits: { benefitTitle: string; ownerName?: string | null; amountText?: string }[], opts: { cap: number; keep?: RegExp[] }) {
+  if (opts.cap === Infinity) return;
+  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
+  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it. The budget
+  // counts what the household reads: the lines and the limit cards shown beside them (one per amount a line shows).
+  const cardWords = (xs: string[]) => { const visible = xs.join("\n"); const seen = new Set<string>(); let n = 0;
+    for (const l of limits) { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + (l.amountText ?? "");
+      if (seen.has(k) || !visible.includes(l.benefitTitle)) continue; seen.add(k);
+      n += [l.ownerName ?? "", l.benefitTitle, l.amountText ?? ""].join(" ").split(/\s+/).filter(Boolean).length; }
+    return n; };
+  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length + cardWords(xs);
+  // The whole answer is read in at most 180 words for a question about one thing and 250 for an overview or several
+  // parts; the summary and the "more lines" note take part of that, so the lines and cards get the rest.
+  const budget = opts.cap <= 5 ? 155 : 220, MORE_NOTE = 22;
+  if (details.length <= opts.cap + 1 && words(details) <= budget) return;
   const chosen = details.slice(0, opts.cap);
   for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
-  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
-  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it.
-  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length;
-  while (chosen.length > 3 && words(chosen) > 200) {
-    const fromEnd = [...chosen].reverse().findIndex((d) => !(opts.keep ?? []).some((re) => re.test(d)));
+  while (chosen.length > 3 && words(chosen) + MORE_NOTE > budget) {
+    // A line is held only while it is the last one left for a part of the question: a second death-cover line can move
+    // to "more lines", the only premium line cannot.
+    const fromEnd = [...chosen].reverse().findIndex((d) => (opts.keep ?? []).every((re) => !re.test(d) || chosen.some((o) => o !== d && re.test(o))));
     if (fromEnd < 0) break;
     chosen.splice(chosen.length - 1 - fromEnd, 1);
   }

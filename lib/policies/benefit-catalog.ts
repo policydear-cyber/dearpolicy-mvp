@@ -534,8 +534,8 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   // Currency comes from the quoted clause, or -- for a share of the sum
   // insured -- from the cover's own currency when its policy evidence states
   // it. Never defaulted to SGD; without one there is no figure.
-  const statedCurrencyCode=benefit.currency?normalizeCurrencyCode(benefit.currency)
-    :benefit.formulaKind==="sum_insured"&&coverage?.currencyVerified===true?normalizeCurrencyCode(coverage.currency):null;
+  const statedCurrencyCode=benefit.currency?normalizeCurrencyCode(benefit.currency)||null
+    :benefit.formulaKind==="sum_insured"&&coverage?.currencyVerified===true?normalizeCurrencyCode(coverage.currency)||null:null;
   const currency=statedCurrencyCode??"";
   const missing:string[]=[];
   const conditions=[...benefit.conditions];
@@ -1035,9 +1035,9 @@ export function validateCatalogFormula(input:{
   // against the personal schedule when used. Nothing is defaulted to SGD, and
   // a currency supplied by the reader but absent from the quote is not proof.
   const quoted=explicitCurrency(input.quote);
-  const declared=input.currency?normalizeCurrencyCode(input.currency):null;
+  const declared=input.currency?normalizeCurrencyCode(input.currency)||null:null;
   if(quoted&&declared&&quoted!==declared)return none;
-  const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
+  const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency)||null:null);
   if(input.kind==="sum_insured"){
     // A choice of the lower that belongs to a printed cap ("or RM5,000, whichever is lower") is read by shareBound.
     const bound=shareBound(input.quote,input.benefitName);
@@ -1203,7 +1203,7 @@ export function benefitIsForAnotherKindOfEvent(benefitName:string,eventText:stri
 }
 export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">
   &Partial<Pick<CatalogBenefit,"quote"|"benefitName"|"reviewedAt">>){
-  const currency=benefit.currency?normalizeCurrencyCode(benefit.currency):null;
+  const currency=benefit.currency?normalizeCurrencyCode(benefit.currency)||null:null;
   const value=benefit.formulaValue;
   const money=(amount:number,code:string|null)=>code?formatMoney(amount,code):amount.toLocaleString("en-US")+" (currency not stated in the policy wording)";
   if(benefit.formulaKind==="sum_insured"&&value!=null){
@@ -1236,7 +1236,7 @@ export function reviewedBenefitFormula(input:{kind:string;value:number|null;curr
   if(kind==="none")return {ok:true,formula:{formulaKind:"none",formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null}};
   const value=input.value;
   if(value==null||!Number.isFinite(value)||value<=0)return {ok:false,error:"Enter an amount greater than zero."};
-  const currency=input.currency?normalizeCurrencyCode(input.currency):null;
+  const currency=input.currency?normalizeCurrencyCode(input.currency)||null:null;
   if(kind!=="sum_insured"&&!currency)return {ok:false,error:"Choose the currency your policy states for this amount."};
   if(kind==="sum_insured"){
     if(value>2)return {ok:false,error:"A percentage of the sum insured cannot be more than 200%."};
@@ -1637,7 +1637,7 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
       if(contradicted)continue;
       // A schedule line is a figure only when its currency is written in the
       // cover's own policy evidence; otherwise the benefit is listed without one.
-      const verifiedCurrency=coverage.currencyVerified===true?normalizeCurrencyCode(coverage.currency):null;
+      const verifiedCurrency=coverage.currencyVerified===true?normalizeCurrencyCode(coverage.currency)||null:null;
       const currency=verifiedCurrency??"";
       const label=coverage.productName&&normalText(coverage.productName)!==normalText(coverage.category)?coverage.productName+" ("+coverage.category+")":coverage.category;
       items.push({
