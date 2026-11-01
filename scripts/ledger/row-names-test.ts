@@ -38,11 +38,17 @@ const rows: [string, string][] = [
   ["Morte da infortunio", "accidental_death"], ["Malattie gravi", "critical_illness"], ["Tử vong do tai nạn", "accidental_death"], ["Bệnh hiểm nghèo", "critical_illness"],
   // English names keep their mapping
   ["Death benefit", "death"], ["Hospital income", "hospital_daily_cash"], ["Disability income benefit", "disability_income"], ["Income protection", "disability_income"],
-  ["Total and permanent disability", "tpd"], ["Room and board per day", "hospital_daily_cash"], ["Annual limit", "other"], ["Premium waiver", "other"],
+  ["Total and permanent disability", "tpd"], ["Room and board per day", "hospital_medical_expense"], ["Annual limit", "other"], ["Premium waiver", "other"],
   // Liability to others stays "other" in any language, whatever else it names
   ["Liabiliti Pihak Ketiga (Kematian)", "other"], ["Responsabilidad civil", "other"], ["Responsabilité civile décès", "other"], ["第三者责任 身故", "other"],
   // Words that only look alike stay "other"
-  ["Had tahunan", "other"], ["Bilik dan Makan", "other"],
+  ["Had tahunan", "other"],
+  // A room and board line is a limit on the room charge, a hospital bill, in any language: never a cash amount per night
+  // (cross-page check, 1 Nov; before, "Room and board per day" was read as daily hospital cash)
+  ["Bilik dan Makan", "hospital_medical_expense"], ["Bilik dan Makan (sehari)", "hospital_medical_expense"], ["Room & Board (per day)", "hospital_medical_expense"],
+  ["Daily room charges", "hospital_medical_expense"], ["房间及膳食", "hospital_medical_expense"], ["Zimmerzuschlag pro Tag", "hospital_medical_expense"],
+  // ...while a cash amount per day stays daily cash
+  ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
   ["Pembebasan Premi karena Penyakit Kritis", "other"], ["Exención de primas por invalidez total y permanente", "other"], ["身故豁免保费", "other"],
@@ -107,12 +113,18 @@ const limits: [string, string | undefined, string][] = [
   ["Annual limit", "ClearSight Vision Health Insurance", "other"],
   ["Had Tahunan", "Asuransi Kesehatan Gigi", "other"],
   ["Annual limit", "Bloom Maternity Health Insurance", "other"],
-  ["Annual limit", "Hospital and Surgical Plan", "other"],
+  // "Hospital and Surgical" names one hospital plan, not two covers (cross-page check, 1 Nov)
+  ["Annual limit", "Hospital and Surgical Plan", "hospital_medical_expense"],
+  ["Annual limit", "Lotus Hospital & Surgical Plan", "hospital_medical_expense"],
+  ["Annual limit", "Pelan Hospital dan Pembedahan", "hospital_medical_expense"],
+  ["Had tahunan", "Teratai MediCare", "hospital_medical_expense"],
+  ["Sum assured", "Medicover Term Life", "other"],
   ["Annual limit", "Teratai Family Takaful", "other"],
   ["Annual limit", "Savings Endowment 20", "other"],
   ["Annual limit", undefined, "other"],
   ["Had Tahunan", "Insurans Hayat Bakti", "other"],
-  ["Room and board limit", "Harbour Hospital Plan", "other"],
+  // A room and board limit is a hospital bill limit (cross-page check, 1 Nov)
+  ["Room and board limit", "Harbour Hospital Plan", "hospital_medical_expense"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
   ["Deductible", "Harbour Hospital Plan", "other"],
