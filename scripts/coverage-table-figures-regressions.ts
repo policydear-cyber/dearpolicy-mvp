@@ -717,6 +717,15 @@ test("a death benefit named only in another language is Death, an accident-only 
     "Todesfall durch Unfall einschließlich Unfall im Straßenverkehr", "意外身故（包括意外交通）"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   for (const b of ["Kematian bukan akibat kemalangan", "Meninggal dunia bukan karena kecelakaan", "Décès non accidentel", "Décès non-accidentel",
     "Todesfall ohne Unfall", "身故（非意外）", "Décès toutes causes y compris accident de la route"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  // By accident OR another cause is any cause: Death, as in English (Critic M1 on #283 9d942cd). An accident word joined to
+  // anything else is still accident cover.
+  for (const b of ["Décès non accidentel ou accidentel", "Décès par accident ou maladie", "Décès accidentel ou non", "Décès par maladie ou accident",
+    "Kematian akibat kemalangan atau bukan kemalangan", "Kematian akibat kemalangan atau penyakit", "Meninggal dunia karena sakit atau kecelakaan",
+    "Tod durch Unfall oder Krankheit", "Todesfall (Unfall und Krankheit)", "Todesfall durch Krankheit oder Unfall", "身故（意外或疾病）", "因疾病或意外身故", "死亡（疾病及意外）", "意外或疾病身故",
+    "Tod und Invalidität", "Death (accidental or non-accidental)", "Death by accident or illness"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  for (const b of ["Décès accidentel et invalidité", "Kematian akibat kemalangan dan hilang upaya", "Todesfall durch Unfall und Verkehrsunfall", "意外身故及残疾",
+    "Unfalltod oder Invalidität", "Décès accidentel (non cumulable avec décès toutes causes)", "Kematian akibat kemalangan atau kecacatan",
+    "Décès accidentel et nonobstant", "Décès par accident ou noyade"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   // A beneficiary label names who is paid, not who dies (Critic M1 on #283).
   for (const b of ["Death benefit (beneficiary: spouse)", "Death benefit - nominee: wife", "Death benefit, payee: children", "Death benefit for the benefit of your children",
     "Manfaat kematian (penama: isteri)", "Manfaat kematian - waris: anak-anak", "Santunan meninggal dunia (penerima manfaat: istri)",

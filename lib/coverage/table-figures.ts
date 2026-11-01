@@ -123,7 +123,7 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * is never taken for one. Malay, Indonesian, French, German, Chinese. German "Tod" only as the whole name or followed by a
  * German word, and with its capital ("TOD surcharge" is no death; Critic M2 on #283). */
 const OTHER_LANGUAGE_DEATH = /^\W*(?:(?:manfaat|faedah|santunan|pampasan|uang(?:\s+duka)?)\s+)?(?:kematian|meninggal(?:\s+dunia)?)\b|^\W*(?:(?:capital|prestations?|garantie|indemnit[ée])\s+)?d[ée]c[èe]s\b|^\W*todesfall\w*|^\W*(?:身故|死亡)/iu;
-const GERMAN_TOD = /^\W*Tod(?:\s*$|\s+(?:durch|bei|infolge|nach|aus|des|der|eines|einer)\b)/u;
+const GERMAN_TOD = /^\W*Tod(?:\s*$|\s+(?:durch|bei|infolge|nach|aus|des|der|eines|einer|und)\b)/u;
 /** Any accident word anywhere in the name, as a substring (compounds such as "Verkehrsunfall" too): the name pays on an
  * accident, never a plain death benefit (Critic H1 on #283). A closed list; unsure is never Death. */
 const OTHER_LANGUAGE_ACCIDENT = /accident|kemalangan|kecelakaan|unfall|意外|事故/iu;
@@ -135,6 +135,15 @@ const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall\w*[\s-]*tod\w*|意外\S{0,4
  * read again, so an accident word elsewhere still makes it accident cover ("Décès accidentel, y compris accident de la
  * route"; Critic H1 on #283). */
 const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|任何原因|\bbukan\s+(?:akibat\s+|disebabkan\s+(?:oleh\s+)?|karena\s+)?(?:kemalangan|kecelakaan)\b|\bnon[\s-]+accident\p{L}*|\bohne\s+unfall\p{L}*|非意外/giu;
+/** A death by accident OR by another cause, in those languages ("Décès par accident ou maladie", "Décès accidentel ou non",
+ * "Kematian akibat kemalangan atau penyakit", "Tod durch Unfall oder Krankheit", "身故（意外或疾病）", "因疾病或意外身故"): any
+ * cause, so Death, as the English "Death by accident or illness" is (Critic M1 on #283 9d942cd). Both sides from closed
+ * lists, joined by "or"/"and" right beside each other. */
+const ACC_WORD = String.raw`(?:accident\p{L}*|kemalangan|kecelakaan|\p{L}*unfall\p{L}*|意外|事故)`;
+const OTHER_CAUSE = String.raw`(?:maladies?|penyakit|sakit|krankheit\p{L}*|疾病|(?:non|bukan|nicht|tidak)(?:[\s-]+(?:akibat\s+|karena\s+)?${ACC_WORD})?|非(?:意外|事故)?)`;
+const OR_AND = String.raw`[\s-]*(?:ou|et|atau|dan|oder|und|或|及|和|/)\s*(?:(?:par|d['’]|akibat|karena|durch|infolge|von|因)\s*)?`;
+// Word edges for Latin script only: Chinese runs on with no spaces ("意外或疾病身故").
+const ACCIDENT_OR_OTHER = new RegExp(String.raw`(?<!\p{Script=Latin})(?:${ACC_WORD}${OR_AND}${OTHER_CAUSE}|${OTHER_CAUSE}${OR_AND}${ACC_WORD})(?!\p{Script=Latin})`, "iu");
 /** A waiver on death, in those languages: it waives what is paid in, it pays no death benefit (Critic M1 on #283). */
 const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
 /** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
@@ -177,8 +186,11 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
 
 function otherLanguageDeath(benefit: string): string | null {
   if (OTHER_LANGUAGE_OTHERS.test(benefit) || OTHER_LANGUAGE_WAIVER.test(benefit)) return null;
-  if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)) return "Personal Accident";
-  if (!OTHER_LANGUAGE_DEATH.test(benefit) && !GERMAN_TOD.test(benefit)) return null;
+  const anyCause = ACCIDENT_OR_OTHER.test(benefit);
+  if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit) && !anyCause) return "Personal Accident";
+  if (!OTHER_LANGUAGE_DEATH.test(benefit) && !GERMAN_TOD.test(benefit) && !OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)
+    && !(anyCause && /(?:身故|死亡)/u.test(benefit))) return null;
+  if (anyCause) return "Death";
   return OTHER_LANGUAGE_ACCIDENT.test(benefit.replace(OTHER_LANGUAGE_ANY_CAUSE, " ")) ? "Personal Accident" : "Death";
 }
 
