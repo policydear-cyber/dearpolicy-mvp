@@ -183,6 +183,7 @@ test("PREMIUM: a paid-in row in any market is a premium; a pay-back or waiver on
     "Annual or monthly mode: total premiums paid S$12,000", "Benefits statement - total premiums paid to date S$12,000",
     "Premium payable on renewal: total premiums paid S$12,000", "Sum assured S$500,000; total premiums paid S$12,000",
     "Benefits statement: total premiums paid S$12,000", "Death benefit higher of S$100,000 or total premiums paid", "Ringkasan manfaat - jumlah sumbangan dibayar RM3,600",
+    "Jumlah kontribusi yang telah dibayar RM3,600", "Equal to S$12,000: total premiums paid", "Premium payable, equal to total premiums paid last year S$1,200; total premiums paid S$12,000",
     // A note after the figure never decides when the name before it is a premium (Critic R276 L); named only in the note, a contribution is one.
     "Premium RM300 (refund of premium on cancellation)", "Death cover RM30 (monthly contribution)"];
   for (const t of paidIn) assert.equal(PREMIUM.test(t), true, t);
@@ -196,6 +197,9 @@ test("PREMIUM: a paid-in row in any market is a premium; a pay-back or waiver on
     "Death benefit: total contributions paid plus profit", "Death benefit: all premiums paid to date", "Death benefit: premiums paid to date",
     "Death benefit higher of sum assured or total premiums paid", "Sum assured or premiums paid to date, whichever is higher", "Manfaat kematian: jumlah sumbangan dibayar",
     "Maturity benefit = total premiums paid", "Total contributions paid plus profit", "Greater of the account value or all premiums paid",
+    // TE R276 follow-up: "equal to" frames, a death name before the colon, and Malay "yang telah dibayar".
+    "Death benefit equal to total premiums paid", "Kematian: jumlah kontribusi yang telah dibayar", "Manfaat kematian sama dengan jumlah sumbangan yang telah dibayar",
+    "Death: total premiums paid",
     "Refunded Premiums upon Death", "Waived Premiums on TPD", "Hospital income contribution RM100/day", "Funeral expenses contribution", "Employer contribution benefit"];
   for (const t of benefit) assert.equal(PREMIUM.test(t), false, t);
 });
