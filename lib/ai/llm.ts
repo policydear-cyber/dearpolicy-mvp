@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
 import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest, remainingModelTimeMs } from "./usage";
-import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
+import { assertUnderSpendCap, recordUsage, SpendCapReached, SpendCheckUnavailable } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
@@ -304,7 +304,7 @@ export class TruncatedModelOutput extends Error {
  * which belongs in the logs. */
 export const PROVIDER_UNAVAILABLE_TEXT = "DearPolicy’s reading service is unavailable right now because of a problem on our side, not with your documents";
 export function householdModelFailure(error: unknown) {
-  if (error instanceof SpendCapReached) return error.message;
+  if (error instanceof SpendCapReached || error instanceof SpendCheckUnavailable) return error.message;
   if (error instanceof ProviderQuotaExhausted) return PROVIDER_UNAVAILABLE_TEXT;
   if (error instanceof TruncatedModelOutput)
     return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
@@ -318,6 +318,7 @@ export function householdModelFailure(error: unknown) {
 }
 export function readableModelFailure(error: unknown) {
   if (error instanceof SpendCapReached) return error.message;
+  if (error instanceof SpendCheckUnavailable) return "the household's month spend could not be read from the ledger, so the call was refused before it was made";
   if (error instanceof ProviderQuotaExhausted) return "the model provider refused the call (" + error.status + "): the provider account's quota or billing limit is exhausted (not retried)";
   if (error instanceof TruncatedModelOutput)
     return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
