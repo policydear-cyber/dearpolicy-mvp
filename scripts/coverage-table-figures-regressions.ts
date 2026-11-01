@@ -727,7 +727,10 @@ test("a death benefit named only in another language is Death, an accident-only 
     "Death (accidental or non-accidental)", "Death by accident or illness"]) assert.equal(categoryOfBenefit(b), "Death", b);
   for (const b of ["Décès accidentel et invalidité", "Kematian akibat kemalangan dan hilang upaya", "Todesfall durch Unfall und Verkehrsunfall", "意外身故及残疾",
     "Unfalltod oder Invalidität", "Tod oder Invalidität durch Unfall", "Décès accidentel (non cumulable avec décès toutes causes)", "Kematian akibat kemalangan atau kecacatan",
-    "Décès accidentel et nonobstant", "Décès par accident ou noyade"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+    "Décès accidentel et nonobstant", "Décès par accident ou noyade",
+    // A cause word that goes on is a narrowed cause or another benefit (Critic L1-L3 on #283).
+    "Décès par accident et maladie professionnelle exclue", "Unfalltod und Krankheitskosten", "Décès par accident ou maladie tropicale (voyage)",
+    "Kematian akibat kemalangan atau penyakit kritikal", "Décès par accident ou maladie (exclue)", "Todesfall durch Unfall oder Krankheit ausgeschlossen"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   // A beneficiary label names who is paid, not who dies (Critic M1 on #283).
   for (const b of ["Death benefit (beneficiary: spouse)", "Death benefit - nominee: wife", "Death benefit, payee: children", "Death benefit for the benefit of your children",
     "Manfaat kematian (penama: isteri)", "Manfaat kematian - waris: anak-anak", "Santunan meninggal dunia (penerima manfaat: istri)",
