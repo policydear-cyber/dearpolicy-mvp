@@ -9,7 +9,7 @@ import { homeView } from "@/lib/format/home-view";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null};
-type TilePart={name:string;amount:number|null;currency:string|null;accelerates?:boolean;conditional?:boolean};
+type TilePart={name:string;amount:number|null;currency:string|null;accelerates?:boolean;conditional?:boolean;period?:string|null;noFigure?:boolean};
 type KnownSum={amount:number;currency:string;without:string[];otherTile?:string[]};
 type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;currencyStated?:boolean;frequency:string|null;annual:number;monthly:number;shared:boolean;fromTable?:boolean;detail?:string|null;source?:string|null};
 type Reminder={kind:string;title:string;detail:string;href:string};
@@ -23,7 +23,7 @@ const premiumMoney=(i:PremiumItem,v:number)=>money(v,i.currencyStated===false?nu
 // One figure per currency: premiums in two currencies are never added into one.
 const perCurrency=(totals:{currency:string;monthly:number;annual:number}[],k:"monthly"|"annual")=>totals.map(t=>money(t[k],t.currency)).join(" + ");
 // Each policy's sum on a lump-sum tile, so the person sees what every policy gives; one with no sum read says where to look.
-function partsText(parts:TilePart[]){const name=(n:string)=>n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi,"").trim();return "Sum insured: "+parts.map(p=>(p.amount!=null?`${name(p.name)} ${money(p.amount,p.currency)}`:`${name(p.name)}: amount on Coverage`)+(p.conditional?" (conditions apply)":"")+(p.accelerates?" (paid instead of the death benefit)":"")).join(" · ");}
+function partsText(parts:TilePart[]){const name=(n:string)=>n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi,"").trim();return (parts.some(p=>p.period)?"Each policy: ":"Sum insured: ")+parts.map(p=>(p.amount!=null?`${name(p.name)} ${money(p.amount,p.currency)}${p.period?` a ${p.period}`:""}`:p.noFigure?`${name(p.name)}: see the document for how much it pays`:`${name(p.name)}: amount on Coverage`)+(p.conditional?" (conditions apply)":"")+(p.accelerates?" (paid instead of the death benefit)":"")).join(" · ");}
 
 export default function DashboardPage(){
  const [activeId,setActiveId]=useState(""),[data,setData]=useState<Dashboard|null>(null),[loading,setLoading]=useState(true);

@@ -82,6 +82,84 @@ const plans: [string, string, string][] = [
 ];
 for (const [name, plan, want] of plans) eq(`${name} / ${plan}`, ev(name, plan), want);
 
+// A row naming only the plan's overall limit is the plan's reimbursed hospital benefit, but only on a plan that is
+// exactly one kind and that kind is a hospital plan, in any language. Anywhere else a limit names no event.
+const limits: [string, string | undefined, string][] = [
+  ["Annual limit", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Overall annual limit", "Shield Plan Gold", "hospital_medical_expense"],
+  ["Annual Limit per policy year", "MediShield Life", "hospital_medical_expense"],
+  ["Lifetime limit", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Overall limit of benefits per policy year", "Kingsmere Health Insurance", "hospital_medical_expense"],
+  ["Had Tahunan", "Insurans Perubatan Cemerlang", "hospital_medical_expense"],
+  ["Had Tahunan", "Takaful Perubatan Mesra", "hospital_medical_expense"],
+  ["Batas Manfaat Tahunan", "Asuransi Kesehatan Prima", "hospital_medical_expense"],
+  ["Límite anual", "Seguro de Salud Andes", "hospital_medical_expense"],
+  ["Plafond annuel", "Assurance Santé Horizon", "hospital_medical_expense"],
+  ["Jahreshöchstbetrag", "Krankenversicherung Komfort", "hospital_medical_expense"],
+  ["年度限额", "安心医疗保险", "hospital_medical_expense"],
+  // Not a hospital plan, more than one kind, no plan name, or a name that says more than the limit: no event
+  ["Annual limit", "Heronsgate Joint Life Cover", "other"],
+  ["Annual limit", "Kestrel Personal Accident Plan", "other"],
+  ["Annual limit", "Wayfarer Travel Plan", "other"],
+  ["Annual limit", "Harbour Hospital Cash Plan", "other"],
+  // A dental, vision or maternity health plan is not a hospital plan (TE #281 F2)
+  ["Annual limit", "Pearl Dental Health Insurance", "other"],
+  ["Annual limit", "ClearSight Vision Health Insurance", "other"],
+  ["Had Tahunan", "Asuransi Kesehatan Gigi", "other"],
+  ["Annual limit", "Bloom Maternity Health Insurance", "other"],
+  ["Annual limit", "Hospital and Surgical Plan", "other"],
+  ["Annual limit", "Teratai Family Takaful", "other"],
+  ["Annual limit", "Savings Endowment 20", "other"],
+  ["Annual limit", undefined, "other"],
+  ["Had Tahunan", "Insurans Hayat Bakti", "other"],
+  ["Room and board limit", "Harbour Hospital Plan", "other"],
+  ["Co-insurance limit", "Harbour Hospital Plan", "other"],
+  ["Limit of liability", "Harbour Hospital Plan", "other"],
+  ["Deductible", "Harbour Hospital Plan", "other"],
+  ["Annual premium limit", "Harbour Hospital Plan", "other"],
+  // A hospital plan's own "Sum assured" is still not read as a bill limit
+  ["Sum assured", "Harbour Hospital Plan", "other"],
+];
+for (const [name, plan, want] of limits) eq(`limit ${name} / ${plan}`, ev(name, plan as string), want);
+
+// An illness named with its treatment pays the treatment bills, never the illness's lump sum (Critic #281 H: a hospital
+// plan's "Annual limit for outpatient cancer drug" was read as a critical illness sum). The illness alone stays a CI.
+// Only on a hospital plan (Critic #281 H1): on a CI plan a condition named with its definition wording stays the CI, and
+// a CI-plan row is never moved to a reimbursement; with no plan kind the name's own mapping stands.
+const treatments: [string, string | undefined, string][] = [
+  ["Annual limit for outpatient cancer drug", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Cancer drug treatment", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Outpatient cancer treatment - chemotherapy and radiotherapy", "MediShield Life", "hospital_medical_expense"],
+  ["Rawatan kemoterapi kanser", "Insurans Perubatan", "hospital_medical_expense"],
+  ["Tratamiento de cáncer", "Seguro de Salud Andes", "hospital_medical_expense"],
+  ["癌症化疗", "医疗保险", "hospital_medical_expense"],
+  ["Kidney Failure (requiring dialysis)", "Critical Illness Plan", "critical_illness"],
+  ["End-stage kidney failure requiring permanent dialysis", "Early Critical Illness Plan", "critical_illness"],
+  ["Major Cancer (requiring treatment)", "Critical Illness Plan", "critical_illness"],
+  ["Kanser memerlukan rawatan", "Takaful Penyakit Kritikal", "critical_illness"],
+  ["癌症治疗", "重疾险", "critical_illness"],
+  ["Cancer treatment benefit", "Cancer Care Plan", "critical_illness"],
+  ["Outpatient cancer drug", undefined, "critical_illness"],
+  ["Major organ transplant (treatment received)", "Critical Illness Plan", "other"],
+  // A treatment alone is a bill benefit on a hospital plan, and never a reimbursement on a CI plan
+  ["Kidney dialysis", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Chemotherapy", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Dialysis", "Critical Illness Plan", "other"],
+  ["Cancer drug treatment", "Life and Hospital Plan", "critical_illness"],
+  // TE #281 F1: CI-plan rows named with treatment words stay the CI
+  ["Cancer treatment benefit", "Lion Critical Illness Plan", "critical_illness"],
+  ["Kidney failure treatment benefit", "Lion Critical Illness Plan", "critical_illness"],
+  ["Major cancer - 100% of sum assured; minor cancer treatment 25%", "Lion Critical Illness Plan", "critical_illness"],
+  ["Cancer", "Living Care Plan", "critical_illness"],
+  ["Major cancer", undefined, "critical_illness"],
+  ["Kidney failure", undefined, "critical_illness"],
+  ["Heart attack of specified severity", undefined, "critical_illness"],
+  ["Kanser Tahap Kritikal", undefined, "critical_illness"],
+  ["癌症", undefined, "critical_illness"],
+  ["Early stage cancer", undefined, "early_critical_illness"],
+];
+for (const [name, plan, want] of treatments) eq(`treatment ${name} / ${plan}`, ev(name, plan as string), want);
+
 // A fixed figure printed with a period is paid per period; an income or daily benefit with no period gives no figure.
 const pays: [string, string, string, number, string][] = [
   ["disability_income", "Monthly benefit", "Monthly benefit\t£2,400", 2400, "per_month"],
