@@ -51,7 +51,11 @@ const rows: [string, string][] = [
   // Cash words in any language keep a room line a cash benefit (Critic #285 M1)
   ["Bilik dan makan - elaun harian", "hospital_daily_cash"], ["Biaya kamar - santunan harian", "hospital_daily_cash"], ["Kamar dan makan (tunjangan tunai harian)", "hospital_daily_cash"],
   ["Chambre particulière - indemnité journalière forfaitaire", "hospital_daily_cash"], ["Zimmerzuschlag (Krankenhaustagegeld)", "hospital_daily_cash"],
-  ["Bilik dan Makan (elaun tunai)", "other"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
+  ["Bilik dan Makan (elaun tunai)", "other"], ["Elaun Bilik dan Makan Harian", "hospital_daily_cash"], ["Wang tunai bilik dan makan sehari", "hospital_daily_cash"],
+  ["Uang harian kamar dan makan", "hospital_daily_cash"], ["Indemnité journalière chambre et pension", "hospital_daily_cash"], ["房间及膳食津贴 每日", "hospital_daily_cash"],
+  ["病房费现金 每日", "hospital_daily_cash"], ["Tiền phòng trợ cấp mỗi ngày", "hospital_daily_cash"],
+  // 房租 alone is rent (TE #285 F2)
+  ["Loss of rent (房租损失)", "other"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
   ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
@@ -127,6 +131,7 @@ const limits: [string, string | undefined, string][] = [
   ["Sum insured", "MediCare Accident Plan", "accidental_death"],
   ["Annual limit", "MediCare Critical Illness Plan", "other"],
   ["Annual limit", "MediCare Dental", "other"],
+  ["Annual limit", "MediCare Cancer Plan", "other"],
   // "Hospital & Surgical Cash Plan" is a cash plan (Critic #285 L1)
   ["Annual limit", "Hospital & Surgical Cash Plan", "other"],
   ["Annual limit", "Teratai Family Takaful", "other"],

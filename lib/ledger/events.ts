@@ -292,7 +292,7 @@ const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*
   "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
 /** Words saying a benefit is a cash amount paid to the person, not a limit on a bill (Critic #285 M1): a closed list. */
 const CASH_WORDS="(?:cash|allowances?|income|benefit per (?:day|night)|daily benefit|elaun|tunai|pendapatan|santunan|tunjangan|uang harian|indemnit[ée]s? journali[èe]res?|forfait(?:aire)?|"+
-  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|indennit[àa] giornaliera|tr[ợo] c[ấa]p)";
+  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|subsidio diario|allocation|indennit[àa] giornaliera|tr[ợo] c[ấa]p|ti[ềe]n m[ặa]t)";
 const CASH_PAID=new RegExp(B+CASH_WORDS+E+"|津贴|津貼|现金|現金|补贴|補貼|日額|日额","iu");
 /** "Hospital and Surgical", "Hospital & Surgical", "Hospital dan Pembedahan" name one kind of plan, a hospital plan, not two
  * covers (cross-page check, 1 Nov). */
@@ -300,11 +300,12 @@ const HOSPITAL_SURGICAL=new RegExp(B+"(?:hospital(?:i[sz]ation|isasi)?|in-?patie
 /** A "MediCare" or "Medicover" plan is a hospital plan only when nothing else in its name says what it is: "Medicare Term
  * Life" is a life plan, "MediCare Accident Plan" an accident plan (Critic #285 M2). */
 const MEDI_PLAN=new RegExp(B+"medi[- ]?(?:care|cover)"+E,"iu");
+const MEDI_NOT_HOSPITAL=/\b(?:cancer|critical|illness|dread|accident\w*|life|travel|motor|car|home|savings|endowment|income|cash|term)\b/i;
 function planEvent(productName:string|null|undefined,limit=false):EventType|null{
   if(!productName)return null;
   productName=productName.replace(HOSPITAL_SURGICAL,"hospital plan");
   let name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName!)).map(([,en])=>en).join(" ");
-  if(MEDI_PLAN.test(productName)&&!PRODUCT_DEFAULTS.some(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name))))name+=" hospital plan";
+  if(MEDI_PLAN.test(productName)&&!MEDI_NOT_HOSPITAL.test(productName)&&!PRODUCT_DEFAULTS.some(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name))))name+=" hospital plan";
   // A plan naming two covers ("Life and Critical Illness Plan") does not say which one its sum is.
   if(/\s(?:and|&|\+|with|plus|dan|y|e|et|und)\s/i.test(productName))return null;
   const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
@@ -369,7 +370,7 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board)|"+
   "bilik\\s*(?:dan|&)\\s*(?:makan|penginapan)|caj bilik|kamar\\s*(?:dan|&)\\s*(?:makan|menginap)|biaya kamar|habitaci[oó]n y (?:alimentaci[oó]n|comida)|quarto e (?:alimenta[cç][aã]o|refei[cç][oõ]es)|"+
-  "chambre (?:et (?:repas|pension)|particuli[eè]re)|unterkunft und verpflegung|zimmerzuschlag|vitto e alloggio|tiền phòng|phòng và ăn)"+E+"|房间及膳食|房間及膳食|房租|病房费|病房費","iu");
+  "chambre (?:et (?:repas|pension)|particuli[eè]re)|unterkunft und verpflegung|zimmerzuschlag|vitto e alloggio|tiền phòng|phòng và ăn)"+E+"|房间及膳食|房間及膳食|病房费|病房費","iu");
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
