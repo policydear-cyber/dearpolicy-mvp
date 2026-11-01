@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "privacy:notice-test": "node --import tsx scripts/privacy/notice-test.ts",
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
     "benefit-table:same-name-test": "node --import tsx scripts/benefit-table/same-name-test.ts",
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
