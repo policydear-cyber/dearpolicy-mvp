@@ -18,8 +18,10 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { formatMoney,statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { documentName,isMachineFilename,loadPolicyInventory,prettifyFilename,type PolicyContract } from "@/lib/policies/inventory";
+import { printedLinePeriod } from "@/lib/coverage/line-period";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
+import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
 
@@ -165,7 +167,6 @@ function planLabel(contract:PolicyContract,productName:string|null,category?:str
   if(category&&category.toLowerCase()!==base.toLowerCase()&&!base.toLowerCase().includes(category.toLowerCase()))return base+" · "+category;
   return base;
 }
-const PLAN_COLUMNS_NOTE="The document prints a different figure for each plan, and which plan is yours is not shown, so no figure is taken from it.";
 function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
   const out:Seed[]=[];
   // A row read once per plan column whose plan was not narrowed to this person's (selectTierRows keeps every column when
@@ -179,18 +180,19 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
     if(benefit.rowKind==="not_covered")continue;
     const perPlan=(columns.get(rowKey(benefit))?.size??0)>1||(!benefit.tier&&rowFiguresDependOnPlan(benefit.quote));
     if(perPlan){if(seen.has(rowKey(benefit)))continue;seen.add(rowKey(benefit));}
-    const {event,detail}=eventForBenefitName(benefit.benefitName);
+    const {event,detail}=eventForBenefitName(benefit.benefitName,benefit.productName??contract.name);
     const coverage=coverageForBenefit(contract,benefit);
     // A rule whose currency is written nowhere is not seeded: the ledger
     // cannot store an amount without labelling it, and SGD is never assumed.
     const currency=statedCurrencyCode(benefit.currency??coverage?.currency);
     if(!currency)continue;
-    const kind:PaysKind=perPlan?"stated":benefit.formulaKind==="sum_insured"?"percent_of_sum":benefit.formulaKind==="fixed"?"lump_sum":benefit.formulaKind==="expense_cap"?"reimbursement_cap":benefit.formulaKind==="daily"?"per_day":"stated";
+    const kind:PaysKind=perPlan?"stated":benefit.formulaKind==="sum_insured"?"percent_of_sum":benefit.formulaKind==="fixed"?fixedPays(event,benefit):benefit.formulaKind==="expense_cap"?"reimbursement_cap":benefit.formulaKind==="daily"?"per_day":"stated";
     out.push({familyMemberId:contract.ownerId,policyId:benefit.policyId,planName:planLabel(contract,benefit.productName),insurer:contract.insurer,
       eventType:event,detail:detail??(event==="other"?benefit.benefitName:null),cause:causeForBenefit(benefit.benefitName,benefit.requires??[]),paysKind:kind,
       amount:kind==="stated"?null:benefit.formulaValue,currency,sumBasis:kind==="percent_of_sum"?(coverage?.amount??null):null,
       offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays,
-      conditions:[...(perPlan?[PLAN_COLUMNS_NOTE]:[]),...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean).slice(0,6),
+      // One wording for "a figure per plan" (the catalogue may already carry it): the household reads it once.
+      conditions:[...new Set([...(perPlan?[PLAN_COLUMNS_NOTE]:[]),...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean))].slice(0,6),
       note:benefit.benefitName,sourcePage:benefit.sourcePage,quote:benefit.quote,origin:"wording",inferred:!!benefit.basisInferred,
       // The same trust rule the benefit catalogue itself uses: a rule needs a
       // person's confirmation only when its basis was inferred (read from a
@@ -224,6 +226,19 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
   return out;
 }
 const ACCIDENT_EVENTS=new Set(["accidental_death","fracture","dismemberment","accidental_disablement","accident_medical_expense"]);
+/** How a row's fixed figure is paid: a figure the row prints with a period ("Monthly benefit £2,400", "Santunan harian
+ * Rp 500.000") is paid per day or per month, never as a lump sum, and an income or daily benefit printed with no period
+ * gives no figure at all (cross-page check, 31 Oct: an income protection plan's "£2,400 lump sum"). */
+const PAID_PER_PERIOD=new Set<EventType>(["disability_income","hospital_daily_cash","icu_daily_cash","long_term_care"]);
+export function fixedPays(event:EventType,benefit:Pick<CatalogBenefit,"benefitName"|"quote"|"formulaValue">):PaysKind{
+  const period=printedLinePeriod(benefit.benefitName,benefit.formulaValue)??printedLinePeriod(benefit.quote,benefit.formulaValue);
+  // Only a benefit paid per period by its nature takes a period (an allow-list): a death or accident sum printed beside
+  // a period word is no income, so it gives no figure rather than one paid per day (Critic #270 H1).
+  if(!PAID_PER_PERIOD.has(event))return period?"stated":"lump_sum";
+  if(period==="day")return "per_day";
+  if(period==="month")return "per_month";
+  return "stated";
+}
 /** The cover a ledger row's "percentage of the sum insured" applies to, or null when that cannot be told. */
 export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:string;detail:string|null;cause:string|null;note:string|null}){
   const label=EVENTS[row.event_type as EventType]?.label??row.event_type;

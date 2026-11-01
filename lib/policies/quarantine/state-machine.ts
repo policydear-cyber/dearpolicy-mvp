@@ -4,7 +4,7 @@ import type { PolicyQuarantineStatus } from "./types";
  * Deterministic state machine for a policy document's quarantine gate:
  *
  *   uploaded -> quarantined -> scan_pending -> scan_clean | scan_rejected
- *                                          | not_scanned_prototype  (prototype mode only)
+ *                                          | not_scanned_prototype  (scanning off, or a hash lookup with no record)
  *
  * "processing"/"processed" from the checkpoint-3 specification are NOT
  * separate values of THIS state machine -- they are the pre-existing

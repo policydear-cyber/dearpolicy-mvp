@@ -6,7 +6,8 @@ import { CORRELATION_ID_HEADER, resolveCorrelationId } from "@/lib/telemetry/cor
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
- * callback flows (which authenticate the visitor as their own first step),
+ * callback flows (which authenticate the visitor as their own first step), the privacy notice (static text, readable
+ * before signing up),
  * and the health check the sidebar polls before anyone has signed in.
  *
  * The household's former shared-password gate (lib/auth/gate.ts,
@@ -22,6 +23,7 @@ const OPEN_PATHS = new Set([
   "/login",
   "/signup",
   "/reset-password",
+  "/privacy",
   "/api/auth/signup",
   "/api/auth/signin",
   "/api/auth/callback",

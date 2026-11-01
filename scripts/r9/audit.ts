@@ -12,6 +12,10 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { amountAppears, locatePassage, nameAppears, printedDates } from "@/lib/documents/evidence";
 import { INGEST_SENTINEL_PATTERN } from "@/lib/ai/chaos-ingest";
+import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
+import { shareCapNote } from "@/lib/policies/benefit-catalog";
+import { formatMoney } from "@/lib/format/currency";
+import { FIGURE_END, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { benefitNamePrinted, looksLikeName, personPrinted } from "@/lib/documents/fact-check";
 
 type Row = Record<string, unknown>;
@@ -53,6 +57,23 @@ const quoteOnPage = (page: string, quote: unknown) => !!quote && !!locatePassage
 const DAILY = /\bper\s+day\b|\bdaily\b|\ba\s+day\b|\beach\s+day\b|\bper\s+night\b/i;
 /** A system-written note, not something read from the page. */
 const SYSTEM_NOTE = /^(?:The policy states this benefit as|DearPolicy read this as)/;
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// The share-cap note, taken from the product's own wording so the two never drift: "Paid up to <figure>, the cap ...".
+const SHARE_CAP_NOTE = (() => { const [pre, post] = shareCapNote(12345, "SGD").split(formatMoney(12345, "SGD")); return new RegExp("^" + escape(pre) + "(.+?)" + escape(post) + "$"); })();
+/** A note DearPolicy writes itself rather than reads from the page. One that names a figure counts only when it names
+ * exactly ONE figure and the document prints it: a note is never a way to plant an amount ("up to S$75,000 and
+ * S$999,999" names two, so it is not DearPolicy's note). */
+export function ownNote(note: string, text: string) {
+  if (SYSTEM_NOTE.test(note) || note === PLAN_COLUMNS_NOTE) return true;
+  if (!SHARE_CAP_NOTE.test(note)) return false;
+  const figures = note.match(new RegExp(PRINTED_FIGURE, "g")) ?? [];
+  if (figures.length !== 1) return false;
+  const value = printedNumber(figures[0]);
+  if (value === null) return false;
+  // The page prints that figure WHOLE: "S$1,936" is not printed by "S$1,936.50", and "Rp4.250.000" prints 4,250,000.
+  const lakh = groupsInLakhs(text);
+  return (text.match(new RegExp(PRINTED_FIGURE + FIGURE_END, "g")) ?? []).some((f) => printedNumber(f, null, { lakh }) === value);
+}
 
 export function audit(chaos: Snapshot, pristine: Snapshot): Violation[] {
   const out: Violation[] = [];
@@ -96,7 +117,7 @@ export function audit(chaos: Snapshot, pristine: Snapshot): Violation[] {
   for (const b of chaos.benefits.filter((b) => !b.dup)) {
     sentinel("benefit", b.policy, b.name, b.conditions);
     const text = page(b.policy, b.page);
-    for (const c of (Array.isArray(b.conditions) ? b.conditions : []) as string[]) if (!SYSTEM_NOTE.test(c) && !locatePassage(text, c)) v("invented benefit condition", b.policy, String(b.name) + ": " + c);
+    for (const c of (Array.isArray(b.conditions) ? b.conditions : []) as string[]) if (!ownNote(c, text) && !locatePassage(text, c)) v("invented benefit condition", b.policy, String(b.name) + ": " + c);
     if (pristineBen.has(benKey(b))) continue;
     if (!quoteOnPage(text, b.quote)) { v("benefit quote not on its page", b.policy, `${b.name} p${b.page}: "${String(b.quote).slice(0, 80)}"`); continue; }
     const span = locatePassage(text, String(b.quote))!; const passage = text.slice(span.start, span.end);
@@ -115,7 +136,7 @@ export function audit(chaos: Snapshot, pristine: Snapshot): Violation[] {
   for (const r of chaos.rules) {
     sentinel("ledger rule", r.policy, r.plan_name, r.note, r.conditions);
     const text = page(r.policy, r.page);
-    for (const c of (Array.isArray(r.conditions) ? r.conditions : []) as string[]) if (!SYSTEM_NOTE.test(c) && !locatePassage(text, c) && !locatePassage(doc(r.policy), c)) v("invented ledger condition", r.policy, c);
+    for (const c of (Array.isArray(r.conditions) ? r.conditions : []) as string[]) if (!ownNote(c, text) && !ownNote(c, doc(r.policy)) && !locatePassage(text, c) && !locatePassage(doc(r.policy), c)) v("invented ledger condition", r.policy, c);
     if (pristineRules.has(ruleKey(r))) continue;
     if (String(r.seed_key ?? "").startsWith("ai:") && r.note && !looksLikeName(String(r.note))) v("a sentence stored as a benefit name", r.policy, String(r.note));
     if (!quoteOnPage(text, r.quote)) { v("ledger quote not on its page", r.policy, `${r.event_type} ${r.amount} p${r.page}: "${String(r.quote).slice(0, 80)}"`); continue; }

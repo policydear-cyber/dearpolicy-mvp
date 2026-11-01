@@ -41,9 +41,13 @@ function walk(dir: string): string[] {
   });
 }
 /** Household-facing UI source: every page and component under app/ except
- * the operator and reviewer areas and API routes, plus the shell. */
+ * the operator and reviewer areas and API routes, plus the shell. The privacy
+ * notice is left out on purpose: the law asks it to name the services that
+ * receive a household's information (the model provider, the database), which
+ * this test rightly keeps off every working screen. Its own test is
+ * scripts/privacy/notice-test.ts. */
 const CUSTOMER_FILES = [
-  ...walk("app").filter((f) => f.endsWith(".tsx") && !/^app[\\/](operator|reviewer|api)[\\/]/.test(f)),
+  ...walk("app").filter((f) => f.endsWith(".tsx") && !/^app[\\/](operator|reviewer|api)[\\/]/.test(f) && !/^app[\\/]privacy[\\/]page\.tsx$/.test(f)),
   "components/AppShell.tsx",
 ];
 /** The text a person can read: string literals, template literals and JSX

@@ -29,7 +29,7 @@ export async function GET(request:NextRequest){
       hold:d.state==="held"?holdReason(d.file,malwareScanningIntentionallyDisabled()):null})),
       people:table.people.map(p=>({...p,rows:p.rows.map(r=>({...r,figureText:figureText(r.figure)})),scheduleLines:lines.filter(l=>l.familyMemberId===p.id).map(l=>({policyId:l.policyId,category:l.category}))})),
       covers:[...new Map(table.people.flatMap(p=>p.covers).map(c=>[c.coverKey,{key:c.coverKey,product:c.product,cover:c.cover,plan:c.plan,riderOf:c.riderOf??null}])).values()],
-      unmatchedCovers:table.unmatchedCovers,illustrationCovers:table.illustrationCovers,
+      unmatchedCovers:table.unmatchedCovers,ambiguousCovers:table.ambiguousCovers,illustrationCovers:table.illustrationCovers,
       unlinkedSections:table.unlinkedSections.map(u=>({...u,chosenBy:chosenBy.get(u.section.key)??null})),
       staleConfirmations:table.staleConfirmations}));
   }catch(error){

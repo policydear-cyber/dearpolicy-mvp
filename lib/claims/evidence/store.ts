@@ -171,13 +171,15 @@ export async function transitionEvidenceStatus(args: {
  * clean verdict from the bounded rescan (./pipeline.ts). CAS on the held
  * state, so a document that was deleted, superseded, rejected or already
  * moved on is never touched. */
-export async function markEvidenceRescanClean(accountId: string, id: string): Promise<ClaimEvidenceDocumentRow | null> {
+/** A held (scan_unavailable) document's rescan outcome: "clean", or "not_scanned_prototype" when the scanner had no
+ * record of the file (hash-only lookup), which goes ahead as not malware-scanned, exactly like scanning switched off. */
+export async function markEvidenceRescanClean(accountId: string, id: string, scanStatus: "clean" | "not_scanned_prototype" = "clean"): Promise<ClaimEvidenceDocumentRow | null> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
-    `UPDATE claim_evidence_documents SET scan_status='clean', updated_at=now()
+    `UPDATE claim_evidence_documents SET scan_status=$3, updated_at=now()
       WHERE id=$1 AND account_id=$2 AND status='quarantined' AND scan_status='scan_unavailable' AND superseded_at IS NULL AND ${activePredicate()}
       RETURNING ${DOCUMENT_COLUMNS}`,
-    [id, accountId],
+    [id, accountId, scanStatus],
   );
   return result.rows[0] ?? null;
 }

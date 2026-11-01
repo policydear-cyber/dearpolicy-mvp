@@ -211,13 +211,16 @@ export default function PoliciesPage() {
     // Otherwise from the Coverage rows; what only a plan type suggests is never shown as cover.
     const table = fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null);
     const ledger = fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null);
-    void Promise.all([table, ledger]).then(([t, l]: [{ enabled?: boolean; people?: Parameters<typeof documentTableKinds>[0] } | null, { rows?: (KindRow & { policyId: string | null; eventLabel: string; status: string })[] } | null]) => {
-      if (t?.enabled) return setFound(documentTableKinds(t.people ?? []));
+    // Whether a document is still being read for Coverage comes from the reader that serves Coverage: the benefit table's
+    // own state when it is on (a document its job is reading now), else the ledger's. The ledger never reads for a table
+    // household, so its list would say "Reading…" forever there.
+    void Promise.all([table, ledger]).then(([t, l]: [{ enabled?: boolean; people?: Parameters<typeof documentTableKinds>[0]; documents?: { id: string; name: string; state: string }[] } | null, { rows?: (KindRow & { policyId: string | null; eventLabel: string; status: string })[]; reading?: { documents?: ReadingDocument[] } } | null]) => {
+      if (t?.enabled) {
+        setBenefitReading(Object.fromEntries((t.documents ?? []).filter((d) => d.state === "waiting").map((d) => [d.id, { policyId: d.id, name: d.name, state: "waiting" } as ReadingDocument])));
+        return setFound(documentTableKinds(t.people ?? []));
+      }
+      if (l) setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
       if (t && l) setFound(documentFoundLabels(l.rows ?? []));
-    }).catch(() => undefined);
-    void ledger.then((l: { reading?: { documents?: ReadingDocument[] } } | null) => {
-      if (!l) return;
-      setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
     }).catch(() => undefined);
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);

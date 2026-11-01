@@ -226,9 +226,12 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[], opts: { documentTitle?: string | null } = {}): PolicyExtraction {
-  const roleFromReader = deterministicDocumentRole(pages, null) == null;
-  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle }).extraction;
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[] } = {}): PolicyExtraction {
+  // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
+  // document is decided on every page, as it is when every page could be checked.
+  const rolePages = opts.allPages ?? pages;
+  const roleFromReader = deterministicDocumentRole(rolePages, null) == null;
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
 
@@ -603,7 +606,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
     // A page that could not be checked confirms nothing: its figures, names and dates are not re-found on it.
-    let extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+    let extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages });
     // A page whose cover amounts the fact check could not re-find, with no visible sign of a scrambled table (a label
     // beside the next row's figure), is read again from its image too, once; a page the readings do not agree on is
     // left out and the reading checked again (Critic R175-2).
@@ -614,7 +617,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         await crossCheck(failed);
         const now = pages.filter((p) => (p.unchecked || p.partChecked) && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
         if (now.length) {
-          extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+          extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages });
           // What the catalogue and the evidence notes read is rebuilt too, so the newly unchecked pages give them no amount (Critic R176-1).
           evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
           for (const p of pages.filter((x) => now.includes(x.pageNumber))) {
