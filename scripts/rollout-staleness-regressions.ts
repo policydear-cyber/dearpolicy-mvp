@@ -277,7 +277,7 @@ async function runDatabaseTests() {
         const { structuredCompletion } = await import("@/lib/ai/llm");
         await structuredCompletion({
           role: "reading", operation: "policy_extraction", system: "test", user: "test",
-          schema: z.object({ ok: z.boolean() }), attempts: 1, householdId: "household-rollout-e2e",
+          schema: z.object({ ok: z.boolean() }), attempts: 1, householdId: "6f1c2a9e-3b7d-4e58-9a10-5d2c8e7f4b31" /* a household id is a UUID: the spend check queries it */,
         });
 
         const rows = await pool.query<{ requested_rollout: string | null }>(

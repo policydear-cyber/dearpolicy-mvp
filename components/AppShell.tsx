@@ -58,9 +58,10 @@ const operatorNav: NavItem[] = [
 ];
 
 /** Pages a signed-out person uses; no sign-out control there. */
-const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password"]);
+// /privacy is public and read before signing in, so it gets no app navigation and no Sign out button.
+const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password", "/privacy"]);
 /** Signed in, but with no household to navigate. */
-const NO_NAV_PATHS = new Set(["/household/deleted"]);
+const NO_NAV_PATHS = new Set(["/household/deleted", "/privacy"]);
 
 /** Ends the Supabase session on the server (which clears the session
  * cookie), then leaves for the sign-in page. Navigates even if the request
@@ -156,7 +157,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
     ?? (pathname === "/" && items.length ? items[0] : null);
   // Pages reached through another menu item still name themselves in the browser tab.
-  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password",
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password", "/privacy": "Privacy",
     "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";

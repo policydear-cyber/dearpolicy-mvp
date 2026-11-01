@@ -417,6 +417,9 @@ export type LedgerReadDocument={policyId:string;name:string;state:LedgerReadStat
  * read failed and it rests until retryAfter). Same documents as
  * pendingDocumentCount. */
 export async function ledgerReadDocuments(accountId:string):Promise<LedgerReadDocument[]>{
+  // With the benefit table on, no ledger read ever runs (and ledger_read_at is never set), so no document is "waiting"
+  // for one: listing them said "Reading its benefits for Coverage…" on Documents forever.
+  if(await benefitTableOwnsReading(accountId))return [];
   await ensureLedgerSchema();
   const docs=(await query<{id:string;name:string}>(
     `SELECT p.id::text AS id,coalesce(p.product_name,p.original_filename) AS name FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}

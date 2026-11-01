@@ -336,7 +336,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     const todayIso = isoOfDay(table.today);
     documents = new Map(docs.rows.map((d) => [d.id, { insurer: d.insurer, policyNumber: d.policy_number,
       endedPages: pages.rows.filter((p) => p.policy_id === d.id && ENDED_WORDS.test(p.text)).map((p) => p.page_number),
-      lapsedOrEnded: ["lapsed", "ended"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
+      lapsedOrEnded: ["lapsed"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }
   const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod);

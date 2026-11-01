@@ -7,12 +7,14 @@
  * bare "$" stays unresolved. A condition is kept only when its words are printed in this document. Everything dropped
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
+import { SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
+import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -145,19 +147,101 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
   planType?: PlanType | null };
 
-/** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000). */
+// The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
+// figure that make it a number other than money.
+const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
+const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|₫|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
+// A three-letter code counts only when it is a currency on this closed list: "TPD 1.500" is no money sign.
+const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|ARS|CLP|COP|PEN|PLN|CZK|HUF|RON|BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
+// Currencies whose market groups thousands with dots, and the three-decimal ones (KD, BHD): the only signs beside which a
+// lone dot group is read whole.
+const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
+const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
+/** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped
+ * with dots read whole ("Rp 500.000.000" -> 500000000). */
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
-  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)(\s*(?:million|m)\b)?/gi)) {
+  const scaleAfter = new RegExp(String.raw`^\s*(${SCALE_WORD})(?![A-Za-z0-9])`);
+  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)/g)) {
     // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
     // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
+    const after = text.slice(m.index! + m[1].length);
     const n = Number(m[1].replace(/,/g, ""));
-    if (Number.isFinite(n)) out.push(m[2] ? n * 1e6 : n);
+    // A scale word after the figure multiplies it only from a closed list per currency, with that currency printed
+    // directly beside the figure (coordinator, 31 Oct: strict first). "1.5 million" and "1.5m" read as before (a million,
+    // never the bare figure), except that a figure reading two ways ("2.500 m", "1,5 million" read as 15) gives none.
+    const scale = scaleAfter.exec(after) ?? ABBREVIATION_AFTER.exec(after);
+    if (scale) {
+      const word = scale[1].toLowerCase();
+      const k = ABBREVIATIONS[word] ?? scaleOf(scale[1]);
+      const currency = currencyBeside(text.slice(Math.max(0, m.index! - 8), m.index!), after.slice(scale[0].length));
+      const allowed = SCALE_CURRENCIES[word.replace(/s$/, "")] ?? SCALE_CURRENCIES[word];
+      const v = scaledFigure(m[1], null, { scaled: true });
+      if (/^(?:million|m)$/.test(word)) { if (v != null) out.push(v * 1e6); continue; }
+      if (allowed && currency && (allowed === "any" || allowed.has(currency))) { if (v != null && Number.isFinite(k)) out.push(v * k); continue; }
+      // Otherwise the figure prints nothing, never the bare figure: with no currency, or one the word does not go with,
+      // which it scales cannot be told ("Cover 3 Mio.", "2 juta", "S$2 juta", "€5 mil", "100 MD consultations") (TE #265 F3).
+      continue;
+    }
+    if (Number.isFinite(n)) out.push(n);
+  }
+  // A market that groups thousands with dots ("Rp 500.000.000", "€50.000", "2.400,00") prints its figure whole: read by
+  // the one shared figure reader (lib/format/printed-number.ts). Before, such a quote printed no figure, so the whole cover
+  // was dropped (cross-page check, 31 Oct). Read only where the quote makes the grouping certain, the rule #260 settled
+  // for evidence.ts (Critic #262 H1: "Section 1.500", "Multiplier 1.250", "Policy year 2.026" are no fifteen hundred):
+  // a currency printed right beside the figure, or a figure that shows its grouping itself (two or more dot groups, or a
+  // ",dd" decimal). Never before a percent sign, "times" or a scale word ("€1.500 million" is no 1,500, and which of
+  // 1.5 or 1,500 million is meant is not known, so nothing is read), nor after a section, table, year, rate or factor word.
+  for (const m of text.matchAll(new RegExp(String.raw`(?<![\d.,'’])(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)(?![\d]|[.,]\d)` + NO_SCALE_AFTER, "g"))) {
+    const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
+    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    const sign = (m: RegExpMatchArray | null) => (!m ? null : m[1] ? (DOT_CODES.test(m[1]) ? m[1] : null) : m[0].trim() === "KD" ? "KWD" : m[0].trim() === "BD" ? "BHD" : m[0].trim());
+    const code = sign(before.match(SIGN_BEFORE)) ?? sign(after.match(SIGN_AFTER));
+    // A lone group ("1.500") is thousands only beside a currency of a market that groups with dots, or a three-decimal one
+    // (read as a decimal below): beside S$, US$, RM, £, ₹, HK$ or A$ the dot is a decimal point, so "S$1.500" is no
+    // fifteen hundred (TE #262 F1). Two or more groups, or a ",dd" decimal, show their grouping wherever they stand.
+    if (!/^\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?$/.test(raw) && !/,\d{1,2}$/.test(raw) && !(code && DOT_MARKET.test(code))) continue;
+    // A three-decimal currency beside it ("BHD 1.500", "KD 1.500") reads it as a decimal (printedNumber).
+    const n = printedNumber(raw, code);
+    if (n != null && !out.includes(n)) out.push(n);
   }
   return out;
+}
+const ABBREVIATIONS: Record<string, number> = { jt: 1_000_000, rb: 1_000, cr: 10_000_000, tr: 1_000_000 };
+const ABBREVIATION_AFTER = /^\s*(jt|rb|cr|tr)\.?(?![\p{L}\p{N}])/iu;
+/** Which currencies print each scale word: a closed list per word. English words go with any currency. */
+const LAKH = new Set(["INR", "PKR", "NPR", "BDT", "LKR"]), EURO = new Set(["EUR", "CHF"]), ID_MY = new Set(["IDR", "MYR"]);
+const SCALE_CURRENCIES: Record<string, Set<string> | "any"> = {
+  k: "any", mn: "any", bn: "any", billion: "any", thousand: "any",
+  lakh: LAKH, lac: LAKH, crore: LAKH, cr: LAKH,
+  juta: ID_MY, jt: ID_MY, rb: ID_MY, miliar: new Set(["IDR"]), milyar: new Set(["IDR"]),
+  tr: new Set(["VND"]),
+  mio: EURO, tsd: EURO, mrd: EURO, md: EURO, mln: new Set(["EUR", "PLN"]), mld: new Set(["EUR", "PLN"]),
+};
+/** The currency printed directly before a figure ("S$", "Rp ", "€", "USD ") or directly after its scale word ("2 Mio. €"),
+ * from a closed list of signs and three-letter codes; null when none or one several currencies print. */
+const SIGNS: Record<string, string> = { "₹": "INR", "RS": "INR", "RS.": "INR", "৳": "BDT", "TK": "BDT", "RP": "IDR", "RP.": "IDR", "RM": "MYR", "₫": "VND", "Đ": "VND",
+  "€": "EUR", "£": "GBP", "S$": "SGD", "US$": "USD", "A$": "AUD", "HK$": "HKD", "NZ$": "NZD", "R$": "BRL", "¥": "JPY", "₱": "PHP", "₩": "KRW", "฿": "THB", "ZŁ": "PLN" };
+/** The runtime's closed list of ISO 4217 codes; none where the runtime has no list (then only signs count). */
+let isoList: Set<string> | undefined;
+function isoCodes(): Set<string> {
+  if (!isoList) {
+    try { isoList = new Set((Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("currency") ?? []); }
+    catch { isoList = new Set(); }
+    for (const word of ["ALL", "TOP", "CUP", "BOB", "SOS", "GEL", "MAD"]) isoList.delete(word); // codes that are also printed words
+  }
+  return isoList;
+}
+function currencyBeside(before: string, afterScale: string): string | null {
+  const b = /(?:(?<![A-Za-z])([A-Z]{3})|((?<![A-Za-z])[A-Z]{1,3}\$|Rp\.?|RM|Rs\.?|Tk|zł|\p{Sc}))\s?$/u.exec(before);
+  const a = /^\.?\s?(?:([A-Z]{3})(?![A-Za-z])|([A-Z]{1,3}\$|Rp\.?(?![A-Za-z])|RM(?![A-Za-z])|Rs\.?(?![A-Za-z])|Tk(?![A-Za-z])|\p{Sc}|zł|đ(?![\p{L}])))/u.exec(afterScale);
+  const code = b?.[1] ?? a?.[1];
+  if (code) return isoCodes().has(code) ? code : null; // "TPD 2 mn" is no money
+  const sign = (b?.[2] ?? a?.[2])?.toUpperCase();
+  return sign ? SIGNS[sign] ?? null : null;
 }
 /** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
  * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it

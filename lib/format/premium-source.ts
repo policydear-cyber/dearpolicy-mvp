@@ -42,3 +42,12 @@ export function premiumSourceCaption(kinds: ReadonlyArray<string | null | undefi
   }).filter((p): p is string => !!p);
   return parts.length ? "from your " + parts.join(" and ") : NEUTRAL;
 }
+
+const ROW: Record<PremiumSourceKind, string> = { policy_schedule: "From the policy schedule", payment_record: "From a payment record" };
+
+/** The line under one premium, the same on Home and Payments: where it was read, its insurer, whether it is a shared or
+ * family payment, and any detail the summary adds (a MediSave split, a rider). */
+export function premiumRowDetail(item: { source?: string | null; insurer?: string | null; shared?: boolean | null; detail?: string | null }): string {
+  const source = item.source && Object.prototype.hasOwnProperty.call(ROW, item.source) ? ROW[item.source as PremiumSourceKind] : "From your documents";
+  return [source, item.insurer, item.shared ? "shared/family payment" : null, item.detail].filter(Boolean).join(" · ");
+}

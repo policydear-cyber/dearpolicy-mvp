@@ -41,6 +41,21 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
     .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name) }));
 }
 
+/** Each person's own links to documents, used only to tell apart people with the same name (assemble.ts sharedNameMatch):
+ * the documents their record links them to (never a link made only because a scheme's wording matches), and the printed
+ * names on a document the household matched to them. */
+async function withDocumentLinks(db: Db, accountId: string, people: FamilyMember[]): Promise<FamilyMember[]> {
+  if (!people.length) return people;
+  // Without these links, people with the same name are shown as undecided (never dropped), so a failed read only loses the tie-break.
+  const [links, printed] = await Promise.all([
+    db("SELECT policy_id, family_member_id FROM policy_members WHERE account_id=$1 AND source<>'scheme_reference_match'", [accountId]).catch(() => []),
+    db("SELECT policy_id, detected_name, matched_family_member_id FROM policy_detected_people WHERE account_id=$1 AND matched_family_member_id IS NOT NULL", [accountId]).catch(() => []),
+  ]);
+  return people.map((p) => ({ ...p,
+    documents: links.filter((l) => String(l.family_member_id) === p.id).map((l) => String(l.policy_id)),
+    printedAs: printed.filter((d) => String(d.matched_family_member_id) === p.id).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })) }));
+}
+
 /** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
  * and for telling whether the table will ever read it. */
 export type DocumentFile = { original_filename: string; product_name: string | null; insurer: string | null; document_role: string | null;
@@ -193,7 +208,8 @@ type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (Sect
   documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[] };
 
 async function load(db: Db, accountId: string): Promise<Loaded> {
-  const [people, docs] = await Promise.all([family(db, accountId), documents(db, accountId)]);
+  const [members, docs] = await Promise.all([family(db, accountId), documents(db, accountId)]);
+  const people = await withDocumentLinks(db, accountId, members);
   const stored = new Map((await db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId]))
     .map((r) => [String(r.policy_id), (typeof r.reading === "string" ? JSON.parse(r.reading) : r.reading) as StoredReading]));
   const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [checkedOnce(d, stored.get(d.id)!)] : []));

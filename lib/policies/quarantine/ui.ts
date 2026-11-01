@@ -57,11 +57,14 @@ export const SCAN_REJECTED_DETAIL = "This file was flagged by malware scanning a
 /** Prototype document-safety mode: the honest record that no scan happened.
  * Never phrased as safe, clean, scanned or approved. */
 export const PROTOTYPE_NOT_SCANNED_DETAIL = "Not scanned: malware scanning is intentionally disabled in this prototype build.";
+/** A scanner that only looks up a file's hash had no record of it, and files are never sent out, so it was not
+ * malware-scanned. Same not-scanned state as above; never phrased as safe, clean, scanned or approved. */
+export const NOT_MALWARE_SCANNED_DETAIL = "Not malware-scanned: the scanner had no record of this file, and DearPolicy does not send files out to be scanned.";
 
 export function userFacingScanResultDetail(policy: PolicyQuarantineUiInput): string | null {
   const raw = policy.scan_result_detail;
   if (policy.quarantine_status === "scan_rejected") return SCAN_REJECTED_DETAIL;
-  if (policy.quarantine_status === "not_scanned_prototype") return PROTOTYPE_NOT_SCANNED_DETAIL;
+  if (policy.quarantine_status === "not_scanned_prototype") return raw === NOT_MALWARE_SCANNED_DETAIL ? NOT_MALWARE_SCANNED_DETAIL : PROTOTYPE_NOT_SCANNED_DETAIL;
   if (policy.quarantine_status !== "scan_pending" || !raw) return null;
   if (raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;
   return SCAN_DID_NOT_COMPLETE_DETAIL;
@@ -76,8 +79,9 @@ export function userFacingScanResultDetail(policy: PolicyQuarantineUiInput): str
  * the server log instead (lib/policies/quarantine/store.ts), which only
  * operators can read.
  */
-export function persistableScanResultDetail(outcome: "clean" | "infected" | "scan_unavailable" | "not_scanned_prototype", raw: string | null | undefined): string | null {
+export function persistableScanResultDetail(outcome: "clean" | "infected" | "scan_unavailable" | "not_scanned_prototype" | "not_scanned", raw: string | null | undefined): string | null {
   if (outcome === "infected") return SCAN_REJECTED_DETAIL;
+  if (outcome === "not_scanned") return NOT_MALWARE_SCANNED_DETAIL;
   if (outcome === "not_scanned_prototype") return PROTOTYPE_NOT_SCANNED_DETAIL;
   if (outcome === "clean") return null;
   if (raw && raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;

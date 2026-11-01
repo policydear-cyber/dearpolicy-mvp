@@ -24,9 +24,13 @@ export const PRINTED_FIGURE = String.raw`\d(?:\d|[,.'’](?=\d)|[ \u00a0\u202f](
 /** Put right after a captured PRINTED_FIGURE: the capture is the whole figure, never a shorter part of it. */
 export const FIGURE_END = String.raw`(?![,.'’ \u00a0\u202f]?\d)`;
 /** A word after a figure that multiplies it ("1.5 million", "S$2.250m", "₹2 crore", "Rp 1,5 juta"). */
-const SCALE_WORDS = ["million", "mil", "mio", "mln", "mn", "m", "tsd", "billion", "bn", "mrd", "md", "mld", "miliar", "milyar", "k", "thousand", "lakhs?", "lacs?", "crores?", "juta"];
-/** Each letter in both cases, so the pattern reads "M", "Mio." or "MILLION" with or without the i flag. */
-const anyCase = (word: string) => word.replace(/[a-z]/g, (c) => "[" + c + c.toUpperCase() + "]");
+const SCALE_WORDS = ["million", "mil", "mio", "mln", "mn", "m", "tsd", "billion", "bn", "mrd", "md", "mld", "miliar", "milyar", "k", "thousand", "lakhs?", "lacs?", "crores?", "juta",
+  // In other languages ("€ 2.500 milioni", "R$ 1,5 milhões", "150 triệu ₫"), each read as no figure by scaleOf (TE #262 F2):
+  // a reader that does not apply them still never takes the bare figure.
+  "milione", "milioni", "miliardo", "miliardi", "milh(?:ão|ao|ões|oes)", "mill(?:ón|on|ones)", "milliard(?:s|e|en)?", "milliarden", "triệu", "trieu", "tỷ", "triliun"];
+/** Each letter in both cases, so the pattern reads "M", "Mio." or "MILLION" with or without the i flag; a letter with an
+ * accent ("ệ", "õ") too. */
+const anyCase = (word: string) => word.replace(/[a-z\u00e0-\u00ff\u1ea0-\u1ef9]/g, (c) => c.toUpperCase() === c ? c : "[" + c + c.toUpperCase() + "]");
 export const SCALE_WORD = "(?:" + SCALE_WORDS.map(anyCase).join("|") + ")";
 /** NaN for a multiplier that reads two ways: the caller gives no figure. */
 export function scaleOf(word: string | null | undefined): number {
@@ -42,7 +46,7 @@ export function scaleOf(word: string | null | undefined): number {
   return NaN;
 }
 /** A reader that does not apply a multiplier puts this right after the figure: "S$1.5 million" is never read as S$1.5. */
-// ASCII only, so it reads the same in a pattern with or without the u flag and after toLowerCase().
+// Every character is in the basic plane, so it reads the same in a pattern with or without the u flag and after toLowerCase().
 export const NO_SCALE_AFTER = String.raw`(?!\s*${SCALE_WORD}(?![A-Za-z0-9]))`;
 
 export function printedNumber(raw: string | null | undefined, currency?: string | null, options: { scaled?: boolean; lakh?: boolean } = {}): number | null {

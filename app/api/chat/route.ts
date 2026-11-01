@@ -11,7 +11,7 @@ import { askContextualDearPolicy as askDearPolicy } from "@/lib/chat/workflow";
 import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
-import { overSpendCap, SPEND_LIMIT_TEXT } from "@/lib/ai/ledger";
+import { overSpendCap, SPEND_LIMIT_TEXT, SpendCheckUnavailable, SPEND_CHECK_UNAVAILABLE_TEXT } from "@/lib/ai/ledger";
 
 const NO_FAMILY_MESSAGE="Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
@@ -46,7 +46,11 @@ export async function POST(request:NextRequest){
     }else if(body.scope!=="family")return NextResponse.json({error:"Tell DearPolicy who this concerns, or start in automatic family context."},{status:400});
     // Past the household's monthly hard stop every answer would fail in the background: say so now, in words a household
     // can act on (live run 23 Oct: "Something went wrong").
-    if(await overSpendCap(accountId))return NextResponse.json({error:SPEND_LIMIT_TEXT,code:"spend_limit"},{status:429});
+    // This month's use that cannot be read is never taken as none: nothing is sent, and the household is told to try again.
+    let over:boolean;
+    try{over=await overSpendCap(accountId);}
+    catch(error){if(error instanceof SpendCheckUnavailable)return NextResponse.json({error:SPEND_CHECK_UNAVAILABLE_TEXT,code:"spend_check_unavailable"},{status:503});throw error;}
+    if(over)return NextResponse.json({error:SPEND_LIMIT_TEXT,code:"spend_limit"},{status:429});
     const args={...body,accountId};
     if(body.asynchronous)return NextResponse.json(await enqueueChat(args),{status:202});
     return NextResponse.json(await askDearPolicy(args));
