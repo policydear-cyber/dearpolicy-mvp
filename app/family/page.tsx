@@ -5,7 +5,7 @@ import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
 import { HouseholdAccess } from "@/components/household-access";
-import { COVER_KINDS, isToConfirm, kindOfRow, kindsOfTable, type KindRow, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { kindsOfTable, ledgerKindsByPerson, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -51,19 +51,13 @@ export default function FamilyPage() {
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
     void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
-      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[] }[] } | null) => {
+      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
         if (!table) return;
-        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])]))); }
-        return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[] } | null) => {
+        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); }
+        return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
           if (!l) return;
-          // Per person, each kind found and whether any of its rows is confirmed; a kind only a schedule line suggests is "to confirm".
-          const by: Record<string, Map<string, boolean>> = {};
-          for (const r of l.rows ?? []) if (r.status !== "rejected") {
-            const kinds = by[r.familyMemberId] ??= new Map(), id = kindOfRow(r).id;
-            kinds.set(id, kinds.get(id) === true || !isToConfirm(r));
-          }
-          setKinds(Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => found.get(k.id) ? k.label : `${k.label} (to confirm)`)])));
+          setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
         });
       }).catch(() => undefined);
   }

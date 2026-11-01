@@ -307,6 +307,7 @@
     "chat:policy-status-test": "node --import tsx scripts/policy-status-regressions.ts",
     "premium:table-test": "node --import tsx scripts/table-premium-regressions.ts",
     "premium:source-caption-test": "node --import tsx scripts/premium-source-caption-regressions.ts",
+    "ledger:schedule-lines-test": "node --import tsx scripts/ledger/schedule-lines-test.ts",
     "coverage:in-force-test": "node --import tsx scripts/coverage/in-force-test.ts"
   },
   "dependencies": {

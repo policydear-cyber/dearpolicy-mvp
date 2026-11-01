@@ -7,6 +7,7 @@ import { holdReason, tableFor } from "@/lib/benefit-table/service";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { documentName } from "@/lib/policies/inventory";
 import { maskShownText } from "@/lib/chat/identity-numbers";
+import { scheduleLinesFor } from "@/lib/ledger/schedule-lines";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -19,12 +20,14 @@ export async function GET(request:NextRequest){
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
     const {table,documents,links}=await tableFor(appDb,accountId);
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
+    // Each person's schedule lines, the ones Home's tiles count, so Family lists the same kinds of cover (kindsOfTable). Optional.
+    const lines=await scheduleLinesFor(accountId).catch(()=>[]);
     // Each document by the name the household knows it by (the Documents page and chat use the same), never a made-up file name.
     // ID numbers in quotes and excerpts are masked as chat masks them; row and link keys are left exactly as stored.
     return NextResponse.json(maskShownText({enabled:true,documents:documents.map(d=>({id:d.id,name:documentName(d.file),state:d.state,
       // A document on hold for its malware scan says why, as its Documents page card does.
       hold:d.state==="held"?holdReason(d.file,malwareScanningIntentionallyDisabled()):null})),
-      people:table.people.map(p=>({...p,rows:p.rows.map(r=>({...r,figureText:figureText(r.figure)}))})),
+      people:table.people.map(p=>({...p,rows:p.rows.map(r=>({...r,figureText:figureText(r.figure)})),scheduleLines:lines.filter(l=>l.familyMemberId===p.id).map(l=>({policyId:l.policyId,category:l.category}))})),
       covers:[...new Map(table.people.flatMap(p=>p.covers).map(c=>[c.coverKey,{key:c.coverKey,product:c.product,cover:c.cover,plan:c.plan,riderOf:c.riderOf??null}])).values()],
       unmatchedCovers:table.unmatchedCovers,illustrationCovers:table.illustrationCovers,
       unlinkedSections:table.unlinkedSections.map(u=>({...u,chosenBy:chosenBy.get(u.section.key)??null})),
