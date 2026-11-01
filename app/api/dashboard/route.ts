@@ -6,7 +6,11 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
-import { statedCurrencyCode } from "@/lib/format/currency";
+import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
+import { PERIODIC_CATEGORIES, lineFigure, linePeriodWords, type LinePeriod } from "@/lib/coverage/line-period";
+/** The period each chosen schedule line prints for its figure (lib/coverage/line-period.ts), by line. */
+const linePeriods=new WeakMap<object,LinePeriod|null>();
+const periodOf=(x:object)=>linePeriods.get(x)??null;
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { TablePremiumCover } from "@/lib/policies/premium-summary";
 import { countedPremiums } from "@/lib/policies/counted-premiums";
@@ -59,7 +63,10 @@ export async function GET(request:NextRequest){
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];
-    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
+    // A figure paid per day, week or month carries its printed period; a periodic cover's figure with none is not shown
+    // (lib/coverage/line-period.ts).
+    const figure=lineFigure(category,row.amount==null?null:Number(row.amount),row.evidence_text);
+    const chosen:Chosen={category,amount:figure.amount,currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at}; linePeriods.set(chosen,figure.period); list.push(chosen);
     byPolicyCategory.set(key,list);
   }
   const selected:Chosen[]=[]; const conflictCategories=new Set<string>();
@@ -75,6 +82,17 @@ export async function GET(request:NextRequest){
     const rows=selected.filter(x=>x.category===category),priced=rows.filter(x=>x.amount!=null);
     const currencies=new Set(priced.map(x=>x.currency));
     const addable=priced.length<=1||(currencies.size===1&&!currencies.has(null));
+    // Only lump sums are added up (Critic R246). A figure paid per period, or a limit of a cover that is not a lump sum,
+    // is shown with its own period and never added into a total: one line shows its figure, several each show their own
+    // (cross-page check, 31 Oct: Disability Income "2,400" a month read as a sum).
+    const periodic=PERIODIC_CATEGORIES.has(category)||priced.some(x=>periodOf(x));
+    if(!LUMP_SUM_CATEGORIES.has(category)&&(periodic||priced.length>1)){
+      const one=rows.length===1?rows[0]:null;
+      coverageMap.set(category,{total:null,currency:null,count:rows.length,policyNames:[...new Set(rows.map(x=>x.productName).filter((n):n is string=>!!n))],
+        displayAmount:one?.amount!=null?[formatMoney(one.amount,one.currency),linePeriodWords(periodOf(one))].filter(Boolean).join(" "):null,derived:false,
+        ...(one?{}:{parts:rows.map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,period:periodOf(x),...(x.amount==null&&PERIODIC_CATEGORIES.has(category)?{noFigure:true}:{})}))})});
+      continue;
+    }
     coverageMap.set(category,{total:priced.length&&addable?priced.reduce((t,x)=>t+x.amount!,0):null,currency:currencies.size===1?[...currencies][0]:null,count:rows.length,
       policyNames:[...new Set(rows.map(x=>x.productName).filter((n):n is string=>!!n))],displayAmount:null,derived:false,
       ...(addable?{}:{parts:rows.map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency}))})});

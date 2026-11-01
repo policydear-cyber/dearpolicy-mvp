@@ -1,5 +1,6 @@
 import { confirmedOwnedCoverages, type OwnedCoverage } from "./facts";
 import { formatMoney } from "@/lib/format/currency";
+import { LUMP_SUM_LINE_CATEGORIES, lineFigure, linePeriodWords } from "./line-period";
 import type { ChatAnswer,ChatCitation } from "@/types";
 
 const CORE=["Hospitalisation","Hospital Cash","Death","Critical Illness","Early Critical Illness","Total Permanent Disability","Personal Accident","Disability Income","Outpatient"];
@@ -10,8 +11,17 @@ export async function answerPortfolioQuestion(accountId:string,familyMemberId:st
  const owned=await confirmedOwnedCoverages(accountId,familyMemberId);const target=specificCategory(question);const notCovered=/not covered|don'?t have|do not have/i.test(question);
  const byCat=new Map<string,OwnedCoverage[]>();for(const c of owned){const a=byCat.get(c.category)??[];a.push(c);byCat.set(c.category,a);}
  let summary="",details:string[]=[];let citations:ChatCitation[]=[];
- if(target){const rows=byCat.get(target)??[];if(rows.length){const amount=rows.reduce((s,r)=>s+(r.amount??0),0);const c=rows[0];summary=`Covered — ${target}${amount>0?` is ${formatMoney(amount,c.currency)}`:" is confirmed in your personal policy evidence"}.`;details=rows.map(r=>`${r.productName??r.policyName??r.category}${r.policyNumber?` · Policy ${r.policyNumber}`:""}`);citations=rows.map(cite);}else {summary=`Not covered — I do not see ${target} in the personal certificate/schedule evidence currently uploaded for this person.`;if(target==="Hospitalisation"&&byCat.has("Hospital Cash")){const h=byCat.get("Hospital Cash")![0];details=[`You do have a separate Hospital Cash benefit${h.productName??h.policyName?` under ${h.productName??h.policyName}`:""}. That is a fixed cash benefit, not general hospital-bill coverage.`];}}}
+ if(target){const rows=byCat.get(target)??[];if(rows.length){
+   // Only lump sums in one stated currency are added up. A figure paid per day or month, a limit of a cover that is not a
+   // lump sum, or figures in different or unstated currencies are each listed with their own figure and period, never
+   // added (cross-page check, 31 Oct: two monthly Disability Income benefits read as one sum).
+   const figs=rows.map(r=>({r,...lineFigure(target,r.amount,r.evidenceText)}));const priced=figs.filter(f=>f.amount!=null);
+   const currencies=new Set(priced.map(f=>f.r.currency??""));
+   const addable=LUMP_SUM_LINE_CATEGORIES.has(target)&&priced.length>0&&currencies.size===1&&!currencies.has("")&&priced.every(f=>!f.period);
+   const amount=addable?priced.reduce((s,f)=>s+f.amount!,0):0;
+   summary=`Covered — ${target}${addable&&amount>0?` is ${formatMoney(amount,priced[0].r.currency)}`:" is confirmed in your personal policy evidence"}.`;
+   details=figs.map(({r,amount:a,period})=>`${r.productName??r.policyName??r.category}${r.policyNumber?` · Policy ${r.policyNumber}`:""}${addable?"":a!=null?`: ${formatMoney(a,r.currency)}${period?" "+linePeriodWords(period):""}`:r.amount!=null?": see the document for how much it pays":""}`);citations=rows.map(cite);}else {summary=`Not covered — I do not see ${target} in the personal certificate/schedule evidence currently uploaded for this person.`;if(target==="Hospitalisation"&&byCat.has("Hospital Cash")){const h=byCat.get("Hospital Cash")![0];details=[`You do have a separate Hospital Cash benefit${h.productName??h.policyName?` under ${h.productName??h.policyName}`:""}. That is a fixed cash benefit, not general hospital-bill coverage.`];}}}
  else if(notCovered){const missing=CORE.filter(c=>!byCat.has(c));summary=missing.length?`Not covered in the personal policies currently uploaded: ${missing.join(", ")}.`:"All core categories in DearPolicy's current portfolio view have confirmed cover.";details=["This is based on personalised ownership evidence, not on which products appear in brochures or product summaries."];citations=owned.slice(0,4).map(cite);}
- else{const covered=[...new Set(owned.map(c=>c.category))];summary=covered.length?`Confirmed cover: ${covered.join(", ")}.`:"I do not have a personalised certificate or schedule that confirms coverage for this person yet.";details=owned.map(c=>`${c.category}: ${c.amount!=null?formatMoney(c.amount,c.currency):"confirmed"} · ${c.productName??c.policyName??"Policy"}`);citations=owned.slice(0,8).map(cite);}
+ else{const covered=[...new Set(owned.map(c=>c.category))];summary=covered.length?`Confirmed cover: ${covered.join(", ")}.`:"I do not have a personalised certificate or schedule that confirms coverage for this person yet.";details=owned.map(c=>{const f=lineFigure(c.category,c.amount,c.evidenceText);return `${c.category}: ${f.amount!=null?formatMoney(f.amount,c.currency)+(f.period?" "+linePeriodWords(f.period):""):c.amount!=null?"see the document for how much it pays":"confirmed"} · ${c.productName??c.policyName??"Policy"}`;});citations=owned.slice(0,8).map(cite);}
  return{mode:"answer",summary,details,claimItems:[],nextSteps:[],confidence:citations.length?"strong_match":"insufficient_evidence",citations,disclaimer:"Coverage status is based on the personal policy evidence uploaded to DearPolicy. Active status can be checked separately with recent renewal/payment evidence.",claimSessionId:null,questions:[],knownFacts:[],missingFacts:[]};
 }

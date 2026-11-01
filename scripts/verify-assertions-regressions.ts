@@ -341,6 +341,33 @@ async function totals() {
     assert.ok(r!.citations.some((c) => c.policyId === docs.SPOUSE.id && c.pageStart === 2), "cited at the page that prints it: " + JSON.stringify(r!.citations));
   });
 
+  await check("T06 a death figure paid per month is an income, never added into a total, in any language", async () => {
+    // A third person with their own documents (made up): a family income benefit paid monthly in ringgit, the same in
+    // Malay, and a lump sum. Only the lump sum is a total; the monthly figures are listed with why.
+    const child = { id: id(3), display_name: "Nur Aisyah Binti Ahmad", preferred_name: "Aisyah", relationship: "child" };
+    await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)", [child.id, A, child.display_name, child.preferred_name, child.relationship]);
+    const mine: D[] = [
+      { id: id(111), member: child.id, product: "Family Income Plan", number: "F-1", page: "Family Income Plan schedule. Life assured: Nur Aisyah Binti Ahmad. Death benefit RM2,000 per month" },
+      { id: id(112), member: child.id, product: "Pelan Pendapatan", number: "F-2", page: "Pelan Pendapatan jadual. Hayat diinsuranskan: Nur Aisyah Binti Ahmad. Kematian RM1,500 sebulan" },
+      { id: id(113), member: child.id, product: "Lump Life", number: "F-3", page: "Lump Life schedule. Life assured: Nur Aisyah Binti Ahmad. Death benefit RM100,000" },
+    ];
+    for (const d of mine) {
+      await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,file_hash,benefits_indexed_at,conditions_indexed_at,ledger_read_at)
+        VALUES($1,$2,$3,'Example Insurer',$4,$5,'Life','certificate',true,90,'ready',$6,$6,$7,'scan_clean','active',$8,now(),now(),now())`,
+        [d.id, A, d.member, d.product, d.number, d.product.toLowerCase().replace(/\W+/g, "-") + ".pdf", recent, "sha256:" + d.number]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [d.id, d.member, A]);
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)", [A, d.id, d.page]);
+    }
+    await cov(mine[0], 2000, "MYR"); await cov(mine[1], 1500, "MYR"); await cov(mine[2], 100000, "MYR");
+    const r = await registryAnswer({ accountId: A, question: "What is Aisyah's total death cover?", family: [me, spouse, child], people: [child] });
+    assert.ok(r, "answered");
+    const text = [r!.summary, ...r!.details].join("\n");
+    assert.ok(!/(?:RM|MYR) ?10[1-3],[05]00/.test(text), "a monthly figure was added into the total: " + text);
+    assert.ok(/(?:RM|MYR) ?100,000/.test(text), "the lump sum is kept: " + text);
+    assert.match(text, /2,000[^\n]*(?:a month|condition)/i, "the monthly figure is listed with why it is not added: " + text);
+    assert.match(text, /1,500[^\n]*(?:a month|condition)/i, "the Malay monthly figure is listed with why it is not added: " + text);
+  });
+
   // Premiums: a record with no currency is not a Singapore-dollar premium.
   await db.query(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_page) VALUES
     ($1,$2,$2,$3,'Example Insurer','Term Shield','T-1',1200,'SGD','annual',2),($1,$4,$4,$3,'Example Insurer','Bare Life','B-1',900,NULL,'annual',2),($1,$5,$5,$3,'Example Insurer','Dollar Life','U-1',800,'USD','annual',2)`,
