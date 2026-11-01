@@ -1608,9 +1608,39 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (looksScanned(text)) text = (cleanScannedLine(text) ?? a.title) + " (read from a scanned page; check it against the original)";
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" && outdated(a.policyId) ? ", document dated " + dated : "") + status + ").";
   };
+  // One row of a table read once per column (an employee plan, a ward class) for a person whose own column is not
+  // known: one line naming each column's figure, and saying which is theirs is not shown -- never one line per column,
+  // each reading like that person's own figure.
+  const columnRows = new Map<string, Candidate[]>();
+  for (const a of kept) if (a.tierLabel && a.source === "benefit" && a.page != null) {
+    const k = a.subjectId + "|" + a.policyId + "|" + a.page + "|" + a.title.toLowerCase();
+    (columnRows.get(k) ?? columnRows.set(k, []).get(k)!).push(a);
+  }
+  const inColumns = new Map<Candidate, Candidate | null>();
+  for (const group of columnRows.values()) {
+    const labels = [...new Set(group.map((g) => g.tierLabel!.trim().toLowerCase()))];
+    if (group.length < 2 || labels.length !== group.length) continue;
+    // "the schedule prints “Not covered” in this column" is, beside its column's name, just the printed words.
+    const valueOf = (g: Candidate) => (g.text.startsWith(g.title) ? g.text.slice(g.title.length).replace(/^[:\s]+/, "") : g.text).replace(/[.;:\s]+$/, "")
+      .replace(/^the schedule prints (“[^”]*”) in this column$/, "$1");
+    // In the order the page prints its columns.
+    const printed = ((pagesByDocEarly.get(group[0].policyId) ?? []).find((p) => p.page === group[0].page)?.text ?? "").toLowerCase();
+    const at = (g: Candidate) => { const i = printed.indexOf(g.tierLabel!.trim().toLowerCase()); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+    const parts = [...group].sort((x, y) => at(x) - at(y)).map((g) => g.tierLabel!.trim() + (valueOf(g) ? ": " + valueOf(g) : ""));
+    // One sentence: the same caveat on two lines must not read as a repeated sentence.
+    const whom = group[0].ownerName || "you";
+    const merged: Candidate = { ...group[0], tierLabel: null, amount: null, currency: null,
+      text: group[0].title + " (which applies to " + whom + " isn’t shown): " + parts.join("; ") };
+    inColumns.set(group[0], merged);
+    for (const g of group.slice(1)) inColumns.set(g, null);
+  }
   // One line for a fact several people share (a family travel plan), naming them all.
   const shared = new Map<string, Candidate[]>();
-  for (const a of kept) { const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a); }
+  for (const raw of kept) {
+    const a = inColumns.has(raw) ? inColumns.get(raw) : raw;
+    if (!a) continue;
+    const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a);
+  }
   const listNames = (names: string[]) => names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names.at(-1);
   // Round 11: the same printed line reached twice (a family plan's row for adults and for children) is one line naming everyone once.
   const sameLine = new Map<string, { at: number; names: string[] }>();
@@ -1631,6 +1661,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   for (const a of kept) {
     const citation = cite(a);
+    // A row printed once per column for someone whose column is not known is one line with no amount (above): none of its
+    // columns' figures is a card of the person's own limit, in any currency (TE #259 F1).
+    if (inColumns.has(a)) continue;
     // (Round 7 port: a row of a table with a column per employee plan is not quoted
     // whole as a limit card -- the quote would show another plan's figure.)
     // Round 11: one card for a figure several people share on the same plan (a family travel plan's row), naming them all.
@@ -1641,7 +1674,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}/).filter((cell) => /(?:S\$|US\$|SGD\s?|USD\s?)\s?\d/.test(cell)).length > 1)))
+    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
@@ -1941,15 +1974,31 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
  * is one question away -- "ask for the full list". Every part of a several-part question keeps a line (`keep`).
  * The cards of amounts follow the lines shown.
  */
-export function conciseDetails(details: string[], limits: { benefitTitle: string }[], opts: { cap: number; keep?: RegExp[] }) {
-  if (details.length <= opts.cap + 1) return;
+/** A table cell that prints an amount in any market's money: a sign or code before the figure ("RM100", "HK$ 1,500",
+ * "Rp100.000", "£50", "CHF 1'250") or after it ("100 €", "150,00 EUR"). A row with two or more such cells prints one figure
+ * per column, so no one of them is a person's own limit card. */
+export const MONEY_CELL = /(?:[A-Z]{1,3}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\b[A-Z]{3})\s?\d|\d[\d.,'’ ]*\s?(?:€|£|\b(?:EUR|GBP|USD|SGD|MYR|IDR|HKD|CHF|AUD|INR)\b)/u;
+export function conciseDetails(details: string[], limits: { benefitTitle: string; ownerName?: string | null; amountText?: string }[], opts: { cap: number; keep?: RegExp[] }) {
+  if (opts.cap === Infinity) return;
+  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
+  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it. The budget
+  // counts what the household reads: the lines and the limit cards shown beside them (one per amount a line shows).
+  const cardWords = (xs: string[]) => { const visible = xs.join("\n"); const seen = new Set<string>(); let n = 0;
+    for (const l of limits) { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + (l.amountText ?? "");
+      if (seen.has(k) || !visible.includes(l.benefitTitle)) continue; seen.add(k);
+      n += [l.ownerName ?? "", l.benefitTitle, l.amountText ?? ""].join(" ").split(/\s+/).filter(Boolean).length; }
+    return n; };
+  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length + cardWords(xs);
+  // The whole answer is read in at most 180 words for a question about one thing and 250 for an overview or several
+  // parts; the summary and the "more lines" note take part of that, so the lines and cards get the rest.
+  const budget = opts.cap <= 5 ? 155 : 220, MORE_NOTE = 22;
+  if (details.length <= opts.cap + 1 && words(details) <= budget) return;
   const chosen = details.slice(0, opts.cap);
   for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
-  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
-  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it.
-  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length;
-  while (chosen.length > 3 && words(chosen) > 200) {
-    const fromEnd = [...chosen].reverse().findIndex((d) => !(opts.keep ?? []).some((re) => re.test(d)));
+  while (chosen.length > 3 && words(chosen) + MORE_NOTE > budget) {
+    // A line is held only while it is the last one left for a part of the question: a second death-cover line can move
+    // to "more lines", the only premium line cannot.
+    const fromEnd = [...chosen].reverse().findIndex((d) => (opts.keep ?? []).every((re) => !re.test(d) || chosen.some((o) => o !== d && re.test(o))));
     if (fromEnd < 0) break;
     chosen.splice(chosen.length - 1 - fromEnd, 1);
   }
