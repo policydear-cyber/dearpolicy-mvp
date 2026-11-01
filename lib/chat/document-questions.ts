@@ -472,7 +472,7 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
     const note = d.notes.find((n) => /^Same schedule as|^An earlier schedule/.test(n)) ?? "";
     const keeper = note.match(/“([^”]+)”/)?.[1];
     return /^Same schedule/.test(note) ? q(d.file) + " is the same schedule as " + q(keeper ?? "the other upload") + " (a photo or scan of it), so DearPolicy keeps one: answers use " + q(keeper ?? "the other upload") + ", which reads more reliably."
-      : q(d.file) + " is an earlier schedule of the same policy" + (note.match(/\(ending ([^)]+)\)/) ? ", which ended on " + note.match(/\(ending ([^)]+)\)/)![1] : "") + "; the current one is " + q(keeper ?? "the newer upload") + ", so answers use that. The earlier one is kept for reference.";
+      : q(d.file) + " is an earlier schedule of the same policy" + (note.match(/\(ending ([^)]+)\)/) ? ", for the period ending " + note.match(/\(ending ([^)]+)\)/)![1] : "") + "; the current one is " + q(keeper ?? "the newer upload") + ", so answers use that. The earlier one is kept for reference.";
   };
   // Copies and earlier schedules: "which upload is the current schedule?", "is the photo the same as the PDF?"
   if ((/\b(?:same|twice|duplicate|copy|copies|current|latest|newest|which one|did you use|do you use|older|earlier|previous|both|and then)\b|\b20\d\d\b/i.test(text)

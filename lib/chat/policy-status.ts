@@ -12,7 +12,7 @@
  * Every state carries the page and line that says it, so an answer can cite it.
  */
 export type PrintedStatus = {
-  state: "lapsed" | "grace" | "grace_passed" | "ended" | "in_force" | "reinstated" | "unknown";
+  state: "lapsed" | "grace" | "grace_passed" | "in_force" | "reinstated" | "unknown";
   /** ISO date the status turns on (lapse date, end of grace, end of period). */
   date: string | null;
   /** The date as the document prints it ("17 March 2026"); grace dates are said in this long form. */
@@ -41,6 +41,18 @@ export function longDate(iso: string) { const [y, m, d] = iso.slice(0, 10).split
 /** Today's date where the household is (Singapore). */
 export function todayIso(now = new Date()) { return new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10); }
 export function daysBetween(fromIso: string, toIso: string) { return Math.round((Date.parse(toIso + "T00:00:00Z") - Date.parse(fromIso + "T00:00:00Z")) / 86400_000); }
+
+/** "How many days left?": the days from today to the date a document prints. A printed end date that has passed gives no
+ *  countdown and no "ended": every policy on file is taken as in force (DC, 31 Oct), so the answer only says what the
+ *  document prints. A grace period comes from an unpaid premium, not an end date, and is still counted. */
+export function countdownLine(name: string, st: Pick<PrintedStatus, "state" | "date" | "printed">, today: string): string | null {
+  if (!st.date || !st.printed) return null;
+  const n = daysBetween(today, st.date), days = (k: number) => k + " day" + (k === 1 ? "" : "s");
+  if (st.state === "in_force") return name + (n < 0 ? "’s printed period runs to " + st.printed + "." : n === 0 ? " ends today, " + st.printed + "." : " ends on " + st.printed + " — " + days(n) + " from today.");
+  if (st.state === "grace") return name + "’s grace period ends on " + st.printed + " — " + days(n) + " from today.";
+  if (st.state === "grace_passed") return name + "’s grace period ended on " + st.printed + ", " + days(-n) + " ago.";
+  return null;
+}
 
 type Page = { page: number; text: string };
 const lines = (pages: Page[]) => pages.flatMap((p) => p.text.split(/\r?\n/).map((l, i) => ({ page: p.page, i, l: l.replace(/\t+/g, " ").trim() })));
@@ -204,12 +216,11 @@ export function supersedePassedGrace(statusOf: Map<string, PrintedStatus>,
   return statusOf;
 }
 
-/** One plain sentence about a policy that no longer covers anyone, or is in its grace period. */
+/** One plain sentence about a policy whose document prints that it lapsed, or that it is in its grace period. */
 export function statusSentence(name: string, s: PrintedStatus): string | null {
   const page = s.page != null ? " (page " + s.page + ")" : "";
   if (s.state === "lapsed") return name + " lapsed on " + s.printed + page + ", so it no longer pays for anything that happens from that date.";
   if (s.state === "reinstated") return name + (s.lapsedPrinted ? " lapsed on " + s.lapsedPrinted + " and" : "") + " was reinstated with effect from " + s.printed + page + ", so it is in force again; the reinstatement letter is the later document.";
-  if (s.state === "ended") return name + " expired on " + s.printed + page + ", so it no longer covers anyone.";
   if (s.state === "grace") return name + " is in its grace period" + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted + " has not been received. " : "a premium has not been received. ")
     + "It stays in force until " + s.printed + ", and lapses if the premium is not paid by then.";
   if (s.state === "grace_passed") return name + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted : "an unpaid premium") + " had to be paid by " + s.printed
@@ -217,7 +228,7 @@ export function statusSentence(name: string, s: PrintedStatus): string | null {
   return null;
 }
 
-/** The household's documents (for these people) whose policy has lapsed or ended, with what each prints. */
+/** The household's documents (for these people) that print that their policy has lapsed, with what each prints. */
 export async function inactiveDocuments(accountId: string, personIds: string[], now = new Date()) {
   const { query } = await import("@/lib/db/client");
   const { activePredicate } = await import("@/lib/lifecycle/scopes");
@@ -235,11 +246,11 @@ export async function inactiveDocuments(accountId: string, personIds: string[], 
   const statuses = applyReinstatements(new Map(docs.map((d) => [d.id, printedStatus(pagesFor(d.id), d.renewal_or_expiry_date, today)])), docs, pagesFor);
   return docs.flatMap((d) => {
     const status = statuses.get(d.id)!;
-    return status.state === "lapsed" || status.state === "ended" ? [{ docId: d.id, name: d.product_name ?? "A policy", people: d.people, status }] : [];
+    return status.state === "lapsed" ? [{ docId: d.id, name: d.product_name ?? "A policy", people: d.people, status }] : [];
   });
 }
-/** "AssureTerm 65 (lapsed on 17 March 2026) and Wanderlust Single Trip (ended on 14 December 2025)". */
+/** "AssureTerm 65 (lapsed on 17 March 2026) and HomeGuard (lapsed on 2 May 2026)": only what a document prints as lapsed. */
 export function inactiveList(items: { name: string; status: PrintedStatus }[]) {
-  const parts = items.map((i) => i.name + " (" + (i.status.state === "lapsed" ? "lapsed" : "ended") + " on " + i.status.printed + ")");
+  const parts = items.map((i) => i.name + " (lapsed on " + i.status.printed + ")");
   return parts.length <= 1 ? parts.join("") : parts.slice(0, -1).join(", ") + " and " + parts.at(-1);
 }

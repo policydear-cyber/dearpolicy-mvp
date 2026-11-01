@@ -266,7 +266,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
   for (const d of docs) (policies.get(policyKey(d)) ?? policies.set(policyKey(d), []).get(policyKey(d))!).push(d);
   const lead = (ds: Doc[]) => ds.find((d) => !isPaper(d)) ?? ds[0];
   const coveredBy = (ds: Doc[]) => { const cover = ds.filter((d) => !isPaper(d)); return [...new Set((cover.length ? cover : ds).flatMap((d) => cover.length ? d.owners : [d.owners[0]]))]; };
-  const stateOf = (ds: Doc[]) => { const st = ds.map((x) => inactive.get(x.id)).find((x) => !!x); return st ? " — " + (st.state === "lapsed" ? "lapsed on " + st.printed + ", not in force" : "ended on " + st.printed + ", no longer in force") : ""; };
+  const stateOf = (ds: Doc[]) => { const st = ds.map((x) => inactive.get(x.id)).find((x) => !!x); return st?.state === "lapsed" ? " — lapsed on " + st.printed + ", not in force" : ""; };
   const kindLabel = (d: Doc) => KINDS.find((k) => k.doc.test((d.kind ?? "") + " " + (d.product ?? "")))?.label ?? null;
   const policyLine = (ds: Doc[], withOwners = true) => {
     const d = lead(ds);
@@ -472,7 +472,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const ownerIds = coveredBy(ds);
     const owner = people.length === 1 ? people[0] : ownerIds.length === 1 ? family.find((p) => p.id === ownerIds[0]) : undefined;
     const whose = owner ? (isSelf(owner) ? "Your " : personName(owner) + "’s ") : "";
-    return { summary: whose + (d.product ?? d.file) + " " + verb + " " + printed + (st ? " — it " + (st.state === "lapsed" ? "lapsed on " + st.printed : "ended on " + st.printed) + ", so it is not in force now" : "") + (page ? ", as page " + page.page + " prints it." : "."),
+    return { summary: whose + (d.product ?? d.file) + " " + verb + " " + printed + (st?.state === "lapsed" ? " — it lapsed on " + st.printed + ", so it is not in force now" : "") + (page ? ", as page " + page.page + " prints it." : "."),
       details: page?.line ? ["“" + page.line.replace(/\t+/g, " · ").replace(/\s+/g, " ").trim() + "” (page " + page.page + ")."] : [],
       citations: [{ ...cite(d), chunkId: "page:" + d.id + ":" + (page?.page ?? 1), pageStart: page?.page ?? 1, pageEnd: page?.page ?? 1 }], personId: null, topic: d.product ?? undefined, keepTopic: true };
   }

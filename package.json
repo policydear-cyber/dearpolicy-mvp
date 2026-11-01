@@ -52,6 +52,7 @@
     "simple:chat-test": "node --import tsx scripts/simple-answer/chat-test.ts",
     "simple:still-reading-test": "node --import tsx scripts/simple-answer/still-reading-test.ts",
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
+    "chat:no-expiry-wording-test": "node --import tsx scripts/chat/no-expiry-wording-test.ts",
     "db:start": "docker compose up -d db",
     "db:status": "docker compose ps",
     "db:setup": "node --import tsx scripts/setup-db.ts",

@@ -30,7 +30,7 @@ import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
-import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
+import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, countdownLine, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
 // ---------------------------------------------------------------------------
 // Topics
@@ -778,7 +778,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       new Map(paid.rows.map((r) => [r.policy_id, r.latest])));
   }
 
-  const inactive = (id: string) => ["lapsed", "ended"].includes(statusOf.get(id)?.state ?? "");
+  // Only a document that prints the policy has lapsed: a printed end date that has passed never makes a policy inactive
+  // (DC, 31 Oct: every policy on file is treated as in force).
+  const inactive = (id: string) => statusOf.get(id)?.state === "lapsed";
   const paymentOnly = (id: string) => PAYMENT_ONLY.test(docs.get(id)?.document_role ?? "");
   const tables = new Map([...pagesByDoc].map(([docId, pages]) => [docId, valueTables(pages)]));
   const tablePageOf = (docId: string, page: number | null) => (tables.get(docId) ?? []).some((t) => t.page === page);
@@ -1135,7 +1137,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     for (const docId of docs.keys()) {
       const st = statusOf.get(docId);
       if (paymentOnly(docId) || !st || st.state === "unknown" || st.page == null || !st.line) continue;
-      if (onlyEnded && st.state !== "lapsed" && st.state !== "ended") continue;
+      if (onlyEnded && st.state !== "lapsed") continue;
       // Round 7 (port): reinstated -- said from the reinstatement letter, cited there (once for both documents).
       if (st.state === "reinstated" && st.byDocId && st.byDocId !== docId) continue;
       const text = st.state === "reinstated" ? "Reinstated with effect from " + st.printed + "; in force" : st.state === "lapsed" ? "Lapsed on " + st.printed : st.state === "grace" ? "Grace period ends: " + st.printed : st.state === "grace_passed" ? "Grace period ended: " + st.printed + "; payment since not shown" : st.line.replace(/\t+/g, ": ").replace(/^(period of insurance|policy term)\s+/i, (m, x: string) => x + ": ");
@@ -1249,11 +1251,11 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     }
   }
   // "Why did my term policy lapse?", "Has my term life ended?": the plan whose status is in question, not the others of its kind.
-  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "ended", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "")))
+  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "")))
   {
     const kinds = topics.filter((t) => t.kind).map((t) => t.key);
     const ofKind = (id: string) => !kinds.length || kinds.some((k) => kindsOf(id).includes(k));
-    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "ended", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
+    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "grace", "grace_passed", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
     if (keep.some((c) => c.policyId)) candidates.splice(0, candidates.length, ...keep);
   }
   // "Max co-pay with the rider?": the rider's premium line is not its benefits.
@@ -1588,7 +1590,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const line = (a: Candidate) => {
     const dated = dateOf(a.policyId), who = args.people.length > 1 ? a.ownerName + " · " : "";
     const st = statusOf.get(a.policyId);
-    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : st?.state === "ended" ? "; expired on " + st.printed : outdated(a.policyId) ? "; not confirmed current" : "";
+    const status = a.source === "expiry" ? "" : st?.state === "lapsed" ? "; lapsed on " + st.printed : "";
     // A value printed in one column of a table names its column after the benefit ("Deductible (Non-panel provider): ...").
     // A column called just "Value" or "Amount" names nothing the household needs told.
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
@@ -1688,7 +1690,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // What each document says about whether it still covers anyone: lapsed, ended, or in its grace period.
   // (A reinstatement is said when the question is about whether the policy is in force, not under every answer from it.)
   const statusAsked = topics.some((t) => t.key === "status") || /\b(?:reinstat\w*|laps\w*|in force|active|valid)\b/i.test(askedText);
-  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "ended", "grace", "grace_passed"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
+  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "grace", "grace_passed"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
   for (const docId of statusDocs) {
     const st = statusOf.get(docId)!, sentence = statusSentence(docName(docId), st);
     if (sentence && !lines.includes(sentence)) lines.push(sentence);
@@ -1713,11 +1715,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     for (const docId of [...new Set(shown.map((a) => a.policyId))]) {
       const st = statusOf.get(docId);
       if (!st?.date || !st.printed) continue;
-      const n = daysBetween(today, st.date), days = (k: number) => k + " day" + (k === 1 ? "" : "s");
-      if (st.state === "in_force") counts.push(docName(docId) + (n === 0 ? " ends today, " + st.printed + "." : " ends on " + st.printed + " — " + days(n) + " from today."));
-      else if (st.state === "grace") counts.push(docName(docId) + "’s grace period ends on " + st.printed + " — " + days(n) + " from today.");
-      else if (st.state === "grace_passed") counts.push(docName(docId) + "’s grace period ended on " + st.printed + ", " + days(-n) + " ago.");
-      else if (st.state === "ended") counts.push(docName(docId) + " expired on " + st.printed + ", " + days(-n) + " ago.");
+      const said = countdownLine(docName(docId), st, today);
+      if (said) counts.push(said);
     }
     if (counts.length) lines.splice(lines.length ? 1 : 0, 0, ...counts);
   }
@@ -1752,8 +1751,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   if (shown.length && shown.every((a) => expired(a.policyId)) && !topics.some((t) => t.key === "status") && !namedDocs.length && !/\b(?:was|were|did|had|before|lapsed?|expired?|ended|old|previous|last|reinstat\w*)\b/i.test(askedText))
     lines.unshift("None of the " + topicLabels.join(" or ").replace(/^the /, "") + " in " + (whose === "your" ? "your" : whose) + " documents is still in force.");
   lines.splice(lines.length ? 1 : 0, 0, ...valueTableNotes);
-  const staleDates = [...new Set(shown.filter((a) => outdated(a.policyId) && !expired(a.policyId)).map((a) => dateOf(a.policyId) ?? "an earlier date"))];
-  if (staleDates.length) lines.push("Some of this comes from a document dated " + staleDates.join(" and ") + ", so it may not reflect the current terms.");
+  // Every policy on file is taken as in force (DC, 31 Oct): an older document's date is shown beside its figure, but the
+  // answer never doubts the policy because of its age ("may not reflect the current terms", "upload the latest renewal").
   if (unresolved.length) lines.push([...new Set(unresolved.map((r) => (r.assertion as Candidate).title))].join(" and ") + ": your documents state different figures, so DearPolicy has not picked one. Upload the latest schedule to settle it.");
   const otherGaps = rejected.filter((r) => !r.reason.startsWith("conflict: ") && !shown.some((k) => k.topic === (r.assertion as Candidate).topic));
   if (otherGaps.length) lines.push("Some details were left out because they could not be matched to the exact passage in the document: " + [...new Set(otherGaps.map((r) => r.reason))].slice(0, 2).join("; ") + ".");
@@ -1761,7 +1760,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // "Who has hospital cover?": who, and on which plan -- not every row of every plan.
   if (args.people.length > 1 && /^\s*(?:who(?: in (?:the|our|my) (?:family|household))?(?:['’]s| is| are)? (?:has|have|covered|insured|got)\b|(?:does|do|is|are|has) (?:anyone|anybody|any of us|someone|everyone)\b|which of us\b)/i.test(askedText) && shown.length && topics.length) {
     const byOwner = new Map<string, Set<string>>();
-    for (const a of shown) (byOwner.get(a.ownerName) ?? byOwner.set(a.ownerName, new Set()).get(a.ownerName)!).add(docName(a.policyId) + (expired(a.policyId) ? " (" + (statusOf.get(a.policyId)?.state === "lapsed" ? "lapsed" : "ended") + ")" : ""));
+    for (const a of shown) (byOwner.get(a.ownerName) ?? byOwner.set(a.ownerName, new Set()).get(a.ownerName)!).add(docName(a.policyId) + (expired(a.policyId) ? " (lapsed)" : ""));
     const listing = [...byOwner].map(([owner, plans]) => owner + " (" + [...plans].join(", ") + ")");
     const join = (xs: string[]) => xs.length <= 1 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
     details.splice(0, details.length, ...[...byOwner].map(([owner, plans]) => owner + ": " + [...plans].join(", ") + "."));
@@ -1924,7 +1923,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
-    nextSteps: staleDates.length ? ["Upload the latest renewal notice or premium receipt to confirm the policy is current."] : [], questions: [] };
+    nextSteps: [], questions: [] };
   return { handled, answer, kept: shown, rejected, topics: topics.map((t) => t.key), notFound, modelCalls, narrated, elapsedMs: Date.now() - started };
 }
 
