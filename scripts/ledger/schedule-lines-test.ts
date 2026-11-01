@@ -176,7 +176,10 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
   const tc = (product: string, cover: string, documentId: string): TableKindCover => ({ product, cover, source: { documentId } });
   const rows = [tr("Kematian atau Hilang Upaya Menyeluruh dan Kekal", "Teratai Family Takaful", "Family Takaful", doc), tr("Serangan Jantung", "Teratai Family Takaful", "Rider Penyakit Kritikal", doc)];
   const covers = [tc("Teratai Family Takaful", "Family Takaful", doc), tc("Teratai Family Takaful", "Rider Penyakit Kritikal", doc)];
-  t("table: without the lines, a takaful plan is only 'Other' (the bug)", JSON.stringify(kindsOfTable(rows, covers)) === JSON.stringify(["Other"]), kindsOfTable(rows, covers));
+  // Without its lines the rider named only by its illness ("Serangan Jantung") is no kind: Critical illness is missing and
+  // "Other" shows (the bug). The Malay death row itself is named Death since other-language death words are known (#282).
+  const bare = kindsOfTable(rows, covers);
+  t("table: without the lines, the takaful rider's Critical illness is missing and 'Other' shows (the bug)", !bare.includes("Critical illness") && bare.includes("Other"), bare);
   const lines = [{ policyId: doc, category: "Death" }, { policyId: doc, category: "Critical Illness" }];
   t("table: with its lines, Death and Critical illness, no 'Other'", JSON.stringify(kindsOfTable(rows, covers, lines)) === JSON.stringify(["Death", "Critical illness"]), kindsOfTable(rows, covers, lines));
   const stray = [...rows, tr("Santunan khusus", "Plan Lain", "Plan Lain", other)];
