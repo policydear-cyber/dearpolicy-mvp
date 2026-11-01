@@ -85,9 +85,21 @@ export async function drainOnce(params: { jobTypes?: WorkerJobTypeConfig[]; now?
   state.inFlight = true;
   state.lastStartedAt = now();
   try {
+    // What chat answers and the coverage ledger took from deleted documents is
+    // removed, catching up any earlier failure (lib/lifecycle/derived-content-scrub.ts;
+    // bounded, never throws).
+    await (await import("@/lib/lifecycle/derived-content-scrub")).scrubDeletedDocumentDerivedContent();
     // Round 5: retry any storage objects of deleted documents/households
     // that could not be removed at deletion time (bounded; never throws).
+    // Deleted documents' content (passages, extracted text, search index) is
+    // removed and their files queued, retrying anything that failed before
+    // (lib/lifecycle/content-scrub.ts; bounded, never throws).
+    await (await import("@/lib/lifecycle/content-scrub")).scrubDeletedDocuments();
     await (await import("@/lib/storage/purge")).purgeSoon();
+    // Claim calculations that used a deleted document lose what they took from
+    // it, catching up any earlier failure (lib/lifecycle/claim-snapshot-scrub.ts;
+    // bounded, never throws).
+    await (await import("@/lib/lifecycle/claim-snapshot-scrub")).scrubDeletedDocumentClaimSnapshots();
     if (!(await hasClaimableWork())) return { ran: false, reason: "no_work" };
     // Round 10: a household waiting on a chat answer is waiting now; a
     // document being read is not watched second by second. Chat analysis is

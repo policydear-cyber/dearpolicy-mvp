@@ -34,9 +34,9 @@ export const kindOfName = (name: string) => {
 };
 
 /** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
-export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; plan?: string | null; coverEnded?: string | null };
+export type TableKindRow = { benefit: string; pays: string; product: string; cover: string; plan?: string | null; coverEnded?: string | null; source?: { documentId?: string | null } | null };
 export type TableKindCover = { product: string; cover: string; plan?: string | null; riderOf?: string | null; ended?: string | null; planType?: PlanType | null;
-  endDate?: string | null; documentPeriodTo?: string | null };
+  endDate?: string | null; documentPeriodTo?: string | null; source?: { documentId?: string | null } | null };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
  * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
@@ -62,8 +62,14 @@ const PREMIUM_ONLY = /^(?:(?:annual|monthly|quarterly|half[- ]yearly|yearly|sing
  * printed as not covered, a value and a premium are no cover. A cover with no row counted (its pages not linked yet) is
  * still cover: never "Nothing found" for a person who has one (Critic R199-2). Every policy on file is treated as in force:
  * a printed end date never takes a kind away (DC, 31 Oct). */
-export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
+export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = [], lines: { policyId: string; category: string }[] = []): string[] {
   const found = new Set<string>(), counted = new Set<string>();
+  // The person's schedule lines (GET /api/benefit-table scheduleLines, the lines Home's tiles count) are cover of their
+  // kind, as on Home, whatever language the cover and its benefits are named in ("Family Takaful", "Proteksi Jiwa").
+  // A row or cover whose own name places it nowhere is not "Other" when a line of the same document says what it is.
+  for (const l of lines) found.add(kindOfCategory(l.category).id);
+  const placed = new Set(lines.map((l) => l.policyId));
+  const other = (documentId?: string | null) => { if (!documentId || !placed.has(documentId)) found.add("other"); };
   const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
   for (const r of rows) {
     // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
@@ -75,9 +81,9 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
     if (cover) found.add(cover);
     if (cover === "travel") continue;
     if (benefit !== "other" && benefit !== "property") found.add(benefit);
-    else if (!cover) found.add("other");
+    else if (!cover) other(r.source?.documentId);
   }
-  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) { const k = ofCover(c.product, c.cover); if (k) found.add(k); else other(c.source?.documentId); }
   // Whole-policy kinds by the rule Home's tiles use (personKinds): savings or investment from the plan type, travel from a
   // travel cover.
   const whole = personKinds(covers, rows);
@@ -160,3 +166,85 @@ export function coverGaps(rows: KindRow[], alsoFound: string[] = []): { missing:
 
 /** "a", "a and b", "a, b and c". */
 export const listOf = (items: string[]) => items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/** A schedule's category of cover (policy_coverages.category, lib/insurance.ts COVERAGE_CATEGORIES), sorted into a kind.
+ * Home's tiles read these lines; Family and Coverage use this so all three agree. A category not listed is sorted by its
+ * own words (kindOfName), else "Other". */
+const CATEGORY_KINDS: Record<string, string> = {
+  hospitalisation: "hospital", "hospital cash": "hospital", outpatient: "hospital",
+  death: "death",
+  "critical illness": "ci", "early critical illness": "ci",
+  "total permanent disability": "disability", "disability income": "disability", "long-term care": "disability",
+  "personal accident": "accident",
+  travel: "travel",
+  home: "property", motor: "property",
+  savings: "savings", investment: "savings",
+};
+export const kindOfCategory = (category: string) => {
+  const id = CATEGORY_KINDS[category.trim().toLowerCase()];
+  return COVER_KINDS.find((k) => k.id === id) ?? kindOfName(category);
+};
+
+/** A line of cover a schedule or certificate lists for a person (GET /api/ledger scheduleLines): confirmed and checked
+ * against its page, the same lines Home's tiles count. */
+/** `events`: the Coverage events the server would seed from this line (lib/ledger/events.ts PRODUCT_DEFAULTS), for a
+ * category CATEGORY_EVENTS does not list ("Life Cover", any other printed wording). */
+export type ScheduleLine = { familyMemberId: string; policyId: string; category: string; planName: string | null; insurer: string | null; sourcePage: number | null; events?: string[] | null;
+  /** The line's kind is already drawn from this policy's rows, which only a plan type suggests: the line confirms it, and
+   * is not drawn again (scheduleOnlyLines). */
+  confirmsOnly?: boolean };
+/** The Coverage event(s) a schedule category itself is: the row the line would have become. A rejection of every one of
+ * them is the household's word that this plan doesn't pay it (Critic M1 on #256); a rejection of a narrower row of the
+ * same kind (a misread ICU cash row on a hospital plan) is not (TE F1 on #256). */
+const CATEGORY_EVENTS: Record<string, string[]> = {
+  hospitalisation: ["hospital_medical_expense"], "hospital cash": ["hospital_daily_cash"], outpatient: ["hospital_medical_expense"],
+  death: ["death"], "critical illness": ["critical_illness"], "early critical illness": ["early_critical_illness"],
+  "total permanent disability": ["tpd"], "disability income": ["disability_income"], "long-term care": ["long_term_care"],
+  "personal accident": ["accidental_death"], travel: ["travel_delay", "trip_cancellation", "travel_medical", "baggage"],
+  home: ["home_damage"], motor: ["motor_damage"], savings: ["maturity"], investment: ["maturity"],
+};
+/** The schedule lines Coverage rows don't already show. A line is left out when the same person has a Coverage row (not
+ * rejected) of the same kind from the same policy, or has rejected, on that policy, every event the line's category
+ * itself is (CATEGORY_EVENTS; for a category not listed there, the events the line would seed: TE F2 on #256). A line with no amount, or an amount with no stated currency, never becomes a Coverage
+ * row (lib/ledger/store.ts scheduleSeeds), so without this a person Home lists as covered was called uncovered on Family
+ * and Coverage (new-user walkthrough, 31 Oct). One line per person, policy and kind. */
+export function scheduleOnlyLines<L extends ScheduleLine>(lines: L[], rows: (KindRow & { familyMemberId: string; policyId: string | null })[]): L[] {
+  const at = (r: { familyMemberId: string; policyId: string | null }) => `${r.familyMemberId}\u0000${r.policyId}`;
+  // A row that is only a plan type's usual benefit (isToConfirm) does not show the line: the line confirms that kind, as
+  // Home counts it. The line is then sent with confirmsOnly, so Coverage does not draw it again beside those rows.
+  const live = rows.filter((r) => r.status !== "rejected" && r.policyId);
+  const shown = new Set(live.filter((r) => !isToConfirm(r)).map((r) => `${at(r)}\u0000${kindOfRow(r).id}`));
+  const guessed = new Set(live.filter(isToConfirm).map((r) => `${at(r)}\u0000${kindOfRow(r).id}`));
+  const rejected = new Set(rows.filter((r) => r.status === "rejected" && r.policyId).map((r) => `${at(r)}\u0000${r.eventType}`));
+  const out: L[] = [];
+  for (const l of lines) {
+    const key = `${at(l)}\u0000${kindOfCategory(l.category).id}`;
+    const own = CATEGORY_EVENTS[l.category.trim().toLowerCase()] ?? (l.events?.length ? l.events : undefined);
+    if (shown.has(key) || (own && own.every((e) => rejected.has(`${at(l)}\u0000${e}`)))) continue;
+    shown.add(key);
+    out.push(guessed.has(key) ? { ...l, confirmsOnly: true } : l);
+  }
+  return out;
+}
+
+/** What Family lists for each person of a household on Coverage rows (GET /api/ledger): only the kinds the documents
+ * establish -- a confirmed row, the wording, the household's own entry, or a schedule line (scheduleLines), confirmed
+ * and checked against its page, which is cover as on Home even when it prints no amount and so has no Coverage row. A
+ * kind only a plan type's usual benefit suggests (isToConfirm) is not listed, as on Home and Documents (owner rule,
+ * 28 Oct: a plan type is not proof of cover); Coverage still shows that row with what is unread (cross-page check, 31 Oct). */
+export function ledgerKindsByPerson(rows: (KindRow & { familyMemberId: string })[], lines: ScheduleLine[] = []): Record<string, string[]> {
+  const by: Record<string, Set<string>> = {};
+  for (const r of rows) if (r.status !== "rejected" && !isToConfirm(r)) (by[r.familyMemberId] ??= new Set()).add(kindOfRow(r).id);
+  for (const line of lines) (by[line.familyMemberId] ??= new Set()).add(kindOfCategory(line.category).id);
+  return Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label)]));
+}
+
+/** One person on Coverage (a household on Coverage rows): the kinds of cover found, each with its rows and the schedule
+ * lines no row shows, and the main kinds not found. A schedule line is cover (never "to confirm", never a gap), as on
+ * Home and Family. `shown` are the rows drawn (an either/or pair once), `all` every row of the person. */
+export function coveragePersonKinds<R extends KindRow, L extends ScheduleLine>(shown: R[], all: R[], lines: L[], alsoFound: string[] = []) {
+  const kinds = COVER_KINDS.map((k) => ({ ...k, rows: shown.filter((r) => kindOfRow(r).id === k.id), all: lines.filter((l) => kindOfCategory(l.category).id === k.id) }))
+    .filter((k) => k.rows.length || k.all.length)
+    .map(({ all, ...k }) => ({ ...k, lines: all.filter((l) => !l.confirmsOnly), toConfirm: !all.length && k.rows.every(isToConfirm) }));
+  return { kinds, gaps: coverGaps(all, [...alsoFound, ...lines.map((l) => kindOfCategory(l.category).id)]), count: all.length + lines.length };
+}
