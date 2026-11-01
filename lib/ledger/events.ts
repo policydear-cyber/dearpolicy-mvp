@@ -270,14 +270,25 @@ const GENERIC_SUM=new RegExp(B+"(?:(?:basic |main )?(?:sum (?:assured|insured|co
   "jumlah (?:yang )?(?:diinsuranskan|dilindungi|perlindungan|takaful)|uang pertanggungan|nilai pertanggungan|suma asegurada|capital asegurado|capital segurado|importância segurada|"+
   "capital assuré|somme assurée|versicherungssumme|somma assicurata|capitale assicurato|số tiền bảo hiểm))"+E+"|保额|保額|基本保额|基本保額","iu");
 const GENERIC_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|cover|amount|of|dan|and|y|e|et|und|\W)*$/iu;
+/** A row whose own name only says it is the plan's overall limit ("Annual limit", "Overall limit per policy year", "Had
+ * Tahunan", "Límite anual", "Plafond annuel", "年度限额") names no event either. A limit is a reimbursement ceiling, so it is
+ * read as the plan's own main benefit only when that benefit is reimbursed: exactly one plan kind fits the plan's name and
+ * it is a hospital plan (cross-page check, 31 Oct: a hospital plan's "Annual limit" landed on "Other benefit"). A limit on
+ * a life, accident or travel plan, or on a plan naming two covers, stays unmapped. */
+const GENERIC_LIMIT=new RegExp(B+"(?:(?:(?:overall|annual|yearly|lifetime|policy[- ]year|maximum|max\\.?|aggregate|total) )*(?:benefit )?limits?(?: (?:of (?:cover|benefits?|indemnity)|per (?:policy[- ]year|year|annum|lifetime|life)|a year|for (?:the|each) policy year))*|"+
+  "had (?:tahunan|keseluruhan|seumur hidup|maksimum|manfaat tahunan|manfaat)|batas (?:tahunan|maksimum|manfaat tahunan|manfaat)|limit (?:tahunan|keseluruhan)|"+
+  "l[ií]mite (?:anual|m[aá]ximo|global|vital[ií]cio|de por vida)|plafond (?:annuel|global|maximum)|jahreshöchstbetrag|jahreslimit|höchstbetrag|massimale (?:annuo|annuale)|giới hạn (?:hàng năm|tối đa))"+E+"|年度限额|年度限額|年度上限|最高限额|最高限額|終身限額|终身限额","iu");
+const LIMIT_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|overall|amount|of|per|dan|and|y|e|et|und|\W)*$/iu;
 /** A plan's name glossed to the English words PRODUCT_DEFAULTS reads ("Proteksi Jiwa" is a life plan). */
 const PLAN_GLOSSES:[RegExp,string][]=[
   [new RegExp(B+"(?:asuransi jiwa|proteksi jiwa|insurans hayat|takaful hayat|seguro de vida|seguro de vida inteira|assurance décès|lebensversicherung|risikolebensversicherung|assicurazione (?:sulla )?vita|bảo hiểm nhân thọ)"+E+"|人寿|人壽|寿险|壽險|定期寿险|終身壽險","iu"),"life insurance"],
   [new RegExp(B+"(?:penyakit (?:kritikal|kritis)|enfermedades graves|doenças graves|maladies graves|schwere krankheiten|malattie gravi|bệnh hiểm nghèo)"+E+"|重大疾病|重疾|危疾","iu"),"critical illness"],
   [new RegExp(B+"(?:kemalangan diri|kecelakaan diri|accidentes personales|acidentes pessoais|individuelle accident|unfallversicherung|infortuni|tai nạn cá nhân)"+E+"|意外伤害|意外傷害","iu"),"personal accident"],
+  [new RegExp(B+"(?:insurans perubatan|pelan (?:hospital|perubatan)|takaful perubatan|asuransi kesehatan|seguro (?:de )?(?:salud|saúde|gastos médicos|médico|hospitalización)|plano de saúde|"+
+    "assurance (?:santé|maladie|hospitalisation)|complémentaire santé|mutuelle santé|krankenversicherung|krankenhauszusatzversicherung|assicurazione (?:sanitaria|malattia|ricovero)|bảo hiểm (?:sức khỏe|y tế))"+E+"|医疗保险|醫療保險|住院医疗|住院醫療|医療保険","iu"),"hospital plan"],
   [new RegExp(B+"(?:perlindungan pendapatan|renta por invalidez|renda por invalidez|berufsunfähigkeit(?:sversicherung)?|prévoyance invalidité)"+E+"|收入保障|失能收入","iu"),"income protection"],
 ];
-function planEvent(productName:string|null|undefined):EventType|null{
+function planEvent(productName:string|null|undefined,limit=false):EventType|null{
   if(!productName)return null;
   const name=productName+" "+PLAN_GLOSSES.filter(([re])=>re.test(productName)).map(([,en])=>en).join(" ");
   // A plan naming two covers ("Life and Critical Illness Plan") does not say which one its sum is.
@@ -285,6 +296,7 @@ function planEvent(productName:string|null|undefined):EventType|null{
   const kinds=PRODUCT_DEFAULTS.filter(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
   // Only a plan kind whose main benefit is its sum or its monthly income: an endowment's sum is not its maturity value.
   const main=kinds.length===1?kinds[0].events[0]:null;
+  if(limit)return main&&main.event==="hospital_medical_expense"?main.event:null;
   return main&&(main.pays==="lump_sum"||main.pays==="per_month")?main.event:null;
 }
 
@@ -309,7 +321,12 @@ export function eventForBenefitName(name:string,productName?:string|null):{event
   const own=eventForOwnName(name);
   if(own.event!=="other"||THIRD_PARTY_LIABILITY.test(glossedName(name)))return own;
   const m=GENERIC_SUM.exec(name);
-  if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length)))return own;
+  if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length))){
+    const l=GENERIC_LIMIT.exec(name);
+    if(!l||!LIMIT_FILLER.test(name.slice(0,l.index)+" "+name.slice(l.index+l[0].length)))return own;
+    const event=planEvent(productName,true);
+    return event?{event,detail:name}:own;
+  }
   const event=planEvent(productName);
   return event?{event,detail:null}:own;
 }

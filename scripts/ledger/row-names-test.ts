@@ -82,6 +82,41 @@ const plans: [string, string, string][] = [
 ];
 for (const [name, plan, want] of plans) eq(`${name} / ${plan}`, ev(name, plan), want);
 
+// A row naming only the plan's overall limit is the plan's reimbursed hospital benefit, but only on a plan that is
+// exactly one kind and that kind is a hospital plan, in any language. Anywhere else a limit names no event.
+const limits: [string, string | undefined, string][] = [
+  ["Annual limit", "Harbour Hospital Plan", "hospital_medical_expense"],
+  ["Overall annual limit", "Shield Plan Gold", "hospital_medical_expense"],
+  ["Annual Limit per policy year", "MediShield Life", "hospital_medical_expense"],
+  ["Lifetime limit", "Integrated Shield Plan", "hospital_medical_expense"],
+  ["Overall limit of benefits per policy year", "Kingsmere Health Insurance", "hospital_medical_expense"],
+  ["Had Tahunan", "Insurans Perubatan Cemerlang", "hospital_medical_expense"],
+  ["Had Tahunan", "Takaful Perubatan Mesra", "hospital_medical_expense"],
+  ["Batas Manfaat Tahunan", "Asuransi Kesehatan Prima", "hospital_medical_expense"],
+  ["Límite anual", "Seguro de Salud Andes", "hospital_medical_expense"],
+  ["Plafond annuel", "Assurance Santé Horizon", "hospital_medical_expense"],
+  ["Jahreshöchstbetrag", "Krankenversicherung Komfort", "hospital_medical_expense"],
+  ["年度限额", "安心医疗保险", "hospital_medical_expense"],
+  // Not a hospital plan, more than one kind, no plan name, or a name that says more than the limit: no event
+  ["Annual limit", "Heronsgate Joint Life Cover", "other"],
+  ["Annual limit", "Kestrel Personal Accident Plan", "other"],
+  ["Annual limit", "Wayfarer Travel Plan", "other"],
+  ["Annual limit", "Harbour Hospital Cash Plan", "other"],
+  ["Annual limit", "Hospital and Surgical Plan", "other"],
+  ["Annual limit", "Teratai Family Takaful", "other"],
+  ["Annual limit", "Savings Endowment 20", "other"],
+  ["Annual limit", undefined, "other"],
+  ["Had Tahunan", "Insurans Hayat Bakti", "other"],
+  ["Room and board limit", "Harbour Hospital Plan", "other"],
+  ["Co-insurance limit", "Harbour Hospital Plan", "other"],
+  ["Limit of liability", "Harbour Hospital Plan", "other"],
+  ["Deductible", "Harbour Hospital Plan", "other"],
+  ["Annual premium limit", "Harbour Hospital Plan", "other"],
+  // A hospital plan's own "Sum assured" is still not read as a bill limit
+  ["Sum assured", "Harbour Hospital Plan", "other"],
+];
+for (const [name, plan, want] of limits) eq(`limit ${name} / ${plan}`, ev(name, plan as string), want);
+
 // A fixed figure printed with a period is paid per period; an income or daily benefit with no period gives no figure.
 const pays: [string, string, string, number, string][] = [
   ["disability_income", "Monthly benefit", "Monthly benefit\t£2,400", 2400, "per_month"],
