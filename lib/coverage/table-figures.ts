@@ -120,14 +120,22 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
 /** A death benefit named only in another language (TE R4-2 on #280): an allow-list of names that START with the death
  * words, so a sentence that only mentions a death ("Exonération des cotisations en cas de décès", "Waiver ... upon death")
- * is never taken for one. Malay, Indonesian, French, German, Chinese. */
-const OTHER_LANGUAGE_DEATH = /^\W*(?:(?:manfaat|faedah|santunan|pampasan|uang)\s+)?(?:kematian|meninggal(?:\s+dunia)?)\b|^\W*(?:(?:capital|prestations?|garantie|indemnit[ée])\s+)?d[ée]c[èe]s\b|^\W*(?:todesfall\w*|tod\b)|^\W*(?:身故|死亡)/iu;
-/** The same names said to pay on an accident only: "Kematian akibat kemalangan", "Décès accidentel", "Todesfall durch
- * Unfall", "Unfalltod", "意外身故". */
-const OTHER_LANGUAGE_ACCIDENT = /\b(?:akibat|kerana|karena|disebabkan(?:\s+oleh)?|oleh)\s+(?:suatu\s+)?kemalangan\b|\baccidentel(?:le)?s?\b|\b(?:par|suite\s+[àa]\s+un|caus[ée]e?\s+par\s+un)\s+accident\b|\b(?:durch|bei|infolge|nach)\s+(?:einen?\s+|eines\s+)?unfall\w*|(?:因|由于)意外/iu;
-const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall(?:tod|todesfall)\w*|意外(?:身故|死亡))/iu;
+ * is never taken for one. Malay, Indonesian, French, German, Chinese. German "Tod" only as the whole name or followed by a
+ * German word, and with its capital ("TOD surcharge" is no death; Critic M2 on #283). */
+const OTHER_LANGUAGE_DEATH = /^\W*(?:(?:manfaat|faedah|santunan|pampasan|uang(?:\s+duka)?)\s+)?(?:kematian|meninggal(?:\s+dunia)?)\b|^\W*(?:(?:capital|prestations?|garantie|indemnit[ée])\s+)?d[ée]c[èe]s\b|^\W*todesfall\w*|^\W*(?:身故|死亡)/iu;
+const GERMAN_TOD = /^\W*Tod(?:\s*$|\s+(?:durch|bei|infolge|nach|aus|des|der|eines|einer)\b)/u;
+/** Any accident word anywhere in the name, as a substring (compounds such as "Verkehrsunfall" too): the name pays on an
+ * accident, never a plain death benefit (Critic H1 on #283). A closed list; unsure is never Death. */
+const OTHER_LANGUAGE_ACCIDENT = /accident|kemalangan|kecelakaan|unfall|意外|事故/iu;
+/** A name that starts with the accident words and goes on to the death words: "Unfalltod", "Unfall-Todesfall", "意外伤害身故". */
+const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall\w*[\s-]*tod\w*|意外\S{0,4}(?:身故|死亡))/iu;
+/** A closed list of words saying the death benefit pays whatever the cause, accident included ("toutes causes y compris
+ * accident", "termasuk kemalangan", "包括意外"): the accident word there does not make it accident only. */
+const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|任何原因/iu;
+/** A waiver on death, in those languages: it waives what is paid in, it pays no death benefit (Critic M1 on #283). */
+const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
 /** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
-const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人/iu;
+const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bautrui\b|\bd['’]une\s+autre\s+personne\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人|别人/iu;
 
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
@@ -142,10 +150,10 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
 }
 
 function otherLanguageDeath(benefit: string): string | null {
-  if (OTHER_LANGUAGE_OTHERS.test(benefit)) return null;
+  if (OTHER_LANGUAGE_OTHERS.test(benefit) || OTHER_LANGUAGE_WAIVER.test(benefit)) return null;
   if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)) return "Personal Accident";
-  if (!OTHER_LANGUAGE_DEATH.test(benefit)) return null;
-  return OTHER_LANGUAGE_ACCIDENT.test(benefit) ? "Personal Accident" : "Death";
+  if (!OTHER_LANGUAGE_DEATH.test(benefit) && !GERMAN_TOD.test(benefit)) return null;
+  return OTHER_LANGUAGE_ACCIDENT.test(benefit) && !OTHER_LANGUAGE_ANY_CAUSE.test(benefit) ? "Personal Accident" : "Death";
 }
 
 /** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified

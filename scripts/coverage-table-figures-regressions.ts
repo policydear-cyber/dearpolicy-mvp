@@ -692,10 +692,19 @@ test("a death benefit named only in another language is Death, an accident-only 
     "Todesfallleistung", "Todesfall", "Tod", "身故保险金", "死亡给付", "Décès toutes causes y compris accident", "Kematian termasuk kemalangan", "Todesfall auch bei Krankheit"])
     assert.equal(categoryOfBenefit(b), "Death", b);
   for (const b of ["Kematian akibat kemalangan", "Kematian disebabkan oleh kemalangan", "Décès accidentel", "Décès par accident", "Todesfall durch Unfall",
-    "Unfalltod", "意外身故", "身故（因意外）"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+    "Unfalltod", "意外身故", "身故（因意外）",
+    // Any accident word anywhere, with no connector, in compounds, in brackets (Critic H1 on #283).
+    "Santunan Meninggal Dunia akibat Kecelakaan", "Meninggal Dunia karena Kecelakaan", "Uang Duka Meninggal Dunia Kecelakaan", "Manfaat Kematian Kemalangan", "Faedah Kematian (Kemalangan)",
+    "Kematian - kemalangan sahaja", "Décès par suite d'accident", "Décès consécutif à un accident", "Décès (accident)", "Décès - accident uniquement",
+    "Todesfall (nur Unfall)", "Tod durch Verkehrsunfall", "身故（意外）", "身故保险金（仅限意外）", "Unfall-Todesfall", "意外伤害身故"])
+    assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   // Only a name that STARTS with the death words: a waiver on death, someone else's death, a word that only begins alike.
   for (const b of ["Exonération des cotisations en cas de décès", "Pengecualian caruman jika meninggal dunia", "Beitragsbefreiung bei Tod", "Décès d'un tiers",
-    "Kematian pihak ketiga", "第三者身故", "Todd's paralysis", "Unfallkrankenhaustagegeld", "意外医疗"]) assert.equal(categoryOfBenefit(b), null, b);
+    "Kematian pihak ketiga", "第三者身故", "Todd's paralysis", "Unfallkrankenhaustagegeld", "意外医疗",
+    // A waiver on death, "TOD", someone else (Critic M1/M2 on #283).
+    "Décès - exonération des cotisations", "Kematian - pengecualian sumbangan", "Meninggal dunia - pembebasan premi", "Todesfall - Beitragsbefreiung", "身故豁免保费",
+    "TOD (time of day) surcharge", "tod", "Décès d'autrui", "Décès d'une autre personne", "别人身故"]) assert.equal(categoryOfBenefit(b), null, b);
+  for (const b of ["Tod", "Tod durch Krankheit", "Décès toutes causes y compris accident", "Kematian termasuk kemalangan", "身故（包括意外）"]) assert.equal(categoryOfBenefit(b), "Death", b);
   // Under an accident section it is accident cover, as an English name is.
   assert.equal(categoryOfBenefit("Kematian", "Personal Accident"), "Personal Accident");
   // On the Death tile: a Malay death benefit beside another policy's English one adds up, never shows the other alone.
