@@ -12,8 +12,12 @@
  *    and critical illness calculators check).
  *  - Location: cover that pays only for events overseas (travel policies,
  *    overseas / evacuation / repatriation benefits) is not a possible benefit
- *    for an event in Singapore.
+ *    for an event in the household's home country (lib/claims/home-country.ts).
+ *
+ * `home` is the household's home country, or null when its documents do not tell one. Every product caller passes it;
+ * left out, it is Singapore, the market the older scripted cases describe.
  */
+import { awayFromHome } from "./home-country";
 export type EventFitIssue = { kind: "expired" | "not_started" | "location" | "trip"; text: string };
 
 const UNKNOWN = /^(?:not sure|unsure|unknown|not yet known|don'?t know)$/i;
@@ -22,18 +26,19 @@ export function meaningfulFact(value: unknown): string | null {
   const text = String(value).trim();
   return text && !UNKNOWN.test(text) ? text : null;
 }
-const OVERSEAS_ONLY = /\b(?:overseas|abroad|outside (?:of )?singapore|travel|trip|journey|evacuat\w*|repatriat\w*|baggage|flight)\b/i;
+const OVERSEAS_ONLY = /\b(?:overseas|abroad|outside (?:of )?(?:singapore|the country|your country|(?:the )?home country)|travel|trip|journey|evacuat\w*|repatriat\w*|baggage|flight)\b/i;
 /** Cover that exists only for events away from home. */
 export function overseasOnly(benefitTitle: string, policyType: string | null | undefined) {
   return OVERSEAS_ONLY.test(benefitTitle) || /\btravel\b/i.test(policyType ?? "");
 }
-/** The event is known to have happened overseas. */
-export function happenedOverseas(location: string | null) {
-  return !!location && (/overseas|abroad/i.test(location) || !/\bsingapore\b|\blocal\b|\bhome\b/i.test(location));
+/** The event is known to have happened away from the household's home. A place that cannot be told (a town not listed,
+ * or a household whose home is unknown) is not known to be overseas. */
+export function happenedOverseas(location: string | null, home: string | null = "Singapore") {
+  return !!location && awayFromHome(location, home) === true;
 }
-/** The event happened in Singapore (and nothing says it was overseas). */
-export function happenedInSingapore(location: string | null) {
-  return !!location && /\bsingapore\b/i.test(location) && !/overseas|abroad/i.test(location);
+/** The event is known to have happened in the household's home country. */
+export function happenedAtHome(location: string | null, home: string | null = "Singapore") {
+  return !!location && awayFromHome(location, home) === false;
 }
 function isoDay(value: string | null | undefined) {
   if (!value) return null;
@@ -64,19 +69,22 @@ export function eventFitIssue(args: {
   /** The insured trip, when known. */
   tripStart?: string | null;
   tripEnd?: string | null;
+  /** The household's home country (lib/claims/home-country.ts), or null when unknown. */
+  home?: string | null;
 }): EventFitIssue | null {
+  const home = args.home === undefined ? "Singapore" : args.home;
   const eventDay = isoDay(meaningfulFact(args.eventDate));
   const effective = isoDay(args.effectiveDate);
   if (effective && eventDay && eventDay < effective)
     return { kind: "not_started", text: "Not a possible benefit on the document on file: " + (args.policyName ? args.policyName + "’s" : "the") + " cover on file starts on " + plainDate(effective) +
       ", after the event on " + plainDate(eventDay) + ". If the policy was in force before then, the earlier certificate or renewal notice will show it." };
-  if (!args.travelEvent && happenedInSingapore(meaningfulFact(args.eventLocation)) && overseasOnly(args.benefitTitle, args.policyType))
-    return { kind: "location", text: "Not a possible benefit: this cover is for events overseas, and this happened in Singapore." };
+  if (!args.travelEvent && happenedAtHome(meaningfulFact(args.eventLocation), home) && overseasOnly(args.benefitTitle, args.policyType))
+    return { kind: "location", text: "Not a possible benefit: this cover is for events overseas, and this happened " + (home ? "in " + home : "at home") + "." };
   // Travel cover needs a trip: an event overseas, within the trip's dates. A
   // diagnosis at home, a local fracture or a death whose place is unknown is
   // not a travel claim.
   if (!args.travelEvent && overseasOnly(args.benefitTitle, args.policyType)) {
-    if (!happenedOverseas(meaningfulFact(args.eventLocation)))
+    if (!happenedOverseas(meaningfulFact(args.eventLocation), home))
       return { kind: "trip", text: "Not a possible benefit unless this happened during an overseas trip: it is travel cover." };
     const start = isoDay(meaningfulFact(args.tripStart)), end = isoDay(meaningfulFact(args.tripEnd));
     if (eventDay && ((start && eventDay < start) || (end && eventDay > end)))

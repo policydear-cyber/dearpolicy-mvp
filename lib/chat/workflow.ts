@@ -136,6 +136,7 @@ import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } fro
 // module is loaded only when the flag is on (lib/rag2/loop/hook.ts).
 import { ragLoopEnabled } from "@/lib/rag2/loop/flag";
 import { simpleChatEnabled } from "@/lib/simple-chat/flag";
+import { householdHomeCountry } from "@/lib/claims/household-home";
 
 
 export type ChatRequest={
@@ -1000,7 +1001,7 @@ function applyEventFit(answer:ChatAnswer,state:ConversationState,person:ClaimPer
       policyType:contract?.documents.map(d=>d.policy_type).find(Boolean)??null,
       expiryDate:status?.renewalOrExpiryDate??contract?.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null,
       expiryPassed:status?.state==="expiry_date_passed",eventDate,eventLocation,travelEvent:category==="travel",
-      tripStart:meaningfulFact(knownValue(facts,"tripStartDate")),tripEnd:meaningfulFact(knownValue(facts,"tripEndDate"))});
+      tripStart:meaningfulFact(knownValue(facts,"tripStartDate")),tripEnd:meaningfulFact(knownValue(facts,"tripEndDate")),home:state.home??null});
     if(issue)return {...item,status:"not_applicable" as const,reason:issue.text,conditions:[]};
     // Travel cover for an event that is not itself a travel claim (an accidental death abroad): it applies only within an insured trip.
     const policyType=contract?.documents.map(d=>d.policy_type).find(Boolean)??null;
@@ -1164,7 +1165,13 @@ async function keepClaimInStep(args:{request:ChatRequest;conversation:{id:string
 }
 /** "My colleague Ravi died", "my uncle fell and broke his leg" -- and the
  * questions the family asks about them afterwards. */
-function outsideHouseholdReply(outside:{relation:string;name:string|null},message:string,earlier?:{relation:string;name:string|null;died?:boolean}){
+/** Singapore's public schemes and bodies (MediShield Life, MediSave, MediFund, CPF, FIDReC, NRIC, the Ministry of Health)
+ * are named only to a household that lives in Singapore, or whose home its documents do not show. A household whose
+ * documents show another home (new-user walkthrough, 31 Oct: an Australian family) is given the same advice in general
+ * words. */
+const singaporeHousehold=(home:string|null|undefined)=>home==null||home==="Singapore";
+export function outsideHouseholdReply(outside:{relation:string;name:string|null},message:string,earlier?:{relation:string;name:string|null;died?:boolean},home?:string|null){
+  const sg=singaporeHousehold(home);
   const who=outside.name??"your "+outside.relation;
   if(earlier){
     const whose=outside.name?outside.name+"’s":"their";
@@ -1175,20 +1182,22 @@ function outsideHouseholdReply(outside:{relation:string;name:string|null},messag
     if(/\bwake\b|\bfuneral\b|\bcondolence/i.test(message))
       return say("There’s no rush on the insurance side — being there for "+who+"’s family comes first. A claim can be started after the funeral.");
     if(/\bbill\b|\bafford\b|\bfinancial\b|\bgovernment\b|\bhelp with\b|\bassistance\b/i.test(message)&&!earlier.died)
-      return say("For help with the bill, the hospital’s medical social workers are the first stop: they can assess "+who+" for MediFund and other assistance. For Singapore citizens and PRs, MediShield Life and MediSave also help with hospital bills.");
+      return say(sg?"For help with the bill, the hospital’s medical social workers are the first stop: they can assess "+who+" for MediFund and other assistance. For Singapore citizens and PRs, MediShield Life and MediSave also help with hospital bills."
+        :"For help with the bill, the hospital’s social workers or patient support team are the first stop: they can tell "+who+" what public cover and financial assistance apply where you live.");
     if(/\bleave\b|\bbereavement\b|\bcompassionate\b/i.test(message))
       return say("Bereavement or compassionate leave is an employment matter rather than insurance — your employer’s HR can tell you what applies.");
     if(/\b(?:find|look for|check (?:if|whether)|know (?:if|whether)|where)\b[^?]*\b(?:polic(?:y|ies)|cover|insur\w*)\b|\bhad cover\b/i.test(message))
       return say("To find "+whose+" policies, look through "+whose+" papers and emails for policy documents or premium notices, check bank statements for regular premium payments, and ask "+whose+" insurance agent or employer.",
-        earlier.died?["CPF savings follow "+whose+" CPF nomination, which the CPF Board handles separately from insurance."]:[]);
+        earlier.died?[sg?"CPF savings follow "+whose+" CPF nomination, which the CPF Board handles separately from insurance.":"Retirement or pension savings follow "+whose+" nomination with that fund, which is handled separately from insurance."]:[]);
     if(/\b(?:company|employer|work|office|group)\b/i.test(message))
       return say("If "+who+"’s employer had group insurance, HR is the place to ask: group claims are usually submitted through the employer"+(earlier.died?", and the family will need the death certificate.":"."));
     if(/\bno insurance\b|\bnot insured\b|\bdoesn['’]?t have (?:any )?insurance\b|\bno policy\b/i.test(message))
-      return say("Without private insurance, MediShield Life (for Singapore citizens and PRs) still helps with large hospital bills, MediSave can pay part of the bill, and the hospital’s medical social workers can advise on help such as MediFund.");
+      return say(sg?"Without private insurance, MediShield Life (for Singapore citizens and PRs) still helps with large hospital bills, MediSave can pay part of the bill, and the hospital’s medical social workers can advise on help such as MediFund."
+        :"Without private insurance, the public health system where you live may still cover much of a hospital bill, and the hospital’s social workers or patient support team can advise on financial help.");
     if(/\b(?:children|kids|son|daughter|family|wife|husband)\b/i.test(message)&&!earlier.died)
       return say("Their family can help "+who+" claim from "+whose+" own cover, but can’t claim "+whose+" bills under their own policies. The hospital’s medical social workers can also help them apply for financial assistance.");
     if(earlier.died)return say("For "+who+"’s family, the usual first steps are: get the death certificate, then contact each insurer "+who+" had a policy with (through the agent or the insurer’s claims line), and "+whose+" employer’s HR in case there was group life cover through work.");
-    return say(Who+" can claim from "+whose+" own insurance, if there is any — the insurer or agent will say what to send. MediShield Life (for citizens and PRs) helps with large hospital bills, and the hospital’s medical social workers can advise on financial help.",
+    return say(Who+" can claim from "+whose+" own insurance, if there is any — the insurer or agent will say what to send. "+(sg?"MediShield Life (for citizens and PRs) helps with large hospital bills, and the hospital’s medical social workers can advise on financial help.":"The hospital’s social workers or patient support team can advise on public cover and financial help."),
       [],["If "+who+" should be part of your household on DearPolicy, add them under Account settings > People and upload their policy documents."]);
   }
   const Who=who.charAt(0).toUpperCase()+who.slice(1);
@@ -1205,17 +1214,18 @@ function outsideHouseholdReply(outside:{relation:string;name:string|null},messag
       nextSteps:["If "+who+" should be part of your household on DearPolicy (for example a parent you support), add them under Account settings > People and upload their policy documents, then ask again."]};
 }
 /** "My knee surgery is next week": nothing to claim yet; what to do before it. */
-function plannedEventReply(person:ClaimPerson,message:string,earlier?:string){
+export function plannedEventReply(person:ClaimPerson,message:string,earlier?:string,home?:string|null){
+  const sg=singaporeHousehold(home);
   const planned=plannedMedicalEvent(message)??(earlier&&/\b(?:before the (?:surgery|operation|procedure)|letters? of guarantee|\blog\b|pre-?auth\w*|what should (?:i|we) (?:do|prepare|bring)|how (?:do|should) (?:i|we) prepare|medisave|complications?|recover\w*|cheaper|cheapest)\b/i.test(message)?{what:earlier}:null);
   if(!planned||reportedEvents(message).length)return null;
   const self=/^self$/i.test(person.relationship??"");
   const whose=self?"Your":(person.preferred_name??person.display_name)+"’s";
-  if(earlier&&!plannedMedicalEvent(message)&&/\bmedisave\b/i.test(message))return {planned:earlier,summary:"MediSave can usually be used for an approved operation, up to the withdrawal limits for it; the hospital works out how much can be deducted and will tell you before or at admission.",details:[],nextSteps:[]};
+  if(sg&&earlier&&!plannedMedicalEvent(message)&&/\bmedisave\b/i.test(message))return {planned:earlier,summary:"MediSave can usually be used for an approved operation, up to the withdrawal limits for it; the hospital works out how much can be deducted and will tell you before or at admission.",details:[],nextSteps:[]};
   if(earlier&&!plannedMedicalEvent(message)&&/\bcomplications?\b/i.test(message))return {planned:earlier,summary:"If complications lead to a longer stay or more treatment, a hospital plan usually treats them as part of the same claim. Tell me what happened afterwards and I’ll check it against "+(self?"your":(person.preferred_name??person.display_name)+"’s")+" policies.",details:[],nextSteps:[]};
   if(earlier&&!plannedMedicalEvent(message)&&/\brecover\w*\b|\bhow long\b[^?]*\b(?:rest|off work|mc|medical leave)\b/i.test(message))return {planned:earlier,summary:"How long recovery takes is a question for the surgeon. For the claim, keep the medical certificate and any follow-up bills — post-hospital treatment is often claimable for a period after discharge.",details:[],nextSteps:[]};
-  if(earlier&&!plannedMedicalEvent(message)&&/\b(?:cheaper|cheapest|cost|price|how much)\b[^?]*\bhospital\b|\bhospital\b[^?]*\b(?:cheaper|cheapest|cost|price)\b/i.test(message))return {planned:earlier,summary:"I can’t compare hospital prices. The Ministry of Health publishes typical bill sizes and fee benchmarks for common operations, and the hospital can give you a written estimate.",details:[],nextSteps:[]};
+  if(earlier&&!plannedMedicalEvent(message)&&/\b(?:cheaper|cheapest|cost|price|how much)\b[^?]*\bhospital\b|\bhospital\b[^?]*\b(?:cheaper|cheapest|cost|price)\b/i.test(message))return {planned:earlier,summary:sg?"I can’t compare hospital prices. The Ministry of Health publishes typical bill sizes and fee benchmarks for common operations, and the hospital can give you a written estimate.":"I can’t compare hospital prices. The hospital and the specialist can give you a written estimate, and your insurer can say what it expects to pay for that operation.",details:[],nextSteps:[]};
   if(earlier&&!plannedMedicalEvent(message))return {planned:planned.what,summary:"Before the "+planned.what+", the most useful thing is pre-authorisation: ask the hospital or the specialist to request a Letter of Guarantee from the insurer, so the bill can be settled directly instead of you paying first.",
-    details:["Bring your NRIC and the insurance details to admission, and keep the referral letter and the cost estimate."],
+    details:["Bring "+(sg?"your NRIC":"your identity document")+" and the insurance details to admission, and keep the referral letter and the cost estimate."],
     nextSteps:["After the "+planned.what+", tell me what happened and I’ll check which benefits respond."]};
   return {planned:planned.what,summary:whose+" "+planned.what+" hasn’t happened yet, so there is nothing to claim today. A little preparation before it saves trouble later.",
     details:["Before a planned operation, ask the hospital or the specialist to get pre-authorisation (a Letter of Guarantee) from the insurer, so the bill can be settled directly.",
@@ -1286,7 +1296,7 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
       return {summary:"If anything is found, tell me what the doctor says and I’ll check which of "+whose+" policies respond to it — a hospital plan for treatment, and any critical illness cover for a diagnosis it names.",details:[],nextSteps:[],citations:[]};
   }
   if(hypothetical==="rejected claim"&&!pendingOnlyDamage&&(followKind||/\b(?:what (?:do|should|can) (?:i|we) do|appeal|what now|next)\b/i.test(text)))
-    return {summary:"Ask the insurer for its reasons in writing, then ask it to review the decision, sending anything that answers those reasons — for example a doctor’s letter on when the condition started. If it keeps to its decision, you can take the dispute to FIDReC.",details:[],nextSteps:[],citations:[],hypothetical:"rejected claim"};
+    return {summary:"Ask the insurer for its reasons in writing, then ask it to review the decision, sending anything that answers those reasons — for example a doctor’s letter on when the condition started. If it keeps to its decision, you can take the dispute to "+(singaporeHousehold(state.home)?"FIDReC.":"the independent insurance complaints or ombudsman service where you live."),details:[],nextSteps:[],citations:[],hypothetical:"rejected claim"};
   if(hypothetical&&followKind&&!pendingOnlyDamage&&!/\bwhat if\b|\bif (?:i|he|she|we|they|my)\b[^?]{0,40}\b(?:get|gets|got|have|has|break|breaks|fall|falls|need|needs)\b/i.test(text)){
     const keep=documentsIfItHappens(hypothetical);
     const pages=await pagesP;
@@ -1312,7 +1322,7 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
     const rest=text.replace(/^.*?\b(?:reject\w*|declin\w*|denied|turned down|says? no|said no)\b[^,.;]*[,.;-]*/i,"").trim();
     const own=!preExisting&&questionTopics(rest).length?await answerFor(rest):null;
     return {summary:"I’m sorry the claim was turned down. Only the insurer decides a claim; you can ask it to explain the decision in writing and to review it."+(own?.handled?" "+own.summary:""),
-      details:[...(preExisting?[preExisting.meaning]:[]),...lines.map(l=>l.line),...(own?.handled?own.details.slice(0,6):[]),"If you still disagree after the review, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore."],
+      details:[...(preExisting?[preExisting.meaning]:[]),...lines.map(l=>l.line),...(own?.handled?own.details.slice(0,6):[]),singaporeHousehold(state.home)?"If you still disagree after the review, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore.":"If you still disagree after the review, the independent insurance complaints or ombudsman service where you live handles disputes with insurers."],
       nextSteps:lines.length||own?.handled?[]:["Tell me what the claim was for and I’ll show what "+whose+" policy says about it."],citations:[...lines.map(l=>l.citation),...(own?.handled?own.citations:[])],hypothetical:"rejected claim"};
   }
   // Round 7 (port): mid-claim, "how much can I get back?", "total claimable": no estimate before the claim evidence is reviewed,
@@ -1594,6 +1604,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   const check=options?.check??(async()=>undefined);
   await check();
   const answer=blankAnswer();let state=conversation.state;
+  // Overseas is relative to where this household lives (lib/claims/home-country.ts), read fresh every turn.
+  state={...state,home:await householdHomeCountry(request.accountId)};
   // Round 7 (port): "never mind the claim. How much is her hospital cash?" sets the
   // open claim aside -- its question is not asked again and the rest of the
   // message is answered as the question it is. The facts stay on record.
@@ -1717,7 +1729,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   // A question about the claim just concluded ("what should we keep for the claim?") is never small talk or advice.
   const conversational=whatIfReply||request.personChoiceId||(state.intent==="claim"&&claimFollowUpKind(request.submittedQuestion??request.question))
     ||(state.propertyEvent&&propertyFollowUp(state.propertyEvent,request.submittedQuestion??request.question))||context.outside?null:conversationalReply({message:request.submittedQuestion??request.question,
-    selected:context.people.length===1?context.people[0]:null,family:context.family,hasTopic:!!state.activeQuery,pending:!!state.pending,products:context.holdings});
+    selected:context.people.length===1?context.people[0]:null,family:context.family,hasTopic:!!state.activeQuery,pending:!!state.pending,products:context.holdings,home:state.home});
   // Round 10: "what reversionary bonus was added in 2024?" reads as off-topic to the small-talk
   // rules, but a line of the household's own documents answers it: that line is the answer.
   if(conversational&&/^I can only help with your household/.test(conversational.summary)&&!request.personChoiceId&&!/\b(?:should (?:i|we)|worth it|advi[cs]e|recommend)\b/i.test(request.submittedQuestion??request.question)){
@@ -1784,9 +1796,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   }
   // Someone outside the household, or an operation that has not happened yet:
   // said plainly, with no question card and nobody else's cover offered.
-  const plain=context.outside?outsideHouseholdReply(context.outside,request.submittedQuestion??request.question,state.outsideSubject)
+  const plain=context.outside?outsideHouseholdReply(context.outside,request.submittedQuestion??request.question,state.outsideSubject,state.home)
     :!context.ambiguity&&context.people.length===1&&!state.pending&&(!request.personChoiceId||!!plannedMedicalEvent(request.question))
-      ?plannedEventReply(context.people[0],request.personChoiceId?request.question:request.submittedQuestion??request.question,state.plannedEvent)??await propertyClaimReply({accountId:request.accountId,person:context.people[0],message:request.submittedQuestion??request.question})
+      ?plannedEventReply(context.people[0],request.personChoiceId?request.question:request.submittedQuestion??request.question,state.plannedEvent,state.home)??await propertyClaimReply({accountId:request.accountId,person:context.people[0],message:request.submittedQuestion??request.question})
         ??(state.intent==="claim"&&state.activeClaimQuery?await lockedDocumentsReply({accountId:request.accountId,person:context.people[0],state,message:request.submittedQuestion??request.question}):null)
         ??(state.propertyEvent?propertyFollowUp(state.propertyEvent,request.submittedQuestion??request.question):null):null;
   if(plain){
@@ -1909,7 +1921,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // nights", "delayed 13 hours") and corrections ("her right arm not
       // left") are recorded now, so the interview never asks for them again.
       if(context.people.length===1&&(state.intent==="claim"||pendingBefore)&&!/\b(?:if|suppose|supposing|what if|were to|in case)\b/i.test(request.submittedQuestion??request.question)){
-        const read=applyMessageFacts({message:request.submittedQuestion??request.question,facts:(state.subjects[context.people[0].id]??={}),now});
+        const read=applyMessageFacts({message:request.submittedQuestion??request.question,facts:(state.subjects[context.people[0].id]??={}),now,home:state.home??null});
         if(read.correction)TURN_CORRECTION.set(answer,read.correction);
         // Someone telling DearPolicy about their own diagnosis is alive: the
         // survival question is never put to them.

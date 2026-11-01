@@ -498,11 +498,15 @@ export function productFromDocumentTitle(title: string | null | undefined): stri
   if (!name || name.length < 4 || name.length > 70 || looksLikeInjectedInstruction(name)) return null;
   return name.replace(/\s+(?:certificate|schedule|policy)$/i, "").trim();
 }
-/** The insurer a document's letterhead prints (its first line naming an insurer). */
+/** The insurer a document's letterhead prints (its first line naming an insurer). A line carrying a money figure, a
+ * thousands figure or a percentage ("General dental  $900", "Life Cover  AUD 850,000") is a row of the document, never its
+ * letterhead; a registration number ("Reg. No. 199002477Z") is not a figure (new-user
+ * walkthrough, 31 Oct: a health fund's membership certificate was filed under the insurer "General dental $900"). */
 export function letterheadInsurer(pages: Page[]): string | null {
   for (const line of contentLines(pages).slice(0, 12)) {
     if (line.length > 70 || /\bpage\s+\d|synthetic|policy|dear\b/i.test(line)) continue;
-    if (/\b(?:insurance|assurance|life|general|mutual|takaful|insurer)\b/i.test(line)) return line;
+    if (/[$€£¥₹₱]\s?\d|\d\s?[$€£]|\b(?:[A-Z]{3}|RM)\s?\d[\d,.]*\b|\d{1,3}(?:[,.]\d{3})+|\b\d+(?:\.\d+)?\s?%/.test(line)) continue;
+    if (/\b(?:insurance|assurance|life|general|mutual|takaful|insurer|insurers|health\s+fund|friendly\s+society|underwriters?)\b/i.test(line)) return line;
   }
   return null;
 }

@@ -167,6 +167,66 @@ export function eventsFromText(text:string):EventCandidate[]{
   return out;
 }
 
+/** The one benefit a schedule line names by its own cover category ("Death", "Total Permanent Disability"), and whether
+ * the line's printed amount is what that benefit pays. A line's sum is that benefit's only: never also a disability or
+ * terminal-illness figure (new-user walkthrough, 31 Oct: an Australian schedule printing Life Cover $850,000 and TPD
+ * Cover $500,000 showed "Total and permanent disability A$850,000"). A category not listed here seeds its own nothing. */
+export const SCHEDULE_LINE_EVENTS:Record<string,{event:EventType;pays:PaysKind}>={
+  "Death":{event:"death",pays:"lump_sum"},
+  "Total Permanent Disability":{event:"tpd",pays:"lump_sum"},
+  "Critical Illness":{event:"critical_illness",pays:"lump_sum"},
+  "Early Critical Illness":{event:"early_critical_illness",pays:"lump_sum"},
+  "Personal Accident":{event:"accidental_death",pays:"lump_sum"},
+  "Hospitalisation":{event:"hospital_medical_expense",pays:"stated"},
+  "Hospital Cash":{event:"hospital_daily_cash",pays:"stated"},
+  "Long-term Care":{event:"long_term_care",pays:"stated"},
+  "Disability Income":{event:"disability_income",pays:"stated"},
+};
+/** The benefit a schedule line seeds: its own category's, with an accident plan's death line read as accidental death
+ * (a personal accident schedule's "Death" sum pays only on an accident). Null when the line names no listed cover. */
+/** A line category in other words than the list above ("Life Cover", "Death Benefit", "TPD", "Trauma"), read from the
+ * category alone, never from the plan's name: a "TPD Cover" line on a life plan is TPD, never death. Ordered so the
+ * narrower cover wins ("Accidental Death" before "Death", "Early Critical Illness" before "Critical Illness"). */
+const SCHEDULE_LINE_WORDS:[RegExp,string][]=[
+  [/\btpd\b|\btotal (?:and |& )?permanent(?:ly)? disab\w*/i,"Total Permanent Disability"],
+  [/\b(?:early|intermediate|early[- ]stage|minor)\b[^,;]{0,20}\b(?:critical|dread|trauma|crisis)\b(?:\s+(?:illness|disease|cover))?/i,"Early Critical Illness"],
+  [/\b(?:critical illness|dread disease|trauma|crisis cover|major illness|\bci\b)/i,"Critical Illness"],
+  [/\baccident(?:al)?\b[^,;]{0,20}\b(?:death|life)\b|\bpersonal accident\b/i,"Personal Accident"],
+  [/(?:\bhospital (?:cash|income|allowance)\b|\bdaily (?:hospital )?(?:cash|allowance)\b)(?:\s+for\s+life\b)?/i,"Hospital Cash"],
+  [/\b(?:long[- ]term care|severe disability)\b/i,"Long-term Care"],
+  [/\b(?:income protection|disability income|salary continuance)\b/i,"Disability Income"],
+  [/\b(?:death in service|death|life (?:cover|insurance|assurance|benefit|sum assured)|^life$|term life|whole life)\b/i,"Death"],
+];
+/** The whole category is a cover's name: the cover words, plus only words that name a sum ("Life Cover", "TPD Benefit",
+ * "Critical Illness Sum Assured"). A line that says anything else is a different thing with a cover's name in it: "TPD
+ * Premium Waiver", "Life Cover Premium" and "Life Insurance Fund Value" are not a TPD or death sum (TE, 31 Oct). */
+// Words that say what kind of the same cover it is ("Group Term Life", "Level Life Cover", "Accelerated Critical
+// Illness Rider") are part of its name too.
+const COVER_NAME_FILLER=new Set(["cover","coverage","benefit","benefits","sum","assured","insured","amount","insurance","assurance","plan","protection","lump","basic","main","and","&","the","of","on","upon","for",
+  "group","individual","family","joint","single","level","decreasing","increasing","accelerated","standalone","stand","alone","additional","supplementary","enhanced","rider","policy"]);
+function wholeCoverName(category:string,re:RegExp):boolean{
+  const m=re.exec(category);
+  if(!m)return false;
+  const rest=(category.slice(0,m.index)+" "+category.slice(m.index+m[0].length)).toLowerCase().split(/[^a-z&]+/).filter(Boolean);
+  return rest.every((w)=>COVER_NAME_FILLER.has(w));
+}
+/** What a printed line costs or holds rather than pays: a premium, a waiver of premium, a fund, surrender or cash value,
+ * a fee, a charge, an excess or deductible, a contribution or subscription, a loan. Intake stores such a line under the
+ * cover it names ("TPD Premium Waiver" as Total Permanent Disability), so its printed label is read too (TE, 31 Oct). */
+const NOT_A_SUM=/\b(?:premiums?|waiver|fund value|surrender(?: value)?|cash value|fees?|charges?|excess|deductible|contributions?|subscriptions?|loan|levy|caruman|yuran|bayaran)\b|保费|保費|退保/i;
+export function printedLabelIsNotASum(evidenceText:string|null|undefined):boolean{
+  const label=String(evidenceText??"").split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"";
+  return NOT_A_SUM.test(label);
+}
+export function scheduleLineEvent(category:string,name:string,printed?:string|null):{event:EventType;pays:PaysKind}|null{
+  if(printedLabelIsNotASum(printed))return null;
+  const said=category.trim();
+  const own=SCHEDULE_LINE_EVENTS[said]??SCHEDULE_LINE_EVENTS[SCHEDULE_LINE_WORDS.find(([re])=>wholeCoverName(said,re))?.[1]??""];
+  if(!own)return null;
+  if(own.event==="death"&&/\b(?:personal accident|group accident|accident(?:al)?(?: death)?(?: cover| plan| insurance| protection)?|\bpa\b)\b/i.test(name))return {event:"accidental_death",pays:"lump_sum"};
+  return own;
+}
+
 /** What a plan of a given kind pays, when only its schedule line is on file.
  * These are the industry's standard shapes, and every row seeded from them
  * says so: they are proposals for the person to confirm, never the wording. */

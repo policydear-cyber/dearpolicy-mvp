@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
     let covers: Awaited<ReturnType<typeof tableCoversByMember>> = null;
     try { covers = await tableCoversByMember(accountId); }
     catch (error) { console.warn("Benefit table unavailable for premiums:", error instanceof Error ? error.message : error); }
-    const people = [];
+    const people = [], memo = {};
     for (const m of family.rows) {
       people.push({ id: m.id, display_name: m.display_name, relationship: m.relationship,
-        premiums: await countedPremiums(accountId, { id: m.id, display_name: m.display_name, preferred_name: null, relationship: m.relationship }, covers ? covers.get(m.id) ?? [] : null) });
+        premiums: await countedPremiums(accountId, { id: m.id, display_name: m.display_name, preferred_name: null, relationship: m.relationship }, covers ? covers.get(m.id) ?? [] : null, memo) });
     }
     return NextResponse.json(maskShownText({ people }));
   } catch (error) {
