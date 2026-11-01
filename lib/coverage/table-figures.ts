@@ -118,15 +118,34 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * disability row printed under an accident section ("Personal accident", "Group Personal Accident") is accident cover
  * whatever its own name says: a travel policy's "Total and permanent disability" under "Personal accident" pays only on an
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
+/** A death benefit named only in another language (TE R4-2 on #280): an allow-list of names that START with the death
+ * words, so a sentence that only mentions a death ("Exonération des cotisations en cas de décès", "Waiver ... upon death")
+ * is never taken for one. Malay, Indonesian, French, German, Chinese. */
+const OTHER_LANGUAGE_DEATH = /^\W*(?:(?:manfaat|faedah|santunan|pampasan|uang)\s+)?(?:kematian|meninggal(?:\s+dunia)?)\b|^\W*(?:(?:capital|prestations?|garantie|indemnit[ée])\s+)?d[ée]c[èe]s\b|^\W*(?:todesfall\w*|tod\b)|^\W*(?:身故|死亡)/iu;
+/** The same names said to pay on an accident only: "Kematian akibat kemalangan", "Décès accidentel", "Todesfall durch
+ * Unfall", "Unfalltod", "意外身故". */
+const OTHER_LANGUAGE_ACCIDENT = /\b(?:akibat|kerana|karena|disebabkan(?:\s+oleh)?|oleh)\s+(?:suatu\s+)?kemalangan\b|\baccidentel(?:le)?s?\b|\b(?:par|suite\s+[àa]\s+un|caus[ée]e?\s+par\s+un)\s+accident\b|\b(?:durch|bei|infolge|nach)\s+(?:einen?\s+|eines\s+)?unfall\w*|(?:因|由于)意外/iu;
+const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall(?:tod|todesfall)\w*|意外(?:身故|死亡))/iu;
+/** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
+const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人/iu;
+
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
   // to other people") pays a third party, never the person's own death, injury or hospital bill.
   if (isLiability(benefit) || (section && (isLiability(section) || LIABILITY_SECTION.test(section.trim())))) return null;
-  const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
+  const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0]
+    ?? otherLanguageDeath(benefit);
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
     && causeOf(section) === "accident") return "Personal Accident";
   return category;
+}
+
+function otherLanguageDeath(benefit: string): string | null {
+  if (OTHER_LANGUAGE_OTHERS.test(benefit)) return null;
+  if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)) return "Personal Accident";
+  if (!OTHER_LANGUAGE_DEATH.test(benefit)) return null;
+  return OTHER_LANGUAGE_ACCIDENT.test(benefit) ? "Personal Accident" : "Death";
 }
 
 /** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified

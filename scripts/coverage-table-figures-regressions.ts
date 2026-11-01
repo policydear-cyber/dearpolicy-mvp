@@ -687,5 +687,22 @@ for (const [m, cur, sum, own] of [["SG", "SGD", 800000, 90000], ["MY", "MYR", 50
   });
 }
 
+test("a death benefit named only in another language is Death, an accident-only one Personal Accident (TE R4-2 on #280)", () => {
+  for (const b of ["Manfaat Kematian", "Kematian", "Meninggal dunia", "Santunan meninggal dunia", "Capital décès", "Décès", "Prestation décès",
+    "Todesfallleistung", "Todesfall", "Tod", "身故保险金", "死亡给付", "Décès toutes causes y compris accident", "Kematian termasuk kemalangan", "Todesfall auch bei Krankheit"])
+    assert.equal(categoryOfBenefit(b), "Death", b);
+  for (const b of ["Kematian akibat kemalangan", "Kematian disebabkan oleh kemalangan", "Décès accidentel", "Décès par accident", "Todesfall durch Unfall",
+    "Unfalltod", "意外身故", "身故（因意外）"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+  // Only a name that STARTS with the death words: a waiver on death, someone else's death, a word that only begins alike.
+  for (const b of ["Exonération des cotisations en cas de décès", "Pengecualian caruman jika meninggal dunia", "Beitragsbefreiung bei Tod", "Décès d'un tiers",
+    "Kematian pihak ketiga", "第三者身故", "Todd's paralysis", "Unfallkrankenhaustagegeld", "意外医疗"]) assert.equal(categoryOfBenefit(b), null, b);
+  // Under an accident section it is accident cover, as an English name is.
+  assert.equal(categoryOfBenefit("Kematian", "Personal Accident"), "Personal Accident");
+  // On the Death tile: a Malay death benefit beside another policy's English one adds up, never shows the other alone.
+  const r = (benefit: string, amount: number, key: string) => ({ ...row(benefit, { figure: { kind: "printed", amount, currency: "MYR", unit: "lump_sum" } }), coverKey: key });
+  const parts = lumpSumParts(tileRows(categoryRows("Death", [r("Death Benefit", 200000, "a"), r("Manfaat Kematian", 50000, "b")])), [], [], "Death");
+  assert.equal(parts.total, 250000);
+});
+
 console.log(`coverage table figures: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("FAIL", f); process.exit(1); }
