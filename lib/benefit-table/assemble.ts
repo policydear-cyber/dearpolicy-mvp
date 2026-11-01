@@ -13,7 +13,8 @@
  *   amount the person holds or will be paid.
  * Rows from different documents are never added together; each row stands alone. A cover read from an illustration
  * (a quotation) is not proof that the person holds it. */
-import { findFamilyMatchWithKind } from "@/lib/policies/linking";
+import { familyNameCandidates, findFamilyMatchWithKind } from "@/lib/policies/linking";
+import { nameKey } from "@/lib/policies/name-dismissals";
 import { printedDay, singaporeDay } from "./dates";
 import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
@@ -21,7 +22,15 @@ import { shareOf as readShare } from "@/lib/format/share-of";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
-export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null };
+export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
+  /** The documents this person is linked to by their own record (policy_members: chosen at upload, ticked in the "who does
+   * this cover" picker, or matched when read), and the printed names on a document the household matched to them
+   * (policy_detected_people). Used only to tell apart people whose names are the same. */
+  documents?: string[]; printedAs?: { documentId: string; name: string }[] };
+/** A cover printed for a name two or more family members share, which neither the document's own links nor a match the
+ * household made tells apart: shown with everyone it may be, never dropped and never given to one of them by guess. */
+/** `sameName`: every candidate has the printed name itself; false when each only fits part of it ("Wei Jie" and "Wei"). */
+export type AmbiguousCover = { cover: CheckedCover; documentId: string; candidates: { id: string; name: string }[]; sameName: boolean };
 export type Figure =
   | { kind: "printed"; amount: number; currency: string | null; unit: "lump_sum" | "up_to" | "per_day" | "per_period"; period?: string | null }
   | { kind: "value"; amount: number; currency: string | null; asOf: string | null }
@@ -73,8 +82,10 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   planType?: PlanType | null };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
-  /** Covers printed for someone who is not (or not unambiguously) a family member. */
+  /** Covers printed for someone who is not a family member. */
   unmatchedCovers: CheckedCover[];
+  /** Covers printed for a name several family members share, that nothing on record tells apart (AmbiguousCover). */
+  ambiguousCovers: AmbiguousCover[];
   /** Covers printed in an illustration (a quotation): not proof the person holds them. */
   illustrationCovers: CheckedCover[];
   /** Sections no cover was linked to, with why: shown to the household, never silently dropped. */
@@ -104,13 +115,34 @@ const cents = (n: number) => Math.round(n * 100) / 100;
 const money = (amount: number, currency: string | null) =>
   `${currency === "SGD" ? "S$" : currency ? currency + " " : "$"}${amount.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
+/** Whom a printed name is when several family members share it: the one the household matched this printed name to on
+ * this document, else, between people with the very same name, the one of them this document is linked to by their own
+ * record. Nobody on record, or several,
+ * gives the candidates (never a guess). A name nobody in the family has gives null. */
+function sharedNameMatch(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | { candidates: { id: string; name: string }[]; sameName: boolean } | null {
+  const { members: candidates, exact } = familyNameCandidates(name, family);
+  if (candidates.length < 2) return null;
+  const key = nameKey(name);
+  const printed = candidates.filter((m) => (m.printedAs ?? []).some((p) => p.documentId === documentId && nameKey(p.name) === key));
+  if (printed.length === 1) return { member: printed[0] };
+  // A document link decides only between true namesakes. People whose different names each fit part of the printed name
+  // ("Wei Jie" and his son "Wei" for "Tan Wei Jie") are never told apart by it: the document may be linked to the son for
+  // his own cover while this line is the father's (Critic H1 on #254).
+  const linked = exact ? candidates.filter((m) => (m.documents ?? []).includes(documentId)) : [];
+  if (linked.length === 1) return { member: linked[0] };
+  return { candidates: candidates.map((m) => ({ id: m.id, name: m.display_name })), sameName: exact };
+}
+
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
 export function coversOf(readings: CheckedReading[], family: FamilyMember[], today: number = singaporeDay(new Date())) {
-  const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [];
+  const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [], ambiguous: AmbiguousCover[] = [];
   const found: PersonCover[] = [];
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
-    const match = findFamilyMatchWithKind(c.person, family);
+    const named = findFamilyMatchWithKind(c.person, family);
+    const shared = named ? null : sharedNameMatch(c.person, r.documentId, family);
+    if (shared && "candidates" in shared) { ambiguous.push({ cover: c, documentId: r.documentId, candidates: shared.candidates, sameName: shared.sameName }); continue; }
+    const match = named ?? shared;
     if (!match) { unmatched.push(c); continue; }
     found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
   }
@@ -147,7 +179,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (!t.holders.includes(name)) t.holders.push(name);
     types.set(c.coverKey, t);
   }
-  return { covers, unmatched, illustration, types: [...types.values()] };
+  return { covers, unmatched, illustration, ambiguous, types: [...types.values()] };
 }
 
 /** A travel cover's term is short when its printed period runs at most this many days: a trip, never an annual plan. */
@@ -293,7 +325,7 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
 
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
-  const { covers, unmatched, illustration, types } = coversOf(readings, family, singaporeDay(now));
+  const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
   // it; the printed figure stays on the cover, so the page can show both.
   const staleConfirmations: Confirmation[] = [];
@@ -345,7 +377,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
     }
   }
-  return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
+  return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
 }
 
 // In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
