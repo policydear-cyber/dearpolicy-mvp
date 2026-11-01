@@ -46,7 +46,7 @@ function paysLine(b:Benefit):{text:string;established:boolean}{
   if(b.planColumns&&b.planFigure)return {text:`For your ${b.planFigure.plan} plan: ${b.planFigure.figureText}. The document prints a different amount for each plan.`,established:true};
   if(b.planColumns)return {text:"The document prints a different amount for each plan, and which plan is yours is not shown, so no amount is used for it.",established:false};
   if(b.attention==="unreadable"&&b.wholeSum?.length)return {text:"Pays the whole sum insured, as each person's own policy document gives it:",established:true};
-  if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote),established:false};
+  if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote,b.benefitName),established:false};
   if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. The amount has not been verified against the page yet, so it is not used in answers.",established:false};
   if(b.formulaKind==="none")return {text:b.pays||"As stated in the document.",established:true};
   return {text:b.pays,established:true};

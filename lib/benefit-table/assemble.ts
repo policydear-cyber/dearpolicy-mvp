@@ -17,6 +17,7 @@ import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { printedDay, singaporeDay } from "./dates";
 import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
+import { shareOf as readShare } from "@/lib/format/share-of";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
@@ -27,7 +28,11 @@ export type Figure =
   | { kind: "projected"; amount: number; currency: string | null; basis: "non_guaranteed" | "illustrated"; asOf: string | null }
   /** capped: the percentage came to more than the most the row pays, so the amount is that printed cap. */
   | { kind: "worked_out"; amount: number; currency: string | null; how: string; capped?: boolean }
-  | { kind: "none"; why: string };
+  /** share: a percentage row whose amount is not worked out (its maximum was not captured, or the amount it is a share
+   * of is not stated with it) still says the share it pays, in the row's own words ("10% of Prevailing Insured Amount").
+   * Never an amount: capWords is the maximum exactly as printed, or null; capMissing says a maximum applies but its
+   * figure was not captured. */
+  | { kind: "none"; why: string; share?: { percent: number; of: string; capWords: string | null; capPage: number | null; capMissing: boolean } };
 export type TableRow = {
   personId: string; person: string; coverKey: string; product: string; cover: string; plan: string | null;
   benefit: string; section: string | null; column: string | null; pays: CheckedBenefit["pays"]; figure: Figure;
@@ -200,8 +205,11 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
-  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt)))
-    return { kind: "none", why: `${b.value}% of ${b.percentOf === "sum_insured" ? "the sum insured" : "a printed amount"}, up to a limit printed with it on p${b.source.page}: see the document` };
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt))) {
+    const of = shareWords(b);
+    return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
+      ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
+  }
   const capped = (amount: number, currency: string | null, how: string): Figure =>
     b.cap != null && amount > b.cap
       ? { kind: "worked_out", amount: b.cap, currency, how: `${how} is more than the most it pays, so up to ${money(b.cap, currency)} (printed with it on p${b.capSource?.page ?? b.source.page})`, capped: true }
@@ -209,11 +217,29 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.percentOf === "fixed_amount" && b.baseAmount != null)
     return capped(cents(b.value! * b.baseAmount / 100), b.currency, `${b.value}% of ${money(b.baseAmount, b.currency)}, printed on the same page`);
   if (b.percentOf === "sum_insured") {
-    if (cover.sumInsured == null) return { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` };
+    if (cover.sumInsured == null) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
     return capped(cents(b.value! * cover.sumInsured / 100), cover.currency,
       `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})`);
   }
-  return { kind: "none", why: `${b.value}% of a base the page does not state` };
+  return withShare(b, { kind: "none", why: `${b.value}% of a base the page does not state` });
+}
+
+/** The words a percentage row says it is a share of, as printed (lib/format/share-of): "10% of Prevailing Insured
+ * Amount, up to maximum of S$25,000" gives "Prevailing Insured Amount". When the row prints none, "the sum insured" if the
+ * reading says that is the base, otherwise null (and the row keeps "See the page"). */
+function shareWords(b: Pick<CheckedBenefit, "value" | "percentOf" | "benefit" | "section"> & { source: { excerpt: string } }): string | null {
+  // Only the row's own name and heading may come before its share; anything else printed first may be a condition.
+  const printed = readShare(b.source.excerpt, { name: [b.benefit, b.section].filter(Boolean).join(" ") });
+  if (printed && printed.percent === b.value) return printed.of;
+  return b.percentOf === "sum_insured" ? "the sum insured" : null;
+}
+/** A row with no amount keeps its share when the row prints what it is a share of, with any maximum exactly as printed. */
+function withShare(b: CheckedBenefit, f: Extract<Figure, { kind: "none" }>): Figure {
+  const of = shareWords(b);
+  if (!of || b.value == null) return f;
+  // The maximum only in the words that print it (checked against the row); never re-worded with a guessed currency.
+  const capWords = b.cap == null ? null : b.capQuote?.trim() || null;
+  return { ...f, share: { percent: b.value, of, capWords, capPage: capWords ? b.capSource?.page ?? b.source.page : null, capMissing: false } };
 }
 
 /** Plan columns, one rule. A heading keeps every word except a closed list of currency and unit tokens (S$, SGD, $, "per
@@ -327,7 +353,9 @@ import { periodWords } from "./headline";
 export { periodWords };
 
 export function figureText(f: Figure): string {
-  if (f.kind === "none") return `no amount (${f.why})`;
+  if (f.kind === "none") return f.share
+    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
+    : `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
   if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;
   if (f.kind === "projected") return `${m} projected, ${f.basis === "non_guaranteed" ? "not guaranteed" : "an illustration"}${f.asOf ? ` (${f.asOf})` : ""}: not an amount held or payable`;
