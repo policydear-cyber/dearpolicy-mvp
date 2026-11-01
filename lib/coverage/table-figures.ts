@@ -137,12 +137,24 @@ const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian|pembebasan|penepian|
 /** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
 const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bautrui\b|\bd['’]une\s+autre\s+personne\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人|别人/iu;
 
+/** Another family member named as the one who dies or is disabled ("Spouse death benefit", "Kematian Pasangan", "Décès du
+ * conjoint", "Tod des Ehepartners", "配偶身故保险金", "Death of child"): that pays on someone else's death, never the person's
+ * own, so it is no Death, accident or disability cover of theirs (TE F2 on #283). A closed list; German "Kind" only with
+ * its capital. */
+const OTHER_FAMILY_MEMBER = /(?<!\p{L})(?:spouses?|spousal|husbands?|wi(?:fe|ves)|child(?:ren)?|sons?|daughters?|conjoints?|[ée]poux|[ée]pouses?|enfants?|pasangan|suami|isteri|istri|anak(?:-anak)?|ehepartner\p{L}*|ehegatt\p{L}*|ehefrau|ehemann)(?!\p{L})|配偶|子女|孩子|儿童|兒童/iu;
+const GERMAN_KIND = /\bKind(?:es|er)?\b/u;
+/** Who it is paid TO is the beneficiary, not who dies: "Death benefit paid to your spouse", "dibayar kepada isteri", "versé
+ * à votre conjoint", "an Ihren Ehepartner", "给配偶". That part never names the one who dies. */
+const PAID_TO = /\b(?:(?:paid|payable|pays?|given|goes)\s+to|to\s+(?:your|the|his|her|their))\b.*$|\b(?:dibayar(?:kan)?\s+)?kepada\b.*$|\b(?:vers[ée]e?s?|pay[ée]e?s?)\s+(?:à|au|aux)(?=\s).*$|(?:^|\s)(?:à|au|aux)\s+(?:votre|vos|son|sa|ses|l['’]\s*[ée]poux)\b.*$|\b(?:an|f[üu]r)\s+(?:Ihre[nm]?|den|die|seine[nm]?)\b.*$|(?:给|付给|支付给).*$/iu;
+
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
   // to other people") pays a third party, never the person's own death, injury or hospital bill.
   if (isLiability(benefit) || (section && (isLiability(section) || LIABILITY_SECTION.test(section.trim())))) return null;
   const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0]
     ?? otherLanguageDeath(benefit);
+  if ((category === "Death" || category === "Personal Accident" || category === "Total Permanent Disability")
+    && (OTHER_FAMILY_MEMBER.test(benefit.replace(PAID_TO, "")) || GERMAN_KIND.test(benefit.replace(PAID_TO, "")))) return null;
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
     && causeOf(section) === "accident") return "Personal Accident";

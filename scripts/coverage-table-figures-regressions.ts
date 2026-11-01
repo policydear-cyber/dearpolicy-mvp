@@ -704,6 +704,12 @@ test("a death benefit named only in another language is Death, an accident-only 
     // A waiver on death, "TOD", someone else (Critic M1/M2 on #283).
     "Décès - exonération des cotisations", "Kematian - pengecualian sumbangan", "Meninggal dunia - pembebasan premi", "Todesfall - Beitragsbefreiung", "身故豁免保费",
     "TOD (time of day) surcharge", "tod", "Décès d'autrui", "Décès d'une autre personne", "别人身故"]) assert.equal(categoryOfBenefit(b), null, b);
+  // Someone else's death is never the person's own Death (TE F2 on #283), English included.
+  for (const b of ["Spouse death benefit", "Death of child", "Kematian Pasangan", "Kematian anak", "Décès du conjoint", "Décès d'un enfant", "Tod des Ehepartners",
+    "Todesfall eines Kindes", "Décès de l'époux", "Décès de l'épouse", "配偶身故保险金", "子女身故", "Accidental death of spouse", "Kematian isteri akibat kemalangan", "TPD of child"]) assert.equal(categoryOfBenefit(b), null, b);
+  // Who it is paid to is the beneficiary, not who dies: still the person's own Death.
+  for (const b of ["Death benefit", "Kematian", "Death benefit paid to your spouse or children", "Death benefit payable to the spouse", "Manfaat kematian dibayar kepada isteri",
+    "Capital décès versé à votre conjoint", "Todesfallleistung an Ihren Ehepartner", "身故保险金给配偶"]) assert.equal(categoryOfBenefit(b), "Death", b);
   for (const b of ["Tod", "Tod durch Krankheit", "Décès toutes causes y compris accident", "Kematian termasuk kemalangan", "身故（包括意外）"]) assert.equal(categoryOfBenefit(b), "Death", b);
   // Under an accident section it is accident cover, as an English name is.
   assert.equal(categoryOfBenefit("Kematian", "Personal Accident"), "Personal Accident");
