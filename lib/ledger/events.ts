@@ -291,8 +291,8 @@ const PLAN_GLOSSES:[RegExp,string][]=[
 const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*|vision|optical|eye(?:care|wear)?|eyes|spectacles|maternity|pregnancy|"+
   "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
 /** Words saying a benefit is a cash amount paid to the person, not a limit on a bill (Critic #285 M1): a closed list. */
-const CASH_WORDS="(?:cash|allowances?|income|benefit per (?:day|night)|daily benefit|elaun|tunai|pendapatan|santunan|tunjangan|uang harian|indemnit[ée]s? journali[èe]res?|forfait(?:aire)?|"+
-  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|subsidio diario|allocation|indennit[àa] giornaliera|tr[ợo] c[ấa]p|ti[ềe]n m[ặa]t)";
+const CASH_WORDS="(?:cash(?![\\s-]*less)|allowances?|income|benefit per (?:day|night)|daily benefit|elaun|tunai|pendapatan|santunan|tunjangan|uang harian|indemnit[ée]s? journali[èe]res?|forfait(?:aire)?|"+
+  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|subsidio diario|per diem|daily payments?|payments? per (?:day|night)|allocation|indennit[àa] giornaliera|tr[ợo] c[ấa]p|ti[ềe]n m[ặa]t)";
 const CASH_PAID=new RegExp(B+CASH_WORDS+E+"|津贴|津貼|现金|現金|补贴|補貼|日額|日额","iu");
 /** "Hospital and Surgical", "Hospital & Surgical", "Hospital dan Pembedahan" name one kind of plan, a hospital plan, not two
  * covers (cross-page check, 1 Nov). */
@@ -364,8 +364,9 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   const n=glossedName(name);
   if(ci&&CI_TREATMENT.test(n)&&planEvent(productName,true)==="hospital_medical_expense")return {event:"hospital_medical_expense",detail:name};
   if(bill){const kind=planEvent(productName);if(kind==="critical_illness"||kind==="early_critical_illness")return {event:"other",detail:name};}
-  // A room and board line on a hospital cash or income plan is that plan's daily amount, not a bill limit (Critic #285 M1).
-  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&productName&&(CASH_PAID.test(productName)||/\bhospital (?:cash|income)\b|\bdaily cash\b/i.test(productName)))return {event:"other",detail:name};
+  // A room and board line on a hospital cash or income plan is that plan's daily cash amount, not a bill limit (Critic #285
+  // M1, TE #285 G2).
+  if(own.event==="hospital_medical_expense"&&ROOM_AND_BOARD.test(n)&&productName&&(CASH_PAID.test(productName)||/\bhospital (?:cash|income)\b|\bdaily cash\b/i.test(productName)))return {event:"hospital_daily_cash",detail:null};
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board)|"+
@@ -389,7 +390,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   // A room and board line ("Room & Board (per day)", "Bilik dan Makan (sehari)", "Zimmer pro Tag") is the most the plan pays
   // towards the room charge each day: a limit on a hospital bill, never a cash amount paid per night (cross-page check, 1 Nov).
   if(ROOM_AND_BOARD.test(n)&&!CASH_PAID.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
-  if(/recuperat|daily (?:hospital )?cash|hospital (?:cash|income|allowance)|per day|daily benefit|confinement/.test(n))return {event:"hospital_daily_cash",detail:null};
+  if(/recuperat|daily (?:hospital )?cash|hospital (?:cash|income|allowance)|per day|per diem|daily (?:benefit|payment)|confinement/.test(n))return {event:"hospital_daily_cash",detail:null};
   if(/surg|operation/.test(n))return {event:"surgery",detail:name};
   if(/ambulance/.test(n))return {event:"ambulance",detail:null};
   // Treatment abroad (a travel plan's overseas medical expenses) is not a hospital bill at home.

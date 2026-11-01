@@ -55,7 +55,10 @@ const rows: [string, string][] = [
   ["Uang harian kamar dan makan", "hospital_daily_cash"], ["Indemnité journalière chambre et pension", "hospital_daily_cash"], ["房间及膳食津贴 每日", "hospital_daily_cash"],
   ["病房费现金 每日", "hospital_daily_cash"], ["Tiền phòng trợ cấp mỗi ngày", "hospital_daily_cash"],
   // 房租 alone is rent (TE #285 F2)
-  ["Loss of rent (房租损失)", "other"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
+  ["Loss of rent (房租损失)", "other"],
+  // TE #285 G1
+  ["Subsidio diario habitación y alimentación", "hospital_daily_cash"], ["Room & board: daily payment of S$150", "hospital_daily_cash"],
+  ["Room and board per diem payment", "hospital_daily_cash"], ["Room and board limit, cash-less admission", "hospital_medical_expense"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
   ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
@@ -141,8 +144,10 @@ const limits: [string, string | undefined, string][] = [
   // A room and board limit is a hospital bill limit (cross-page check, 1 Nov)
   ["Room and board limit", "Harbour Hospital Plan", "hospital_medical_expense"],
   // On a hospital cash or income plan a room line is that plan's daily amount, never a bill limit (Critic #285 M1)
-  ["Room and board", "Hospital Income Plan", "other"],
-  ["Daily room and board benefit", "Hospital Income Plan", "other"],
+  ["Room and board", "Hospital Income Plan", "hospital_daily_cash"],
+  ["Daily room and board benefit", "Hospital Income Plan", "hospital_daily_cash"],
+  ["Room & Board (per day)", "Hospital & Surgical Cash Plan", "hospital_daily_cash"],
+  ["Bilik dan Makan (sehari)", "Pelan Elaun Hospital", "hospital_daily_cash"],
   ["房间及膳食津贴", "住院现金计划", "other"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
