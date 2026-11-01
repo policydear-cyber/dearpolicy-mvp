@@ -23,11 +23,11 @@ function PersonPremiums({ person }: { person: Person }) {
   const p=person.premiums;
   return <section className="section premium-breakdown-panel">
     <div className="section-heading"><div><h2>{person.display_name}</h2>
-      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Portfolio shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":"No premium found yet."}</p></div></div>
+      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Portfolio shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
     <div className="premium-breakdown-list">
       {p.items.map(i=><PremiumRow item={i} key={i.id}/>)}
       {p.oneOff.map(i=><PremiumRow item={i} once key={i.id}/>)}
-      {!p.items.length&&!p.oneOff.length&&<div className="empty-row">Upload a policy schedule, renewal notice or receipt for {person.display_name} on <Link href="/policies" className="text-link">Documents</Link>.</div>}
+      {!p.items.length&&!p.oneOff.length&&!(p.countedElsewhere?.length&&!p.missing.length)&&<div className="empty-row">Upload a policy schedule, renewal notice or receipt for {person.display_name} on <Link href="/policies" className="text-link">Documents</Link>.</div>}
     </div>
     {p.oneOff.length>0&&<p className="note">A premium paid once, such as a single trip, is listed but not counted in the monthly or yearly cost.</p>}
     {p.note&&<p className="note">{p.note}</p>}

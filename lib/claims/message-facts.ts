@@ -6,6 +6,7 @@
  * Only unambiguous phrases are read, and a fact already known is never
  * overwritten except by an explicit correction. Pure: returns what changed.
  */
+import { placeCountry } from "./home-country";
 import type { SubjectFacts } from "@/lib/chat/types";
 import { resolveClaimDate } from "@/lib/claims/dates";
 
@@ -34,7 +35,9 @@ function nightsIn(text: string): number | null {
 }
 
 export type MessageFactsResult = { changed: string[]; correction: string | null };
-export function applyMessageFacts(args: { message: string; facts: SubjectFacts; now: Date }): MessageFactsResult {
+/** `home`: the household's home country (lib/claims/home-country.ts), null when unknown; left out, Singapore (the
+ * market the older scripted cases describe). Every product caller passes it. */
+export function applyMessageFacts(args: { message: string; facts: SubjectFacts; now: Date; home?: string | null }): MessageFactsResult {
   const { facts } = args;
   const text = args.message.replace(/\s+/g, " ").trim();
   const changed: string[] = [];
@@ -143,11 +146,16 @@ export function applyMessageFacts(args: { message: string; facts: SubjectFacts; 
   // A condition reported with one date ("had a stroke on 2026-09-14"): the diagnosis date.
   if (past && known(facts, "diagnosis") != null && known(facts, "death") !== true && unset("diagnosisDate")) set("diagnosisDate", past);
   // ---------------------------------------------------------------- where it happened
-  const OVERSEAS_PLACE = /\b(?:overseas|abroad|phuket|bangkok|thailand|bali|indonesia|jakarta|malaysia|kuala lumpur|\bkl\b|johor|penang|tokyo|osaka|japan|seoul|korea|taipei|taiwan|hong kong|china|beijing|shanghai|paris|france|london|europe|australia|sydney|melbourne|vietnam|hanoi|ho chi minh|manila|philippines|india|usa|america|new york)\b/i;
-  const LOCAL = /\b(?:in singapore|nccs|kkh|sgh|ttsh|nuh|cgh|ktph|polyclinic|mount elizabeth|gleneagles|raffles hospital|mount alvernia|thomson medical|changi general|tan tock seng|singapore general|national university hospital)\b/i;
+  // Overseas is relative to the household's home (lib/claims/home-country.ts): Sydney is overseas for a family in
+  // Singapore and at home for a family in Brisbane. A place in a country that cannot be told apart from home (home
+  // unknown) is recorded as that country, which is neither; a place that is not listed is not recorded.
+  const home = args.home === undefined ? "Singapore" : args.home;
   if (unset("eventLocation") && !facts.eventCountry) {
-    if (OVERSEAS_PLACE.test(text)) set("eventLocation", "Overseas");
-    else if (LOCAL.test(text) && !ON_A_TRIP.test(text)) set("eventLocation", "Singapore");
+    const country = placeCountry(text);
+    if (/\b(?:overseas|abroad)\b/i.test(text)) set("eventLocation", "Overseas");
+    else if (country && home && country !== home) set("eventLocation", "Overseas");
+    else if (country && home && country === home && !ON_A_TRIP.test(text)) set("eventLocation", home);
+    else if (country && !home) set("eventLocation", country);
   }
   // ---------------------------------------------------------------- critical illness details said up front
   if (/\b(?:by|from|with|saw)\s+(?:(?:my|her|his|an?|the)\s+)?(?:oncologist|cardiologist|neurologist|specialist|surgeon|haematologist|nephrologist)\b/i.test(text) && unset("diagnosedBySpecialist")) set("diagnosedBySpecialist", true);

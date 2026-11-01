@@ -24,6 +24,7 @@ import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amoun
 import { PLAN_COLUMNS_NOTE } from "@/lib/insurance/scale-limit";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { maskIdentityText,sentName } from "@/lib/chat/identity-numbers";
+import { scheduleLineEvent } from "@/lib/ledger/events";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
@@ -207,20 +208,33 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
 }
 function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>):Seed[]{
   const out:Seed[]=[];
-  for(const coverage of contract.coverages){
-    if(coverage.amount==null||!(coverage.amount>0))continue;
-    const name=(coverage.category+" "+(coverage.productName??"")+" "+contract.name).trim();
-    const kind=PRODUCT_DEFAULTS.find(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
-    if(!kind)continue;
-    const currency=statedCurrencyCode(coverage.currency);
-    if(!currency)continue; // never assume SGD for a schedule line
-    for(const ev of kind.events){
-      if(eventsFromWording.has(ev.event))continue; // the wording already says what this pays
-      out.push({familyMemberId:contract.ownerId,policyId:coverage.policyId,planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,
-        eventType:ev.event,detail:null,cause:null,paysKind:ev.pays,amount:ev.pays==="lump_sum"?coverage.amount:null,currency,
-        sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note:ev.note,
-        sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
-        seedKey:"coverage:"+coverage.id+":"+ev.event+"|member:"+contract.ownerId});
+  const lines=contract.coverages.filter(c=>c.amount!=null&&c.amount>0&&statedCurrencyCode(c.currency)); // never assume SGD for a schedule line
+  const named=(c:typeof lines[number])=>(c.category+" "+(c.productName??"")+" "+contract.name).trim();
+  const seed=(coverage:typeof lines[number],event:EventType,pays:PaysKind,amount:number|null,note:string|null):Seed=>({familyMemberId:contract.ownerId,policyId:coverage.policyId,
+    planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,
+    eventType:event,detail:null,cause:null,paysKind:pays,amount,currency:statedCurrencyCode(coverage.currency)!,
+    sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note,
+    sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
+    seedKey:"coverage:"+coverage.id+":"+event+"|member:"+contract.ownerId});
+  const given=new Set<EventType>(eventsFromWording);
+  // Each line first seeds the benefit it names itself, with its own printed amount (lib/ledger/events.ts
+  // SCHEDULE_LINE_EVENTS): "TPD Cover $500,000" is the TPD row, never the life cover's sum.
+  for(const coverage of lines){
+    const own=scheduleLineEvent(coverage.category,named(coverage),coverage.evidenceText);
+    if(!own||given.has(own.event))continue; // the wording already says what this pays
+    const note=PRODUCT_DEFAULTS.flatMap(d=>d.events).find(e=>e.event===own.event)?.note??null;
+    out.push(seed(coverage,own.event,own.pays,own.pays==="lump_sum"?coverage.amount:null,note));
+    given.add(own.event);
+  }
+  // What a plan of that kind usually also pays is a proposal with no figure: a line's sum is never another benefit's
+  // amount (new-user walkthrough, 31 Oct: "Total and permanent disability A$850,000" from a life cover's sum), and a
+  // benefit a line or the wording already gives is not proposed again.
+  for(const coverage of lines){
+    const kind=PRODUCT_DEFAULTS.find(d=>d.pattern.test(named(coverage))&&!(d.exclude&&d.exclude.test(named(coverage))));
+    for(const ev of kind?.events??[]){
+      if(given.has(ev.event))continue;
+      out.push(seed(coverage,ev.event,"stated",null,ev.note));
+      given.add(ev.event);
     }
   }
   return out;
@@ -324,6 +338,16 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
     seeds.push(...mineSeeds);
   }
+  // A schedule line seeds its own benefit, and a plan type's usual benefits only without a figure and only where no line
+  // gives them (scheduleSeeds). A machine-made row an older rule seeded beside a line ("Total and permanent disability"
+  // carrying a life cover's sum, beside the TPD line) is removed once nobody has touched it; one whose key is still
+  // seeded takes the new seed's terms (refreshSeededRows); a row a person changed or rejected stays.
+  const lineKeys=seeds.filter(s=>s.origin==="schedule").flatMap(s=>[s.seedKey,s.seedKey.replace(/\|member:[^|]+$/,"")]);
+  const lineIds=[...new Set(contracts.flatMap(c=>c.coverages.map(x=>x.id)))];
+  if(lineIds.length)await query(
+    `DELETE FROM coverage_rules WHERE account_id=$1 AND origin='schedule' AND status<>'rejected' AND updated_at=created_at AND seed_key LIKE 'coverage:%'
+       AND split_part(split_part(seed_key,'|',1),':',2)=ANY($2::text[]) AND NOT (seed_key=ANY($3::text[]))`,
+    [accountId,lineIds,lineKeys]).catch(()=>undefined);
   // A seed's key is fixed by the row it came from, so a row seeded under an older rule is never seeded again: it kept
   // what that rule said (live, 21 Oct: a travel policy's liability-to-others row still "Accidental death S$500,000",
   // seeded the day before liability rows stopped being read as the person's own death cover). A machine-made row nobody

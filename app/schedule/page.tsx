@@ -65,6 +65,8 @@ export default function BenefitsPage(){
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState(false);
   const [stillReading,setStillReading]=useState(false);
+  /** How many read documents the household has: an empty page with documents on file never asks for an upload. */
+  const [readyDocs,setReadyDocs]=useState(0);
   /** Unread documents that did not get read after a while of waiting: shown
    * with a "Try again" that reads them now, instead of "still being read"
    * forever. */
@@ -96,7 +98,8 @@ export default function BenefitsPage(){
   // Only whether anything is still being read -- never which reader or how many.
   async function checkUnread():Promise<boolean>{
     try{
-      const p=await fetch("/api/benefits/index",{cache:"no-store"}).then(r=>r.json());
+      const p=await fetch("/api/benefits/index?all=1",{cache:"no-store"}).then(r=>r.json());
+      setReadyDocs(Array.isArray(p.all)?p.all.length:0);
       const unread=Array.isArray(p.unread)&&p.unread.length>0;
       setStillReading(unread);setReadingDocs(Array.isArray(p.documents)?p.documents:[]);if(!unread)setReadStalled(false);
       return unread;
@@ -166,7 +169,7 @@ export default function BenefitsPage(){
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading your benefits…</div>
-      :!benefits.length?<div className="empty-card">{stillReading?((readStalled||stuck.length)&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
+      :!benefits.length?<div className="empty-card">{stillReading?((readStalled||stuck.length)&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):readyDocs>0?<>No benefit details have been listed from your documents yet. <Link className="text-link" href="/coverage">Coverage</Link> shows the cover found in them, and you can ask about any policy in Ask DearPolicy.</>:<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>

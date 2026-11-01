@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/format/currency";
 import { amountAppears, amountPrintedWith } from "./assertions";
 import { attachOperand, boundOperand, citeLine, differenceOperands, documentHashes, figuresIn, perPeriodOperand, printedRowFor, productOperand, rowBenefit, sumOperands } from "./answer-verification";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
-import { summarisePremiums, type PremiumItem } from "@/lib/policies/premium-summary";
+import { summarisePremiums, type PremiumItem, type PremiumSummaryMemo } from "@/lib/policies/premium-summary";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding, FigurePeriod } from "@/types";
 import { documentsByPerson, noPoliciesSentence, personName } from "./household-status";
@@ -187,9 +187,10 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
   const memo = newDocMemo();
   // The pages that say why a premium is not counted are cited like any other.
   const uncounted: { docId: string; page: number; name: string; insurer: string | null; id: string }[] = [];
-  const perPerson: { person: ClaimPerson; lines: Line[]; missing: string[]; annual: number; cash: number | null; medisave: number | null; currency: string }[] = [];
+  const perPerson: { person: ClaimPerson; lines: Line[]; missing: string[]; elsewhere: { name: string; owner: string }[]; annual: number; cash: number | null; medisave: number | null; currency: string }[] = [];
+  const premiumMemo: PremiumSummaryMemo = {};
   for (const person of args.people) {
-    const summary = await summarisePremiums(args.accountId, person);
+    const summary = await summarisePremiums(args.accountId, person, undefined, premiumMemo);
     const listed = [...summary.items, ...summary.oneOff, ...summary.shortPeriod], ids = listed.map((i) => i.id);
     const sources = ids.length ? (await query<{ id: string; doc_id: string | null; page: number | null; product_name: string | null; role: string | null; insurer: string | null; policy_type: string | null; active: boolean }>(
       `SELECT pr.id::text AS id,coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.source_page AS page,p.product_name,p.document_role AS role,p.insurer,p.policy_type,
@@ -265,7 +266,7 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
     const sgd = lines.filter((l) => l.item.currency === "SGD");
     const cash = sgd.some((l) => l.item.cashAnnual != null) ? r2(sgd.reduce((n, l) => n + (l.item.cashAnnual ?? l.item.annual), 0)) : null;
     const medisave = sgd.some((l) => l.item.medisaveAnnual != null) ? r2(sgd.reduce((n, l) => n + (l.item.medisaveAnnual ?? 0), 0)) : null;
-    perPerson.push({ person, lines, missing: summary.missing, annual, cash, medisave, currency });
+    perPerson.push({ person, lines, missing: summary.missing, elsewhere: summary.countedElsewhere ?? [], annual, cash, medisave, currency });
   }
   // One policy covering two people is paid once: it is counted under the first of them.
   const seenItems = new Set<string>();
@@ -374,6 +375,12 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
     // Only one-off or ended premiums on file: say exactly that, not "no premium".
     return { summary: (family ? "No yearly premium is printed in your household’s documents. " : "") + [...new Set(notCounted)].map((n) => n.replace(" — ", ": ")).join(". ") + ".", details, citations, handled: true };
   }
+  const elsewhere = perPerson.flatMap((p) => p.elsewhere.map((e) => ({ ...e, person: p.person })));
+  const elsewhereText = elsewhere.length ? [...new Set(elsewhere.map((e) => (args.people.length > 1 ? personName(e.person) + "’s " : "") + e.name + " is paid under " + e.owner + "’s policy, so its premium is counted in " + e.owner + "’s total"))].join("; ") + "." : null;
+  if (!withPremiums.length && !family && elsewhere.length && !(perPerson[0]?.missing ?? []).length) {
+    // A family plan's one premium, printed under the policyholder: the premium is on file, never "not printed".
+    return { summary: (isSelf(args.people[0]) ? "You have" : personName(args.people[0]) + " has") + " no separate premium. " + elsewhereText!.charAt(0).toUpperCase() + elsewhereText!.slice(1) + " Ask about " + elsewhere[0].owner + "’s premiums to see the amount.", details, citations, handled: true };
+  }
   if (!withPremiums.length) {
     summary = family ? "No premium amounts are printed in the documents on file for your household, so DearPolicy can’t total them. A renewal notice or premium receipt shows the premium; upload one and ask again."
       // Round 11: which policy has no premium printed is named ("Kai Ting's PA Guardian"), not only whose.
@@ -413,6 +420,7 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
   const missing = [...new Set(perPerson.flatMap((p) => p.missing))].filter((m) => !counted.has(m) && !notCounted.some((n) => n.startsWith(m + " — ")));
   if (notCounted.length && withPremiums.length) details.push("Not included: " + [...new Set(notCounted)].join("; ") + ".");
   if (missing.length && withPremiums.length) details.push("Not included: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + " — no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + ".");
+  if (elsewhereText && withPremiums.length && !family) details.push(elsewhereText.charAt(0).toUpperCase() + elsewhereText.slice(1));
   return { summary, details, citations, handled: true };
 }
 

@@ -235,7 +235,19 @@ export type FactFindingInput = {
   reviewerDecisions?: Record<string, "matches" | "does_not_match" | "needs_more_information" | undefined>;
   /** Policy conditions (waiting periods, exclusions) the engine could not resolve. */
   unresolvedPolicyConditions?: string[];
+  /** The household's home country (lib/claims/home-country.ts), null when unknown. Where-did-it-happen questions name
+   * it instead of Singapore; left out, they read as written (the market the older scripted cases describe). */
+  home?: string | null;
 };
+
+/** A where-did-it-happen question in the household's own terms: its home country, or "where you live" when unknown.
+ * "Overseas" is relative to the household, never to Singapore. */
+export function localisedLocation<T extends { key: string; question: string; options?: string[] }>(f: T, home: string | null | undefined): T {
+  if (home === undefined || home === "Singapore" || !/^(?:eventLocation|deathLocation)$/.test(f.key)) return f;
+  const place = home ?? "the country where you live";
+  return { ...f, question: f.question.replace(/\bin Singapore\b/g, "in " + place),
+    ...(f.options ? { options: f.options.map((o) => (o === "Singapore" ? home ?? "Where we live" : o)) } : {}) };
+}
 
 function resolve(facts: SubjectFacts, spec: FactSpec) {
   const entries = [spec.key, ...spec.aliases].map((k) => ({ key: k, fact: facts[k] })).filter((e) => e.fact);
@@ -278,7 +290,7 @@ export function planFactFinding(input: FactFindingInput): FactFindingPlan {
   const requiredMissing = missing.filter((f) => f.required);
   // One coherent group at a time: the lowest group that still has something to ask.
   const nextGroup = requiredMissing.length ? Math.min(...requiredMissing.map((f) => f.group)) : missing.length ? Math.min(...missing.map((f) => f.group)) : null;
-  const nextQuestions: FactFindingQuestion[] = nextGroup == null ? [] : missing.filter((f) => f.group === nextGroup).slice(0, 3).map((f) => ({
+  const nextQuestions: FactFindingQuestion[] = nextGroup == null ? [] : missing.filter((f) => f.group === nextGroup).slice(0, 3).map((f) => localisedLocation(f, input.home)).map((f) => ({
     id: `ff-${input.category}-${f.key}`, factKey: f.key, type: f.type, ...(f.options ? { options: f.options } : {}), why: f.why,
     text: conflictingFacts.includes(f.key) ? `You gave two different answers earlier. ${f.question}`
       : staleFacts.includes(f.key) ? `An earlier answer changed, so please confirm again: ${f.question}` : f.question,

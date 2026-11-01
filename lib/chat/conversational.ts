@@ -58,7 +58,9 @@ export function dishonestReply(message: string): ConversationalReply | null {
 function stripEmoji(text: string) { return text.replace(/[\p{Extended_Pictographic}‍️]/gu, " "); }
 
 /** A reply for a message that is not a policy or claim question, or null. */
-export function conversationalReply(args: { message: string; selected: ClaimPerson | null; family?: ClaimPerson[]; hasTopic: boolean; pending: boolean; products?: string[] }): ConversationalReply | null {
+export function conversationalReply(args: { message: string; selected: ClaimPerson | null; family?: ClaimPerson[]; hasTopic: boolean; pending: boolean; products?: string[];
+  /** The household's home country from its documents (lib/claims/home-country.ts): Singapore's disputes body is named only there, or when unknown. */
+  home?: string | null }): ConversationalReply | null {
   const raw = args.message ?? "";
   const text = stripEmoji(raw).replace(/\s+/g, " ").trim();
   // A question naming one of the household's own plans ("what's the TPD on
@@ -120,7 +122,7 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
   if (MARKET.test(text))
     return reply("off_topic", "I can only see the policies your household has uploaded, so I can’t compare plans or insurers on the market, and I can’t recommend one — a licensed financial adviser can help with that. I can tell you exactly what your own policies cover and cost.");
   if (LEGAL.test(text) && !/\b(?:exclu\w*|waiting period|what does (?:my|the) policy say)\b/i.test(text))
-    return reply("legal", "I can’t give legal advice. If an insurer turns down a claim, you can ask it to explain the decision in writing and to review it; if you still disagree, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore, and a lawyer can advise you on your rights.",
+    return reply("legal", "I can’t give legal advice. If an insurer turns down a claim, you can ask it to explain the decision in writing and to review it; if you still disagree, " + (args.home == null || args.home === "Singapore" ? "FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore" : "the independent insurance complaints or ombudsman service where you live handles disputes with insurers") + ", and a lawyer can advise you on your rights.",
       ["What I can do is show exactly what your policies say — for example their premiums, exclusions and conditions — so you have the facts in front of you."]);
   if (ADVICE.test(text) || JUDGEMENT.test(text))
     return reply("advice", "I can’t recommend whether to buy, keep, change or cancel a policy, or where to put your money — that is financial advice, and a licensed financial adviser can help with it.",

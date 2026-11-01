@@ -74,7 +74,7 @@ export async function applyFactFinding(
     const benefitNames = opts?.accountId ? await personBenefitNames(opts.accountId, person.id) : null;
     for (const category of categoriesFor(signals, facts)) {
       if (category === "hospital_cash" && benefitNames?.length && !benefitNames.some((n) => HOSPITAL_CASH.test(n))) continue;
-      const plan = planFactFinding({ subjectId: person.id, category, facts });
+      const plan = planFactFinding({ subjectId: person.id, category, facts, home: state.home });
       if (plan.status === "information_needed" || plan.status === "evidence_needed") {
         const asked = new Set(plan.nextQuestions.map((q) => q.factKey));
         for (const extra of conditionDrivenQuestions({ category, conditions, facts })) {
@@ -166,7 +166,7 @@ export function nextInjuryQuestion(state: ConversationState, people: Person[]): 
     const facts = state.subjects[person.id] ?? {};
     const signals = new Set<string>((state.scenarios?.[person.id] ?? []).flatMap((s) => [...s.traits, s.family]));
     if (!categoriesFor(signals, facts).includes("accidental_injury")) continue;
-    const plan = planFactFinding({ subjectId: person.id, category: "accidental_injury", facts });
+    const plan = planFactFinding({ subjectId: person.id, category: "accidental_injury", facts, home: state.home });
     if (!plan.missingFacts.length) continue;
     const question = plan.nextQuestions.find((q) => plan.missingFacts.includes(q.factKey)) ?? plan.nextQuestions[0];
     if (question) return { subjectId: person.id, plan, question };
@@ -284,7 +284,7 @@ export function nextClaimInterviewQuestion(state: ConversationState, people: Per
       if (injury) return { ...injury, category };
       continue;
     }
-    const plan = planFactFinding({ subjectId: person.id, category, facts: state.subjects[person.id] ?? {} });
+    const plan = planFactFinding({ subjectId: person.id, category, facts: state.subjects[person.id] ?? {}, home: state.home });
     if (!plan.missingFacts.length) continue;
     const question = plan.nextQuestions.find((q) => plan.missingFacts.includes(q.factKey)) ?? plan.nextQuestions[0];
     if (question) return { subjectId: person.id, plan, question, category };

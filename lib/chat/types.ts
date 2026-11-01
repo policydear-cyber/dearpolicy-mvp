@@ -29,6 +29,9 @@ export type ScenarioClassification = {
 };
 export type ConversationState = {
   subjects: Record<string, SubjectFacts>;
+  /** The household's home country this turn (lib/claims/home-country.ts), null when its documents do not tell one.
+   * Set at the start of every turn; where-did-it-happen questions and overseas-only cover are read against it. */
+  home?: string | null;
   /** Event candidates are kept separate from user facts. They help retrieve and
    * test policy clauses but never prove that a policy definition is met. */
   scenarios?: Record<string, ScenarioClassification[]>;
