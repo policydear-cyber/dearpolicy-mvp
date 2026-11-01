@@ -30,6 +30,7 @@
     "benefit-table:te157-test": "node --import tsx scripts/benefit-table/te-pr157-test.ts",
     "benefit-table:te155-test": "node --import tsx scripts/benefit-table/te-pr155-test.ts",
     "benefit-table:claim-note-test": "node --import tsx scripts/benefit-table/claim-note-test.ts",
+    "benefit-table:all-accounts-test": "node --import tsx scripts/benefit-table/all-accounts-test.ts",
     "coverage:table-test": "node --import tsx scripts/coverage-table-figures-regressions.ts",
     "coverage:portfolio-kinds-test": "node --import tsx scripts/coverage/portfolio-kinds-test.ts",
     "coverage:te147-test": "node --import tsx scripts/coverage/te-pr147-test.ts",
