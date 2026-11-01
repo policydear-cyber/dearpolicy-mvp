@@ -119,14 +119,24 @@ for (const [name, plan, want] of limits) eq(`limit ${name} / ${plan}`, ev(name, 
 
 // An illness named with its treatment pays the treatment bills, never the illness's lump sum (Critic #281 H: a hospital
 // plan's "Annual limit for outpatient cancer drug" was read as a critical illness sum). The illness alone stays a CI.
+// Only on a hospital plan (Critic #281 H1): on a CI plan a condition named with its definition wording stays the CI, and
+// a CI-plan row is never moved to a reimbursement; with no plan kind the name's own mapping stands.
 const treatments: [string, string | undefined, string][] = [
   ["Annual limit for outpatient cancer drug", "Integrated Shield Plan", "hospital_medical_expense"],
   ["Cancer drug treatment", "Harbour Hospital Plan", "hospital_medical_expense"],
-  ["Outpatient cancer treatment - chemotherapy and radiotherapy", undefined, "hospital_medical_expense"],
-  ["Kidney dialysis", "Shield Plan", "hospital_medical_expense"],
+  ["Outpatient cancer treatment - chemotherapy and radiotherapy", "MediShield Life", "hospital_medical_expense"],
   ["Rawatan kemoterapi kanser", "Insurans Perubatan", "hospital_medical_expense"],
   ["Tratamiento de cáncer", "Seguro de Salud Andes", "hospital_medical_expense"],
   ["癌症化疗", "医疗保险", "hospital_medical_expense"],
+  ["Kidney Failure (requiring dialysis)", "Critical Illness Plan", "critical_illness"],
+  ["End-stage kidney failure requiring permanent dialysis", "Early Critical Illness Plan", "critical_illness"],
+  ["Major Cancer (requiring treatment)", "Critical Illness Plan", "critical_illness"],
+  ["Kanser memerlukan rawatan", "Takaful Penyakit Kritikal", "critical_illness"],
+  ["癌症治疗", "重疾险", "critical_illness"],
+  ["Cancer treatment benefit", "Cancer Care Plan", "critical_illness"],
+  ["Outpatient cancer drug", undefined, "critical_illness"],
+  ["Major organ transplant (treatment received)", "Critical Illness Plan", "other"],
+  ["Cancer drug treatment", "Life and Hospital Plan", "critical_illness"],
   ["Cancer", "Living Care Plan", "critical_illness"],
   ["Major cancer", undefined, "critical_illness"],
   ["Kidney failure", undefined, "critical_illness"],

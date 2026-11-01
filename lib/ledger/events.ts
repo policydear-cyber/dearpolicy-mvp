@@ -318,7 +318,7 @@ const NOT_A_SUM_NAME=new RegExp([
 ].join("|"),"iu");
 export function eventForBenefitName(name:string,productName?:string|null):{event:EventType;detail:string|null}{
   if(NOT_A_SUM_NAME.test(name))return {event:"other",detail:name};
-  const own=eventForOwnName(name);
+  const own=withPlanKind(eventForOwnName(name),name,productName);
   if(own.event!=="other"||THIRD_PARTY_LIABILITY.test(glossedName(name)))return own;
   const m=GENERIC_SUM.exec(name);
   if(!m||!GENERIC_FILLER.test(name.slice(0,m.index)+" "+name.slice(m.index+m[0].length))){
@@ -333,6 +333,23 @@ export function eventForBenefitName(name:string,productName?:string|null):{event
 const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:therap(?:y|ies))?|radio(?:therap(?:y|ies))?|radiation|immunotherap(?:y|ies)|targeted therap(?:y|ies)|"+
   "outpatient|dialysis|treatments?|reimburse\\w*|expenses?|costs?|ubat(?:an)?|rawatan|kemoterapi|radioterapi|dialisis|pengobatan|obat|tratamientos?|quimioterapia|radioterapia|"+
   "tratamentos?|traitements?|chimioth[ée]rapie|radioth[ée]rapie|behandlung(?:en)?|chemotherapie|strahlentherapie|trattament[oi]|chemioterapia|điều trị|hóa trị|xạ trị)"+E+"|化疗|化療|放疗|放療|治疗|治療|药物|藥物|洗肾|洗腎|透析","iu");
+/** The plan's own kind settles a row whose name fits both an illness and its treatment (Critic #281 H, H1):
+ * - on a hospital plan (exactly one plan kind, a hospital plan), an illness named with a treatment or drug word ("Annual
+ *   limit for outpatient cancer drug", "Rawatan kemoterapi kanser") pays the treatment bills: a medical expense, never the
+ *   illness's lump sum;
+ * - on a critical illness plan, a condition named with its definition wording ("Kidney Failure (requiring dialysis)",
+ *   "Major organ transplant (treatment received)") is never moved to a reimbursement: it stays the CI it names, or is left
+ *   unmapped when its name alone names no illness;
+ * - on any other plan, or when the kind is unknown or two kinds fit, the name's own mapping stands. */
+function withPlanKind(own:{event:EventType;detail:string|null},name:string,productName?:string|null):{event:EventType;detail:string|null}{
+  const ci=own.event==="critical_illness"||own.event==="early_critical_illness";
+  const bill=own.event==="hospital_medical_expense"||own.event==="accident_medical_expense";
+  if(!ci&&!bill)return own;
+  const n=glossedName(name);
+  if(ci&&CI_TREATMENT.test(n)&&planEvent(productName,true)==="hospital_medical_expense")return {event:"hospital_medical_expense",detail:name};
+  if(bill){const kind=planEvent(productName);if(kind==="critical_illness"||kind==="early_critical_illness")return {event:"other",detail:name};}
+  return own;
+}
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
@@ -345,9 +362,6 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   // Round 11: "Loss of a thumb", "Loss of an index finger", "Loss of any other finger" are lines of the same scale.
   if(/dismember|loss of (?:use|sight|hearing|speech|limb|one|two|both)|loss of (?:an? |any (?:other )?|the )?(?:thumbs?|(?:index |other )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot)\b|amputat/.test(n))return {event:"dismemberment",detail:name};
   if(/terminal/.test(n))return {event:"terminal_illness",detail:null};
-  // An illness named with a treatment or a limit ("Annual limit for outpatient cancer drug", "Kidney dialysis", "Rawatan
-  // kemoterapi kanser") pays the bills for treating it, up to a limit: it is a medical expense, never the illness's lump sum.
-  if(/critical illness|major illness|dread disease|cancer|heart attack|stroke|kidney failure|kidney|renal/.test(n)&&CI_TREATMENT.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/early|intermediate/.test(n)&&/illness|stage|critical/.test(n))return {event:"early_critical_illness",detail:name};
   if(/critical illness|major illness|dread disease|cancer|heart attack|stroke|kidney failure/.test(n))return {event:"critical_illness",detail:name};
   if(/\bicu\b|intensive care/.test(n))return {event:"icu_daily_cash",detail:null};
