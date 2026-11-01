@@ -6,6 +6,7 @@
  *   npm run ledger:schedule-lines-test */
 import { coveragePersonKinds, kindOfCategory, kindsOfTable, ledgerKindsByPerson, scheduleOnlyLines, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 import { COVERAGE_CATEGORIES } from "@/lib/insurance";
+import { coverScheduleLines } from "@/lib/ledger/schedule-lines";
 
 const realFetch = globalThis.fetch;
 let fetches = 0;
@@ -189,5 +190,22 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
 
 globalThis.fetch = realFetch;
 t("no outbound fetch", fetches === 0, fetches);
+// A line whose own printed label says it is no cover never reaches Family or Coverage (the rule Home applies).
+{
+  const rows = [
+    { id: "sum", evidence_text: "Death benefit S$250,000", amount: "250000" },
+    { id: "premium", evidence_text: "TPD Premium Waiver S$3,000", amount: "3000" },
+    { id: "contribution", evidence_text: "Sumbangan tahunan RM1,200", amount: "1200" },
+    { id: "excess", evidence_text: "Excess £250 per claim", amount: "250" },
+    { id: "no-label", evidence_text: null, amount: null },
+    { id: "kontribusi", evidence_text: "Kontribusi bulanan Rp 450.000", amount: "450000" },
+    // A rider whose figure may not be its sum keeps its line with no figure, as on Home.
+    { id: "waiver-ja", evidence_text: "保険料払込免除特約 ¥0", amount: "0" },
+    { id: "premier", evidence_text: "Premier Ward room & board A$450", amount: "450" },
+  ];
+  const kept = coverScheduleLines(rows).map((r) => r.id);
+  t("schedule lines: a premium, contribution (incl. Malay sumbangan, Indonesian kontribusi) or excess line is left out", ["premium", "contribution", "excess", "kontribusi"].every((id) => !kept.includes(id)), kept);
+  t("schedule lines: a sum, a line with no label, a Premier ward and a withheld rider stay", ["sum", "no-label", "premier", "waiver-ja"].every((id) => kept.includes(id)), kept);
+}
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

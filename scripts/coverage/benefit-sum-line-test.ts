@@ -112,6 +112,13 @@ async function main() {
     sum("Annual premium S$1,200", 999); assert.equal(lineLabel("Annual premium S$1,200", 999), "", "a stored figure the line does not print gives no label");
     sum("", 1000); sum("S$1,000", 1000);
   });
+  t("a head that starts with what is paid in and names no benefit is no cover; a payout it names keeps the line (Critic #279 L1, L2)", () => {
+    for (const [line, amount] of [["Sumbangan Tabarru' RM30", 30], ["Premi Asuransi Jiwa Rp 1.000.000", 1000000], ["Iuran bulanan Rp 150.000", 150000],
+      ["Contribution Tabarru RM45", 45], ["Prämie Risikoleben 25 €", 25]] as const) assert.equal(kind(line, amount), "not_a_sum", line);
+    held("Sumbangan khairat kematian RM5,000", 5000); held("Funeral contribution RM5,000", 5000); held("Education contribution S$2,000", 2000);
+    whole("Premium Ward room & board A$450", 450); whole("Contribution Takaful Plan death benefit RM100,000", 100000);
+    whole("Manfaat Kematian RM100,000", 100000); whole("Santunan Meninggal Dunia Rp 50.000.000", 50000000);
+  });
   t("every reader of stored schedule lines leaves such a line out", () => {
     for (const f of ["lib/coverage/facts.ts", "app/api/dashboard/route.ts", "app/api/coverage/route.ts", "lib/rag/chat.ts"])
       assert.match(readFileSync(f, "utf8"), /asBenefitLine\(/, f + " applies the rule");

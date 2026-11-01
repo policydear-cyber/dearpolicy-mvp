@@ -21,8 +21,9 @@ import { PRINTED_FIGURE, FIGURE_END, printedNumber, groupsInLakhs } from "@/lib/
  * A closed list in English, Malay, Indonesian, French, German and Chinese.
  */
 const NOT_A_SUM_TERM = [
-  // A premium or contribution the person pays (Takaful "contribution", Malay "caruman", French "cotisation").
-  String.raw`\bpremi(?:um|ums|a)?`, String.raw`\bcontributions?`, String.raw`\bcaruman`, String.raw`\biuran`, String.raw`\bcotisations?`,
+  // A premium or contribution the person pays (Takaful "contribution", Malay "caruman" or "sumbangan", Indonesian
+  // "kontribusi", French "cotisation").
+  String.raw`\bpremi(?:um|ums|a)?`, String.raw`\bcontributions?`, String.raw`\bcaruman`, String.raw`\bsumbangan`, String.raw`\bkontribusi`, String.raw`\biuran`, String.raw`\bcotisations?`,
   String.raw`\bprimes?\s+(?:annuelle|mensuelle|totale|d['’]assurance|nette|brute)`, String.raw`prämie`, String.raw`\bbeitr[aä]g\w*`, "保费", "保費",
   // A waiver of premium: what is waived is a premium, never the cover's sum.
   String.raw`\bwaiver`,
@@ -103,13 +104,22 @@ export function labelHead(label: string): string {
  */
 const HOLDS_NOT_A_SUM = new RegExp([
   String.raw`\bpremi(?:um|ums|a)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)`,
-  String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
+  String.raw`\bcontributions?\b(?!\s+(?:takaful|plans?)\b)`, String.raw`\bcaruman\b|\bsumbangan\b|\bkontribusi\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費`,
   String.raw`\bwaiver\b|\bpayor\b|\bpayer\s+benefit\b|払込免除|保费豁免|保費豁免`,
   String.raw`\b(?:fund|surrender|cash|account|policy|units?|investment)\s+values?\b|\bnilai\s+(?:tunai|serahan|dana|akaun|penyerahan)\b|\bvaleur\s+de\s+rachat\b|r[uü]ckkaufswert|现金价值|現金價值`,
   String.raw`\bdeductibles?\b|\bexcess\b|\bco-?(?:payments?|pay|insurance)\b|\bfranchise\b|selbstbeteiligung|selbstbehalt`,
 ].join("|"), "iu");
 /** A value term, then "of the policy/plan" ("Surrender value of the policy"): still the value. */
 const OF_THE_POLICY = /\s+of\s+(?:the|this|your)\s+(?:policy|plan|contract|certificate)$/i;
+
+/** A head that STARTS with what the person pays in ("Sumbangan Tabarru'", "Premi Asuransi Jiwa",
+ * "Iuran bulanan") and names no benefit is that payment, so the line is no cover (Critic R on #279 L1). A plan tier ("Premium
+ * Ward", "Contribution Takaful Plan") is a product's name and never counts. */
+const STARTS_PAID_IN = new RegExp(String.raw`^(?:\bpremi(?:um|ums|a)?\b(?!\s+(?:plans?|tiers?|class|wards?|rooms?|edition|option|package|series|shield|saver|select|gold|platinum|version)\b)|\bcontributions?\b(?!\s+(?:takaful|plans?)\b)|\bcaruman\b|\bsumbangan\b|\bkontribusi\b|\biuran\b|\bcotisations?\b|prämie|\bbeitr[aä]g|保费|保費)`, "iu");
+/** Words naming what a payment-named line pays out ("Sumbangan khairat kematian", "Funeral contribution"): such a line is a
+ * benefit whose figure may still be something else, so it is kept and its figure withheld, never dropped. */
+const PAYS_OUT = /\b(?:funeral|burial|bereavement|khairat|kematian|meninggal|death|education|pendidikan)\b/iu;
+const PAYS_OUT_CONTRIBUTION = /\b(?:funeral|burial|bereavement|khairat|education|pendidikan)\s+(?:contributions?|sumbangan|kontribusi|caruman)$/iu;
 
 export type BenefitSumKind = "sum" | "not_a_sum" | "withhold";
 
@@ -154,7 +164,8 @@ function kindOfLabel(label: string): BenefitSumKind {
   const ends = ENDS_NOT_A_SUM.test(last);
   // A sum named as the other choice ("higher of sum assured or fund value"): the cover stays, the figure is withheld.
   if (alternatives.some((a) => NAMES_A_SUM.test(a))) return ends || HOLDS_NOT_A_SUM.test(last) ? "withhold" : "sum";
-  if (ends) return "not_a_sum";
+  if (ends) return PAYS_OUT_CONTRIBUTION.test(last) ? "withhold" : "not_a_sum";
+  if (STARTS_PAID_IN.test(last) && !NAMES_A_SUM.test(last) && !PAYS_OUT.test(last)) return "not_a_sum";
   return HOLDS_NOT_A_SUM.test(last) ? "withhold" : "sum";
 }
 
