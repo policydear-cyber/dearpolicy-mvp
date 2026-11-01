@@ -48,9 +48,17 @@ const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVer
 
 /** A row that prints what is paid for the cover. Insurers call it a premium; health funds and cash plans a
  * "subscription"; friendly societies and takaful operators a "contribution". Those two words count only as the
- * payment ("Monthly subscription £148.60", "Annual contribution RM1,200", "Contribution payable"), never a
- * benefit row that mentions one ("the employer's contribution to your pension"). */
-export const PREMIUM_ROW = /\bpremiums?\b|\b(?:monthly|annual|yearly|quarterly|half[- ]yearly|weekly|fortnightly|total|modal|regular|single|first|renewal)\s+(?:subscriptions?|contributions?)\b|\b(?:subscriptions?|contributions?)\s*(?:payable|due|amount|paid|per\s+(?:month|year|annum))\b|\btakaful contributions?\b/i;
+ * payment, and only when the label is nothing more than an optional frequency, the word, and an optional
+ * payable / due / amount / paid (by you) / per period, right before the figure or the end of the label
+ * ("Monthly subscription £148.60", "Annual contribution RM1,200", "Contribution payable S$85"). A benefit row that
+ * uses the word ("Annual contribution towards optical costs A$250", "Employer contribution paid", "Contribution
+ * paid by us towards dental", "Monthly contribution limit for physiotherapy", "Annual subscription to the online
+ * GP service") never is (TE W1 on #286). */
+const PAY_TERM = String.raw`(?=\s*(?:$|[:.,;()|=\-–—]|\d|(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b|(?:S|SG|US|HK|A|AU|NZ)\$|RM\s?\d|[$€£¥₱₹฿₩]))`;
+const PAY_QUAL = String.raw`(?:\s+(?:payable|due|amount|paid(?:\s+by\s+(?:you|the\s+(?:member|policyholder|policy\s+owner|insured|participant)))?|per\s+(?:month|year|annum|week|fortnight|quarter)))`;
+const PAY_NOT_OURS = String.raw`(?<!\b(?:employer|employer['’]s|employers['’]?|company|company['’]s|government|state|scheme|scheme['’]s|our|their|fund['’]s)\s+)`;
+const PAY_FREQ = String.raw`(?:monthly|annual|yearly|quarterly|half[- ]yearly|weekly|fortnightly|total|modal|regular|single|first|renewal|takaful)`;
+export const PREMIUM_ROW = new RegExp(String.raw`\bpremiums?\b|` + PAY_NOT_OURS + String.raw`\b` + PAY_FREQ + String.raw`\s+(?:subscriptions?|contributions?)` + PAY_QUAL + "{0,2}" + PAY_TERM + "|" + PAY_NOT_OURS + String.raw`\b(?:subscriptions?|contributions?)` + PAY_QUAL + "{1,2}" + PAY_TERM, "i");
 export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t match to your documents.";
 export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 

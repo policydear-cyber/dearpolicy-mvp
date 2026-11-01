@@ -33,7 +33,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 async function main() {
   const { questionTopics } = await import("@/lib/chat/policy-answer");
   const { PREMIUM_ROW } = await import("@/lib/chat/answer-verification");
-  const { withoutCorrectedPerson } = await import("@/lib/chat/workflow");
+  const { withoutCorrectedPerson, correctionOf } = await import("@/lib/chat/workflow");
   const keys = (q: string) => questionTopics(q).map((t) => t.key);
 
   await test("'how much do we pay for insurance each month?' is a premium question", () => {
@@ -46,9 +46,9 @@ async function main() {
   });
 
   await test("a subscription or contribution row is the payment; a row that only mentions one is not", () => {
-    for (const row of ["Monthly subscription £148.60", "Monthly contribution £41.20", "Annual contribution RM1,200.00", "Contribution payable S$85.00", "Takaful contribution RM96.50", "Annual premium £96.00"])
+    for (const row of ["Monthly contribution: A$41.10", "Contribution paid by you A$41.10 per month", "Subscription per month £20", "Monthly subscription £148.60", "Monthly contribution £41.20", "Annual contribution RM1,200.00", "Contribution payable S$85.00", "Takaful contribution RM96.50", "Annual premium £96.00"])
       assert.ok(PREMIUM_ROW.test(row), row);
-    for (const row of ["Out-patient consultations up to £1,000 per member per year", "Employer contribution to your pension 5%", "Hospital cash £100 per night", "Subscription to our newsletter is free"])
+    for (const row of ["Annual contribution towards optical costs A$250", "Weekly contribution towards childcare while in hospital A$120", "Monthly contribution towards care home fees A$500", "Employer contribution paid A$500", "Employer's contribution £200", "Total contribution from the scheme towards treatment A$1,000", "Contribution paid by us towards dental treatment A$300", "Monthly contribution limit for physiotherapy A$90", "Annual subscription to the online GP service (included)", "Contribution amount for each night in hospital A$50", "Out-patient consultations up to £1,000 per member per year", "Employer contribution to your pension 5%", "Hospital cash £100 per night", "Subscription to our newsletter is free"])
       assert.ok(!PREMIUM_ROW.test(row), row);
   });
 
@@ -59,14 +59,41 @@ async function main() {
     assert.equal(withoutCorrectedPerson("Not Ada, Joe", fam), "Joe");
   });
   await test("any other 'not' is left alone", () => {
-    for (const m of ["Joe is not covered?", "It was not Ada's fault", "Ada broke her arm, not her leg", "sorry, not Ada"]) assert.equal(withoutCorrectedPerson(m, fam), m);
+    for (const m of ["It was not Ada's fault, Joe crashed into her and she broke her wrist", "It is not Ada driving, Joe is", "Joe is not covered?", "It was not Ada's fault", "Ada broke her arm, not her leg", "sorry, not Ada"]) assert.equal(withoutCorrectedPerson(m, fam), m);
   });
 
+  const fam2 = [["Lena Novak", "self"], ["Omar Haddad", "spouse"], ["Tia Haddad", "child"], ["Ravi Haddad", "child"]].map(([n, r], i) => ({ id: "q" + i, display_name: n, preferred_name: null, relationship: r }));
+  await test("an opener alone, or another person's name, is never a correction of the pending person (Critic H1)", () => {
+    for (const m of ["Sorry, does Ravi have the same cover, not just Tia?", "Does Omar have it too, not only Tia?", "Sorry, is Omar covered, not Tia?", "Actually, can Ravi claim as well, not just Tia?", "Sorry, what does Omar's plan pay for physio?", "Actually, does Ravi have travel cover?", "It is late, can Omar claim tomorrow?", "It's Omar's turn next: is he covered for dental?", "Oops, is Ravi covered for dental?", "My mistake, what is Omar's excess?"]) {
+      assert.equal(correctionOf(m, fam2), null, m);
+      assert.equal(withoutCorrectedPerson(m, fam2), m, m);
+    }
+  });
+  await test("an explicit 'not <pending person>' plus one other person is a correction", () => {
+    for (const [m, meant, not] of [["It's not Tia, it's Omar", "q1", "q2"], ["I meant Ravi not Tia", "q3", "q2"], ["Sorry, it was Omar, not Tia.", "q1", "q2"], ["Not Tia, Ravi", "q3", "q2"]] as const) {
+      const c = correctionOf(m, fam2);
+      assert.ok(c, m);
+      assert.equal(c!.meant.id, meant, m);
+      assert.equal(c!.not.id, not, m);
+    }
+    const c = correctionOf("Sorry, it was Joe, not Ada", fam);
+    assert.equal(c?.meant.id, "p3");
+    assert.equal(c?.not.id, "p2");
+  });
+  await test("a relation word that names no single person is not a correction (Critic M1: 'not my son, my daughter')", () => {
+    const two = [["Lena Novak", "self"], ["Tia Haddad", "daughter"], ["Ravi Haddad", "son"], ["Sam Haddad", "son"]].map(([n, r], i) => ({ id: "r" + i, display_name: n, preferred_name: null, relationship: r }));
+    const c = correctionOf("not my son, my daughter", two);
+    assert.ok(c === null || c.meant.id !== "r0", JSON.stringify(c));
+    assert.equal(correctionOf("not my son, I meant me", fam2), null);
+  });
   await test("a document's own title is not a line that answers anything; a benefit line is (any market)", async () => {
     const { titleLine } = await import("@/lib/chat/document-questions");
     assert.equal(titleLine("Income Protection - Policy schedule", "Income Protection"), true);
     assert.equal(titleLine("Takaful Keluarga Certificate of Takaful", "Takaful Keluarga"), true);
     assert.equal(titleLine("Takaful Keluarga waiting period", "Takaful Keluarga"), false);
+    assert.equal(titleLine("Bupa By You Health Insurance — Membership certificate", "Bupa By You"), true);
+    for (const [line, product] of [["Hospital cash", "Hospital Cash Plan"], ["Excess", "Family Health Plan Excess Cover"], ["Monthly benefit", "Monthly Benefit Income Plan"], ["Waiver of premium", "Total Permanent Disability Waiver of Premium Cover"]])
+      assert.equal(titleLine(line, product), false, line);
     assert.equal(titleLine("Gold Hospital and Top Extras Policy Summary", "Gold Hospital and Top Extras"), true);
     assert.equal(titleLine("Monthly benefit\t£2,400", "Income Protection"), false);
     assert.equal(titleLine("Hospital cash benefit", "Hospital Cash Plan"), false);

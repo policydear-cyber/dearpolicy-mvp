@@ -120,12 +120,18 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
 
 /** A document's own title or heading ("Income Protection - Policy schedule") answers nothing: every word of it is the
  * plan's name or the kind of document, and it prints no figure (UK walkthrough, 31 Oct). */
-const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members"]);
+const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members", "membership", "health", "life", "medical", "travel", "general"]);
+/** Words that only a document's title carries ("Policy schedule", "Membership certificate"), never a benefit line. */
+const TITLE_ONLY_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "details", "membership", "page"]);
+/** A line with no figure that is only the product's name plus document words. A benefit line that happens to use
+ * some of the name's words ("Hospital cash" on a Hospital Cash Plan, "Monthly benefit" on a Monthly Benefit Income
+ * Plan) is not a title: a title prints the whole name or names the document. */
 export function titleLine(line: string, product: string | null | undefined) {
   if (/\d/.test(line)) return false;
   const name = new Set(String(product ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
   const words = line.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  return words.length > 0 && name.size > 0 && words.some((w) => name.has(w)) && words.every((w) => name.has(w) || DOCUMENT_KIND_WORDS.has(w));
+  if (!(words.length > 0 && name.size > 0 && words.some((w) => name.has(w)) && words.every((w) => name.has(w) || DOCUMENT_KIND_WORDS.has(w)))) return false;
+  return [...name].every((w) => words.includes(w)) || words.some((w) => TITLE_ONLY_WORDS.has(w) && !name.has(w));
 }
 // Gate R17: each line's figures are read from the page it cites (resolved on that page at save time).
 export async function documentQuestionAnswer(args: Parameters<typeof documentQuestionAnswerInner>[0]): Promise<DocumentAnswer | null> {
