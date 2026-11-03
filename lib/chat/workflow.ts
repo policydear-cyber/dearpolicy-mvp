@@ -874,7 +874,7 @@ function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
  * compared in code (lib/chat/deferred-period). Null unless the message states one length off work and exactly one
  * such plan of theirs prints exactly one such period. */
 async function waitingPeriodAnswer(accountId:string,people:ClaimPerson[],message:string):Promise<{summary:string;line:string;citation:ChatCitation}|null>{
-  const off=asksAboutIncomeCover(message)?timeOffWork(message):null;
+  const off=asksAboutIncomeCover(message)?timeOffWork(message):null
   if(!off||people.length!==1)return null;
   const rows=(await query<{id:string;product:string|null;insurer:string|null;type:string|null;role:string|null;page_number:number;text:string}>(
     `SELECT p.id::text,p.product_name AS product,p.insurer,p.policy_type AS type,p.document_role AS role,pg.page_number,pg.text FROM policies p
@@ -882,13 +882,19 @@ async function waitingPeriodAnswer(accountId:string,people:ClaimPerson[],message
       WHERE p.account_id=$1 AND pm.family_member_id=$2 AND p.processing_status='ready' AND p.superseded_at IS NULL AND ${activePredicate("p")}
       ORDER BY p.created_at,pg.page_number`,[accountId,people[0].id]).catch(()=>({rows:[]}))).rows;
   const incomePlan=(r:{product:string|null;type:string|null})=>/income protection|salary continuance|permanent health|disab|\bsalary\b/i.test((r.product??"")+" "+(r.type??""))
-    &&!/critical|accident|long[- ]term care|careshield|eldershield|\btpd\b|total (?:and )?permanent/i.test((r.product??"")+" "+(r.type??""));
-  const found=rows.filter(incomePlan).flatMap(r=>r.text.split(/\r?\n/).map(l=>({r,line:l.trim(),printed:printedWaitingPeriod(l)}))).filter(x=>x.printed);
+    &&!/critical|accident|long[- ]term care|careshield|eldershield|\btpd\b|total (?:and )?permanent|waiver|payor|payer|premium/i.test((r.product??"")+" "+(r.type??""));
+  // Only the person's own schedule, certificate or endorsement prints their period (a brochure's example does not).
+  const own=rows.filter(r=>incomePlan(r)&&["personal_schedule","certificate","endorsement"].includes(r.role??""));
+  // Any other line that names a period on the same plan (a hospital-cash "Waiting period 7 days", a period in a table)
+  // leaves it unclear which one is the income period: no answer.
+  const periodWords=/\b(?:deferred|deferment|waiting|elimination|qualifying)\s+periods?\b/i;
+  if(own.some(r=>r.text.split(/\r?\n/).some(l=>periodWords.test(l)&&!printedWaitingPeriod(l))))return null;
+  const found=own.flatMap(r=>r.text.split(/\r?\n/).map(l=>({r,line:l.trim(),printed:printedWaitingPeriod(l)}))).filter(x=>x.printed);
   const plans=new Set(found.map(x=>x.r.id)),periods=new Set(found.map(x=>x.printed!.span.min+"-"+x.printed!.span.max));
   if(plans.size!==1||periods.size!==1)return null;
   const {r,line,printed}=found[0];
   const plan=r.product??"the plan";
-  const who=people[0].preferred_name?.trim()||people[0].display_name.split(/\s+/)[0];
+  const who=people[0].preferred_name?.trim()||people[0].display_name.trim();
   return {summary:waitingPeriodSentence(who,off,printed!,plan),line:plan+" — "+line.replace(/\t+/g,": ").replace(/\s{2,}/g," ")+" (page "+r.page_number+").",
     citation:{chunkId:"waiting:"+r.id+":"+r.page_number,policyId:r.id,policyName:plan,insurer:r.insurer??undefined,pageStart:r.page_number,pageEnd:r.page_number,documentRole:r.role}};
 }

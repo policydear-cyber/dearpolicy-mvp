@@ -8,7 +8,7 @@ export type Span = { min: number; max: number; text: string };
 
 const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
   thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, eighteen: 18, twenty: 20, "twenty-four": 24, "twenty-six": 26, thirty: 30, "fifty-two": 52 };
-const N = "(\\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|eighteen|twenty|twenty-four|twenty-six|thirty|fifty-two)";
+const N = "(?<![\\w.,\\-–])(\\d{1,3}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|eighteen|twenty|twenty-four|twenty-six|thirty|fifty-two)";
 const UNIT = "(days?|weeks?|months?|years?)";
 
 function span(count: string, unit: string): Span | null {
@@ -30,12 +30,16 @@ const PERIOD_LENGTH = new RegExp("\\b(?:deferred|deferment|waiting|elimination|q
 /** How long the person has been off work, when the message says it once and says it as the time off itself ("off work
  * for 3 months", "off sick for the past six weeks", "signed off 10 days ago"). Two different lengths, a length that is the
  * plan's period, time off still to come, or none, give null. */
+/** Wording that is not time already off and still continuing: denied ("not off work"), past ("was off", "back at work"),
+ * or counted from a date or event ("since last week", which this cannot measure). */
+const NOT_NOW = /\b(?:not|never|isn['’]t|wasn['’]t|hasn['’]t been)\s+(?:been\s+)?(?:off|out of work|away from work|signed off|on sick|on medical)|\b(?:was|were|had been)\s+(?:off|out of work|away|signed off|unable|on sick|on medical)\b|\bback (?:at|to|in) work\b|\breturned to work\b|\bsince\b/i;
+
 export function timeOffWork(message: string): Span | null {
-  if (!OFF_WORK.test(message) || FUTURE.test(message) || PERIOD_LENGTH.test(message)) return null;
+  if (!OFF_WORK.test(message) || FUTURE.test(message) || PERIOD_LENGTH.test(message) || NOT_NOW.test(message)) return null;
   // The length belongs to the off-work phrase: right after it ("off work for 3 months", "off sick for the past six weeks",
   // "unable to work for a year now"), or "N units ago" in the same message ("signed off 10 days ago").
-  const own = new RegExp(OFF_WORK.source + "(?:\\s+(?:now|already|since then))?\\s+(?:for|over)\\s+(?:the\\s+)?(?:past\\s+|last\\s+)?(?:about\\s+|around\\s+|nearly\\s+|almost\\s+|over\\s+)?" + N + "\\s+" + UNIT + "\\b|\\b" + N + "\\s+" + UNIT + "\\s+ago\\b", "gi");
-  const spans = [...message.matchAll(own)].map((m) => (m[1] ? span(m[1], m[2]) : span(m[3], m[4]))).filter((s): s is Span => !!s);
+  const own = new RegExp(OFF_WORK.source + "(?:\\s+(?:now|already|since then))?\\s+(?:for|over)\\s+(?:the\\s+)?(?:past\\s+|last\\s+)?(?:about\\s+|around\\s+|nearly\\s+|almost\\s+|over\\s+)?" + N + "\\s+" + UNIT + "\\b|\\b" + N + "\\s+" + UNIT + "\\s+ago\\b|" + OFF_WORK.source + "\\s+" + N + "\\s+" + UNIT + "\\s+(?:already|now|so far)\\b", "gi");
+  const spans = [...message.matchAll(own)].map((m) => (m[1] ? span(m[1], m[2]) : m[3] ? span(m[3], m[4]) : span(m[5], m[6]))).filter((s): s is Span => !!s);
   if (!spans.length) return null;
   // Every length the message states: two different ones ("2 weeks ... 3 months") leave it unclear which is meant.
   const every = [...message.matchAll(new RegExp("\\b" + N + "\\s+" + UNIT + "\\b", "gi"))].map((m) => span(m[1], m[2])).filter((s): s is Span => !!s);
@@ -85,6 +89,8 @@ export function waitingPeriodSentence(who: string, off: Span, printed: { label: 
  * first, so the usual answer stays and this comparison is not given in its place. */
 const INCOME_ASKED = /\b(?:income protection|income (?:benefit|cover|insurance|plan|replacement|continuance)|disability (?:income|insurance|benefit|cover|plan)|salary (?:continuance|protection|cover|plan)|permanent health|loss of income|(?:deferred|deferment|waiting|elimination|qualifying) period)\b/i;
 const OTHER_EVENT = /\b(?:broke|broken|break|fractur\w*|hospital\w*|warded|surgery|surgical|operation|accident\w*|injur\w*|diagnos\w*|cancer|heart attack|stroke|dental|died|death|passed away|disabled for life|permanent(?:ly)? disab\w*)\b/i;
+/** Another kind of plan named in the same question ("his private medical insurance", "his critical illness cover"). */
+const OTHER_PLAN = /\b(?:medical|health|hospital\w*|critical(?:\s+illness)?|\bci\b|life|term|travel|accident|dental|maternity|long[- ]term care|shield|medishield|careshield|eldershield|tpd)\s+(?:insurance|cover|coverage|plan|policy|policies|benefits?|rider)\b/i;
 export function asksAboutIncomeCover(message: string): boolean {
-  return INCOME_ASKED.test(message) && !OTHER_EVENT.test(message);
+  return INCOME_ASKED.test(message) && !OTHER_EVENT.test(message) && !OTHER_PLAN.test(message);
 }
