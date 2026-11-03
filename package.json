@@ -220,6 +220,7 @@
     "policies:premium-elsewhere-test": "node --import tsx scripts/policies/premium-counted-elsewhere-test.ts",
     "documents:no-guessed-cover-test": "node --import tsx scripts/documents/no-guessed-cover-test.ts",
     "documents:found-line-table-test": "node --import tsx scripts/documents/found-line-table-test.ts",
+    "family:covered-for-other-test": "node --import tsx scripts/family/covered-for-other-test.ts",
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",
     "documents:failed-advice-test": "node --import tsx scripts/failed-document-advice-regressions.ts",

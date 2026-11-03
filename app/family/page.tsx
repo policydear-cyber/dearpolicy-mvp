@@ -5,7 +5,7 @@ import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
 import { HouseholdAccess } from "@/components/household-access";
-import { kindsOfTable, ledgerKindsByPerson, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { kindsOfTable, ledgerKindsByPerson, namedCoverKinds, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -127,8 +127,14 @@ export default function FamilyPage() {
               </div>
               <div className="profile-glance">
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
-                {kinds[member.id]?.length ? <p><b>Covered for</b> {kinds[member.id].join(" · ")}. <a className="text-link" href={`/ledger?member=${member.id}`}>See {baseline[member.id]?.display_name ?? member.display_name}&rsquo;s cover →</a></p>
-                  : member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
+                {/* Never "Covered for Other": only named kinds are listed, and cover whose kind nothing names yet is said in
+                    words, as on Documents (namedCoverKinds). */}
+                {(() => { const { named, unknownOnly, unknownToConfirm } = namedCoverKinds(kinds[member.id] ?? []); const name = baseline[member.id]?.display_name ?? member.display_name;
+                  const see = <a className="text-link" href={`/ledger?member=${member.id}`}>See {name}&rsquo;s cover →</a>;
+                  return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
+                    : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
+                    : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
+                    : null; })() ?? (member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
