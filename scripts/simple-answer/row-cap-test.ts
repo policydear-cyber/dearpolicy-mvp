@@ -122,6 +122,14 @@ test("negative (Critic #318 H1/H2): a next line that is another benefit's labell
     ["Fractures: 15% of the Sum Insured\nplus RM 2,000 for physiotherapy", "Fractures: 15% of the Sum Insured"],
     ["Fractures: up to RM50,000 or 15% of the Sum Insured, whichever is higher", "Fractures: up to RM50,000 or 15% of the Sum Insured"],
     ["Fractures: 15% of the Sum Insured or up to S$50,000, whichever is greater", "Fractures: 15% of the Sum Insured"],
+    // TE #318 round 2: alternatives with a floor or no stated rule, in other wordings and languages.
+    ["Fractures: 15% of the Sum Insured or up to S$50,000, the larger of the two", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured or up to S$50,000, if bigger", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured, up to S$50,000 where this exceeds the percentage", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured atau up to RM50,000, mana-mana yang lebih tinggi", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured ou up to €50,000, le montant le plus élevé", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured or up to S$50,000", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured, maximum S$200 per day", "Fractures: 15% of the Sum Insured"],
   ];
   for (const [text, quote] of rows) {
     const h = house(["Lim Ah Kow"], [doc("c1", "Personal Accident Plan.pdf", ["Lim Ah Kow"], `Personal Accident Plan\nInsured: Lim Ah Kow\n${text}`)]);

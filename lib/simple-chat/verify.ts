@@ -472,6 +472,10 @@ const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
 const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|jumlah\s+(?:di)?(?:insuranskan|diinsuranskan|perlindungan)|(?:the\s+)?capital\s+assur[ée]|suma\s+asegurada|versicherungssumme|保额|保額|保险金额|保險金額)\b/i;
 /** A row that is a share the household pays or a charge, never a cap on what the policy pays (closed list). */
 const CHARGE_ROW = /\b(?:co-?insurance|co-?pay(?:ment)?s?|excess(?:es)?|deductibles?|premiums?|loading|contributions?|fees?|charges?|levy|tax)\b/i;
+/** Words that may follow a row's cap figure: what it is per, and the lesser-of rule (closed list). */
+const CAP_TAIL = new Set(["per", "each", "any", "one", "a", "an", "the", "in", "for", "of", "all", "and", "claim", "claims", "accident", "accidents", "admission",
+  "admissions", "bone", "bones", "fracture", "fractures", "injury", "event", "illness", "condition", "policy", "year", "lifetime", "aggregate", "overall", "only",
+  "whichever", "is", "lesser", "will", "shall", "be", "payable", "paid", "lower", "less", "smaller", "life", "insured", "person", "setiap", "tuntutan", "setahun", "par", "sinistre", "an", "année"]);
 function rowCap(st: ModelStatement, at: Found, household: Household, person: string | null): { found: Found; raw: string; amount: NonNullable<Checked["amount"]> } | null {
   if (!person) return null;
   const doc = household.documents[at.docIndex];
@@ -499,7 +503,16 @@ function rowCap(st: ModelStatement, at: Found, household: Household, person: str
   // "whichever" picks the lesser: "whichever is greater" makes the figure a floor, and "10% of each claim" or "of the
   // bill" is a share the household pays (TE #318). A row that is a share paid or a charge (co-insurance, excess,
   // premium ...) is never a cap on what the policy pays.
-  if (/\bwhichever\b/i.test(text) && !/\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less|smaller)\b/i.test(text)) return null;
+  // A row that offers the percentage or the figure ("... or up to S$50,000", "atau", "ou", "oder", "或") is a cap only when
+  // it says the lesser applies; "the larger of the two", "if bigger", "mana-mana yang lebih tinggi" or no rule at all
+  // gives no figure (TE #318 round 2).
+  const lesser = /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less|smaller)\b/i.test(text);
+  if (/\bwhichever\b/i.test(text) && !lesser) return null;
+  if (/\b(?:or|atau|ou|oder|o)\b|或/i.test(text) && !lesser) return null;
+  // The words after the cap say what it is per, from a closed list; anything else ("if bigger", "where this exceeds the
+  // percentage", "per day") may change what the figure means, so no figure.
+  const tail = text.slice(i + fig.raw.length).toLowerCase().replace(/[,.;()]/g, " ").split(/\s+/).filter(Boolean);
+  if (tail.some((w) => !CAP_TAIL.has(w))) return null;
   if (/\b(?:greater|higher|minimum|min\.|at\s+least|not\s+less\s+than)\b/i.test(text)) return null;
   const pctOf = [...text.matchAll(/\d+(?:\.\d+)?\s*%\s*(?:of\s+(?:the\s+|your\s+|its\s+)?)?([^,;.\t]{0,40})/gi)];
   if (!pctOf.length || pctOf.some((m) => !PCT_BASE.test(m[1]))) return null;
