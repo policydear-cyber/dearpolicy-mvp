@@ -846,6 +846,13 @@ export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:
   }
 }
 
+/** The kinds whose outcome reads nothing of the benefit it is tested against: only the condition, the facts and the
+ * dates. Inside one answer each of these is the same for every benefit, so it is worked out once per condition. A kind
+ * whose branch in evaluateCondition reads the item (a limit, a figure, a title) must not be listed here; the stress
+ * suite checks every listed kind against varied benefits. */
+export const ITEM_FREE_KINDS:ReadonlySet<CoverConditionKind>=new Set<CoverConditionKind>(["waiting_period","survival_period",
+  "time_bar_from_inception","exclusion","notice_period","age_limit","aggregate_cap"]);
+
 export type ConditionsResult={qualifiers:string[];blocked:{title:string;reason:string}[]};
 
 /** Apply a document's conditions to an answer's figures.
@@ -865,11 +872,14 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   // benefits produced hundreds of thousands of them -- which then had to be
   // de-duplicated against each other one by one. Seven seconds of a person's
   // turn went into composing a paragraph that four lines of it would survive.
-  const caveats=new Map<string,number>();
+  //
+  // Kept by the exact text first and tidied once at the end: the same few sentences arrive tens of thousands of times,
+  // and tidying the spacing of each arrival was most of this function's time. Order and weights are unchanged: a line
+  // still takes its place from the first text that tidies to it, and the highest weight any of them carried.
+  const said=new Map<string,number>();
   const say=(text:string,weight:number)=>{
-    const line=text.replace(/\s+/g," ").trim();
-    if(!line)return;
-    caveats.set(line,Math.max(caveats.get(line)??0,weight));
+    const before=said.get(text);
+    if(before===undefined||weight>before)said.set(text,weight);
   };
   const blocked:{title:string;reason:string}[]=[];
   const items=args.items;
@@ -882,9 +892,20 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
     item.conditions=[...new Set([...(item.conditions??[]),text])];
     say(text,7);
   };
+  // A household with hundreds of benefits and hundreds of conditions asked the same question of each benefit: whether
+  // a waiting period had run, an exclusion was named, a notice was due. Those answers do not depend on the benefit.
+  const once=new Map<CoverCondition,ConditionOutcome>();
+  const outcomeOf=(condition:CoverCondition,item:ClaimItem)=>{
+    const shared=ITEM_FREE_KINDS.has(condition.kind);
+    const known=shared?once.get(condition):undefined;
+    if(known)return known;
+    const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,tenureStart:args.tenureStart,today});
+    if(shared)once.set(condition,outcome);
+    return outcome;
+  };
   for(const item of items){
     for(const condition of conditionsForItem(item,args.conditions)){
-      const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,tenureStart:args.tenureStart,today});
+      const outcome=outcomeOf(condition,item);
       if(outcome.kind==="clear")continue;
       if(outcome.kind==="caveat"){say(outcome.text,outcome.weight);continue;}
       if(outcome.kind==="withhold"){withhold(item,outcome.text);continue;}
@@ -962,6 +983,11 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   }
   // Heaviest first, and bounded: an answer has room for a handful, and a list
   // nobody reaches the end of is the same as no list at all.
+  const caveats=new Map<string,number>();
+  for(const [text,weight] of said){
+    const line=text.replace(/\s+/g," ").trim();
+    if(line)caveats.set(line,Math.max(caveats.get(line)??0,weight));
+  }
   const qualifiers=[...caveats.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([text])=>text);
   return {qualifiers,blocked};
 }
