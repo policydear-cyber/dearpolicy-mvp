@@ -35,6 +35,8 @@ import { citeAnswerLines } from "./answer-verification";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string; role: string | null; status: string; message: string | null; product: string | null; insurer: string | null;
+  /** The plan's stored type ("Travel", "Life", "Health"), which names its kind when its product name doesn't ("Annual Multi-Trip Family"). */
+  type?: string | null;
   /** For a failed document: why and what to do, from the Documents page's allow-list (never the stored text itself). */
   failure: FailedDocumentChatAdvice | null;
   superseded: boolean; notes: string[]; uploadedTo: string; owners: string[]; created: string };
@@ -46,14 +48,14 @@ const cleanInsurer = (name: string | null) => name ? name.replace(/\s*\((?:ficti
 const q = (file: string) => "“" + file + "”";
 
 async function loadDocuments(accountId: string): Promise<Doc[]> {
-  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; pages: number | null; message: string | null; product: string | null; insurer: string | null;
+  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; pages: number | null; message: string | null; product: string | null; insurer: string | null; type: string | null;
     superseded: boolean; notes: unknown; uploaded_to: string; owners: string[] | null; created: string }>(
-    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.page_count AS pages,p.processing_message AS message,p.product_name AS product,p.insurer,
+    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.page_count AS pages,p.processing_message AS message,p.product_name AS product,p.insurer,p.policy_type AS type,
             p.superseded_at IS NOT NULL AS superseded,p.extracted_json->'documentNotes' AS notes,p.family_member_id::text AS uploaded_to,
             ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id) AS owners,p.created_at::text AS created
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at,p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
   return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", role: r.role, status: r.status, message: r.message,
-    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, superseded: !!r.superseded,
+    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
 }
 async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { page: number; text: string }[]>> {
@@ -554,15 +556,68 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
 const GENERIC_WORDS = new Set("cover covered policy policies plan plans pay paid much insurance benefit benefits amount whole life many does still have has get".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
 const PRODUCT_COMMON = /^(?:plan|policy|insurance|integrated|personal|accident|critical|illness|hospital|income|annual|travel|whole|life|shield|care)$/i;
 const PRODUCT_COMMON_WORDS = ["plan", "policy", "insurance", "integrated", "personal", "annual", "whole", "life", "shield"];
-/** Plan kinds a question names without the product's name ("Mama's CI plan", "the accident plan"). */
-const PLAN_KINDS: [RegExp, RegExp][] = [
+/** Plan kinds a question names without the product's name ("Mama's CI plan", "the accident plan"), read from the
+ * product's name as before. */
+const NAMED_KINDS: [RegExp, RegExp][] = [
   [/\bci\b|critical illness/i, /critical illness/i],
   [/\baccident (?:plan|policy|cover)\b|\bpa (?:plan|policy|premium|cover)\b|\b(?:her|his|my|their|\w+[’']s) pa\b|personal accident/i, /accident/i],
   [/\bhospital (?:cash|income)\b/i, /hospital (?:cash|income)/i],
-  [/\btravel\b/i, /travel/i],
   [/\bwhole life\b/i, /whole life/i],
   [/\bshield\b|\bhospital plan\b|\bintegrated\b/i, /shield|integrated/i],
 ];
+/** Kinds of plan a question names whose product name often doesn't say it ("Tom's travel policy" is the "Annual
+ * Multi-Trip Family", "Siti's life insurance" the "Pelan Hayat Berkala"). Each document's kind is read from its
+ * stored type through a closed list of whole values, else from its name; a document whose name and type disagree,
+ * or that names two kinds, is of no known kind. */
+type PlanKind = "travel" | "life" | "health" | "income" | "other";
+const ASKED_KINDS: [RegExp, PlanKind][] = [
+  [/\btravel\b/i, "travel"],
+  [/\b(?:term )?life (?:plan|policy|polic(?:y|ies)|insurance|cover|assurance)\b|\bterm (?:plan|policy)\b/i, "life"],
+  [/(?<!permanent )\b(?:health|medical|private medical) (?:plan|policy|insurance|cover|scheme|fund)\b/i, "health"],
+  [/\bincome protection\b|\bsalary continuance\b|\bpermanent health\b|\bdisability (?:income|plan|policy|cover|insurance)\b/i, "income"],
+];
+const TYPE_KINDS = new Map<string, PlanKind>([
+  ...["travel", "travel insurance", "travel takaful", "perjalanan", "takaful perjalanan", "insurans perjalanan", "旅游保险", "旅行保险", "旅游", "旅行", "voyage", "assurance voyage", "viagem", "seguro viagem", "reise", "reiseversicherung", "viaje"].map((t) => [t, "travel"] as const),
+  ...["life", "life insurance", "life assurance", "term", "term life", "term assurance", "term insurance", "whole life", "whole life assurance", "whole life insurance", "endowment",
+    "hayat", "insurans hayat", "takaful hayat", "keluarga takaful", "family takaful", "takaful keluarga", "vida", "seguro de vida", "assurance vie", "lebensversicherung", "risikolebensversicherung", "人寿", "人寿保险", "寿险"].map((t) => [t, "life"] as const),
+  ...["health", "health insurance", "medical", "medical insurance", "hospitalisation", "hospitalization", "hospital and surgical", "hospital & surgical", "integrated shield",
+    "integrated shield plan", "private medical", "private medical insurance", "perubatan", "insurans perubatan", "takaful perubatan", "医疗", "医疗保险"].map((t) => [t, "health"] as const),
+  ...["disability", "disability income", "income protection", "berufsunfähigkeit", "berufsunfähigkeitsversicherung", "invalidez", "salary continuance", "permanent health", "permanent health insurance"].map((t) => [t, "income"] as const),
+  ...["critical illness", "ci", "early critical illness", "personal accident", "accident", "long-term care", "long term care", "ltc", "careshield", "eldershield", "dental", "maternity",
+    "hospital cash", "hospital income", "motor", "car", "home", "household", "contents", "investment", "investment-linked", "ilp", "annuity", "savings"].map((t) => [t, "other"] as const),
+]);
+const NAME_KINDS: [RegExp, PlanKind][] = [
+  [/\btravel|\b(?:multi|single)[- ]trip\b|\btrip\b|\bperjalanan\b|\bvoyage|\bviagem\b|\breise/i, "travel"],
+  [/income protection|\bsalary\b|permanent health|disab/i, "income"],
+  [/\bcritical\b|\bci\b|accident|long[- ]term|careshield|eldershield|hospital (?:cash|income)|dental|maternity/i, "other"],
+  [/\bhealth\b|\bmedical\b|\bhospital(?!\s+(?:cash|income))|\bshield\b|medishield|integrated|perubatan/i, "health"],
+  [/^(?!.*(?:shield|short[- ]term|long[- ]term)).*(?:\blife\b|\bterm\b|\bhayat\b)/i, "life"],
+];
+function planKind(d: { product: string | null; type?: string | null }): PlanKind | null {
+  const byName = new Set(NAME_KINDS.filter(([re]) => re.test(d.product ?? "")).map(([, k]) => k));
+  const byType = TYPE_KINDS.get((d.type ?? "").trim().toLowerCase().replace(/\s+/g, " "));
+  // A name and a type that say different kinds ("Early Critical Protector" stored as Health, "Life Secure Critical
+  // Illness" stored as Critical Illness) make the plan neither kind; a name that says two kinds, one of them the type's,
+  // is the type's.
+  if (byType) return !byName.size || byName.has(byType) ? byType : "other";
+  return byName.size === 1 ? [...byName][0] : null;
+}
+/** The documents a question names by kind: those of that kind, plus any of no known kind (it may be one). None when
+ * the question names no kind, or no document is that kind -- the question then goes to every document, as before. */
+export function planKindDocs<D extends { product: string | null; type?: string | null }>(question: string, docs: D[]): D[] {
+  const asked = new Set(ASKED_KINDS.filter(([re]) => re.test(question)).map(([, k]) => k));
+  const named = docs.filter((d) => NAMED_KINDS.some(([asks, kind]) => asks.test(question) && kind.test(d.product ?? "")));
+  if (!asked.size) return named;
+  const kinds = new Map(docs.map((d) => [d, planKind(d)]));
+  const theKind = docs.filter((d) => asked.has(kinds.get(d) as PlanKind));
+  if (!theKind.length) return named;
+  return docs.filter((d) => named.includes(d) || theKind.includes(d) || kinds.get(d) === null);
+}
+/** The question's words that name a kind of plan ("travel" in "Tom's travel policy"): like a plan's own name, they
+ * say which plan is asked, never what on it, so a line that only repeats them answers nothing. */
+export function planKindWords(question: string): string[] {
+  return ASKED_KINDS.flatMap(([re]) => [...question.matchAll(new RegExp(re.source, "gi"))].flatMap((m) => [...wordsOf(m[0])]));
+}
 /** "last year", "the 2025 schedule": an earlier year's schedule, kept for reference, is what is asked. */
 export function earlierYearAsked(text: string, today = new Date()) {
   const year = today.getUTCFullYear();
@@ -593,7 +648,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   const current = loaded.filter((d) => usable(d) && !d.superseded);
   const productWords = (d: Doc) => (d.product ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !PRODUCT_COMMON.test(w));
   const namesIn = (d: Doc, t: string) => productWords(d).some((w) => new RegExp("\\b" + w + "\\b", "i").test(t))
-    || PLAN_KINDS.some(([asks, kind]) => asks.test(t) && kind.test(d.product ?? ""));
+    || planKindDocs(t, loaded).includes(d);
   const firstPerson = /\b(?:my|mine|i|me)\b/i.test(question);
   // An earlier year's schedule first when an earlier year is asked; the current documents otherwise ("the bonus added in 2024" is on this year's statement).
   const pick = async (all: Doc[]) => {
@@ -607,10 +662,10 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
       const pool = docs.some(names) ? docs.filter(names) : docs;
       let best: { d: Doc; lines: ReturnType<typeof bestLines> } | null = null;
       for (const d of pool) {
-        const own = new Set(productWords(d).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
+        const own = new Set([...productWords(d).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")), ...planKindWords(asked)]);
         const lines = bestLines(pages.get(d.id) ?? [], asked, { limit: 3, min: args.min ?? 1.5 }).filter((l) => l.hits.some((h) => !own.has(h) && !GENERIC_WORDS.has(h)) && !titleLine(l.line, d.product));
         // The lines must say at least half of what the question turns on ("my CPF MediSave balance" is not a premium line that mentions MediSave).
-        const { distinct, covered } = askedCoverage(asked, lines.flatMap((l) => l.hits), new Set([...GENERIC_WORDS, ...all.flatMap((x) => productWords(x).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")))]
+        const { distinct, covered } = askedCoverage(asked, lines.flatMap((l) => l.hits), new Set([...GENERIC_WORDS, ...own, ...all.flatMap((x) => productWords(x).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")))]
           .concat([...PRODUCT_COMMON_WORDS])));
         if (distinct.length && covered.length * 2 < distinct.length) continue;
         // In place of a reply that it can't help, the lines must say everything asked ("the bonus added in 2024"), never one word of it ("the weather").

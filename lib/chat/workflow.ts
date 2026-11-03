@@ -972,7 +972,8 @@ export function notInDocuments(args:{question:string;people:ClaimPerson[];contra
   const named=[...new Set(args.contracts.map(c=>c.name))].slice(0,3).join(", ");
   for(const kind of POLICY_KINDS){
     if(!kind.asked.test(lower))continue;
-    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")));
+    // A plan is held when its name, its lines or its stored type say so ("Jelajah Tahunan", stored as Travel, is a travel policy).
+    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")+" "+(c.documents??[]).map(d=>d.policy_type??"").join(" ")));
     if(!held){
       const who=whose==="Your"?"You have":whose==="Your family’s"?"Your family has":whose.replace(/’s$/,"")+" has";
       return who+" no "+kind.kind+" policy on file, so your documents don’t say anything about this. The "+plural+" on file "+(args.contracts.length===1?"is":"are")+": "+named+". If there is a "+kind.kind+" policy, upload it and ask again.";
@@ -2040,7 +2041,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             ||(/^(?:and|what about|how about)\b/i.test(sentNow)&&!explicitPeople(sentNow,context.family).length&&!/\b(?:my|his|her|their|our)\s+(?:mak|mum|mom|mother|dad|father|son|daughter|brother|sister|helper|maid|wife|husband|grandm\w+|grandp\w+|self)\b|['’]s\s*\??$|\b(?:me|mine|myself)\b/i.test(sentNow)&&words<=6);
           const pronoun=!topicsNow.length&&(/\b(?:that|it|this|those|they|them|its)\b/i.test(sentNow)||asksNew||(words<=2&&/^[\p{L}-]+(?:\s[\p{L}-]+)?\s*\??$/u.test(sentNow)&&!explicitPeople(sentNow,context.family).length&&!latestPlan(sentNow,context.holdings)))&&words<=8;
           // "and when does it start paying?", "how much does she need to pay?": a date, a premium or a status of the same thing.
-          const onlyAttributes=topicsNow.length>0&&topicsNow.every(t=>["renewal","premium","status","excess"].includes(t.key))&&words<=8&&!/\b(?:policies|plans|insurance|cover(?:age)?)\b|^\s*(?:which|who|list)\b/i.test(sentNow)&&!context.holdings.some(h=>h.split(/[^\p{L}\p{N}]+/u).some(t=>t.length>=5&&new RegExp("\\b"+t+"\\b","i").test(sentNow)));
+          // A message that names its own kind of plan ("when does Amara's life policy end?" after a travel question) asks
+          // about that plan, never the attribute of the one before it.
+          const onlyAttributes=topicsNow.length>0&&topicsNow.every(t=>["renewal","premium","status","excess"].includes(t.key))&&words<=8&&!/\b(?:policies|plans|insurance|cover(?:age)?)\b|^\s*(?:which|who|list)\b/i.test(sentNow)&&!context.holdings.some(h=>h.split(/[^\p{L}\p{N}]+/u).some(t=>t.length>=5&&new RegExp("\\b"+t+"\\b","i").test(sentNow)))
+            &&!PLAN_KINDS.some(k=>k.re.test(sentNow));
           if(followUp||pronoun||onlyAttributes){
             state.intent=before.intent==="portfolio"&&!topicsNow.length?"portfolio":"policy_question";
             const earlier=before.activeQuery.length>220?before.activeQuery.slice(-220):before.activeQuery;
