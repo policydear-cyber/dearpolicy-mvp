@@ -435,3 +435,28 @@ test("last year's and this year's schedule of one policy: the renewal's premium 
   assert.deepEqual(run([t1, t2]).items, []);
   assert.deepEqual(run([t1, t2]).leftOut, [{ name: "Kestrel Single Trip", why: "two_documents" }]);
 });
+
+test("a page's one first-year premium is counted once, however many plans on it carry a premium (3 Nov: S$376.68 counted twice)", () => {
+  // A made-up schedule (RM, other insurer): a basic plan and a rider each print their own premium, and the page prints one
+  // first-year premium for the policy. The reading gives that line to every plan with a premium.
+  const text = "Jadual Polisi / Policy Schedule\nPolicy Effective Date\t: 01/06/2026\nLife Assured\t: Siti Aminah\nFirst Year Premium : 300.00\nCurrency\t: Ringgit Malaysia\n"
+    + "Payment Frequency\t: Monthly\nBenefit\tSum Assured\tPremium\nKestrel Critical Care\t200,000.00\t250.00\nHospital Booster Rider\t50,000.00\t125.00";
+  const read = checkReading({ id: "d9", name: "s.pdf", readable: true, people: ["Siti Aminah"], pages: [{ page: 2, text }] },
+    { document: { kind: "personal_proof", product: "Kestrel Critical Care", namedPeople: ["Siti Aminah"] }, covers: [
+      { page: 2, person: "Siti Aminah", product: "Kestrel Critical Care", cover: "Critical Illness", plan: null, quote: "Kestrel Critical Care\t200,000.00\t250.00", sumInsured: 200000, premium: 250, premiumFrequency: "Monthly" },
+      { page: 2, person: "Siti Aminah", product: "Kestrel Critical Care", cover: "Hospital Booster Rider", plan: null, quote: "Hospital Booster Rider\t50,000.00\t125.00", sumInsured: 50000, premium: 125, premiumFrequency: "Monthly" },
+    ], benefits: [] } as never).covers;
+  assert.deepEqual(read.map((c) => [c.premium, c.firstYearPremium]), [[250, 300], [125, 300]], "the shape the reading stores");
+  const plans = read.map((c) => cover({ product: c.product, cover: c.cover, premium: c.premium, firstYearPremium: c.firstYearPremium, premiumNote: c.premiumNote ?? null,
+    firstYearFrom: c.firstYearFrom ?? null, currency: "MYR", premiumCurrency: "MYR", documentPeriodFrom: "01/06/2026", premiumSource: { ...src("doc-a"), page: 2 } as never }));
+  const inFirstYear = run(plans, day("03/11/2026")).items;
+  assert.deepEqual(inFirstYear.map((i) => [i.amount, i.currency, i.annual]), [[300, "MYR", 3600]], "one first-year premium, not one per plan");
+  assert.equal(inFirstYear[0].detail, "first policy year; MYR 375.00 monthly from 1 June 2027", "the later premium is both plans'");
+  const after = run(plans, day("03/11/2027")).items;
+  assert.deepEqual(after.map((i) => i.amount), [250, 125], "after the first year each plan's own premium counts");
+  // Two documents each printing a first-year premium are two policies, and both count.
+  const other = plans.map((c) => ({ ...c, product: "Thames Life", source: src("doc-b") as never, premiumSource: { ...src("doc-b"), page: 2 } as never }));
+  assert.equal(run([plans[0], other[0]], day("03/11/2026")).items.length, 2);
+  // Different first-year figures on one document are not merged.
+  assert.equal(run([plans[0], { ...plans[1], firstYearPremium: 90 }], day("03/11/2026")).items.length, 2);
+});
