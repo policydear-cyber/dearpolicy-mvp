@@ -335,8 +335,10 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // Every schedule line each document printed, by plan, person and cover kind (the contract keeps one per kind).
   // If they cannot be read, no printed rate or limit keeps a figure (fails closed, never open).
   const printedByKind=new Map<string,string[]>();
-  const printedRead=await query<{policy_id:string;family_member_id:string;category:string;evidence_text:string|null}>(
-    "SELECT policy_id,family_member_id,category,evidence_text FROM policy_coverages WHERE account_id=$1 AND amount>0",[accountId]).catch(()=>null);
+  // Read only when some line prints a rate or limit at all (most households have none, so seeding costs no extra query).
+  const anyRate=contracts.some(c=>c.coverages.some(v=>{const e=scheduleLineEvent(v.category,(v.category+" "+(v.productName??"")+" "+c.name).trim(),v.evidenceText);return e?.pays==="stated"&&!!scheduleLinePays(e.event,v.evidenceText);}));
+  const printedRead=anyRate?await query<{policy_id:string;family_member_id:string;category:string;evidence_text:string|null}>(
+    "SELECT policy_id,family_member_id,category,evidence_text FROM policy_coverages WHERE account_id=$1 AND amount>0",[accountId]).catch(()=>null):null;
   for(const r of printedRead?.rows??[]){
     const key=r.policy_id+"|"+r.family_member_id+"|"+r.category;
     printedByKind.set(key,[...(printedByKind.get(key)??[]),r.evidence_text??""]);
