@@ -693,8 +693,16 @@ const COVER_NAMES = /\b(?:total\s+(?:and|&)\s+permanent\s+disab\w*|total\s+perma
  * total" alone (a sum of payouts) and "the most" alone (the most one event pays). Unsure is no: the limit stays out. */
 export function asksOverallMost(question: string): boolean {
   const q = question.normalize("NFKC").toLowerCase().replace(COVER_NAMES, " ");
-  return MOST_WORDS.some((w) => w.test(q)) && TOGETHER_WORDS.some((w) => w.test(q)) && !EVENT_WORDS.some((w) => w.test(q));
+  if (!MOST_WORDS.some((w) => w.test(q)) || !TOGETHER_WORDS.some((w) => w.test(q)) || EVENT_WORDS.some((w) => w.test(q))) return false;
+  // Allowed words, not a list of events (which always misses one: "bitten by a dog", "collapsed at work"): every part of
+  // the message that is not the limit question itself must be an "if" clause (TE #312 round 2). "My son was bitten by a
+  // dog. What's the most across all his policies?" says something happened, so the limit stays out.
+  const parts = q.split(/[.;,!?:，。？！；：、]+|\s[-–—]\s/).map((x) => x.trim()).filter(Boolean);
+  const asking = (x: string) => MOST_WORDS.some((w) => w.test(x)) || TOGETHER_WORDS.some((w) => w.test(x));
+  return parts.every((x) => asking(x) || HYPOTHETICAL.test(x));
 }
+/** How a clause that only supposes something opens: "if I claim twice", "jika", "如果", "si", "en caso de". */
+const HYPOTHETICAL = lettersEdge(/^(?:(?:and|but|so)\s+)?(?:if|what\s+if|suppose|supposing|say|assuming|in\s+case|jika|kalau|sekiranya|andainya|seandainya|如果|假如|要是|假设|假設|si|s'il|s'ils|en\s+caso\s+de|supongamos)\b/);
 
 /** Whether a limit row's card says it is a limit: its card carries the printed sentence (scopeOnCard), or its own name
  * has limit words ("Limits of compensation", "Aggregate limit"). One that does not is never shown as the answer to a
@@ -720,6 +728,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const statements: unknown[] = [];
   const charges = new Set<string>(), benefits = new Set<string>();
   const given = new Set<string>();
+  // Limit cards given for an event (asksOverallMost), with the statement each is: kept only beside a card of the same
+  // person's own per-claim amount on the same policy, so the limit is never the only figure (Critic #312 M1).
+  const limitsOnEvent: { row: ChatRow; st: Record<string, unknown> }[] = [];
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
     .filter((x): x is string => typeof x === "string").join(" ");
@@ -863,6 +874,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
+        if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
         (r.premium ? charges : benefits).add(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
           (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
@@ -873,6 +885,17 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   }
   // A card left out for its copied name whose row is shown anyway (given with the same benefit from another document) is
   // not missing: no "left out an amount" for it.
+  for (const { row: r, st } of limitsOnEvent) {
+    const beside = Object.keys(report.cards!).some((id) => { const o = byId.get(id);
+      return !!o && !o.combinedLimit && !o.premium && !PREMIUM_ROW.test(o.benefit) && o.personId === r.personId && samePolicy(o, r); });
+    if (beside) continue;
+    const at = statements.indexOf(st);
+    if (at >= 0) statements.splice(at, 1);
+    const label = String(st.text);
+    if (!statements.some((x) => (x as { text?: unknown })?.text === label)) report.labels = report.labels.filter((l) => l !== label);
+    delete report.cards![r.id]; given.delete(r.id);
+    report.dropped.push({ why: `${names(r)} is the most paid for several benefits together, not what this event pays`, text: label, row: r.id });
+  }
   report.dropped = report.dropped.filter((d) => !d.row || !given.has(d.row));
   // A label also given for a row that is not a premium is not a premium's.
   report.premiumLabels = [...charges].filter((l) => !benefits.has(l));

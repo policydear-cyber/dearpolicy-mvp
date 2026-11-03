@@ -280,9 +280,15 @@ for (const { m, sign } of MARKETS) {
       effectiveDate: null, expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: [person], supersededAt: null, processingStatus: "ready", pages }] } as Household;
   const chat = chatRows(table, HOUSE);
   const limitId = chat.find((r) => r.combinedLimit)!.id;
-  const card = (eventFit: string, question = "", rs = chat) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
-    { kind: "amount", text: "Cover.", person, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null,
-      row: limitId, rowBenefit: rs.find((r) => r.id === limitId)!.benefit, eventFit }] }, rs, HOUSE, new Date(), question);
+  const ciId = chat.find((r) => r.benefit === "Critical Illness Benefit" && !r.combinedLimit)!.id;
+  const st = (row: string, eventFit: string, rs: typeof chat) => ({ kind: "amount", text: "Cover.", person, document: null, quote: null, amount: null, percentOf: null, conditions: [],
+    alternativeGroup: null, perDay: null, ofBill: null, row, rowBenefit: rs.find((r) => r.id === row)!.benefit, eventFit });
+  // `perClaim`: the answer also gives the plan's own critical illness amount, as an answer about a limit for claims does.
+  const card = (eventFit: string, question = "", rs = chat, perClaim = false) => {
+    const r = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [st(limitId, eventFit, rs), ...(perClaim ? [st(ciId, eventFit, rs)] : [])] }, rs, HOUSE, new Date(), question);
+    const limitLabel = rs.find((x) => x.id === limitId)!;
+    return { ...r, report: { ...r.report, labels: r.report.labels.filter((l) => !perClaim || r.report.cards?.[limitId]?.text === l) }, limitLabel };
+  };
   test(`${m}: the chat never gives the limit as what an event pays; asked about the limit itself, it is shown`, () => {
     for (const fit of ["on_list", "any_event"]) {
       const r = card(fit);
@@ -293,17 +299,21 @@ for (const { m, sign } of MARKETS) {
   });
   test(`${m}: asked for the most paid for all claims together, the limit is what was asked; an event question still never gets it (chat-speed S4)`, () => {
     for (const fit of ["on_list", "any_event"]) {
-      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan untuk semua tuntutan?"])
-        assert.equal(card(fit, q).report.labels.length, 1, `${fit}: ${q}`);
-      for (const q of ["I had a heart attack, what can I claim?", "what can I claim in total for this?", "what's the most I can get for my stroke?", "I had a heart attack, what's the most the plan pays over the years?"])
-        assert.deepEqual(card(fit, q).report.labels, [], `${fit}: ${q}`);
+      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan untuk semua tuntutan?"]) {
+        assert.equal(card(fit, q, chat, true).report.labels.length, 1, `${fit}: ${q}`);
+        // Given alone for an event it would read as what the event pays (Critic #312 M1).
+        assert.deepEqual(card(fit, q).report.labels, [], `alone ${fit}: ${q}`);
+      }
+      for (const q of ["I had a heart attack, what can I claim?", "what can I claim in total for this?", "what's the most I can get for my stroke?", "I had a heart attack, what's the most the plan pays over the years?",
+        "My son was bitten by a dog. What's the most we can claim across all his policies?"])
+        for (const perClaim of [false, true]) assert.deepEqual(card(fit, q, chat, perClaim).report.labels, [], `${fit} ${perClaim}: ${q}`);
       // A limit row whose card would not say it is a limit (no limit words in its name, no printed sentence on the card)
       // is never given as the answer: it would read as a payout.
       const plain = chat.map((r) => r.id === limitId ? { ...r, benefit: "Critical Illness Benefit", scopeOnCard: false } : r);
-      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", plain).report.labels, [], fit);
+      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", plain, true).report.labels, [], fit);
       // "Total" in a cover's name is no limit word.
       const tpd = chat.map((r) => r.id === limitId ? { ...r, benefit: "Total and Permanent Disability", scopeOnCard: false } : r);
-      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", tpd).report.labels, [], `${fit} TPD`);
+      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", tpd, true).report.labels, [], `${fit} TPD`);
     }
   });
 }

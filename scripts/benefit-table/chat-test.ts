@@ -1996,7 +1996,10 @@ test("no total limit row unless the clause plainly prints one total in a stated 
 // A question that asks for the most paid for everything together gets the printed total limit, said as a limit with what
 // it is printed for; a question about an event never does, however it is worded (chat-speed run 3 Nov, S4).
 test("asked for the most paid in total, the clause's total limit is shown as a limit; an event question never gets it", () => {
-  const ask = (question: string, eventFit: string, limit = TOTAL) => partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(limit)), [{ row: limitRow, text: "The most in total.", eventFit }], [b(ciRow)], partsCover, question);
+  // For an event fit the answer also gives the per-claim benefit: a limit given alone is never kept (Critic #312 M1).
+  const ask = (question: string, eventFit: string, limit = TOTAL, perClaim = eventFit !== "no_event") => partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(limit)),
+    [{ row: limitRow, text: "The most in total.", eventFit }, ...(perClaim ? [{ row: rowNamed(/^Critical Illness Benefit$/), text: "Each claim.", eventFit }] : [])], [b(ciRow)], partsCover, question);
+  const shows = (r: ReturnType<typeof ask>, amount = "S$800,000") => r.amounts.some((a) => a.replace(/\s/g, "") === amount.replace(/\s/g, ""));
   for (const question of [
     "if I claim for two different early stage illnesses over the years, what's the most the plan will pay in total?",
     "Is there an overall cap on all my critical illness claims?",
@@ -2017,16 +2020,15 @@ test("asked for the most paid in total, the clause's total limit is shown as a l
     "¿Cuál es el tope acumulado de todas mis reclamaciones?",
   ]) for (const fit of ["on_list", "any_event", "no_event"]) {
     const r = ask(question, fit);
-    assert.deepEqual(r.amounts, ["S$800,000"], `${fit}: ${question} ${JSON.stringify(r.report.dropped)}`);
-    const card = r.kept.find((x) => x.amount)!;
+    assert.ok(shows(r), `${fit}: ${question} ${JSON.stringify(r.amounts)} ${JSON.stringify(r.report.dropped)}`);
+    const card = r.kept.find((x) => x.amount && /^Limit in total/.test(x.text))!;
     assert.match(card.text, /^Limit in total on Critical Illness Benefit claims/, question);
     assert.ok(JSON.stringify(card).includes("The most We will pay in total for all Early Stage Critical Illness claims"), `the card says what the limit is for: ${question}`);
   }
   // In other currencies the figure is the printed one.
   for (const [from, to, shown] of [["S$800,000", "RM800,000", "RM800,000"], ["S$800,000", "£800,000", "£800,000"]] as const) {
     const r = ask("what's the most it pays over the years?", "on_list", TOTAL.replace(from, to));
-    assert.equal(r.amounts.length, 1, `${to}: ${JSON.stringify(r.report.dropped)}`);
-    assert.ok(r.amounts[0].replace(/\s/g, "").includes(shown.replace("RM", "")), `${to}: ${r.amounts[0]}`);
+    assert.ok(r.amounts.some((a) => a.replace(/\s/g, "").includes(shown.replace("RM", ""))), `${to}: ${JSON.stringify(r.amounts)} ${JSON.stringify(r.report.dropped)}`);
   }
   // Negative controls: an event (also asked with most and total words, in any language), a sum of payouts, a most for
   // one event, or a cover's name holding "total", is never answered with the total (TE #312).
@@ -2067,12 +2069,37 @@ test("asked for the most paid in total, the clause's total limit is shown as a l
     "Tengo cáncer, ¿cuál es el máximo en total que puedo reclamar?",
     "what can I claim in total? I had a heart attack",
     "my wife had a stroke - total payout?",
+    // Critic #312 M1 and TE #312 round 2: an event in words no list holds, before the limit question.
+    "I've just got cancer, what's the max across all my policies?",
+    "My husband has cancer now, what is the most he can get for all his claims?",
+    "I'm off sick with cancer - what's the lifetime maximum?",
+    "Saya ada kanser, berapa had maksimum semua tuntutan?",
+    "我得了癌症，所有理赔最多赔多少？",
+    "Mum fell and hurt her hip, what's the max over the years?",
+    "J'ai attrapé un cancer, quel est le plafond global ?",
+    "My son was bitten by a dog. What's the most we can claim across all his policies?",
+    "我昨天中风了，所有理赔最多赔多少？",
+    "Mi esposa tuvo un infarto, ¿cuál es el máximo acumulado de todas las reclamaciones?",
+    "Mon fils s'est cassé le bras, quel est le plafond global de toutes les réclamations ?",
+    "she was knocked down by a car, is there a lifetime cap on her claims?",
+    "my dad collapsed at work and is in the ward now. what is the aggregate limit?",
+    "Ayah saya dimasukkan ke wad, berapa had seumur hidup?",
+    "what's the most over the years for all my claims? my dad collapsed at work",
     "",
-  ]) for (const fit of ["on_list", "any_event"]) {
-    const r = ask(question, fit);
-    assert.deepEqual(r.amounts, [], `${fit}: ${question}`);
+  ]) for (const fit of ["on_list", "any_event"]) for (const perClaim of [false, true]) {
+    const r = ask(question, fit, TOTAL, perClaim);
+    assert.ok(!shows(r), `${fit} ${perClaim}: ${question}`);
     assert.match(r.report.dropped.map((d) => d.why).join(" "), /several benefits together/, `${fit}: ${question}`);
   }
+  // A many-claims question about an event, with the limit given alone (no per-claim amount beside it), never shows it:
+  // alone it reads as what the event pays (Critic #312 M1). Beside the per-claim amount it is the limit asked for.
+  for (const question of ["My husband has cancer now what is the most he can get for all his claims?", "what's the most the plan pays over the years for all my claims?"])
+    for (const fit of ["on_list", "any_event"]) {
+      assert.ok(!shows(ask(question, fit, TOTAL, false)), `alone ${fit}: ${question}`);
+      assert.ok(shows(ask(question, fit, TOTAL, true)), `beside ${fit}: ${question}`);
+    }
+  // Asked with no event, the limit alone is what was asked.
+  assert.ok(shows(ask("what's the most the plan pays over the years for all my claims?", "no_event", TOTAL, false)));
 });
 
 async function atest(name: string, fn: () => Promise<void>) {
