@@ -269,15 +269,17 @@ async function main() {
     assert.ok(!jun.covering.some((p) => p.policyId === doc("GHS").id));
     assert.ok(jun.covering.some((p) => p.policyId === doc("CASH").id) && jun.covering.some((p) => p.policyId === doc("PA").id));
   });
-  await check("C4 nominee is not insured; expired helper cover says when it ended; topic ordering", async () => {
+  await check("C4 nominee is not insured; helper cover whose printed period has passed is in force; topic ordering", async () => {
     const mel = await C.policiesFor({ accountId: ACCOUNT, subjectId: M.melissa.id, asOf: ASOF, topic: "critical illness cancer" });
     const legacy = mel.notCovering.find((p) => p.policyId === doc("LEGACY").id)!;
     assert.ok(legacy, "the nominee's policy is reported, as not covering"); assert.equal(legacy.role, "nominee"); assert.equal(legacy.covered, false);
     assert.ok(!mel.covering.some((p) => p.policyId === doc("LEGACY").id));
     assert.equal(mel.covering[0].policyId, doc("CI").id, "the topic's policy comes first");
     const rosa = await C.policiesFor({ accountId: ACCOUNT, subjectId: M.rosalind.id, asOf: ASOF });
-    const helper = rosa.notCovering.find((p) => p.policyId === doc("HELPER").id)!;
-    assert.equal(helper.inForce.status, "expired"); assert.ok(helper.reasons.some((x) => /ended on 2024-12-31/.test(x)));
+    // DC (31 Oct, yes 1 Nov): a printed period that has passed (to 31 Dec 2024) never makes a policy ended; it is in force.
+    const helper = rosa.covering.find((p) => p.policyId === doc("HELPER").id)!;
+    assert.ok(helper, "the helper's policy is listed as covering"); assert.ok(!rosa.notCovering.some((p) => p.policyId === doc("HELPER").id));
+    assert.equal(helper.inForce.status, "in_force"); assert.ok(!helper.reasons.some((x) => /\b(?:ended|expired|lapsed)\b/i.test(x)), helper.reasons.join("; "));
     const ahmui = await C.policiesFor({ accountId: ACCOUNT, subjectId: M.ahmui.id, asOf: ASOF });
     assert.ok(ahmui.covering.some((p) => p.policyId === doc("LEGACY").id), "the life assured is covered");
     assert.ok(ahmui.undetermined.length >= 1, "what cannot be determined is reported");
