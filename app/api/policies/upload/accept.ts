@@ -22,6 +22,7 @@ import { pool } from "@/lib/db/client";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
+import { noteOwnerUnsure } from "@/lib/policies/upload-owner";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -154,6 +155,8 @@ export async function acceptPolicyUpload(args: {
         malwareScanningIntentionallyDisabled() ? "Document received — reading and extracting information." : "Waiting to be analysed…",
         outcome.verifiedSupersedesId],
     );
+    // "Not sure": the owner above is only a placeholder, so the document is nobody's until someone is linked to it.
+    if (!args.explicitFamilyMember) await noteOwnerUnsure(ctx.householdId, policyId);
     if (outcome.verifiedSupersedesId) {
       await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });
     }

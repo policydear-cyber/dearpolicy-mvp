@@ -3,6 +3,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { DOCUMENT_READ_IN_PART_MESSAGE } from "@/lib/documents/processing-errors";
 import { BENEFIT_READ_FAILURE_KEY, readingCacheReady } from "@/lib/policies/read-failures";
+import { UNSURE_KEY } from "@/lib/policies/upload-owner";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { SCAN_GOES_ON } from "@/lib/benefit-table/service";
 
@@ -19,8 +20,10 @@ export type NotFullyRead = { count: number; names: string[]; ids: string[] };
 /** Benefit-table states that mean the document's cover was not read (lib/benefit-table/service.ts documentState). */
 const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread"]);
 /** The person's own documents: linked to them, or uploaded for them and linked to no one. `p` is the policies alias. */
-export const OWNED_BY_MEMBER = (member: string) => `(EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=${member})
-  OR (p.family_member_id=${member} AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)))`;
+/** `cache`: the policies.reading_cache column exists (readingCacheReady). Then an upload whose person was "Not sure"
+ * (lib/policies/upload-owner.ts) and that nobody is linked to yet is nobody's: its placeholder owner never counts. */
+export const OWNED_BY_MEMBER = (member: string, cache = false) => `(EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=${member})
+  OR (p.family_member_id=${member} AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)${cache ? ` AND NOT coalesce(p.reading_cache ? '${UNSURE_KEY}',false)` : ""}))`;
 
 export async function notFullyRead(accountId: string, familyMemberId: string, tableDocuments: { id: string; state: string }[] = []): Promise<NotFullyRead> {
   try {
@@ -30,7 +33,7 @@ export async function notFullyRead(accountId: string, familyMemberId: string, ta
     const unread = tableDocuments.filter((d) => UNREAD_STATES.has(d.state)).map((d) => d.id);
     const rows = await query<{ id: string; product_name: string | null; original_filename: string | null; insurer: string | null; document_role: string | null; policy_number: string | null }>(
       `SELECT p.id::text AS id,p.product_name,p.original_filename,p.insurer,p.document_role,p.policy_number FROM policies p
-        WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2")}
+        WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2", cache)}
           AND (p.id::text=ANY($6::text[]) OR (NOT (coalesce(p.document_role,'')=ANY($5::text[])) AND (
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
