@@ -43,6 +43,12 @@ export const DOCUMENT_READING_SERVICE_MESSAGE =
  * search) is available now. The progress message of a ready document. */
 export const DOCUMENT_READ_IN_PART_MESSAGE =
   "Ready. DearPolicy read this document's text and tables, but couldn't finish reading who it covers and its cover amounts right now. It will try again automatically.";
+/** The same state once no automatic retry is left (the deferred retry already ran, or could not be scheduled): it never
+ * says it will try again. Read again (the document card) is the one step that reads it once more. */
+export const DOCUMENT_READ_IN_PART_FINAL_MESSAGE =
+  "Ready. DearPolicy read this document's text and tables, but couldn't finish reading who it covers and its cover amounts. Use Read again to try once more.";
+/** Both stored states of a document read without its cover reading, for every reader that matches the stored message. */
+export const DOCUMENT_READ_IN_PART_MESSAGES: readonly string[] = [DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE];
 /** Shown (as the progress message, not an error) while an automatic retry
  * is scheduled after a temporary failure. */
 export const DOCUMENT_READING_RETRY_MESSAGE =

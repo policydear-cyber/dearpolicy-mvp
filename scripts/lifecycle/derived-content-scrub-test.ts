@@ -28,7 +28,7 @@ async function main() {
   const { pool } = await import("@/lib/db/client");
   const db = new PGlite({ extensions: { vector, pgcrypto } });
   await db.waitReady;
-  for (const f of ["schema", "claim-evidence", "critical-illness", "disability", "coverage-ledger", "lifecycle", "chat-upgrade", "background-jobs", "storage-purge", "cover-conditions"]) {
+  for (const f of ["schema", "claim-evidence", "critical-illness", "disability", "coverage-ledger", "lifecycle", "chat-upgrade", "background-jobs", "storage-purge", "cover-conditions", "household-rls", "benefit-table"]) {
     await db.exec(await readFile(path.resolve("sql/" + f + ".sql"), "utf8")).catch((e) => { throw new Error("sql/" + f + ".sql: " + (e as Error).message); });
   }
   let tail = Promise.resolve();
@@ -202,7 +202,37 @@ async function main() {
     await q(`INSERT INTO policy_analysis_cache(account_id,cache_key,analysis_json) VALUES ($1,$2,'{}')`, [acc3, "c".repeat(64)]);
     await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [d]);
     const r = await scrubDeletedDocumentDerivedContent({ policyIds: [d] });
-    assert.deepEqual(r, { documents: 1, answersRedacted: 1, chatsReset: 1, jobsCleared: 0, cacheDropped: 1, ledgerRowsRemoved: 1, failed: 0 });
+    assert.deepEqual(r, { documents: 1, answersRedacted: 1, chatsReset: 1, jobsCleared: 0, cacheDropped: 1, ledgerRowsRemoved: 1, linksRemoved: 0, failed: 0 });
+  });
+  await t("its section-to-cover links go too, the model's and the household's own, and only its own (Critic R310 M1)", async () => {
+    const acc5 = await household("Moreau household (fictitious)");
+    const lea = await member(acc5, "Léa Moreau", "self");
+    const gone = await doc(acc5, lea, { file: "Hospital-Plus.pdf", insurer: "Garonne Assurances (fictitious)", product: "Hospital Plus", policyNo: "HP-2290-1180" });
+    const keep = await doc(acc5, lea, { file: "Vie-Sereine.pdf", insurer: "Garonne Assurances (fictitious)", product: "Vie Sereine", policyNo: "VS-8812-0043" });
+    // A heading with % and _ in it: removal never matches by pattern.
+    await q(`INSERT INTO benefit_links(account_id,section_key,cover_key,why,chosen_by) VALUES
+      ($1,$2,'hospital plus|hospital plus|plan b','The Hospital Plus Plan B column pays daily hospital cash of €150.','model'),
+      ($1,$3,'hospital plus|surgical|plan b','','household'),
+      ($1,$4,'vie sereine|vie sereine|','The death benefit is €200,000.','model'),
+      ($1,$5,'x|x|','','model')`,
+      [acc5, `${gone}|daily hospital cash|plan b`, `${gone}|surgical benefit 100%_cap|plan b`, `${keep}|death benefit|`, `${keep}${gone}|odd|`]);
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [gone]);
+    const r = await scrubDeletedDocumentDerivedContent({ policyIds: [gone] });
+    assert.equal(r.linksRemoved, 2, JSON.stringify(r));
+    const left = (await q<{ section_key: string }>(`SELECT section_key FROM benefit_links WHERE account_id=$1 ORDER BY section_key`, [acc5])).rows.map((x) => x.section_key);
+    assert.deepEqual(left.sort(), [`${keep}${gone}|odd|`, `${keep}|death benefit|`].sort());
+  });
+  await t("links of a document handled before links were removed are caught up on the next pass", async () => {
+    const acc6 = await household("Okafor household (fictitious)");
+    const ada = await member(acc6, "Ada Okafor", "self");
+    const old = await doc(acc6, ada, { file: "Ikenga-Life.pdf", insurer: "Ikenga Assurance (fictitious)", product: "Ikenga Life", policyNo: "IL-55-90021" });
+    await q(`UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1`, [old]);
+    await scrubDeletedDocumentDerivedContent({ policyIds: [old] });
+    // A link left behind by an older pass (the document is already marked done).
+    await q(`INSERT INTO benefit_links(account_id,section_key,cover_key,why,chosen_by) VALUES ($1,$2,'ikenga life|ikenga life|','Pays ₦20,000,000 on death.','household')`, [acc6, `${old}|death benefit|`]);
+    const r = await scrubDeletedDocumentDerivedContent();
+    assert.equal(r.documents, 0, "the document itself is not handled twice");
+    assert.equal((await q(`SELECT 1 FROM benefit_links WHERE account_id=$1`, [acc6])).rows.length, 0);
   });
   await t("another household's chat and cache are never touched", async () => {
     const o = await msg(otherAnswer);
