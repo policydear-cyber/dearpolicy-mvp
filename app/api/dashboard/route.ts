@@ -110,7 +110,7 @@ export async function GET(request:NextRequest){
       const loaded=await tableFor(appDb,accountId);tableDocuments=loaded.documents;
       const person=loaded.table.people.find(p=>p.id===active.id);
       tableCovers=person?.covers??[];
-      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency,notionalSum:c.notionalSum??null}));
+      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency,notionalSum:c.notionalSum??null,policyNumber:c.policyNumber??null}));
       const kinds=personKinds(person?.covers??[],person?.rows??[]);
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
