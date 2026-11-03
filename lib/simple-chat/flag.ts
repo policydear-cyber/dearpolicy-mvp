@@ -7,6 +7,8 @@
  * As with DEARPOLICY_RAG_LOOP, a production build refuses the switch unless DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION=1
  * is also set there, so one stray setting cannot change what households see.
  *
+ * DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS=1 opens it to every household rather than only DEARPOLICY_ALPHA_ACCOUNTS.
+ *
  * DEARPOLICY_SIMPLE_CHAT_MODEL picks the model as "provider:model" (anthropic or openai); default anthropic:claude-sonnet-5-5,
  * the model DC chose for the paid tests (21 Oct 2026) and the alpha, at a fraction of Opus's cost.
  */
@@ -25,6 +27,14 @@ export function simpleChatStatus(env: NodeJS.ProcessEnv = process.env, accountId
   if (!truthy(env.DEARPOLICY_SIMPLE_CHAT)) return { enabled: false, production, reason: "DEARPOLICY_SIMPLE_CHAT is not set (default off)" };
   if (production && !truthy(env.DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION))
     return { enabled: false, production, reason: "DEARPOLICY_SIMPLE_CHAT is refused in a production build unless DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION=1" };
+  // DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS=1 opens the simple chat to every signed-in household instead of the alpha list (DC,
+  // 3 Nov: new users get the simple chat at launch). Nothing else changes: the two switches above must still be set, and a
+  // call that names no account is still off. A household's earlier chats stay readable (lib/simple-chat/hook.ts reads
+  // their messages, whatever path answered them).
+  if (truthy(env.DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS) && !alphaAccountAllowed(accountId, env)) {
+    if (!accountId || !accountId.trim()) return { enabled: false, production, reason: "no account named (the simple chat is per household)" };
+    return { enabled: true, production, reason: "enabled for every account by DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS" };
+  }
   if (!alphaAccountAllowed(accountId, env)) return { enabled: false, production, reason: "this account is not in DEARPOLICY_ALPHA_ACCOUNTS" };
   return { enabled: true, production, reason: production ? "enabled in production by DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION" : "enabled by DEARPOLICY_SIMPLE_CHAT" };
 }
