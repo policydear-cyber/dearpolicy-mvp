@@ -666,30 +666,42 @@ function nameHead(row: ChatRow): string | null {
   const head = plainWords(benefitName(row.benefit).replace(/^\s*[a-z]\s*[.,]\s+/i, "").split(/\b(?:upon|on|following|after|due\s+to|for|while|in\s+case\s+of|arising|caused\s+by)\b/i)[0].replace(/\bbenefits?\s*$/i, ""));
   return head.trim().split(" ").length >= 2 ? head : null;
 }
-/** Words that ask for a most, a maximum or a cap, and words that ask for everything together (all claims, over the years),
- * as closed lists in the languages households write in. Both kinds must be in the question (asksOverallMost). */
+/** Words that ask for a most, a maximum or a cap; words that ask about many claims together (all claims, over the years,
+ * a lifetime); and words that say an event has happened (a stay, a diagnosis, an accident). All closed lists, in the
+ * languages households write in (asksOverallMost). "Total" alone is no together word: it asks for a sum of payouts, and
+ * is part of cover names ("total and permanent disability", masked first). "Had" alone is English, never the Malay limit. */
+/** The same pattern with \b as a word edge in any script: JavaScript's \b sees "é" and "ñ" as no letter, so
+ * "hospitalisé" would never end a word. */
+const lettersEdge = (r: RegExp) => new RegExp(r.source.replace(/\\b/g, "(?:(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}]))"), r.flags.replace("u", "") + "u");
 const MOST_WORDS = [/\b(?:most|maximum|max|highest|ceiling|caps?|capped|limits?|up\s+to\s+how\s+much)\b/,
-  /\b(?:paling\s+banyak|paling\s+tinggi|maksimum|maksima|tertinggi|had)\b/, /(?:最多|最高|上限|封顶|封頂)/,
-  /(?:\bmaximum\b|\bmaximale?s?\b|\bplafonds?\b|\bau\s+plus\b|\ble\s+plus\b)/, /(?:\bm[áa]ximos?\b|\btopes?\b|\bcomo\s+mucho\b|\blo\s+m[áa]s\b)/];
-const TOGETHER_WORDS = [/\b(?:in\s+total|totals?|overall|altogether|all\s+together|combined|aggregate|cumulative(?:ly)?|lifetime|in\s+all|over\s+the\s+years|all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+)?claims|across\s+(?:all|both|every))\b/,
-  /\b(?:jumlah|keseluruhan|kesemua|semua\s+tuntutan|seumur\s+hidup)\b/, /(?:总共|总额|總額|合计|合計|累计|累計|一共|总计|總計|加起来|加起來)/,
-  /(?:\bau\s+total\b|\ben\s+tout\b|\bcumul[ée]e?s?\b|\bglobale?s?\b)/, /(?:\ben\s+total\b|\bacumulad[oa]s?\b|\ben\s+conjunto\b)/];
-/** Whether the question asks for the most paid for everything together ("what's the most the plan will pay in total",
- * "is there an overall cap on all my claims"). Only then is a limit on what several benefits pay together (combinedLimit)
- * what was asked; a question about an event ("what can I claim", "what can I claim in total for this stay") asks what the
- * event pays, which such a limit never is. Both a most word and a together word are needed: "in total" alone asks for a
- * sum of payouts, "the most" alone can ask what one event pays at most. */
+  /\b(?:paling\s+banyak|paling\s+tinggi|maksimum|maksima|tertinggi|had\s+(?:maksimum|keseluruhan|tuntutan|seumur))\b/, /(?:最多|最高|上限|封顶|封頂)/,
+  /(?:\bmaximum\b|\bmaximale?s?\b|\bplafonds?\b|\bau\s+plus\b|\ble\s+plus\b)/, /(?:\bm[áa]ximos?\b|\btopes?\b|\bcomo\s+mucho\b|\blo\s+m[áa]s\b)/].map(lettersEdge);
+const TOGETHER_WORDS = [/\b(?:all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+|these\s+)?claims|every\s+claim|(?:several|multiple|repeated|many)\s+claims|claims\s+combined|combined\s+claims|aggregate|cumulative(?:ly)?|lifetime|over\s+(?:the|many)\s+years|over\s+(?:my|his|her|their)\s+(?:life|lifetime)|across\s+(?:all|both|every)\b|overall\s+(?:limit|cap|maximum|max|most))\b/,
+  /\b(?:semua\s+tuntutan|kesemua\s+tuntutan|keseluruhan\s+tuntutan|seumur\s+hidup|had\s+keseluruhan)\b/, /(?:所有.{0,8}(?:理赔|理賠|索赔|索償|索偿)|终身|終身|累计|累計)/,
+  /(?:\btoutes\s+(?:les|mes|ses|nos)\s+(?:demandes|r[ée]clamations|indemnisations|remboursements|sinistres)\b|\bcumul[ée]e?s?\b|\bplafond\s+global\b|\blimite\s+globale\b|\bau\s+fil\s+des\s+ann[ée]es\b|\b[àa]\s+vie\b)/,
+  /(?:\btodas\s+(?:las|mis|sus|nuestras)\s+reclamaciones\b|\bacumulad[oa]s?\b|\ba\s+lo\s+largo\s+de\s+los\s+a[ñn]os\b|\bde\s+por\s+vida\b)/].map(lettersEdge);
+const EVENT_WORDS = [/\b(?:diagnos(?:ed|is)|hospitali[sz](?:ed|ation)|admitted|in\s+(?:the\s+)?hospital|warded|icu|intensive\s+care|broke|broken|fractured?|accident|injur(?:ed|y|ies)|surgery|operation|operated|died|passed\s+away|death\s+of|stroke|heart\s+attack|disabled|ambulance|spent\s+\d+\s+days?)\b/,
+  /\b(?:didiagnosis|disahkan|dimasukkan\s+ke\s+hospital|masuk\s+hospital|kemalangan|patah|cedera|pembedahan|meninggal)\b/, /(?:住院|确诊|確診|手术|手術|意外|骨折|去世|过世|過世|受伤|受傷)/,
+  /(?:\bhospitalis[ée]e?s?\b|\bdiagnostiqu[ée]e?s?\b|\bop[ée]r[ée]e?s?\b|\baccident\b|\bfracture\b|\bd[ée]c[ée]d[ée]e?s?\b|\bbless[ée]e?s?\b)/,
+  /(?:\bhospitalizad[oa]s?\b|\bdiagnosticad[oa]s?\b|\boperaron\b|\boperad[oa]s?\b|\baccidente\b|\bfractura\b|\bfalleci[óo]\b|\bherid[oa]s?\b)/].map(lettersEdge);
+/** Cover names that hold a together or most word without asking for one. */
+const COVER_NAMES = /\b(?:total\s+(?:and|&)\s+permanent\s+disab\w*|total\s+permanent\s+disab\w*|tpd|total\s+disab\w*|totally\s+disabled|maximum\s+care)\b/g;
+/** Whether the question asks for the most paid for many claims together ("if I claim for two illnesses over the years,
+ * what's the most the plan will pay", "is there a lifetime limit on all my claims"), with no event described. Only then
+ * is a limit on what several benefits pay together (combinedLimit) what was asked. A question about an event ("I was in
+ * hospital, what's the most I can claim in total") asks what that event pays, which such a limit never is; so does "in
+ * total" alone (a sum of payouts) and "the most" alone (the most one event pays). Unsure is no: the limit stays out. */
 export function asksOverallMost(question: string): boolean {
-  const q = question.normalize("NFKC").toLowerCase();
-  return MOST_WORDS.some((w) => w.test(q)) && TOGETHER_WORDS.some((w) => w.test(q));
+  const q = question.normalize("NFKC").toLowerCase().replace(COVER_NAMES, " ");
+  return MOST_WORDS.some((w) => w.test(q)) && TOGETHER_WORDS.some((w) => w.test(q)) && !EVENT_WORDS.some((w) => w.test(q));
 }
 
 /** Whether a limit row's card says it is a limit: its card carries the printed sentence (scopeOnCard), or its own name
  * has limit words ("Limits of compensation", "Aggregate limit"). One that does not is never shown as the answer to a
  * total question: it would read as a payout. */
 function readsAsLimit(r: ChatRow): boolean {
-  const name = r.benefit.normalize("NFKC").toLowerCase();
-  return !!r.scopeOnCard || MOST_WORDS.some((w) => w.test(name)) || TOGETHER_WORDS.some((w) => w.test(name));
+  const name = r.benefit.normalize("NFKC").toLowerCase().replace(COVER_NAMES, " ");
+  return !!r.scopeOnCard || MOST_WORDS.some((w) => w.test(name)) || /\b(?:in\s+total|total|aggregate|overall|combined)\b/.test(name);
 }
 
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see

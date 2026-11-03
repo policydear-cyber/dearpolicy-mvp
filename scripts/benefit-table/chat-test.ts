@@ -2000,11 +2000,16 @@ test("asked for the most paid in total, the clause's total limit is shown as a l
   for (const question of [
     "if I claim for two different early stage illnesses over the years, what's the most the plan will pay in total?",
     "Is there an overall cap on all my critical illness claims?",
-    "What is the maximum payable altogether across all my policies?",
+    "What is the maximum payable across all my policies?",
+    "what's the most my plan pays for all claims combined?",
+    "is there a lifetime limit on this plan?",
+    "what's the most my total and permanent disability cover pays over the years for all my claims?",
     "berapa jumlah maksimum yang dibayar untuk semua tuntutan?",
+    "Apakah had maksimum seumur hidup?",
     "所有重疾理赔总共最多赔多少？",
-    "Quel est le montant maximum payé au total ?",
-    "¿Cuál es el máximo que paga en total?",
+    "我的保险终身最高赔付总额是多少？",
+    "Quel est le plafond global de mes remboursements ?",
+    "¿Cuál es el tope acumulado de todas mis reclamaciones?",
   ]) for (const fit of ["on_list", "any_event", "no_event"]) {
     const r = ask(question, fit);
     assert.deepEqual(r.amounts, ["S$800,000"], `${fit}: ${question} ${JSON.stringify(r.report.dropped)}`);
@@ -2014,17 +2019,34 @@ test("asked for the most paid in total, the clause's total limit is shown as a l
   }
   // In other currencies the figure is the printed one.
   for (const [from, to, shown] of [["S$800,000", "RM800,000", "RM800,000"], ["S$800,000", "£800,000", "£800,000"]] as const) {
-    const r = ask("what's the most it pays in total?", "on_list", TOTAL.replace(from, to));
+    const r = ask("what's the most it pays over the years?", "on_list", TOTAL.replace(from, to));
     assert.equal(r.amounts.length, 1, `${to}: ${JSON.stringify(r.report.dropped)}`);
     assert.ok(r.amounts[0].replace(/\s/g, "").includes(shown.replace("RM", "")), `${to}: ${r.amounts[0]}`);
   }
-  // Negative controls: an event, or a sum of payouts, or a most for one event, is never answered with the total.
+  // Negative controls: an event (also asked with most and total words, in any language), a sum of payouts, a most for
+  // one event, or a cover's name holding "total", is never answered with the total (TE #312).
   for (const question of [
     "I was just diagnosed with early stage cancer and spent 5 days in ICU. what can I claim?",
     "what can I claim in total for my cancer and the ICU stay?",
     "what's the most I can claim for this cancer?",
     "how much do I get altogether for this diagnosis?",
+    "I was in hospital for 10 days after a car accident, what's the most I can claim in total?",
+    "I was in hospital after a car accident, what's the most I can claim over all my claims?",
+    "I had surgery last week. How much will I get in total?",
+    "what's the most my total and permanent disability cover pays?",
+    "I'm totally disabled now, what's the maximum I can claim?",
+    "what's my total monthly premium at most?",
+    "my wife broke her arm, what's the max in total for the fracture and the hospital stay?",
+    "how much in total do I get for this hospital stay?",
     "saya didiagnosis kanser, berapa yang boleh saya tuntut?",
+    "Saya dimasukkan ke hospital 5 hari, berapa jumlah maksimum yang boleh saya tuntut untuk semua tuntutan?",
+    "berapa jumlah tuntutan yang boleh dibuat untuk pembedahan ini? had saya?",
+    "我住院了5天，最多一共可以赔多少？",
+    "我住院了5天，所有理赔最多赔多少？",
+    "J'ai été hospitalisé 3 jours, combien au maximum au total ?",
+    "J'ai été hospitalisé 3 jours, quel est le plafond global ?",
+    "Me operaron ayer, ¿cuánto es lo máximo en total que puedo reclamar?",
+    "Me operaron ayer, ¿cuál es el tope acumulado?",
     "",
   ]) for (const fit of ["on_list", "any_event"]) {
     const r = ask(question, fit);

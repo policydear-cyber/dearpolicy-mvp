@@ -293,14 +293,17 @@ for (const { m, sign } of MARKETS) {
   });
   test(`${m}: asked for the most paid for all claims together, the limit is what was asked; an event question still never gets it (chat-speed S4)`, () => {
     for (const fit of ["on_list", "any_event"]) {
-      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan?"])
+      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan untuk semua tuntutan?"])
         assert.equal(card(fit, q).report.labels.length, 1, `${fit}: ${q}`);
-      for (const q of ["I had a heart attack, what can I claim?", "what can I claim in total for this?", "what's the most I can get for my stroke?"])
+      for (const q of ["I had a heart attack, what can I claim?", "what can I claim in total for this?", "what's the most I can get for my stroke?", "I had a heart attack, what's the most the plan pays over the years?"])
         assert.deepEqual(card(fit, q).report.labels, [], `${fit}: ${q}`);
       // A limit row whose card would not say it is a limit (no limit words in its name, no printed sentence on the card)
       // is never given as the answer: it would read as a payout.
       const plain = chat.map((r) => r.id === limitId ? { ...r, benefit: "Critical Illness Benefit", scopeOnCard: false } : r);
-      assert.deepEqual(card(fit, "what's the most the plan pays in total?", plain).report.labels, [], fit);
+      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", plain).report.labels, [], fit);
+      // "Total" in a cover's name is no limit word.
+      const tpd = chat.map((r) => r.id === limitId ? { ...r, benefit: "Total and Permanent Disability", scopeOnCard: false } : r);
+      assert.deepEqual(card(fit, "what's the most the plan pays over the years?", tpd).report.labels, [], `${fit} TPD`);
     }
   });
 }
