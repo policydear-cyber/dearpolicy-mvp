@@ -24,8 +24,12 @@ test("each stored state gets its own reason and next step; any other text gets n
   assert.match(final.next, /Read again/);
   assert.doesNotMatch(final.next + final.what, /automatically|matched to the page/);
   for (const other of [null, "", "Ready.", "Read in part. Page 3 could not be checked.", errors.DOCUMENT_READING_SERVICE_MESSAGE, errors.DOCUMENT_READING_FAILED_MESSAGE,
-    errors.DOCUMENT_READ_IN_PART_MESSAGE + " Page 4 is sideways.", " " + errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE.toUpperCase()])
+    errors.DOCUMENT_READ_IN_PART_MESSAGE + "Page 4 is sideways.", errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE.toUpperCase(), "Note. " + errors.DOCUMENT_READ_IN_PART_MESSAGE])
     assert.equal(coverReadingPending(other), null, String(other));
+  // A later note after the stored one (an earlier copy kept for reference) is the same state (TE #313).
+  const kept = "An earlier schedule of the same policy (ending 1 March 2026), replaced by the newer schedule “b.pdf”; kept for reference.";
+  assert.match(coverReadingPending(errors.DOCUMENT_READ_IN_PART_MESSAGE + " " + kept)!.next, /automatically/);
+  assert.match(coverReadingPending(errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE + " " + kept)!.next, /Read again/);
   // The two states never overlap with "Read in part" (that card has its own advice).
   assert.equal(readInPartAdvice(errors.DOCUMENT_READ_IN_PART_MESSAGE), null);
   assert.equal(readInPartAdvice(errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE), null);
@@ -69,10 +73,12 @@ test("Home counts a document in either state as not fully read (lib/policies/not
   await add(P, errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE, "certificate", "Example Takaful Shield (RM)");
   await add(P, errors.DOCUMENT_READ_IN_PART_MESSAGE, "personal_schedule", "Example Health Cash Plan (£)");
   await add(P, "Ready.", "personal_schedule", "Example Term");
+  await add(P, errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE + " An earlier schedule of the same policy, replaced by the newer schedule “b.pdf”; kept for reference.", "personal_schedule", "Example Hospital Plan (HK$)");
+  await add(P, errors.DOCUMENT_READ_IN_PART_MESSAGE + "X", "personal_schedule", "Example Not A Note (€)");
   await add(Q, errors.DOCUMENT_READ_IN_PART_FINAL_MESSAGE, "premium_receipt", "Example Receipt");
   const { notFullyRead } = await import("@/lib/policies/not-fully-read");
   const nadia = await notFullyRead(A, P);
-  assert.equal(nadia.count, 2, JSON.stringify(nadia));
-  assert.deepEqual(new Set(nadia.names), new Set(["Example Takaful Shield (RM)", "Example Health Cash Plan (£)"]));
+  assert.equal(nadia.count, 3, JSON.stringify(nadia));
+  assert.deepEqual(new Set(nadia.names), new Set(["Example Takaful Shield (RM)", "Example Health Cash Plan (£)", "Example Hospital Plan (HK$)"]));
   assert.equal((await notFullyRead(A, Q)).count, 0, "a receipt never holds cover, in either state");
 });

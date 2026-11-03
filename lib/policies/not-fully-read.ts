@@ -35,7 +35,7 @@ export async function notFullyRead(accountId: string, familyMemberId: string, ta
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
               OR NOT (coalesce(p.quarantine_status,'')=ANY($7::text[]))))
-            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message=ANY($3::text[])
+            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR EXISTS(SELECT 1 FROM unnest($3::text[]) AS note(m) WHERE p.processing_message=note.m OR left(p.processing_message,length(note.m)+1)=note.m||' ')
               OR NOT EXISTS(SELECT 1 FROM policy_pages pp WHERE pp.policy_id=p.id AND pp.account_id=p.account_id)
               ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))
         ORDER BY p.created_at`,

@@ -140,7 +140,10 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
 export function coverReadingPending(message: string | null | undefined): { what: string; next: string } | null {
   const text = (message ?? "").trim();
   const what = "DearPolicy read this document's text and tables, but couldn't finish reading who it covers and its cover amounts, so those are not used in answers yet.";
-  if (text === DOCUMENT_READ_IN_PART_MESSAGE) return { what, next: "It will try again automatically; there is nothing you need to do." };
-  if (text === DOCUMENT_READ_IN_PART_FINAL_MESSAGE) return { what, next: "Use Read again to try once more. Nothing is wrong with the file." };
+  // The note leads the stored message; a later note may follow it after a space (an earlier copy kept for reference,
+  // lib/rag/ingest.ts concat_ws), and the state is the same (TE #313).
+  const is = (note: string) => text === note || text.startsWith(note + " ");
+  if (is(DOCUMENT_READ_IN_PART_MESSAGE)) return { what, next: "It will try again automatically; there is nothing you need to do." };
+  if (is(DOCUMENT_READ_IN_PART_FINAL_MESSAGE)) return { what, next: "Use Read again to try once more. Nothing is wrong with the file." };
   return null;
 }
