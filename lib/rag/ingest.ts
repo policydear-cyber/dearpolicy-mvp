@@ -510,6 +510,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     };
     await crossCheck(ocrSourceBytes && sniffed.format === "pdf" ? suspectPages(pages) : []);
 
+    // Too little text, and scanned pages no reader looked at: the reading service is missing, not the file's text. It is
+    // handled as the service failure it is (attempts, the one later re-read, then "reading service wasn't available,
+    // nothing is wrong with the file"), never "no readable text, upload a clearer scan" or "retake the photo".
+    if (pages.some((p) => p.notRead) && pages.reduce((sum, p) => sum + (p.notRead ? 0 : p.text.length), 0) < 100) {
+      throw new TemporaryProcessingError("OCR unavailable: no reader looked at the scanned pages");
+    }
     // Round 10: a photo the reader could not make out at all is explained as a
     // photo, with how to take it again.
     if (sniffed.format !== "pdf" && sniffed.format !== "docx" && pages.length && pages.every((p) => p.unreadable || !p.text.trim())) {
