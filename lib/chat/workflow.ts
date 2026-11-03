@@ -125,6 +125,7 @@ import { correctTypos } from "./typos";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
 import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
+import { planKind as planKindOf } from "./plan-kinds";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
 import { graceEndDates,inactiveDocuments,inactiveList,todayIso } from "./policy-status";
@@ -757,6 +758,8 @@ function dedupeNegativeRestatements(observations:PolicyObservation[]){
   return observations.filter(o=>!isRestatement(o.text)||o===best);
 }
 /** The kind of policy a question names, when it names one. */
+/** Which shared plan kind (lib/chat/plan-kinds) holds each of these kinds. */
+const HELD_KIND:Record<string,string>={travel:"travel",hospital:"health",life:"life"};
 const POLICY_KINDS:{kind:string;asked:RegExp;held:RegExp}[]=[
   {kind:"travel",asked:/\b(?:travel\w*|trip|overseas|abroad)\b/i,held:/\b(?:travel\w*|trip|overseas)\b/i},
   {kind:"hospital",asked:/\bhospital\w*\b/i,held:/\bhospital\w*|\bshield\b|medical/i},
@@ -973,7 +976,9 @@ export function notInDocuments(args:{question:string;people:ClaimPerson[];contra
   for(const kind of POLICY_KINDS){
     if(!kind.asked.test(lower))continue;
     // A plan is held when its name, its lines or its stored type say so ("Jelajah Tahunan", stored as Travel, is a travel policy).
-    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")+" "+(c.documents??[]).map(d=>d.policy_type??"").join(" ")));
+    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")+" "+(c.documents??[]).map(d=>d.policy_type??"").join(" "))
+      // Or its stored type and name say it is that kind ("Heron Family Care" stored as Health is a hospital policy).
+      ||(c.documents??[]).some(d=>{const k=planKindOf({product:d.product_name??c.name,type:d.policy_type});return !!k&&HELD_KIND[kind.kind]===k;}));
     if(!held){
       const who=whose==="Your"?"You have":whose==="Your family’s"?"Your family has":whose.replace(/’s$/,"")+" has";
       return who+" no "+kind.kind+" policy on file, so your documents don’t say anything about this. The "+plural+" on file "+(args.contracts.length===1?"is":"are")+": "+named+". If there is a "+kind.kind+" policy, upload it and ask again.";

@@ -17,6 +17,7 @@
 import { NON_COVER_ROLES, flagUnclearFigures, unclearFigures } from "@/lib/documents/messy";
 import { bestLines, columnsFor, narrowToColumn, piecesOf, wordsOf } from "./printed-lines";
 import { printedRuleLines } from "./printed-rules";
+import { planKind, type PlanKind } from "./plan-kinds";
 import { figurePremise, premiseLead, premiseOf } from "./premises";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
@@ -53,8 +54,8 @@ export const TOPICS: Topic[] = [
   // "Hospital" is named by what a hospital plan pays, not by the word
   // "medical" -- an accident plan's "Accident medical reimbursement" and a
   // travel plan's "Overseas medical expenses" are not hospital cover.
-  { key: "hospital", label: "hospital cover", asks: /\b(?:hospital\w*|warded|ward|inpatient|surgery|surgical|intensive care|icu)\b|\bmedical (?:cover|coverage|plan|insurance)\b|\b(?:integrated )?shield(?: plan| policy)?\b/i,
-    fact: /hospital|\bward\b|inpatient|intensive care|\bicu\b|room and board/i, kind: /hospital|\bshield|\bmedishield\b|health plan/i },
+  { key: "hospital", label: "hospital cover", asks: /\b(?:hospital\w*|warded|ward|in-?patient|surgery|surgical|intensive care|icu)\b|\bmedical (?:cover|coverage|plan|insurance)\b|\b(?:integrated )?shield(?: plan| policy)?\b/i,
+    fact: /hospital|\bward\b|in-?patient|intensive care|\bicu\b|room and board/i, kind: /hospital|\bshield|\bmedishield\b|health plan/i },
   { key: "premium", label: "the premium", asks: /\bpremiums?\b|\bmedisave\b(?![^?]*\b(?:balance|account|savings)\b)|\bcosts? (?:more|less|the most|the least)\b|\bcheaper\b|\bmore expensive\b|how much do (?:i|we) pay for|\bhow much (?:does|do|is|are) [^?]{1,40}\bcosts?\b|\bcosts? (?:me|us|a year|per year|monthly|each month)\b|\bhow much (?:does|do|did) (?:i|we|she|he|they|[\p{L}]+) (?:need|have) to pay\b(?![^?]*\b(?:hospital|bill|claim|clinic|doctor)\b)|\bhow much (?:do|does) (?:i|we|she|he|they) owe\b|\bhow much cash\b|\bcash (?:payable|portion|part|to pay)\b/iu, fact: /premium/i },
   { key: "maturity", label: "maturity or surrender value", asks: /\b(?:matur\w*|endowment|surrender\w*|cash values?|paid (?:in|into|so far)|put in(?:to)?)\b/i, fact: /matur|surrender|cash value|endowment/i, kind: /endow|savings|matur/i, passage: /matur|surrender|cash value/i },
   { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeduct[ai]bles?\b|\b(?:a |the )?cap on what (?:i|you|we) pay\b|\bco-?payment cap\b|\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:how much )?(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b|^\s*(?:annual |yearly |overall )?limits?\s*\??\s*$|\bco-?pay(?:ment)?s?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b|\b(?:yearly |annual |a )?cap\b[^?]{0,30}\b(?:pay|out of pocket)\b|\bout of pocket\b/i,
@@ -62,7 +63,7 @@ export const TOPICS: Topic[] = [
   { key: "rider", label: "the rider", asks: /\briders?\b/i, fact: /\brider\b/i },
   { key: "group", label: "group insurance", asks: /\b(?:group|company|employer|employee|work|office|corporate|staff)\b[^?]{0,25}\b(?:insurance|plans?|polic(?:y|ies)|cover(?:age)?|benefits?|scheme)\b|\bgroup (?:insurance|plan|policy|cover|benefits?)\b/i, fact: /(?!)/, kind: /\bgroup\b|employee benefits/i },
   { key: "dental", label: "dental cover", asks: /\b(?:dental|dentist\w*|teeth|tooth)\b/i, fact: /\bdental\b/i },
-  { key: "outpatient", label: "outpatient cover", asks: /\b(?:outpatient|gp|general practitioners?|clinics?|specialists?|tcm|chinese medicine)\b/i, fact: /outpatient|general practitioner|\bgp\b|specialist|clinic|chinese medicine/i },
+  { key: "outpatient", label: "outpatient cover", asks: /\b(?:out-?patient|gp|general practitioners?|clinics?|specialists?|tcm|chinese medicine)\b/i, fact: /out-?patient|general practitioner|\bgp\b|specialist|clinic|chinese medicine/i },
   { key: "maternity", label: "maternity cover", asks: /\b(?:maternity|pregnan\w*|childbirth)\b/i, fact: /maternity|pregnan|childbirth/i },
   // Answered from the person's own column and the schedule line that names it, not from rows.
   { key: "ward", label: "ward class", asks: /\bward (?:class|type)\b|\bwhich ward\b|\bwhat ward\b|\b(?:plan|cover) tier\b|\bwhich (?:tier|plan (?:type|level))\b/i, fact: /(?!)/ },
@@ -477,6 +478,8 @@ export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
 ];
 /** Schedule terms (round 5 typed rows): cost-sharing and limits printed in a
  * benefit table. Stated as the document prints them; never calculated. */
+/** A row whose own name is a share the household pays. */
+const COST_SHARE_TITLE = /\b(?:excess(?:es)?|deductibles?|co-?pay(?:ment)?s?|co-?insurance)\b/i;
 const COST_SHARING_KINDS = new Set(["deductible", "co_insurance", "co_payment", "co_payment_cap", "pro_ration", "policy_year_limit", "family_limit"]);
 function scheduleTermText(kind: string, value: number | null, currency: string | null): { text: string; amount: number | null } | null {
   const amount = value != null && value > 0 && currency ? value : null;
@@ -701,11 +704,21 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // an accident plan is accident cover, whatever medical words it uses.
   const docKindText = new Map<string, string>();
   for (const [docId, d] of docs) docKindText.set(docId, [d.policy_type, d.product_name, ...contracts.flatMap((c) => c.coverages.filter((v) => v.policyId === docId).map((v) => v.category))].filter(Boolean).join(" "));
-  const kindsOf = (docId: string) => TOPICS.filter((t) => t.kind && t.kind.test(docKindText.get(docId) ?? "")).map((t) => t.key);
+  // A plan's kind from its stored type and name (shared with the printed-lines reader): "Heron Family Care" stored as
+  // Health is a hospital plan even when no hospital line was stored for it.
+  const KIND_TOPIC: Partial<Record<PlanKind, string>> = { health: "hospital", travel: "travel", life: "death", income: "disability" };
+  // Which plans are in scope reads both; which topic a row belongs to reads only the printed kind words (rowKindsOf), so a
+  // Health plan's rider and premium rows still answer rider and premium questions.
+  const rowKindsOf = (docId: string) => TOPICS.filter((t) => t.kind && t.kind.test(docKindText.get(docId) ?? "")).map((t) => t.key);
+  const kindsOf = (docId: string) => {
+    const d = docs.get(docId), shared = d ? KIND_TOPIC[planKind({ product: d.product_name, type: d.policy_type }) ?? "other"] : undefined;
+    const kinds = rowKindsOf(docId);
+    return shared && !kinds.includes(shared) && TOPICS.some((t) => t.key === shared) ? [...kinds, shared] : kinds;
+  };
   // A benefit the question names ("hospital cash", "ambulance") is that benefit on whatever plan prints it.
   const namedBenefit = NARROW.filter((n) => n.asks.test(askedText));
   const topicOf = (label: string, passage: string, docId: string, page?: number | null) => {
-    const kinds = kindsOf(docId);
+    const kinds = rowKindsOf(docId);
     // A row that names another kind of cover this plan also is (an ILP's fund
     // rows on a question about its death benefit) belongs to that kind.
     if (topics.length && namedBenefit.some((n) => n.fact.test(label) || n.fact.test(passage.replace(/^[^\t]*\t/, "")))) return topics[0].key;
@@ -1681,9 +1694,10 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
+    // (Round 5: whatever the topic -- an "Excess £250" row in a hospital plan's answer is still what the household pays.)
     // An excess, deductible or co-payment is what the household pays, not a limit on what the policy pays: it is said in
     // the answer's own lines, never on a "Policy-stated coverage limit" card (UK walkthrough, 31 Oct: "Excess £75").
-    if (a.source !== "premium" && a.source !== "expiry" && a.topic !== "excess" && a.topic !== "cost_sharing" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
+    if (a.source !== "premium" && a.source !== "expiry" && a.topic !== "excess" && a.topic !== "cost_sharing" && !COST_SHARE_TITLE.test(a.title) && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
