@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
         if (!named.rows[0]) throw new NameNotFound();
         // A name already matched to someone is taken off them first (moveDetectedName, after this transaction): on a
         // personal document that is the only place to say the match is wrong (audit 3 Nov).
-        if (named.rows.some((r) => r.matched)) return { move: { to: null as string | null }, extraction: null as PolicyExtraction | null };
+        if (named.rows.some((r) => r.matched)) return { move: { to: null as string | null } };
         // Before sql/detected-name-dismissals.sql is applied the answer cannot be
         // kept; the page remembers it in the browser and nothing here changes.
         if (!remembersDismissals) return { ok: true, notFamily: true, remembered: false };
@@ -180,8 +180,7 @@ export async function POST(request: NextRequest) {
       const current = await client.query<{ matched: string | null }>(
         `SELECT matched_family_member_id::text AS matched FROM policy_detected_people WHERE account_id=$1 AND policy_id=$2 AND ${nameKeySql("detected_name")}=${nameKeySql("$3")}`,
         [ctx.householdId, body.policyId, body.detectedName!]);
-      if (!current.rows.length) throw new NameNotFound();
-      if (current.rows.some((r) => r.matched && r.matched !== body.familyMemberId)) return { move: { to: body.familyMemberId! }, extraction };
+      if (current.rows.some((r) => r.matched && r.matched !== body.familyMemberId)) return { move: { to: body.familyMemberId! } };
 
       await syncInsuredPersonToMember({
         accountId: ctx.householdId,
@@ -198,9 +197,8 @@ export async function POST(request: NextRequest) {
 
     if ("notFoundExtraction" in result) return NextResponse.json({ error: "Policy extraction not found" }, { status: 404 });
     if ("move" in result && result.move) {
+      // One transaction: the old person off, the chosen one on (or the name remembered as not the family's).
       await moveDetectedName({ accountId: ctx.householdId, policyId: body.policyId, detectedName: body.detectedName!, to: result.move.to });
-      if (result.move.to && result.extraction) await syncInsuredPersonToMember({ accountId: ctx.householdId, sourcePolicyId: body.policyId, familyMemberId: result.move.to,
-        detectedName: body.detectedName!, extraction: result.extraction, householdChoice: true, link: { source: "user_declared", confidence: 1.0 } });
       await refreshReviewState(ctx.householdId, body.policyId, unmatchedClause)
         .catch((error) => console.warn("Refreshing the review flag failed:", error instanceof Error ? error.message : error));
       return NextResponse.json(result.move.to ? { ok: true, moved: true } : { ok: true, notFamily: true, remembered: true, moved: true });

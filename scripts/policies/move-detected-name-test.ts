@@ -35,6 +35,8 @@ async function main() {
   const { coverKeyOf, sectionKeyOf } = await import("@/lib/benefit-table/assemble");
   const { GET } = await import("@/app/api/coverage/route");
   const { POST } = await import("@/app/api/policies/link-person/route");
+  const { syncInsuredPersonToMember } = await import("@/lib/policies/linking");
+  const { moveDetectedName } = await import("@/lib/policies/coverage-assignments");
   type TableModel = import("@/lib/benefit-table/model").TableModel;
   const links = new Map<string, { section: string; cover: string | null; why: string }>();
   const model = (answer: unknown): TableModel => ({ choice: { provider: "anthropic", model: "test-model" }, async call(c) {
@@ -64,6 +66,12 @@ async function main() {
     for (const [printed, , member] of covers) {
       await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'ai_name_match',0.95) ON CONFLICT DO NOTHING", [id, P[member], ACCOUNT]);
       await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.95)", [ACCOUNT, id, printed, P[member]]);
+    }
+    // The cover rows the dashboard, chat, Home and export read (policy_coverages), written from the stored reading.
+    for (const member of new Set(covers.map(([, , m]) => m))) {
+      const names = covers.filter(([, , m]) => m === member).map(([n]) => n);
+      await syncInsuredPersonToMember({ accountId: ACCOUNT, sourcePolicyId: id, familyMemberId: P[member], detectedName: names[0], alsoNames: names.slice(1),
+        extraction: extraction as never, link: { source: "ai_name_match", confidence: 0.95 } });
     }
     const reading = { document: { kind: "personal_proof", product, insurer: null, namedPeople: covers.map(([p]) => p), plan: null, periodFrom: null, periodTo: null },
       covers: covers.map(([p, s]) => ({ person: p, product, cover: product, plan: null, riderOf: null, policyNumber: null, sumInsured: s, premium: null, premiumFrequency: null, asOf: null,
@@ -169,6 +177,40 @@ async function main() {
       assert.deepEqual(await membersOf(shared), ["Ana:ai_name_match"]);
     });
     await query("DELETE FROM accounts WHERE id=$1", [otherHousehold.rows[0].id]);
+
+    // One person printed twice on one document (a short and a full name), and one of the two is really the daughter.
+    const twice = await doc("Doble Vida", "€", [["Ana", 100000, "Ana"], ["Ana Ortega", 200000, "Ana"]]);
+    const rows = async (policyId: string) => (await query<{ r: string }>(
+      `SELECT fm.display_name||':'||pc.amount::bigint AS r FROM policy_coverages pc JOIN family_members fm ON fm.id=pc.family_member_id WHERE pc.policy_id=$1 ORDER BY 1`, [policyId])).rows.map((x) => x.r);
+    await test("setup: both printed names' cover rows are the holder's", async () => assert.deepEqual(await rows(twice), ["Ana:100000", "Ana:200000"]));
+    const split = await link({ policyId: twice, detectedName: "Ana Ortega", familyMemberId: P["Ana Lucia Ortega"] });
+    await test("moving one of a person's two names moves that name's cover rows too: the holder keeps only her own", async () => {
+      assert.equal(split.status, 200, JSON.stringify(split.body));
+      assert.deepEqual((await rows(twice)).sort(), ["Ana Lucia Ortega:200000", "Ana:100000"].sort());
+      assert.deepEqual((await membersOf(twice)).sort(), ["Ana Lucia Ortega:user_declared", "Ana:ai_name_match"].sort());
+      const excluded = (await query("SELECT 1 FROM policy_member_exclusions WHERE policy_id=$1", [twice]).catch(() => ({ rows: [] }))).rows;
+      assert.equal(excluded.length, 0, "the holder is still on it, so she is not remembered as removed");
+    });
+    await test("moving a name to someone already named on the document keeps their other rows", async () => {
+      const back = await link({ policyId: twice, detectedName: "Ana", familyMemberId: P["Ana Lucia Ortega"] });
+      assert.equal(back.status, 200, JSON.stringify(back.body));
+      assert.deepEqual(await rows(twice), ["Ana Lucia Ortega:100000", "Ana Lucia Ortega:200000"]);
+      assert.deepEqual(await membersOf(twice), ["Ana Lucia Ortega:user_declared"]);
+    });
+
+    // A failure part-way leaves the document exactly as it was.
+    const halfway = await doc("Seguro Uno", "£", [["Ana Ortega", 70000, "Ana"], ["Tomás Ortega", 90000, "Tomás"]]);
+    const snapshot = async (policyId: string) => JSON.stringify([await membersOf(policyId), await rows(policyId), await ownerOf(policyId),
+      (await query("SELECT detected_name, matched_family_member_id FROM policy_detected_people WHERE policy_id=$1 ORDER BY 1", [policyId])).rows,
+      (await query("SELECT family_member_id FROM policy_member_exclusions WHERE policy_id=$1 ORDER BY 1", [policyId]).catch(() => ({ rows: [] }))).rows,
+      (await query("SELECT name_key FROM policy_name_dismissals WHERE policy_id=$1 ORDER BY 1", [policyId]).catch(() => ({ rows: [] }))).rows]);
+    const beforeFail = await snapshot(halfway);
+    for (const to of [P["Ana Lucia Ortega"], null]) {
+      await test(`a move that fails part-way (to ${to ? "someone" : "nobody"}) changes nothing`, async () => {
+        await assert.rejects(moveDetectedName({ accountId: ACCOUNT, policyId: halfway, detectedName: "Ana Ortega", to, beforeLink: async () => { throw new Error("injected"); } }), /injected/);
+        assert.equal(await snapshot(halfway), beforeFail);
+      });
+    }
 
     await test("no outbound request", async () => assert.deepEqual(outbound, []));
   } finally {
