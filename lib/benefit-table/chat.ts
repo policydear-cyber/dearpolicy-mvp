@@ -666,6 +666,32 @@ function nameHead(row: ChatRow): string | null {
   const head = plainWords(benefitName(row.benefit).replace(/^\s*[a-z]\s*[.,]\s+/i, "").split(/\b(?:upon|on|following|after|due\s+to|for|while|in\s+case\s+of|arising|caused\s+by)\b/i)[0].replace(/\bbenefits?\s*$/i, ""));
   return head.trim().split(" ").length >= 2 ? head : null;
 }
+/** Words that ask for a most, a maximum or a cap, and words that ask for everything together (all claims, over the years),
+ * as closed lists in the languages households write in. Both kinds must be in the question (asksOverallMost). */
+const MOST_WORDS = [/\b(?:most|maximum|max|highest|ceiling|caps?|capped|limits?|up\s+to\s+how\s+much)\b/,
+  /\b(?:paling\s+banyak|paling\s+tinggi|maksimum|maksima|tertinggi|had)\b/, /(?:最多|最高|上限|封顶|封頂)/,
+  /(?:\bmaximum\b|\bmaximale?s?\b|\bplafonds?\b|\bau\s+plus\b|\ble\s+plus\b)/, /(?:\bm[áa]ximos?\b|\btopes?\b|\bcomo\s+mucho\b|\blo\s+m[áa]s\b)/];
+const TOGETHER_WORDS = [/\b(?:in\s+total|totals?|overall|altogether|all\s+together|combined|aggregate|cumulative(?:ly)?|lifetime|in\s+all|over\s+the\s+years|all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+)?claims|across\s+(?:all|both|every))\b/,
+  /\b(?:jumlah|keseluruhan|kesemua|semua\s+tuntutan|seumur\s+hidup)\b/, /(?:总共|总额|總額|合计|合計|累计|累計|一共|总计|總計|加起来|加起來)/,
+  /(?:\bau\s+total\b|\ben\s+tout\b|\bcumul[ée]e?s?\b|\bglobale?s?\b)/, /(?:\ben\s+total\b|\bacumulad[oa]s?\b|\ben\s+conjunto\b)/];
+/** Whether the question asks for the most paid for everything together ("what's the most the plan will pay in total",
+ * "is there an overall cap on all my claims"). Only then is a limit on what several benefits pay together (combinedLimit)
+ * what was asked; a question about an event ("what can I claim", "what can I claim in total for this stay") asks what the
+ * event pays, which such a limit never is. Both a most word and a together word are needed: "in total" alone asks for a
+ * sum of payouts, "the most" alone can ask what one event pays at most. */
+export function asksOverallMost(question: string): boolean {
+  const q = question.normalize("NFKC").toLowerCase();
+  return MOST_WORDS.some((w) => w.test(q)) && TOGETHER_WORDS.some((w) => w.test(q));
+}
+
+/** Whether a limit row's card says it is a limit: its card carries the printed sentence (scopeOnCard), or its own name
+ * has limit words ("Limits of compensation", "Aggregate limit"). One that does not is never shown as the answer to a
+ * total question: it would read as a payout. */
+function readsAsLimit(r: ChatRow): boolean {
+  const name = r.benefit.normalize("NFKC").toLowerCase();
+  return !!r.scopeOnCard || MOST_WORDS.some((w) => w.test(name)) || TOGETHER_WORDS.some((w) => w.test(name));
+}
+
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
@@ -702,8 +728,10 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // So is a figure paid per child, when the household gives a number of children right after asking about that benefit by
       // name ("what's the child education fund" then "how much in total if we have two kids", overnight run 23 Oct, N023).
       : x.eventFit === "not_described" ? (asksFor(question, r) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
-      // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1).
-      : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
+      // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1),
+      // unless the question asks for exactly that: the most paid for everything together (chat-speed run 3 Nov, S4). Its
+      // card always says it is a limit and what it is printed for (scopeOnCard).
+      : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") && !(asksOverallMost(question) && readsAsLimit(r)) ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);

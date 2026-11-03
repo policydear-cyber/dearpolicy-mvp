@@ -280,9 +280,9 @@ for (const { m, sign } of MARKETS) {
       effectiveDate: null, expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: [person], supersededAt: null, processingStatus: "ready", pages }] } as Household;
   const chat = chatRows(table, HOUSE);
   const limitId = chat.find((r) => r.combinedLimit)!.id;
-  const card = (eventFit: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
+  const card = (eventFit: string, question = "", rs = chat) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
     { kind: "amount", text: "Cover.", person, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null,
-      row: limitId, rowBenefit: chat.find((r) => r.id === limitId)!.benefit, eventFit }] }, chat, HOUSE);
+      row: limitId, rowBenefit: rs.find((r) => r.id === limitId)!.benefit, eventFit }] }, rs, HOUSE, new Date(), question);
   test(`${m}: the chat never gives the limit as what an event pays; asked about the limit itself, it is shown`, () => {
     for (const fit of ["on_list", "any_event"]) {
       const r = card(fit);
@@ -290,6 +290,18 @@ for (const { m, sign } of MARKETS) {
       assert.match(r.report.dropped.map((d) => d.why).join(" "), /several benefits together/, fit);
     }
     assert.equal(card("no_event").report.labels.length, 1);
+  });
+  test(`${m}: asked for the most paid for all claims together, the limit is what was asked; an event question still never gets it (chat-speed S4)`, () => {
+    for (const fit of ["on_list", "any_event"]) {
+      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan?"])
+        assert.equal(card(fit, q).report.labels.length, 1, `${fit}: ${q}`);
+      for (const q of ["I had a heart attack, what can I claim?", "what can I claim in total for this?", "what's the most I can get for my stroke?"])
+        assert.deepEqual(card(fit, q).report.labels, [], `${fit}: ${q}`);
+      // A limit row whose card would not say it is a limit (no limit words in its name, no printed sentence on the card)
+      // is never given as the answer: it would read as a payout.
+      const plain = chat.map((r) => r.id === limitId ? { ...r, benefit: "Critical Illness Benefit", scopeOnCard: false } : r);
+      assert.deepEqual(card(fit, "what's the most the plan pays in total?", plain).report.labels, [], fit);
+    }
   });
 }
 

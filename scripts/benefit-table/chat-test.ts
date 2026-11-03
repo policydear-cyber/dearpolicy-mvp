@@ -1877,7 +1877,7 @@ const partsHouse = (sched: string, wording = ""): Household => ({ ...HOUSE, docu
 const partsCover = { person: "Lim Ah Kow", product: "CI Plan", cover: "Critical Illness Cover", plan: null, sumInsured: 200000, asOf: "01/10/2026", page: 1, quote: "Critical Illness Cover\t200,000.00\t250.25\t01/10/2036" };
 const ciKey = coverKeyOf({ product: "CI Plan", cover: "Critical Illness Cover", plan: null });
 const currencyOf = (r: ChatRow) => (r.figure.kind === "none" ? null : r.figure.currency);
-function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover) {
+function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover, question = "") {
   const sched = checkReading(src(house.documents[0]), reading("personal_proof", "CI Plan", [cover], []));
   const readings = [sched];
   if (house.documents[1]) readings.push(checkReading(src(house.documents[1]), reading("policy_wording", "CI Plan", [], benefits)));
@@ -1885,8 +1885,8 @@ function partsAnswer(house: Household, statements: Record<string, unknown>[], be
   const rs = chatRows(t, house);
   const raw = { bottomLine: "b", nextSteps: [], question: null, statements: statements.map((st) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "no_event", ...st, ...(typeof st.row === "function" ? { row: (st.row as (r: typeof rs) => string)(rs) } : {}) })) };
-  const fromRows = amountsFromRows(raw, rs, house);
-  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, ["how much"], new Set(fromRows.report.labels));
+  const fromRows = amountsFromRows(raw, rs, house, new Date(), question);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, [question || "how much"], new Set(fromRows.report.labels));
   const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
   return { rows: rs, cover: sched.covers[0], amounts: kept.filter((x) => x.amount).map((x) => x.amount!.text), kept, report: fromRows.report };
 }
@@ -1991,6 +1991,46 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   // The row's own cap said again adds nothing.
   none(LIMIT_WORDING("The most We will pay in total under this benefit and all Policies covering the same Life Assured shall not exceed S$25,000.").replace("will be payable in one lump sum.", "will be payable, subject to a maximum amount of S$25,000."),
     "the row's own cap", { ...ciRow, quote: "100% of the Sum Assured will be payable, subject to a maximum amount of S$25,000." });
+});
+
+// A question that asks for the most paid for everything together gets the printed total limit, said as a limit with what
+// it is printed for; a question about an event never does, however it is worded (chat-speed run 3 Nov, S4).
+test("asked for the most paid in total, the clause's total limit is shown as a limit; an event question never gets it", () => {
+  const ask = (question: string, eventFit: string, limit = TOTAL) => partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(limit)), [{ row: limitRow, text: "The most in total.", eventFit }], [b(ciRow)], partsCover, question);
+  for (const question of [
+    "if I claim for two different early stage illnesses over the years, what's the most the plan will pay in total?",
+    "Is there an overall cap on all my critical illness claims?",
+    "What is the maximum payable altogether across all my policies?",
+    "berapa jumlah maksimum yang dibayar untuk semua tuntutan?",
+    "所有重疾理赔总共最多赔多少？",
+    "Quel est le montant maximum payé au total ?",
+    "¿Cuál es el máximo que paga en total?",
+  ]) for (const fit of ["on_list", "any_event", "no_event"]) {
+    const r = ask(question, fit);
+    assert.deepEqual(r.amounts, ["S$800,000"], `${fit}: ${question} ${JSON.stringify(r.report.dropped)}`);
+    const card = r.kept.find((x) => x.amount)!;
+    assert.match(card.text, /^Limit in total on Critical Illness Benefit claims/, question);
+    assert.ok(JSON.stringify(card).includes("The most We will pay in total for all Early Stage Critical Illness claims"), `the card says what the limit is for: ${question}`);
+  }
+  // In other currencies the figure is the printed one.
+  for (const [from, to, shown] of [["S$800,000", "RM800,000", "RM800,000"], ["S$800,000", "£800,000", "£800,000"]] as const) {
+    const r = ask("what's the most it pays in total?", "on_list", TOTAL.replace(from, to));
+    assert.equal(r.amounts.length, 1, `${to}: ${JSON.stringify(r.report.dropped)}`);
+    assert.ok(r.amounts[0].replace(/\s/g, "").includes(shown.replace("RM", "")), `${to}: ${r.amounts[0]}`);
+  }
+  // Negative controls: an event, or a sum of payouts, or a most for one event, is never answered with the total.
+  for (const question of [
+    "I was just diagnosed with early stage cancer and spent 5 days in ICU. what can I claim?",
+    "what can I claim in total for my cancer and the ICU stay?",
+    "what's the most I can claim for this cancer?",
+    "how much do I get altogether for this diagnosis?",
+    "saya didiagnosis kanser, berapa yang boleh saya tuntut?",
+    "",
+  ]) for (const fit of ["on_list", "any_event"]) {
+    const r = ask(question, fit);
+    assert.deepEqual(r.amounts, [], `${fit}: ${question}`);
+    assert.match(r.report.dropped.map((d) => d.why).join(" "), /several benefits together/, `${fit}: ${question}`);
+  }
 });
 
 async function atest(name: string, fn: () => Promise<void>) {
