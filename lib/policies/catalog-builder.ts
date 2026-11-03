@@ -15,6 +15,16 @@ import { annotateBenefitEvidence,evidenceKey,markConflicts } from "@/lib/documen
 import { amountAppears,looksLikeInjectedInstruction } from "@/lib/documents/evidence";
 import { benefitNamePrinted,looksLikeName } from "@/lib/documents/fact-check";
 import { loadBenefitCatalog } from "./benefit-catalog";
+import { pageCurrency } from "@/lib/simple-chat/verify";
+
+/** The currency of a figure printed with a bare "$" or with no sign at all, on a page that declares one currency for every
+ * figure ("Currency : Singapore Dollar"). pageCurrency declines a page that names or prints any other currency, or says
+ * "unless stated otherwise". A figure with any other mark ("US$", "HK$", "RM", "€") is never given the page's. */
+export function unmarkedPageCurrency(printed:string|null|undefined,pageText:string):string|null{
+  const text=String(printed??"");
+  if(statedCurrencyCode(text)||/\p{L}\$|\$\p{L}|[€£¥₹₱₩฿₫]|\b(?:RM|Rp|Fr|kr|SGD|USD|MYR|HKD|EUR|GBP|AUD|IDR|INR|PHP|THB|CNY|RMB|JPY)\b/iu.test(text))return null;
+  return pageCurrency(pageText);
+}
 
 /** Reading a document is a one-time job, so it can be slow and thorough.
  *
@@ -323,7 +333,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       benefits.push({productName:section,benefitName,
         traits:readerTraits(row.label,row.line,category),
         requires:readerRequires(row.label,row.line,category),
-        formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
+        formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency??unmarkedPageCurrency(row.value,page.text),
         factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
         offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
         sourcePage:page.page_number,quote,
@@ -370,8 +380,9 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       const tableRow=pageRows.find(row=>{const line=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().toLowerCase();return line.includes(flatQuote)||flatQuote.includes(line);});
       const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
       if(seen.has(key))continue;seen.add(key);
-      const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
+      const read=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
         quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays,benefitName:found.name});
+      const formula=read.currency||read.formulaValue==null||read.formulaKind==="none"||read.formulaKind==="sum_insured"?read:{...read,currency:unmarkedPageCurrency(found.quote,page.text)};
       // The same row already stored as printed-only: a validated rule from the
       // model replaces it; a model reading with no rule adds nothing new.
       const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|");
