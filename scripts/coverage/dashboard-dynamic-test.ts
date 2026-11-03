@@ -137,7 +137,8 @@ async function main() {
         await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1 AND account_id=$2", [second, m.account]);
         assert.deepEqual(summary(tile(await tiles(m.account, self), "Death")), ["covered", m.a, m.cur, `Harbour Life Plan ${m.a}`]);
       });
-      await test(`${m.cur}: a single trip in force shows; the same trip once its dates have passed does not`, async () => {
+      // DC (31 Oct, yes 1 Nov): every policy on file is in force; a trip whose printed dates have passed still shows.
+      await test(`${m.cur}: a single trip in force shows; a trip whose printed dates have passed shows too`, async () => {
         const trip = (from: number, to: number, product: string) => plan(product, 100000, { category: "Personal Accident", benefit: "Accidental Death", line: false,
           travel: { from: day(from), to: day(to) } });
         await upload(trip(-3, 10, "Wanderer Single Trip Travel"), self);
@@ -146,8 +147,9 @@ async function main() {
         assert.equal(now.amount, 100000);
         await upload(trip(-40, -30, "Voyager Single Trip Travel"), self);
         const later = tile(await tiles(m.account, self), "Personal Accident");
-        assert.deepEqual((later.parts ?? []).map((p) => p.name), ["Wanderer Single Trip Travel"], "an ended trip is not cover");
-        assert.equal(later.amount, 100000);
+        assert.equal(later.status, "covered");
+        assert.deepEqual((later.parts ?? []).map((p) => p.name).sort(), ["Voyager Single Trip Travel", "Wanderer Single Trip Travel"], "a passed printed period is still cover");
+        assert.equal(later.amount, 200000);
       });
       await test(`${m.cur}: a policy uploaded for another person changes that person's tile only`, async () => {
         await upload(plan("Harbour Life Plan", m.b, { person: m.name[1] }), spouse);

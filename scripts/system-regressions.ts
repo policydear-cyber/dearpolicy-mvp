@@ -468,8 +468,11 @@ export function runSystemRegressions(){
     assert.equal(stale.state,"not_recently_verified");assert.match(stale.detail,/Ownership stays confirmed/);
     const none=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:null});
     assert.equal(none.state,"unknown");assert.match(none.detail,/Ownership stays confirmed/);
+    // DC (31 Oct, yes 1 Nov): a printed renewal or expiry date that has passed never changes the status; it reads as a
+    // policy with no payment evidence, never "ended" or "expired".
     const expired=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:"2025-01-01"});
-    assert.equal(expired.state,"expiry_date_passed");assert.match(expired.detail,/Ownership stays confirmed/);
+    assert.equal(expired.state,none.state);assert.equal(expired.label,none.label);assert.equal(expired.detail,none.detail);
+    assert.doesNotMatch(expired.label+" "+expired.detail,/\b(?:ended|expired|lapsed|passed)\b/i);assert.equal(expired.renewalOrExpiryDate,"2025-01-01");
     // A later receipt outranks a passed printed expiry date.
     assert.equal(assessCurrentness({now,lastEvidenceOn:"2026-08-01",renewalOrExpiryDate:"2025-01-01"}).state,"verified_recent");
     assert.equal(assessCurrentness({now,lastEvidenceOn:"not-a-date",renewalOrExpiryDate:"not-a-date"}).state,"unknown");
@@ -485,7 +488,8 @@ export function runSystemRegressions(){
     assert.equal(matchPremiumEvidence(contract,[...rows,{policy_id:"schedule",family_member_id:null,insurer:null,policy_number:null,latest:"2026-05-05"}]),"2026-05-05");
     assert.equal(matchPremiumEvidence(contract,[...rows,{policy_id:null,family_member_id:person,insurer:"Example Insurer",policy_number:"P-100",latest:"2026-04-04"}]),"2026-04-04");
     assert.equal(contractCurrentness(contract,[],now).state,"unknown");
-    assert.equal(contractCurrentness({...contract,documents:[document({renewal_or_expiry_date:"2024-01-01"})]},[],now).state,"expiry_date_passed");
+    // A passed printed expiry never changes status (DC, 31 Oct; yes 1 Nov): the same as no payment evidence.
+    assert.equal(contractCurrentness({...contract,documents:[document({renewal_or_expiry_date:"2024-01-01"})]},[],now).state,"unknown");
   });
   test("Missing premium evidence never removes a confirmed coverage amount",()=>{
     const assessed=assessmentFromBenefit({benefit:benefit(),contract,sources:[source("We pay 100% of Sum Insured for a qualifying critical illness.")],facts:{},now});
