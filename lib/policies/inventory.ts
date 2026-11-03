@@ -189,40 +189,87 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
 function escaped(value:string){return value.replace(/[.*+?^$()|[\]\\]/g,"\\$&");}
 /** Which product section each page of a booklet belongs to, for naming the benefits read from it.
  *
- * A page starts a product's section only when the product name stands as a heading near the top: a line of its own,
- * optionally numbered ("2.", "Section 3 -", "BENEFIT 1:", "PRODUCT SUMMARY:") or followed by a closed list of plan
- * words ("Insurance", "Plan", "Rider", "Benefits"). A name used in a sentence ("No Benefit is payable for ...
- * continuous hospitalisation"), a table row ("Hospitalisation visit  S$5,000", or the label on the line above its
- * figure) or a contents entry ("1. Group Term Life  2") is not a section heading, so it never renames the rest of the
- * booklet (live 3 Nov: Death, TPD and travel endorsement rows were stored under "Hospitalisation", a benefit the
- * reading listed among the products). Pages before any heading have no section: the caller names them after the
- * document's own plan. */
+ * Fail-safe: only a positively recognised heading of a product's own name starts its section, and anything doubtful
+ * ends the section so the caller names the page after the document's own plan, never after another product.
+ *  - Starts: a line near the top that is the product's name standing as a heading, optionally numbered ("2.", "II.",
+ *    "Section 3 -", "Chapter 2:", "BENEFIT 1:", "Product Summary for", "Ringkasan Produk:") and followed only by a
+ *    closed list of plan words ("Insurance", "Plan", "Rider", "– Product Summary", "Policy Wording"), a short bracket
+ *    ("(Plan B)") or a mark (®, ™), and not a label whose figure is printed on the next line.
+ *  - A name made only of cover words ("Hospitalisation", "Death", "Critical Illness", "Rawat Inap", "住院") is a kind
+ *    of benefit, not a product, even when the reading listed it as one: it never starts a section; standing as a
+ *    heading it ends the current one.
+ *  - Any other mention near the top of a page of a different product (a sentence, a table row, a contents entry, a
+ *    heading shape not recognised) ends the current section instead of carrying it on. A name printed near the top of
+ *    most pages (a running header) is ignored.
+ * Live 3 Nov: Death, TPD and travel endorsement rows were stored under "Hospitalisation", a benefit the reading listed
+ * among the products, because any mention of it started a section. */
 export function pageProductScopes(pages:{page_number:number;text:string}[],products:string[]) {
   const result=new Map<number,string[]>();let current:string[]=[];
-  const names=[...new Set(products.filter(Boolean))].sort((a,b)=>b.length-a.length);
-  for(const page of [...pages].sort((a,b)=>a.page_number-b.page_number)){
-    const lines=page.text.slice(0,650).split(/\r?\n/).map(line=>line.trim());
-    const found=names.filter(name=>lines.some((line,i)=>headingOf(line,name)&&!figureFollows(lines,i)));
-    if(found.length)current=found.filter(name=>!found.some(other=>other!==name&&productIdentity(other).startsWith(productIdentity(name)+" ")));
+  const names=[...new Set(products.filter(name=>!!name&&!!nameWords(name).length))].sort((a,b)=>b.length-a.length);
+  const ordered=[...pages].sort((a,b)=>a.page_number-b.page_number).map(page=>({page,lines:page.text.slice(0,650).split(/\r?\n/).map(line=>line.normalize("NFKC").trim())}));
+  const mentionedOn=new Map(names.map(name=>[name,ordered.filter(({lines})=>lines.some(line=>mentions(line,name))).length]));
+  const runningHeader=(name:string)=>ordered.length>=3&&(mentionedOn.get(name)??0)>=Math.ceil(ordered.length*0.6);
+  for(const {page,lines} of ordered){
+    const headed=names.filter(name=>lines.some((line,i)=>headingOf(line,name)&&!figureFollows(lines,i)));
+    const starts=headed.filter(name=>!coverOnly(name)&&!runningHeader(name)&&!headed.some(other=>other!==name&&!coverOnly(other)&&containsName(other,name)));
+    if(starts.length)current=starts;
+    else if(current.length){
+      const ends=names.some(name=>{
+        if(current.some(own=>containsName(own,name)||containsName(name,own))||runningHeader(name))return false;
+        if(coverOnly(name))return lines.some(line=>headingOf(line,name));
+        return lines.some(line=>mentions(line,name)&&!names.some(longer=>longer!==name&&containsName(longer,name)&&mentions(line,longer)&&current.some(own=>containsName(own,longer)||containsName(longer,own))));
+      });
+      if(ends)current=[];
+    }
     result.set(page.page_number,[...current]);
   }
   return result;
 }
-const HEADING_PREFIX=/^(?:(?:section|part|benefit|plan|product(?:\s+summary)?)\s*\d*\s*[:.\-–—]?\s*|\d{1,2}\s*[.)]\s*|[A-Z]\s*[.)]\s+)?/i;
-const PLAN_WORDS=/^(?:\s+(?:insurance|assurance|plan|rider|benefits?|cover(?:age)?|policy|scheme|product\s+summary|summary))*\s*$/i;
+const ROMAN=String.raw`(?:i{1,3}|iv|vi{0,3}|ix|x{1,3})`;
+const HEADING_PREFIX=new RegExp(String.raw`^(?:(?:section|part|chapter|bahagian|seksyen|bab|benefit|manfaat|plan|product\s+(?:summary|disclosure\s+sheet)(?:\s+(?:for|of))?|ringkasan\s+produk(?:\s+(?:untuk|bagi))?|产品摘要|產品摘要)\s*(?:(?:\d+(?:\.\d+)*|${ROMAN}|[A-Z])(?![\p{L}\p{N}]))?\s*[:.\-–—]?\s*|\d{1,2}(?:\.\d{1,2})+\s+|(?:\d{1,2}(?:\.\d{1,2})*|${ROMAN})\s*[.)]\s*|[A-Z]\s*[.)]\s+)?`,"iu");
+const PLAN_WORDS=/^(?:\s*[:\-–—|]\s*|\s+)?(?:\s*(?:insurance|assurance|plan|rider|benefits?|cover(?:age)?|policy(?:\s+wording)?|wording|scheme|product\s+(?:summary|disclosure\s+sheet)|summary|key\s+features|takaful|insurans|pelan|ringkasan\s+produk|\([^()\n]{1,24}\))(?=\s|$|[:\-–—]))*\s*$/i;
 /** The line is the product's heading: the name with at most a numbering prefix and plan words after it, nothing else
  * (no figure, no page number, no other words). */
 function headingOf(line:string,name:string){
-  if(!line||/\d\s*$/.test(line)&&!/\d\s*$/.test(name))return false;
-  const rest=line.replace(HEADING_PREFIX,"");
-  const at=rest.toLowerCase().indexOf(name.toLowerCase());
-  if(at!==0)return false;
-  return PLAN_WORDS.test(rest.slice(name.length).replace(/[:\-–—]\s*$/,""));
+  const clean=line.replace(/[®™©]/g,"").replace(/^[•▪●■\-*]\s*/,"").trim();
+  if(!clean||/\d\s*$/.test(clean)&&!/\d\s*$/.test(name))return false;
+  const rest=clean.replace(HEADING_PREFIX,"");
+  if(rest.toLowerCase().indexOf(name.normalize("NFKC").toLowerCase())!==0)return false;
+  return PLAN_WORDS.test(rest.slice(name.normalize("NFKC").length).replace(/[:\-–—]\s*$/,""));
 }
 /** A label whose figure is printed on the next line ("Hospitalisation" then "S$5,000") is a table row. */
 function figureFollows(lines:string[],index:number){
   const next=lines.slice(index+1).find(line=>line.length>0);
   return !!next&&(/^(?:[A-Z]{0,3}\s?[$€£¥₹]|(?:RM|Rp|USD|SGD|MYR|HKD|EUR|GBP|IDR|THB|PHP|INR|AUD)\s?\d)/.test(next)||/^\d{1,3}(?:[,.\s]\d{3})+\b|^\d{3,}\b|^\d+(?:\.\d+)?\s*%/.test(next));
+}
+function nameWords(value:string){return value.normalize("NFKC").toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);}
+/** The name appears in the line as whole words (any case, any punctuation between them). */
+function mentions(line:string,name:string){
+  const words=nameWords(name);if(!words.length)return false;
+  if(/\p{Script=Han}/u.test(name))return line.normalize("NFKC").includes(name.normalize("NFKC"));
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${words.map(escaped).join("[^\\p{L}\\p{N}]+")}(?=$|[^\\p{L}\\p{N}])`,"iu").test(line.normalize("NFKC"));
+}
+/** `longer` holds every word of `shorter`, in order ("Living Care Plus" holds "Living Care"). */
+function containsName(longer:string,shorter:string){
+  const a=nameWords(longer).join(" "),b=nameWords(shorter).join(" ");
+  return !!b&&(` ${a} `).includes(` ${b} `);
+}
+/** Kinds of cover and benefit, in the markets read; with plan words and joining words. A name made only of these
+ * (and holding at least one cover word) names a benefit, never a product. Closed list: a brand or any other word
+ * ("Group", "Term", "Shield", "Platinum") makes the name a product. */
+const COVER_WORDS=new Set(("hospitalisation hospitalization hospital hospitalised daily cash income allowance death tpd total permanent "+
+  "disability disablement accident accidental personal critical illness illnesses early cancer medical expenses expense "+
+  "room board surgical surgery surgeon outpatient inpatient out in patient dental maternity waiver life funeral terminal "+
+  "emergency evacuation repatriation baggage delay cancellation trip travel health major serious "+
+  "kemasukan rawatan perubatan kematian hilang upaya kekal menyeluruh kemalangan diri penyakit kritikal pembedahan bilik "+
+  "makan harian elaun hospitalisasi rawat inap jalan meninggal dunia kecelakaan kesehatan santunan cacat tetap").split(" "));
+const NEUTRAL_WORDS=new Set(("and of for the due to with per by from benefit benefits cover coverage plan rider insurance assurance "+
+  "policy scheme protection product summary dan bagi untuk manfaat perlindungan pelan takaful insurans asuransi").split(" "));
+const HAN_COVER=/住院|医疗|醫療|身故|死亡|意外|重大疾病|重疾|癌症|残疾|殘疾|保险|保險|保障|计划|計劃|利益|津贴|津貼|手术|手術|门诊|門診/g;
+function coverOnly(name:string){
+  if(/\p{Script=Han}/u.test(name)){const left=name.normalize("NFKC").replace(HAN_COVER,"").replace(/[^\p{L}\p{N}]+/gu,"");return !left.length&&HAN_COVER.test(name);}
+  const words=nameWords(name).filter(w=>w!=="&"&&w!=="-");
+  return words.some(w=>COVER_WORDS.has(w))&&words.every(w=>COVER_WORDS.has(w)||NEUTRAL_WORDS.has(w));
 }
 /** Retrieval depth per document.
  *

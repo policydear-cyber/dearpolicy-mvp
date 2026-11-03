@@ -59,5 +59,55 @@ t("only the top of a page is read for its heading", () => {
   const got = scopes(["Benefits\n" + "x ".repeat(400) + "\nAccident Guard\n"], ["Accident Guard"]);
   assert.deepEqual(got, [""]);
 });
+const GTL = "Group Term Life\nKey Features";
+t("a benefit the reading listed as a product never starts a section, whatever its layout; standing as a heading it ends the one before", () => {
+  const P = ["Group Term Life", "Group Personal Accident", "Hospitalisation", "Critical Illness", "Rawat Inap", "住院保障"];
+  for (const page of [
+    "Hospitalisation Benefit\nWe pay a daily amount for each day in hospital.\nDeath\t100% of Sum Insured",
+    "Hospitalisation\nUp to S$5,000 per stay\nDeath\tS$100,000",
+    "Hospitalisation\nPlan A\tS$5,000\tPlan B\tS$7,500",
+    "Hospitalisation:\nWhat we pay",
+    "• Hospitalisation\nWe pay room and board.",
+    "3. CRITICAL ILLNESS BENEFIT\nWhat we pay",
+    "Manfaat Rawat Inap\nKami membayar",
+    "住院保障\n我们支付",
+  ]) assert.deepEqual(scopes([GTL, page], P), ["Group Term Life", ""], page.split("\n")[0]);
+});
+t("a product's heading in other common shapes starts its section", () => {
+  const Q = ["Group Term Life", "Group Personal Accident"];
+  for (const page of [
+    "Group Personal Accident – Product Summary\nKey Features",
+    "Group Personal Accident (Plan B)\nKey Features",
+    "Group Personal Accident®\nKey Features",
+    "Product Summary for Group Personal Accident\nKey Features",
+    "Group Personal Accident Policy Wording\nKey Features",
+    "Harbour Assurance\nGroup Personal Accident\nKey Features",
+    "Ringkasan Produk: Group Personal Accident\nCiri-ciri",
+    "Chapter 2: Group Personal Accident\nKey Features",
+    "II. Group Personal Accident\nKey Features",
+    "4.2 Group Personal Accident\nKey Features",
+  ]) assert.deepEqual(scopes([GTL, page], Q), ["Group Term Life", "Group Personal Accident"], page.split("\n")[0]);
+});
+t("when another product is named but its heading is not recognised, the section ends (the document's plan names it), never carries on", () => {
+  const Q = ["Group Term Life", "Group Personal Accident"];
+  for (const page of [
+    "Group Personal Accident\n100% of Sum Insured on death",
+    "Group Personal Accident\nS$600,000 cover for each employee",
+    "Your Group Personal Accident cover pays on accidental death.",
+    "GROUP PERSONAL ACCIDENT INSURANCE FOR EMPLOYEES OF THE STATE\nKey Features",
+  ]) assert.deepEqual(scopes([GTL, page, "Insurance Benefits\n• Death\t100% of Sum Insured"], Q), ["Group Term Life", "", ""], page.split("\n")[0]);
+});
+t("the section's own name in a sentence, a fuller name holding it, and a running header keep the section", () => {
+  const header = "Harbour Civil Service Group Insurance";
+  const got = scopes([
+    header + "\nContents",
+    header + "\nGroup Term Life\nKey Features",
+    header + "\nThe Group Term Life Insurance pays on death.",
+    header + "\nInsurance Benefits\n• Death\t100% of Sum Insured",
+    header + "\nMerlion Shield Plus\nKey Features",
+    header + "\nYour Merlion Shield Plus cover pays hospital bills.",
+  ], [header, "Group Term Life", "Merlion Shield", "Merlion Shield Plus"]);
+  assert.deepEqual(got, ["", "Group Term Life", "Group Term Life", "Group Term Life", "Merlion Shield Plus", "Merlion Shield Plus"]);
+});
 console.log(`\nproduct scopes: ${passed} passed, ${failed.length} failed`);
 if (failed.length) process.exit(1);
