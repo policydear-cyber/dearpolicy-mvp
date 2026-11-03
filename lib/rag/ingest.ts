@@ -2,7 +2,7 @@ import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
 import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
-import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts, statesOtherAmounts } from "@/lib/documents/evidence-store";
+import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts, provesSameAmounts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { createHash, randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
@@ -317,11 +317,11 @@ async function settleSameSchedule(args: ProcessPolicyArgs, extraction: PolicyExt
     const myEnd = extraction.renewalOrExpiryDate || null, theirEnd = other.renewal_or_expiry_date;
     const shared = printedDates(other.text).filter((d) => myDates.has(d)).length;
     const samePeriod = myEnd && theirEnd ? myEnd === theirEnd : shared >= 2;
-    // A copy never states another amount for the same benefit or cover. Two schedules of one policy and period that do
-    // (a schedule reissued after a change of cover) are not copies: neither is set aside, and each differing amount keeps
-    // its conflict note, so no newer figure is hidden behind an older one (v11 E2: the 2026 schedule was filed as a copy
-    // of 2025's, and answers used 2025's amounts).
-    if (samePeriod && await statesOtherAmounts(args.accountId, args.policyId, other.id)) continue;
+    // A copy is proven to state the same amounts. Two schedules of one policy and period that state another amount (a
+    // schedule reissued after a change of cover), or whose amounts cannot be compared, are not filed as copies: neither is
+    // set aside, and each differing amount keeps its conflict note, so no newer figure is hidden behind an older one
+    // (v11 E2: the 2026 schedule was filed as a copy of 2025's, and answers used 2025's amounts; Critic #325 M1).
+    if (samePeriod && !(await provesSameAmounts(args.accountId, args.policyId, other.id))) continue;
     let older: string, newer: string, olderFile: string, newerFile: string, note: string;
     if (samePeriod) {
       const keepMine = myNative && !other.native;

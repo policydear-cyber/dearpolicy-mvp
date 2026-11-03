@@ -225,24 +225,30 @@ async function markDuplicates(accountId: string, group: GroupPolicy[]) {
   return marked;
 }
 
-/** Whether two documents state a different amount (or a different printed currency) for the same benefit or cover: the
- * same name, tier, kind and person class, each with an amount. A row with no amount, or a currency only one of them
- * prints, is no difference: a photo of a schedule that reads fewer figures is still a copy. Names are compared whole,
- * in any script, ignoring case and spacing. */
-export async function statesOtherAmounts(accountId: string, policyId: string, otherId: string): Promise<boolean> {
+/** Whether two documents are proven to state the same amounts: at least one benefit or cover with an amount in BOTH
+ * (the same name, tier, kind and row kind), and no such pair differs in its amount or in a currency both print. Proof of
+ * sameness, never the absence of a difference: a document whose amounts were not read (a reading cut short, figures
+ * withheld from unchecked pages) proves nothing, so it is never filed as a copy of another (Critic #325 M1). A row with no
+ * amount, or a benefit only one lists, is neither proof nor difference, so a photo that read fewer figures is still a copy
+ * when what it read agrees. A row marked a duplicate of a third document never decides (one marked a duplicate of the
+ * other is the very agreement being checked). Names are compared whole, in any script,
+ * ignoring case and spacing. */
+export async function provesSameAmounts(accountId: string, policyId: string, otherId: string): Promise<boolean> {
   const name = (c: string) => `regexp_replace(lower(trim(${c})),'\\s+',' ','g')`;
-  const differ = (x: string, y: string, value: string) => `${x}.${value} IS NOT NULL AND ${y}.${value} IS NOT NULL
-      AND (${x}.${value}<>${y}.${value} OR (${x}.currency IS NOT NULL AND ${y}.currency IS NOT NULL AND upper(${x}.currency)<>upper(${y}.currency)))`;
-  const result = await query<{ differs: boolean }>(
-    `SELECT EXISTS(SELECT 1 FROM policy_benefits x JOIN policy_benefits y ON y.account_id=x.account_id AND y.policy_id=$3
+  const differs = (value: string) => `(x.${value}<>y.${value} OR (x.currency IS NOT NULL AND y.currency IS NOT NULL AND upper(x.currency)<>upper(y.currency)))`;
+  const pairs = `SELECT ${differs("formula_value")} AS differs FROM policy_benefits x JOIN policy_benefits y ON y.account_id=x.account_id AND y.policy_id=$3
         AND ${name("x.benefit_name")}=${name("y.benefit_name")} AND coalesce(lower(x.tier),'')=coalesce(lower(y.tier),'')
         AND coalesce(x.row_kind,'benefit')=coalesce(y.row_kind,'benefit') AND x.formula_kind=y.formula_kind
-       WHERE x.account_id=$1 AND x.policy_id=$2 AND x.formula_kind<>'none' AND ${differ("x", "y", "formula_value")})
-     OR EXISTS(SELECT 1 FROM policy_coverages x JOIN policy_coverages y ON y.account_id=x.account_id AND y.policy_id=$3
+       WHERE x.account_id=$1 AND x.policy_id=$2 AND x.formula_kind<>'none' AND x.formula_value IS NOT NULL AND y.formula_value IS NOT NULL
+         AND (x.duplicate_of_policy_id IS NULL OR x.duplicate_of_policy_id=$3) AND (y.duplicate_of_policy_id IS NULL OR y.duplicate_of_policy_id=$2)
+     UNION ALL
+     SELECT ${differs("amount")} FROM policy_coverages x JOIN policy_coverages y ON y.account_id=x.account_id AND y.policy_id=$3
         AND ${name("x.category")}=${name("y.category")} AND coalesce(lower(x.tier),'')=coalesce(lower(y.tier),'')
-       WHERE x.account_id=$1 AND x.policy_id=$2 AND ${differ("x", "y", "amount")}) AS differs`,
-    [accountId, policyId, otherId]);
-  return !!result.rows[0]?.differs;
+       WHERE x.account_id=$1 AND x.policy_id=$2 AND x.amount IS NOT NULL AND y.amount IS NOT NULL
+         AND (x.duplicate_of_policy_id IS NULL OR x.duplicate_of_policy_id=$3) AND (y.duplicate_of_policy_id IS NULL OR y.duplicate_of_policy_id=$2)`;
+  const result = await query<{ n: number; differ: number }>(`SELECT count(*)::int AS n,count(*) FILTER (WHERE differs)::int AS differ FROM (${pairs}) p`, [accountId, policyId, otherId]);
+  const row = result.rows[0];
+  return !!row && row.n > 0 && row.differ === 0;
 }
 
 /** Contradictory amounts or currencies for the same benefit -- two pages of
