@@ -3,6 +3,7 @@ import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { isIsoCurrency, normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
+import { canadianDollarCode } from "@/lib/chat/policy-analysis";
 
 /** Reading the "what it pays" cell of a benefit schedule.
  *
@@ -58,6 +59,9 @@ function statedCode(text:string):string|null{
   if(!q)return null;
   // No fallback: a marker that does not resolve to a real ISO code stays null.
   const code=normalizeCurrencyCode(q,"");
+  // "CAD" read from a bare code by any reader is Canadian dollars only beside a money figure with no heart words
+  // (coronary artery disease, TE #269 F2); a C$ / CA$ sign is always Canadian dollars.
+  if(code==="CAD"&&!canadianDollarCode(text)&&!/\bCA?\$/.test(text))return null;
   return /^[A-Z]{3}$/.test(code)?code:null;
 }
 /** Markers explicitCurrency() does not know: RM, ₹, ₱, ฿, ₩, ₫, Rp, NT$, HK$, A$/AU$, SG$, NZ$, C$/CA$.

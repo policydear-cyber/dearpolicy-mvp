@@ -43,6 +43,7 @@
     "coverage:te147c-test": "node --import tsx scripts/coverage/te-pr147c-test.ts",
     "coverage:te147d-test": "node --import tsx scripts/coverage/te-pr147d-test.ts",
     "coverage:te148b-test": "node --import tsx scripts/coverage/te-pr148b-test.ts",
+    "format:cad-code-test": "node --import tsx --import ./scripts/coverage/no-network.ts scripts/format/cad-code-test.ts",
     "coverage:te148c-test": "node --import tsx scripts/coverage/te-pr148c-test.ts",
     "coverage:te149-test": "node --import tsx scripts/coverage/te-pr149-test.ts",
     "coverage:te149b-test": "node --import tsx scripts/coverage/te-pr149b-test.ts",

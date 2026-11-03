@@ -247,8 +247,19 @@ export function explicitCurrency(quote:string){
   if(/\bJPY\b|¥|yen\b/i.test(quote))return "JPY";
   if(/\bEUR\b|€/i.test(quote))return "EUR";
   if(/\bGBP\b|£/i.test(quote))return "GBP";
-  if(/\b(?:AUD|CAD|MYR|PHP|CNY|HKD|INR|THB|KRW|IDR)\b/i.test(quote))return quote.match(/\b(?:AUD|CAD|MYR|PHP|CNY|HKD|INR|THB|KRW|IDR)\b/i)![0].toUpperCase();
+  if(/\b(?:AUD|MYR|PHP|CNY|HKD|INR|THB|KRW|IDR)\b/i.test(quote))return quote.match(/\b(?:AUD|MYR|PHP|CNY|HKD|INR|THB|KRW|IDR)\b/i)![0].toUpperCase();
+  if(canadianDollarCode(quote))return "CAD";
   return null;
+}
+/** "CAD" is also coronary artery disease in health documents ("CAD 1 angiogram 8,000", "Treatment for CAD 3 stents
+ * 20,000"): it is Canadian dollars only in capitals, directly beside a figure that reads as money (a grouped figure,
+ * three or more digits, or two decimals; never a count, rate or multiple), and never with heart or artery words in the
+ * same text (TE #269 F2). */
+const MONEY_FIGURE=String.raw`(?:\d{1,3}(?:[.,' \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d{3,}(?:[.,]\d{1,2})?|\d+[.,]\d{2})(?![\d.,])(?!\s?(?:%|x\b|×|times\b|per\s?cent|percent|bps\b|basis\s+points?))`;
+const CAD_BESIDE_FIGURE=new RegExp(String.raw`(?<![A-Za-z])CAD\s?\$?\s?${MONEY_FIGURE}|${MONEY_FIGURE}\s?CAD(?![A-Za-z])`);
+const HEART_WORDS=/\b(?:coronar\w*|arter\w*|angio\w*|stents?|cardi\w*|heart|bypass|pci|cabg|myocard\w*|ischa?emi\w*|jantung|koroner|corazón|coração|cœur|herz\w*)\b|心脏|心臟|冠心|冠状|冠狀/i;
+export function canadianDollarCode(quote:string):boolean{
+  return CAD_BESIDE_FIGURE.test(quote)&&!HEART_WORDS.test(quote);
 }
 function boundProduct(benefit:PolicyBenefit,contract:PolicyContract,sources:PolicySource[]) {
   const coverage=contract.coverages.find(c=>c.id===benefit.coverageId);
