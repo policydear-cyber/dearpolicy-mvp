@@ -29,33 +29,57 @@ async function main() {
   const { planKindDocs, planKindWords } = await import("@/lib/chat/document-questions");
   const D = (product: string, type: string | null) => ({ product, type });
   const docs = [
-    D("Annual Multi-Trip Family", "Travel"), D("Jelajah Tahunan", "Travel Insurance"), D("Voyager Gold", null), D("Single Trip Europe", null),
-    D("Level Term", "Life"), D("Pelan Hayat Berkala", "Life Insurance"), D("Whole Life Plus", null), D("CareShield Life", "Long-term care"),
-    D("Heron Family Health", "Health"), D("MediKad Keluarga", "Medical"), D("Hospital Cash Plan", "Hospital Cash"), D("Travel Medical Plus", "Travel"),
-    D("Income Protection", "Disability"), D("Salary Shield", "Income Protection"), D("Accident Guard", "Personal Accident"),
+    D("Annual Multi-Trip Family", "Travel"), D("Jelajah Tahunan", "Travel Insurance"), D("Single Trip Europe", null), D("Lifestyle Travel Medical", "Travel"),
+    D("Level Term", "Life"), D("Pelan Hayat Berkala", "Insurans Hayat"), D("Whole Life Plus", null), D("Group Term Life", "Group"), D("Endowment Saver", "Life"),
+    D("Heron Family Health", "Health"), D("MediKad Keluarga", "Medical"), D("MyCare Plus", "Hospitalisation"), D("Premier Care", "Hospital and Surgical"), D("MediShield Life", "Health"),
+    D("Smart Life Health", "Health"), D("Income Protection", "Disability"), D("Salary Shield", "Income Protection"), D("Short-Term Disability Plan", "Disability"),
+    D("CareShield Life", "Long Term Care"), D("ElderShield 400", "Long Term Care"), D("Early Critical Protector", "Health"), D("Critical Illness Plus", "Life"),
+    D("Accident Care Plus", "Medical"), D("Personal Accident Guard", "Health"), D("Hospital Cash Plan", "Health"), D("Hospital Income Benefit", "Health"),
+    D("Dental Plus", "Health"), D("Maternity Care", "Health"), D("LifeTime Income", "Annuity"),
   ];
-  const kinds = (q: string) => planKindDocs(q, docs).map((d) => d.product);
+  const kinds = (q: string, from = docs) => planKindDocs(q, from).map((d) => d.product);
 
   await test("a plan is the kind its stored type says, when its name doesn't say it", () => {
-    assert.deepEqual(kinds("When does Tom's travel policy start?"), ["Annual Multi-Trip Family", "Jelajah Tahunan", "Single Trip Europe", "Travel Medical Plus"]);
-    assert.deepEqual(kinds("What is Siti's life insurance policy number?"), ["Level Term", "Pelan Hayat Berkala", "Whole Life Plus"]);
-    assert.deepEqual(kinds("What's the excess on our health insurance?"), ["Heron Family Health", "MediKad Keluarga"]);
-    assert.deepEqual(kinds("what is the policy number of his income protection?"), ["Income Protection", "Salary Shield"]);
+    assert.deepEqual(kinds("When does Tom's travel policy start?"), ["Annual Multi-Trip Family", "Jelajah Tahunan", "Single Trip Europe", "Lifestyle Travel Medical"]);
+    assert.deepEqual(kinds("What is Siti's life insurance policy number?"), ["Level Term", "Pelan Hayat Berkala", "Whole Life Plus", "Group Term Life", "Endowment Saver"]);
+    assert.deepEqual(kinds("What's the excess on our health insurance?"), ["Heron Family Health", "MediKad Keluarga", "MyCare Plus", "Premier Care", "MediShield Life", "Smart Life Health"]);
+    assert.deepEqual(kinds("what is the policy number of his income protection?"), ["Income Protection", "Salary Shield", "Short-Term Disability Plan"]);
   });
-  await test("a kind is never another kind that shares a word with it", () => {
-    // Long-term care is not term life; a hospital cash plan and a travel medical plan are not health insurance.
-    assert.ok(!kinds("her term life policy").includes("CareShield Life"));
-    assert.ok(!kinds("our medical insurance").includes("Hospital Cash Plan"));
-    assert.ok(!kinds("our medical insurance").includes("Travel Medical Plus"));
+  await test("a kind is never another kind that shares a word with it, whatever its stored type (Critic H1)", () => {
+    const life = kinds("When does Tom's term policy end?"), health = kinds("Does my medical plan cover physiotherapy?");
+    // Long-term care, MediShield Life, a short-term disability plan and a critical illness plan stored as Life are not life cover.
+    for (const p of ["CareShield Life", "ElderShield 400", "MediShield Life", "Short-Term Disability Plan", "Critical Illness Plus", "Smart Life Health", "LifeTime Income"]) assert.ok(!life.includes(p), p);
+    // Critical illness, accident, hospital cash, dental and maternity plans stored as Health, and a travel medical plan, are not health insurance.
+    for (const p of ["Early Critical Protector", "Accident Care Plus", "Personal Accident Guard", "Hospital Cash Plan", "Hospital Income Benefit", "Dental Plus", "Maternity Care", "Lifestyle Travel Medical", "CareShield Life"]) assert.ok(!health.includes(p), p);
     // "Permanent health insurance" is income protection (UK), not a health plan.
-    assert.deepEqual(kinds("what does his permanent health insurance pay?"), ["Income Protection", "Salary Shield"]);
+    assert.deepEqual(kinds("what does his permanent health insurance pay?"), kinds("what does his income protection pay?"));
+  });
+  await test("in a two-plan household the plan asked about is always in the pool (Critic H1 rows)", () => {
+    const rows: [string, [string, string][], string][] = [
+      ["What's the excess on my health insurance?", [["MyCare Plus", "Hospitalisation"], ["Early Critical Protector", "Health"]], "MyCare Plus"],
+      ["Does my medical plan cover physiotherapy?", [["Premier Care", "Hospital and Surgical"], ["Accident Care Plus", "Medical"]], "Premier Care"],
+      ["What is Siti's life insurance sum assured?", [["Legacy Builder", "Whole Life Assurance"], ["MediShield Life", "Health"]], "Legacy Builder"],
+      ["When does Tom's term policy end?", [["Protect Plus", "Term Assurance"], ["Short-Term Disability Plan", "Disability"]], "Protect Plus"],
+      ["What is Siti's life insurance sum assured?", [["Legacy Builder", "Insurans Hayat"], ["Smart Life Health", "Health"]], "Legacy Builder"],
+    ];
+    for (const [q, pair, right] of rows) {
+      const pool = kinds(q, pair.map(([p, t]) => D(p, t)));
+      assert.ok(!pool.length || pool.includes(right), q + " -> " + pool.join(" | "));
+      assert.ok(!pool.length || pool.length === 1, q + " -> " + pool.join(" | "));
+    }
+  });
+  await test("a plan of no known kind is never left out by a kind; with no plan of the kind asked, nothing is narrowed", () => {
+    // "Voyager Gold" (no type) may be the travel plan, so it stays in; "Premier Care" (no type) may be the hospital plan.
+    assert.deepEqual(kinds("When does Tom's travel policy end?", [D("Voyager Gold", null), D("Annual Multi-Trip", "Travel"), D("Level Term", "Life")]), ["Voyager Gold", "Annual Multi-Trip"]);
+    assert.deepEqual(kinds("What's the excess on my health insurance?", [D("Premier Care", "Hospital"), D("Level Term", "Life")]), []);
+    assert.deepEqual(kinds("When does Tom's travel policy end?", [D("Level Term", "Life"), D("Heron Family Health", "Health")]), []);
   });
   await test("a question that names no kind names no plan", () => {
     for (const q of ["What is the policy number?", "When does it end?", "How much is the premium?", "Is Siti covered for dengue?"]) assert.deepEqual(kinds(q), [], q);
   });
   await test("the words that name the kind say which plan, never what on it", () => {
-    assert.ok(planKindWords("When does Tom's travel policy start?", D("Annual Multi-Trip Family", "Travel")).includes("travel"));
-    assert.deepEqual(planKindWords("When does Tom's travel policy start?", D("Level Term", "Life")), []);
+    assert.ok(planKindWords("When does Tom's travel policy start?").includes("travel"));
+    assert.deepEqual(planKindWords("When does the policy start?"), []);
   });
 
   const url = process.env.DATABASE_URL ?? "";

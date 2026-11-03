@@ -556,31 +556,66 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
 const GENERIC_WORDS = new Set("cover covered policy policies plan plans pay paid much insurance benefit benefits amount whole life many does still have has get".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
 const PRODUCT_COMMON = /^(?:plan|policy|insurance|integrated|personal|accident|critical|illness|hospital|income|annual|travel|whole|life|shield|care)$/i;
 const PRODUCT_COMMON_WORDS = ["plan", "policy", "insurance", "integrated", "personal", "annual", "whole", "life", "shield"];
-/** Plan kinds a question names without the product's name ("Mama's CI plan", "the accident plan",
- * "Tom's travel policy", "her life insurance"). A document is that kind when its own name or its stored
- * type says so: "Annual Multi-Trip Family" is stored as Travel, "Level Term Life" as Life. A kind the
- * question names and no document is leaves the question to the household's documents as before. */
-const PLAN_KINDS: { asks: RegExp; is: RegExp; not?: RegExp }[] = [
-  { asks: /\bci\b|critical illness/i, is: /critical illness/i },
-  { asks: /\baccident (?:plan|policy|cover)\b|\bpa (?:plan|policy|premium|cover)\b|\b(?:her|his|my|their|\w+[’']s) pa\b|personal accident/i, is: /accident/i },
-  { asks: /\bhospital (?:cash|income)\b/i, is: /hospital (?:cash|income)/i },
-  { asks: /\btravel\b/i, is: /\btravel|\b(?:multi|single)[- ]trip\b|\btrip\b/i },
-  { asks: /\bwhole life\b/i, is: /whole life/i },
-  { asks: /\bshield\b|\bhospital plan\b|\bintegrated\b/i, is: /shield|integrated/i },
-  { asks: /\b(?:term )?life (?:plan|policy|polic(?:y|ies)|insurance|cover|assurance)\b|\bterm (?:plan|policy)\b/i, is: /\blife\b|\bterm\b/i, not: /long[- ]term|\btravel|\btrip\b/i },
-  { asks: /(?<!permanent )\b(?:health|medical|private medical) (?:plan|policy|insurance|cover|scheme|fund)\b/i, is: /\bhealth\b|\bmedical\b|\bhospital\b|shield|integrated/i, not: /\btravel|\btrip\b|accident|permanent health|hospital (?:cash|income)|careshield|eldershield|long[- ]term|income|salary|disab/i },
-  { asks: /\bincome protection\b|\bsalary continuance\b|\bpermanent health\b|\bdisability (?:income|plan|policy|cover|insurance)\b/i, is: /income protection|salary continuance|permanent health|disab/i },
+/** Plan kinds a question names without the product's name ("Mama's CI plan", "the accident plan"), read from the
+ * product's name as before. */
+const NAMED_KINDS: [RegExp, RegExp][] = [
+  [/\bci\b|critical illness/i, /critical illness/i],
+  [/\baccident (?:plan|policy|cover)\b|\bpa (?:plan|policy|premium|cover)\b|\b(?:her|his|my|their|\w+[’']s) pa\b|personal accident/i, /accident/i],
+  [/\bhospital (?:cash|income)\b/i, /hospital (?:cash|income)/i],
+  [/\bwhole life\b/i, /whole life/i],
+  [/\bshield\b|\bhospital plan\b|\bintegrated\b/i, /shield|integrated/i],
 ];
-const kindOf = (k: (typeof PLAN_KINDS)[number], d: { product: string | null; type?: string | null }) => { const t = (d.product ?? "") + " " + (d.type ?? ""); return k.is.test(t) && !k.not?.test(t); };
-/** The documents that are a kind of plan the question names. */
-export function planKindDocs<D extends { product: string | null; type?: string | null }>(question: string, docs: D[]): D[] {
-  const kinds = PLAN_KINDS.filter((k) => k.asks.test(question));
-  return docs.filter((d) => kinds.some((k) => kindOf(k, d)));
+/** Kinds of plan a question names whose product name often doesn't say it ("Tom's travel policy" is the "Annual
+ * Multi-Trip Family", "Siti's life insurance" the "Pelan Hayat Berkala"). Each document's kind is read from its
+ * stored type through a closed list of whole values, else from its name; a document whose name and type disagree,
+ * or that names two kinds, is of no known kind. */
+type PlanKind = "travel" | "life" | "health" | "income" | "other";
+const ASKED_KINDS: [RegExp, PlanKind][] = [
+  [/\btravel\b/i, "travel"],
+  [/\b(?:term )?life (?:plan|policy|polic(?:y|ies)|insurance|cover|assurance)\b|\bterm (?:plan|policy)\b/i, "life"],
+  [/(?<!permanent )\b(?:health|medical|private medical) (?:plan|policy|insurance|cover|scheme|fund)\b/i, "health"],
+  [/\bincome protection\b|\bsalary continuance\b|\bpermanent health\b|\bdisability (?:income|plan|policy|cover|insurance)\b/i, "income"],
+];
+const TYPE_KINDS = new Map<string, PlanKind>([
+  ...["travel", "travel insurance", "travel takaful", "perjalanan", "takaful perjalanan", "insurans perjalanan", "旅游保险", "旅行保险", "旅游", "旅行"].map((t) => [t, "travel"] as const),
+  ...["life", "life insurance", "life assurance", "term", "term life", "term assurance", "term insurance", "whole life", "whole life assurance", "whole life insurance", "endowment",
+    "hayat", "insurans hayat", "takaful hayat", "keluarga takaful", "人寿", "人寿保险", "寿险"].map((t) => [t, "life"] as const),
+  ...["health", "health insurance", "medical", "medical insurance", "hospitalisation", "hospitalization", "hospital and surgical", "hospital & surgical", "integrated shield",
+    "integrated shield plan", "private medical", "private medical insurance", "perubatan", "insurans perubatan", "takaful perubatan", "医疗", "医疗保险"].map((t) => [t, "health"] as const),
+  ...["disability", "disability income", "income protection", "salary continuance", "permanent health", "permanent health insurance"].map((t) => [t, "income"] as const),
+  ...["critical illness", "ci", "early critical illness", "personal accident", "accident", "long-term care", "long term care", "ltc", "group", "careshield", "eldershield", "dental", "maternity",
+    "hospital cash", "hospital income", "motor", "car", "home", "household", "contents", "investment", "investment-linked", "ilp", "annuity"].map((t) => [t, "other"] as const),
+]);
+const NAME_KINDS: [RegExp, PlanKind][] = [
+  [/\btravel|\b(?:multi|single)[- ]trip\b|\btrip\b|\bperjalanan\b/i, "travel"],
+  [/income protection|\bsalary\b|permanent health|disab/i, "income"],
+  [/\bcritical\b|\bci\b|accident|long[- ]term|careshield|eldershield|hospital (?:cash|income)|dental|maternity/i, "other"],
+  [/\bhealth\b|\bmedical\b|\bhospital(?!\s+(?:cash|income))|\bshield\b|medishield|integrated|perubatan/i, "health"],
+  [/^(?!.*(?:shield|short[- ]term|long[- ]term)).*(?:\blife\b|\bterm\b|\bhayat\b)/i, "life"],
+];
+function planKind(d: { product: string | null; type?: string | null }): PlanKind | null {
+  const byName = new Set(NAME_KINDS.filter(([re]) => re.test(d.product ?? "")).map(([, k]) => k));
+  const byType = TYPE_KINDS.get((d.type ?? "").trim().toLowerCase().replace(/\s+/g, " "));
+  // A name that says the plan is another kind wins over its type ("Early Critical Protector" stored as Health is a
+  // critical illness plan); a name that says two kinds, one of them the type's, is the type's kind.
+  if (byType) return !byName.size || byName.has(byType) ? byType : byName.size === 1 ? [...byName][0] : null;
+  return byName.size === 1 ? [...byName][0] : null;
 }
-/** The question's words that name this document's kind ("travel" in "Tom's travel policy"): like the plan's own
- * name, they say which plan is asked, never what on it, so a line that only repeats them answers nothing. */
-export function planKindWords(question: string, d: { product: string | null; type?: string | null }): string[] {
-  return PLAN_KINDS.filter((k) => kindOf(k, d)).flatMap((k) => [...question.matchAll(new RegExp(k.asks.source, "gi"))].flatMap((m) => [...wordsOf(m[0])]));
+/** The documents a question names by kind: those of that kind, plus any of no known kind (it may be one). None when
+ * the question names no kind, or no document is that kind -- the question then goes to every document, as before. */
+export function planKindDocs<D extends { product: string | null; type?: string | null }>(question: string, docs: D[]): D[] {
+  const asked = new Set(ASKED_KINDS.filter(([re]) => re.test(question)).map(([, k]) => k));
+  const named = docs.filter((d) => NAMED_KINDS.some(([asks, kind]) => asks.test(question) && kind.test(d.product ?? "")));
+  if (!asked.size) return named;
+  const kinds = new Map(docs.map((d) => [d, planKind(d)]));
+  const theKind = docs.filter((d) => asked.has(kinds.get(d) as PlanKind));
+  if (!theKind.length) return named;
+  return docs.filter((d) => named.includes(d) || theKind.includes(d) || kinds.get(d) === null);
+}
+/** The question's words that name a kind of plan ("travel" in "Tom's travel policy"): like a plan's own name, they
+ * say which plan is asked, never what on it, so a line that only repeats them answers nothing. */
+export function planKindWords(question: string): string[] {
+  return ASKED_KINDS.flatMap(([re]) => [...question.matchAll(new RegExp(re.source, "gi"))].flatMap((m) => [...wordsOf(m[0])]));
 }
 /** "last year", "the 2025 schedule": an earlier year's schedule, kept for reference, is what is asked. */
 export function earlierYearAsked(text: string, today = new Date()) {
@@ -612,7 +647,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   const current = loaded.filter((d) => usable(d) && !d.superseded);
   const productWords = (d: Doc) => (d.product ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !PRODUCT_COMMON.test(w));
   const namesIn = (d: Doc, t: string) => productWords(d).some((w) => new RegExp("\\b" + w + "\\b", "i").test(t))
-    || planKindDocs(t, [d]).length > 0;
+    || planKindDocs(t, loaded).includes(d);
   const firstPerson = /\b(?:my|mine|i|me)\b/i.test(question);
   // An earlier year's schedule first when an earlier year is asked; the current documents otherwise ("the bonus added in 2024" is on this year's statement).
   const pick = async (all: Doc[]) => {
@@ -626,7 +661,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
       const pool = docs.some(names) ? docs.filter(names) : docs;
       let best: { d: Doc; lines: ReturnType<typeof bestLines> } | null = null;
       for (const d of pool) {
-        const own = new Set([...productWords(d).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")), ...planKindWords(asked, d)]);
+        const own = new Set([...productWords(d).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")), ...planKindWords(asked)]);
         const lines = bestLines(pages.get(d.id) ?? [], asked, { limit: 3, min: args.min ?? 1.5 }).filter((l) => l.hits.some((h) => !own.has(h) && !GENERIC_WORDS.has(h)) && !titleLine(l.line, d.product));
         // The lines must say at least half of what the question turns on ("my CPF MediSave balance" is not a premium line that mentions MediSave).
         const { distinct, covered } = askedCoverage(asked, lines.flatMap((l) => l.hits), new Set([...GENERIC_WORDS, ...own, ...all.flatMap((x) => productWords(x).map((w) => w.replace(/(?:ing|ed|es|s)$/, "")))]
