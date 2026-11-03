@@ -13,7 +13,7 @@ globalThis.fetch = (async () => { fetches++; throw new Error("no network"); }) a
 
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import type { CheckedBenefit, CheckedCover, CheckedReading } from "@/lib/benefit-table/check";
-import { categoryRows, lumpSumParts, tileRows, type ConfirmedLine, type HeldCover } from "@/lib/coverage/table-figures";
+import { categoryRows, lumpSumParts, REFERENCE_DOCUMENT_KINDS, tileRows, type ConfirmedLine, type HeldCover } from "@/lib/coverage/table-figures";
 
 let pass = 0, fail = 0;
 function t(id: string, ok: boolean, detail: unknown) {
@@ -62,10 +62,13 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
       : /death/i.test(b.section ?? "") ? DEATH : NAMED);
     return { section, cover, why: "test" };
   }));
-  const tile = (rs: CheckedReading[], category: string, lines: (ConfirmedLine & { name: string })[] = [], person = "p-ana", extra: Record<string, string> = {}) => {
+  // referenceDocs: documents whose stored role is a policy wording (the route's REFERENCE_DOCUMENT_ROLES), whatever kind
+  // the reading gave them.
+  const tile = (rs: CheckedReading[], category: string, lines: (ConfirmedLine & { name: string })[] = [], person = "p-ana", extra: Record<string, string> = {}, referenceDocs: string[] = []) => {
     const p = assembleTable(rs, family, linksFor(rs, extra)).people.find((x) => x.id === person)!;
     const held: HeldCover[] = p.covers.map((c) => ({ coverKey: c.coverKey, ...(c.holding ? { holding: c.holding } : {}), name: c.cover, documentId: c.source.documentId,
-      sumInsured: c.sumInsured, currency: c.currency, policyNumber: c.policyNumber, ...(c.copyNumbers ? { copyNumbers: c.copyNumbers } : {}) }));
+      sumInsured: c.sumInsured, currency: c.currency, policyNumber: c.policyNumber, ...(c.copyNumbers ? { copyNumbers: c.copyNumbers } : {}),
+      ...(referenceDocs.includes(c.source.documentId) || REFERENCE_DOCUMENT_KINDS.has(c.documentKind ?? "") ? { reference: true } : {}) }));
     return lumpSumParts(tileRows(categoryRows(category, p.rows)), lines, held, category);
   };
   const show = (r: ReturnType<typeof tile>) => ({ total: r.total, known: r.known, parts: r.parts.map((x) => `${x.name}=${x.amount ?? "?"} ${x.currency ?? ""}`) });
@@ -85,6 +88,30 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
     t(`${m} A3 one number written two ways: counted once, 650,000`, ci.total === 650000, show(ci));
   }
 
+  // A4: the wording names the person, so its reading calls it personal proof, but it is stored as a policy wording.
+  {
+    const w = wording(); w.kind = "personal_proof";
+    const ci = tile([schedule(), w, otherPolicy], "Critical Illness", [], "p-ana", {}, ["wording"]);
+    t(`${m} A4 a wording stored as a wording, read as personal proof: counted once, 650,000`, ci.total === 650000, show(ci));
+  }
+  // T1 (TE pr303): two contracts of one plan and sum, one naming the benefit, the other the plan (a second policy bought):
+  // never joined unless both print the same number; one number missing gives no total, never 300,000.
+  for (const [label, a, b, want] of [["neither prints a number", null, null, null], ["only the schedule prints one", "84001234", null, null],
+    ["only the certificate prints one", null, "84001234", null], ["both print the same number", "84001234", "84-001234", 650000],
+    ["they print different numbers", "84001234", "55000111", null]] as const) {
+    const cert = reading("cert", [cover("cert", { policyNumber: b })], [row("cert", "2.2 Critical Illness Benefit", "Critical Illness Benefit", null)], "personal_proof");
+    const ci = tile([schedule({ policyNumber: a }), cert, otherPolicy], "Critical Illness");
+    t(`${m} T1 two contracts of the plan, ${label}: ${want ?? "no total"}`, ci.total === want, show(ci));
+  }
+  // N9 (TE pr303): a life plan named after itself on its schedule, and an accelerated CI benefit of the same sum on its own
+  // endorsement: the Death tile keeps its total (the CI benefit is not on Death), and CI is the benefit's own sum.
+  {
+    const life = reading("lifesched", [cover("lifesched", { policyNumber: "84001234" })], [row("lifesched", "Schedule", "Death Benefit", 300000)], "personal_proof");
+    const endorsement = reading("endorse", [cover("endorse", { cover: BEN, policyNumber: "84001234" })], [row("endorse", "Endorsement", BEN, 300000)], "personal_proof");
+    const links = { "lifesched|Schedule": WHOLE, "endorse|Endorsement": NAMED };
+    const death = tile([life, endorsement], "Death", [], "p-ana", links);
+    t(`${m} N9 life plan + accelerated CI endorsement: Death keeps 300,000`, death.total === 300000, show(death));
+  }
   // N1: a basic plan and its rider, each 300,000 on the schedule: both count, and the wording joins the basic plan only.
   {
     const rider = cover("sched", { cover: "Critical Illness Plus Rider", riderOf: BEN, policyNumber: "84001234" });
