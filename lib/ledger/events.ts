@@ -218,18 +218,28 @@ export function printedLabelIsNotASum(evidenceText:string|null|undefined):boolea
   const label=String(evidenceText??"").split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"";
   return NOT_A_SUM.test(label);
 }
+/** A schedule line's own label: the printed words before its figure. */
+function printedLabel(printed:string|null|undefined):string{
+  const t=String(printed??"");
+  return (t.split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"").replace(/[\s:;,.–—-]+$/,"").replace(/\s+/g," ").trim();
+}
 /** A travel schedule's lines are limits for one benefit each, named by the printed label (intake stores them all as
- * "Travel"): emergency medical expenses, cancellation, baggage. Delay pays per block of hours, so it is not read here. */
+ * "Travel"). Only a label that is the whole benefit's name counts, closed list: "Overseas medical expenses",
+ * "Trip cancellation", "Loss of baggage and personal belongings". A label with any other word (evacuation, post-trip,
+ * cash, visit, delay, sub-limit, per item, an age, terrorism) is another benefit or a sub-limit, so it seeds nothing
+ * (Critic H1 on #294). */
 const TRAVEL_LINES:[RegExp,EventType][]=[
-  [/\b(?:medical|hospital|emergency treatment)\b/i,"travel_medical"],
-  [/\b(?:cancell?ation|curtailment|cutting short)\b/i,"trip_cancellation"],
-  [/\b(?:baggage|luggage|personal (?:belongings|possessions|effects))\b/i,"baggage"],
+  [/^(?:(?:overseas|emergency|foreign|travel)\s+)*medical(?:\s+and\s+(?:hospital(?:isation)?|associated))?\s+expenses(?:\s+(?:overseas|abroad|outside (?:your )?home country))?$/i,"travel_medical"],
+  [/^(?:perbelanjaan perubatan(?: di)? luar negara|frais m[ée]dicaux (?:à|a) l['’]étranger|海外医疗费用|海外醫療費用)$/i,"travel_medical"],
+  [/^(?:(?:trip|travel|journey|holiday)\s+)?cancell?ation(?:\s+(?:charges|costs|cover))?$/i,"trip_cancellation"],
+  [/^(?:(?:loss of|loss or damage to|lost or damaged)\s+)?(?:personal\s+)?(?:baggage|luggage)(?:\s+and\s+personal\s+(?:belongings|effects|possessions))?$/i,"baggage"],
 ];
 export function scheduleLineEvent(category:string,name:string,printed?:string|null):{event:EventType;pays:PaysKind}|null{
   if(printedLabelIsNotASum(printed))return null;
   if(/^travel$/i.test(category.trim())){
-    const label=String(printed??"").split(/\t/)[0]??"";
-    const travel=TRAVEL_LINES.find(([re])=>re.test(label))?.[1];
+    const parts=printedLabel(printed).split(/\s+\/\s+/).map((p)=>p.trim()).filter(Boolean);
+    const found=new Set(parts.map((label)=>TRAVEL_LINES.find(([re])=>re.test(label))?.[1]??null));
+    const travel=found.size===1?[...found][0]:null;
     return travel?{event:travel,pays:"stated"}:null;
   }
   const said=category.trim();
@@ -240,19 +250,30 @@ export function scheduleLineEvent(category:string,name:string,printed?:string|nu
 }
 
 /** How a line the list calls "stated" pays, when its own printed words say so, with its printed amount: "Monthly benefit
- * £2,400" pays £2,400 a month, "Hospital cash S$200 per day" pays per day, and a travel or hospital line printed as a
- * limit ("Emergency medical expenses £10,000,000", "Overall limit S$1,000,000") reimburses up to it. A line whose words
- * don't say which is kept with no figure, never shown as a lump sum (new-user walkthrough round 3, 31 Oct). */
+ * £2,400" pays £2,400 a month, "Daily hospital cash S$200" pays per day, a travel line whose label is the whole benefit
+ * reimburses up to its figure, and a hospital plan's "Overall limit" / "Annual limit" is the plan's limit. A rate counts
+ * only when nothing on the label says the figure is a total ("for 24 months, total", "overall maximum"); a hospital
+ * limit only when the label is that limit and nothing else ("Room & Board limit", "Surgical limit" are sub-limits).
+ * Anything else keeps no figure, never a lump sum (Critic H2/M3 on #294). */
+const NOT_A_RATE=/\b(?:total|maximum|max|overall|aggregate|lifetime|limit|cap|up to|for (?:up to )?\d+|\d+\s*(?:months?|years?|days?|weeks?))\b/i;
+const HOSPITAL_PLAN_LIMIT=/^(?:(?:overall|annual|yearly|policy[- ]year)\s+)?(?:limit|benefit limit|maximum limit|sum insured)$/i;
 export function scheduleLinePays(event:EventType,printed:string|null|undefined):PaysKind|null{
+  // A bilingual label ("Elaun hospital harian / Daily hospital allowance") is read one language at a time.
+  const parts=printedLabel(printed).split(/\s+\/\s+/).map((p)=>p.trim()).filter(Boolean);
+  const kinds=new Set(parts.map((label)=>labelPays(event,label,printed)));
+  return kinds.size===1?[...kinds][0]:null;
+}
+function labelPays(event:EventType,label:string,printed:string|null|undefined):PaysKind|null{
   const text=String(printed??"");
-  const per=/\bper\b|\/\s?(?:day|month|year|annum)|\b(?:a|each) (?:day|month|year)\b|\bp\.?\s?[mad]\.?(?:\s|$)/i;
+  const figures=(text.match(/(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[]).length;
+  if(figures>1)return null; // two amounts on one line: which is which is not certain
   if(event==="disability_income"||event==="long_term_care")
-    return /\bmonthly\b|\bper (?:calendar )?month\b|\b(?:a|each) month\b|\/\s?month\b|\bbulanan\b/i.test(text)&&!/\b(?:annual|yearly|per (?:year|annum)|weekly|per week)\b/i.test(text)?"per_month":null;
+    return /^(?:monthly (?:benefit|income|payment|payout|allowance)|(?:benefit|income|payment|payout|allowance) per month|faedah bulanan)$/i.test(label)&&!NOT_A_RATE.test(label)?"per_month":null;
   if(event==="hospital_daily_cash"||event==="icu_daily_cash")
-    return /\bdaily\b|\bper day\b|\b(?:a|each) day\b|\/\s?day\b|\bper night\b|\bharian\b/i.test(text)?"per_day":null;
-  if(event==="travel_medical"||event==="trip_cancellation"||event==="baggage")return per.test(text)?null:"reimbursement_cap";
-  if(event==="hospital_medical_expense")
-    return /\b(?:overall|annual|policy[- ]year|lifetime)?\s*(?:limit|maximum|sum insured)\b|\bup to\b/i.test(text)&&!per.test(text)?"reimbursement_cap":null;
+    return /^(?:(?:daily (?:hospital )?(?:cash|income|allowance|benefit))|(?:hospital )?(?:cash|income|allowance) harian|(?:hospital )?(?:cash|income|allowance) per (?:day|night)|elaun (?:hospital )?harian(?: hospital)?)$/i.test(label)&&!NOT_A_RATE.test(label.replace(/\bper (?:day|night)\b/i,""))?"per_day":null;
+  if(event==="travel_medical"||event==="trip_cancellation"||event==="baggage")
+    return /\bper\b|\/\s?(?:day|month|year|annum|item|person)/i.test(text)?null:"reimbursement_cap";
+  if(event==="hospital_medical_expense")return HOSPITAL_PLAN_LIMIT.test(label)?"reimbursement_cap":null;
   return null;
 }
 /** What a plan of a given kind pays, when only its schedule line is on file.

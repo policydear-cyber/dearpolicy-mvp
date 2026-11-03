@@ -207,7 +207,7 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
   }
   return out;
 }
-function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>):Seed[]{
+function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>,printedLines:(policyId:string,memberId:string,category:string)=>string[]=()=>[]):Seed[]{
   const out:Seed[]=[];
   const lines=contract.coverages.filter(c=>c.amount!=null&&c.amount>0&&statedCurrencyCode(c.currency)); // never assume SGD for a schedule line
   const named=(c:typeof lines[number])=>(c.category+" "+(c.productName??"")+" "+contract.name).trim();
@@ -220,12 +220,24 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
   const given=new Set<EventType>(eventsFromWording);
   // Each line first seeds the benefit it names itself, with its own printed amount (lib/ledger/events.ts
   // SCHEDULE_LINE_EVENTS): "TPD Cover $500,000" is the TPD row, never the life cover's sum.
+  // A line that prints how it pays (a monthly benefit, a daily allowance, a travel or plan limit) keeps its figure only
+  // when it is the one printed line of its plan that does so for that benefit. The contract keeps one line per plan and
+  // cover kind, so every line the document printed under that kind is read here: two such lines ("Medical expenses"
+  // and "Overseas medical expenses") leave which is the limit uncertain, so neither gives one (Critic H1 on #294).
+  const figureLines=(coverage:typeof lines[number],event:EventType)=>{
+    const printed=printedLines(coverage.policyId,coverage.familyMemberId,coverage.category);
+    return (printed.length?printed:[coverage.evidenceText??""]).filter(t=>{
+      const e=scheduleLineEvent(coverage.category,named(coverage),t);
+      return e?.event===event&&e.pays==="stated"&&!!scheduleLinePays(event,t);
+    }).length;
+  };
   for(const coverage of lines){
     const own=scheduleLineEvent(coverage.category,named(coverage),coverage.evidenceText);
     if(!own||given.has(own.event))continue; // the wording already says what this pays
+    const rate=own.pays==="stated"?scheduleLinePays(own.event,coverage.evidenceText):null;
     const note=PRODUCT_DEFAULTS.flatMap(d=>d.events).find(e=>e.event===own.event)?.note??null;
     // A rate or limit the line itself prints keeps its amount with how it pays; otherwise no figure (never a lump sum).
-    const pays=own.pays==="stated"?scheduleLinePays(own.event,coverage.evidenceText)??"stated":own.pays;
+    const pays=own.pays==="stated"?(rate&&figureLines(coverage,own.event)===1?rate:"stated"):own.pays;
     out.push(seed(coverage,own.event,pays,pays==="stated"?null:coverage.amount,note));
     given.add(own.event);
   }
@@ -326,6 +338,13 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   const tiers=new Map((await query<{policy_id:string;family_member_id:string;tier:string|null}>(
     "SELECT policy_id,family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier FROM policy_members pm WHERE account_id=$1",[accountId]).catch(()=>({rows:[]}))).rows
     .map(r=>[r.policy_id+"|"+r.family_member_id,r.tier] as const));
+  // Every schedule line each document printed, by plan, person and cover kind (the contract keeps one per kind).
+  const printedByKind=new Map<string,string[]>();
+  for(const r of (await query<{policy_id:string;family_member_id:string;category:string;evidence_text:string|null}>(
+    "SELECT policy_id,family_member_id,category,evidence_text FROM policy_coverages WHERE account_id=$1 AND amount>0",[accountId]).catch(()=>({rows:[]}))).rows){
+    const key=r.policy_id+"|"+r.family_member_id+"|"+r.category;
+    printedByKind.set(key,[...(printedByKind.get(key)??[]),r.evidence_text??""]);
+  }
   const seeds:Seed[]=[];
   const contractOf=new Map<Seed,string>();
   for(const contract of contracts){
@@ -337,7 +356,7 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     const wording=wordingSeeds(contract,preferStatedRules(selectTierRows(catalog.filter(b=>mine.has(b.policyId)),
       policyId=>tiers.get(policyId+"|"+contract.ownerId)))).filter(w=>!known.has(w.eventType));
     for(const w of wording)if(w.paysKind!=="stated")known.add(w.eventType);
-    const mineSeeds=[...wording,...scheduleSeeds(contract,known)];
+    const mineSeeds=[...wording,...scheduleSeeds(contract,known,(policyId,memberId,category)=>printedByKind.get(policyId+"|"+memberId+"|"+category)??[])];
     for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
     seeds.push(...mineSeeds);
   }
