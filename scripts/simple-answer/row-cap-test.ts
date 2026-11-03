@@ -95,6 +95,24 @@ test("negative: a bare '$' cap, and a row that defines another sum insured, give
   assert.deepEqual(ask(h, "Lim Ah Kow", "Coma benefit: Coma sum insured will be 15% of the Sum Insured", 15).amounts, []);
 });
 
+test("negative (TE #318): a floor, a share the household pays, a charge, or a percentage of something else is no cap", () => {
+  const rows: [string, string, number][] = [
+    ["Fracture: 15% of the Sum Insured or up to S$50,000, whichever is greater", "Fracture: 15% of the Sum Insured", 15],
+    ["Co-insurance: 10% of each claim, capped at £3,000 per policy year", "Co-insurance: 10% of each claim", 10],
+    ["Co-payment: 5% of the bill, up to S$3,000 per year", "Co-payment: 5% of the bill", 5],
+    ["Excess: 1% of the Sum Insured, maximum A$500 per admission", "Excess: 1% of the Sum Insured", 1],
+    ["Premium loading: 25% of standard premium, up to RM 1,200 a year", "Premium loading: 25% of standard premium", 25],
+    ["Partial disability: 20% of the Sum Insured, minimum S$5,000", "Partial disability: 20% of the Sum Insured", 20],
+    ["Lost luggage: 50% of the item's value, up to S$500", "Lost luggage: 50% of the item's value", 50],
+  ];
+  for (const [line, quote, pct] of rows) {
+    const h = house(["Lim Ah Kow"], [doc("t1", "Plan Schedule.pdf", ["Lim Ah Kow"], `Insured: Lim Ah Kow\n${line}`)]);
+    assert.deepEqual(ask(h, "Lim Ah Kow", quote, pct).amounts, [], line);
+  }
+  const cont = house(["Lim Ah Kow"], [doc("t2", "Plan Schedule.pdf", ["Lim Ah Kow"], "Insured: Lim Ah Kow\nFracture: 15% of the Sum Insured\nor up to S$50,000, whichever is higher")]);
+  assert.deepEqual(ask(cont, "Lim Ah Kow", "Fracture: 15% of the Sum Insured", 15).amounts, []);
+});
+
 test("negative: a statement with no person gives no cap", () => {
   assert.deepEqual(ask(MY, null as unknown as string, "Early stage critical illness: 25% of Sum Assured per claim", 25).amounts, []);
 });

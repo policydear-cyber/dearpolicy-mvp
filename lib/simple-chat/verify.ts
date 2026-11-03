@@ -468,6 +468,10 @@ const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
  * - the statement names a household member, the document is linked to them, and the page names no other life.
  * The cap is then checked as a plain amount (plainAmount) on that row. Fail-safe: anything else gives null and the
  * percentage stays a fact with no amount. */
+/** What a cap's percentage may be of: the benefit's own sum (closed list, in the languages households' documents use). */
+const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|jumlah\s+(?:di)?(?:insuranskan|diinsuranskan|perlindungan)|(?:the\s+)?capital\s+assur[ée]|suma\s+asegurada|versicherungssumme|保额|保額|保险金额|保險金額)\b/i;
+/** A row that is a share the household pays or a charge, never a cap on what the policy pays (closed list). */
+const CHARGE_ROW = /\b(?:co-?insurance|co-?pay(?:ment)?s?|excess(?:es)?|deductibles?|premiums?|loading|contributions?|fees?|charges?|levy|tax)\b/i;
 function rowCap(st: ModelStatement, at: Found, household: Household, person: string | null): { found: Found; raw: string; amount: NonNullable<Checked["amount"]> } | null {
   if (!person) return null;
   const doc = household.documents[at.docIndex];
@@ -489,6 +493,15 @@ function rowCap(st: ModelStatement, at: Found, household: Household, person: str
   // of the Sum Insured or maximum of $50,000") is that sum's rule, not what this benefit pays.
   if (!fig.currency || fig.currency === "$" || i < 0 || !CAP_BEFORE.test(text.slice(Math.max(0, i - 40), i))) return null;
   if (/\bsum\s+(?:insured|assured)\s+(?:will\s+be|shall\s+be|is|equals?)\b/i.test(text)) return null;
+  // The cap is the most only when the percentage is of the benefit's own sum (closed list, several languages) and any
+  // "whichever" picks the lesser: "whichever is greater" makes the figure a floor, and "10% of each claim" or "of the
+  // bill" is a share the household pays (TE #318). A row that is a share paid or a charge (co-insurance, excess,
+  // premium ...) is never a cap on what the policy pays.
+  if (/\bwhichever\b/i.test(text) && !/\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less|smaller)\b/i.test(text)) return null;
+  if (/\b(?:greater|higher|minimum|min\.|at\s+least|not\s+less\s+than)\b/i.test(text)) return null;
+  const pctOf = [...text.matchAll(/\d+(?:\.\d+)?\s*%\s*(?:of\s+(?:the\s+|your\s+|its\s+)?)?([^,;.\t]{0,40})/gi)];
+  if (!pctOf.length || pctOf.some((m) => !PCT_BASE.test(m[1]))) return null;
+  if (CHARGE_ROW.test(text)) return null;
   const found: Found = { docIndex: at.docIndex, page: at.page, excerpt: text.trim().replace(/[ \t]+/g, " "), offset: row.start };
   const plain = plainAmount({ ...st, percentOf: null, amount: fig.raw, quote: found.excerpt }, found, household);
   return plain.ok && /^Up to /.test(plain.amount.text) ? { found, raw: fig.raw, amount: plain.amount } : null;
