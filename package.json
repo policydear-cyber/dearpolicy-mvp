@@ -257,6 +257,7 @@
     "policies:not-sure-owner-test": "node --import tsx --test scripts/policies/not-sure-owner-test.ts",
     "policies:not-fully-read-test": "node --import tsx scripts/policies/not-fully-read-test.ts",
     "documents:cover-reading-pending-test": "node --import tsx --test scripts/documents/cover-reading-pending-test.ts",
+    "documents:pages-not-read-test": "node --import tsx --test scripts/documents/pages-not-read-test.ts",
     "policies:capped-share-test": "node --import tsx scripts/policies/capped-share-test.ts",
     "policies:page-currency-rows-test": "node --import tsx scripts/policies/page-currency-rows-test.ts",
     "policies:share-cap-test": "node --import tsx scripts/policies/share-cap-test.ts",

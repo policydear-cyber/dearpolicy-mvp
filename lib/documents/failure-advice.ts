@@ -147,3 +147,18 @@ export function coverReadingPending(message: string | null | undefined): { what:
   if (is(DOCUMENT_READ_IN_PART_FINAL_MESSAGE)) return { what, next: "Use Read again to try once more. Nothing is wrong with the file." };
   return null;
 }
+
+/** Pages of a ready document that could not be read at all (lib/documents/processing-errors.ts unreadablePagesNote).
+ * The note is stored after whatever leads the message ("Ready.", "Read in part.", a cover-reading note), so it is
+ * found by its own exact shape wherever it sits, and only that sentence is ever shown: never other stored text. The
+ * card showed nothing, so a household could not tell that a page of its schedule was missing. Allow-list: any other
+ * wording gives null. */
+const UNREADABLE_PAGES = /(?:^|\s)((?:Page \d+|Pages \d+(?:, \d+)* and \d+) could not be read, so anything printed only there is not available\.)(?=\s|$)/;
+export function unreadablePagesAdvice(message: string | null | undefined): { what: string; next: string } | null {
+  const found = (message ?? "").match(UNREADABLE_PAGES);
+  if (!found) return null;
+  return {
+    what: found[1],
+    next: "Everything else in it is used. If you have a clearer copy of those pages, such as the insurer's original PDF, upload it, and once it shows as read, delete this one.",
+  };
+}
