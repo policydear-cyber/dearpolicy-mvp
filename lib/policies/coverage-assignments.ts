@@ -94,7 +94,7 @@ export async function rebuildForAddedPeople(args: { accountId: string; policyId:
 
 /** Moves one printed name on a document from the person it is matched to, to `to` (someone else in the family), or to
  * nobody ("Not in my family"), as the household said on the Documents page (audit 3 Nov: a name matched by part of it,
- * "Wei Ming" for "Chen Wei Ming", could not be corrected on a personal document).
+ * a cousin who shares a given name, could not be corrected on a personal document).
  *
  * The caller has authorised the document, the name and `to` against the household. Everything happens in ONE service
  * transaction, every statement scoped by that household, so a failure leaves the document exactly as it was:

@@ -153,7 +153,7 @@ function sharedNameMatch(name: string, documentId: string, family: FamilyMember[
  * people (an older build) decides nothing. */
 export function householdRecord(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | "nobody" | null {
   // Every printed name stored for this document, with the household's word on it (chosen for someone, not family, or
-  // neither). The cover's own printing of a name can differ from the stored one: "Ortega, Ana", "Sra. Ana Ortega",
+  // neither). The cover's own printing of a name can differ from the stored one: "Surname, Given", "Mrs Given Surname",
   // "陈伟明（受保人）". So it is compared as the matcher reads names, by words, and the closest stored name decides.
   type Said = { name: string; who: string | "nobody" | null };
   const said: Said[] = [];
@@ -173,7 +173,7 @@ export function householdRecord(name: string, documentId: string, family: Family
     if (!own.length || !printed.length) return 0;
     if ([...own].sort().join(" ") === [...printed].sort().join(" ")) return 2;
     // Every word of the stored name is printed, and every other printed word is a title or a role word ("Sra.",
-    // "(Life Assured)", "（受保人）"), never another name word: "Ana Lucia Ortega" is not the household's "Ana".
+    // "(Life Assured)", "（受保人）"), never another name word: a fuller name with another name word is not the shorter stored one.
     const extra = printed.filter((w) => !own.includes(w));
     return own.every((w) => printed.includes(w)) && extra.every((w) => NOT_NAME_WORDS.has(w)) ? 1 : 0;
   };
@@ -217,7 +217,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
     // The household's own word first (a name it moved to someone else, or said is not its family's): a cover is never
-    // shown for a person the household said it is not (audit 3 Nov: "Wei Ming" kept "Chen Wei Ming"'s certificate).
+    // shown for a person the household said it is not (audit 3 Nov: a member kept a cousin's certificate matched by a shared given name).
     const record = householdRecord(c.person, r.documentId, family);
     if (record === "nobody") { unmatched.push(c); continue; }
     const named = record ?? findFamilyMatchWithKind(c.person, family);
