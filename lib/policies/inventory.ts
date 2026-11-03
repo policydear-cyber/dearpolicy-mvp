@@ -209,15 +209,27 @@ export function pageProductScopes(pages:{page_number:number;text:string}[],produ
   const ordered=[...pages].sort((a,b)=>a.page_number-b.page_number).map(page=>({page,lines:page.text.slice(0,650).split(/\r?\n/).map(line=>line.normalize("NFKC").trim())}));
   const mentionedOn=new Map(names.map(name=>[name,ordered.filter(({lines})=>lines.some(line=>mentions(line,name))).length]));
   const runningHeader=(name:string)=>ordered.length>=3&&(mentionedOn.get(name)??0)>=Math.ceil(ordered.length*0.6);
+  // A word printed before the heading of two or more different products ("Harbourlife Group Term Life", "Harbourlife
+  // Group Personal Accident") is the insurer's brand, not part of another product's name.
+  const brandFor=new Map<string,Set<string>>();
+  for(const {lines} of ordered)for(const line of lines){const m=/^(\p{Lu}[\p{L}\p{N}'’]*)\s+(.+)$/u.exec(line);if(m)for(const name of names)if(headingOf(m[2],name)){const k=m[1].toLowerCase();if(!brandFor.has(k))brandFor.set(k,new Set());brandFor.get(k)!.add(name);}}
+  const brands=new Set([...brandFor].filter(([word,named])=>named.size>=2&&!COVER_WORDS.has(word)&&!NEUTRAL_WORDS.has(word)).map(([word])=>word));
+  const heading=(line:string,name:string)=>headingOf(line,name,brands);
   for(const {page,lines} of ordered){
-    const headed=names.filter(name=>lines.some((line,i)=>headingOf(line,name)&&!figureFollows(lines,i)));
+    const headed=names.filter(name=>lines.some((line,i)=>heading(line,name)&&!figureFollows(lines,i)));
     const starts=headed.filter(name=>!coverOnly(name)&&!runningHeader(name)&&!headed.some(other=>other!==name&&!coverOnly(other)&&containsName(other,name)));
     if(starts.length)current=starts;
     else if(current.length){
       const ends=names.some(name=>{
-        if(current.some(own=>containsName(own,name)||containsName(name,own))||runningHeader(name))return false;
-        if(coverOnly(name))return lines.some(line=>headingOf(line,name));
-        return lines.some(line=>mentions(line,name)&&!names.some(longer=>longer!==name&&containsName(longer,name)&&mentions(line,longer)&&current.some(own=>containsName(own,longer)||containsName(longer,own))));
+        if(current.includes(name)||runningHeader(name))return false;
+        return lines.some(line=>{
+          // Another name standing as a heading ends the section unless the line is the section's own heading.
+          if(heading(line,name))return !current.some(own=>heading(line,own));
+          // Any other mention of a different product (its words left once the section's own names are taken out).
+          if(coverOnly(name))return false;
+          const rest=current.reduce((text,own)=>text.replace(mentionPattern(own,"giu"),"  "),line);
+          return mentions(rest,name);
+        });
       });
       if(ends)current=[];
     }
@@ -226,16 +238,21 @@ export function pageProductScopes(pages:{page_number:number;text:string}[],produ
   return result;
 }
 const ROMAN=String.raw`(?:i{1,3}|iv|vi{0,3}|ix|x{1,3})`;
-const HEADING_PREFIX=new RegExp(String.raw`^(?:(?:section|part|chapter|bahagian|seksyen|bab|benefit|manfaat|plan|product\s+(?:summary|disclosure\s+sheet)(?:\s+(?:for|of))?|ringkasan\s+produk(?:\s+(?:untuk|bagi))?|产品摘要|產品摘要)\s*(?:(?:\d+(?:\.\d+)*|${ROMAN}|[A-Z])(?![\p{L}\p{N}]))?\s*[:.\-–—]?\s*|\d{1,2}(?:\.\d{1,2})+\s+|(?:\d{1,2}(?:\.\d{1,2})*|${ROMAN})\s*[.)]\s*|[A-Z]\s*[.)]\s+)?`,"iu");
-const PLAN_WORDS=/^(?:\s*[:\-–—|]\s*|\s+)?(?:\s*(?:insurance|assurance|plan|rider|benefits?|cover(?:age)?|policy(?:\s+wording)?|wording|scheme|product\s+(?:summary|disclosure\s+sheet)|summary|key\s+features|takaful|insurans|pelan|ringkasan\s+produk|\([^()\n]{1,24}\))(?=\s|$|[:\-–—]))*\s*$/i;
+const HEADING_PREFIX=new RegExp(String.raw`^(?:(?:section|part|chapter|bahagian|seksyen|bab|benefit|manfaat|pelan|plan|product\s+(?:summary|disclosure\s+sheet)(?:\s+(?:for|of))?|ringkasan\s+produk(?:\s+(?:untuk|bagi))?|产品摘要|產品摘要)\s*(?:(?:\d+(?:\.\d+)*|${ROMAN}|[A-Z])(?![\p{L}\p{N}]))?\s*[:.\-–—]?\s*|\d{1,2}(?:\.\d{1,2})+\s+|(?:\d{1,2}(?:\.\d{1,2})*|${ROMAN})\s*[.)]\s*|[A-Z]\s*[.)]\s+)?`,"iu");
+const PLAN_WORDS=/^(?:(?:\s*[:\-–—|]\s*|\s+)(?:insurance|assurance|plan|rider|benefits?|cover(?:age)?|policy(?:\s+wording)?|wording|(?:benefits?\s+)?schedule|table\s+of\s+benefits|scheme|product\s+(?:summary|disclosure\s+sheet)|summary|key\s+features|takaful|insurans|pelan|ringkasan\s+produk|\([^()\n]{1,24}\))(?=\s|$|[:\-–—|]))*\s*$/i;
 /** The line is the product's heading: the name with at most a numbering prefix and plan words after it, nothing else
  * (no figure, no page number, no other words). */
-function headingOf(line:string,name:string){
+function headingOf(line:string,name:string,brands:ReadonlySet<string>=new Set()){
   const clean=line.replace(/[®™©]/g,"").replace(/^[•▪●■\-*]\s*/,"").trim();
   if(!clean||/\d\s*$/.test(clean)&&!/\d\s*$/.test(name))return false;
-  const rest=clean.replace(HEADING_PREFIX,"");
-  if(rest.toLowerCase().indexOf(name.normalize("NFKC").toLowerCase())!==0)return false;
-  return PLAN_WORDS.test(rest.slice(name.normalize("NFKC").length).replace(/[:\-–—]\s*$/,""));
+  const own=name.normalize("NFKC"),lower=own.toLowerCase();
+  let rest=clean.replace(HEADING_PREFIX,"");
+  // A leading translation in Chinese ("團體定期人壽 Group Term Life") or the insurer's brand word.
+  if(!/\p{Script=Han}/u.test(own))rest=rest.replace(/^[\p{Script=Han}\s]+(?=\p{Script=Latin})/u,"");
+  const lead=/^(\S+)\s+/.exec(rest);
+  if(rest.toLowerCase().indexOf(lower)!==0&&lead&&brands.has(lead[1].toLowerCase()))rest=rest.slice(lead[0].length);
+  if(rest.toLowerCase().indexOf(lower)!==0)return false;
+  return PLAN_WORDS.test(rest.slice(own.length).replace(/[:\-–—]\s*$/,""));
 }
 /** A label whose figure is printed on the next line ("Hospitalisation" then "S$5,000") is a table row. */
 function figureFollows(lines:string[],index:number){
@@ -244,11 +261,11 @@ function figureFollows(lines:string[],index:number){
 }
 function nameWords(value:string){return value.normalize("NFKC").toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);}
 /** The name appears in the line as whole words (any case, any punctuation between them). */
-function mentions(line:string,name:string){
-  const words=nameWords(name);if(!words.length)return false;
-  if(/\p{Script=Han}/u.test(name))return line.normalize("NFKC").includes(name.normalize("NFKC"));
-  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${words.map(escaped).join("[^\\p{L}\\p{N}]+")}(?=$|[^\\p{L}\\p{N}])`,"iu").test(line.normalize("NFKC"));
+function mentionPattern(name:string,flags="iu"){
+  if(/\p{Script=Han}/u.test(name))return new RegExp(escaped(name.normalize("NFKC")),flags);
+  return new RegExp(`(?:^|(?<=[^\\p{L}\\p{N}]))${nameWords(name).map(escaped).join("[^\\p{L}\\p{N}]+")}(?=$|[^\\p{L}\\p{N}])`,flags);
 }
+function mentions(line:string,name:string){return !!nameWords(name).length&&mentionPattern(name).test(line.normalize("NFKC"));}
 /** `longer` holds every word of `shorter`, in order ("Living Care Plus" holds "Living Care"). */
 function containsName(longer:string,shorter:string){
   const a=nameWords(longer).join(" "),b=nameWords(shorter).join(" ");

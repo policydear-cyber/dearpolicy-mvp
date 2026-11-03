@@ -109,5 +109,18 @@ t("the section's own name in a sentence, a fuller name holding it, and a running
   ], [header, "Group Term Life", "Merlion Shield", "Merlion Shield Plus"]);
   assert.deepEqual(got, ["", "Group Term Life", "Group Term Life", "Group Term Life", "Merlion Shield Plus", "Merlion Shield Plus"]);
 });
+t("an insurer's brand before two products' headings, a Chinese translation, schedule words, PELAN, a bracket then a dash: each starts its section", () => {
+  const Q = ["Group Term Life", "Group Personal Accident"], B = "\nBenefits\n• Death\tS$100,000";
+  assert.deepEqual(scopes(["Harbourlife Group Term Life" + B, "Harbourlife Group Personal Accident" + B], Q), ["Group Term Life", "Group Personal Accident"]);
+  assert.deepEqual(scopes(["團體定期人壽 Group Term Life" + B, "團體個人意外 Group Personal Accident" + B], Q), ["Group Term Life", "Group Personal Accident"]);
+  assert.deepEqual(scopes(["Group Term Life Benefit Schedule" + B, "Group Personal Accident (GPA) – Key Features" + B], Q), ["Group Term Life", "Group Personal Accident"]);
+  assert.deepEqual(scopes(["PELAN TAKAFUL MEDIK PRIMA\nCiri-ciri utama", "Bahagian 2: Takaful Hayat\nCiri-ciri utama"], ["Takaful Medik Prima", "Takaful Hayat"]), ["Takaful Medik Prima", "Takaful Hayat"]);
+  // A word before only one product's name is not known to be a brand: that line is another product's, so the section ends.
+  assert.deepEqual(scopes([GTL, "Dependants Group Personal Accident" + B], Q), ["Group Term Life", ""]);
+});
+t("a shorter benefit-word name's heading after a fuller product ends the fuller one's section", () => {
+  assert.deepEqual(scopes(["Hospitalisation Plus\nKey Features", "Benefits\n• Room and board\tS$300 per day", "Hospitalisation\nKey Features", "Benefits\n• Room and board\tS$200 per day"],
+    ["Hospitalisation", "Hospitalisation Plus"]), ["Hospitalisation Plus", "Hospitalisation Plus", "", ""]);
+});
 console.log(`\nproduct scopes: ${passed} passed, ${failed.length} failed`);
 if (failed.length) process.exit(1);
