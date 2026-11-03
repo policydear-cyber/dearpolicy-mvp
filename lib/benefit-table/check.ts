@@ -14,6 +14,7 @@ import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
+import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -36,6 +37,10 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   /** The policy's start as the first-year premium's page labels it ("Policy Effective Date : 19/10/2026"), when that page
    * prints exactly one such date: the first policy year runs from it. */
   firstYearFrom?: string | null;
+  /** The sum insured the cover's line prints when its page says that sum is not what is paid ("The sum insured ... does
+   * not represent the amount to be paid out for claims", lib/documents/notional-sum): kept here for matching only, while
+   * sumInsured is null, so no tile, total or share uses it. */
+  notionalSum?: number | null;
   /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
    * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
    * premium (premiumPartsOf). */
@@ -590,7 +595,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredCurrency(pageText(source.page));
     const page = pageText(source.page);
     const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
-    out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured, premium,
+    // A page that says its sum insured is not what is paid (a bonus base): the figure is kept for matching only.
+    // The note governs the basic plan: a rider listed on the same page keeps its own fixed sum (TE O1, Critic L4).
+    const notional = sumInsured != null && printsNotionalSum(page) && !str(c.riderOf) && !RIDER_NAME.test(`${cover ?? ""} ${product ?? ""} ${quote}`);
+    out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured: notional ? null : sumInsured, ...(notional ? { notionalSum: sumInsured } : {}), premium,
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
       startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
   }
@@ -611,7 +619,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const amount = new RegExp(String.raw`^[^\d]*?${MONEY_SIGN}?\s*(\d[\d,]*(?:\.\d+)?)`).exec(line);
     const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
     // A stacked figure equal to the cover's sum insured may be the sum insured set over the wrong label: never the premium.
-    if (!Number.isFinite(premium) || premium <= 0 || (stacked.length && c.sumInsured != null && Math.abs(premium - c.sumInsured) < 0.005)) continue;
+    if (!Number.isFinite(premium) || premium <= 0 || (stacked.length && (c.sumInsured ?? c.notionalSum) != null && Math.abs(premium - (c.sumInsured ?? c.notionalSum)!) < 0.005)) continue;
     const at = find(line.trim(), c.page);
     const said = !at || at.page !== c.page || at.excerpt.includes("\n") ? null : stacked.length ? stacked[0].label : premiumLineLabel(at.excerpt, premium);
     if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;
@@ -645,7 +653,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
 
   for (const c of out.covers) {
     if (c.premium == null || (c.premiumSource && c.premiumSource.page !== c.page) || otherLife(pageText(c.page), c.person, doc.people ?? [])) continue;
-    const parts = premiumPartsOf(pageText(c.page), c.sumInsured, c.premium);
+    const parts = premiumPartsOf(pageText(c.page), c.sumInsured ?? c.notionalSum ?? null, c.premium);
     const sources = parts?.map((p) => find(p.line.trim(), c.page));
     if (parts && sources && sources.every((s) => s && s.page === c.page))
       c.premiumParts = parts.map((p, i) => ({ label: p.label, amount: p.amount, source: sources[i]! }));
@@ -654,12 +662,18 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;
     const benefit = str(b?.benefit), quote = str(b?.quote);
-    const pays = (PAYS as readonly string[]).includes(b?.pays as string) ? b.pays : null;
+    let pays = (PAYS as readonly string[]).includes(b?.pays as string) ? b.pays : null;
     if (!benefit || !quote || !pays) { out.dropped.push({ what: label, why: "incomplete row" }); continue; }
     const source = find(quote, int(b.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
     if (value != null && !printsNumber(source.excerpt, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional
+    // sum: the row stays, paid as its wording says, with no figure.
+    if (value != null && pays !== "percent" && out.covers.some((c) => c.notionalSum != null && c.page === source.page && Math.abs(c.notionalSum - value!) < 0.005)) {
+      out.dropped.push({ what: label, why: `figure ${value} is the sum insured its page says is not the amount paid; kept the row without it` });
+      pays = "words"; value = null;
+    }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
     if (!FIGURED.includes(pays)) value = null;

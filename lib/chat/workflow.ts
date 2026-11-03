@@ -142,6 +142,9 @@ import { householdHomeCountry } from "@/lib/claims/household-home";
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
   question:string;conversationId?:string|null;conversationRevision?:number;
+  /** The chat this message was sent from, when preparing it moved the conversation to another person's chat (a background
+   * job prepares the message again from that new chat): what carries over (an open claim, the topic) is read from here. */
+  carryFrom?:string;
   claimSessionId?:string|null;timeZone?:string;personChoiceId?:string;
   personContextMessage?:string;personContextRecordedAt?:string;
   submittedQuestion?:string;
@@ -210,6 +213,54 @@ const NAMED_PLAN=/\b(?:travel|motor|car|home|hospital|shield|critical illness|pe
 const REPORTS_AN_EVENT=/\b(?:caught|contracted|came down with|admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injured|injury|broke|broken|fractured|delayed|lost|stolen|fell|fall|sick|surgery|operation|disabled|cannot work|can['’]?t work|unable to work|hurt|killed|sprain(?:ed|s)?|twisted|dislocated|bruised|needed stitches|knocked down|hit by a (?:car|bus|lorry|motorcycle|van)|run over|collapsed|unconscious|murdered|stabbed|shot dead|drowned|homicide)\b|\b(?:is|was) (?:now )?in (?:\w+ )?hospital\b/i;
 /** "What is X covered for?", "What am I covered for?", "Tell me about X's policies", "list all our policies". */
 const COVERAGE_OVERVIEW=/^\s*(?:(?:what|which) (?:is|are|am) (?:i|[\p{L}]+(?: [\p{L}]+){0,3}) (?:covered|insured) (?:for|with)|what (?:does|do) (?:my |our )?[\p{L}'’ -]{1,40} have|(?:tell me|show me|give me|can i (?:get|have)) (?:an? )?(?:quick |short |brief |full |simple |overall )?(?:overview|summary|rundown) of|(?:tell me )?everything (?:i['’]?m|i am|we['’]?re|we are|[\p{L}]+ is) (?:insured|covered) for|compare .{1,60}(?:cover|coverage|insurance|policies|plans)|what (?:cover|coverage|insurance|policies|plans?) (?:do|does) .{1,40} have|(?:tell me|show me|list|give me)(?: me)? (?:about )?(?:all )?(?:(?:my|our|his|her|their|the family['’]?s?|[\p{L}]+(?: [\p{L}]+)?['’]s) )?(?:family )?(?:policies|coverage|cover|insurance|portfolio|plans)|(?:all )?(?:my|our) (?:policies|coverage|cover|portfolio|insurance)|cover(?:age)?|policies|portfolio|what do (?:i|we) have|what (?:insurance |cover |policies |plans )?(?:do )?(?:i|we) (?:got|have)|who (?:is|are) (?:covered|insured|named) (?:under|by|in|on)|(?:which|who) (?:of us|in (?:the|my|our) family|in the household)(?: (?:has|have|is|are))? (?:no|not|without|doesn['’]?t have|don['’]?t have)(?: any)? (?:insurance|cover(?:ed)?|coverage|policies|policy|plans?))\b[^?]*\??\s*$/iu;
+/** "Sorry, it was Joe, not Ada", "I meant Mai not Bao", "It's not Ada, it's Joe": a correction names the person meant
+ * and the person it is not. It is a correction only when a "not <X>" names a household member and the rest of the
+ * message names exactly one other: an opener alone ("Sorry, what does Omar's plan pay?", "Actually, does Ravi have
+ * travel cover?") is never one (Critic, 1 Nov). "not just X", "not Ada's fault" and a question about
+ * someone ("Sorry, does Sam have the same cover, not just Priya?") are never one either (TE W2). A relation word that
+ * names no single member ("not my son" when the household lists its children only as "child") is not resolved,
+ * so the message is left as it is and the open claim stays where it is. */
+const CORRECTION_WORDS=/\b(?:actually|oops|my (?:bad|mistake)|i meant?|i mean|meant|it was|it['’]s|it is|wrong person|correction)\b|^\s*not\b/i;
+export function correctionOf(message:string,family:ClaimPerson[]):{meant:ClaimPerson;not:ClaimPerson;rest:string}|null{
+  for(const m of message.matchAll(/(?:,|;|—|–|-|\band\b|^)?\s*\bnot\s+((?:my |our |his |her )?[\p{L}'’-]+(?:\s+[\p{L}'’-]+)?)/giu)){
+    // "not just Priya", "not only Sam", "not also Ada": adds a person, never replaces one (TE W2 on #286).
+    if(/^(?:just|only|also|even|yet|merely|simply)\b/i.test(m[1]))continue;
+    const phrase=m[1].replace(/\s+(?:but|it|its|it['’]s|was)$/i,"");
+    for(const words of [phrase,phrase.split(/\s+/).slice(0,phrase.startsWith("my ")||/^(?:our|his|her) /i.test(phrase)?2:1).join(" ")]){
+      // "not Ada's fault", "not Ada driving": the person is not what is negated.
+      if(/['’]s\b/i.test(words))continue;
+      // Two words count only as a member's whole name ("not Tia Haddad") or a relation ("not my son").
+      if(/\s/.test(words)&&!/^(?:my|our|his|her)\s/i.test(words)&&!family.some((p)=>[p.display_name,p.preferred_name].some((n)=>n&&n.trim().toLowerCase()===words.toLowerCase())))continue;
+      const after=message.slice((m.index??0)+m[0].indexOf(words)+words.length);
+      if(!/^\s*(?:$|[,.;:!?—–-]|(?:but|it|it['’]s|its|was|i)\b)/i.test(after))continue;
+      const negated=resolveClaimPerson(words,family,"");
+      if(negated.status!=="resolved")continue;
+      const rest=(message.slice(0,m.index)+" "+message.slice((m.index??0)+m[0].length)).replace(/\s+/g," ").replace(/\s+([,.;!?])/g,"$1").replace(/^[,;.\s]+/,"").trim();
+      const meant=resolveClaimPerson(rest,family,"");
+      // A question about someone ("Sorry, does Sam have the same cover, not Priya?") asks; it does not correct.
+      if(/^(?:(?:sorry|actually|oops|ok(?:ay)?|well|so|and|but|hmm|wait)\b[\s,.!-]*)*(?:does|do|did|is|are|was|were|can|could|will|would|has|have|had|should|shall|may|might|what|which|who|whose|how|when|where|why)\b/i.test(rest))return null;
+      if(meant.status==="resolved"&&meant.explicit&&meant.person.id!==negated.person.id&&correctionFrameOnly(rest,meant.person))return {meant:meant.person,not:negated.person,rest};
+    }
+  }
+  return null;
+}
+/** Once "not <X>" is taken out, a correction says nothing but who it is: an opener (sorry, actually, oops, my
+ * mistake, no), a frame (it was, it's, I meant, I'm asking about, tell me about, I want), the member's name (optionally
+ * "'s claim/details") and optionally "was hurt / was the one / was in hospital". Anything else ("Omar paid the bill",
+ * "Omar drove", "Omar wants to claim too", "Omar is covered, right?") negates a role, not who the claim is about, so
+ * nothing moves (Critic M2 on #286). */
+function correctionFrameOnly(rest:string,person:ClaimPerson):boolean{
+  const names=[person.display_name,person.preferred_name,String(person.display_name??"").split(/\s+/)[0]].filter((n):n is string=>!!n&&!!n.trim()).map((n)=>n.trim().toLowerCase()).sort((a,b)=>b.length-a.length);
+  let t=" "+rest.toLowerCase().replace(/[’]/g,"'")+" ";
+  for(const n of names)t=t.split(n).join(" @ ");
+  t=t.replace(/@\s*'s\s+(?:claim|details|policy|cover)\b/g,"@").replace(/@\s*(?:was|got|is)\s+(?:the one|hurt|injured|admitted|in hospital|ill|sick)\b/g,"@");
+  t=t.replace(/\b(?:sorry|actually|oops|my (?:mistake|bad)|no|it was|it's|it is|i meant|i mean|meant|i'm asking (?:about|for)|i am asking (?:about|for)|tell me about|i want|wrong person|correction)\b/g," ");
+  return (t.match(/@/g)??[]).length===1&&/^[\s@,.;:!—–-]*$/.test(t);
+}
+export function withoutCorrectedPerson(message:string,family:ClaimPerson[]):string{
+  if(!CORRECTION_WORDS.test(message)&&!/\bnot\b/i.test(message))return message;
+  return correctionOf(message,family)?.rest??message;
+}
 function explicitPeople(message:string,family:ClaimPerson[]){
   const text=" "+normalText(message).replace(/[^\p{L}\p{N}]+/gu," ")+" ";
   return family.filter(p=>[p.display_name,p.preferred_name].filter(Boolean).some(name=>text.includes(" "+normalText(name!).replace(/[^\p{L}\p{N}]+/gu," ")+" ")));
@@ -356,7 +407,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const replyPart=pendingText&&selectionMessage.trim().toLowerCase().startsWith(pendingText.toLowerCase()+":")
     ?selectionMessage.trim().slice(pendingText.length+1).trim():selectionMessage;
   const fullMessage=original&&request.personChoiceId?original:selectionMessage;
-  const personMessage=original&&request.personChoiceId?original:replyPart;
+  const personMessage=original&&request.personChoiceId?original:withoutCorrectedPerson(replyPart,family);
   const chosen=original&&request.personChoiceId?family.find(p=>p.id===request.personChoiceId):null;
   // A cancelled or shortened trip is claimed by the traveller: "because my
   // mum was hospitalised" names the reason, not the person claiming.
@@ -407,7 +458,12 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const ownQuestion=!chosen&&!!pendingSubject&&!mentioned.length&&onlyAsksQuestions(personMessage)&&
     /\bmy\s+(?:own\s+)?(?:shield|plan|policy|policies|insurance|cover|deductible|premium|rider|hospital plan)\b/i.test(personMessage)
     ?family.find(p=>/^self$/i.test(p.relationship))??null:null;
-  const pendingReply=!chosen&&!claimant&&!ownQuestion&&pendingSubject&&!mentioned.length&&!REPORTS_AN_EVENT.test(personMessage)&&!/\b(?:i|my|me)\b/i.test(replyPart)?pendingSubject:null;
+  // "Sorry, it was Joe, not Ada" while a question about Ada is open: a correction naming someone else is about them,
+  // never an answer to Ada's question.
+  // Only an explicit "not <the person the open question is about>" moves the claim ("It was Joe, not Ada").
+  const correction=pendingSubject?correctionOf(replyPart,family):null;
+  const correctsPerson=!!pendingSubject&&!!correction&&correction.not.id===pendingSubject.id&&correction.meant.id!==pendingSubject.id;
+  const pendingReply=!chosen&&!claimant&&!ownQuestion&&!correctsPerson&&pendingSubject&&!mentioned.length&&!REPORTS_AN_EVENT.test(personMessage)&&!/\b(?:i|my|me)\b/i.test(replyPart)?pendingSubject:null;
   const midClaimSpeaker=!chosen&&previous?.state.intent==="claim"&&!!previous.family_member_id&&!mentioned.length&&!REPORTS_AN_EVENT.test(personMessage)&&
     /\b(?:i|we|me|us)\b/i.test(personMessage)&&!/\b(?:my|our)\s+(?:own\b|polic|plan|shield|deductible|excess|premium|insurance|cover|car|home|house|flat|ilp|rider)|\b(?:and|what about|how about)\s+(?:me|mine|myself)\b|\b(?:am i|for me) (?:covered|insured)\b/i.test(personMessage)&&
     !/\b(?:my|our|his|her)\s+(?:mak|emak|ibu|mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband|grand\w+)\b/i.test(personMessage);
@@ -496,14 +552,16 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   }
   const message=original&&people.length>0?original:fullMessage;
   const token=await historyToken(request.accountId,conversation.family_member_id);
-  const carriedTopic=previous&&conversation.id!==previous.id&&(previous.state.intent==="policy_question"||previous.state.intent==="portfolio")&&previous.state.activeQuery
-    ?{intent:previous.state.intent,activeQuery:previous.state.activeQuery}:undefined;
-  const carriedWhatIf=previous&&conversation.id!==previous.id&&previous.state.whatIf?.query&&previous.state.hypothetical&&people.length===1
-    ?{intent:previous.state.intent,query:previous.state.whatIf.query}:undefined;
-  const carriedClaim=previous&&conversation.id!==previous.id&&previous.state.intent==="claim"&&previous.state.activeClaimQuery&&people.length===1&&
-    previous.family_member_id&&previous.family_member_id!==people[0].id&&/\b(?:actually|sorry|i mean|it was|it['’]s|it is|not)\b/i.test(selectionMessage)&&!REPORTS_AN_EVENT.test(selectionMessage)
-    ?{activeClaimQuery:previous.state.activeClaimQuery,facts:structuredClone(previous.state.subjects?.[previous.family_member_id]??{}),scenarios:structuredClone(previous.state.scenarios?.[previous.family_member_id]??[])}:undefined;
-  const carriedDocuments=previous&&conversation.id!==previous.id&&previous.state.documents?previous.state.documents:undefined;
+  // A background job prepares the message again from the chat it moved to: what carries over is read from the chat it came from.
+  const source=request.carryFrom&&previous&&request.carryFrom!==previous.id?await getConversation(request.accountId,request.carryFrom)??previous:previous;
+  const carriedTopic=source&&conversation.id!==source.id&&(source.state.intent==="policy_question"||source.state.intent==="portfolio")&&source.state.activeQuery
+    ?{intent:source.state.intent,activeQuery:source.state.activeQuery}:undefined;
+  const carriedWhatIf=source&&conversation.id!==source.id&&source.state.whatIf?.query&&source.state.hypothetical&&people.length===1
+    ?{intent:source.state.intent,query:source.state.whatIf.query}:undefined;
+  const carriedClaim=source&&conversation.id!==source.id&&source.state.intent==="claim"&&source.state.activeClaimQuery&&people.length===1&&
+    source.family_member_id&&source.family_member_id!==people[0].id&&/\b(?:actually|sorry|i mean|it was|it['’]s|it is|not)\b/i.test(selectionMessage)&&!REPORTS_AN_EVENT.test(selectionMessage)
+    ?{activeClaimQuery:source.state.activeClaimQuery,facts:structuredClone(source.state.subjects?.[source.family_member_id]??{}),scenarios:structuredClone(source.state.scenarios?.[source.family_member_id]??[])}:undefined;
+  const carriedDocuments=source&&conversation.id!==source.id&&source.state.documents?source.state.documents:undefined;
   // Round 9: "my son Irfan and my mum were both in the car and got injured": everyone named is acknowledged; the claim
   // goes one person at a time, starting with the person resolved.
   const alsoInEvent=people.length===1&&!chosen&&!tripReason&&!outside&&REPORTS_AN_EVENT.test(personMessage)&&!/\b(?:if|what if|suppose|in case)\b/i.test(personMessage)
@@ -1864,6 +1922,16 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       const id=context.people[0].id;
       state={...state,intent:"claim",activeClaimQuery:context.carriedClaim.activeClaimQuery,activeQuery:context.carriedClaim.activeClaimQuery,
         subjects:{...state.subjects,[id]:context.carriedClaim.facts},scenarios:{...(state.scenarios??{}),[id]:context.carriedClaim.scenarios}};
+    }
+    // "Sorry, it was Joe, not Ada" in the same chat, while Ada's claim waits on a question: the event is Joe's. What was
+    // told about it moves to Joe, and Ada's open question is dropped (it was never about her).
+    const wrongSubject=state.pending?.subjectId;
+    if(state.intent==="claim"&&wrongSubject&&context.people.length===1&&context.people[0].id!==wrongSubject&&(()=>{const c=correctionOf(request.question,context.family);return !!c&&c.not.id===wrongSubject&&c.meant.id===context.people[0].id;})()&&
+      !REPORTS_AN_EVENT.test(request.question)&&!Object.keys(state.subjects?.[context.people[0].id]??{}).length){
+      const id=context.people[0].id;
+      const {[wrongSubject]:moved,...others}=state.subjects??{};
+      const {[wrongSubject]:movedScenarios,...otherScenarios}=state.scenarios??{};
+      state={...state,pending:undefined,subjects:{...others,[id]:moved??{}},scenarios:{...otherScenarios,...(movedScenarios?{[id]:movedScenarios}:{})}};
     }
     const history=await recentMessages(request.accountId,conversation.id);
     // The question this chat was waiting on before this message. A short bare

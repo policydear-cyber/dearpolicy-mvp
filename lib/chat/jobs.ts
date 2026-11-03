@@ -82,7 +82,9 @@ export async function enqueueChat(request:ChatRequest){
   // whose prior run already reached a terminal status, always inserts
   // normally, since a terminal-status row no longer satisfies that
   // predicate and so can never conflict with a fresh insert.
-  const persistedRequest={...request,conversationId:context.conversation.id,conversationRevision:context.conversation.revision};
+  // A message that moved to another person's chat keeps where it came from, so the job carries the claim or topic over.
+  const persistedRequest={...request,conversationId:context.conversation.id,conversationRevision:context.conversation.revision,
+    ...(request.carryFrom?{carryFrom:request.carryFrom}:request.conversationId&&request.conversationId!==context.conversation.id?{carryFrom:request.conversationId}:{})};
   const inserted=await query<{id:string}>(
     `INSERT INTO chat_analysis_jobs(account_id,family_member_id,conversation_id,request_json,idempotency_key)
      VALUES($1,$2,$3,$4::jsonb,$5)

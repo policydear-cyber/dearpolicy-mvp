@@ -15,6 +15,59 @@ import { annotateBenefitEvidence,evidenceKey,markConflicts } from "@/lib/documen
 import { amountAppears,looksLikeInjectedInstruction } from "@/lib/documents/evidence";
 import { benefitNamePrinted,looksLikeName } from "@/lib/documents/fact-check";
 import { loadBenefitCatalog } from "./benefit-catalog";
+import { pageCurrency } from "@/lib/simple-chat/verify";
+
+/** Words that may stand beside a figure that carries no currency of its own: limits, periods and linking words, in a
+ * closed list. A figure beside any other word ("5,000 francs", "Ksh 500,000", "Rs 50,000", "2,000 baht", "R 5 000")
+ * may carry a currency the page does not declare, so it is given none (Critic H1 on #293). */
+const BESIDE_BARE_FIGURE=new Set(("up to upto maximum max min minimum per each any one lump sum of a an the and or for in on at to by is are be will "
+  +"we you your our pay pays paid payable benefit benefits limit limits limited amount total aggregate overall only lifetime policy plan year years "
+  +"yearly annual annually month months monthly week weeks weekly day days daily night nights visit visits claim claims trip trips event events "
+  +"incident admission admissions disability diagnosis accident period insured person life covered cover with without under from after before within not exceeding exceed subject "
+  +"sehingga maksimum setiap sehari bagi untuk dan atau hari tahun tuntutan lawatan").split(" "));
+const BESIDE_BARE_CJK=/^(?:最高|上限|每日|每天|每次|每年|每宗|每项|每項|限额|限額|至|为|為)+$/u;
+/** Currency words in many markets, as a belt beside the allow-lists: any of them in the printed value or quote gives none. */
+const CURRENCY_WORD=/(?<!\p{L})(?:francs?|baht|rupees?|shillings?|dirhams?|riyals?|rials?|yuan|renminbi|pesos?|rand|lira|liras|lire|zloty|zlotys|kron[aeoru]r?|dong|won|kyat|taka|ringgit|rupiah|dollars?|euros?|pounds?|sterling|yen|dinars?|reais|real|lei|leu|forint|koruna|pataca|pataka|nairas?|cedis?|kwacha|lempira|quetzal|sol|soles|hryvnia|rubles?|roubles?|tenge|som|manat|lari|dram|afghani|ngultrum|kina|vatu|tala|pa['’]?anga)(?!\p{L})/iu;
+/** Words that may follow "in" or "to" in a quoted payout sentence without naming a currency. */
+const IN_WORD_OK=new Set(("hospital respect case cases full total addition excess any each which accordance lieu advance arrears one lump the a an this that "
+  +"your our his her their its insured person life policy claim claims event benefit benefits patient treatment year years month day days "
+  +"singapore malaysia force line relation regard place connection").split(" "));
+const besideOk=(w:string)=>BESIDE_BARE_FIGURE.has(w.toLowerCase())||BESIDE_BARE_CJK.test(w);
+const FIGURE=/\d[\d.,'\u00a0\u202f ]*\d|\d/g;
+/** A page that pays some figures in another currency than the one it declares: "in the local currency", "the currency of
+ * the country of treatment", "paid in the currency in which ...", Malay "mata wang tempatan", Chinese 当地货币 (Critic H2),
+ * or that prints another currency's code (MOP on a HKD page, TE note 2). */
+const OTHER_CURRENCY_PAID=/\blocal\s+currency\b|\bcurrency\s+of\s+(?:the\s+)?(?:country|place|territory|location)\b|\bin\s+the\s+currency\s+(?:in\s+which|of)\b|\bpaid\s+in\s+(?:the\s+|a\s+)?(?:other\s+|another\s+|same\s+)?currency\b|\bmata\s+wang\s+tempatan\b|当地货币|當地貨幣|当地貨幣/i;
+const CODES=/\b(?:SGD|USD|MYR|HKD|EUR|GBP|AUD|NZD|CAD|CHF|JPY|CNY|RMB|IDR|INR|PHP|THB|VND|KRW|TWD|MOP|BND|AED|SAR|ZAR|KES|LKR|PKR|BDT)\b/g;
+
+/** The currency of a figure printed with a bare "$" or with no sign at all, on a page that declares one currency for every
+ * figure ("Currency : Singapore Dollar"). An allow-list: once the figure, one leading bare "$" and the closed words above
+ * are taken off, nothing may be left; any other mark or word gives none. pageCurrency declines a page that names or prints
+ * any other currency, or says "unless stated otherwise"; a page that pays in a local or other currency, or prints another
+ * currency's code, declines here too. `beside` judges only the words next to each figure (a quoted sentence). */
+export function unmarkedPageCurrency(printed:string|null|undefined,pageText:string,beside=false):string|null{
+  const text=String(printed??"");
+  if(statedCurrencyCode(text)||/\p{L}\$|\$\p{L}|[€£¥₹₱₩฿₫₺₦₽₴₪]|\b(?:RM|Rp|Fr|kr|SGD|USD|MYR|HKD|EUR|GBP|AUD|IDR|INR|PHP|THB|CNY|RMB|JPY)\b/iu.test(text))return null;
+  const bare=text.replace(/(^|[^\p{L}])\$(?=\s*\d)/gu,"$1 ");
+  if(/\$/.test(bare))return null;
+  if(CURRENCY_WORD.test(bare))return null;
+  if(beside){
+    // A currency named later in the clause ("5,000 in Swiss francs", "payable in baht"): any "in <word>" whose word is not
+    // in a closed list gives none (Critic H1b on #293).
+    for(const m of bare.matchAll(/\b(?:in|into|converted\s+(?:in)?to)\s+(?:the\s+|a\s+)?(\p{L}+)/giu))if(!IN_WORD_OK.has(m[1].toLowerCase()))return null;
+    const figures=[...bare.matchAll(FIGURE)];
+    if(!figures.length)return null;
+    for(const f of figures){
+      const before=bare.slice(0,f.index).match(/(\p{L}+)[^\p{L}\d]*$/u)?.[1],after=bare.slice(f.index+f[0].length).match(/^[^\p{L}\d]*(\p{L}+)/u)?.[1];
+      if((before&&!besideOk(before))||(after&&!besideOk(after)))return null;
+    }
+  }else if(!(bare.replace(FIGURE," ").match(/\p{L}+/gu)??[]).every(besideOk))return null;
+  if(OTHER_CURRENCY_PAID.test(pageText))return null;
+  const code=pageCurrency(pageText);
+  if(!code)return null;
+  if([...pageText.matchAll(CODES)].some(m=>m[0].toUpperCase()!==code&&!(code==="CNY"&&m[0].toUpperCase()==="RMB")))return null;
+  return code;
+}
 
 /** Reading a document is a one-time job, so it can be slow and thorough.
  *
@@ -323,7 +376,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       benefits.push({productName:section,benefitName,
         traits:readerTraits(row.label,row.line,category),
         requires:readerRequires(row.label,row.line,category),
-        formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
+        formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency??unmarkedPageCurrency(row.value,page.text),
         factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
         offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
         sourcePage:page.page_number,quote,
@@ -370,8 +423,9 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       const tableRow=pageRows.find(row=>{const line=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().toLowerCase();return line.includes(flatQuote)||flatQuote.includes(line);});
       const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
       if(seen.has(key))continue;seen.add(key);
-      const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
+      const read=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
         quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays,benefitName:found.name});
+      const formula=read.currency||read.formulaValue==null||read.formulaKind==="none"||read.formulaKind==="sum_insured"?read:{...read,currency:unmarkedPageCurrency(found.quote,page.text,true)};
       // The same row already stored as printed-only: a validated rule from the
       // model replaces it; a model reading with no rule adds nothing new.
       const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|");

@@ -118,15 +118,88 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * disability row printed under an accident section ("Personal accident", "Group Personal Accident") is accident cover
  * whatever its own name says: a travel policy's "Total and permanent disability" under "Personal accident" pays only on an
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
+/** A death benefit named only in another language (TE R4-2 on #280): an allow-list of names that START with the death
+ * words, so a sentence that only mentions a death ("Exonération des cotisations en cas de décès", "Waiver ... upon death")
+ * is never taken for one. Malay, Indonesian, French, German, Chinese. German "Tod" only as the whole name or followed by a
+ * German word, and with its capital ("TOD surcharge" is no death; Critic M2 on #283). */
+const OTHER_LANGUAGE_DEATH = /^\W*(?:(?:manfaat|faedah|santunan|pampasan|uang(?:\s+duka)?)\s+)?(?:kematian|meninggal(?:\s+dunia)?)\b|^\W*(?:(?:capital|prestations?|garantie|indemnit[ée])\s+)?d[ée]c[èe]s\b|^\W*todesfall\w*|^\W*(?:非因?意外(?:的|导致的|導致的)?)?(?:身故|死亡)/iu;
+const GERMAN_TOD = /^\W*Tod(?:\s*$|\s+(?:durch|bei|infolge|nach|aus|des|der|eines|einer|und|oder|ohne)\b)/u;
+/** Any accident word anywhere in the name, as a substring (compounds such as "Verkehrsunfall" too): the name pays on an
+ * accident, never a plain death benefit (Critic H1 on #283). A closed list; unsure is never Death. */
+const OTHER_LANGUAGE_ACCIDENT = /accident|kemalangan|kecelakaan|unfall|意外|事故/iu;
+/** A name that starts with the accident words and goes on to the death words: "Unfalltod", "Unfall-Todesfall", "意外伤害身故". */
+const OTHER_LANGUAGE_ACCIDENT_DEATH = /^\W*(?:unfall\w*[\s-]*tod\w*|(?<!非|非因)意外\S{0,4}(?:身故|死亡))/iu;
+/** A closed list of words saying the death benefit pays whatever the cause, accident included ("toutes causes y compris
+ * accident", "termasuk kemalangan", "包括意外"), or a death NOT by accident ("bukan akibat kemalangan", "non accidentel",
+ * "ohne Unfall", "非意外"): the accident word there does not make it accident only. They are taken out and the rest is
+ * read again, so an accident word elsewhere still makes it accident cover ("Décès accidentel, y compris accident de la
+ * route"; Critic H1 on #283). */
+const OTHER_LANGUAGE_ANY_CAUSE = /\btoutes\s+causes\b|\by\s+compris\s+(?:en\s+cas\s+d['’]\s*|l['’]\s*|un\s+)?accident|\btermasuk\s+(?:akibat\s+)?(?:kemalangan|kecelakaan)\b|\bsemua\s+sebab\b|\bapa\s+jua\s+sebab\b|\beinschlie(?:ß|ss)lich\s+(?:durch\s+)?unfall|\bjede[rn]?\s+ursache\b|包括意外|(?:不包括|不含|除外)?(?:任何|一切)原因(?:除外)?|\bbukan\s+(?:akibat\s+|disebabkan\s+(?:oleh\s+)?|karena\s+)?(?:kemalangan|kecelakaan)\b|\bnon[\s-]+accident\p{L}*|\bohne\s+unfall\p{L}*|非因?意外/giu;
+/** A death by accident OR by another cause, in those languages ("Décès par accident ou maladie", "Décès accidentel ou non",
+ * "Kematian akibat kemalangan atau penyakit", "Tod durch Unfall oder Krankheit", "身故（意外或疾病）", "因疾病或意外身故"): any
+ * cause, so Death, as the English "Death by accident or illness" is (Critic M1 on #283 9d942cd). Both sides from closed
+ * lists, joined by "or"/"and" right beside each other. */
+const ACC_WORD = String.raw`(?:accident\p{L}*|kemalangan|kecelakaan|\p{L}*unfall\p{L}*|意外|事故)`;
+/** Words saying the death pays whatever the cause: beside an accident word ("Décès accidentel ou toutes causes", "Kematian
+ * akibat kemalangan atau apa jua sebab") or right after the death words ("Décès toutes causes, doublé en cas d'accident")
+ * the name is any-cause Death (TE K2 on #283). Elsewhere ("non cumulable avec décès toutes causes") it is only taken out. */
+const TRUE_ANY_CAUSE = String.raw`(?:toutes\s+causes|tout\s+cause|semua\s+sebab|apa\s+jua\s+sebab|sebarang\s+sebab|jede[rnms]?\s+(?:art|ursache)|aus\s+jedem\s+grund|任何原因|一切原因)`;
+const LEADING_ANY_CAUSE = new RegExp(String.raw`^\W*(?:(?:manfaat|faedah|santunan|capital|prestations?|garantie)\s+)?(?:kematian|meninggal(?:\s+dunia)?|d[ée]c[èe]s|todesfall\p{L}*|tod|身故|死亡)[\s()（）:：,，-]*(?:(?:de|à|akibat|karena|oleh|aus|durch|因)\s*)?${TRUE_ANY_CAUSE}(?!\s*(?:除外|exclu|excluded|ausgeschlossen|dikecualikan))`, "iu");
+const OTHER_CAUSE = String.raw`(?:${TRUE_ANY_CAUSE}|maladies?|penyakit|sakit|krankheit(?:sfall)?|疾病|(?:non|bukan|nicht|tidak)(?:[\s-]+(?:akibat\s+|karena\s+)?${ACC_WORD})?|非(?:意外|事故)?)`;
+const OR_AND = String.raw`[\s-]*(?:ou|et|atau|dan|oder|und|或|及|和|/)\s*(?:(?:par|d['’]|akibat|karena|durch|infolge|von|因)\s*)?`;
+// Word edges for Latin script only: Chinese runs on with no spaces ("意外或疾病身故"). The pair must end the name, a bracket
+// or a clause, or run into the death words: a cause word that goes on ("maladie tropicale", "maladie professionnelle
+// exclue", "Krankheitskosten") is a narrowed cause or another benefit, never any cause (Critic L1-L3 on #283).
+const CAUSE_END = String.raw`(?=\s*(?:$|[)）\]】,;，；、/(（:：]|\s-\s|身故|死亡))(?!\s*[(（]?\s*(?:exclu|excluded|except|ausgeschlossen|ausser|außer|dikecualikan|tidak\s+termasuk|除外|不包括))`;
+const ACCIDENT_OR_OTHER = new RegExp(String.raw`(?<!\p{Script=Latin})(?:${ACC_WORD}${OR_AND}${OTHER_CAUSE}|${OTHER_CAUSE}${OR_AND}${ACC_WORD})(?!\p{Script=Latin})${CAUSE_END}`, "iu");
+/** A waiver on death, in those languages: it waives what is paid in, it pays no death benefit (Critic M1 on #283). */
+const OTHER_LANGUAGE_WAIVER = /exon[ée]ration|pengecualian\s+(?:sumbangan|caruman|premium|premi|bayaran)|pembebasan|penepian|befreiung|豁免|\bwaiver\b/iu;
+/** Someone else's death or loss, in those languages: a liability frame, never the person's own cover. */
+const OTHER_LANGUAGE_OTHERS = /\bd['’]un\s+tiers\b|\bdes\s+tiers\b|\bautrui\b|\bd['’]une\s+autre\s+personne\b|\bpihak\s+ketiga\b|\borang\s+lain\b|\bdritte\w*|第三|他人|别人/iu;
+
+/** Another family member named as the one who dies or is disabled ("Spouse death benefit", "Kematian Pasangan", "Décès du
+ * conjoint", "Tod des Ehepartners", "配偶身故保险金", "Death of child"): that pays on someone else's death, never the person's
+ * own, so it is no Death, accident or disability cover of theirs (TE F2 on #283). A closed list; German "Kind" only with
+ * its capital. */
+const OTHER_FAMILY_MEMBER = /(?<!\p{L})(?:spouses?|spousal|husbands?|wi(?:fe|ves)|child(?:ren)?|sons?|daughters?|conjoints?|[ée]poux|[ée]pouses?|enfants?|pasangan|suami|isteri|istri|anak(?:-anak)?|ehepartner\p{L}*|ehegatt\p{L}*|ehefrau|ehemann)(?!\p{L})|配偶|子女|孩子|儿童|兒童/iu;
+const GERMAN_KIND = /\bKind(?:es|er)?\b/u;
+/** Who it is paid TO is the beneficiary, not who dies: "Death benefit paid to your spouse", "dibayar kepada isteri", "versé
+ * à votre conjoint", "an Ihren Ehepartner", "给配偶", and a beneficiary label ("Beneficiary: spouse", "Penama: isteri",
+ * "Bénéficiaire : conjoint", "Begünstigte: Ehepartner", "受益人：配偶"; Critic M1 on #283). That part never names the one
+ * who dies. The strip stops at a death word, which names the one who dies again ("payable to the insured on death of a
+ * child", "für den Tod eines Kindes"), so it and what follows are read (Critic L1, TE F3 on #283). */
+const DEATH_WORD = String.raw`(?:(?:on|upon)\s+(?:the\s+)?)?death|kematian|meninggal|d[ée]c[èe]s|todesfall|\bTod\b|身故|死亡`;
+const UNTIL_DEATH = String.raw`(?:(?!${DEATH_WORD}).)*`;
+const PAID_TO = new RegExp(String.raw`(?:\b(?:(?:paid|payable|pays?|given|goes)\s+to|to\s+(?:your|the|his|her|their))\b`
+  + String.raw`|\b(?:beneficiar(?:y|ies)|nominees?|payees?|for\s+the\s+benefit\s+of|penama|waris|penerima(?:\s+manfaat)?|zugunsten|beg[üu]nstigte\p{L}*)(?!\p{L})`
+  + String.raw`|\bb[ée]n[ée]ficiaires?(?!\p{L})|\bau\s+profit\s+d(?:u|e|es|['’])|\b(?:dibayar(?:kan)?\s+)?kepada\b|\b(?:vers[ée]e?s?|pay[ée]e?s?)\s+(?:à|au|aux)(?=\s)`
+  + String.raw`|(?:^|\s)(?:à|au|aux)\s+(?:votre|vos|son|sa|ses|l['’]\s*[ée]poux)\b|\b(?:an|f[üu]r)\s+(?:Ihre[nm]?|den|die|seine[nm]?)\b|受益人|指定)${UNTIL_DEATH}`
+  // Chinese "支付给被保险人的配偶身故保险金": only up to "的", whose next words are the one who dies. "给付" is "payment", never
+  // "paid to" (身故给付（配偶）).
+  + String.raw`|(?:付给|支付给|给(?!付))(?:[^的身死]{0,12}的|${UNTIL_DEATH})`, "giu");
+
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   // Cover for what the person owes others ("Personal Liability", "If you are liable for accidental death, injury or damage
   // to other people") pays a third party, never the person's own death, injury or hospital bill.
   if (isLiability(benefit) || (section && (isLiability(section) || LIABILITY_SECTION.test(section.trim())))) return null;
-  const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
+  const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0]
+    ?? otherLanguageDeath(benefit);
+  if ((category === "Death" || category === "Personal Accident" || category === "Total Permanent Disability")
+    && (OTHER_FAMILY_MEMBER.test(benefit.replace(PAID_TO, "")) || GERMAN_KIND.test(benefit.replace(PAID_TO, "")))) return null;
   // A name that says it pays on any cause keeps its own category under any section (Critic R238).
   if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
     && causeOf(section) === "accident") return "Personal Accident";
   return category;
+}
+
+function otherLanguageDeath(benefit: string): string | null {
+  if (OTHER_LANGUAGE_OTHERS.test(benefit) || OTHER_LANGUAGE_WAIVER.test(benefit)) return null;
+  const anyCause = ACCIDENT_OR_OTHER.test(benefit) || LEADING_ANY_CAUSE.test(benefit);
+  if (OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit) && !anyCause) return "Personal Accident";
+  if (!OTHER_LANGUAGE_DEATH.test(benefit) && !GERMAN_TOD.test(benefit) && !OTHER_LANGUAGE_ACCIDENT_DEATH.test(benefit)
+    && !(anyCause && /(?:身故|死亡)/u.test(benefit))) return null;
+  if (anyCause) return "Death";
+  return OTHER_LANGUAGE_ACCIDENT.test(benefit.replace(OTHER_LANGUAGE_ANY_CAUSE, " ")) ? "Personal Accident" : "Death";
 }
 
 /** A critical illness plan often names each benefit by its illness only ("Major Cancer", "Heart attack of specified
@@ -494,7 +567,10 @@ const coverDocs = (key: string, list: TileRow[], held: HeldCover[]) =>
  * added (Critic R246). */
 export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
 /** A cover the person's benefit table holds: its own document (the page that names the person with it) and sum insured. */
-export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
+export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null;
+  /** The sum its page prints but says is not what is paid (lib/documents/notional-sum): a schedule line of that document
+   * with this amount is the same notional figure, so it is named with no amount, never added up. */
+  notionalSum?: number | null };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 /** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
@@ -598,8 +674,17 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   let unsure = split.size > 0;
   const taken = new Set<(typeof covers)[number]>();
   const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
+  // A schedule line that prints a held cover's notional sum, from that cover's own document, is that notional figure: no
+  // amount anywhere on the tile, and it is the cover's part (a cover of that document with no sum of its own is taken).
+  const notional = new Set(lines.filter((l) => l.amount != null && held.some((h) => h.notionalSum != null && Math.abs(h.notionalSum - l.amount!) < 0.005
+    && !!h.documentId && l.documentIds.includes(h.documentId))));
   for (const l of lines) {
     const same = covers.filter((c) => !taken.has(c) && l.documentIds.some((d) => c.docs.has(d)));
+    if (notional.has(l)) {
+      const own = same.filter((c) => c.sum == null);
+      if (own.length === 1) taken.add(own[0]); else if (same.length) unsure = true;
+      continue;
+    }
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
     if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
     // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
@@ -618,7 +703,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const c = categoryOfBenefit(l.name);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };
-  const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
+  const parts: TilePart[] = [...lines.map((l) => notional.has(l) ? { name: l.name, amount: null, currency: null } : ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
     ...(elsewhere(l) && l.amount != null ? { otherTile: true } : {}),
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),

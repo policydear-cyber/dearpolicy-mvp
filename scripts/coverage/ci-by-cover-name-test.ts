@@ -85,8 +85,8 @@ t("an early-stage row in Malay is early critical illness",
 }
 
 // Critic H1 on #252: rows of a critical illness plan that are not an illness, in several languages, and cover for others.
-for (const benefit of ["Santunan Meninggal Dunia", "Pembebasan Premi", "Bantuan Pengebumian", "Annual Cash Payout", "Guaranteed Cash Benefit", "Survival Benefit",
-  "Health Screening Benefit", "Second Medical Opinion", "Wellness Reward", "Vaccination", "Policy Loan", "Prestation décès", "Rente mensuelle", "Child Benefit",
+for (const benefit of ["Pembebasan Premi", "Bantuan Pengebumian", "Annual Cash Payout", "Guaranteed Cash Benefit", "Survival Benefit",
+  "Health Screening Benefit", "Second Medical Opinion", "Wellness Reward", "Vaccination", "Policy Loan", "Rente mensuelle", "Child Benefit",
   "Spouse Benefit", "Dependant's benefit", "Lump sum payout", "Benefit A", "Premium Holiday", "Coverage Multiplier", "Monthly Payout for 3 years"]) {
   const got = categoryOfRow(row("kestrel", { product: "Acme CritiCare Critical Illness Plan", cover: "Acme CritiCare Critical Illness Plan" }, benefit, 5000, "SGD"));
   t(`in a critical illness plan, "${benefit}" is not critical illness`, got === null, got);
@@ -94,13 +94,19 @@ for (const benefit of ["Santunan Meninggal Dunia", "Pembebasan Premi", "Bantuan 
 // Critic H1 round 3 and TE F2/F3 on #252: a row whose name has any word outside the illness list (a service, a payout,
 // another person, a death or waiver in another language, a treatment bill) is never critical illness.
 for (const benefit of ["Cancer Screening Benefit", "Heart Health Check-up", "Second Medical Opinion for Cancer", "Cancer Vaccination", "Child Cancer Benefit",
-  "Juvenile Heart Conditions", "Spouse's Cancer Benefit", "Kanser Kanak-kanak", "子女癌症保险金", "Kematian akibat Kanser", "癌症身故保险金", "癌症身故",
+  "Juvenile Heart Conditions", "Spouse's Cancer Benefit", "Kanser Kanak-kanak", "子女癌症保险金",
   "Pengecualian Caruman selepas Kanser", "癌症豁免保费", "Nilai Tunai Kanser", "Cancer Cash Payout", "Annual payout after Cancer", "Cancer Monthly Payout",
   "Cancer Survival Payout", "Cancer Relapse Benefit", "Kidney Dialysis Treatment", "Cancer Treatment (Chemotherapy, Radiotherapy)", "Cancer drug list treatment",
   "Brain Health Wellness Programme", "Cancer Care Concierge", "Liver function test", "Cancer Booster", "Cancer Treatment", "Juvenile stroke", "Spouse cancer cover",
   "Pre-existing cancer exclusion", "Cancer care allowance daily", "Total loss", "Breast"]) {
   const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
   t(`in a critical illness plan, "${benefit}" is not critical illness`, got === null, got);
+}
+// A death row in another language is Death, as "Death due to Cancer" already is in English (#283 reads other-language
+// death words): never critical illness, and never left uncounted as nothing.
+for (const benefit of ["Santunan Meninggal Dunia", "Prestation décès", "Kematian akibat Kanser", "癌症身故保险金", "癌症身故", "Death due to Cancer"]) {
+  const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
+  t(`in a critical illness plan, "${benefit}" is Death`, got === "Death", got);
 }
 for (const [benefit, want] of [["Kanser Tahap Akhir", "Critical Illness"], ["Kanser Tahap Kritikal", "Critical Illness"], ["Heart Attack", "Critical Illness"],
   ["Carcinoma in situ of the breast", "Early Critical Illness"], ["Loss of hearing", "Critical Illness"], ["End-stage liver failure", "Critical Illness"]] as const) {
