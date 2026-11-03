@@ -38,6 +38,8 @@ t("says what deleting a document really does, and names Pinecone and the hash-on
   assert.match(page, /replaced by a note that the document was deleted \(the questions you typed stay\)/);
   assert.match(page, /claim calculations that used it keep only that a calculation was made/);
   assert.doesNotMatch(page, /a fix is being built/);
+  assert.match(page, /links between its sections and your covers are removed/);
+  assert.match(readFileSync("lib/lifecycle/derived-content-scrub.ts", "utf8"), /DELETE FROM benefit_links WHERE account_id=\$1 AND split_part\(section_key,'\|',1\)=\$2/);
   assert.match(page, /not malware-scanned/);
   assert.match(readFileSync("lib/privacy/notice-status.ts", "utf8"), /Do not flip it before the deletion work it describes is live/);
 });
@@ -51,7 +53,7 @@ t("technical facts the notice states are the code's own (encryption, where it ru
   assert.match(page, /refuses to start in production without it/);
   assert.match(readFileSync("lib/db/client.ts", "utf8"), /DATABASE_SSL=off is not permitted in production/);
   // Where it runs: the website region is the deploy config's; records and files are Supabase's Southeast Asia region.
-  assert.match(page, /the website runs in Singapore \(Vercel\)/);
+  assert.match(page, /the website&rsquo;s server runs in Singapore \(Vercel/);
   assert.match(readFileSync("vercel.json", "utf8"), /"regions":\s*\["sin1"\]/);
   // Anthropic: the standard API only (no file storage or batch services, which keep data longer).
   assert.match(page, /within 30 days/);

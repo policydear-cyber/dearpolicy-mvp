@@ -26,7 +26,8 @@
  *   - a finished background answer since then that fails the same test loses its result.
  *   - every cached chat analysis of that household is dropped (they are keyed by a hash, so which document each one
  *     came from cannot be told; they are only a 24-hour cache and are rebuilt on the next question).
- *   - its ledger rows are deleted.
+ *   - its ledger rows are deleted, and so are the links of its benefit sections to covers (benefit_links), whoever chose
+ *     them; links of documents handled before this was added are removed on the next pass.
  *   - one content-free audit entry records that this was done (who, what, when and a status key; nothing else). That entry is also what marks the
  *     document as done, so each document is handled once.
  *
@@ -105,7 +106,7 @@ export type DerivedScrubOptions = {
   policyIds?: string[];
   limit?: number;
 };
-export type DerivedScrubResult = { documents: number; answersRedacted: number; chatsReset: number; jobsCleared: number; cacheDropped: number; ledgerRowsRemoved: number; failed: number };
+export type DerivedScrubResult = { documents: number; answersRedacted: number; chatsReset: number; jobsCleared: number; cacheDropped: number; ledgerRowsRemoved: number; linksRemoved: number; failed: number };
 
 const defaultTransaction = <T>(fn: (db: Db) => Promise<T>) => withServiceTransaction((client) => fn(client as unknown as Db));
 
@@ -117,10 +118,20 @@ async function present(db: Db, names: string[]): Promise<Set<string>> {
 export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptions = {}): Promise<DerivedScrubResult> {
   const db = opts.db ?? (pool as unknown as Db);
   const transaction = opts.transaction ?? defaultTransaction;
-  const result: DerivedScrubResult = { documents: 0, answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0, failed: 0 };
+  const result: DerivedScrubResult = { documents: 0, answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0, linksRemoved: 0, failed: 0 };
   try {
-    const tables = await present(db, ["chat_messages", "chat_conversations", "chat_analysis_jobs", "policy_analysis_cache", "coverage_rules", "policy_document_audit_log"]);
+    const tables = await present(db, ["chat_messages", "chat_conversations", "chat_analysis_jobs", "policy_analysis_cache", "coverage_rules", "benefit_links", "policy_document_audit_log"]);
     if (!tables.has("policy_document_audit_log")) return result;
+    // Catch-up: links of documents deleted (and marked done) before links were removed here. Every link whose document
+    // is deleted, in any household, whatever the done marks say; idempotent.
+    if (tables.has("benefit_links")) {
+      const r = await db.query(
+        `DELETE FROM benefit_links bl USING policies p
+          WHERE p.account_id=bl.account_id AND p.id::text=split_part(bl.section_key,'|',1) AND p.lifecycle_state=ANY($1::text[])
+            AND ($2::uuid[] IS NULL OR p.id=ANY($2::uuid[]))`,
+        [DELETED_STATES, opts.policyIds?.length ? opts.policyIds : null]);
+      result.linksRemoved += r.rowCount ?? 0;
+    }
     const due = await db.query<{ id: string; account_id: string; added_at: string }>(
       `SELECT p.id::text AS id, p.account_id::text AS account_id, p.created_at::text AS added_at FROM policies p
         WHERE p.lifecycle_state=ANY($1::text[]) AND ($2::uuid[] IS NULL OR p.id=ANY($2::uuid[]))
@@ -132,7 +143,7 @@ export async function scrubDeletedDocumentDerivedContent(opts: DerivedScrubOptio
         const counts = await transaction((tx) => scrubOne(tx, tables, doc));
         result.documents++;
         result.answersRedacted += counts.answersRedacted; result.chatsReset += counts.chatsReset; result.jobsCleared += counts.jobsCleared;
-        result.cacheDropped += counts.cacheDropped; result.ledgerRowsRemoved += counts.ledgerRowsRemoved;
+        result.cacheDropped += counts.cacheDropped; result.ledgerRowsRemoved += counts.ledgerRowsRemoved; result.linksRemoved += counts.linksRemoved;
       } catch (error) {
         result.failed++;
         console.warn("deleted document derived-content scrub will be retried:", error instanceof Error ? error.name : "unknown");
@@ -215,7 +226,7 @@ function staysWith(active: Set<string>, known: Set<string>) {
 }
 
 async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_id: string; added_at: string }) {
-  const counts = { answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0 };
+  const counts = { answersRedacted: 0, chatsReset: 0, jobsCleared: 0, cacheDropped: 0, ledgerRowsRemoved: 0, linksRemoved: 0 };
   // Every document of the household, in every state, named explicitly: the test needs to know which ids are this
   // household's documents (deleted ones too) and which of them are still on file.
   const docs = await tx.query<{ id: string; active: boolean }>(
@@ -296,6 +307,13 @@ async function scrubOne(tx: Db, tables: Set<string>, doc: { id: string; account_
   if (tables.has("coverage_rules")) {
     const r = await tx.query(`DELETE FROM coverage_rules WHERE account_id=$1 AND policy_id=$2`, [doc.account_id, doc.id]);
     counts.ledgerRowsRemoved = r.rowCount ?? 0;
+  }
+  // Which cover each of its sections is paid under (benefit_links, keyed "<document id>|<section>|<column>", with the
+  // model's sentence about the section, or the household's own choice): both name what the document said (Critic R310 M1).
+  // split_part, not LIKE: a section heading can hold % or _.
+  if (tables.has("benefit_links")) {
+    const r = await tx.query(`DELETE FROM benefit_links WHERE account_id=$1 AND split_part(section_key,'|',1)=$2`, [doc.account_id, doc.id]);
+    counts.linksRemoved = r.rowCount ?? 0;
   }
   // The content-free record: who, what and when, and a status key only (the counts are returned, not stored, so the
   // entry stays as it is when the document's own audit payloads are reduced to status keys).
