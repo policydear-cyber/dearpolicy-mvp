@@ -6,8 +6,11 @@
  * unreachable from there). Now the configured reading model reads it when it takes PDF input (a Chat Completions file
  * content part), and a page nothing can read is marked unread.
  *
- * Deterministic: a fake endpoint (globalThis.fetch) stands in for OpenAI / Gemini; no key, no network, no database
- * (DATABASE_URL points at a closed local port: usage / provenance persistence fails closed, which never fails a call).
+ * Deterministic: a fake endpoint (globalThis.fetch) stands in for OpenAI / Gemini; no key, no network. The household's
+ * usage ledger is real SQL on PGlite (every production schema file, scripts/r6/fixture.ts), because every hosted call
+ * first reads this month's spend and refuses when it cannot (the spend cap fails closed, #244). DATABASE_URL points at a
+ * closed local port so nothing can reach a real database; the last check makes the ledger unreadable and shows the
+ * scanned page is then never sent.
  *   node --import tsx scripts/ocr-openai-regressions.ts
  */
 import assert from "node:assert/strict";
@@ -47,7 +50,12 @@ async function fixturePdf() {
 const okReply = (text: string, id = "chatcmpl-fake-1") => ({ status: 200, json: { id, model: "gpt-6-luna-2026-09-01", choices: [{ message: { content: text }, finish_reason: "stop" }], usage: { prompt_tokens: 1800, completion_tokens: 40, prompt_tokens_details: { cached_tokens: 0 } } } });
 const transcript = (n: number, text: string) => JSON.stringify({ pages: [{ pageNumber: n, text, orientation: "upright", rotation: 0, legibility: "good" }] });
 
+const ACCOUNT = "00000000-0000-4000-8000-0000000000e1";
 async function main() {
+  // The usage ledger the spend cap reads before any hosted call: an empty month for this household.
+  const { installDatabase } = await import("./r6/fixture");
+  const db = await installDatabase();
+  await db.query("INSERT INTO accounts(id,name) VALUES($1,$2)", [ACCOUNT, "Test household OCR"]);
   const providers = await import("@/lib/ai/providers");
   const { extractPdfPages } = await import("@/lib/documents/pdf");
   const { completePdfPagesWithOcr, pagesNeedingOcr } = await import("@/lib/documents/ocr");
@@ -124,6 +132,14 @@ async function main() {
   assert.equal(fb.servedBy.provider, "gemini");
   assert.equal(fb.resolved.resolvedProvider, "gemini");
   delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_BASE_URL;
+
+  // 9. The spend cap fails closed: with the usage ledger unreadable, the scanned page is never sent to any model.
+  setReading("openai:gpt-6-luna");
+  await db.exec("ALTER TABLE model_usage RENAME TO model_usage_unreadable");
+  seen = []; respond = (s) => okReply(transcript(2, "should never be read"));
+  await assert.rejects(() => completePdfPagesWithOcr({ accountId: ACCOUNT, bytes, pages }), (e: Error) => e.name === "SpendCheckUnavailable");
+  assert.equal(seen.length, 0, "no request leaves when this month's spend cannot be read");
+  await db.exec("ALTER TABLE model_usage_unreadable RENAME TO model_usage");
 
   console.log("DearPolicy OCR with an OpenAI reading model: request shape, scanned page read, text page untouched, provider identity, unread pages visible, fallback identity -- passed (the live guard's PDF reservation: scripts/rag2-live/fetch-guard-pdf-regressions.ts).");
 }
