@@ -225,6 +225,26 @@ async function markDuplicates(accountId: string, group: GroupPolicy[]) {
   return marked;
 }
 
+/** Whether two documents state a different amount (or a different printed currency) for the same benefit or cover: the
+ * same name, tier, kind and person class, each with an amount. A row with no amount, or a currency only one of them
+ * prints, is no difference: a photo of a schedule that reads fewer figures is still a copy. Names are compared whole,
+ * in any script, ignoring case and spacing. */
+export async function statesOtherAmounts(accountId: string, policyId: string, otherId: string): Promise<boolean> {
+  const name = (c: string) => `regexp_replace(lower(trim(${c})),'\\s+',' ','g')`;
+  const differ = (x: string, y: string, value: string) => `${x}.${value} IS NOT NULL AND ${y}.${value} IS NOT NULL
+      AND (${x}.${value}<>${y}.${value} OR (${x}.currency IS NOT NULL AND ${y}.currency IS NOT NULL AND upper(${x}.currency)<>upper(${y}.currency)))`;
+  const result = await query<{ differs: boolean }>(
+    `SELECT EXISTS(SELECT 1 FROM policy_benefits x JOIN policy_benefits y ON y.account_id=x.account_id AND y.policy_id=$3
+        AND ${name("x.benefit_name")}=${name("y.benefit_name")} AND coalesce(lower(x.tier),'')=coalesce(lower(y.tier),'')
+        AND coalesce(x.row_kind,'benefit')=coalesce(y.row_kind,'benefit') AND x.formula_kind=y.formula_kind
+       WHERE x.account_id=$1 AND x.policy_id=$2 AND x.formula_kind<>'none' AND ${differ("x", "y", "formula_value")})
+     OR EXISTS(SELECT 1 FROM policy_coverages x JOIN policy_coverages y ON y.account_id=x.account_id AND y.policy_id=$3
+        AND ${name("x.category")}=${name("y.category")} AND coalesce(lower(x.tier),'')=coalesce(lower(y.tier),'')
+       WHERE x.account_id=$1 AND x.policy_id=$2 AND ${differ("x", "y", "amount")}) AS differs`,
+    [accountId, policyId, otherId]);
+  return !!result.rows[0]?.differs;
+}
+
 /** Contradictory amounts or currencies for the same benefit -- two pages of
  * one document, or two current versions of the same plan -- are never
  * silently collapsed: every row involved is kept and carries a
