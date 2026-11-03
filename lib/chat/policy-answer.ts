@@ -28,7 +28,7 @@ import { amountAppears, dateAppears, normalPassage, rephrasingIsFaithful, verify
 import type { ClaimPerson } from "@/lib/claims/person";
 import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
-import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
+import { bindPassageFact, citeLine, citePageLines, PREMIUM_ROW as VERIFIED_PREMIUM_ROW } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
 import { applyReinstatements, supersedePassedGrace, printedPeriodStart, printedReinstatement, countdownLine, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
@@ -44,7 +44,10 @@ type Topic = { key: string; label: string; asks: RegExp;
 export const TOPICS: Topic[] = [
   { key: "death", label: "death cover", asks: /\b(?:death|die[sd]?|dying|life (?:cover|insurance|assured)|term life|term (?:plan|policy)|pass(?:es)? away)\b/i, fact: /\bdeath\b|\blife\b|(?<!long[- ])\bterm\b/i, kind: /(?<!long[- ])\bterm\b|\blife\b|\bdeath\b/i },
   { key: "critical_illness", label: "critical illness cover", asks: /\b(?:critical illness|early critical|\bci\b|cancer|heart attack|stroke|angioplasty|bypass)\b/i, fact: /critical|cancer|\bci\b|living care/i, kind: /critical|cancer|living care/i },
-  { key: "disability", label: "disability cover", asks: /\b(?:disab\w*|tpd|total(?:ly)? (?:and )?permanent)\b/i, fact: /disab|tpd|permanent/i, kind: /disab|\btpd\b/i },
+  // Income protection (UK, AU), disability income, salary continuance and permanent health insurance pay a monthly
+  // income while the insured can't work: disability cover, named by what the plan is called (UK walkthrough, 31 Oct).
+  { key: "disability", label: "disability cover", asks: /\b(?:disab\w*|tpd|total(?:ly)? (?:and )?permanent|income protection|salary continuance|permanent health insurance|loss of income (?:cover|insurance|benefit))\b/i,
+    fact: /disab|tpd|permanent|income protection|salary continuance/i, kind: /disab|\btpd\b|income protection|salary continuance|permanent health/i },
   { key: "infectious", label: "infectious disease cover", asks: /\b(?:dengue|hfmd|infectious|hand,? foot and mouth)\b/i, fact: /dengue|infectious|hfmd/i },
   { key: "accident", label: "accident cover", asks: /\b(?:pa|personal accident|accident\w*|fractur\w*|injur\w*|broken bones?|los(?:e|es|ing|t)\s+(?:a |an |one |two |both |his |her |my |the )?(?:thumb|finger|index finger|eyes?|sight|limbs?|arm|leg|hand|foot|hearing)|thumbs?|index finger|fingers?|loss of (?:hearing|sight|a limb|one limb))\b/i, fact: /accident|fractur|injur|dismember/i, kind: /accident/i },
   // "Hospital" is named by what a hospital plan pays, not by the word
@@ -66,7 +69,7 @@ export const TOPICS: Topic[] = [
   // Round 7: whether a policy still covers anyone, from what its own documents print.
   { key: "status", label: "whether it is still in force", asks: /\b(?:still (?:active|valid|in force|covered|current|ok|on|good)|in force|lapsed?|lapsing|active|valid|current|ended|expired|grace period|reinstat\w*|get (?:it|this|that) back|revive|restore|cancelled|deadline|(?:doesn['’]?t|don['’]?t|not) pay)\b/i, fact: /(?!)/ },
   // Answered from the period and renewal lines the documents print.
-  { key: "renewal", label: "renewal and expiry dates", asks: /\brenew\w*|\bexpir\w*|\bends?\b|\bending\b|\bhow many days\b(?![^?]*\b(?:treatment|hospital\w*|deferment|waiting|payout|cover(?:ed)?|pay(?:s)?)\b)|\bdays (?:left|until|till|to go)\b|\bdue (?:date|for)\b|\bperiod of (?:insurance|cover)\b|\bvalid (?:until|till)\b|\bwhen does [^?]* (?:end|start)\b/i, fact: /(?!)/ },
+  { key: "renewal", label: "renewal and expiry dates", asks: /\brenew\w*|\bexpir\w*|\bends?\b|\bending\b|\bhow many days\b(?![^?]*\b(?:treatment|hospital\w*|deferment|waiting|payout|cover(?:ed)?|pay(?:s)?)\b)|\bdays (?:left|until|till|to go)\b|\bdue (?:date|for)\b|\bperiod of (?:insurance|cover)\b|\bvalid (?:until|till)\b|\bwhen does [^?]* end\b|^(?![^?]*\b(?:income protection|disability income|salary continuance|benefits?|payouts?)\b)[^?]*\bwhen does [^?]* start\b(?!\s+(?:to\s+)?pay)/i, fact: /(?!)/ },
   // Round 7: the other kinds of policy a household holds. A row on a car,
   // home, investment-linked or long-term care plan is that kind of cover.
   { key: "excess", label: "the excess", asks: /\bexcess\b/i, fact: /\bexcess\b/i },
@@ -134,7 +137,8 @@ const NARROW: { asks: RegExp; fact: RegExp }[] = [
   { asks: /\bno[- ]?claims? discount|\bncd\b/i, fact: /no-claim/i },
   { asks: /\bnamed driver|who (?:can|may) drive|(?:son|daughter|someone else|another person|wife|husband) driv/i, fact: /named driver|authori[sz]ed driver/i },
   { asks: /\bfor how long|\bhow long\b(?!\s+(?:more|until|till|before|left|to go))(?![^?]*\b(?:expir\w*|renew\w*|ends?)\b)|maximum (?:payout )?period/i, fact: /period|months|years|days/i },
-  { asks: /\bdeferment|starts? paying|before (?:it|eldershield|careshield|the (?:plan|payout|monthly payout)) (?:starts? )?pays?\b/i, fact: /deferment/i },
+  // When a monthly benefit starts: the deferment (ElderShield), deferred period (income protection) or waiting period.
+  { asks: /\bdeferment|\bdeferred period|starts? paying|before (?:it|eldershield|careshield|the (?:plan|payout|monthly payout|benefit)) (?:starts? )?pays?\b/i, fact: /deferment|deferred period|waiting period/i },
   { asks: /\bmonthly payout|pay(?:s)? (?:out )?(?:a|per|each) month|how much a month\b/i, fact: /monthly payout/i },
 ];
 /** A question that asks about a premium in any words ("what do I pay a year for it"). */
@@ -159,7 +163,8 @@ export function questionTopics(question: string): Topic[] {
     // A topic word inside a plan-naming phrase ("my car insurance", "her shield plan") only says which plan.
     const attribute = asked.some((t) => ["premium", "renewal", "cost_sharing", "excess", "rider", "ward", "dental", "maternity", "outpatient", "status"].includes(t.key));
     const planSpans = attribute ? PLAN_KINDS.flatMap((p) => [...question.matchAll(new RegExp(p.re.source, "gi"))].filter((m) => /\b(?:plan|policy|insurance|claims?|excess|premium)$/i.test(m[0]) || /^(?:eldershield|careshield|ilps?|invest-link|endowment)$/i.test(m[0])).map((m) => [m.index ?? 0, (m.index ?? 0) + m[0].replace(/\s+(?:excess|premium)$/i, "").length])) : [];
-    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (attribute && (t.key === "hospital" && /^(?:integrated )?shield$/i.test(m[0]) || t.key === "accident" && /^(?:pa|personal accident)$/i.test(m[0])) || /^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
+    // ("how much do we pay for insurance each month?": a phrase ending in "for" asks about what follows; it names no plan.)
+    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (attribute && (t.key === "hospital" && /^(?:integrated )?shield$/i.test(m[0]) || t.key === "accident" && /^(?:pa|personal accident)$/i.test(m[0])) || !/\b(?:for|of|on|towards?)\s*$/i.test(m[0]) && /^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
     const specific = asked.filter((t) => !namingOnly(t));
     if (specific.length) asked = specific;
   }
@@ -315,7 +320,9 @@ const MONTH_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a
 export const COMMON_PRODUCT_WORD = /^(?:annual|family|group|premier|premium|programme|program|plus|classic|basic|standard|personal|accident|travel|health|hospital|medical|life|term|secure|guardian|shield|care|protect|protection|saver|gold|silver|platinum|benefits?|employee|schedule|certificate|renewal|notice|integrated|critical|illness|cover|global|family|essential|elite|advantage)$/i;
 /** A premium the household pays, printed in a schedule or notice. Never a
  * benefit, a limit or a conflicting figure for a benefit. */
-export const PREMIUM_ROW = /\bpremium\b|\bmedisave\b|\bcash payable\b|\bpayable (?:in|by) cash\b|\bamount (?:due|payable)\b|^\s*less\s*:/i;
+// A health fund's "Monthly subscription" and a friendly society's or takaful operator's "Monthly contribution" are the
+// premium too (UK walkthrough, 31 Oct), never a benefit row; "Employer contribution to your pension" is not one.
+export const PREMIUM_ROW = new RegExp(/\bpremium\b|\bmedisave\b|\bcash payable\b|\bpayable (?:in|by) cash\b|\bamount (?:due|payable)\b|^\s*less\s*:/.source + "|" + VERIFIED_PREMIUM_ROW.source, "i");
 /** The English half of a bilingual cell ("Bayaran bulanan / Monthly payout",
  * "保证满期价值 Guaranteed maturity value", "S$2,460.00, payable for 18 years 缴费18年").
  * A cell with no second language is returned unchanged. */
@@ -456,7 +463,7 @@ async function documentPages(accountId: string, docs: Map<string, DocRow>) {
 const CONDITION_QUESTION = /\bwaiting period|\bsurvival period|\bgrace period|\bexclu\w*|\bpre-existing|\bboth\b[^?]*\b(?:paid|payable|pay)\b|\balternative benefits?|\bonly the higher\b/i;
 const SUBJECTS = /\b(dental|maternity|pregnan\w*|cosmetic|mental|psychiatric|hiv|war|terroris\w*|suicide|self-inflicted|professional sports?|pre-existing)\b/i;
 export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
-  { re: /\bhospital (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
+  { re: /\b(?:hospital|health|medical|private medical) (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
   { re: /\btravel (?:plan|policy|insurance|cover|premium)\b/i, kind: "travel" },
   { re: /\b(?:personal )?accident (?:plan|policy|insurance|premium)\b|\bpa (?:plan|policy|cover|premium)\b/i, kind: "accident" },
   { re: /\b(?:group |term )?life (?:plan|policy|insurance|cover)\b|\bterm (?:plan|policy)\b/i, kind: "death" },
@@ -1260,7 +1267,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   // "Max co-pay with the rider?": the rider's premium line is not its benefits.
   {
-    const premiumLine = (c: RawCandidate) => /\bpremium\b/i.test(c.title + " " + c.text.split(":")[0]) && !NARROW.some((n) => n.asks.test(askedText) && n.fact.test(c.text.replace(/\([^)]*\)/g, "")));
+    const premiumLine = (c: RawCandidate) => (/\bpremium\b/i.test(c.title + " " + c.text.split(":")[0]) || VERIFIED_PREMIUM_ROW.test(c.title + " " + c.text.split(":")[0])) && !NARROW.some((n) => n.asks.test(askedText) && n.fact.test(c.text.replace(/\([^)]*\)/g, "")));
     if (!topics.some((t) => t.key === "premium" || t.key === "status") && !isPremiumAsked(askedText) && candidates.some((c) => !premiumLine(c))) candidates.splice(0, candidates.length, ...candidates.filter((c) => !premiumLine(c)));
   }
   // "the sum assured on my lapsed term plan": the plan that lapsed, not the ones still in force.
@@ -1674,7 +1681,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
+    // An excess, deductible or co-payment is what the household pays, not a limit on what the policy pays: it is said in
+    // the answer's own lines, never on a "Policy-stated coverage limit" card (UK walkthrough, 31 Oct: "Excess £75").
+    if (a.source !== "premium" && a.source !== "expiry" && a.topic !== "excess" && a.topic !== "cost_sharing" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}|\s\|\s/).filter((cell) => MONEY_CELL.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }

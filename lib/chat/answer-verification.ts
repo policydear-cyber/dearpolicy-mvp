@@ -46,6 +46,19 @@ import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendme
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
 
+/** A row that prints what is paid for the cover. Insurers call it a premium; health funds and cash plans a
+ * "subscription"; friendly societies and takaful operators a "contribution". Those two words count only as the
+ * payment, and only when the label is nothing more than an optional frequency, the word, and an optional
+ * payable / due / amount / paid (by you) / per period, right before the figure or the end of the label
+ * ("Monthly subscription £148.60", "Annual contribution RM1,200", "Contribution payable S$85"). A benefit row that
+ * uses the word ("Annual contribution towards optical costs A$250", "Employer contribution paid", "Contribution
+ * paid by us towards dental", "Monthly contribution limit for physiotherapy", "Annual subscription to the online
+ * GP service") never is (TE W1 on #286). */
+const PAY_TERM = String.raw`(?=\s*(?:$|[:.,;()|=\-–—]|\d|(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b|(?:S|SG|US|HK|A|AU|NZ)\$|RM\s?\d|[$€£¥₱₹฿₩]))`;
+const PAY_QUAL = String.raw`(?:\s*(?:payable|due|amount|monthly|annually|yearly|quarterly|weekly|fortnightly|half[- ]yearly|\(?paid(?:\s+by\s+(?:you|the\s+(?:member|policyholder|policy\s+owner|insured|participant)))?\)?|per\s+(?:month|year|annum|week|fortnight|quarter)))`;
+const PAY_NOT_OURS = String.raw`(?<!\b(?:employer|employer['’]s|employers['’]?|company|company['’]s|government|state|scheme|scheme['’]s|our|their|fund['’]s)\s+)`;
+const PAY_FREQ = String.raw`(?:monthly|annual|yearly|quarterly|half[- ]yearly|weekly|fortnightly|total|modal|regular|single|first|renewal|takaful)`;
+export const PREMIUM_ROW = new RegExp(String.raw`\bpremiums?\b|` + PAY_NOT_OURS + String.raw`\b` + PAY_FREQ + String.raw`\s+(?:subscriptions?|contributions?)` + PAY_QUAL + "{0,2}" + PAY_TERM + "|" + PAY_NOT_OURS + String.raw`\b(?:subscriptions?|contributions?)` + PAY_QUAL + "{1,2}" + PAY_TERM, "i");
 export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t match to your documents.";
 export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 
@@ -979,7 +992,7 @@ function compute(r: ComputationRecord, sentence: string, ctx: Ctx, depth: number
       if (printed.some((p) => p != null) && !printed.includes(declared)) return { error: "an operand’s period is not the one its passage prints" };
       // A premium is a premium on its own row; a benefit never is.
       const row = passageRows(o.binding.passage).filter((x) => amountAppears(o.value, x)).join(" ") + " " + o.binding.benefit;
-      if ((o.role === "premium") !== /\bpremiums?\b/i.test(row)) return { error: "an operand’s role is not what its passage prints" };
+      if ((o.role === "premium") !== PREMIUM_ROW.test(row)) return { error: "an operand’s role is not what its passage prints" };
       subjects.add(o.binding.subjectId); roles.add(o.role); vals.push(o.value); periods.push(declared);
     } else if (o.user) {
       if (o.role !== "user") return { error: "the household’s own figure cannot be a policy figure" };
