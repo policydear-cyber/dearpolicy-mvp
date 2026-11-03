@@ -24,7 +24,7 @@ import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./lib
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, asksForNobody, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number }; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -266,7 +266,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   }
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
-  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse()) : { json: reply.json, report: null };
+  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
+    !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household)) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });

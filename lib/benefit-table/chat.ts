@@ -743,7 +743,30 @@ function readsAsLimit(r: ChatRow): boolean {
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = []): { json: unknown; report: RowReport } {
+/** Whether the household's words name one of its members: a word of a member's name that no other member shares, or a
+ * family word (closed list, in the languages households write in). "My" and "I" alone name nobody when the chat is about
+ * no one in particular: the account is shared, so they do not settle whose. */
+const FAMILY_WORDS = /\b(?:wife|husband|spouse|partner|son|sons|daughter|daughters|child|children|kid|kids|baby|mother|father|mum|mom|dad|mummy|daddy|parents?|brother|sister|grandma|grandpa|grandmother|grandfather|isteri|suami|anak|ibu|ayah|emak|bapa|esposa|esposo|hijo|hija|madre|padre|femme|mari|fils|fille|m[eè]re|p[eè]re)\b|妻子|老婆|丈夫|老公|儿子|兒子|女儿|女兒|孩子|妈妈|媽媽|爸爸|父亲|父親|母亲|母親/i;
+export function namesSomeone(said: string[], household: Household): boolean {
+  const text = said.join(" ").normalize("NFKC").toLowerCase();
+  if (FAMILY_WORDS.test(text)) return true;
+  const words = (n: string) => baseName(n).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 3);
+  const people = household.members.map((m) => m.name);
+  const heard = new Set(text.split(/[^\p{L}]+/u));
+  return people.some((p) => words(p).some((w) => heard.has(w) && !people.some((o) => o !== p && words(o).includes(w))));
+}
+/** The speaker alone ("I", "my", "saya", "我", "je", "yo"): the account's own member (relationship "self") is meant, as
+ * the model is told, so the words ask for one person. "We", "our" and "我们" ask for the household. Closed list. */
+const FIRST_PERSON = /\b(?:i|me|my|mine|myself|i'm|i’m|im|i've|i’ve|i'd|i’d|i'll|i’ll|saya|aku|daku|je|j'|moi|mon|ma|mes|yo|mi|mis|me)\b|我(?![们們])/i;
+/** Whether the household's words ask for nobody in particular: no member named (namesSomeone), and not the speaker alone. */
+export function asksForNobody(said: string[], household: Household): boolean {
+  return !namesSomeone(said, household) && !said.some((t) => FIRST_PERSON.test(t.normalize("NFKC")));
+}
+/** `forNobody`: the chat is about no one in particular and the household's words ask for nobody (asksForNobody). Then a
+ * card given for one person's row is given for every other member's own row of the same benefit and document: each
+ * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
+ * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
@@ -888,7 +911,11 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         quote: c.quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
       away.set(key, st); points.push(st);
     }
-    for (const r of [row, ...companions, ...firstYear]) {
+    // The same row of every other member, when the chat is for nobody in particular (forNobody).
+    const others = forNobody ? rows.filter((o) => o.personId !== row.personId && !given.has(o.id) && !ruledOut.has(o.id) && o.docIndex === row.docIndex
+      && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
+      && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
       // Premiums for different policy years are paid one after the other, never alternatives (live run 23 Oct, A6).
@@ -896,7 +923,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // alone ("Limit in total on Critical Illness Benefit claims") would leave out a scope such as early stages only.
       const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
       const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
-      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || others.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
       // A printed cover period never changes what a card says: every policy on file is treated as in force (DC, 31 Oct).
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
