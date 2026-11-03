@@ -78,9 +78,10 @@ function roleLabel(role: string | null) {
   const t = role.replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1);
 }
 /** How much a document says about the household's own cover, in their words: the stored labels are internal. */
-/** "a, b and 2 more": what a document was found to pay for, in a line. */
+/** "a, b and 2 more": what a document was found to pay for, in a line. "Other" is never named as a kind (beside a named
+ * kind it is dropped; alone, the caller says in words that the kind is not clear yet). */
 function foundLine(labels: string[]) {
-  const l = labels;
+  const l = labels.filter((k) => k !== OTHER_LABEL);
   return l.length <= 3 ? l.join(l.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1") : `${l.slice(0, 3).join(", ")} and ${l.length - 3} more`;
 }
 function stageLabel(_stage: string | null, status: string) {
@@ -504,7 +505,7 @@ export default function PoliciesPage() {
             if (state) return <p className="document-found" data-testid="document-found">Reading its benefits for Coverage…</p>;
             // Only cover whose kind nothing names: said in words, never "Found Other".
             if (labels.length === 1 && labels[0] === OTHER_LABEL) return <p className="document-found" data-testid="document-found"><b>Found</b> its cover, but not yet what kind of cover it is. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
-            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels.filter((l) => l !== OTHER_LABEL))}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
+            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}

@@ -138,7 +138,11 @@ async function main() {
   });
   await test("O4 the page never prints \"Found Other\": alone it says the kind is not clear yet, beside others it is dropped", () => {
     assert.match(page, /labels\.length === 1 && labels\[0\] === OTHER_LABEL\) return <p[^>]*><b>Found<\/b> its cover, but not yet what kind of cover it is\./);
-    assert.match(page, /foundLine\(labels\.filter\(\(l\) => l !== OTHER_LABEL\)\)/);
+    // Beside a named kind "Other" is dropped: the one line builder filters it, so no caller can print it (it also keeps the
+    // Found line's own shape, which no-guessed-cover P2 checks).
+    assert.match(page, /function foundLine\(labels: string\[\]\) \{\s+const l = labels\.filter\(\(k\) => k !== OTHER_LABEL\);/);
+    assert.match(page, /<b>Found<\/b> \{foundLine\(labels\)\}/);
+    assert.doesNotMatch(page, /foundLine\((?!labels\)|labels: string)/, "a Found line is built from another list");
   });
   await test("P2 Coverage rows fill Found only when the table answered that the household is not on it", () => {
     assert.match(page, /if \(t && l\) setFound\(documentFoundLabels\(l\.rows \?\? \[\]\)\)/, "Coverage rows fill Found without the table's answer");
