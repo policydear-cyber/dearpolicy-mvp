@@ -18,7 +18,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 type Row = { name: string; kind?: string; value: number | null; currency?: string | null; tier?: string | null; rowKind?: string | null };
-type Cover = { category: string; amount: number | null; currency?: string | null };
+type Cover = { category: string; amount: number | null; currency?: string | null; member?: string };
 
 async function main() {
   const url = process.env.DATABASE_URL ?? "";
@@ -38,7 +38,7 @@ async function main() {
       VALUES($1,$2,$3,'Harbourline Health Plus','schedule.pdf',$4,'ready','ready','scan_clean',true,'personal_schedule')`, [id, acct, member, `test/${id}`]);
     for (const r of rows) await query(`INSERT INTO policy_benefits(account_id,policy_id,benefit_name,formula_kind,formula_value,currency,tier,row_kind,quote) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$3)`,
       [acct, id, r.name, r.kind ?? "fixed", r.value, r.currency ?? null, r.tier ?? null, r.rowKind ?? null]);
-    for (const c of covers) await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency) VALUES($1,$2,$3,$4,$5,$6)`, [acct, id, member, c.category, c.amount, c.currency ?? null]);
+    for (const c of covers) await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency) VALUES($1,$2,$3,$4,$5,$6)`, [acct, id, c.member ?? member, c.category, c.amount, c.currency ?? null]);
     return id;
   };
   const both = async (a: string, b: string) => [await provesSameAmounts(account, a, b), await provesSameAmounts(account, b, a)];
@@ -113,6 +113,27 @@ async function main() {
       assert.equal(await isCopyOf(account, photo, original), true, "a photo that read fewer rows is a copy of the PDF");
       const photoWithExtra = await doc(account, person, [base[0], { name: "Hospital cash", kind: "daily", value: 200, currency: "SGD" }]);
       assert.equal(await isCopyOf(account, photoWithExtra, original), false, "a scan copy that adds a row is not set aside");
+    });
+    await test("R11 a real copy of a schedule covering two people is a copy: covers are compared per person (TE #325)", async () => {
+      const spouse = (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,'Farid Okafor','spouse') RETURNING id", [account])).rows[0].id;
+      const covers = [{ category: "Life", amount: 100000, currency: "MYR" }, { category: "Life", amount: 50000, currency: "MYR", member: spouse }];
+      const first = await doc(account, person, [], covers);
+      const again = await doc(account, person, [], covers);
+      assert.deepEqual(await both(first, again), [true, true]);
+      assert.equal(await isCopyOf(account, again, first), true);
+      const raised = await doc(account, person, [], [covers[0], { ...covers[1], amount: 80000 }]);
+      assert.deepEqual(await both(first, raised), [false, false], "the spouse's raised cover is a difference");
+    });
+    await test("R12 one benefit printed with two amounts under one key (two wards) is compared as a set, never paired across (TE #325)", async () => {
+      const rows = [{ name: "Room and board", kind: "daily", value: 200, currency: "MYR" }, { name: "Room and board", kind: "daily", value: 400, currency: "MYR" }];
+      const first = await doc(account, person, rows);
+      const again = await doc(account, person, [...rows].reverse());
+      assert.deepEqual(await both(first, again), [true, true]);
+      assert.equal(await isCopyOf(account, again, first), true);
+      const changed = await doc(account, person, [rows[0], { ...rows[1], value: 500 }]);
+      assert.deepEqual(await both(first, changed), [false, false]);
+      const oneWard = await doc(account, person, [rows[0]]);
+      assert.equal(await isCopyOf(account, oneWard, first), false, "a photo that read one of the two rates is not proven the same: kept, safe direction");
     });
     await test("N no request left this machine", async () => assert.equal(outbound, 0));
   } finally {
