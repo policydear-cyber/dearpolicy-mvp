@@ -28,21 +28,21 @@ export type Provider="gemini"|"anthropic"|"openai"|"groq";
 export type ModelChoice={provider:Provider;model:string};
 
 const PROVIDERS:Provider[]=["gemini","anthropic","openai","groq"];
-function parseChoice(value:string|undefined):ModelChoice|null{
+function parseChoice(value:string|undefined,env:NodeJS.ProcessEnv=process.env):ModelChoice|null{
   const text=(value??"").trim();
   const colon=text.indexOf(":");
   if(colon<1)return null;
   const provider=text.slice(0,colon).toLowerCase() as Provider,model=text.slice(colon+1).trim();
   if(!PROVIDERS.includes(provider)||!model)return null;
-  if(!apiKeyFor(provider))return null; // configured but no key: fall back
+  if(!apiKeyFor(provider,env))return null; // configured but no key: fall back
   return {provider,model};
 }
-export function apiKeyFor(provider:Provider){
+export function apiKeyFor(provider:Provider,env:NodeJS.ProcessEnv=process.env){
   switch(provider){
-    case "groq":return process.env.GROQ_API_KEY;
-    case "anthropic":return process.env.ANTHROPIC_API_KEY;
-    case "openai":return process.env.OPENAI_API_KEY;
-    case "gemini":return process.env.GEMINI_API_KEY;
+    case "groq":return env.GROQ_API_KEY;
+    case "anthropic":return env.ANTHROPIC_API_KEY;
+    case "openai":return env.OPENAI_API_KEY;
+    case "gemini":return env.GEMINI_API_KEY;
   }
 }
 /** The model for a job. Order of precedence: the job's own setting, then the
@@ -58,8 +58,8 @@ const PRESETS:Record<string,Record<"reading"|"judgement"|"narration",string>>={
   gemini:{reading:"gemini:flash-lite",judgement:"gemini:flash",narration:"gemini:flash-lite"},
   openai:{reading:"openai:gpt-5-mini",judgement:"openai:gpt-5-mini",narration:"openai:gpt-5-mini"},
 };
-export function modelPreset(){
-  const name=(process.env.MODEL_PRESET??"").trim().toLowerCase();
+export function modelPreset(env:NodeJS.ProcessEnv=process.env){
+  const name=(env.MODEL_PRESET??"").trim().toLowerCase();
   return name&&PRESETS[name]?name:null;
 }
 /** Where a job lands when nothing is configured. Naming a Google model rather
@@ -74,18 +74,20 @@ export function allowedByPreset(choice:ModelChoice|null,env:NodeJS.ProcessEnv=pr
   const anthropicOnly=(env.MODEL_PRESET??"").trim().toLowerCase()==="anthropic";
   return choice&&(!anthropicOnly||choice.provider==="anthropic")?choice:null;
 }
-export function modelFor(role:ModelRole):ModelChoice{
-  const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:process.env.CHAT_MODEL;
-  const chosen=allowedByPreset(parseChoice(setting));
+/** `env` is the settings to resolve from: the running process by default; a pre-flight check (the live-run guard) passes
+ * the exact settings it is validating, so it never checks one set of settings and resolves the model from another. */
+export function modelFor(role:ModelRole,env:NodeJS.ProcessEnv=process.env):ModelChoice{
+  const setting=role==="reading"?env.READING_MODEL:role==="judgement"?env.JUDGEMENT_MODEL:role==="narration"?env.NARRATION_MODEL:env.CHAT_MODEL;
+  const chosen=allowedByPreset(parseChoice(setting,env),env);
   if(chosen)return chosen;
-  const preset=modelPreset();
+  const preset=modelPreset(env);
   if(preset&&role!=="chat"){
-    const fromPreset=parseChoice(PRESETS[preset][role]);
+    const fromPreset=parseChoice(PRESETS[preset][role],env);
     if(fromPreset)return fromPreset;
   }
-  if(preset&&role==="chat"){const fromPreset=parseChoice(PRESETS[preset].judgement);if(fromPreset)return fromPreset;}
-  if(role==="reading"&&(process.env.READING_MODEL_PROVIDER??"").toLowerCase()==="groq"&&process.env.GROQ_API_KEY)
-    return {provider:"groq",model:process.env.GROQ_MODEL??"llama-3.3-70b-versatile"};
+  if(preset&&role==="chat"){const fromPreset=parseChoice(PRESETS[preset].judgement,env);if(fromPreset)return fromPreset;}
+  if(role==="reading"&&(env.READING_MODEL_PROVIDER??"").toLowerCase()==="groq"&&env.GROQ_API_KEY)
+    return {provider:"groq",model:env.GROQ_MODEL??"llama-3.3-70b-versatile"};
   return {provider:"gemini",model:DEFAULT_MODEL[role]};
 }
 export function describeChoice(choice:ModelChoice){

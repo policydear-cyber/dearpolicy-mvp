@@ -88,14 +88,14 @@ export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice
   const meterCap = Number(env.DEARPOLICY_RAG_LOOP_RUN_MAX_USD ?? "");
   if (!Number.isFinite(meterCap) || meterCap <= 0 || meterCap > MAX_RUN_CAP_USD) fail(`DEARPOLICY_RAG_LOOP_RUN_MAX_USD must be set, > 0 and <= ${MAX_RUN_CAP_USD}`);
   if (env.DEARPOLICY_RAG_LOOP_REQUIRE_PRICE !== "1") fail("DEARPOLICY_RAG_LOOP_REQUIRE_PRICE must be 1 (an unpriced model is refused, never budgeted at a guess)");
-  const choice = modelFor("chat");
+  const choice = modelFor("chat", env);
   if (choice.provider !== "openai") fail(`the chat model resolves to ${choice.provider}:${choice.model}; set CHAT_MODEL=openai:<model>`);
   if (env.RAG2_LIVE_EXPECT_MODEL && `${choice.provider}:${choice.model}` !== env.RAG2_LIVE_EXPECT_MODEL) fail(`the chat model resolves to ${choice.provider}:${choice.model}, not ${env.RAG2_LIVE_EXPECT_MODEL}`);
   // Every role the run configures resolves to exactly that model (no silent substitution, e.g. a missing key falling
   // back to another provider). The CI run sets all four, mirroring production.
   for (const [role, v] of [["chat", env.CHAT_MODEL], ["judgement", env.JUDGEMENT_MODEL], ["narration", env.NARRATION_MODEL], ["reading", env.READING_MODEL]] as const) {
     if (!v) continue;
-    const got = modelFor(role);
+    const got = modelFor(role, env);
     if (`${got.provider}:${got.model}` !== v.trim()) fail(`${role} model resolves to ${got.provider}:${got.model}, not ${v.trim()} (substituted)`);
   }
   const price = priceFor(choice);
