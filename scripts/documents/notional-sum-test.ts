@@ -32,6 +32,15 @@ async function main() {
     ["MY Malay", "Jumlah Diinsuranskan yang ditunjukkan tidak mewakili amaun yang akan dibayar bagi tuntutan atau penyerahan."],
     ["Chinese simplified", "注：本保单所示保额不代表身故时的赔付金额。"],
     ["Chinese traditional, bonus", "保額僅用於計算紅利，詳情請參閱保單條款。"],
+    // Closed phrasings for the same notional sum (Critic M2)
+    ["bonus purposes and not the claim amount", "The basic sum assured is for bonus calculation purposes and is not the claim amount."],
+    ["for bonus computation only", "Sum Assured (for bonus computation only)\tS$80,000"],
+    ["nominal, basis for bonus, not payable on death", "The nominal sum assured is used solely as a basis for bonus allocation and is not payable on death."],
+    ["is notional", "The Sum Insured stated is notional and is not payable on any claim."],
+    ["a bonus base only", "The Sum Assured shown above is a bonus base only and is not the benefit payable."],
+    ["Indonesian", "Uang Pertanggungan tidak mencerminkan jumlah yang dibayarkan atas klaim."],
+    ["French", "Le capital assuré ne représente pas le montant versé en cas de sinistre."],
+    ["Chinese, not the death payout", "此保额仅作为计算红利之用，并非身故赔付金额。"],
   ];
   for (const [name, text] of notional) await test(`N ${name}: notional`, () => assert.equal(printsNotionalSum(text), true, text));
   const plain: [string, string][] = [
@@ -44,6 +53,19 @@ async function main() {
     ["Malay plain", "Jumlah Diinsuranskan akan dibayar apabila berlaku kematian."],
     ["Chinese plain", "身故保险金等于保额。"],
     ["bonus mentioned without the sum", "Bonuses are not guaranteed and may be used to calculate the surrender value."],
+    // Ordinary policies that contrast their sum with something else (Critic H1, TE O2 on #291): never notional.
+    ["not the surrender value", "The Sum Assured does not represent the surrender value payable on surrender of the policy."],
+    ["total death benefit is sum plus bonuses", "The Sum Assured does not represent the total death benefit, which is the Sum Assured plus any bonuses declared."],
+    ["not the amount under one benefit", "The Sum Insured is not the amount payable under Benefit 3, which pays 50% of the Sum Insured."],
+    ["used to calculate bonus, then paid", "The sum assured is used to calculate the reversionary bonus. On death we pay the sum assured plus bonuses."],
+    ["not the amount where partial", "The sum insured shall not be the amount payable where the claim is made under the partial disability table."],
+    ["not the premiums paid", "Your coverage amount does not equal the premiums paid."],
+    ["not the loan", "The Face Amount does not reflect any outstanding policy loan, which is deducted from the claim."],
+    ["Malay, not the premium", "Jumlah diinsuranskan tidak sama dengan jumlah premium yang dibayar."],
+    ["bonus only where participating, otherwise death benefit", "The Basic Sum Assured is for bonus calculation only where the policy is participating; otherwise it is the death benefit."],
+    ["not the hospital maximum", "The sum insured does not represent the maximum we pay for hospital bills, which are paid as charged up to the limits below."],
+    ["not paid if you cancel", "Your sum assured is not the amount paid if you cancel; see surrender values."],
+    ["Chinese, not the premiums", "保额不等于已缴保费总额。身故赔付保额。"],
   ];
   for (const [name, text] of plain) await test(`P ${name}: not notional`, () => assert.equal(printsNotionalSum(text), false, text));
 
@@ -71,6 +93,18 @@ async function main() {
     const r = read("PLEASE REFER TO CONTRACT FOR MORE DETAILS.");
     assert.equal(r.covers[0].sumInsured, 64000); assert.equal(r.covers[0].notionalSum ?? null, null);
     assert.equal(r.benefits.find((b) => b.benefit === "Death Benefit")!.value, 64000);
+  });
+
+  await test("T4 a rider on the same notional page keeps its own fixed sum; the basic plan has none (TE O1, Critic L4)", () => {
+    const text = `SCHEDULE\nLIFE INSURED\tWONG KA MAN\nBASIC PLAN\tSUM ASSURED\nHARBOUR PAR 25\tHK$300,000\nCRITICAL ILLNESS RIDER\tHK$150,000\nThe sum assured of the basic plan is used only to calculate bonuses and is not the amount payable on a claim.`;
+    const r = checkReading({ id: "doc-p", name: "Par.pdf", readable: true, pages: [{ page: 1, text }] } as never, {
+      document: { kind: "personal_proof", product: "HARBOUR PAR 25", insurer: null, namedPeople: ["WONG KA MAN"], plan: null, periodFrom: null, periodTo: null },
+      covers: [
+        { person: "WONG KA MAN", product: "HARBOUR PAR 25", cover: "Death", plan: null, sumInsured: 300000, asOf: null, page: 1, quote: "HARBOUR PAR 25\tHK$300,000" },
+        { person: "WONG KA MAN", product: "HARBOUR PAR 25", cover: "Critical Illness", plan: null, sumInsured: 150000, asOf: null, page: 1, quote: "CRITICAL ILLNESS RIDER\tHK$150,000" },
+      ], benefits: [] });
+    assert.equal(r.covers.find((c) => c.cover === "Death")!.sumInsured, null);
+    assert.equal(r.covers.find((c) => c.cover === "Critical Illness")!.sumInsured, 150000);
   });
 
   // ---- H: Home tile parts
@@ -108,6 +142,13 @@ async function main() {
   await test("I2 control: no such note keeps the amount", () => {
     const c = FC.factCheckExtraction(extraction(120000, "Lotus Wealth 20\tRM 120,000.00"), myPage("Sila rujuk kontrak polisi.")).extraction.insuredPeople[0].coverages[0];
     assert.equal(c.amount, 120000); assert.equal(c.evidenceVerified, true);
+  });
+
+  await test("I3 a rider line on a notional page keeps its amount", () => {
+    const e = extraction(30000, "Term Rider\tRM 30,000.00");
+    e.insuredPeople[0].coverages[0].productName = "Term Rider";
+    const c = FC.factCheckExtraction(e, [{ pageNumber: 1, text: `JADUAL POLISI\nOrang Diinsuranskan\tSiti Aminah binti Yusof\nLotus Wealth 20\tRM 120,000.00\nTerm Rider\tRM 30,000.00\nJumlah Diinsuranskan tidak mewakili amaun yang dibayar bagi tuntutan.` }]).extraction.insuredPeople[0].coverages[0];
+    assert.equal(c.amount, 30000);
   });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

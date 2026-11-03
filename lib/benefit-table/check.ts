@@ -14,7 +14,7 @@ import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { printsNotionalSum } from "@/lib/documents/notional-sum";
+import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -596,7 +596,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const page = pageText(source.page);
     const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
     // A page that says its sum insured is not what is paid (a bonus base): the figure is kept for matching only.
-    const notional = sumInsured != null && printsNotionalSum(page);
+    // The note governs the basic plan: a rider listed on the same page keeps its own fixed sum (TE O1, Critic L4).
+    const notional = sumInsured != null && printsNotionalSum(page) && !str(c.riderOf) && !RIDER_NAME.test(`${cover ?? ""} ${product ?? ""} ${quote}`);
     out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured: notional ? null : sumInsured, ...(notional ? { notionalSum: sumInsured } : {}), premium,
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
       startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });

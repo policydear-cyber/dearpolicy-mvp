@@ -10,7 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
-import { NOTIONAL_SUM_NOTE, printsNotionalSum } from "@/lib/documents/notional-sum";
+import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
@@ -546,7 +546,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
   // A sum on a page that says its sum insured is not what is paid (a bonus base, lib/documents/notional-sum) is kept as a
   // line with no amount: the cover is held, its figure is never a cover amount (Home, Coverage, chat, claims).
-  if (coverage.amount != null && printsNotionalSum(text))
+  if (coverage.amount != null && printsNotionalSum(text) && !RIDER_NAME.test(`${coverage.productName ?? ""} ${coverage.evidenceText ?? ""}`))
     return { ...coverage, amount: null, notes: [notes, NOTIONAL_SUM_NOTE].filter(Boolean).join(" · "), evidenceVerified: ok && coverage.evidenceVerified === true };
   return { ...coverage, notes, evidenceVerified: ok && coverage.evidenceVerified === true };
 }
