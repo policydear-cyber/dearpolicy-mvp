@@ -735,8 +735,15 @@ export function runSystemRegressions(){
   });
   test("A payout rule is only accepted when the quoted clause proves it",()=>{
     const ok=validateCatalogFormula({kind:"sum_insured",value:0.25,currency:"SGD",
-      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null});
+      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null,benefitName:"Simple Fracture"});
     assert.equal(ok.formulaKind,"sum_insured");assert.equal(ok.formulaValue,0.25);
+    // Every reader passes the row's own benefit name (catalog-builder, ruleFromQuote): the words after a share may only
+    // name that benefit. With no name, "for a simple fracture" could narrow the share, so it is withheld (#222).
+    assert.equal(validateCatalogFormula({kind:"sum_insured",value:0.25,currency:"SGD",
+      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none");
+    assert.equal(validateCatalogFormula({kind:"sum_insured",value:0.25,currency:"SGD",
+      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null,benefitName:"Death Benefit"}).formulaKind,"none",
+      "another benefit's name does not clear the words");
     // The clause says 25%, the model claimed 50%.
     assert.equal(validateCatalogFormula({kind:"sum_insured",value:0.5,currency:"SGD",
       quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none");
