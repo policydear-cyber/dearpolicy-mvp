@@ -134,7 +134,10 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
     "we will pay the death benefit stated in the rider schedule.", "we will pay the death benefit and the funeral expense benefit.",
     "kami akan membayar manfaat kematian dan manfaat perbelanjaan pengebumian.",
     "We will pay the death benefit of this rider on diagnosis.", "we will pay the death benefit under this rider.",
-    "kami akan membayar manfaat kematian di bawah rider ini.", "nous versons le capital décès du présent avenant."]) {
+    "kami akan membayar manfaat kematian di bawah rider ini.", "nous versons le capital décès du présent avenant.",
+    "we will pay the death benefit in advance, and on death we pay 10% more.",
+    "we will pay the death benefit in advance. A compassionate allowance of one month's salary is payable on death.",
+    "we will pay the death benefit in a lump sum and a hospital income of S$100 a day."]) {
     const r = tile([planDoc({ says }), ...others], lines);
     t(`${m} R12 a TI rider whose words say it pays more stays listed: "${says.slice(0, 40)}"`, names(r).includes(RIDER) && r.total === null && (r.known === null || r.known.without.includes(RIDER)), show(r));
   }

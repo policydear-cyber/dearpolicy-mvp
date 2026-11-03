@@ -661,8 +661,23 @@ function paysPlanDeathBenefit(texts: (string | null | undefined)[]): boolean {
   if (all.some((t) => { const m = JOINED.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); })) return false;
   // A negated mention ("we will not pay the death benefit" in an exclusion for suicide) says when nothing is paid, not
   // that the rider pays something else: it is no evidence either way, and never counts as the positive phrasing.
-  return all.some((t) => PAYS_DEATH_BENEFIT.some((re) => { const m = re.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); }));
+  const positive = all.filter((t) => PAYS_DEATH_BENEFIT.some((re) => { const m = re.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); }));
+  // The sentence that says so says nothing more: every one of its words is a known word of that statement (an allow-list,
+  // TE pr307 round 4: "...in advance, and on death we pay 10% more" pays a second sum). No figure, no other benefit.
+  if (!positive.length || !positive.every(onlyPaysDeathBenefit)) return false;
+  // No other words of the rider pay something on death ("A compassionate allowance is payable on death"), unless negated.
+  return !all.some((t) => !positive.includes(t) && (() => { const m = SECOND_DEATH_PAYMENT.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); })());
 }
+const SAYS_ONLY_WORDS = new Set(["we", "will", "shall", "would", "pay", "pays", "paid", "payable", "the", "death", "benefit", "in", "a", "an", "one",
+  "lump", "sum", "early", "earlier", "advance", "advanced", "as", "of", "is", "be", "this", "policy", "policy's", "plan", "plan's", "basic", "to", "you",
+  "your", "life", "insured", "assured", "upon", "on", "diagnosis", "if", "when", "diagnosed", "with", "terminal", "terminally", "ill", "illness", "ti",
+  "during", "term", "while", "in-force", "force", "payment", "out", "kami", "akan", "membayar", "bayar", "dibayar", "dibayarkan", "manfaat", "kematian",
+  "secara", "sekaligus", "lebih", "awal", "didahulukan", "pendahuluan", "polisi", "pelan", "ini", "jika", "apabila", "orang", "yang", "diinsuranskan"]);
+/** Every word of the sentence is one of the statement's known words (or accelerat-): nothing else is paid by it. */
+const onlyPaysDeathBenefit = (t: string) => t.toLowerCase().replace(/[’]/g, "'").split(/[^\p{L}\p{N}'-]+/u).filter(Boolean)
+  .every((w) => SAYS_ONLY_WORDS.has(w) || /^accelerat/.test(w));
+/** Words that something is paid on death (a second payment beside the plan's death benefit). */
+const SECOND_DEATH_PAYMENT = /\b(?:payable|paid|pay|pays)\b[^.;]*\b(?:on|upon)\s+(?:the\s+)?death\b|\b(?:on|upon)\s+(?:the\s+)?death\b[^.;]*\b(?:payable|paid|pay|pays)\b|\bdibayar\b[^.;]*\bkematian\b/i;
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
 const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
