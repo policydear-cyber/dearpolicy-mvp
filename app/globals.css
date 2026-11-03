@@ -364,6 +364,8 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-person-filter { margin: 4px 0 12px; font-size: var(--fs-sm); color: var(--muted); }
 .document-person-filter b { color: var(--ink); }
 .document-person-filter button.text-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--brand-ink); }
+.matched-names button.text-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--brand-ink); }
+.matched-names { display: grid; gap: 8px; }
 .document-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: var(--fs-xs); }
 @media (max-width: 620px) { .document-meta > span { flex-basis: 100%; } }
 .linked-people { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: var(--fs-xs); }

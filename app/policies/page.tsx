@@ -150,7 +150,7 @@ export default function PoliciesPage() {
     try {
       const result = await postNotFamily(policyId, detectedName, true);
       if (result.status === 409) {
-        setLibraryNotice(`${detectedName} is already linked to someone in your family. To change who this document covers, use “Change” on the document.`);
+        setLibraryNotice(result.error || "Could not save that answer.");
         return false;
       }
       if (!result.ok) throw new Error(result.error || "Could not save that answer");
@@ -350,7 +350,7 @@ export default function PoliciesPage() {
     await refresh();
   }
 
-  async function linkPerson(policyId: string, detectedName: string, familyMemberId: string) {
+  async function linkPerson(policyId: string, detectedName: string, familyMemberId: string): Promise<boolean> {
     try {
       const response = await fetch("/api/policies/link-person", {
         method: "POST",
@@ -359,10 +359,13 @@ export default function PoliciesPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Could not link person");
-      setLibraryNotice(`Linked ${detectedName} to the selected family profile.`);
+      const who = family.find((m) => m.id === familyMemberId)?.display_name;
+      setLibraryNotice(who ? `Saved: ${detectedName} is ${who}. This document is now used for ${who} on every page.` : `Linked ${detectedName} to the selected family profile.`);
       await refresh();
+      return true;
     } catch (error) {
       setLibraryNotice(customerError(error, "Could not link that person. Please try again in a moment."));
+      return false;
     }
   }
 
@@ -491,7 +494,7 @@ export default function PoliciesPage() {
 
           {!processing && policy.personal_coverage_confirmed ? <>
             {/* Names printed in it: matched ones in one quiet line; each unmatched one asks who it is. */}
-            {policy.detected_people.some((p) => p.matchedFamilyMemberId) && <p className="document-names">Named in it: {policy.detected_people.filter((p) => p.matchedFamilyMemberId).map((p) => `${p.name} (${family.find((m) => m.id === p.matchedFamilyMemberId)?.display_name ?? "matched"})`).join(", ")}</p>}
+            {policy.detected_people.some((p) => p.matchedFamilyMemberId) && <MatchedNames policy={policy} family={family} onMove={(name, to) => to === "__not_family" ? markNotFamily(policy.id, name) : linkPerson(policy.id, name, to)} />}
             {!!unmatched.length && <div className="detected-block">{unmatched.map((person) => <div className="detected-row" key={person.name}>
               <label htmlFor={`who-${policy.id}-${person.name}`}>&ldquo;{person.name}&rdquo; is named in it. Who is this?</label>
               <select id={`who-${policy.id}-${person.name}`} defaultValue="" onChange={(e) => { const select = e.target; if (select.value === "__not_family") void markNotFamily(policy.id, person.name).then((taken) => { if (!taken) select.value = ""; }); else if (select.value) void linkPerson(policy.id, person.name, select.value); }}><option value="">Choose a family member…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
@@ -540,6 +543,45 @@ function PreviewLink({ policy }: { policy: Named & Pick<Policy, "id"> }) {
 /** A locked PDF already in the library: enter its password here and it is
  * read again -- no delete, no re-upload. Says plainly whether a password
  * was missing or did not work. */
+/** The words of a name, ignoring case and punctuation, so "TAN, Alex" and "Alex Tan" have the same words. */
+function nameWords(name: string): string[] {
+  return name.normalize("NFKC").toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+/** Matched the way the reader matches part of a name: every word of the person's name is in the printed one, which
+ * has more. A name the household chose by hand fits no such pattern and gets no hint. */
+function matchedByPart(memberName: string, printed: string): boolean {
+  const own = nameWords(memberName), words = new Set(nameWords(printed));
+  return own.length > 0 && own.every((w) => words.has(w)) && words.size > new Set(own).size;
+}
+
+/** Names printed in a personal document that DearPolicy matched to someone, each with a way to say it is someone
+ * else or no one in the family. A match made from part of a name says so, because that is where a wrong match
+ * hides (a cousin who shares a given name). The household's answer is used on every page. */
+function MatchedNames({ policy, family, onMove }: { policy: Policy; family: Member[]; onMove: (name: string, to: string) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const matched = policy.detected_people.filter((p) => p.matchedFamilyMemberId);
+  const shown = matched.map((p) => {
+    const member = family.find((m) => m.id === p.matchedFamilyMemberId);
+    const byPart = !!member && matchedByPart(member.display_name, p.name);
+    return { ...p, member, byPart };
+  });
+  const anyByPart = shown.some((p) => p.byPart);
+  return <div className="matched-names">
+    <p className="document-names">Named in it: {shown.map((p, i) => <span key={p.name}>{i ? ", " : ""}{p.name} ({p.member?.display_name ?? "matched"}{p.byPart ? ", matched by part of the name" : ""})</span>)}{" "}
+      <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : anyByPart ? "Not them? Change" : "Change"}</button></p>
+    {open && <div className="detected-block">{shown.map((p) => <div className="detected-row" key={p.name}>
+      <label htmlFor={`is-${policy.id}-${p.name}`}>&ldquo;{p.name}&rdquo; is</label>
+      <select id={`is-${policy.id}-${p.name}`} value={p.matchedFamilyMemberId ?? ""} disabled={saving === p.name} onChange={(e) => {
+        const to = e.target.value;
+        if (!to || to === p.matchedFamilyMemberId) return;
+        setSaving(p.name);
+        void onMove(p.name, to).finally(() => setSaving(null));
+      }}>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
+    </div>)}<small className="muted">Changing this moves the document&rsquo;s cover for that name to the person you choose, on every page.</small></div>}
+  </div>;
+}
+
 function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean; onUnlock: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

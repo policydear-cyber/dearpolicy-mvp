@@ -26,7 +26,12 @@ export type FamilyMember = { id: string; display_name: string; preferred_name?: 
   /** The documents this person is linked to by their own record (policy_members: chosen at upload, ticked in the "who does
    * this cover" picker, or matched when read), and the printed names on a document the household matched to them
    * (policy_detected_people). Used only to tell apart people whose names are the same. */
-  documents?: string[]; printedAs?: { documentId: string; name: string }[] };
+  documents?: string[]; printedAs?: { documentId: string; name: string }[];
+  /** The household's own word on who a printed name is, which wins over any match by name (householdRecord):
+   * `chosenAs`, the printed names on a document the household matched to this person by hand; `excludedFrom`, the
+   * documents the household took this person off; `notThem`, printed names on a document the household said are no one
+   * in the family ("Not in my family"), the same list on every person. */
+  chosenAs?: { documentId: string; name: string }[]; excludedFrom?: string[]; notThem?: { documentId: string; name: string }[] };
 /** A cover printed for a name two or more family members share, which neither the document's own links nor a match the
  * household made tells apart: shown with everyone it may be, never dropped and never given to one of them by guess. */
 /** `sameName`: every candidate has the printed name itself; false when each only fits part of it ("Wei Jie" and "Wei"). */
@@ -139,13 +144,32 @@ function sharedNameMatch(name: string, documentId: string, family: FamilyMember[
   return { candidates: candidates.map((m) => ({ id: m.id, name: m.display_name })), sameName: exact };
 }
 
+/** Who a printed name on a document is by the household's own word, before any match by name: the one person it matched
+ * the name to by hand there; "nobody" when it said the name is no one in the family, or took the person the name would
+ * match off that document; null when it said nothing, and the name decides as before. A name matched by hand to two
+ * people (an older build) decides nothing. */
+export function householdRecord(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | "nobody" | null {
+  const key = nameKey(name);
+  const on = (list: { documentId: string; name: string }[] | undefined) => (list ?? []).some((p) => p.documentId === documentId && nameKey(p.name) === key);
+  const chosen = family.filter((m) => on(m.chosenAs));
+  if (chosen.length === 1) return { member: chosen[0] };
+  if (family.some((m) => on(m.notThem))) return "nobody";
+  const named = findFamilyMatchWithKind(name, family);
+  if (named && (named.member.excludedFrom ?? []).includes(documentId)) return "nobody";
+  return null;
+}
+
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
 export function coversOf(readings: CheckedReading[], family: FamilyMember[], today: number = singaporeDay(new Date())) {
   const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [], ambiguous: AmbiguousCover[] = [];
   const found: PersonCover[] = [];
   for (const r of readings) for (const c of r.covers) {
     if (r.kind === "illustration") { illustration.push(c); continue; }
-    const named = findFamilyMatchWithKind(c.person, family);
+    // The household's own word first (a name it moved to someone else, or said is not its family's): a cover is never
+    // shown for a person the household said it is not (audit 3 Nov: "Wei Ming" kept "Chen Wei Ming"'s certificate).
+    const record = householdRecord(c.person, r.documentId, family);
+    if (record === "nobody") { unmatched.push(c); continue; }
+    const named = record ?? findFamilyMatchWithKind(c.person, family);
     const shared = named ? null : sharedNameMatch(c.person, r.documentId, family);
     if (shared && "candidates" in shared) { ambiguous.push({ cover: c, documentId: r.documentId, candidates: shared.candidates, sameName: shared.sameName }); continue; }
     const match = named ?? shared;
