@@ -666,6 +666,13 @@ function nameHead(row: ChatRow): string | null {
   const head = plainWords(benefitName(row.benefit).replace(/^\s*[a-z]\s*[.,]\s+/i, "").split(/\b(?:upon|on|following|after|due\s+to|for|while|in\s+case\s+of|arising|caused\s+by)\b/i)[0].replace(/\bbenefits?\s*$/i, ""));
   return head.trim().split(" ").length >= 2 ? head : null;
 }
+/** The question asks for a most or a cap (MOST_WORDS) and says nothing has happened: no event word (EVENT_WORDS) and no
+ * word that tells of one (closed list). "What's the most my hospital plan pays?" is about the plan, not a stay. */
+const HAPPENED_WORDS = /\b(?:had|has\s+been|got|get|getting|fell|fall(?:en)?|hurt|sick|ill|illness|happened|after|since|when|if|yesterday|today|last\s+(?:week|month|year|night)|days?|nights?|weeks?)\b/i;
+function asksMostOfNothing(question: string): boolean {
+  const q = question.toLowerCase();
+  return MOST_WORDS.some((w) => w.test(q)) && !EVENT_WORDS.some((w) => w.test(q)) && !HAPPENED_WORDS.test(q);
+}
 /** Words that ask for a most, a maximum or a cap; words that ask about many claims together (all claims, over the years,
  * a lifetime); and words that say an event has happened (a stay, a diagnosis, an accident). All closed lists, in the
  * languages households write in (asksOverallMost). "Total" alone is no together word: it asks for a sum of payouts, and
@@ -750,7 +757,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list`
       // So is a figure paid per child, when the household gives a number of children right after asking about that benefit by
       // name ("what's the child education fund" then "how much in total if we have two kids", overnight run 23 Oct, N023).
-      : x.eventFit === "not_described" ? (asksFor(question, r) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
+      // Nor is one when the question asks for a most and describes nothing at all ("what's the most my hospital plan pays in
+      // total?"): there is no event for anything to be missing from (live 637c547, hospital cash lost its daily figure).
+      : x.eventFit === "not_described" ? (asksFor(question, r) || asksMostOfNothing(question) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
       // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1),
       // unless the question asks for exactly that: the most paid for everything together (chat-speed run 3 Nov, S4). Its
       // card always says it is a limit and what it is printed for (scopeOnCard).

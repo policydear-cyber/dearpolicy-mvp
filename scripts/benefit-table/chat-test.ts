@@ -1155,6 +1155,19 @@ test("a benefit the question asks about by name is never hidden as not described
   assert.equal(shown("I broke my wrist. What does my personal accident cover pay?"), 0);
 });
 
+test("asking for a most with nothing described never hides a card as 'not described' (live 637c547: hospital cash)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const cash: ChatRow = { ...amb, id: "R961", benefit: "Daily Hospital Cash" };
+  const shown = (question: string, row = cash) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, cash], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
+  assert.equal(shown("What's the most my hospital plan pays in total?"), 1);
+  assert.equal(shown("what is the maximum our insurance pays?", amb), 1);
+  assert.equal(shown("Berapa maksimum pelan saya bayar?"), 1);
+  // Something has happened, or may: the missing step stays missing and the card stays hidden.
+  for (const q of ["She had an accident, what's the most she can get?", "I'm in hospital for 3 days, what's the maximum?", "what's the most I can claim if I get sick?", "Broke my arm yesterday. Max payout?", "What can my plan pay?"])
+    assert.equal(shown(q), 0, q);
+});
+
 test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const rec: ChatRow = { ...amb, id: "R962", benefit: "J, Accidental Hospital Recuperation Benefit" }, cef: ChatRow = { ...amb, id: "R963", benefit: "K. Child Education Fund Benefit" };
