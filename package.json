@@ -251,6 +251,7 @@
     "policies:capped-share-test": "node --import tsx scripts/policies/capped-share-test.ts",
     "policies:page-currency-rows-test": "node --import tsx scripts/policies/page-currency-rows-test.ts",
     "policies:share-cap-test": "node --import tsx scripts/policies/share-cap-test.ts",
+    "policies:word-figure-test": "node --import tsx scripts/policies/word-figure-test.ts",
     "policies:stored-share-shapes-test": "node --import tsx scripts/policies/stored-share-shapes-test.ts",
     "r10:perf-test": "node --import tsx scripts/r10-perf-regressions.ts",
     "r11:blind-test": "node --import tsx scripts/r11-blind-test.ts",
