@@ -80,6 +80,15 @@ export function unreadablePagesNote(pageNumbers: number[]): string | null {
   return list + ", so anything printed only there is not available.";
 }
 
+/** A ready document's stored message: its lead (the cover reading not finished) followed by its page notes, so the notes
+ * are never lost behind the lead. Readers match the lead itself, or the lead and a space (lib/documents/failure-advice.ts,
+ * lib/policies/not-fully-read.ts). A note's own "Read in part." is dropped: the lead already says the document is not
+ * fully read. */
+export function withPageNotes(lead: string, notes: (string | null | undefined)[]): string {
+  const rest = notes.map((n) => (n ?? "").replace(/^Read in part\.\s*/, "").trim()).filter(Boolean);
+  return [lead, ...rest].join(" ");
+}
+
 /** A processing failure whose message is safe and useful to show the
  * household member who uploaded the document. Writers store its message in
  * the household-readable processing_error column ONLY when it is also in

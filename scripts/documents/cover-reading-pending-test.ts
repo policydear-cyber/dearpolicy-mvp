@@ -49,7 +49,7 @@ test("intake chooses the note by whether a retry was really scheduled, and the c
   const schedule = ingest.indexOf("const retryScheduled = readInPart ? await scheduleDeferredRead(args) : false;");
   const ready = ingest.indexOf("UPDATE policies SET processing_status='ready',processing_stage='complete'");
   assert.ok(schedule > 0 && ready > schedule, "the retry is scheduled before the note is written");
-  assert.match(ingest, /readInPart \? \(retryScheduled \? DOCUMENT_READ_IN_PART_MESSAGE : DOCUMENT_READ_IN_PART_FINAL_MESSAGE\)/);
+  assert.match(ingest, /readInPart\s*\?\s*withPageNotes\(retryScheduled \? DOCUMENT_READ_IN_PART_MESSAGE : DOCUMENT_READ_IN_PART_FINAL_MESSAGE,/);
   assert.doesNotMatch(ingest.slice(ready, ready + 3000), /scheduleDeferredRead\(args\)/, "scheduled once, not again after the note");
   const page = readFileSync("app/policies/page.tsx", "utf8");
   assert.match(page, /const pending = !part && !processing && policy\.processing_status === "ready" \? coverReadingPending\(policy\.processing_message\) : null;/);
@@ -81,4 +81,22 @@ test("Home counts a document in either state as not fully read (lib/policies/not
   assert.equal(nadia.count, 3, JSON.stringify(nadia));
   assert.deepEqual(new Set(nadia.names), new Set(["Example Takaful Shield (RM)", "Example Health Cash Plan (£)", "Example Hospital Plan (HK$)"]));
   assert.equal((await notFullyRead(A, Q)).count, 0, "a receipt never holds cover, in either state");
+});
+
+test("a document read in part keeps its page notes after the message, and every reader still sees the state (TE and Critic #323)", () => {
+  const unread = errors.unreadablePagesNote([4]);
+  const unchecked = "Read in part. Page 2 could not be checked: a second reading from the page image did not agree with its text, so no amount on it is used.";
+  for (const lead of errors.DOCUMENT_READ_IN_PART_MESSAGES) {
+    const stored = errors.withPageNotes(lead, [unchecked, unread, null, "Page 3 was sideways or upside down; DearPolicy turned it upright to read it."]);
+    assert.ok(stored.startsWith(lead + " "), stored);
+    assert.match(stored, /Page 4 could not be read, so anything printed only there is not available\./);
+    assert.match(stored, /Page 2 could not be checked/);
+    assert.match(stored, /Page 3 was sideways/);
+    assert.doesNotMatch(stored, /Read in part\./, "the lead says it already; a note's own 'Read in part.' is dropped");
+    assert.ok(coverReadingPending(stored), "the card still shows 'Not fully read yet'");
+    assert.equal(readInPartAdvice(stored), null, "never the other state's 'Read in part' advice");
+    // lib/policies/not-fully-read.ts matches the lead exactly or the lead and a space.
+    assert.ok(stored === lead || stored.slice(0, lead.length + 1) === lead + " ");
+  }
+  assert.equal(errors.withPageNotes(errors.DOCUMENT_READ_IN_PART_MESSAGE, [null, undefined, ""]), errors.DOCUMENT_READ_IN_PART_MESSAGE, "no notes: the message alone, as before");
 });
