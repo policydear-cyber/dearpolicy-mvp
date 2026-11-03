@@ -666,12 +666,29 @@ function nameHead(row: ChatRow): string | null {
   const head = plainWords(benefitName(row.benefit).replace(/^\s*[a-z]\s*[.,]\s+/i, "").split(/\b(?:upon|on|following|after|due\s+to|for|while|in\s+case\s+of|arising|caused\s+by)\b/i)[0].replace(/\bbenefits?\s*$/i, ""));
   return head.trim().split(" ").length >= 2 ? head : null;
 }
-/** The question asks for a most or a cap (MOST_WORDS) and says nothing has happened: no event word (EVENT_WORDS) and no
- * word that tells of one (closed list). "What's the most my hospital plan pays?" is about the plan, not a stay. */
-const HAPPENED_WORDS = /\b(?:had|has\s+been|got|get|getting|fell|fall(?:en)?|hurt|sick|ill|illness|happened|after|since|when|if|yesterday|today|last\s+(?:week|month|year|night)|days?|nights?|weeks?)\b/i;
-function asksMostOfNothing(question: string): boolean {
-  const q = question.toLowerCase();
-  return MOST_WORDS.some((w) => w.test(q)) && !EVENT_WORDS.some((w) => w.test(q)) && !HAPPENED_WORDS.test(q);
+/** The question asks for a most or a cap (MOST_WORDS) about a plan, and nothing else: every other word is on a closed
+ * list of question, plan and cover words, or a word of the name of a product the household holds. Any other word ("dengue",
+ * "bitten", "stolen", "crash", or a language the list does not hold) may tell of an event, so the answer is no (Critic
+ * and TE #319: an event deny-list let 21 of 25 event questions through). "What's the most my hospital plan pays?" is
+ * about the plan, not a stay. */
+const MOST_ONLY_PHRASES = /\b(?:critical\s+illness(?:es)?|personal\s+accident|hospital\s+cash|hospital\s+income|daily\s+cash|room\s+and\s+board|integrated\s+shield|term\s+life|whole\s+life|up\s+to)\b/g;
+const MOST_ONLY_WORDS = new Set(("what what's whats how much many is are was the a an my our your his her their its me i we us you can could would will does do did should "
+  + "get gets give gives pay pays paid payout payouts payable claim claims claimable cover covers covered coverage plan plans policy policies scheme schemes insurance insurer "
+  + "benefit benefits most maximum max highest limit limits cap caps capped ceiling in total totals overall altogether combined under from for of on to by with it this that "
+  + "these those each per year yearly annual annually lifetime amount amounts sum sums at all any there which be been hospital hospitalisation hospitalization medical health "
+  + "travel life cash daily income plan's policy's scheme's group family whole term "
+  // Malay, French and Spanish: the same kinds of words only.
+  + "apakah apa berapa had maksimum maksima paling tinggi banyak polisi pelan insurans saya kami kita anda bayar dibayar membayar yang boleh tuntut dituntut jumlah untuk "
+  + "quel quelle est le la les l' maximum que qu'il mon ma mes notre nos votre contrat contrats police assurance paie paye verse rembourse plafond montant de du des pour "
+  + "cuál cual es el la los las máximo maximo que mi mis nuestra nuestro su póliza poliza pólizas seguro paga cubre tope monto de del por").split(" "));
+/** Chinese has no spaces: these words, in any order, and nothing else. */
+const MOST_ONLY_CJK = /我的|我们的|我們的|保单|保單|保险|保險|计划|計劃|最多|最高|上限|封顶|封頂|可以|能|赔|賠|付|多少|是|的|总共|總共|一共/g;
+export function asksMostOfNothing(question: string, rows: ChatRow[] = []): boolean {
+  const q = question.normalize("NFKC").toLowerCase().replace(/[’`]/g, "'");
+  if (!MOST_WORDS.some((w) => w.test(q)) || EVENT_WORDS.some((w) => w.test(q))) return false;
+  const product = new Set(rows.flatMap((r) => (r.product ?? "").toLowerCase().split(/[^\p{L}\d']+/u)).filter((w) => w.length >= 3 && !EVENT_WORDS.some((e) => e.test(w))));
+  const words = q.replace(MOST_ONLY_PHRASES, " ").replace(MOST_ONLY_CJK, " ").split(/[^\p{L}\d']+/u).filter(Boolean);
+  return words.every((w) => MOST_ONLY_WORDS.has(w) || product.has(w));
 }
 /** Words that ask for a most, a maximum or a cap; words that ask about many claims together (all claims, over the years,
  * a lifetime); and words that say an event has happened (a stay, a diagnosis, an accident). All closed lists, in the
@@ -759,7 +776,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // name ("what's the child education fund" then "how much in total if we have two kids", overnight run 23 Oct, N023).
       // Nor is one when the question asks for a most and describes nothing at all ("what's the most my hospital plan pays in
       // total?"): there is no event for anything to be missing from (live 637c547, hospital cash lost its daily figure).
-      : x.eventFit === "not_described" ? (asksFor(question, r) || asksMostOfNothing(question) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
+      : x.eventFit === "not_described" ? (asksFor(question, r) || asksMostOfNothing(question, rows) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
       // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1),
       // unless the question asks for exactly that: the most paid for everything together (chat-speed run 3 Nov, S4). Its
       // card always says it is a limit and what it is printed for (scopeOnCard).

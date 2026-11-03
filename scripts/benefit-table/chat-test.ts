@@ -1166,6 +1166,12 @@ test("asking for a most with nothing described never hides a card as 'not descri
   // Something has happened, or may: the missing step stays missing and the card stays hidden.
   for (const q of ["She had an accident, what's the most she can get?", "I'm in hospital for 3 days, what's the maximum?", "what's the most I can claim if I get sick?", "Broke my arm yesterday. Max payout?", "What can my plan pay?"])
     assert.equal(shown(q), 0, q);
+  // Allow-list (Critic and TE #319): any word off the closed list may tell of an event, in any language, so the card stays hidden.
+  for (const q of ["What's the most I can claim for my dengue?", "Max payout for my wife's cancer?", "What's the most I can get for a dog bite?", "My car was stolen, what's the most I can claim?",
+    "We lost our luggage, what's the maximum?", "Flight delayed 6 hours, what's the most?", "My son was bitten by a dog, max payout?", "We were in a car crash, what's the most we can claim?",
+    "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
+    assert.equal(shown(q), 0, q);
+  for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？", "What's the cap on my hospital plan?"]) assert.equal(shown(q), 1, q);
 });
 
 test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
