@@ -172,6 +172,30 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i] })).filter((o) => figureLine(o.t));
   const imageLines = pool.length;
   const unconfirmed: number[] = [];
+  // A label the text layer wraps or splits onto a line of its own, words only, right above or below the row ("Comprehensive
+  // Critical\t300,000.00 ..." over "Illness Benefit"; ": Singapore Dollar" over "Instalment Premium\t: 470.85\tCurrency"),
+  // while the image reading prints the row on one line. The row is confirmed when the image line is the row's own words
+  // and figures, in the same order, with that line's words in one run beside a word of the row, never between two of its
+  // figures. Each such line lends its words once. Every figure must still match in order, so nothing is paired differently
+  // from how the image reads it (re-read 1 Nov: a schedule's sum and premium were withheld, so its cover had no sum).
+  const filledText = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+  const lent = new Set<number>();
+  const isWord = (t: Token | undefined) => typeof t === "string" && !isDate(t);
+  const wordsOnly = (j: number) => { if (j < 0 || skipText.has(j) || lent.has(j)) return null; const t = lineTokens(lines[j]); return t.length && t.every(isWord) ? t : null; };
+  const wrapped = (i: number, tokens: Token[]): { at: number; j: number } | null => {
+    const k = filledText.indexOf(i);
+    for (const j of [filledText[k + 1] ?? -1, filledText[k - 1] ?? -1]) {
+      const words = wordsOnly(j);
+      if (!words) continue;
+      for (let pos = 0; pos <= tokens.length; pos++) {
+        if (!isWord(tokens[pos - 1]) && !isWord(tokens[pos])) continue;
+        const joined = [...tokens.slice(0, pos), ...words, ...tokens.slice(pos)];
+        const at = pool.findIndex((o) => sameLine(joined, o.t) && o.h === textUnder[i]);
+        if (at >= 0) return { at, j };
+      }
+    }
+    return null;
+  };
   let figureLines = 0, noLabel = -1, why = "";
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
@@ -180,6 +204,8 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
     figureLines++;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
+    const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
+    if (wrap) { pool.splice(wrap.at, 1); lent.add(wrap.j); return; }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
     why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
