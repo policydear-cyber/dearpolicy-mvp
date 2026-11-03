@@ -6,7 +6,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
-import { rebuildForAddedPeople, saveDocumentCoverage } from "@/lib/policies/coverage-assignments";
+import { moveDetectedName, NobodyWouldBeLeft, rebuildForAddedPeople, saveDocumentCoverage } from "@/lib/policies/coverage-assignments";
 import { exclusionsReady } from "@/lib/policies/member-exclusions";
 import { dismissalsReady, nameKeySql, notDismissedClause, recountedReview } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, normalizePlanTier, tierOptionsForDocument } from "@/lib/policies/member-tier";
@@ -41,7 +41,6 @@ class PolicyNotFound extends Error {}
 class FamilyMemberNotFound extends Error {}
 class NobodyLeft extends Error {}
 class NameNotFound extends Error {}
-class NameLinked extends Error {}
 
 /** Review state is server-derived and server-written (browser sessions cannot
  * update policies' verification columns), so it runs on the service connection
@@ -133,8 +132,9 @@ export async function POST(request: NextRequest) {
           [ctx.householdId, body.policyId, name],
         );
         if (!named.rows[0]) throw new NameNotFound();
-        // A name already linked to someone is taken off them in "Who does this cover", not here.
-        if (named.rows.some((r) => r.matched)) throw new NameLinked();
+        // A name already matched to someone is taken off them first (moveDetectedName, after this transaction): on a
+        // personal document that is the only place to say the match is wrong (audit 3 Nov).
+        if (named.rows.some((r) => r.matched)) return { move: { to: null as string | null } };
         // Before sql/detected-name-dismissals.sql is applied the answer cannot be
         // kept; the page remembers it in the browser and nothing here changes.
         if (!remembersDismissals) return { ok: true, notFamily: true, remembered: false };
@@ -175,6 +175,12 @@ export async function POST(request: NextRequest) {
 
       const extraction = policyRow.rows[0].extracted_json;
       if (!extraction) return { notFoundExtraction: true };
+      // The name is matched to someone else: it moves (moveDetectedName, after this transaction, which takes the other
+      // person off the document unless another printed name there is theirs), then links to the person chosen.
+      const current = await client.query<{ matched: string | null }>(
+        `SELECT matched_family_member_id::text AS matched FROM policy_detected_people WHERE account_id=$1 AND policy_id=$2 AND ${nameKeySql("detected_name")}=${nameKeySql("$3")}`,
+        [ctx.householdId, body.policyId, body.detectedName!]);
+      if (current.rows.some((r) => r.matched && r.matched !== body.familyMemberId)) return { move: { to: body.familyMemberId! } };
 
       await syncInsuredPersonToMember({
         accountId: ctx.householdId,
@@ -190,6 +196,13 @@ export async function POST(request: NextRequest) {
     });
 
     if ("notFoundExtraction" in result) return NextResponse.json({ error: "Policy extraction not found" }, { status: 404 });
+    if ("move" in result && result.move) {
+      // One transaction: the old person off, the chosen one on (or the name remembered as not the family's).
+      await moveDetectedName({ accountId: ctx.householdId, policyId: body.policyId, detectedName: body.detectedName!, to: result.move.to });
+      await refreshReviewState(ctx.householdId, body.policyId, unmatchedClause)
+        .catch((error) => console.warn("Refreshing the review flag failed:", error instanceof Error ? error.message : error));
+      return NextResponse.json(result.move.to ? { ok: true, moved: true } : { ok: true, notFamily: true, remembered: true, moved: true });
+    }
     if ("refresh" in result) {
       const { refresh: _refresh, ...shown } = result;
       // The household's change is already saved; a failed recount leaves the old flag, not a failed request.
@@ -201,9 +214,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
     if (error instanceof PolicyNotFound) return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    if (error instanceof NameLinked) return NextResponse.json({ error: "That name is linked to someone in your family. Change who this document covers instead." }, { status: 409 });
     if (error instanceof NameNotFound) return NextResponse.json({ error: "That name isn't on this document" }, { status: 404 });
     if (error instanceof FamilyMemberNotFound) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    if (error instanceof NobodyWouldBeLeft) return NextResponse.json({ error: "This is the only person this document names, so it can't be no one. If they are family but not listed, add them under Account settings > People, then choose them here. If the document isn't your family's, delete it." }, { status: 409 });
     if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers (add them under Account settings > People first if they aren't listed), or delete the document if it isn't your family's." }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Link failed" }, { status: 500 });

@@ -1,4 +1,6 @@
 import { query } from "@/lib/db/client";
+import type { ScopedDbClient } from "@/lib/db/authz-client";
+const queryPool: ScopedDbClient["query"] = (text, params) => query(text, params);
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCoverageCategory, normalizePersonName } from "@/lib/insurance";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
@@ -64,7 +66,7 @@ export function findFamilyMatch<T extends FamilyCandidate>(name: string, family:
   return findFamilyMatchWithKind(name, family)?.member ?? null;
 }
 
-async function resolveTargetPolicyId(accountId: string, sourcePolicyId: string, policyNumber?: string | null) {
+async function resolveTargetPolicyId(accountId: string, sourcePolicyId: string, policyNumber?: string | null, query: ScopedDbClient["query"] = queryPool) {
   if (!policyNumber) return sourcePolicyId;
   const result = await query<{ id: string }>(
     `SELECT id FROM policies WHERE account_id=$1 AND policy_number=$2 AND id<>$3 AND ${activePredicate()}
@@ -153,8 +155,17 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
    * uploader chose for a document naming one person no profile matched. */
   link?: { source: "ai_name_match" | "upload_hint" | "user_declared"; confidence: number };
   /** The household itself is linking this person, so a remembered removal does not apply. */
-  householdChoice?: boolean; }) {
-  const person = args.extraction.insuredPeople.find((p)=>normalizePersonName(p.name)===normalizePersonName(args.detectedName));
+  householdChoice?: boolean;
+  /** Other printed names on the document that are this same person. This call replaces the person's rows for the
+   * document, so every name that is theirs is rebuilt together (moveDetectedName, when one of two names moves away). */
+  alsoNames?: string[];
+  /** Run inside the caller's transaction (moveDetectedName), so a failed link leaves nothing half-moved. */
+  db?: ScopedDbClient; }) {
+  const query = args.db ? args.db.query : queryPool;
+  const names = new Set([args.detectedName, ...(args.alsoNames ?? [])].map((n) => normalizePersonName(n)));
+  // One entry per printed name, as before when there is one name (a reading that lists a name twice is read once).
+  const people = [...names].map((n) => args.extraction.insuredPeople.find((p)=>normalizePersonName(p.name)===n)).filter((p): p is NonNullable<typeof p> => !!p);
+  const person = people.find((p)=>normalizePersonName(p.name)===normalizePersonName(args.detectedName)) ?? (args.alsoNames?.length ? people[0] : undefined);
   if (!person) return;
   // The household removed this person from this document: a re-read does not put them back.
   if (!args.householdChoice && args.link?.source !== "user_declared" && await isExcluded(args.accountId, args.sourcePolicyId, args.familyMemberId)) return;
@@ -169,7 +180,7 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
   await query(`DELETE FROM premium_records WHERE account_id=$1 AND source_document_id=$2 AND family_member_id=$3`,[args.accountId,args.sourcePolicyId,args.familyMemberId]);
 
   if (args.extraction.personalCoverageConfirmed) {
-    for (const coverage of person.coverages) {
+    for (const coverage of people.flatMap((p) => p.coverages)) {
       const category=normalizeCoverageCategory(coverage.category||coverage.productName||"Other");
       const verified=Boolean(coverage.sourcePage && coverage.evidenceText && coverage.evidenceVerified);
       await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,notes,source_page,authority,confirmed,evidence_text,evidence_verified)
@@ -184,8 +195,8 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
   }
 
   for (const payment of args.extraction.paymentRecords.filter((p)=>p.amount!=null)) {
-    if (!payment.insuredPersonName || normalizePersonName(payment.insuredPersonName)!==normalizePersonName(person.name)) continue;
-    const targetPolicyId=await resolveTargetPolicyId(args.accountId,args.sourcePolicyId,payment.policyNumber??args.extraction.policyNumber);
+    if (!payment.insuredPersonName || !people.some((p)=>normalizePersonName(payment.insuredPersonName!)===normalizePersonName(p.name))) continue;
+    const targetPolicyId=await resolveTargetPolicyId(args.accountId,args.sourcePolicyId,payment.policyNumber??args.extraction.policyNumber,query);
     await query(`INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,[
       args.accountId,targetPolicyId,args.familyMemberId,payment.insurer??args.extraction.insurer,payment.productName??args.extraction.productName,payment.policyNumber??args.extraction.policyNumber,
