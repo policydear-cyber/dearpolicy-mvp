@@ -159,6 +159,9 @@ export function unreadablePagesAdvice(message: string | null | undefined): { wha
   if (!found) return null;
   return {
     what: found[1],
-    next: "Everything else in it is used. If you have a clearer copy of those pages, such as the insurer's original PDF, upload it, and once it shows as read, delete this one.",
+    // True whatever left the page unread (an illegible scan, scan reading off, the reading service failing on its
+    // last try), and whatever else the card says: so it never blames the file, and never says the rest is used
+    // while cover reading is still pending (Critic #326 M1, L1).
+    next: "Use Read again to try those pages once more. If they still can't be read, a clearer copy of them, such as the insurer's original PDF, usually helps.",
   };
 }

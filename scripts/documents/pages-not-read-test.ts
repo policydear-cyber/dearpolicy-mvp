@@ -20,7 +20,10 @@ test("the writer's own notes are found, one page or several", () => {
   assert.equal(unreadablePagesAdvice("Ready. " + one)?.what, "Page 4 could not be read, so anything printed only there is not available.");
   assert.equal(unreadablePagesAdvice("Ready. " + many)?.what, "Pages 2, 5 and 7 could not be read, so anything printed only there is not available.");
   assert.equal(unreadablePagesAdvice("Ready. " + errors.unreadablePagesNote([3, 9]))?.what, "Pages 3 and 9 could not be read, so anything printed only there is not available.");
-  assert.match(unreadablePagesAdvice("Ready. " + one)!.next, /clearer copy of those pages/);
+  // The next step is true whatever left the page unread, and never claims the rest is used (Critic #326 M1, L1).
+  const next = unreadablePagesAdvice("Ready. " + one)!.next;
+  assert.match(next, /^Use Read again to try those pages once more\./);
+  assert.doesNotMatch(next, /is used|nothing is wrong|upload it/i);
 });
 
 test("found wherever it sits: after Ready, a read-in-part note, a cover-reading note, and before later notes", () => {
