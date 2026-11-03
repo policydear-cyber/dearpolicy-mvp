@@ -462,7 +462,7 @@ const NOT_ROW_FIGURE = "the percentage is not the quoted row's own figure";
 const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
 /** The cap a percentage row prints with its own currency ("25% of Sum Assured per claim, maximum RM 50,000 per claim",
  * "15% of the Sum Insured, up to S$50,000"), read from the row's own line and the lines that continue it, when:
- * - the row (with its continuation) prints exactly one money figure, it carries a currency sign, and a cap word stands
+ * - the row (with its continuation) prints exactly one money figure, it carries a currency (not a bare "$"), a cap word stands
  *   right before it ("up to", "maximum", "not exceeding", "limited to", "capped at"): a row with a second figure (an
  *   overall limit, another benefit's sum) or a bare number gives nothing;
  * - the statement names a household member, the document is linked to them, and the page names no other life.
@@ -485,7 +485,10 @@ function rowCap(st: ModelStatement, at: Found, household: Household, person: str
   if (new Set(figures.map((f) => f.value)).size !== 1 || numbersIn(text.replace(/\d+(?:\.\d+)?\s*%/g, " ")).some((n) => !sameValue(n, figures[0].value))) return null;
   const fig = figures[0];
   const i = text.indexOf(fig.raw);
-  if (!fig.currency || i < 0 || !CAP_BEFORE.test(text.slice(Math.max(0, i - 40), i))) return null;
+  // A bare "$" names no currency (S$, US$, A$ ...); a row that defines another sum ("Comatose State sum insured will be 15%
+  // of the Sum Insured or maximum of $50,000") is that sum's rule, not what this benefit pays.
+  if (!fig.currency || fig.currency === "$" || i < 0 || !CAP_BEFORE.test(text.slice(Math.max(0, i - 40), i))) return null;
+  if (/\bsum\s+(?:insured|assured)\s+(?:will\s+be|shall\s+be|is|equals?)\b/i.test(text)) return null;
   const found: Found = { docIndex: at.docIndex, page: at.page, excerpt: text.trim().replace(/[ \t]+/g, " "), offset: row.start };
   const plain = plainAmount({ ...st, percentOf: null, amount: fig.raw, quote: found.excerpt }, found, household);
   return plain.ok && /^Up to /.test(plain.amount.text) ? { found, raw: fig.raw, amount: plain.amount } : null;

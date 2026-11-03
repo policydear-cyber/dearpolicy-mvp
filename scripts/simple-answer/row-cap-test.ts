@@ -88,6 +88,13 @@ test("negative: the wrong person (a certificate linked to someone else, or a pag
   assert.deepEqual(ask(both, "Ng Siew Lan", "Early stage critical illness: 25% of Sum Assured per claim", 25).amounts, []);
 });
 
+test("negative: a bare '$' cap, and a row that defines another sum insured, give no cap", () => {
+  const h = house(["Lim Ah Kow"], [doc("h1", "CI Policy.pdf", ["Lim Ah Kow"],
+    "Insured: Lim Ah Kow\nEarly stage illness: 25% of the Sum Insured, up to $50,000\nComa benefit: Coma sum insured will be 15% of the Sum Insured or maximum of S$50,000, whichever is the lesser")]);
+  assert.deepEqual(ask(h, "Lim Ah Kow", "Early stage illness: 25% of the Sum Insured", 25).amounts, []);
+  assert.deepEqual(ask(h, "Lim Ah Kow", "Coma benefit: Coma sum insured will be 15% of the Sum Insured", 15).amounts, []);
+});
+
 test("negative: a statement with no person gives no cap", () => {
   assert.deepEqual(ask(MY, null as unknown as string, "Early stage critical illness: 25% of Sum Assured per claim", 25).amounts, []);
 });
