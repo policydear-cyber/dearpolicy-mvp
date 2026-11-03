@@ -223,6 +223,7 @@
     "policies:premium-elsewhere-test": "node --import tsx scripts/policies/premium-counted-elsewhere-test.ts",
     "documents:no-guessed-cover-test": "node --import tsx scripts/documents/no-guessed-cover-test.ts",
     "documents:found-line-table-test": "node --import tsx scripts/documents/found-line-table-test.ts",
+    "chat:deferred-period-test": "node --import tsx scripts/chat/deferred-period-test.ts",
     "chat:walkthrough-uk-test": "node --import tsx scripts/chat/walkthrough-uk-test.ts",
     "chat:plan-kind-test": "node --import tsx scripts/chat/plan-kind-test.ts",
     "family:covered-for-other-test": "node --import tsx scripts/family/covered-for-other-test.ts",
