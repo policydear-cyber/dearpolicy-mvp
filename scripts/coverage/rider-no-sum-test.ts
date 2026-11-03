@@ -30,6 +30,7 @@ const MARKETS = [
   { m: "UK", cur: "GBP", plan: "Alder Savings Builder", rider: "Terminal Illness Cover", says: "the death benefit will be paid early as one lump sum." },
 ] as const;
 
+let EXTRA = "Extra Life Cover Rider";
 for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
   const src = (doc: string) => ({ documentId: doc, document: `${doc}.pdf`, page: 1, excerpt: "" });
   const cover = (doc: string, o: Partial<CheckedCover>): CheckedCover => ({ person: "Ana Reyes", product: PLAN, cover: PLAN, plan: PLAN, riderOf: null,
@@ -52,7 +53,7 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
     cover("builder", { cover: RIDER, riderOf: PLAN, sumInsured: o.riderSum ?? null }),
     cover("builder", { cover: "WAIVER OF PREMIUM ON TPD BENEFIT", riderOf: PLAN, sumInsured: null }),
     ...(o.secondPlan ? [cover("builder", { cover: "Builder Death Plus", sumInsured: null })] : []),
-    ...(o.extra ? [cover("builder", { cover: "Extra Life Cover Rider", riderOf: PLAN, sumInsured: null })] : []),
+    ...(o.extra ? [cover("builder", { cover: EXTRA, riderOf: PLAN, sumInsured: null })] : []),
   ], [
     o.planSum ? row("builder", "5. Death benefit", "Death benefit", 49000) : row("builder", "5. Death benefit", "Death benefit: 105% of total premiums paid on the basic plan", 105, { pays: "percent", percentOf: "other" }),
     row("builder", "6. Terminal illness (TI) benefit", "Terminal illness benefit", o.riderSum ?? null, o.riderSum ? {} : { pays: "words", quote: o.says ?? SAYS }),
@@ -61,13 +62,13 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
       quote: "we will not pay the death benefit and will refund all premiums paid without interest." }),
     row("builder", "Terminal illness benefit", "Bonuses from the participating fund", null, { pays: "words", quote: "Such bonuses are not guaranteed until declared." }),
     ...(o.secondPlan ? [row("builder", "8. Death plus", "Death plus benefit", null, { pays: "words" })] : []),
-    ...(o.extra ? [row("builder", "7. Additional death benefit", "Death benefit (rider)", null, { pays: "words", quote: o.extra })] : []),
+    ...(o.extra ? [row("builder", "7. Rider benefit", "Death benefit (rider)", null, { pays: "words", quote: o.extra })] : []),
   ], PLAN);
   const others = [reading("gtl", [cover("gtl", { product: GTL, cover: GTL, plan: null, sumInsured: 1000000, policyNumber: "G-1" })], [row("gtl", "Benefits", "Death", 1000000)], GTL),
     reading("life", [cover("life", { product: LIFE, cover: LIFE, plan: null, sumInsured: 100000, policyNumber: "L-9" })], [row("life", "Benefits", "Death Benefit", 100000)], LIFE)];
   const linkOf = (doc: string, section: string | null) => doc === "gtl" ? GTL_KEY : doc === "life" ? LIFE_KEY
     : section === "5. Death benefit" ? PLAN_KEY : section === "8. Death plus" ? coverKeyOf({ product: PLAN, cover: "Builder Death Plus", plan: PLAN })
-    : section === "7. Additional death benefit" ? coverKeyOf({ product: PLAN, cover: "Extra Life Cover Rider", plan: PLAN, riderOf: PLAN }) : RIDER_KEY;
+    : section === "7. Rider benefit" ? coverKeyOf({ product: PLAN, cover: EXTRA, plan: PLAN, riderOf: PLAN }) : RIDER_KEY;
   const tile = (rs: CheckedReading[], lines: (ConfirmedLine & { name: string })[]) => {
     const links = rs.flatMap((r) => r.benefits.map((b) => ({ section: sectionKeyOf(r.documentId, b), cover: linkOf(r.documentId, b.section), why: "test" })));
     const p = assembleTable(rs, family, links).people[0];
@@ -115,6 +116,25 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
   for (const extra of ["une prestation supplémentaire égale au capital décès est versée.", "身故時額外賠償保額的100%。"]) {
     const r = tile([planDoc({ says: extra }), ...others], lines);
     t(`${m} R10 a rider whose words say it pays extra stays listed: "${extra.slice(0, 30)}"`, names(r).includes(RIDER) && r.total === null, show(r));
+  }
+  // R11 (Critic R307 H2): a death rider describes paying its own sum as "we will pay the death benefit": a rider whose
+  // name names death or life cover, or no early payment, is never folded, whatever its words.
+  for (const [name, extra] of [["Level Term Rider", "On the death of the life assured during the rider term, we will pay the death benefit."],
+    ["Family Income Rider", "If the life assured dies, we will pay the death benefit in monthly instalments."],
+    ["Rider Hayat Bertempoh", "Kami akan membayar manfaat kematian rider ini."],
+    ["Premier Protector Rider", "we will pay the death benefit in a lump sum."]] as const) {
+    EXTRA = name;
+    const r = tile([planDoc({ extra }), ...others], lines);
+    t(`${m} R11 a rider named ${name} stays listed and named as not counted`, names(r).includes(name) && r.total === null && (r.known === null || r.known.without.includes(name)), show(r));
+  }
+  EXTRA = "Extra Life Cover Rider";
+  // R12 (TE pr307 F1 round 2): a terminal illness rider whose words say it pays a sum of its own, or something more.
+  for (const says of ["we pay the death benefit again on the death of the second life insured.",
+    "this rider pays its death benefit, equal to the rider sum assured shown in the rider schedule.",
+    "we will pay the death benefit stated in the rider schedule.", "we will pay the death benefit and the funeral expense benefit.",
+    "kami akan membayar manfaat kematian dan manfaat perbelanjaan pengebumian."]) {
+    const r = tile([planDoc({ says }), ...others], lines);
+    t(`${m} R12 a TI rider whose words say it pays more stays listed: "${says.slice(0, 40)}"`, names(r).includes(RIDER) && r.total === null && (r.known === null || r.known.without.includes(RIDER)), show(r));
   }
   // R7 (Critic R307 H1): a rider that pays on top of the plan's death benefit is never folded: listed, no known figure.
   for (const extra of ["we will pay an additional amount equal to the sum assured on death, on top of the death benefit.",
