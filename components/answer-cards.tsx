@@ -71,13 +71,17 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).ma
  * document's terms, not a payment or an insurer's decision") is not drawn on each card. */
 const withoutFooterClause = (c: string) => c.replace(/;\s*[^;]*\bnot a payment or an insurer[’']s decision\.?\s*$/i, ".");
 
-function Qualifiers({ s }: { s: AnswerStatement }) {
+/** A point's conditions are said as its conditions: under a sentence, a bare line ("Pays for at most 30 days of continuous
+ * hospitalisation") reads as a claim of its own, with nothing saying what it limits (live 637c547). A card's conditions
+ * sit under its figure and need no heading. */
+function Qualifiers({ s, point = false }: { s: AnswerStatement; point?: boolean }) {
   const said = norm(s.text);
   const conditions = (s.conditions ?? []).map(norm);
   const basis = s.basis && !said.includes(norm(s.basis)) && !restates(s.basis, s.text, 0.75) ? s.basis : null;
   const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
     {basis ? <p className="answer-card-basis">{basis}</p> : null}
+    {point && s.conditions?.length ? <p className="answer-point-conditions-label" data-testid="answer-point-conditions-label">{s.conditions.length === 1 ? "Condition" : "Conditions"} from the document:</p> : null}
     {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{s.amount ? withoutFooterClause(c) : c}</li>)}</ul> : null}
     {note ? <p className="answer-card-note" data-testid="answer-card-note">{note}</p> : null}
   </>;
@@ -185,7 +189,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     if (!text && !s.basis && !s.conditions?.length) return null;
     return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
       {text ? <p>{text}</p> : null}
-      <Qualifiers s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
+      <Qualifiers point s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
     </div>;
   };
   // Either/or amounts are drawn as one block, joined by "or" and their note, at the place of the first of them: two
