@@ -574,6 +574,8 @@ export type HeldCover = { coverKey: string; holding?: string; name: string; docu
   /** The policy number its page prints, if any, and every number its other copies print (PersonCover.copyNumbers): two
    * covers printing different numbers are never one policy here. */
   policyNumber?: string | null; copyNumbers?: string[];
+  /** Every document a copy of it was printed on (PersonCover.copyDocuments): all count as its own documents. */
+  copyDocumentIds?: string[];
   /** Its document is about the product, not a contract (a policy wording, product summary or benefit guide, by its stored
    * role or its reading's kind): it can never be a second policy. */
   reference?: boolean };
@@ -767,8 +769,16 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
 
 const nameKey = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 /** Stored document roles, and reading kinds, of a document about a product rather than a contract: a closed list. */
-export const REFERENCE_DOCUMENT_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "brochure"]);
+// Benefit guides are left out: certificate parts and personal benefit summaries are stored under that role (TE pr303 T5).
+export const REFERENCE_DOCUMENT_ROLES = new Set(["policy_wording", "product_summary", "brochure"]);
 export const REFERENCE_DOCUMENT_KINDS = new Set(["policy_wording", "product_summary"]);
+/** Whether a held cover sits only on documents about the product: EVERY document it was printed on (each copy's, in
+ * whatever order they were read) is one by its stored role or by its reading's kind (Critic R303 H2). */
+export function referenceCover(c: { source?: { documentId: string } | null; documentKind?: string | null; copyDocuments?: { documentId: string; kind: string | null }[] },
+  referenceDocs: Set<string>): boolean {
+  const copies = c.copyDocuments?.length ? c.copyDocuments : c.source?.documentId ? [{ documentId: c.source.documentId, kind: c.documentKind ?? null }] : [];
+  return copies.length > 0 && copies.every((x) => referenceDocs.has(x.documentId) || REFERENCE_DOCUMENT_KINDS.has(x.kind ?? ""));
+}
 const keyParts = (coverKey: string | undefined) => (coverKey ?? "").split("|");
 /** Whether a cover is named after its own plan (its cover name is the product's or the plan's), and not a rider. */
 const planNamed = (coverKey: string | undefined) => { const [product, cover, plan, rider] = keyParts(coverKey); return !!product && !rider && (cover === product || cover === plan); };
@@ -780,8 +790,9 @@ function twinDocument(coverKey: string | undefined, held: HeldCover[]): string |
   if (!planNamed(coverKey)) return undefined;
   const own = held.filter((h) => h.coverKey === coverKey && !!h.documentId);
   if (!own.length) return undefined;
-  const [product, , plan] = keyParts(coverKey), docs = new Set(own.map((h) => h.documentId!));
-  const named = held.filter((h) => { const [p, c, pl, rider] = keyParts(h.coverKey); return !rider && p === product && pl === plan && c !== p && c !== pl && !!h.documentId && !docs.has(h.documentId); });
+  const [product, , plan] = keyParts(coverKey), docs = new Set(own.flatMap((h) => [h.documentId!, ...(h.copyDocumentIds ?? [])]));
+  const named = held.filter((h) => { const [p, c, pl, rider] = keyParts(h.coverKey); return !rider && p === product && pl === plan && c !== p && c !== pl && !!h.documentId
+    && [h.documentId, ...(h.copyDocumentIds ?? [])].every((d) => !docs.has(d)); });
   if (!named.length) return undefined;
   const sums = new Set(own.map((h) => h.sumInsured)), currencies = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
   const printed = (h: HeldCover) => [h.policyNumber, ...(h.copyNumbers ?? [])].map((n) => n ? numberKey(n) : "").filter(Boolean);

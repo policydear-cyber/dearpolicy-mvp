@@ -13,7 +13,7 @@ globalThis.fetch = (async () => { fetches++; throw new Error("no network"); }) a
 
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import type { CheckedBenefit, CheckedCover, CheckedReading } from "@/lib/benefit-table/check";
-import { categoryRows, lumpSumParts, REFERENCE_DOCUMENT_KINDS, tileRows, type ConfirmedLine, type HeldCover } from "@/lib/coverage/table-figures";
+import { categoryRows, lumpSumParts, referenceCover, tileRows, type ConfirmedLine, type HeldCover } from "@/lib/coverage/table-figures";
 
 let pass = 0, fail = 0;
 function t(id: string, ok: boolean, detail: unknown) {
@@ -68,7 +68,8 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
     const p = assembleTable(rs, family, linksFor(rs, extra)).people.find((x) => x.id === person)!;
     const held: HeldCover[] = p.covers.map((c) => ({ coverKey: c.coverKey, ...(c.holding ? { holding: c.holding } : {}), name: c.cover, documentId: c.source.documentId,
       sumInsured: c.sumInsured, currency: c.currency, policyNumber: c.policyNumber, ...(c.copyNumbers ? { copyNumbers: c.copyNumbers } : {}),
-      ...(referenceDocs.includes(c.source.documentId) || REFERENCE_DOCUMENT_KINDS.has(c.documentKind ?? "") ? { reference: true } : {}) }));
+      ...(c.copyDocuments ? { copyDocumentIds: c.copyDocuments.map((x) => x.documentId) } : {}),
+      ...(referenceCover(c, new Set(referenceDocs)) ? { reference: true } : {}) }));
     return lumpSumParts(tileRows(categoryRows(category, p.rows)), lines, held, category);
   };
   const show = (r: ReturnType<typeof tile>) => ({ total: r.total, known: r.known, parts: r.parts.map((x) => `${x.name}=${x.amount ?? "?"} ${x.currency ?? ""}`) });
@@ -88,6 +89,12 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
     t(`${m} A3 one number written two ways: counted once, 650,000`, ci.total === 650000, show(ci));
   }
 
+  // A5: the schedule's own provisions share is read too ("one hundred percent (100%) of the Sum Assured"): still once.
+  {
+    const sch = schedule(); sch.benefits = sch.benefits.map((b) => b.benefit === "Critical Illness Benefit" ? { ...b, percentOf: "sum_insured" } : b);
+    const ci = tile([sch, wording(), otherPolicy], "Critical Illness");
+    t(`${m} A5 the provisions' share read as 100% of the sum: counted once, 650,000`, ci.total === 650000, show(ci));
+  }
   // A4: the wording names the person, so its reading calls it personal proof, but it is stored as a policy wording.
   {
     const w = wording(); w.kind = "personal_proof";
@@ -111,6 +118,23 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
     const links = { "lifesched|Schedule": WHOLE, "endorse|Endorsement": NAMED };
     const death = tile([life, endorsement], "Death", [], "p-ana", links);
     t(`${m} N9 life plan + accelerated CI endorsement: Death keeps 300,000`, death.total === 300000, show(death));
+  }
+  // T5 (TE pr303): policy B's personal benefit summary or certificate part (stored as a benefit guide) names the plan and
+  // its sum with no number: a second policy may be held, so it is never joined (no total, never 300,000).
+  {
+    const summary = reading("bsum", [cover("bsum", {})], [row("bsum", "2.2 Critical Illness Benefit", "Critical Illness Benefit", null)], "personal_proof");
+    const ci = tile([schedule(), summary, otherPolicy], "Critical Illness");
+    t(`${m} T5 a personal benefit summary of a second policy: not joined, no total`, ci.total === null, show(ci));
+  }
+  // P2 (Critic R303 H2): the wording and a separate plan-named contract with no number, of one sum, are one cover in the
+  // table whichever is read first: never joined, in either order.
+  {
+    const contract = reading("contract", [cover("contract", {})], [row("contract", "2.2 Critical Illness Benefit", "Critical Illness Benefit", null)], "personal_proof");
+    for (const [order, rs] of [["schedule, wording, contract", [schedule(), wording(), contract]], ["schedule, contract, wording", [schedule(), contract, wording()]],
+      ["wording, contract, schedule", [wording(), contract, schedule()]], ["contract, wording, schedule", [contract, wording(), schedule()]]] as const) {
+      const ci = tile([...rs], "Critical Illness");
+      t(`${m} P2 wording + a plan-named contract with no number (${order}): not joined, no total`, ci.total === null, show(ci));
+    }
   }
   // N1: a basic plan and its rider, each 300,000 on the schedule: both count, and the wording joins the basic plan only.
   {

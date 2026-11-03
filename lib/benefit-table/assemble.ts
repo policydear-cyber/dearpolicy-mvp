@@ -73,6 +73,9 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when another copy of this same cover (same person, cover type and sum) that was not kept prints a policy number
    * this copy does not: every number its copies print, so a reader that must not join two policies sees them all. */
   copyNumbers?: string[];
+  /** Set when this cover was printed on more than one document: every copy's document and its reading's kind, the kept
+   * one included, so a reader asking what documents hold it sees them all, in whatever order they were read. */
+  copyDocuments?: { documentId: string; kind: CheckedReading["kind"] | null }[];
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
@@ -171,6 +174,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
       // contract): the kept cover carries every printed number of its copies (Critic R303 H1).
       const printed = [...new Set(group.map((x) => x.policyNumber).filter((n): n is string => !!n && !!policyNumberKey(n)))];
       if (printed.some((n) => !c.policyNumber || policyNumberKey(n) !== policyNumberKey(c.policyNumber))) c.copyNumbers = printed;
+      if (group.length > 1) c.copyDocuments = group.map((x) => ({ documentId: x.source.documentId, kind: x.documentKind ?? null }));
       covers.push(c);
     }
   }

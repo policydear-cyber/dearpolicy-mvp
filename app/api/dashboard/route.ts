@@ -15,7 +15,7 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { TablePremiumCover } from "@/lib/policies/premium-summary";
 import { countedPremiums } from "@/lib/policies/counted-premiums";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
-import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, REFERENCE_DOCUMENT_KINDS, REFERENCE_DOCUMENT_ROLES, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
+import { categoryRows, confirmedTotalComplete, LUMP_SUM_CATEGORIES, lumpSumParts, referenceCover, REFERENCE_DOCUMENT_ROLES, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
@@ -112,7 +112,7 @@ export async function GET(request:NextRequest){
       tableCovers=person?.covers??[];
       // A page about the product (its wording, summary or guide) is never a second policy (lib/coverage/table-figures twinDocument).
       const referenceDocs=new Set(loaded.documents.filter(d=>REFERENCE_DOCUMENT_ROLES.has(d.file?.document_role??"")).map(d=>d.id));
-      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency,notionalSum:c.notionalSum??null,policyNumber:c.policyNumber??null,...(c.copyNumbers?{copyNumbers:c.copyNumbers}:{}),...(referenceDocs.has(c.source?.documentId??"")||REFERENCE_DOCUMENT_KINDS.has(c.documentKind??"")?{reference:true}:{})}));
+      const held=(person?.covers??[]).map(c=>({coverKey:c.coverKey,...(c.holding?{holding:c.holding}:{}),name:c.cover||c.product,documentId:c.source?.documentId??null,sumInsured:c.confirmation?.status==="corrected"?c.confirmation.sumInsured:c.sumInsured,currency:c.currency,notionalSum:c.notionalSum??null,policyNumber:c.policyNumber??null,...(c.copyNumbers?{copyNumbers:c.copyNumbers}:{}),...(c.copyDocuments?{copyDocumentIds:c.copyDocuments.map(x=>x.documentId)}:{}),...(referenceCover(c,referenceDocs)?{reference:true}:{})}));
       const kinds=personKinds(person?.covers??[],person?.rows??[]);
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
