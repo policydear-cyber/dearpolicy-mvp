@@ -52,7 +52,7 @@ test("a share written in words and figures keeps its figure, on stored and fresh
   assert.equal(pay("Angioplasty Benefit", "We pay ten percent (10%) of the Sum Insured, up to a maximum of Ten Thousand Ringgit Malaysia (RM10,000).", 0.1, 500_000, "MYR"), 10_000);
   assert.equal(pay("Accidental Death Rider", "We will pay one hundred and fifty per cent (150%) of the Sum Assured of this rider in one (1) lump sum.", 1.5, 200_000, "GBP"), 300_000);
   assert.equal(pay("Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Supplementary Benefit.", 0.5, 200_000, "SGD"), 100_000);
-  assert.equal(pay("Critical Illness Benefit", "We will pay fifty percent (50%) of the Sum Assured of this Plan.", 0.5, 200_000, "SGD"), 100_000);
+  assert.equal(pay("Early Stage Critical Illness Benefit", "We will pay fifty percent (50%) of the Sum Assured of this Rider.", 0.5, 200_000, "SGD"), 100_000);
   // Withheld: a mismatch, a cap in another currency, another cover's sum, a changer, a second figure.
   for (const [name, quote] of [
     ["Critical Illness Benefit", "We will pay twenty percent (25%) of the Sum Assured."],
@@ -66,5 +66,7 @@ test("a share written in words and figures keeps its figure, on stored and fresh
     ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Plan."],
     ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Basic Benefit."],
     ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Policy."],
+    // A rider's row is often named for its benefit: "this Plan" may still be the basic plan (TE pr300 P1b).
+    ["Early Stage Critical Illness Benefit", "We will pay fifty percent (50%) of the Sum Assured of this Plan."],
   ] as const) assert.equal(validateCatalogFormula({ kind: "sum_insured", value: Number(quote.match(/\((\d+)%\)/)![1]) / 100, currency: "SGD", quote, factKey: null, offsetDays: null, maximumDays: null, benefitName: name }).formulaKind, "none", quote);
 });

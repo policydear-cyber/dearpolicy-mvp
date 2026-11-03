@@ -925,13 +925,14 @@ const SUBJECT_TO_THE_POLICY=/\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provis
 const CAP_SCOPE_WORD=/^(?:total|aggregate|all|across|lifetime|combined|overall|child|children|adult|adults|juvenile|minor|plus|double|doubled|triple|half|halved|increase\w*|decrease\w*|reduc\w*|less|more|maximum|minimum|limit\w*|any|other|each)$/u;
 /** "of the Sum Assured of this Basic Benefit": whose sum the share is of, said as the row's own kind. On a rider or
  * supplementary row only "this rider" or "this supplementary benefit" is its own: "this Plan" or "this Policy" there may be
- * the basic plan, whose sum is another (TE pr300 P1). On any other row, "this basic benefit", "this benefit", "this plan" or
- * "this policy". Anything else stays in the passage and is read. */
+ * the basic plan, whose sum is another (TE pr300 P1). On any other row, "this basic benefit", "this rider" or "this
+ * supplementary benefit": a rider's row is often named for its benefit, so "this plan" may still be the basic plan (TE pr300
+ * P1b) and stays in the passage, read as before. */
 const RIDER_ROW=/\b(?:riders?|supplementary|add[- ]?on|tambahan)\b/iu;
 function ownSumPhrase(benefitName:string|null|undefined){
   return RIDER_ROW.test(normalText(benefitName??""))
     ?/\bof\s+this\s+(?:rider|supplementary\s+benefit)\b/gu
-    :/\bof\s+this\s+(?:basic\s+)?(?:benefit|plan|policy)\b/gu;
+    :/\bof\s+this\s+(?:basic\s+benefit|rider|supplementary\s+benefit)\b/gu;
 }
 function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   // The name's words, but never one that scopes or changes a cap, whatever the name ("Total and Permanent Disability").
