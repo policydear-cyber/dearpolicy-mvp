@@ -76,7 +76,7 @@ async function main() {
     const hooks = src.split("\n").filter((l) => l.includes("@/lib/simple-chat/hook"));
     assert.equal(hooks.length, 2);
     // prepareChat reads the switch; the run follows the path that prepared the turn (R36-5).
-    assert.match(hooks[0], /^\s*if\(simpleChatEnabled\(process\.env,request\.accountId\)\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.prepareSimpleChat\(request\);$/);
+    assert.match(hooks[0], /^\s*if\(await simpleChatFor\(request\.accountId\)\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.prepareSimpleChat\(request\);$/);
     assert.match(hooks[1], /^\s*if\(context\.chatPath==="simple"\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.runSimpleChat\(/);
     assert.match(readFileSync("lib/simple-chat/hook.ts", "utf8"), /holdings: \[\], chatPath: "simple" \}/);
     assert.ok(!/^import .*simple-chat\/hook/m.test(src));

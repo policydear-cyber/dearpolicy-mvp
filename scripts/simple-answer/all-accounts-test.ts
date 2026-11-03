@@ -52,3 +52,50 @@ test("a household that chatted on the earlier path continues the same conversati
   assert.match(turns[1].text, /RM200 a day in hospital/, "the earlier answer is carried into the simple chat's history");
   assert.equal(fetches, 0);
 });
+
+test("a household reached only by the switch gets the simple chat only on the benefit table; one on its existing reading keeps the existing chat", async () => {
+  const { readFileSync } = await import("node:fs");
+  const db = await installDatabase();
+  await db.exec(readFileSync("sql/benefit-table.sql", "utf8"));
+  const OLD = "00000000-0000-0000-0000-0000000c0011", NEW = "00000000-0000-0000-0000-0000000c0012", TABLE = "00000000-0000-0000-0000-0000000c0013";
+  const people: Record<string, string> = {};
+  let k = 0;
+  for (const [acc, name] of [[OLD, "Priya Nair"], [NEW, "Tomasz Nowak"], [TABLE, "Mei Ling Goh"]]) {
+    await db.query("INSERT INTO accounts(id,name) VALUES($1,'Made-up household')", [acc]);
+    people[acc] = "76000000-0000-4000-8000-0000000001" + String(++k).padStart(2, "0");
+    await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'self')", [people[acc], acc, name]);
+  }
+  const doc = async (acc: string, product: string) => {
+    const pid = "77000000-0000-4000-8000-0000000001" + String(++k).padStart(2, "0");
+    await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,product_name,document_role,quarantine_status)
+      VALUES($1,$2,$3,$4,$5,$6,'ready',$7,'personal_schedule','scan_clean')`, [pid, acc, people[acc], product + ".pdf", "k/" + pid, "h" + pid, product]);
+    return pid;
+  };
+  // OLD: a document read the existing way before the table existed. TABLE: a document read into the table. NEW: nothing yet.
+  await doc(OLD, "Example Hospital Cash (£)");
+  const read = await doc(TABLE, "Example Term Life (S$)");
+  await db.query("INSERT INTO benefit_readings(account_id,policy_id,reading,model,prompt_version) VALUES($1,$2,$3,'stand-in','test')", [TABLE, read, JSON.stringify({ document: {}, pages: [] })]);
+
+  Object.assign(process.env, { DEARPOLICY_SIMPLE_CHAT: "1", DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS: "1", DEARPOLICY_BENEFIT_TABLE: "1",
+    DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS: "1", DEARPOLICY_ALPHA_ACCOUNTS: "someone-else" });
+  const { simpleChatFor } = await import("@/lib/simple-chat/for-household");
+  assert.equal(await simpleChatFor(OLD), false, "read the existing way: keeps the existing chat (whole library, no row guards otherwise)");
+  assert.equal(await simpleChatFor(NEW), true, "a new household starts on the table and the simple chat");
+  assert.equal(await simpleChatFor(TABLE), true, "already on the table");
+  // Without the table's own all-accounts switch no such household is on the table, so none gets the simple chat.
+  assert.equal(await simpleChatFor(NEW, { ...process.env, DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS: "" }), false);
+  // The table check failing keeps the existing chat; the alpha list never asks the table.
+  assert.equal(await simpleChatFor(NEW, process.env, async () => { throw new Error("database down"); }), false);
+  let asked = 0;
+  assert.equal(await simpleChatFor("someone-else", process.env, async () => { asked++; return false; }), true);
+  assert.equal(asked, 0);
+
+  // The old-reading household's conversation continues on the existing chat path, the same conversation.
+  const conv = (await db.query<{ id: string }>("INSERT INTO chat_conversations(account_id,family_member_id,title) VALUES($1,$2,'Hospital cash') RETURNING id", [OLD, people[OLD]])).rows[0].id;
+  await db.query("INSERT INTO chat_messages(account_id,family_member_id,conversation_id,role,content) VALUES($1,$2,$3,'user','What does my hospital cash plan pay?')", [OLD, people[OLD], conv]);
+  const { prepareChat } = await import("@/lib/chat/workflow");
+  const ctx = await prepareChat({ accountId: OLD, familyMemberId: people[OLD], question: "And per night in intensive care?", conversationId: conv });
+  assert.equal(ctx.conversation.id, conv, "the same conversation");
+  assert.notEqual(ctx.chatPath, "simple", "the existing chat answers it");
+  assert.equal(fetches, 0);
+});
