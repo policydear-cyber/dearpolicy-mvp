@@ -885,10 +885,10 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   for(const m of before.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu")))
     if(!EVENT_PERCENT_BEFORE.test(before.slice(0,m.index))&&!EVENT_PERCENT_AFTER.test(before.slice(m.index!+m[0].length)))return false;
   // "per eye", "for each hand": the share is for each such part, which changes nothing (Critic R450 low).
-  // "of the Sum Assured of this Basic Benefit": whose sum it is, the passage's own benefit, plan or rider. "of the Basic
-  // Benefit" from another row may be another cover's sum, so only "this" is read.
+  // "of the Sum Assured of this Basic Benefit": whose sum it is, the row's own kind (ownSumPhrase). "of the Basic Benefit"
+  // from another row may be another cover's sum, so only "this" is read.
   const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ").replace(PER_BODY_PART," ")
-    .replace(/^\s*of\s+this\s+(?:basic\s+)?(?:benefit|plan|policy|rider|supplementary\s+benefit)\b/u," ");
+    .replace(new RegExp("^\\s*"+ownSumPhrase(benefitName).source,"u")," ");
   // A second share anywhere after it ("50% of the Sum Insured. 25% for children.") is another rule for some claims.
   if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
   // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
@@ -912,7 +912,7 @@ export type ShareBound={kind:"none"}|{kind:"cap";amount:number;currency:string}|
  * "doubled if overseas", "for a child under 18", a figure) leaves the share unsure. The benefit's own name words count too. */
 const CAP_PASSAGE_WORDS=new Set(("a an the this that it its we will shall be is are was pay pays paid payable paying receive "
   +"benefit benefits amount sum insured assured person life policy cover per claim condition event of additional additionally only akan dibayar dibayarkan").split(" "));
-const CAP_PASSAGE_PHRASES=/\bof\s+this\s+(?:basic\s+)?(?:benefit|plan|policy|rider|supplementary\s+benefit)\b|\bin\s+advance\b|\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\b(?:as|in)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
+const CAP_PASSAGE_PHRASES=/\bin\s+advance\b|\(?\s*or\s+(?:its\s+)?equivalent\s+(?:in\s+any\s+other\s+)?currency\s*\)?|\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b|\b(?:as|in)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b|\b(?:payable\s+|paid\s+)?only\s+once\b|\bunder\s+this\s+(?:policy|rider|supplementary\s+agreement|contract|benefit)\b|\bor\b(?=[\s,]*whichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b)|(?:,\s*)?\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|smaller|less)\b/giu;
 /** The share's own trigger when it names every covered condition, never one of them: "upon diagnosis of any one of the 27
  * conditions covered", "on the diagnosis of any of the covered illnesses". It narrows nothing, so it does not unsettle the
  * cap. A named condition, a person, a place or a time ("upon diagnosis of carcinoma in situ", "in the first year") is not
@@ -923,10 +923,23 @@ const ANY_COVERED_CONDITION=/\b(?:up)?on\s+(?:the\s+)?diagnosis\s+of\s+any\s+(?:
 const HARMLESS_REFERENCE=/\b(?:as\s+)?(?:listed|set\s+out|described|defined|shown|named)\s+in\s+(?:the\s+)?(?:schedule|appendix|annex(?:ure)?|lampiran|jadual)(?:\s+[a-z0-9]{1,3})?\b|,?\s*\bsubject\s+to\s+(?:a|the)\s+(?:survival|waiting)\s+period\s+of\s+\d{1,4}\s+(?:days?|months?|hari|bulan)\b/giu;
 const SUBJECT_TO_THE_POLICY=/\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)(?:\s+and\s+conditions)?\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b/giu;
 const CAP_SCOPE_WORD=/^(?:total|aggregate|all|across|lifetime|combined|overall|child|children|adult|adults|juvenile|minor|plus|double|doubled|triple|half|halved|increase\w*|decrease\w*|reduc\w*|less|more|maximum|minimum|limit\w*|any|other|each)$/u;
+/** "of the Sum Assured of this Basic Benefit": whose sum the share is of, said as the row's own kind. On a rider or
+ * supplementary row only "this rider" or "this supplementary benefit" is its own: "this Plan" or "this Policy" there may be
+ * the basic plan, whose sum is another (TE pr300 P1). On any other row, "this basic benefit", "this benefit", "this plan" or
+ * "this policy". Anything else stays in the passage and is read. */
+const RIDER_ROW=/\b(?:riders?|supplementary|add[- ]?on|tambahan)\b/iu;
+function ownSumPhrase(benefitName:string|null|undefined){
+  return RIDER_ROW.test(normalText(benefitName??""))
+    ?/\bof\s+this\s+(?:rider|supplementary\s+benefit)\b/gu
+    :/\bof\s+this\s+(?:basic\s+)?(?:benefit|plan|policy)\b/gu;
+}
 function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   // The name's words, but never one that scopes or changes a cap, whatever the name ("Total and Permanent Disability").
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const words=normalText(rest).replace(CAP_PASSAGE_PHRASES," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
+  const plain=normalText(rest).replace(CAP_PASSAGE_PHRASES," ");
+  // On a rider, "of this Policy" or "this Plan" may be the basic plan's sum (TE pr300 P1).
+  if(RIDER_ROW.test(normalText(benefitName??""))&&/\bthis\s+(?:basic\s+)?(?:policy|plan|benefit)\b/u.test(plain))return false;
+  const words=plain.replace(ownSumPhrase(benefitName)," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CAP_PASSAGE_WORDS.has(w)||own.has(w));
 }
 const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)\s+(?:claims?|events?|conditions?|diagnos[ie]s)\b/iu;
@@ -972,7 +985,7 @@ const CURRENCY_NAMES:[RegExp,RegExp][]=[
   [/^(?:pounds?(?:\s+sterling)?|british\s+pounds?)$/u,/^(?:gbp|£)$/u],[/^euros?$/u,/^(?:eur|€)$/u],
 ];
 const NUMBER_WORD_SOURCE="(?:"+[...Object.keys(NUMBER_WORDS),...Object.keys(SCALE_WORDS),"and"].join("|")+")";
-const WORDS_THEN_FIGURE=new RegExp(String.raw`\b(${NUMBER_WORD_SOURCE}(?:[\s-]+${NUMBER_WORD_SOURCE})*)(\s+(?:per\s?cent|percent))?((?:\s+\p{L}+){0,3}?)\s*\(\s*((?:sgd|myr|usd|hkd|gbp|eur|rm|s\$|us\$|hk\$|£|€)\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?\s*(%)?\s*\)`,"giu");
+const WORDS_THEN_FIGURE=new RegExp(String.raw`\b((?!and\b)${NUMBER_WORD_SOURCE}(?:[\s-]+${NUMBER_WORD_SOURCE})*)(\s+(?:per\s?cent|percent))?((?:\s+\p{L}+){0,3}?)\s*\(\s*((?:sgd|myr|usd|hkd|gbp|eur|rm|s\$|us\$|hk\$|£|€)\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?\s*(%)?\s*\)`,"giu");
 export function figureOnce(text:string):string{
   return text.normalize("NFKC").replace(WORDS_THEN_FIGURE,(whole,words:string,percent:string|undefined,named:string,sign:string|undefined,figure:string,cents:string|undefined,mark:string|undefined)=>{
     const spelled=spelledNumber(words.trim());

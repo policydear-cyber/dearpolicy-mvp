@@ -20,6 +20,7 @@ test("words then the same figure in brackets are one figure", async () => {
   const { figureOnce } = await import("@/lib/policies/benefit-catalog");
   assert.equal(figureOnce("We will pay one hundred percent (100%) of the Sum Assured in one (1) lump sum."), "We will pay 100% of the Sum Assured in one lump sum.");
   assert.equal(figureOnce("one hundred and fifty per cent (150%)"), "150%");
+  assert.equal(figureOnce("the Sum Assured and one (1) lump sum"), "the Sum Assured and one lump sum", "a joining \"and\" is not part of the number");
   assert.equal(figureOnce("Twenty-Five Thousand Singapore Dollars (SGD 25,000)"), "SGD 25,000");
   assert.equal(figureOnce("Ten Thousand Ringgit Malaysia (RM10,000)"), "RM 10,000");
   assert.equal(figureOnce("Twenty Thousand Pounds (£20,000)"), "£ 20,000");
@@ -49,7 +50,9 @@ test("a share written in words and figures keeps its figure, on stored and fresh
   assert.equal(unread("Death Benefit", "If the Life Assured dies while the Policy is in force, We will pay the Death Benefit in one (1) lump sum, less any amounts owing to Us.").formulaKind, "none");
   // Other markets.
   assert.equal(pay("Angioplasty Benefit", "We pay ten percent (10%) of the Sum Insured, up to a maximum of Ten Thousand Ringgit Malaysia (RM10,000).", 0.1, 500_000, "MYR"), 10_000);
-  assert.equal(pay("Accidental Death Benefit", "We will pay one hundred and fifty per cent (150%) of the Sum Assured of this rider in one (1) lump sum.", 1.5, 200_000, "GBP"), 300_000);
+  assert.equal(pay("Accidental Death Rider", "We will pay one hundred and fifty per cent (150%) of the Sum Assured of this rider in one (1) lump sum.", 1.5, 200_000, "GBP"), 300_000);
+  assert.equal(pay("Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Supplementary Benefit.", 0.5, 200_000, "SGD"), 100_000);
+  assert.equal(pay("Critical Illness Benefit", "We will pay fifty percent (50%) of the Sum Assured of this Plan.", 0.5, 200_000, "SGD"), 100_000);
   // Withheld: a mismatch, a cap in another currency, another cover's sum, a changer, a second figure.
   for (const [name, quote] of [
     ["Critical Illness Benefit", "We will pay twenty percent (25%) of the Sum Assured."],
@@ -59,5 +62,9 @@ test("a share written in words and figures keeps its figure, on stored and fresh
     ["Benign Tumour Benefit", "We will pay twenty percent (20%) of the Sum Assured, subject to a maximum amount of Twenty-Five Thousand Singapore Dollars (RM 25,000)"],
     ["Critical Illness Benefit", "We will pay one hundred percent (100%) of the Sum Assured in two (2) instalments."],
     ["Critical Illness Benefit", "We will pay one hundred percent (100%) of the Sum Assured, and a further ten percent (10%) after one (1) year."],
+    // On a rider, "this Plan" may be the basic plan, whose sum is another (TE pr300 P1).
+    ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Plan."],
+    ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Basic Benefit."],
+    ["Early Critical Illness Rider", "We will pay fifty percent (50%) of the Sum Assured of this Policy."],
   ] as const) assert.equal(validateCatalogFormula({ kind: "sum_insured", value: Number(quote.match(/\((\d+)%\)/)![1]) / 100, currency: "SGD", quote, factKey: null, offsetDays: null, maximumDays: null, benefitName: name }).formulaKind, "none", quote);
 });
