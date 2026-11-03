@@ -4,7 +4,9 @@
  * rows stored as "Hospitalisation"). Pure; made-up booklets from several markets; no network.
  *   npm run policies:product-scopes-test */
 import assert from "node:assert/strict";
-import { pageProductScopes } from "@/lib/policies/inventory";
+import { pageProductScopes, type InventoryDocument, type PolicyContract } from "@/lib/policies/inventory";
+import { validateAnalysis } from "@/lib/chat/policy-analysis";
+import type { PolicySource } from "@/lib/chat/types";
 for (const k of Object.keys(process.env)) if (/API_KEY|ANTHROPIC_KEY|OPENAI_KEY/i.test(k)) delete process.env[k];
 let passed = 0; const failed: string[] = [];
 const t = (name: string, fn: () => void) => { try { fn(); passed++; console.log("  ok  " + name); } catch (e) { failed.push(name); console.error("  FAIL " + name + ": " + (e instanceof Error ? e.message.split("\n")[0] : String(e))); } };
@@ -121,6 +123,26 @@ t("an insurer's brand before two products' headings, a Chinese translation, sche
 t("a shorter benefit-word name's heading after a fuller product ends the fuller one's section", () => {
   assert.deepEqual(scopes(["Hospitalisation Plus\nKey Features", "Benefits\n• Room and board\tS$300 per day", "Hospitalisation\nKey Features", "Benefits\n• Room and board\tS$200 per day"],
     ["Hospitalisation", "Hospitalisation Plus"]), ["Hospitalisation Plus", "Hospitalisation Plus", "", ""]);
+});
+t("in answers, a passage outside any section of a multi-product booklet is not used for a product the person does not own", () => {
+  const doc = (o: Partial<InventoryDocument>): InventoryDocument => ({ id: "booklet", insurer: "Harbour Assurance", product_name: "Harbour Civil Service Group Insurance", policy_number: null,
+    group_policy_number: "G-1", policy_type: "other", document_role: "benefits_booklet", personal_coverage_confirmed: false, document_authority: 60, needs_review: false,
+    processing_status: "ready", original_filename: "booklet.pdf", updated_at: "2026-11-03", effective_date: null, renewal_or_expiry_date: null, member_ids: [],
+    products: ["Group Term Life", "Group Personal Accident"], header: "", page_total: 9, chunk_total: 9, ...o } as InventoryDocument);
+  const contract = (references: InventoryDocument[]): PolicyContract => ({ id: "c", ownerId: "p", ownerName: "Person", name: "Group Term Life", insurer: "Harbour Assurance",
+    documents: [doc({ id: "cert", document_role: "certificate", personal_coverage_confirmed: true, product_name: "Group Term Life", products: ["Group Term Life"] })], references,
+    coverages: [{ id: "cov", policyId: "cert", familyMemberId: "p", category: "Death", amount: 100000, currency: "SGD", productName: "Group Term Life", sourcePage: 1,
+      evidenceText: "Death S$100,000", insurer: "Harbour Assurance", policyName: "Group Term Life", policyNumber: null, groupPolicyNumber: "G-1", documentRole: "certificate",
+      effectiveDate: null, renewalOrExpiryDate: null, currencyVerified: true }], confirmed: true, effectiveDate: null, ownershipBasis: "evidence" } as PolicyContract);
+  const quote = "Claims must be notified within 30 days of the accident.";
+  const source = (policyId: string, productScopes: string[]): PolicySource => ({ id: "s1", policyId, text: quote, pageStart: 4, pageEnd: 4, productScopes,
+    citation: { chunkId: "s1", policyId, policyName: "Booklet", pageStart: 4, pageEnd: 4 } } as PolicySource);
+  const kept = (c: PolicyContract, s: PolicySource) => validateAnalysis({ benefits: [], observations: [{ text: quote, evidence: [{ sourceId: "s1", quote }] }], nextSteps: [] }, [s], c).observations.length;
+  assert.equal(kept(contract([doc({})]), source("booklet", [])), 0, "unscoped page of a two-product booklet named after neither owned product");
+  assert.equal(kept(contract([doc({})]), source("booklet", ["Group Personal Accident"])), 0, "another product's section");
+  assert.equal(kept(contract([doc({})]), source("booklet", ["Group Term Life"])), 1, "the owned product's section");
+  assert.equal(kept(contract([doc({ products: ["Group Term Life"] })]), source("booklet", [])), 1, "a single-product document");
+  assert.equal(kept(contract([doc({ product_name: "Group Term Life" })]), source("booklet", [])), 1, "a document named after the owned product");
 });
 console.log(`\nproduct scopes: ${passed} passed, ${failed.length} failed`);
 if (failed.length) process.exit(1);
