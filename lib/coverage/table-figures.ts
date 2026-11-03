@@ -578,7 +578,14 @@ export type HeldCover = { coverKey: string; holding?: string; name: string; docu
   copyDocumentIds?: string[];
   /** Its document is about the product, not a contract (a policy wording, product summary or benefit guide, by its stored
    * role or its reading's kind): it can never be a second policy. */
-  reference?: boolean };
+  reference?: boolean;
+  /** Every text of its own rows in the person's whole table, on any tile (coverWords): a rider's words saying it pays its
+   * plan's death benefit may sit on a row of another tile ("Terminal illness benefit: we will pay the death benefit"). */
+  words?: string[] };
+/** Every text of a cover's own rows: names, sections, conditions and the quotes they were read from. */
+export function coverWords(rows: (SummaryRow & { coverKey?: string; source?: { excerpt?: string } | null })[], coverKey: string): string[] {
+  return rows.filter((r) => r.coverKey === coverKey).flatMap((r) => [r.benefit, r.section ?? "", r.source?.excerpt ?? "", ...r.conditions]).filter(Boolean);
+}
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 /** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
@@ -623,6 +630,54 @@ function acceleratesText(texts: (string | null | undefined)[]): boolean {
   }
   return affirmative;
 }
+/** A rider's own words say it pays its plan's death benefit itself, not a sum of its own (3 Nov, Critic R307 H1): "we will
+ * pay the death benefit in a lump sum", "the death benefit is payable early", "an advance of the death benefit",
+ * "accelerates the death benefit", Malay "kami akan membayar manfaat kematian". A closed list of phrasings, each naming THE
+ * death benefit as what is paid ("an amount equal to the death benefit" is not one: it may be a second sum). */
+const PAYS_DEATH_BENEFIT = [
+  /\b(?:pay|pays|paying|paid|advance|advances|advancing)\s+(?:out\s+)?(?:the|this\s+policy['’]s|the\s+policy['’]s|the\s+plan['’]s|the\s+basic\s+plan['’]s)\s+death\s+benefit\b/i,
+  /\bthe\s+death\s+benefit\s+(?:will|shall|is|would|may)\s+(?:be\s+)?(?:paid|payable|advanced)\b/i,
+  /\b(?:an?\s+)?(?:advance|advanced|early|acceleration)\s+(?:payment\s+)?of\s+the\s+death\s+benefit\b/i,
+  /\baccelerat\w*\s+the\s+death\s+benefit\b/i,
+  /\b(?:membayar|bayar|dibayar)\s+manfaat\s+kematian\b/i,
+  /\bmanfaat\s+kematian\s+(?:akan\s+)?(?:dibayar|dibayarkan|didahulukan)\b/i,
+];
+/** Words that a rider pays something beside the plan's death benefit: never folded into the plan. */
+const BESIDE_PLAN = /\b(?:additional|additionally|extra|in\s+addition|on\s+top|over\s+and\s+above|plus|top[\s-]?up|besides|as\s+well\s+as|further|double|tambahan|selain|di\s+samping|suppl[ée]mentaire|en\s+plus|zus[äa]tzlich|again|twice|also|its\s+own|rider\s+sum|rider\s+schedule|sum\s+assured\s+of\s+(?:this|the)\s+rider|lagi|sekali\s+lagi|juga|(?:of|under|for|from)\s+(?:this|the)\s+(?:rider|supplementary\s+(?:benefit|contract)|endorsement)|(?:di\s+bawah\s+)?rider\s+ini|du\s+pr[ée]sent\s+avenant|de\s+cet\s+avenant)\b|額外|额外|追加|本附加/i;
+/** The death benefit paid together with something else ("the death benefit and the funeral expense benefit"): a second
+ * sum beside it, unless the sentence says it is not paid (an exclusion: "we will not pay the death benefit and will refund"). */
+const JOINED = /\bdeath\s+benefit\s+(?:and|plus|together\s+with|with)\b|\bmanfaat\s+kematian\s+(?:rider|dan)\b/i;
+/** A rider's own name says it pays on an event other than death, early out of the plan: terminal illness or an
+ * accelerated / advance payment (a closed list, several languages). A name naming death or life cover never does (Critic
+ * R307 H2: "Level Term Rider", "Family Income Rider", "Rider Hayat Bertempoh" pay death sums of their own). */
+const EARLY_PAY_NAME = /\b(?:terminal(?:ly)?\s+ill(?:ness)?|ti|penyakit\s+terminal|accelerat\w*|advance\s+payment|maladie\s+terminale|phase\s+terminale)\b|末期/i;
+const DEATH_NAME = /\b(?:death|life|term|family\s+income|income|funeral|hayat|kematian|jiwa|décès|vie|leben|tod)\b|身故|死亡|壽|寿/i;
+export const earlyPayRiderName = (name: string) => EARLY_PAY_NAME.test(name) && !DEATH_NAME.test(name);
+/** Every text of a rider (its name, rows, sections, conditions, quotes) says nothing beside the plan, and one of them
+ * positively says it pays the plan's own death benefit, with no negation before it in its phrase. */
+function paysPlanDeathBenefit(texts: (string | null | undefined)[]): boolean {
+  const all = texts.filter((t): t is string => !!t);
+  if (all.some((t) => BESIDE_PLAN.test(t))) return false;
+  if (all.some((t) => { const m = JOINED.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); })) return false;
+  // A negated mention ("we will not pay the death benefit" in an exclusion for suicide) says when nothing is paid, not
+  // that the rider pays something else: it is no evidence either way, and never counts as the positive phrasing.
+  const positive = all.filter((t) => PAYS_DEATH_BENEFIT.some((re) => { const m = re.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); }));
+  // The sentence that says so says nothing more: every one of its words is a known word of that statement (an allow-list,
+  // TE pr307 round 4: "...in advance, and on death we pay 10% more" pays a second sum). No figure, no other benefit.
+  if (!positive.length || !positive.every(onlyPaysDeathBenefit)) return false;
+  // No other words of the rider pay something on death ("A compassionate allowance is payable on death"), unless negated.
+  return !all.some((t) => !positive.includes(t) && (() => { const m = SECOND_DEATH_PAYMENT.exec(t); return !!m && !NEGATED.test(t.slice(0, m.index)); })());
+}
+const SAYS_ONLY_WORDS = new Set(["we", "will", "shall", "would", "pay", "pays", "paid", "payable", "the", "death", "benefit", "in", "a", "an", "one",
+  "lump", "sum", "early", "earlier", "advance", "advanced", "as", "of", "is", "be", "this", "policy", "policy's", "plan", "plan's", "basic", "to", "you",
+  "your", "life", "insured", "assured", "upon", "on", "diagnosis", "if", "when", "diagnosed", "with", "terminal", "terminally", "ill", "illness", "ti",
+  "during", "term", "while", "in-force", "force", "payment", "out", "kami", "akan", "membayar", "bayar", "dibayar", "dibayarkan", "manfaat", "kematian",
+  "secara", "sekaligus", "lebih", "awal", "didahulukan", "pendahuluan", "polisi", "pelan", "ini", "jika", "apabila", "orang", "yang", "diinsuranskan"]);
+/** Every word of the sentence is one of the statement's known words (or accelerat-): nothing else is paid by it. */
+const onlyPaysDeathBenefit = (t: string) => t.toLowerCase().replace(/[’]/g, "'").split(/[^\p{L}\p{N}'-]+/u).filter(Boolean)
+  .every((w) => SAYS_ONLY_WORDS.has(w) || /^accelerat/.test(w));
+/** Words that something is paid on death (a second payment beside the plan's death benefit). */
+const SECOND_DEATH_PAYMENT = /\b(?:payable|paid|pay|pays)\b[^.;]*\b(?:on|upon)\s+(?:the\s+)?death\b|\b(?:on|upon)\s+(?:the\s+)?death\b[^.;]*\b(?:payable|paid|pay|pays)\b|\bdibayar\b[^.;]*\bkematian\b/i;
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
 const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
@@ -669,7 +724,11 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
     const names = { product: nameKey(list[0].product), plan: nameKey(list[0].plan), cover: nameKey(list[0].cover) };
     return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, names,
-      rider: (list[0].coverKey ?? "").split("|").length > 3, plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+      rider: (list[0].coverKey ?? "").split("|").length > 3,
+      earlyName: [list[0].cover, ...own.map((h) => h.name)].filter((n): n is string => !!n).every(earlyPayRiderName) && !!(list[0].cover || own[0]?.name),
+      paysPlanDeath: paysPlanDeathBenefit([...list.flatMap((r) => [r.benefit, r.section, r.cover, (r as { source?: { excerpt?: string } | null }).source?.excerpt, ...r.conditions]),
+        ...own.flatMap((h) => [h.name, ...(h.words ?? [])])]),
+      plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   // One policy read under two names on two of its documents: its wording names the person's cover after the plan itself
@@ -724,6 +783,16 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
       if (own.length === 1) taken.add(own[0]); else if (same.length) unsure = true;
       continue;
     }
+    // A confirmed line that prints no amount (a notional sum withheld at intake) is its document's one plan cover with no
+    // amount either: the same policy, listed once with no amount, never twice (3 Nov: "READYBUILDER 10" listed twice).
+    if (l.amount == null) {
+      const base = same.filter((c) => !c.rider && c.part.amount == null);
+      // The line must name that cover: its product, plan or cover name, word for word (TE pr307 F2: a line named after
+      // another policy is never joined to this plan).
+      const words = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      const named = base.length === 1 && !!words(l.name) && [base[0].names.product, base[0].names.plan, base[0].names.cover].some((n) => words(n) === words(l.name));
+      if (named && same.every((c) => c === base[0] || c.rider)) { taken.add(base[0]); lineCover.set(l, base[0]); continue; }
+    }
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
     if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
     // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
@@ -742,11 +811,22 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const c = categoryOfBenefit(l.name);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };
+  // A rider here with no amount of its own, whose plan is on this tile with no amount either, and whose own words say it
+  // pays that plan's death benefit ("Terminal Illness: we will pay the death benefit", paysPlanDeathBenefit), is that
+  // plan's own benefit paid another way: it adds nothing, and is not listed as another policy without a fixed sum. Any
+  // other rider, or one whose words say additional, extra or on top, is still listed (Critic R307 H1). A rider beside a plan with an amount, or with a sum insured of its own, is still listed: it may pay on top (3 Nov).
+  const amountOf = (c: (typeof covers)[number]) => { const l = [...lineCover].find(([, x]) => x === c)?.[0]; return l ? l.amount : taken.has(c) ? undefined : c.part.amount; };
+  const foldedRider = (c: (typeof covers)[number]) => {
+    if (!c.rider || c.part.amount != null || c.insured.size || !c.paysPlanDeath || !c.earlyName) return false;
+    const [product, , plan, riderOf] = keyParts(c.coverKey);
+    const base = covers.filter((x) => !x.rider && keyParts(x.coverKey)[0] === product && keyParts(x.coverKey)[1] === riderOf && keyParts(x.coverKey)[2] === plan);
+    return base.length === 1 && amountOf(base[0]) === null;
+  };
   const parts: TilePart[] = [...lines.map((l) => notional.has(l) ? { name: l.name, amount: null, currency: null } : ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
     ...(elsewhere(l) && l.amount != null ? { otherTile: true } : {}),
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
-    ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
+    ...covers.filter((c) => !taken.has(c) && !foldedRider(c)).map((c) => c.part)];
   // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
   const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");
   if (parts.some((a, i) => parts.some((b, j) => j > i && a.amount != null && a.amount === b.amount && a.currency === b.currency
