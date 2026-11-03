@@ -135,14 +135,15 @@ async function main() {
         const t = tile(await home(m.account, me), "Death");
         assert.equal(t.amount, m.sum); assert.deepEqual(parts(t), [`Kestrel Whole Life ${m.sum} ${m.cur}`]);
       });
-      // E: an ended single trip leaves the tile; a trip in force and a yearly policy past its first end date stay.
-      await test(`${m.cur} E1 trip in force counts; a trip that ended 20 days ago does not`, async () => {
+      // E: every policy on file is in force (DC 31 Oct, yes 1 Nov): a single trip whose printed dates have passed stays on the
+      // tile, beside a trip in force; a yearly policy past its first end date stays too.
+      await test(`${m.cur} E1 trip in force counts; a trip whose printed dates passed 20 days ago counts too`, async () => {
         const trip = (p: string, f: number, t: number) => doc(p, { sum: 50000, category: "Personal Accident", benefit: "Accidental Death", trip: { from: day(f), to: day(t) } });
         const live = trip("Swift Single Trip Travel", -2, 5), old = trip("Plover Single Trip Travel", -30, -20);
         await read(live, await add(live)); await read(old, await add(old));
         const t = tile(await home(m.account, me), "Personal Accident");
-        assert.equal(t.status, "covered"); assert.equal(t.amount, 50000);
-        assert.deepEqual(parts(t), [`Swift Single Trip Travel 50000 ${m.cur}`]);
+        assert.equal(t.status, "covered"); assert.equal(t.amount, 100000);
+        assert.deepEqual(parts(t).sort(), [`Plover Single Trip Travel 50000 ${m.cur}`, `Swift Single Trip Travel 50000 ${m.cur}`]);
       });
       await test(`${m.cur} E2 negative control: a yearly personal accident policy whose first year ended stays (may be renewed)`, async () => {
         const yearly = doc("Heron Personal Accident Plan", { person: m.names[1], personId: spouse, sum: 70000, category: "Personal Accident", benefit: "Accidental Death",
