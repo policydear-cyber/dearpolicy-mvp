@@ -113,6 +113,25 @@ test("negative (TE #318): a floor, a share the household pays, a charge, or a pe
   assert.deepEqual(ask(cont, "Lim Ah Kow", "Fracture: 15% of the Sum Insured", 15).amounts, []);
 });
 
+test("negative (Critic #318 H1/H2): a next line that is another benefit's labelled row, in any case, or a floor wording, gives no cap", () => {
+  const rows: [string, string][] = [
+    ["Fractures: 15% of the Sum Insured\nburns: maximum S$50,000", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured\n(Dislocation: up to S$20,000)", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured\nother injuries: up to S$10,000", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured\nand Burns: up to £5,000", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured\nplus RM 2,000 for physiotherapy", "Fractures: 15% of the Sum Insured"],
+    ["Fractures: up to RM50,000 or 15% of the Sum Insured, whichever is higher", "Fractures: up to RM50,000 or 15% of the Sum Insured"],
+    ["Fractures: 15% of the Sum Insured or up to S$50,000, whichever is greater", "Fractures: 15% of the Sum Insured"],
+  ];
+  for (const [text, quote] of rows) {
+    const h = house(["Lim Ah Kow"], [doc("c1", "Personal Accident Plan.pdf", ["Lim Ah Kow"], `Personal Accident Plan\nInsured: Lim Ah Kow\n${text}`)]);
+    assert.deepEqual(ask(h, "Lim Ah Kow", quote, 15, "the Sum Insured").amounts, [], text);
+  }
+  // The same rows with the cap continuing the sentence still show it.
+  const ok = house(["Lim Ah Kow"], [doc("c2", "Personal Accident Plan.pdf", ["Lim Ah Kow"], "Personal Accident Plan\nInsured: Lim Ah Kow\nFractures: 15% of the Sum Insured\nmaximum S$50,000 per claim")]);
+  assert.deepEqual(ask(ok, "Lim Ah Kow", "Fractures: 15% of the Sum Insured", 15, "the Sum Insured").amounts, ["Lim Ah Kow: Up to S$50,000"]);
+});
+
 test("negative: a statement with no person gives no cap", () => {
   assert.deepEqual(ask(MY, null as unknown as string, "Early stage critical illness: 25% of Sum Assured per claim", 25).amounts, []);
 });

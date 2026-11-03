@@ -335,7 +335,7 @@ function rowBase(pageText: string, rowOffset: number): { value: number; raw: str
   return nearest.base;
 }
 
-type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]>; base?: Base; found?: Found } | { ok: false; why: string; asFact?: boolean; found?: Found };
+type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]>; base?: Base; found?: Found } | { ok: false; why: string; asFact?: boolean; found?: Found; baseUnknown?: true };
 
 const PCTS = /(?<![\d.])(\d+(?:\.\d+)?)\s?(?:%|per\s?cent)/gi;
 const LABEL_STOP = new Set(["and", "the", "for", "due", "with", "from", "any", "one", "per", "all", "his", "her", "its", "of", "to", "or", "in", "on", "an", "by"]);
@@ -483,7 +483,9 @@ function rowCap(st: ModelStatement, at: Found, household: Household, person: str
   // The row's own line, with the lines that continue its sentence ("... 15% of Sum Insured" / "or up to S$50,000, whichever
   // is lesser"); a line that starts a new label ("Overall limit for all early stage claims: RM 100,000") is another row.
   const whole = rowWithContinuation(page.text, at.offset), extra = whole.slice(row.text.length).trim();
-  const continues = /^[a-z(]/.test(extra) || /^(?:or|and|whichever|subject|less|plus|but)\b/i.test(extra);
+  // A continuation starts with a closed list of sentence words and prints no label of its own ("burns: maximum S$50,000",
+  // "(Dislocation: up to S$20,000)" and "and Burns: up to £5,000" are other benefits' rows, Critic #318 H1).
+  const continues = /^(?:or|whichever|subject\s+to|up\s+to|max(?:imum)?\b|max\.|not\s+exceeding|limited\s+to|capped\s+at|per)\b/i.test(extra) && !/:/.test(extra);
   const text = extra && continues ? whole : row.text;
   const figures = moneyFiguresIn(text);
   if (new Set(figures.map((f) => f.value)).size !== 1 || numbersIn(text.replace(/\d+(?:\.\d+)?\s*%/g, " ")).some((n) => !sameValue(n, figures[0].value))) return null;
@@ -689,14 +691,14 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
     const printed = rowBase(page.text, found.offset);
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);
-      if (!b.ok) return { ok: false, why: b.why, asFact: true };
+      if (!b.ok) return { ok: false, why: b.why, asFact: true, baseUnknown: true };
       const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex], b.base.found.page);
       const value = Math.round(b.value * pct) / 100;
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
-    if (!printed) return { ok: false, why: NO_PRINTED_BASE };
-    if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
+    if (!printed) return { ok: false, why: NO_PRINTED_BASE, baseUnknown: true };
+    if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of", baseUnknown: true };
     const cur = currencyOf(printed.raw, page.text, doc, page.page);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
@@ -1620,7 +1622,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // The row's own printed cap ("25% of Sum Assured per claim, maximum RM 50,000 per claim") is the most it pays,
         // whatever the percentage works out to: it is shown as that cap, with the row's conditions, while the percentage
         // stays unworked (TE #311 round 3). Only when the percentage is this row's own figure, and rowCap's checks hold.
-        const cap = st.percentOf && r.why !== NOT_ROW_FIGURE ? rowCap(st, r.found ?? found, household, person) : null;
+        // Allow-list (Critic #318 L1): only a refusal about the percentage's base, for a positive percentage, opens the cap.
+        const cap = st.percentOf && st.percentOf.percent > 0 && r.baseUnknown ? rowCap(st, r.found ?? found, household, person) : null;
         if (!r.asFact && !cap) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
         // A percentage that is not worked out is kept as the printed percentage, without an amount. A benefit table's label
