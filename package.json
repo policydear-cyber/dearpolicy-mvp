@@ -226,6 +226,7 @@
     "chat:walkthrough-uk-test": "node --import tsx scripts/chat/walkthrough-uk-test.ts",
     "chat:plan-kind-test": "node --import tsx scripts/chat/plan-kind-test.ts",
     "family:covered-for-other-test": "node --import tsx scripts/family/covered-for-other-test.ts",
+    "chat:hospital-kind-test": "node --import tsx scripts/chat/hospital-kind-test.ts",
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",
     "documents:failed-advice-test": "node --import tsx scripts/failed-document-advice-regressions.ts",
