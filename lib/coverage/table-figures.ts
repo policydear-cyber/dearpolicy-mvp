@@ -724,6 +724,12 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
       if (own.length === 1) taken.add(own[0]); else if (same.length) unsure = true;
       continue;
     }
+    // A confirmed line that prints no amount (a notional sum withheld at intake) is its document's one plan cover with no
+    // amount either: the same policy, listed once with no amount, never twice (3 Nov: "READYBUILDER 10" listed twice).
+    if (l.amount == null) {
+      const base = same.filter((c) => !c.rider && c.part.amount == null);
+      if (base.length === 1 && same.every((c) => c === base[0] || c.rider)) { taken.add(base[0]); lineCover.set(l, base[0]); continue; }
+    }
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
     if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
     // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
@@ -742,11 +748,21 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const c = categoryOfBenefit(l.name);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };
+  // A rider here with no amount of its own, whose plan is on this tile with no amount either ("Terminal Illness: we will
+  // pay the death benefit"), is that plan's own benefit paid another way: it adds nothing, and is not listed as another
+  // policy without a fixed sum. A rider beside a plan with an amount, or with a sum insured of its own, is still listed: it may pay on top (3 Nov).
+  const amountOf = (c: (typeof covers)[number]) => { const l = [...lineCover].find(([, x]) => x === c)?.[0]; return l ? l.amount : taken.has(c) ? undefined : c.part.amount; };
+  const foldedRider = (c: (typeof covers)[number]) => {
+    if (!c.rider || c.part.amount != null || c.insured.size) return false;
+    const [product, , plan, riderOf] = keyParts(c.coverKey);
+    const base = covers.filter((x) => !x.rider && keyParts(x.coverKey)[0] === product && keyParts(x.coverKey)[1] === riderOf && keyParts(x.coverKey)[2] === plan);
+    return base.length === 1 && amountOf(base[0]) === null;
+  };
   const parts: TilePart[] = [...lines.map((l) => notional.has(l) ? { name: l.name, amount: null, currency: null } : ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
     ...(elsewhere(l) && l.amount != null ? { otherTile: true } : {}),
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
-    ...covers.filter((c) => !taken.has(c)).map((c) => c.part)];
+    ...covers.filter((c) => !taken.has(c) && !foldedRider(c)).map((c) => c.part)];
   // One cover read under two names ("Group Term Life" and "GTL") with the same sum is not added twice (R247 Q3).
   const words = (n: string) => productWords(n.replace(/\([^)]*\)/g, " ")).join(" ");
   if (parts.some((a, i) => parts.some((b, j) => j > i && a.amount != null && a.amount === b.amount && a.currency === b.currency
