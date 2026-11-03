@@ -97,7 +97,7 @@ async function main() {
   await test("S1 the stored page carries the rebuilt row; a page that matched line for line is kept as it was", async () => {
     const split = "Schedule\nAccidental\nDeath Benefit\t500,000.00\nPremium\t120.00", image = "Schedule\nAccidental Death Benefit\t500,000.00\nPremium\t120.00";
     const plain = "Schedule\nDeath Benefit\t200,000.00\nPremium\t120.00";
-    const pages = [{ pageNumber: 2, text: split }, { pageNumber: 3, text: plain }];
+    const pages: { pageNumber: number; text: string; unchecked?: boolean; partChecked?: boolean }[] = [{ pageNumber: 2, text: split }, { pageNumber: 3, text: plain }];
     const out = await crossCheckPages(pages, [2, 3], async () => [{ pageNumber: 2, text: image, extractionMethod: "ocr" }, { pageNumber: 3, text: plain, extractionMethod: "ocr" }]);
     assert.ok(out[0].text.split("\n").includes("Accidental Death Benefit\t500,000.00"), out[0].text);
     assert.ok(!out[0].unchecked && !out[0].partChecked, "the page is fully checked");
