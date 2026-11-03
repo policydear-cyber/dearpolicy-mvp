@@ -308,7 +308,9 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
       : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
       : checkLines(p.text, image.text, p.pageNumber);
-    if (check.agree) return p;
+    // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
+    // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
+    if (check.agree) return check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p;
     // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
     if (check.text === p.text) return { ...p, checkLog: check.log };
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
