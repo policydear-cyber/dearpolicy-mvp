@@ -18,7 +18,8 @@ import { notDismissedClause } from "@/lib/policies/name-dismissals";
 import { categoryRows, confirmedTotalComplete, coverWords, LUMP_SUM_CATEGORIES, lumpSumParts, referenceCover, REFERENCE_DOCUMENT_ROLES, personKinds, tableDisplay, tileRows, wordingDescribes, type KnownSum, type TilePart } from "@/lib/coverage/table-figures";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
-import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote } from "@/lib/policies/not-fully-read";
+import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote, unownedNotFullyRead } from "@/lib/policies/not-fully-read";
+import { readingCacheReady } from "@/lib/policies/read-failures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -194,8 +195,13 @@ export async function GET(request:NextRequest){
   // A failed or partly read document of this person may hold cover the tiles cannot show: say so, never "not found" alone.
   const notRead=await notFullyRead(accountId,active.id,tableDocuments);
   const notReadNote=notFullyReadNote(notRead,active.display_name,true);
+  // A "Not sure" upload nobody is linked to is no one's, so no person's count holds it. One whose reading failed or
+  // stalled is not in "Say whose" (ready documents only) either: name it once for the household so it never vanishes.
+  const claimable=new Set(unclaimed.rows.map((r)=>String(r.id)));
+  const unowned=(await unownedNotFullyRead(accountId,tableDocuments)).ids.filter((id)=>!claimable.has(id)).length;
+  if(unowned>0)reminders.push({kind:"coverage",title:unowned===1?"An upload was not fully read":"Some uploads were not fully read",detail:`${unowned===1?"One document":`${unowned} documents`} you uploaded without choosing a person could not be fully read, so nothing in ${unowned===1?"it":"them"} is used yet. Documents shows what to do.`,href:"/policies"});
   // Documents with details not matched to their page, in the words Documents uses. One already named as not fully read is not named twice.
-  const unconfirmed=Number(q.needs_review)>0?(await query<{id:string}>(`SELECT DISTINCT p.id::text AS id FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2")} AND p.needs_review`,[accountId,active.id])).rows.filter((r)=>!notRead.ids.includes(r.id)).length:0;
+  const unconfirmed=Number(q.needs_review)>0?(await query<{id:string}>(`SELECT DISTINCT p.id::text AS id FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2",await readingCacheReady())} AND p.needs_review`,[accountId,active.id])).rows.filter((r)=>!notRead.ids.includes(r.id)).length:0;
   if(unconfirmed>0)reminders.push({kind:"coverage",title:unconfirmed===1?"Some details in a document are not confirmed":"Some details in documents are not confirmed",detail:`${unconfirmed===1?"One document has":`${unconfirmed} documents have`} details that could not be matched to the page they came from, so DearPolicy does not use them in answers yet. Documents shows which.`,href:"/policies"});
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
