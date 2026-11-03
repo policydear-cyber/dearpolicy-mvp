@@ -1336,6 +1336,7 @@ export function reviewedBenefitFormula(input:{kind:string;value:number|null;curr
 import { query } from "@/lib/db/client";
 import { pool } from "@/lib/db/client";
 import { readFile } from "node:fs/promises";
+import { additiveSchemaInPlace } from "@/lib/db/additive-schema";
 import path from "node:path";
 
 type CatalogGlobals={__dearpolicyBenefitSchema?:Promise<void>};
@@ -1350,6 +1351,8 @@ export async function ensureBenefitSchema(){
     const sql=await readFile(path.join(process.cwd(),"sql/benefit-catalog.sql"),"utf8");
     const client=await pool.connect();
     try{
+      // Already in place: nothing is run, so no table lock is taken (lib/db/additive-schema.ts).
+      if(await additiveSchemaInPlace(client,sql))return;
       await client.query("BEGIN");
       // Serialise the migration across requests without holding a lasting lock.
       await client.query("SELECT pg_advisory_xact_lock(73499202)");
