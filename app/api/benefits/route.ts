@@ -88,7 +88,7 @@ export async function GET(request:NextRequest){
               b.currency,b.fact_key,b.offset_days,b.maximum_days,b.source_page,b.quote,
               b.conditions,b.requirements,b.needs_review,b.reviewed_at::text,b.basis_inferred,
               p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,p.policy_number AS document_policy_number,
-              owners.names AS owner_names,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind
+              owners.names AS owner_names,x.tier,x.row_kind
          FROM policy_benefits b
          JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
          LEFT JOIN LATERAL (
@@ -97,15 +97,18 @@ export async function GET(request:NextRequest){
                 JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")}
                WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id
          ) owners ON true
+         -- The optional columns, read from the row once each (tier, row kind and duplicate are absent on older schemas):
+         -- read inside the duplicate check, the row was turned into JSON once per document of the household (Benefits load).
+         CROSS JOIN LATERAL (SELECT j->>'tier' AS tier,j->>'row_kind' AS row_kind,j->>'duplicate_of_policy_id' AS duplicate_of FROM (SELECT to_jsonb(b) AS j) bj) x
         WHERE b.account_id=$1
           -- The same policy uploaded twice: one set of rows (see markDuplicates),
           -- as long as the kept document is still here.
-          AND NOT EXISTS (SELECT 1 FROM policies k WHERE k.account_id=b.account_id AND k.id=(to_jsonb(b)->>'duplicate_of_policy_id')::uuid
+          AND NOT EXISTS (SELECT 1 FROM policies k WHERE k.account_id=b.account_id AND k.id=x.duplicate_of::uuid
                 AND k.superseded_at IS NULL AND ${activePredicate("k")})
           AND ($2::uuid IS NULL OR EXISTS (
                 SELECT 1 FROM policy_members pm
                  WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id AND pm.family_member_id=$2::uuid))
-        ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name,b.source_page,to_jsonb(b)->>'tier'`,
+        ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name,b.source_page,x.tier`,
       [accountId,member||null]);
     // A table's numbered rows in number order, not text order ("2." before "10.").
     rows.rows=inNumberedOrder(rows.rows);

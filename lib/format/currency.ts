@@ -123,7 +123,21 @@ export function anyMoneyFigures(text: string): { value: number; index: number; l
 
 export const CURRENCY_NOT_STATED = "(currency unknown)";
 // An amount with cents shows both digits ("41.10", never "41.1"); a whole amount shows none.
-const plainNumber = (amount: number) => { const digits = Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2; return amount.toLocaleString("en-SG", { minimumFractionDigits: digits, maximumFractionDigits: digits }); };
+// Formatters are built once per set of options and reused: building one is most of the cost of formatting a figure, and a
+// page of several hundred benefits formats thousands of them. Same options, same text, as toLocaleString gives.
+const formatters = new Map<string, Intl.NumberFormat>();
+function formatter(currency: string | null, min: number | undefined, max: number): Intl.NumberFormat {
+  const key = `${currency ?? ""}|${min ?? ""}|${max}`;
+  let made = formatters.get(key);
+  if (!made) {
+    made = currency
+      ? new Intl.NumberFormat("en-SG", { style: "currency", currency, minimumFractionDigits: min, maximumFractionDigits: max })
+      : new Intl.NumberFormat("en-SG", { minimumFractionDigits: min, maximumFractionDigits: max });
+    formatters.set(key, made);
+  }
+  return made;
+}
+const plainNumber = (amount: number) => { const digits = Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2; return formatter(null, digits, digits).format(amount); };
 
 export function formatMoney(value: number | string | null | undefined, currency?: string | null) {
   const numeric = typeof value === "number" ? value : Number(value ?? 0);
@@ -139,12 +153,7 @@ export function formatMoney(value: number | string | null | undefined, currency?
     // Whole amounts of 1,000 or more drop the cents; an amount that has cents
     // keeps them (a S$1,936.50 premium is never shown as S$1,937).
     const whole = Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0;
-    const formatted = new Intl.NumberFormat("en-SG", {
-      style: "currency",
-      currency: code,
-      minimumFractionDigits: whole ? 0 : Math.abs(amount) >= 1000 ? 2 : undefined,
-      maximumFractionDigits: whole ? 0 : 2,
-    }).format(amount);
+    const formatted = formatter(code, whole ? 0 : Math.abs(amount) >= 1000 ? 2 : undefined, whole ? 0 : 2).format(amount);
     // Singapore's locale often renders SGD with a bare "$". DearPolicy uses an
     // explicit prefix so insurance amounts are never confused with USD -- and
     // only SGD is ever given the S$ prefix.

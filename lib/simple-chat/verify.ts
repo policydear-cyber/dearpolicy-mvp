@@ -45,6 +45,14 @@ function squash(s: string): { text: string; at: Int32Array } {
   // character, not a rope and a boxed array (Critic R445 M1).
   const chars: string[] = []; const at = new Int32Array(s.length); let n = 0;
   for (let i = 0; i < s.length; i++) {
+    // Plain ASCII, nearly every character of a page, is decided by its code without a pattern test (Benefits load):
+    // the same result as the general path below, which every other character still takes.
+    const code = s.charCodeAt(i);
+    if (code < 128) {
+      if (code === 32 || (code >= 9 && code <= 13)) continue;
+      chars.push(code === 96 ? "'" : code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : s[i]); at[n++] = i;
+      continue;
+    }
     let c = s[i];
     if (/\s/.test(c)) continue;
     if (/[“”„"]/.test(c)) c = "\"";
