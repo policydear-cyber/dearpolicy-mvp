@@ -46,7 +46,7 @@ async function main() {
   });
 
   await test("a subscription or contribution row is the payment; a row that only mentions one is not", () => {
-    for (const row of ["Monthly contribution: A$41.10", "Contribution paid by you A$41.10 per month", "Subscription per month £20", "Monthly subscription £148.60", "Monthly contribution £41.20", "Annual contribution RM1,200.00", "Contribution payable S$85.00", "Takaful contribution RM96.50", "Annual premium £96.00"])
+    for (const row of ["Contribution payable monthly S$85.00", "Contribution (paid by you) per month £30", "Monthly contribution: A$41.10", "Contribution paid by you A$41.10 per month", "Subscription per month £20", "Monthly subscription £148.60", "Monthly contribution £41.20", "Annual contribution RM1,200.00", "Contribution payable S$85.00", "Takaful contribution RM96.50", "Annual premium £96.00"])
       assert.ok(PREMIUM_ROW.test(row), row);
     for (const row of ["Annual contribution towards optical costs A$250", "Weekly contribution towards childcare while in hospital A$120", "Monthly contribution towards care home fees A$500", "Employer contribution paid A$500", "Employer's contribution £200", "Total contribution from the scheme towards treatment A$1,000", "Contribution paid by us towards dental treatment A$300", "Monthly contribution limit for physiotherapy A$90", "Annual subscription to the online GP service (included)", "Contribution amount for each night in hospital A$50", "Out-patient consultations up to £1,000 per member per year", "Employer contribution to your pension 5%", "Hospital cash £100 per night", "Subscription to our newsletter is free"])
       assert.ok(!PREMIUM_ROW.test(row), row);
@@ -64,13 +64,13 @@ async function main() {
 
   const fam2 = [["Lena Novak", "self"], ["Omar Haddad", "spouse"], ["Tia Haddad", "child"], ["Ravi Haddad", "child"]].map(([n, r], i) => ({ id: "q" + i, display_name: n, preferred_name: null, relationship: r }));
   await test("an opener alone, or another person's name, is never a correction of the pending person (Critic H1)", () => {
-    for (const m of ["Sorry, does Ravi have the same cover, not just Tia?", "Does Omar have it too, not only Tia?", "Sorry, is Omar covered, not Tia?", "Actually, can Ravi claim as well, not just Tia?", "Sorry, what does Omar's plan pay for physio?", "Actually, does Ravi have travel cover?", "It is late, can Omar claim tomorrow?", "It's Omar's turn next: is he covered for dental?", "Oops, is Ravi covered for dental?", "My mistake, what is Omar's excess?"]) {
+    for (const m of ["Omar paid the bill, not Tia", "Omar drove, not Tia", "Omar wants to claim too, not Tia", "Omar is covered, not Tia, right?", "Omar was there, not Tia", "Sorry, does Ravi have the same cover, not just Tia?", "Does Omar have it too, not only Tia?", "Sorry, is Omar covered, not Tia?", "Actually, can Ravi claim as well, not just Tia?", "Sorry, what does Omar's plan pay for physio?", "Actually, does Ravi have travel cover?", "It is late, can Omar claim tomorrow?", "It's Omar's turn next: is he covered for dental?", "Oops, is Ravi covered for dental?", "My mistake, what is Omar's excess?"]) {
       assert.equal(correctionOf(m, fam2), null, m);
       assert.equal(withoutCorrectedPerson(m, fam2), m, m);
     }
   });
   await test("an explicit 'not <pending person>' plus one other person is a correction", () => {
-    for (const [m, meant, not] of [["It's not Tia, it's Omar", "q1", "q2"], ["I meant Ravi not Tia", "q3", "q2"], ["Sorry, it was Omar, not Tia.", "q1", "q2"], ["Not Tia, Ravi", "q3", "q2"]] as const) {
+    for (const [m, meant, not] of [["It's not Tia, it's Omar", "q1", "q2"], ["I meant Ravi not Tia", "q3", "q2"], ["Sorry, it was Omar, not Tia.", "q1", "q2"], ["Not Tia, Ravi", "q3", "q2"], ["Not Tia — Omar", "q1", "q2"], ["Tell me about Omar, not Tia", "q1", "q2"], ["Not Tia, I mean Omar", "q1", "q2"]] as const) {
       const c = correctionOf(m, fam2);
       assert.ok(c, m);
       assert.equal(c!.meant.id, meant, m);

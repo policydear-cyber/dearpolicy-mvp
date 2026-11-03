@@ -55,7 +55,7 @@ const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVer
  * paid by us towards dental", "Monthly contribution limit for physiotherapy", "Annual subscription to the online
  * GP service") never is (TE W1 on #286). */
 const PAY_TERM = String.raw`(?=\s*(?:$|[:.,;()|=\-–—]|\d|(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b|(?:S|SG|US|HK|A|AU|NZ)\$|RM\s?\d|[$€£¥₱₹฿₩]))`;
-const PAY_QUAL = String.raw`(?:\s+(?:payable|due|amount|paid(?:\s+by\s+(?:you|the\s+(?:member|policyholder|policy\s+owner|insured|participant)))?|per\s+(?:month|year|annum|week|fortnight|quarter)))`;
+const PAY_QUAL = String.raw`(?:\s*(?:payable|due|amount|monthly|annually|yearly|quarterly|weekly|fortnightly|half[- ]yearly|\(?paid(?:\s+by\s+(?:you|the\s+(?:member|policyholder|policy\s+owner|insured|participant)))?\)?|per\s+(?:month|year|annum|week|fortnight|quarter)))`;
 const PAY_NOT_OURS = String.raw`(?<!\b(?:employer|employer['’]s|employers['’]?|company|company['’]s|government|state|scheme|scheme['’]s|our|their|fund['’]s)\s+)`;
 const PAY_FREQ = String.raw`(?:monthly|annual|yearly|quarterly|half[- ]yearly|weekly|fortnightly|total|modal|regular|single|first|renewal|takaful)`;
 export const PREMIUM_ROW = new RegExp(String.raw`\bpremiums?\b|` + PAY_NOT_OURS + String.raw`\b` + PAY_FREQ + String.raw`\s+(?:subscriptions?|contributions?)` + PAY_QUAL + "{0,2}" + PAY_TERM + "|" + PAY_NOT_OURS + String.raw`\b(?:subscriptions?|contributions?)` + PAY_QUAL + "{1,2}" + PAY_TERM, "i");

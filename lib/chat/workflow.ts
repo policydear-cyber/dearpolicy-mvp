@@ -239,10 +239,23 @@ export function correctionOf(message:string,family:ClaimPerson[]):{meant:ClaimPe
       const meant=resolveClaimPerson(rest,family,"");
       // A question about someone ("Sorry, does Sam have the same cover, not Priya?") asks; it does not correct.
       if(/^(?:(?:sorry|actually|oops|ok(?:ay)?|well|so|and|but|hmm|wait)\b[\s,.!-]*)*(?:does|do|did|is|are|was|were|can|could|will|would|has|have|had|should|shall|may|might|what|which|who|whose|how|when|where|why)\b/i.test(rest))return null;
-      if(meant.status==="resolved"&&meant.explicit&&meant.person.id!==negated.person.id)return {meant:meant.person,not:negated.person,rest};
+      if(meant.status==="resolved"&&meant.explicit&&meant.person.id!==negated.person.id&&correctionFrameOnly(rest,meant.person))return {meant:meant.person,not:negated.person,rest};
     }
   }
   return null;
+}
+/** Once "not <X>" is taken out, a correction says nothing but who it is: an opener (sorry, actually, oops, my
+ * mistake, no), a frame (it was, it's, I meant, I'm asking about, tell me about, I want), the member's name (optionally
+ * "'s claim/details") and optionally "was hurt / was the one / was in hospital". Anything else ("Omar paid the bill",
+ * "Omar drove", "Omar wants to claim too", "Omar is covered, right?") negates a role, not who the claim is about, so
+ * nothing moves (Critic M2 on #286). */
+function correctionFrameOnly(rest:string,person:ClaimPerson):boolean{
+  const names=[person.display_name,person.preferred_name,String(person.display_name??"").split(/\s+/)[0]].filter((n):n is string=>!!n&&!!n.trim()).map((n)=>n.trim().toLowerCase()).sort((a,b)=>b.length-a.length);
+  let t=" "+rest.toLowerCase().replace(/[’]/g,"'")+" ";
+  for(const n of names)t=t.split(n).join(" @ ");
+  t=t.replace(/@\s*'s\s+(?:claim|details|policy|cover)\b/g,"@").replace(/@\s*(?:was|got|is)\s+(?:the one|hurt|injured|admitted|in hospital|ill|sick)\b/g,"@");
+  t=t.replace(/\b(?:sorry|actually|oops|my (?:mistake|bad)|no|it was|it's|it is|i meant|i mean|meant|i'm asking (?:about|for)|i am asking (?:about|for)|tell me about|i want|wrong person|correction)\b/g," ");
+  return (t.match(/@/g)??[]).length===1&&/^[\s@,.;:!—–-]*$/.test(t);
 }
 export function withoutCorrectedPerson(message:string,family:ClaimPerson[]):string{
   if(!CORRECTION_WORDS.test(message)&&!/\bnot\b/i.test(message))return message;
