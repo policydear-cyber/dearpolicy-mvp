@@ -459,4 +459,19 @@ test("a page's one first-year premium is counted once, however many plans on it 
   assert.equal(run([plans[0], other[0]], day("03/11/2026")).items.length, 2);
   // Different first-year figures on one document are not merged.
   assert.equal(run([plans[0], { ...plans[1], firstYearPremium: 90 }], day("03/11/2026")).items.length, 2);
+  // Plans paid at different frequencies: how often the one first-year figure is paid is not stated, so it is left out and
+  // named, never counted once per plan (Critic R299 H1, TE pr299 F1: £35 counted monthly and yearly).
+  const gbp = (product: string, premium: number, premiumFrequency: string) => cover({ product, premium, premiumFrequency, firstYearPremium: 35, firstYearFrom: "01/06/2026",
+    currency: "GBP", premiumCurrency: "GBP", premiumNote: "the page prints a different premium for the first policy year", premiumSource: { ...src("doc-a"), page: 2 } as never });
+  const mixed = run([gbp("Thames Protect", 40, "Monthly"), gbp("Thames Income Rider", 300, "Yearly")], day("03/11/2026"));
+  assert.deepEqual(mixed.items, []);
+  assert.deepEqual(mixed.leftOut, [{ name: "Thames Protect", why: "unclear" }, { name: "Thames Income Rider", why: "unclear" }]);
+  assert.deepEqual(run([gbp("Thames Protect", 40, "Monthly"), gbp("Thames Income Rider", 300, "Yearly")], day("03/11/2027")).items.map((i) => i.annual), [480, 300],
+    "after the first year each plan's own premium counts");
+  // Two policy numbers on one page carrying one first-year line: whose it is is not known (Critic R299 M2).
+  const two = run([{ ...plans[0], product: "Kestrel Term", policyNumber: "P-111" }, { ...plans[1], product: "Kestrel Saver", policyNumber: "P-222" }], day("03/11/2026"));
+  assert.deepEqual([two.items.length, two.leftOut.map((x) => x.name)], [0, ["Kestrel Term", "Kestrel Saver"]]);
+  // One number printed on both rows, or on one row only, is one policy.
+  assert.equal(run([{ ...plans[0], policyNumber: "P-111" }, { ...plans[1], policyNumber: "P111" }], day("03/11/2026")).items.length, 1);
+  assert.equal(run([{ ...plans[0], policyNumber: "P-111" }, plans[1]], day("03/11/2026")).items.length, 1);
 });

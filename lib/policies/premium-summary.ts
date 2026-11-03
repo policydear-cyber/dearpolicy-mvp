@@ -185,8 +185,9 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
   const found: { cover: TablePremiumCover; name: string; item: PremiumItem }[] = [];
   // The one first-year line a page prints is the policy's whole first-year premium, whichever of its plans' rows carries it
   // (check.ts gives it to every cover with a premium on that page): it is counted once, never once per plan (3 Nov: a
-  // schedule's basic plan and rider each carried the page's first-year premium, and Home counted it twice).
-  const firstYear = new Map<string, { item: PremiumItem; later: number[]; currency: string; frequency: string; anniversary: number }>();
+  // schedule's basic plan and rider each carried the page's first-year premium, and Home counted it twice). Grouped by
+  // document, page, figure and currency; settled after the loop (sharedFirstYear).
+  const firstYear = new Map<string, { item: PremiumItem; name: string; later: number; frequency: string; perYear: number; anniversary: number; number: string | null }[]>();
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
     const documentId = c.source?.documentId;
@@ -216,27 +217,39 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
       if (c.firstYearPremium == null || start == null) { leftOut.push({ name, why: "not_current" }); continue; }
       const next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
       const anniversary = next.getTime() / 86_400_000;
-      if (today < anniversary) {
-        amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary));
-        const key = [documentId, page, c.firstYearPremium, currency, perYear].join("|"), same = firstYear.get(key);
-        if (same) {
-          same.later.push(c.premium);
-          // The later premium is every plan's, added up, when each is paid as often; otherwise it is not stated.
-          same.item.detail = "first policy year" + (same.frequency.toLowerCase() === c.premiumFrequency.toLowerCase() && same.anniversary === anniversary
-            ? "; " + formatMoney(Math.round(same.later.reduce((x, y) => x + y, 0) * 100) / 100, same.currency) + " " + same.frequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)) : "");
-          continue;
-        }
-        firstYear.set(key, { item: null as never, later: [c.premium], currency, frequency: c.premiumFrequency, anniversary });
-      }
+      if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
     }
     const annual = amount * perYear;
-    const fyKey = detail ? [documentId, page, c.firstYearPremium, currency, perYear].join("|") : null;
     found.push({ cover: c, name, item: { id: "table:" + documentId + ":" + productKey(c.product), policy_id: documentId, family_member_id: member.id, insurer: doc?.insurer ?? null, product_name: c.product,
       policy_number: c.policyNumber ?? null, frequency: c.premiumFrequency, payment_date: null, period_start: null, period_end: null, created_at: "", notes: null,
       amount, currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
       oneOff: false, shortPeriod: false, fromTable: true, detail } });
-    if (fyKey) firstYear.get(fyKey)!.item = found[found.length - 1].item;
+    if (detail) {
+      const key = [documentId, page, c.firstYearPremium, currency].join("|");
+      const start = printedDay(c.startDate ?? c.firstYearFrom ?? null)!, next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
+      firstYear.set(key, [...(firstYear.get(key) ?? []), { item: found[found.length - 1].item, name, later: c.premium, frequency: c.premiumFrequency, perYear,
+        anniversary: next.getTime() / 86_400_000, number: c.policyNumber ? numberKey(c.policyNumber) : null }]);
+    }
   }
+  // A first-year line several plans carry is one premium: counted once, for plans paid as often from one anniversary and on
+  // one policy. When they are paid at different frequencies, how often the first-year figure is paid is not stated; when they
+  // print different policy numbers, whose it is is not known: then it is left out, named, never counted twice or guessed
+  // (Critic R299 H1, M2; TE pr299 F1).
+  const dropped = new Set<PremiumItem>();
+  for (const group of firstYear.values()) {
+    if (group.length < 2) continue;
+    const [head, ...rest] = group;
+    const numbers = new Set(group.map((g) => g.number).filter((n): n is string => !!n));
+    const one = numbers.size <= 1 && rest.every((g) => g.perYear === head.perYear && g.frequency.toLowerCase() === head.frequency.toLowerCase() && g.anniversary === head.anniversary);
+    if (!one) {
+      for (const g of group) { dropped.add(g.item); leftOut.push({ name: g.name, why: "unclear" }); }
+      continue;
+    }
+    for (const g of rest) dropped.add(g.item);
+    head.item.detail = "first policy year; " + formatMoney(Math.round(group.reduce((x, g) => x + g.later, 0) * 100) / 100, head.item.currency!) + " "
+      + head.frequency.toLowerCase() + " from " + longDate(isoOfDay(head.anniversary));
+  }
+  if (dropped.size) found.splice(0, found.length, ...found.filter((f) => !dropped.has(f.item)));
   // A policy two documents give a premium (by a number, or a name, that may be one): the one whose printed period starts
   // latest is the renewal, and its premium counts (Critic R453 M1: last year's and this year's schedule). Choosing between
   // versions of one policy is reading content, never an expiry: no premium is dropped for its end date. When the starts tie
