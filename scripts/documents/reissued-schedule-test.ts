@@ -27,7 +27,7 @@ async function main() {
     process.exit(0);
   }
   const { query } = await import("@/lib/db/client");
-  const { provesSameAmounts } = await import("@/lib/documents/evidence-store");
+  const { provesSameAmounts, isCopyOf } = await import("@/lib/documents/evidence-store");
   const account = randomUUID(), other = randomUUID();
   await query("INSERT INTO accounts(id,name) VALUES($1,'Reissued schedule test household'),($2,'Another household')", [account, other]);
   const person = (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,'Amara Okafor','self') RETURNING id", [account])).rows[0].id;
@@ -99,6 +99,20 @@ async function main() {
       assert.deepEqual(await both(first, second), [true, true]);
       await query("UPDATE policy_benefits SET duplicate_of_policy_id=$2 WHERE policy_id=$1", [third, first]);
       assert.deepEqual(await both(second, third), [false, false], "third's rows are a duplicate of first, not of second");
+    });
+    await test("R10 a reissue that adds a figured rider is never set aside under the schedule without it; a photo that read less still is (Critic #325 M2)", async () => {
+      const base = [{ name: "Death", value: 500000, currency: "SGD" }, { name: "Total and permanent disability", value: 500000, currency: "SGD" }];
+      const original = await doc(account, person, base);
+      const withRider = await doc(account, person, [...base, { name: "Critical Illness Rider", value: 100000, currency: "SGD" }]);
+      const riderCover = await doc(account, person, base, [{ category: "Critical Illness", amount: 100000, currency: "SGD" }]);
+      assert.equal(await provesSameAmounts(account, withRider, original), true, "the shared rows agree");
+      assert.equal(await isCopyOf(account, withRider, original), false, "the reissue (later upload, or a scan) is never set aside: its rider would vanish");
+      assert.equal(await isCopyOf(account, riderCover, original), false, "a cover only the one to set aside states");
+      assert.equal(await isCopyOf(account, original, withRider), true, "the original may give way to the reissue that keeps everything it states");
+      const photo = await doc(account, person, [base[0]]);
+      assert.equal(await isCopyOf(account, photo, original), true, "a photo that read fewer rows is a copy of the PDF");
+      const photoWithExtra = await doc(account, person, [base[0], { name: "Hospital cash", kind: "daily", value: 200, currency: "SGD" }]);
+      assert.equal(await isCopyOf(account, photoWithExtra, original), false, "a scan copy that adds a row is not set aside");
     });
     await test("N no request left this machine", async () => assert.equal(outbound, 0));
   } finally {
