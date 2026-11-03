@@ -266,3 +266,36 @@ test("payees and illnesses from closed word lists keep the share; a period the s
     "100% of the Sum Assured is payable to your dependants or your legal personal representative.",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
 });
+
+test("the event verb in its own forms, and a share's own large figure, do not withhold a share (claims:test, 3 Nov)", async () => {
+  const { shareBound, assessCatalogBenefit, validateCatalogFormula } = await import("@/lib/policies/benefit-catalog");
+  // "results", "arises": the same event words as "resulting from", in the forms other insurers print.
+  for (const [quote, name] of [
+    ["We pay 100% of the Sum Insured where death results from an accident.", "Death due to Accident"],
+    ["100% of the Sum Assured is payable if death resulted from an Accident.", "Accidental Death"],
+    ["We pay 200% of the sum insured when the death arises from an accident.", "Accidental Death Benefit"],
+    ["100% of the Coverage Amount is payable if the disability arose from an accident.", "Accidental Disability"],
+  ] as const) assert.equal(shareBound(quote, name).kind, "none", quote);
+  // The verbs never clear a changer, a second share, another person or a period of payment beside them.
+  for (const quote of [
+    "We pay 100% of the Sum Insured where death results from an accident, less any amount paid.",
+    "We pay 100% of the Sum Insured where death results from an accident. 50% for children.",
+    "We pay 100% of the Sum Insured where death results from an accident, for children under 18.",
+    "We pay 100% of the Sum Insured where death results from an accident, for 5 years.",
+    "We pay 100% of the Sum Insured where death results from an accident, up to S$200,000.",
+  ]) assert.notEqual(shareBound(quote, "Death due to Accident").kind, "none", quote);
+  // A share's own figure is the share: "1000%" and "1,000 per cent" are not printed amounts. A real amount still is.
+  assert.equal(shareBound("We pay 1000% of the Sum Insured.", "Death Benefit").kind, "none");
+  assert.equal(shareBound("We pay 1,000 per cent of the Sum Insured.", "Death Benefit").kind, "none");
+  for (const quote of ["We pay 100% of the Sum Insured or 25000, whichever is lower.", "We pay 100% of the Sum Insured, not exceeding 25 000.",
+    "We pay 100% of the Sum Insured up to RM 1,000.50% of this is paid first."]) assert.equal(shareBound(quote, "Death Benefit").kind, "unsure", quote);
+  // The absurd share is still read, shown as indicative, and never counted.
+  const wild = assessCatalogBenefit({ benefit: { ...base, id: "w", benefitName: "Death Benefit", quote: "We pay 1000% of the Sum Insured.", formulaKind: "sum_insured", formulaValue: 10, currency: "SGD" } as never,
+    coverage: coverage(1_000_000, "SGD") as never, ownerName: "Ana", facts: {} as never, events: ["death"] as never }).item;
+  assert.equal(wild.calculatedAmount, 10_000_000); assert.equal(wild.estimateBasis, "indicative");
+  // Every reader passes the benefit's own name; without it the event words after a share are not cleared.
+  assert.equal(validateCatalogFormula({ kind: "sum_insured", value: 0.25, currency: "SGD", quote: "We pay 25% of the Sum Insured for a simple fracture.",
+    factKey: null, offsetDays: null, maximumDays: null }).formulaKind, "none");
+  assert.equal(validateCatalogFormula({ kind: "sum_insured", value: 0.25, currency: "SGD", quote: "We pay 25% of the Sum Insured for a simple fracture.",
+    factKey: null, offsetDays: null, maximumDays: null, benefitName: "Simple Fracture" }).formulaKind, "sum_insured");
+});

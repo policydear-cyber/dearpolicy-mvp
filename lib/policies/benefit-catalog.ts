@@ -743,7 +743,8 @@ const WORD_FRACTIONS=[
 const PRINTS_AN_AMOUNT=new RegExp([
   String.raw`(?:s\$|us\$|hk\$|a\$|nz\$|\$|€|£|¥|₹|\b(?:sgd|usd|myr|rm|hkd|aud|nzd|cad|eur|gbp|chf|jpy|inr|idr|thb|php|cny|rmb|twd|krw|vnd|bnd))\s*\d`,
   String.raw`\b(?:dollars?|ringgit|euros?|pounds?|francs?|yen|yuan|rupees?|rupiah|baht|pesos?|won(?!['’]t))\b`,
-  String.raw`\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,}|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
+  // A share's own figure ("1000% of the Sum Insured", "1,000 per cent") is the share, never a printed amount.
+  String.raw`(?:\d{1,3}(?:[ ,.'’]\d{3})+|\d{4,})(?![\d.,]*\s?(?:%|per\s?cent\b))|\b\d+(?:\.\d+)?\s*k\b|\b(?:hundreds?|thousands?|millions?|billions?|lakhs?|crores?|ratus|ribu|juta)\b`,
   String.raw`\d\s*(?:per|a|each|every)\s+(?:day|night|week|month|visit|claim)\b|\b\d+\s*/\s*\d+\b`,
   String.raw`\bup\s+to\b|\bmax(?:imum|\.)?\b|\blimit(?:s|ed)?\b|\bcap(?:s|ped)?\b|\bexceed\w*|(?:\b(?:no|not|never|cannot|nor)|n['’]t)(?:\s+\p{L}+){0,3}?\s+(?:more|longer)\s+than\b|\bsubject\s+to\b|\bceiling\b|\bwhichever\b|\bat\s+most\b|\b(?:lesser|smaller|lower|higher|greater|larger)\b|\b(?:table|schedule)\b`,
   // The same in Malay: exceeding, maximum, limit, schedule, subject to, up to, limited, not more than. Words that change
@@ -824,7 +825,7 @@ const PER_BODY_PART=/\b(?:per|for\s+each|for\s+one)\s+(?:eye|ear|limb|arm|leg|ha
  * and who certifies it, in English and Malay. Any other word ("in five equal instalments", "to the extent not paid by any
  * other insurer", "dibahagi sama rata") may change what is paid, so the share is not used. */
 const CONDITION_WORDS=new Set(("if when where for once provided that within upon on following to after before during until as "
-  +"due caused by resulting from result of the a an any one this that his her their your you our its it we us he she they "
+  +"due caused by resulting from result results resulted arise arises arising arose of the a an any one this that his her their your you our its it we us he she they "
   +"is are was were be been being has have had becomes become becoming occurs occur occurred happens happen happened "
   +"and in at least more than or equal with from date event direct directly expected use anniversary legs arms hands feet "
   +"lasting lasts lasted continuous continuously tertanggung meninggal dibayarkan pemegang ahli kecelakaan sakit kritis "
