@@ -494,7 +494,10 @@ const coverDocs = (key: string, list: TileRow[], held: HeldCover[]) =>
  * added (Critic R246). */
 export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability", "Critical Illness", "Early Critical Illness", "Personal Accident"]);
 /** A cover the person's benefit table holds: its own document (the page that names the person with it) and sum insured. */
-export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null };
+export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null;
+  /** The sum its page prints but says is not what is paid (lib/documents/notional-sum): a schedule line of that document
+   * with this amount is the same notional figure, so it is named with no amount, never added up. */
+  notionalSum?: number | null };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 /** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
@@ -598,8 +601,17 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   let unsure = split.size > 0;
   const taken = new Set<(typeof covers)[number]>();
   const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
+  // A schedule line that prints a held cover's notional sum, from that cover's own document, is that notional figure: no
+  // amount anywhere on the tile, and it is the cover's part (a cover of that document with no sum of its own is taken).
+  const notional = new Set(lines.filter((l) => l.amount != null && held.some((h) => h.notionalSum != null && Math.abs(h.notionalSum - l.amount!) < 0.005
+    && !!h.documentId && l.documentIds.includes(h.documentId))));
   for (const l of lines) {
     const same = covers.filter((c) => !taken.has(c) && l.documentIds.some((d) => c.docs.has(d)));
+    if (notional.has(l)) {
+      const own = same.filter((c) => c.sum == null);
+      if (own.length === 1) taken.add(own[0]); else if (same.length) unsure = true;
+      continue;
+    }
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
     if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
     // The line's document holds covers here but not exactly one with its sum: which is the line's cannot be told (R247 Q2).
@@ -618,7 +630,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const c = categoryOfBenefit(l.name);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };
-  const parts: TilePart[] = [...lines.map((l) => ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
+  const parts: TilePart[] = [...lines.map((l) => notional.has(l) ? { name: l.name, amount: null, currency: null } : ({ name: l.name, amount: elsewhere(l) ? null : l.amount, currency: elsewhere(l) ? null : l.currency,
     ...(elsewhere(l) && l.amount != null ? { otherTile: true } : {}),
     ...(lineCover.get(l)?.accelerates ? { accelerates: true } : {}),
     ...(!elsewhere(l) && l.amount != null && lineCover.get(l)?.conditional ? { conditional: true } : {}) })),
