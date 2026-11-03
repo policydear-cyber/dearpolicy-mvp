@@ -65,7 +65,7 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
   const tile = (rs: CheckedReading[], category: string, lines: (ConfirmedLine & { name: string })[] = [], person = "p-ana", extra: Record<string, string> = {}) => {
     const p = assembleTable(rs, family, linksFor(rs, extra)).people.find((x) => x.id === person)!;
     const held: HeldCover[] = p.covers.map((c) => ({ coverKey: c.coverKey, ...(c.holding ? { holding: c.holding } : {}), name: c.cover, documentId: c.source.documentId,
-      sumInsured: c.sumInsured, currency: c.currency, policyNumber: c.policyNumber }));
+      sumInsured: c.sumInsured, currency: c.currency, policyNumber: c.policyNumber, ...(c.copyNumbers ? { copyNumbers: c.copyNumbers } : {}) }));
     return lumpSumParts(tileRows(categoryRows(category, p.rows)), lines, held, category);
   };
   const show = (r: ReturnType<typeof tile>) => ({ total: r.total, known: r.known, parts: r.parts.map((x) => `${x.name}=${x.amount ?? "?"} ${x.currency ?? ""}`) });
@@ -106,6 +106,16 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
     const ci = tile([schedule(), wording({ policyNumber: "99007777" }), otherPolicy], "Critical Illness");
     t(`${m} N3 different printed numbers: not joined, no total`, ci.total === null, show(ci));
   }
+  // N3b (Critic R303 H1): a contract of the plan printing another number, beside a wording page with none, in either read
+  // order: the number is never lost by which copy is kept, so the two are never joined.
+  {
+    const contract = reading("contract", [cover("contract", { policyNumber: "99007777" })], [row("contract", "2.2 Critical Illness Benefit", "Critical Illness Benefit", null)], "personal_proof");
+    for (const [order, rs] of [["schedule, wording, contract", [schedule(), wording(), contract]], ["schedule, contract, wording", [schedule(), contract, wording()]],
+      ["wording, contract, schedule", [wording(), contract, schedule()]], ["contract, wording, schedule", [contract, wording(), schedule()]]] as const) {
+      const ci = tile([...rs], "Critical Illness");
+      t(`${m} N3b another number on a contract of the plan (${order}): not joined, no total`, ci.total === null, show(ci));
+    }
+  }
   // N4: another product's plan-named cover with the same sum is another policy: both count.
   {
     const rs = [schedule(), reading("wording", [cover("wording", { product: OTHER, cover: OTHER, plan: OTHER })], [row("wording", "2.2 Critical Illness Benefit", "Critical Illness Benefit", 300000)], "personal_proof", OTHER)];
@@ -134,7 +144,7 @@ for (const { m, cur, plan: PLAN, benefit: BEN, other: OTHER } of MARKETS) {
   {
     const s = schedule({}, [cover("sched", { policyNumber: "84001234" })]);
     const ci = tile([s], "Critical Illness");
-    t(`${m} N8 both names on one document: this rule does not join them`, ci.total !== 300000 || ci.parts.length !== 1 ? true : false, show(ci));
+    t(`${m} N8 both names on one document: this rule does not join them (two parts, no total)`, ci.total === null && ci.parts.length === 2, show(ci));
   }
 }
 

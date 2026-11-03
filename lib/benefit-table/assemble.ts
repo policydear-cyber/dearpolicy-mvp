@@ -70,6 +70,9 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when the person holds two or more policies of this cover type with different printed policy numbers: this one's
    * own key, so a tile counts each policy (coversOf). Unset otherwise. */
   holding?: string;
+  /** Set when another copy of this same cover (same person, cover type and sum) that was not kept prints a policy number
+   * this copy does not: every number its copies print, so a reader that must not join two policies sees them all. */
+  copyNumbers?: string[];
   /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
   confirmation: (Confirmation & { printed: number | null }) | null;
   /** Set when the cover was for one short term that has ended (coverEnded below): its last day, as printed. */
@@ -163,7 +166,13 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
   for (const c of found) {
     const group = groups.get(`${c.personId}\u0000${c.coverKey}\u0000${c.sumInsured}`)!;
     const numbers = new Set(group.map((x) => numberOf.get(x)).filter(Boolean));
-    if (numbers.size <= 1 ? group[0] === c : numberOf.has(c) && group.find((x) => numberOf.get(x) === numberOf.get(c)) === c) covers.push(c);
+    if (numbers.size <= 1 ? group[0] === c : numberOf.has(c) && group.find((x) => numberOf.get(x) === numberOf.get(c)) === c) {
+      // A copy that was not kept may print a number the kept copy does not (a wording page with none, read before the
+      // contract): the kept cover carries every printed number of its copies (Critic R303 H1).
+      const printed = [...new Set(group.map((x) => x.policyNumber).filter((n): n is string => !!n && !!policyNumberKey(n)))];
+      if (printed.some((n) => !c.policyNumber || policyNumberKey(n) !== policyNumberKey(c.policyNumber))) c.copyNumbers = printed;
+      covers.push(c);
+    }
   }
   // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own part
   // on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording still links

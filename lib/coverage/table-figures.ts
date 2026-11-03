@@ -571,8 +571,9 @@ export type HeldCover = { coverKey: string; holding?: string; name: string; docu
   /** The sum its page prints but says is not what is paid (lib/documents/notional-sum): a schedule line of that document
    * with this amount is the same notional figure, so it is named with no amount, never added up. */
   notionalSum?: number | null;
-  /** The policy number its page prints, if any: two covers printing different numbers are never one policy here. */
-  policyNumber?: string | null };
+  /** The policy number its page prints, if any, and every number its other copies print (PersonCover.copyNumbers): two
+   * covers printing different numbers are never one policy here. */
+  policyNumber?: string | null; copyNumbers?: string[] };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 /** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
@@ -663,8 +664,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
     const names = { product: nameKey(list[0].product), plan: nameKey(list[0].plan), cover: nameKey(list[0].cover) };
     return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, names,
-      rider: (list[0].coverKey ?? "").split("|").length > 3, plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)),
-      numbers: new Set(own.map((h) => h.policyNumber ? numberKey(h.policyNumber) : "").filter(Boolean)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+      rider: (list[0].coverKey ?? "").split("|").length > 3, plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   // One policy read under two names on two of its documents: its wording names the person's cover after the plan itself
@@ -775,10 +775,11 @@ function twinDocument(coverKey: string | undefined, held: HeldCover[]): string |
   const named = held.filter((h) => { const [p, c, pl, rider] = keyParts(h.coverKey); return !rider && p === product && pl === plan && c !== p && c !== pl && !!h.documentId && !docs.has(h.documentId); });
   if (!named.length) return undefined;
   const sums = new Set(own.map((h) => h.sumInsured)), currencies = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
-  const numbers = new Set(own.map((h) => h.policyNumber ? numberKey(h.policyNumber) : "").filter(Boolean));
+  const printed = (h: HeldCover) => [h.policyNumber, ...(h.copyNumbers ?? [])].map((n) => n ? numberKey(n) : "").filter(Boolean);
+  const numbers = new Set(own.flatMap(printed));
   if (sums.size !== 1 || [...sums][0] == null || currencies.size !== 1 || ![...currencies][0]) return null;
   const agree = named.filter((h) => h.sumInsured === [...sums][0] && !!h.currency && normalizeCurrencyCode(h.currency, "") === [...currencies][0]
-    && (!numbers.size || !h.policyNumber || numbers.has(numberKey(h.policyNumber))));
+    && (!numbers.size || printed(h).every((n) => numbers.has(n))) && (!printed(h).length || [...numbers].every((n) => printed(h).includes(n))));
   const agreeDocs = new Set(agree.map((h) => h.documentId!));
   return agree.length === 1 && agreeDocs.size === 1 ? [...agreeDocs][0] : null;
 }
