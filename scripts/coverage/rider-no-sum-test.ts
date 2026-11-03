@@ -106,6 +106,16 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
     const r = tile([planDoc({ planSum: true }), ...others], lines);
     t(`${m} R6 an amount-less line beside a plan with an amount: no total and no known figure`, r.total === null && r.known === null, show(r));
   }
+  // R9 (TE pr307 F2): an amount-less line from the plan's document named after another policy is not the plan: unchanged.
+  {
+    const r = tile([planDoc(), ...others], [line("Harbour Legacy Plan", "builder", null), ...lines.slice(1)]);
+    t(`${m} R9 an amount-less line named after another policy is not joined to the plan`, names(r).includes("Harbour Legacy Plan") && names(r).includes(PLAN) && r.total === null && (r.known === null || r.known.without.includes(PLAN)), show(r));
+  }
+  // R10: rider words in other languages saying it pays on top are never folded.
+  for (const extra of ["une prestation supplémentaire égale au capital décès est versée.", "身故時額外賠償保額的100%。"]) {
+    const r = tile([planDoc({ says: extra }), ...others], lines);
+    t(`${m} R10 a rider whose words say it pays extra stays listed: "${extra.slice(0, 30)}"`, names(r).includes(RIDER) && r.total === null, show(r));
+  }
   // R7 (Critic R307 H1): a rider that pays on top of the plan's death benefit is never folded: listed, no known figure.
   for (const extra of ["we will pay an additional amount equal to the sum assured on death, on top of the death benefit.",
     "kami akan membayar manfaat kematian tambahan bersamaan dengan manfaat kematian pelan asas.",

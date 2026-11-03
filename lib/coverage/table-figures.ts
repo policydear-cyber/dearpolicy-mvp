@@ -643,7 +643,7 @@ const PAYS_DEATH_BENEFIT = [
   /\bmanfaat\s+kematian\s+(?:akan\s+)?(?:dibayar|dibayarkan|didahulukan)\b/i,
 ];
 /** Words that a rider pays something beside the plan's death benefit: never folded into the plan. */
-const BESIDE_PLAN = /\b(?:additional|additionally|extra|in\s+addition|on\s+top|over\s+and\s+above|plus|top[\s-]?up|besides|as\s+well\s+as|further|double|tambahan|selain|di\s+samping)\b/i;
+const BESIDE_PLAN = /\b(?:additional|additionally|extra|in\s+addition|on\s+top|over\s+and\s+above|plus|top[\s-]?up|besides|as\s+well\s+as|further|double|tambahan|selain|di\s+samping|suppl[ée]mentaire|en\s+plus|zus[äa]tzlich)|額外|额外|追加/i;
 /** Every text of a rider (its name, rows, sections, conditions, quotes) says nothing beside the plan, and one of them
  * positively says it pays the plan's own death benefit, with no negation before it in its phrase. */
 function paysPlanDeathBenefit(texts: (string | null | undefined)[]): boolean {
@@ -761,7 +761,11 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // amount either: the same policy, listed once with no amount, never twice (3 Nov: "READYBUILDER 10" listed twice).
     if (l.amount == null) {
       const base = same.filter((c) => !c.rider && c.part.amount == null);
-      if (base.length === 1 && same.every((c) => c === base[0] || c.rider)) { taken.add(base[0]); lineCover.set(l, base[0]); continue; }
+      // The line must name that cover: its product, plan or cover name, word for word (TE pr307 F2: a line named after
+      // another policy is never joined to this plan).
+      const words = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      const named = base.length === 1 && !!words(l.name) && [base[0].names.product, base[0].names.plan, base[0].names.cover].some((n) => words(n) === words(l.name));
+      if (named && same.every((c) => c === base[0] || c.rider)) { taken.add(base[0]); lineCover.set(l, base[0]); continue; }
     }
     const match = same.filter((c) => c.sum != null && c.sum === l.amount);
     if (match.length === 1) { taken.add(match[0]); lineCover.set(l, match[0]); }
