@@ -340,6 +340,7 @@
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
     "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts",
     "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts",
+    "rag2:live-reconstruct-test": "node --import tsx scripts/rag2-live/reconstruct-run-record-regressions.ts",
     "identity:mask-test": "node --import tsx scripts/identity-mask-regressions.ts",
     "chat:policy-status-test": "node --import tsx scripts/policy-status-regressions.ts",
     "premium:table-test": "node --import tsx scripts/table-premium-regressions.ts",
