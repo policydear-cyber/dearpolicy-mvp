@@ -4,7 +4,7 @@
  *   npm run privacy:notice-test
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { PRIVACY_NOTICE_FINAL, privacyNoticeVisible } from "@/lib/privacy/notice-status";
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 let passed = 0;
@@ -32,7 +32,12 @@ t("a draft never goes live: while unpublished the page is 'not found' (unless th
 t("says what deleting a document really does, and names Pinecone and the hash-only malware check", () => {
   for (const w of [/Pinecone/, /everything read from it is deleted/, /none of its content/, /retried automatically/, /The file itself is not sent/]) assert.match(page, w, String(w));
   assert.doesNotMatch(page, /it is no longer used for anything/);
-  assert.match(page, /<ToConfirm>that answers DearPolicy already gave you which quoted the document/, "past answers and summaries are not claimed as removed until that fix lands");
+  // Past answers, claim calculations and summaries are claimed as removed only now that the scrubs are merged and live
+  // (lib/lifecycle/derived-content-scrub.ts, claim-snapshot-scrub.ts; prod 3 Nov: every deleted document has both audit marks).
+  for (const f of ["lib/lifecycle/derived-content-scrub.ts", "lib/lifecycle/claim-snapshot-scrub.ts"]) assert.ok(existsSync(f), f);
+  assert.match(page, /replaced by a note that the document was deleted \(the questions you typed stay\)/);
+  assert.match(page, /claim calculations that used it keep only that a calculation was made/);
+  assert.doesNotMatch(page, /a fix is being built/);
   assert.match(page, /not malware-scanned/);
   assert.match(readFileSync("lib/privacy/notice-status.ts", "utf8"), /Do not flip it before the deletion work it describes is live/);
 });
