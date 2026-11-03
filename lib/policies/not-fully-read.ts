@@ -25,10 +25,10 @@ const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread"
 export const OWNED_BY_MEMBER = (member: string, cache = false) => `(EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=${member})
   OR (p.family_member_id=${member} AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)${cache ? ` AND NOT coalesce(p.reading_cache ? '${UNSURE_KEY}',false)` : ""}))`;
 
-/** The reading-did-not-finish rule shared by a person's count and the household's unlinked "Not sure" uploads.
+/** The reading-did-not-finish rule (the caller adds activePredicate inline, where the lifecycle guard reads it) shared by a person's count and the household's unlinked "Not sure" uploads.
  * Parameters: $1 account, $3 read-in-part notes (exact, or followed by more text), $4 benefit read failure key, $5 no-cover roles, $6 Read again ids,
  * $7 scan-goes-on states, $8 unread ids. */
-const NOT_FULLY_READ = (cache: boolean) => `p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL
+const NOT_FULLY_READ = (cache: boolean) => `p.account_id=$1 AND p.superseded_at IS NULL
           AND (p.id::text=ANY($6::text[]) OR (NOT (coalesce(p.document_role,'')=ANY($5::text[])) AND (
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
@@ -48,7 +48,7 @@ async function unread(accountId: string, owner: (cache: boolean) => string | nul
     const unreadIds = tableDocuments.filter((d) => UNREAD_STATES.has(d.state)).map((d) => d.id);
     const rows = await query<{ id: string; product_name: string | null; original_filename: string | null; insurer: string | null; document_role: string | null; policy_number: string | null }>(
       `SELECT p.id::text AS id,p.product_name,p.original_filename,p.insurer,p.document_role,p.policy_number FROM policies p
-        WHERE ${NOT_FULLY_READ(cache)} AND ${who}
+        WHERE ${activePredicate("p")} AND ${NOT_FULLY_READ(cache)} AND ${who}
         ORDER BY p.created_at`,
       [accountId, member, [...DOCUMENT_READ_IN_PART_MESSAGES], cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unreadIds]);
     return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id) };
