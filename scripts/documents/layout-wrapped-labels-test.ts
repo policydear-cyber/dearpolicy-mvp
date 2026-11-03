@@ -15,7 +15,7 @@ async function test(name: string, fn: () => unknown) {
 }
 
 async function main() {
-  const { checkLines, NOT_CHECKED } = await import("@/lib/documents/layout-check");
+  const { checkLines, crossCheckPages, NOT_CHECKED } = await import("@/lib/documents/layout-check");
   const confirmed = (text: string, image: string, page = 2) => {
     const r = checkLines(text, image, page);
     assert.equal(r.agree, true, `expected agreement, got: ${r.why}\n${r.text}`);
@@ -91,6 +91,17 @@ async function main() {
       "300,000.00\tComprehensive Critical Illness Benefit");
     handedOn("Cover\nDeath\t100,000\tAccidental\t50,000\nDisablement\nPremium\t30", "Cover\nDeath\t100,000\tAccidental Disablement\t50,000\nPremium\t30",
       "Death\t100,000\tAccidental Disablement\t50,000");
+  });
+
+  // The page as stored at upload (crossCheckPages, the ingest path) is the rebuilt page, not the split text layer.
+  await test("S1 the stored page carries the rebuilt row; a page that matched line for line is kept as it was", async () => {
+    const split = "Schedule\nAccidental\nDeath Benefit\t500,000.00\nPremium\t120.00", image = "Schedule\nAccidental Death Benefit\t500,000.00\nPremium\t120.00";
+    const plain = "Schedule\nDeath Benefit\t200,000.00\nPremium\t120.00";
+    const pages: { pageNumber: number; text: string; unchecked?: boolean; partChecked?: boolean }[] = [{ pageNumber: 2, text: split }, { pageNumber: 3, text: plain }];
+    const out = await crossCheckPages(pages, [2, 3], async () => [{ pageNumber: 2, text: image, extractionMethod: "ocr" }, { pageNumber: 3, text: plain, extractionMethod: "ocr" }]);
+    assert.ok(out[0].text.split("\n").includes("Accidental Death Benefit\t500,000.00"), out[0].text);
+    assert.ok(!out[0].unchecked && !out[0].partChecked, "the page is fully checked");
+    assert.equal(out[1], pages[1], "an unchanged page is the same object");
   });
 
   // Negative: a different figure on the image line still fails.
