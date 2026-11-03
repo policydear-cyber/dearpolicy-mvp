@@ -37,7 +37,16 @@ test("a schema file is read as what it creates, and anything else makes it alway
     "DO $$ BEGIN END $$;",
     "CREATE INDEX IF NOT EXISTS i ON t(a); DELETE FROM t;",
     "ALTER TABLE t ADD COLUMN IF NOT EXISTS a text DEFAULT 'x;",
+    // A "--" inside a literal is not a comment, so the statements after it are still read (Critic #306 M1).
+    "alter table t add column if not exists a text default 'x--y';\nupdate policies set foo='z';\ncreate index if not exists i on t(a) where b <> 'q--';",
+    "alter table t add column if not exists a text default 'x--y';\ndrop table policies;\ncreate table if not exists u (b text default 'q--');",
+    "ALTER TABLE t ADD COLUMN IF NOT EXISTS a text DEFAULT E'it\\'s';",
+    "ALTER TABLE t ADD COLUMN IF NOT EXISTS a text /* note */ DEFAULT 'x';",
+    "create index if not exists i on t(a) /* ' */; update policies set foo=1; /* ' */",
   ]) assert.equal(schemaObjects(other), null, other);
+  // A doubled quote stays inside its literal.
+  assert.deepEqual(schemaObjects("ALTER TABLE t ADD COLUMN IF NOT EXISTS a text DEFAULT 'it''s; --fine';\nCREATE INDEX IF NOT EXISTS i ON t(a);"),
+    { tables: [], indexes: ["i"], columns: [{ table: "t", column: "a" }] });
 });
 
 test("present only when every table, column and index exists; then running the file again is what fills a gap", async () => {

@@ -20,12 +20,27 @@ const INDEX = new RegExp(`^create (?:unique )?index if not exists ${IDENT} on `)
 
 /** What the file creates, or null when any statement is something else (then the file must always run). */
 export function schemaObjects(sql: string): SchemaObjects | null {
-  // Comments go first (they may hold an apostrophe: "this document's"); then plain string literals (a default such as
-  // '{}') are blanked, so a ";" inside one is never read as a statement's end. Unpaired quotes: not parsed.
-  const code = sql.split("\n").map((line) => line.replace(/--.*$/, "")).join("\n");
-  if ((code.match(/'/g) ?? []).length % 2) return null;
-  const body = code.replace(/'[^']*'/g, "''");
-  // Quoted identifiers, dollar-quoted bodies (functions, DO blocks) and backslash escapes are never parsed here.
+  // One pass, character by character: a "--" comment is dropped only outside a string literal, and every literal (a
+  // default such as '{}', a doubled '' inside it) is blanked to '', so neither a ";" nor a "--" inside one is ever read
+  // as SQL (Critic #306 M1). A literal left open, a backslash (E'' escapes), a quoted identifier or a dollar-quoted body
+  // (functions, DO blocks) outside a comment is not parsed: the file then always runs.
+  let body = "";
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+    if (c === "-" && sql[i + 1] === "-") { while (i < sql.length && sql[i] !== "\n") i++; body += "\n"; continue; }
+    // A block comment could hide a quote that pairs with another statement's: not parsed.
+    if (c === "/" && sql[i + 1] === "*") return null;
+    if (c !== "'") { body += c; continue; }
+    let closed = false;
+    for (i++; i < sql.length; i++) {
+      if (sql[i] === "\\") return null;
+      if (sql[i] !== "'") continue;
+      if (sql[i + 1] === "'") { i++; continue; }
+      closed = true; break;
+    }
+    if (!closed) return null;
+    body += "''";
+  }
   if (/["$\\]/.test(body)) return null;
   const found: SchemaObjects = { tables: [], columns: [], indexes: [] };
   for (const raw of body.split(";")) {
