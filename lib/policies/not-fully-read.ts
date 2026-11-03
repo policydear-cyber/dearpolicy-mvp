@@ -1,7 +1,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { DOCUMENT_READ_IN_PART_MESSAGE } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGES } from "@/lib/documents/processing-errors";
 import { BENEFIT_READ_FAILURE_KEY, readingCacheReady } from "@/lib/policies/read-failures";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { SCAN_GOES_ON } from "@/lib/benefit-table/service";
@@ -35,11 +35,11 @@ export async function notFullyRead(accountId: string, familyMemberId: string, ta
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
               OR NOT (coalesce(p.quarantine_status,'')=ANY($7::text[]))))
-            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message=$3
+            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message=ANY($3::text[])
               OR NOT EXISTS(SELECT 1 FROM policy_pages pp WHERE pp.policy_id=p.id AND pp.account_id=p.account_id)
               ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))
         ORDER BY p.created_at`,
-      [accountId, familyMemberId, DOCUMENT_READ_IN_PART_MESSAGE, cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unread]);
+      [accountId, familyMemberId, [...DOCUMENT_READ_IN_PART_MESSAGES], cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unread]);
     return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id) };
   } catch (error) {
     console.warn("Could not count documents not fully read:", error instanceof Error ? error.message : error);

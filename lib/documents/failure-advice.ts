@@ -1,5 +1,5 @@
 import {
-  DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, INCOMPLETE_PDF_MESSAGE, READING_LIMIT_REACHED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE,
+  DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, INCOMPLETE_PDF_MESSAGE, READING_LIMIT_REACHED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE,
   PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE,
 } from "@/lib/documents/processing-errors";
 
@@ -131,4 +131,16 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
     what: known.length ? known.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
     next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it, and once it shows as read, delete this one. Read again reads the document once more, but with the same copy the result may not change.",
   };
+}
+
+/** A ready document whose cover reading did not finish (the reading service failed; lib/rag/ingest.ts readInPart): the
+ * stored reason, in the household's words, and whether a retry is still scheduled. The card showed "some details could
+ * not be matched to the page they came from" instead, which is another state's reason (new-household audit, 3 Nov,
+ * defect 2). Allow-list: only the two messages DearPolicy writes for this state; anything else is null. */
+export function coverReadingPending(message: string | null | undefined): { what: string; next: string } | null {
+  const text = (message ?? "").trim();
+  const what = "DearPolicy read this document's text and tables, but couldn't finish reading who it covers and its cover amounts, so those are not used in answers yet.";
+  if (text === DOCUMENT_READ_IN_PART_MESSAGE) return { what, next: "It will try again automatically; there is nothing you need to do." };
+  if (text === DOCUMENT_READ_IN_PART_FINAL_MESSAGE) return { what, next: "Use Read again to try once more. Nothing is wrong with the file." };
+  return null;
 }
