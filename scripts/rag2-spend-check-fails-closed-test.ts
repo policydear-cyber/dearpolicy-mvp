@@ -8,8 +8,8 @@
  */
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { setAdvEnv, startAdvHarness } from "../fixtures/rag2-adv/harness";
-import { ACCOUNT_N } from "../fixtures/rag2-adv/household";
+import { setAdvEnv, startAdvHarness } from "./fixtures/rag2-adv/harness";
+import { ACCOUNT_N } from "./fixtures/rag2-adv/household";
 
 setAdvEnv();
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|GEMINI/i.test(k)) delete process.env[k];
