@@ -49,3 +49,30 @@ test("/api/health answers a limited caller with the 429 before any database or s
   assert.ok(body.indexOf("limitOpenEndpoint(request") > 0 && body.indexOf("limitOpenEndpoint(request") < body.indexOf("query(\"SELECT 1\")"), "the limit comes before the database check");
   void db;
 });
+
+test("memory stays bounded under a flood of distinct addresses, and an IPv6 /64 counts as one caller", async () => {
+  const { createRateLimiter, MAX_TRACKED_KEYS } = await import("@/lib/http/rate-limit");
+  const flood = createRateLimiter({ windowMs: 60_000, max: 60 });
+  const t = 1_900_000_000_000;
+  for (let i = 0; i < 50_000; i++) flood.attempt("198.18." + (i >> 8) + "." + (i & 255), t + (i % 1000));
+  assert.ok(flood.size() <= MAX_TRACKED_KEYS, `buckets ${flood.size()}`);
+  const { callerNetwork, limitOpenEndpoint, OPEN_ENDPOINT_MAX } = await import("@/lib/http/open-endpoint-limit");
+  assert.equal(callerNetwork("2001:db8:abcd:12:1::5"), "2001:db8:abcd:12::/64");
+  assert.equal(callerNetwork("2001:0db8:abcd:0012:ffff:ffff:ffff:ffff"), "2001:db8:abcd:12::/64");
+  assert.equal(callerNetwork("[2001:db8::1]"), "2001:db8:0:0::/64");
+  assert.equal(callerNetwork("fe80::1%eth0"), "fe80:0:0:0::/64");
+  assert.equal(callerNetwork("::ffff:203.0.113.9"), "203.0.113.9");
+  assert.equal(callerNetwork("203.0.113.9"), "203.0.113.9");
+  assert.equal(callerNetwork("unknown"), "unknown");
+  // Rotating through one /64 is one caller.
+  const t2 = t + 86_400_000;
+  for (let i = 0; i < OPEN_ENDPOINT_MAX; i++) assert.equal(limitOpenEndpoint(from(`2001:db8:5:6:${i.toString(16)}::1`), "health", t2 + i), null);
+  assert.equal(limitOpenEndpoint(from("2001:db8:5:6:ffff::9"), "health", t2 + OPEN_ENDPOINT_MAX)?.status, 429);
+  assert.equal(limitOpenEndpoint(from("2001:db8:5:7::1"), "health", t2 + OPEN_ENDPOINT_MAX), null, "the next /64 is another caller");
+});
+
+test("the operator status panel says the check ran too often on a 429, not that the server is down", async () => {
+  const { readFileSync } = await import("node:fs");
+  const panel = readFileSync("app/operator/status-panel.tsx", "utf8");
+  assert.match(panel, /response\.status === 429\) \{ if \(!cancelled\) setError\("Checking too often\. Try again shortly\."\); return; \}/);
+});
