@@ -216,8 +216,11 @@ async function main() {
         assert.equal(pays(c, t), want, t);
       for (const t of ["Benefit limit\tS$500 per day", "Sum insured\tS$2,000,000 per lifetime", "Annual limit\tS$150,000 per person", "Overall limit\tS$1,000 daily"])
         assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
-      for (const t of ["Monthly benefit\t£2,400 or 75% of salary, whichever is lower", "Monthly benefit\tAs charged"])
+      for (const t of ["Monthly benefit\t£2,400 or 75% of salary, whichever is lower", "Monthly benefit\tAs charged", "Monthly benefit\t75% of salary up to £2,400", "Monthly benefit\tUp to £2,400", "Monthly benefit\tMaximum S$5,000"])
         assert.ok(String(pays("Disability Income", t)).endsWith(":stated"), t);
+      assert.ok(String(pays("Long Term Care", "Monthly payout\t50% of sum assured, S$1,000")).endsWith(":stated"));
+      assert.ok(String(pays("Hospital Cash", "Daily hospital cash\tUp to RM200")).endsWith(":stated"));
+      assert.equal(pays("Hospital Cash", "Daily hospital cash\tRM200 per day"), "hospital_daily_cash:per_day");
       for (const t of [] as string[])
         assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
     });

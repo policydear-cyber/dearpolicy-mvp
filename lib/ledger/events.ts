@@ -266,7 +266,17 @@ export function scheduleLinePays(event:EventType,printed:string|null|undefined):
   const figures=text.match(/(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|HK\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[];
   if(figures.length!==1||/\b(?:or|whichever|lower|higher|lesser|greater|as charged)\b|%/i.test(text.slice(text.indexOf(figures[0])+figures[0].length)))return null;
   const kinds=new Set(parts.map((label)=>labelPays(event,label,printed)));
-  return kinds.size===1?[...kinds][0]:null;
+  // A rate is the value cell's figure and nothing more: "Up to £2,400", "Maximum S$5,000", "75% of salary up to
+  // £2,400" or "50% of sum assured, S$1,000" are limits or worked-out amounts, not what is paid each month or day
+  // (TE V1 on #294).
+  const rate=kinds.size===1?[...kinds][0]:null;
+  if(rate==="per_month"||rate==="per_day"){
+    const label=printedLabel(printed);
+    const value=(text.includes("\t")?text.slice(text.indexOf("\t")+1):text.slice(text.indexOf(label)+label.length)).trim();
+    const cell=value.slice(0,value.indexOf(figures[0]))+"#"+value.slice(value.indexOf(figures[0])+figures[0].length);
+    if(!/^\s*#\s*(?:(?:per|a|each|\/)\s*(?:calendar\s+)?(?:month|day|night)|monthly|daily|for life|sebulan|sehari)?\s*\.?\s*$/i.test(cell))return null;
+  }
+  return rate;
 }
 function labelPays(event:EventType,label:string,printed:string|null|undefined):PaysKind|null{
   const text=String(printed??"");
