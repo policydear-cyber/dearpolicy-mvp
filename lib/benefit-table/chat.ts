@@ -686,9 +686,13 @@ const MOST_ONLY_CJK = /我的|我们的|我們的|保单|保單|保险|保險|�
 export function asksMostOfNothing(question: string, rows: ChatRow[] = []): boolean {
   const q = question.normalize("NFKC").toLowerCase().replace(/[’`]/g, "'");
   if (!MOST_WORDS.some((w) => w.test(q)) || EVENT_WORDS.some((w) => w.test(q))) return false;
-  const product = new Set(rows.flatMap((r) => (r.product ?? "").toLowerCase().split(/[^\p{L}\d']+/u)).filter((w) => w.length >= 3 && !EVENT_WORDS.some((e) => e.test(w))));
-  const words = q.replace(MOST_ONLY_PHRASES, " ").replace(MOST_ONLY_CJK, " ").split(/[^\p{L}\d']+/u).filter(Boolean);
-  return words.every((w) => MOST_ONLY_WORDS.has(w) || product.has(w));
+  // A product the household holds counts only as its whole name, as one phrase ("dengue shield"): a single word of it is
+  // often an illness or a place ("cancer", "japan"), which tells of an event (Critic #319 H1b).
+  const spaced = (t: string) => ` ${t.toLowerCase().split(/[^\p{L}\d']+/u).filter(Boolean).join(" ")} `;
+  const names = [...new Set(rows.map((r) => spaced(r.product ?? "").trim()).filter((n) => n.split(" ").length >= 2 && !EVENT_WORDS.some((e) => e.test(n))))].sort((a, b) => b.length - a.length);
+  let left = spaced(q.replace(MOST_ONLY_PHRASES, " ").replace(MOST_ONLY_CJK, " "));
+  for (const n of names) left = left.split(` ${n} `).join("  ");
+  return left.split(" ").filter(Boolean).every((w) => MOST_ONLY_WORDS.has(w));
 }
 /** Words that ask for a most, a maximum or a cap; words that ask about many claims together (all claims, over the years,
  * a lifetime); and words that say an event has happened (a stay, a diagnosis, an accident). All closed lists, in the

@@ -1172,6 +1172,13 @@ test("asking for a most with nothing described never hides a card as 'not descri
     "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
     assert.equal(shown(q), 0, q);
   for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？", "What's the cap on my hospital plan?"]) assert.equal(shown(q), 1, q);
+  // A product the household holds counts only as its whole name; one word of it is often an illness or a place (Critic #319).
+  const named = { ...cash, id: "R962", product: "Dengue Shield" };
+  const shownNamed = (question: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: named.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, named], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
+  assert.equal(shownNamed("What's the most my Dengue Shield pays?"), 1);
+  assert.equal(shownNamed("What's the maximum for my dengue?"), 0);
+  assert.equal(shownNamed("What's the most the shield pays?"), 0);
 });
 
 test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
