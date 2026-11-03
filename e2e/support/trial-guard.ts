@@ -42,7 +42,7 @@ export function trialSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choic
   const preflight = key === NO_KEY_PLACEHOLDER;
   for (const [role, k] of [["chat", "CHAT_MODEL"], ["judgement", "JUDGEMENT_MODEL"], ["narration", "NARRATION_MODEL"], ["reading", "READING_MODEL"]] as const) {
     if ((env[k] ?? "").trim() !== TRIAL_MODEL) fail(`${k} must be ${TRIAL_MODEL}`);
-    const got = modelFor(role);
+    const got = modelFor(role, env);
     if (`${got.provider}:${got.model}` !== TRIAL_MODEL) fail(`${role} resolves to ${got.provider}:${got.model}, not ${TRIAL_MODEL}`);
   }
   if (!/^trial-codespace-\d{1,3}$/.test(env.TRIAL_ALLOCATION_ID ?? "")) fail("TRIAL_ALLOCATION_ID must be set by start.sh from the open allocation in docs/rag-migration/live/LEDGER.json");
@@ -50,7 +50,7 @@ export function trialSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choic
   if (env.TRIAL_CAP_USD == null || env.TRIAL_CAP_USD === "") fail("TRIAL_CAP_USD must be set by start.sh (the open trial allocation)");
   const cap = Number(env.TRIAL_CAP_USD);
   if (!Number.isFinite(cap) || cap <= 0 || cap > TRIAL_MAX_CAP_USD) fail(`TRIAL_CAP_USD must be > 0 and <= ${TRIAL_MAX_CAP_USD} (got ${env.TRIAL_CAP_USD})`);
-  const choice = modelFor("chat");
+  const choice = modelFor("chat", env);
   const price = priceFor(choice) ?? fail(`no price on file for ${TRIAL_MODEL}`);
   return { choice, price, capUsd: cap, preflight };
 }
