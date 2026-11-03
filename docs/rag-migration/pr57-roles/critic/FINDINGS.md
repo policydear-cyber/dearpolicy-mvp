@@ -10568,3 +10568,11 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - #292 waiver lines: e32189a H1 (prefix match dropped combined riders "Premium Waiver and Critical Illness Benefit") → 6168e7b READY: whole-label allow-list; p292 40/40; coverage suites identical to main.
 - #293 page currency: 8612f9e H1 (currency words "Ksh", "Rs", "francs", "baht" took the page's SGD), H2 (local-currency pages) → 0cc2d57 H1b (quote path checked only neighbours: "5,000 in Swiss francs") → 2697b60 READY: allow-list words beside figures, "in <word>" closed list, currency-word list; p293 clean; DB test 16/0.
 - Lesson: a suite in the 45-suite run stops local Postgres; check pg_lsclusters after long queues and treat ECONNREFUSED rows as not run.
+
+## R521 — 3 Nov: #294–#300 (made-up households only; probes in the shared critic folder)
+- #294 ledger events: H1 travel labels, H2 hospital sub-limits, M3 rate vs total, H4 per-day on hospital, M5 query failed open, R1 r10 perf 81 > 80 → c07ab41 READY (all fixed, guard fails closed).
+- #295 b7a8382 READY (blocks paid re-reads; full gate + next build, other insurers and layouts).
+- #296 walkthrough plan kinds: M2 withdrawn → 08676bc READY: closed type list, name and type must agree (p296).
+- #297 7d339da READY (claims:test fix for validateCatalogFormula); #298 fdae3ee READY (rag2:tools F4).
+- #299 9059d6d READY: one page's first-year premium line no longer counted once per plan (p299-case).
+- #300 words-then-figure shares → 965f41e READY: a share whose words and bracket disagree ("fifty percent (100%)") now gives no figure; matching shares and rider rows unchanged (p300). Gate: ci 0, benefit-table 107/0, replay 22/22, r5 21/21, tsc 0, build 0, 0 Edge warnings.
