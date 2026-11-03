@@ -1877,7 +1877,7 @@ const partsHouse = (sched: string, wording = ""): Household => ({ ...HOUSE, docu
 const partsCover = { person: "Lim Ah Kow", product: "CI Plan", cover: "Critical Illness Cover", plan: null, sumInsured: 200000, asOf: "01/10/2026", page: 1, quote: "Critical Illness Cover\t200,000.00\t250.25\t01/10/2036" };
 const ciKey = coverKeyOf({ product: "CI Plan", cover: "Critical Illness Cover", plan: null });
 const currencyOf = (r: ChatRow) => (r.figure.kind === "none" ? null : r.figure.currency);
-function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover) {
+function partsAnswer(house: Household, statements: Record<string, unknown>[], benefits: unknown[] = [], cover: Record<string, unknown> = partsCover, question = "") {
   const sched = checkReading(src(house.documents[0]), reading("personal_proof", "CI Plan", [cover], []));
   const readings = [sched];
   if (house.documents[1]) readings.push(checkReading(src(house.documents[1]), reading("policy_wording", "CI Plan", [], benefits)));
@@ -1885,8 +1885,8 @@ function partsAnswer(house: Household, statements: Record<string, unknown>[], be
   const rs = chatRows(t, house);
   const raw = { bottomLine: "b", nextSteps: [], question: null, statements: statements.map((st) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "no_event", ...st, ...(typeof st.row === "function" ? { row: (st.row as (r: typeof rs) => string)(rs) } : {}) })) };
-  const fromRows = amountsFromRows(raw, rs, house);
-  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, ["how much"], new Set(fromRows.report.labels));
+  const fromRows = amountsFromRows(raw, rs, house, new Date(), question);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, [question || "how much"], new Set(fromRows.report.labels));
   const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
   return { rows: rs, cover: sched.covers[0], amounts: kept.filter((x) => x.amount).map((x) => x.amount!.text), kept, report: fromRows.report };
 }
@@ -1991,6 +1991,115 @@ test("no total limit row unless the clause plainly prints one total in a stated 
   // The row's own cap said again adds nothing.
   none(LIMIT_WORDING("The most We will pay in total under this benefit and all Policies covering the same Life Assured shall not exceed S$25,000.").replace("will be payable in one lump sum.", "will be payable, subject to a maximum amount of S$25,000."),
     "the row's own cap", { ...ciRow, quote: "100% of the Sum Assured will be payable, subject to a maximum amount of S$25,000." });
+});
+
+// A question that asks for the most paid for everything together gets the printed total limit, said as a limit with what
+// it is printed for; a question about an event never does, however it is worded (chat-speed run 3 Nov, S4).
+test("asked for the most paid in total, the clause's total limit is shown as a limit; an event question never gets it", () => {
+  // For an event fit the answer also gives the per-claim benefit: a limit given alone is never kept (Critic #312 M1).
+  const ask = (question: string, eventFit: string, limit = TOTAL, perClaim = eventFit !== "no_event") => partsAnswer(partsHouse(PARTS_SCHED(), LIMIT_WORDING(limit)),
+    [{ row: limitRow, text: "The most in total.", eventFit }, ...(perClaim ? [{ row: rowNamed(/^Critical Illness Benefit$/), text: "Each claim.", eventFit }] : [])], [b(ciRow)], partsCover, question);
+  const shows = (r: ReturnType<typeof ask>, amount = "S$800,000") => r.amounts.some((a) => a.replace(/\s/g, "") === amount.replace(/\s/g, ""));
+  for (const question of [
+    "if I claim for two different early stage illnesses over the years, what's the most the plan will pay in total?",
+    "Is there an overall cap on all my critical illness claims?",
+    "What is the maximum payable across all my policies?",
+    "what's the most my plan pays for all claims combined?",
+    "is there a lifetime limit on this plan?",
+    "if I claim for two different early stage illnesses over the years, what's the most it pays?",
+    "if I make several claims, what is the maximum the plan pays?",
+    "每次多次理赔最多赔多少？",
+    "Si je fais plusieurs réclamations, quel est le maximum ?",
+    "Si hago varias reclamaciones, ¿cuál es el máximo?",
+    "what's the most my total and permanent disability cover pays over the years for all my claims?",
+    "berapa jumlah maksimum yang dibayar untuk semua tuntutan?",
+    "Apakah had maksimum seumur hidup?",
+    "所有重疾理赔总共最多赔多少？",
+    "我的保险终身最高赔付总额是多少？",
+    "Quel est le plafond global de mes remboursements ?",
+    "¿Cuál es el tope acumulado de todas mis reclamaciones?",
+  ]) for (const fit of ["on_list", "any_event", "no_event"]) {
+    const r = ask(question, fit);
+    assert.ok(shows(r), `${fit}: ${question} ${JSON.stringify(r.amounts)} ${JSON.stringify(r.report.dropped)}`);
+    const card = r.kept.find((x) => x.amount && /^Limit in total/.test(x.text))!;
+    assert.match(card.text, /^Limit in total on Critical Illness Benefit claims/, question);
+    assert.ok(JSON.stringify(card).includes("The most We will pay in total for all Early Stage Critical Illness claims"), `the card says what the limit is for: ${question}`);
+  }
+  // In other currencies the figure is the printed one.
+  for (const [from, to, shown] of [["S$800,000", "RM800,000", "RM800,000"], ["S$800,000", "£800,000", "£800,000"]] as const) {
+    const r = ask("what's the most it pays over the years?", "on_list", TOTAL.replace(from, to));
+    assert.ok(r.amounts.some((a) => a.replace(/\s/g, "").includes(shown.replace("RM", ""))), `${to}: ${JSON.stringify(r.amounts)} ${JSON.stringify(r.report.dropped)}`);
+  }
+  // Negative controls: an event (also asked with most and total words, in any language), a sum of payouts, a most for
+  // one event, or a cover's name holding "total", is never answered with the total (TE #312).
+  for (const question of [
+    "I was just diagnosed with early stage cancer and spent 5 days in ICU. what can I claim?",
+    "what can I claim in total for my cancer and the ICU stay?",
+    "what's the most I can claim for this cancer?",
+    "how much do I get altogether for this diagnosis?",
+    "I was in hospital for 10 days after a car accident, what's the most I can claim in total?",
+    "I was in hospital after a car accident, what's the most I can claim over all my claims?",
+    "I had surgery last week. How much will I get in total?",
+    "what's the most my total and permanent disability cover pays?",
+    "I'm totally disabled now, what's the maximum I can claim?",
+    "what's my total monthly premium at most?",
+    "my wife broke her arm, what's the max in total for the fracture and the hospital stay?",
+    "how much in total do I get for this hospital stay?",
+    "saya didiagnosis kanser, berapa yang boleh saya tuntut?",
+    "Saya dimasukkan ke hospital 5 hari, berapa jumlah maksimum yang boleh saya tuntut untuk semua tuntutan?",
+    "berapa jumlah tuntutan yang boleh dibuat untuk pembedahan ini? had saya?",
+    "我住院了5天，最多一共可以赔多少？",
+    "我住院了5天，所有理赔最多赔多少？",
+    "J'ai été hospitalisé 3 jours, combien au maximum au total ?",
+    "J'ai été hospitalisé 3 jours, quel est le plafond global ?",
+    "Me operaron ayer, ¿cuánto es lo máximo en total que puedo reclamar?",
+    "Me operaron ayer, ¿cuál es el tope acumulado?",
+    // Critic #312 H1.
+    "I had surgery for early stage cancer, what can I claim in total?",
+    "I was diagnosed with early stage cancer and spent 5 days in ICU, what's the most I can claim in total?",
+    "I broke my knee cap, what can I claim in total?",
+    "What's the maximum I can claim altogether for this cancer and the ICU stay?",
+    "Most of my bill was ICU, what's my total claim?",
+    "Under my Lifetime Shield plan, what's the max for this diagnosis?",
+    "Under my Lifetime Shield plan, what's the max?",
+    "For this diagnosis, what is the highest amount overall?",
+    "saya didiagnosis kanser, berapa jumlah maksimum yang boleh saya tuntut?",
+    "我确诊早期癌症，总共最多能赔多少？",
+    "J'ai un cancer, quel est le montant maximum au total pour ce diagnostic ?",
+    "Tengo cáncer, ¿cuál es el máximo en total que puedo reclamar?",
+    "what can I claim in total? I had a heart attack",
+    "my wife had a stroke - total payout?",
+    // Critic #312 M1 and TE #312 round 2: an event in words no list holds, before the limit question.
+    "I've just got cancer, what's the max across all my policies?",
+    "My husband has cancer now, what is the most he can get for all his claims?",
+    "I'm off sick with cancer - what's the lifetime maximum?",
+    "Saya ada kanser, berapa had maksimum semua tuntutan?",
+    "我得了癌症，所有理赔最多赔多少？",
+    "Mum fell and hurt her hip, what's the max over the years?",
+    "J'ai attrapé un cancer, quel est le plafond global ?",
+    "My son was bitten by a dog. What's the most we can claim across all his policies?",
+    "我昨天中风了，所有理赔最多赔多少？",
+    "Mi esposa tuvo un infarto, ¿cuál es el máximo acumulado de todas las reclamaciones?",
+    "Mon fils s'est cassé le bras, quel est le plafond global de toutes les réclamations ?",
+    "she was knocked down by a car, is there a lifetime cap on her claims?",
+    "my dad collapsed at work and is in the ward now. what is the aggregate limit?",
+    "Ayah saya dimasukkan ke wad, berapa had seumur hidup?",
+    "what's the most over the years for all my claims? my dad collapsed at work",
+    "",
+  ]) for (const fit of ["on_list", "any_event"]) for (const perClaim of [false, true]) {
+    const r = ask(question, fit, TOTAL, perClaim);
+    assert.ok(!shows(r), `${fit} ${perClaim}: ${question}`);
+    assert.match(r.report.dropped.map((d) => d.why).join(" "), /several benefits together/, `${fit}: ${question}`);
+  }
+  // A many-claims question about an event, with the limit given alone (no per-claim amount beside it), never shows it:
+  // alone it reads as what the event pays (Critic #312 M1). Beside the per-claim amount it is the limit asked for.
+  for (const question of ["My husband has cancer now what is the most he can get for all his claims?", "what's the most the plan pays over the years for all my claims?"])
+    for (const fit of ["on_list", "any_event"]) {
+      assert.ok(!shows(ask(question, fit, TOTAL, false)), `alone ${fit}: ${question}`);
+      assert.ok(shows(ask(question, fit, TOTAL, true)), `beside ${fit}: ${question}`);
+    }
+  // Asked with no event, the limit alone is what was asked.
+  assert.ok(shows(ask("what's the most the plan pays over the years for all my claims?", "no_event", TOTAL, false)));
 });
 
 async function atest(name: string, fn: () => Promise<void>) {

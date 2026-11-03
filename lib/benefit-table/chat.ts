@@ -666,6 +666,52 @@ function nameHead(row: ChatRow): string | null {
   const head = plainWords(benefitName(row.benefit).replace(/^\s*[a-z]\s*[.,]\s+/i, "").split(/\b(?:upon|on|following|after|due\s+to|for|while|in\s+case\s+of|arising|caused\s+by)\b/i)[0].replace(/\bbenefits?\s*$/i, ""));
   return head.trim().split(" ").length >= 2 ? head : null;
 }
+/** Words that ask for a most, a maximum or a cap; words that ask about many claims together (all claims, over the years,
+ * a lifetime); and words that say an event has happened (a stay, a diagnosis, an accident). All closed lists, in the
+ * languages households write in (asksOverallMost). "Total" alone is no together word: it asks for a sum of payouts, and
+ * is part of cover names ("total and permanent disability", masked first). "Had" alone is English, never the Malay limit. */
+/** The same pattern with \b as a word edge in any script: JavaScript's \b sees "é" and "ñ" as no letter, so
+ * "hospitalisé" would never end a word. */
+const lettersEdge = (r: RegExp) => new RegExp(r.source.replace(/\\b/g, "(?:(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}]))"), r.flags.replace("u", "") + "u");
+const MOST_WORDS = [/\b(?:most|maximum|max|highest|ceiling|caps?(?=\s+(?:on|of|for))|capped|limits?|up\s+to\s+how\s+much)\b/,
+  /\b(?:paling\s+banyak|paling\s+tinggi|maksimum|maksima|tertinggi|had\s+(?:maksimum|keseluruhan|tuntutan|seumur))\b/, /(?:最多|最高|上限|封顶|封頂)/,
+  /(?:\bmaximum\b|\bmaximale?s?\b|\bplafonds?\b|\bau\s+plus\b|\ble\s+plus\b)/, /(?:\bm[áa]ximos?\b|\btopes?\b|\bcomo\s+mucho\b|\blo\s+m[áa]s\b)/].map(lettersEdge);
+const TOGETHER_WORDS = [/\b(?:all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+|these\s+)?claims|every\s+claim|(?:several|multiple|repeated|many)\s+claims|claims\s+combined|combined\s+claims|aggregate|cumulative(?:ly)?|lifetime\s+(?:limit|limits|cap|maximum|max)|(?:in|over|during)\s+(?:my|his|her|their|a)\s+lifetime|over\s+(?:the|many)\s+years|(?:two|three|several|multiple|different|more\s+than\s+one|repeated|many)\s+(?:\w+\s+){0,3}(?:claims|illnesses|conditions|diagnoses)|each\s+time\s+(?:i|he|she|we|they)\s+claim|over\s+(?:my|his|her|their)\s+(?:life|lifetime)|across\s+(?:all|both|every)\b|overall\s+(?:limit|cap|maximum|max|most))\b/,
+  /\b(?:semua\s+tuntutan|kesemua\s+tuntutan|keseluruhan\s+tuntutan|seumur\s+hidup|had\s+keseluruhan)\b/, /(?:所有.{0,8}(?:理赔|理賠|索赔|索償|索偿)|多次|终身|終身|累计|累計)/,
+  /(?:\btoutes\s+(?:les|mes|ses|nos)\s+(?:demandes|r[ée]clamations|indemnisations|remboursements|sinistres)\b|\bcumul[ée]e?s?\b|\bplafond\s+global\b|\bplusieurs\s+(?:sinistres|r[ée]clamations|demandes|maladies)\b|\blimite\s+globale\b|\bau\s+fil\s+des\s+ann[ée]es\b|\b[àa]\s+vie\b)/,
+  /(?:\btodas\s+(?:las|mis|sus|nuestras)\s+reclamaciones\b|\bacumulad[oa]s?\b|\bvarias\s+(?:reclamaciones|enfermedades)\b|\ba\s+lo\s+largo\s+de\s+los\s+a[ñn]os\b|\bde\s+por\s+vida\b)/].map(lettersEdge);
+const EVENT_WORDS = [/\b(?:diagnos(?:ed|is)|hospitali[sz](?:ed|ation)|admitted|in\s+(?:the\s+)?hospital|warded|icu|intensive\s+care|broke|broken|fractured?|accident|injur(?:ed|y|ies)|surgery|operation|operated|died|passed\s+away|death\s+of|stroke|heart\s+attack|disabled|ambulance|spent\s+\d+\s+days?)\b/,
+  /\b(?:didiagnosis|disahkan|dimasukkan\s+ke\s+hospital|masuk\s+hospital|kemalangan|patah|cedera|pembedahan|meninggal)\b/, /(?:住院|确诊|確診|手术|手術|意外|骨折|去世|过世|過世|受伤|受傷)/,
+  /(?:\bhospitalis[ée]e?s?\b|\bdiagnostiqu[ée]e?s?\b|\bop[ée]r[ée]e?s?\b|\baccident\b|\bfracture\b|\bd[ée]c[ée]d[ée]e?s?\b|\bbless[ée]e?s?\b)/,
+  /(?:\bhospitalizad[oa]s?\b|\bdiagnosticad[oa]s?\b|\boperaron\b|\boperad[oa]s?\b|\baccidente\b|\bfractura\b|\bfalleci[óo]\b|\bherid[oa]s?\b)/].map(lettersEdge);
+/** Cover names that hold a together or most word without asking for one. */
+const COVER_NAMES = /\b(?:total\s+(?:and|&)\s+permanent\s+disab\w*|total\s+permanent\s+disab\w*|tpd|total\s+disab\w*|totally\s+disabled|maximum\s+care)\b/g;
+/** Whether the question asks for the most paid for many claims together ("if I claim for two illnesses over the years,
+ * what's the most the plan will pay", "is there a lifetime limit on all my claims"), with no event described. Only then
+ * is a limit on what several benefits pay together (combinedLimit) what was asked. A question about an event ("I was in
+ * hospital, what's the most I can claim in total") asks what that event pays, which such a limit never is; so does "in
+ * total" alone (a sum of payouts) and "the most" alone (the most one event pays). Unsure is no: the limit stays out. */
+export function asksOverallMost(question: string): boolean {
+  const q = question.normalize("NFKC").toLowerCase().replace(COVER_NAMES, " ");
+  if (!MOST_WORDS.some((w) => w.test(q)) || !TOGETHER_WORDS.some((w) => w.test(q)) || EVENT_WORDS.some((w) => w.test(q))) return false;
+  // Allowed words, not a list of events (which always misses one: "bitten by a dog", "collapsed at work"): every part of
+  // the message that is not the limit question itself must be an "if" clause (TE #312 round 2). "My son was bitten by a
+  // dog. What's the most across all his policies?" says something happened, so the limit stays out.
+  const parts = q.split(/[.;,!?:，。？！；：、]+|\s[-–—]\s/).map((x) => x.trim()).filter(Boolean);
+  const asking = (x: string) => MOST_WORDS.some((w) => w.test(x)) || TOGETHER_WORDS.some((w) => w.test(x));
+  return parts.every((x) => asking(x) || HYPOTHETICAL.test(x));
+}
+/** How a clause that only supposes something opens: "if I claim twice", "jika", "如果", "si", "en caso de". */
+const HYPOTHETICAL = lettersEdge(/^(?:(?:and|but|so)\s+)?(?:if|what\s+if|suppose|supposing|say|assuming|in\s+case|jika|kalau|sekiranya|andainya|seandainya|如果|假如|要是|假设|假設|si|s'il|s'ils|en\s+caso\s+de|supongamos)\b/);
+
+/** Whether a limit row's card says it is a limit: its card carries the printed sentence (scopeOnCard), or its own name
+ * has limit words ("Limits of compensation", "Aggregate limit"). One that does not is never shown as the answer to a
+ * total question: it would read as a payout. */
+function readsAsLimit(r: ChatRow): boolean {
+  const name = r.benefit.normalize("NFKC").toLowerCase().replace(COVER_NAMES, " ");
+  return !!r.scopeOnCard || MOST_WORDS.some((w) => w.test(name)) || /\b(?:in\s+total|total|aggregate|overall|combined)\b/.test(name);
+}
+
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
@@ -682,6 +728,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const statements: unknown[] = [];
   const charges = new Set<string>(), benefits = new Set<string>();
   const given = new Set<string>();
+  // Limit cards given for an event (asksOverallMost), with the statement each is: kept only beside a card of the same
+  // person's own per-claim amount on the same policy, so the limit is never the only figure (Critic #312 M1).
+  const limitsOnEvent: { row: ChatRow; st: Record<string, unknown> }[] = [];
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
     .filter((x): x is string => typeof x === "string").join(" ");
@@ -702,8 +751,10 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // So is a figure paid per child, when the household gives a number of children right after asking about that benefit by
       // name ("what's the child education fund" then "how much in total if we have two kids", overnight run 23 Oct, N023).
       : x.eventFit === "not_described" ? (asksFor(question, r) || (childrenSaid(question) != null && perChild(r) && asksFor(earlier[0] ?? "", r)) ? null : `${names(r)} pays only on something not described`)
-      // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1).
-      : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") ? `${names(r)} is the most paid for several benefits together, not what this event pays`
+      // A limit on what several benefits pay together is never what an event pays (check.ts combinedLimit; live 27f35c1),
+      // unless the question asks for exactly that: the most paid for everything together (chat-speed run 3 Nov, S4). Its
+      // card always says it is a limit and what it is printed for (scopeOnCard).
+      : r.combinedLimit && (x.eventFit === "on_list" || x.eventFit === "any_event") && !(asksOverallMost(question) && readsAsLimit(r)) ? `${names(r)} is the most paid for several benefits together, not what this event pays`
       // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
@@ -823,6 +874,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
+        if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
         (r.premium ? charges : benefits).add(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
           (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
@@ -833,6 +885,17 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   }
   // A card left out for its copied name whose row is shown anyway (given with the same benefit from another document) is
   // not missing: no "left out an amount" for it.
+  for (const { row: r, st } of limitsOnEvent) {
+    const beside = Object.keys(report.cards!).some((id) => { const o = byId.get(id);
+      return !!o && !o.combinedLimit && !o.premium && !PREMIUM_ROW.test(o.benefit) && o.personId === r.personId && samePolicy(o, r); });
+    if (beside) continue;
+    const at = statements.indexOf(st);
+    if (at >= 0) statements.splice(at, 1);
+    const label = String(st.text);
+    if (!statements.some((x) => (x as { text?: unknown })?.text === label)) report.labels = report.labels.filter((l) => l !== label);
+    delete report.cards![r.id]; given.delete(r.id);
+    report.dropped.push({ why: `${names(r)} is the most paid for several benefits together, not what this event pays`, text: label, row: r.id });
+  }
   report.dropped = report.dropped.filter((d) => !d.row || !given.has(d.row));
   // A label also given for a row that is not a premium is not a premium's.
   report.premiumLabels = [...charges].filter((l) => !benefits.has(l));
