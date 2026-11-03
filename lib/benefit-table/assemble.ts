@@ -31,7 +31,10 @@ export type FamilyMember = { id: string; display_name: string; preferred_name?: 
    * `chosenAs`, the printed names on a document the household matched to this person by hand; `excludedFrom`, the
    * documents the household took this person off; `notThem`, printed names on a document the household said are no one
    * in the family ("Not in my family"), the same list on every person. */
-  chosenAs?: { documentId: string; name: string }[]; excludedFrom?: string[]; notThem?: { documentId: string; name: string }[] };
+  chosenAs?: { documentId: string; name: string }[]; excludedFrom?: string[]; notThem?: { documentId: string; name: string }[];
+  /** Every printed name stored for a document (policy_detected_people), so a cover's printing of a name is judged
+   * against the closest stored one, not only the ones the household answered. */
+  namedOn?: { documentId: string; name: string }[] };
 /** A cover printed for a name two or more family members share, which neither the document's own links nor a match the
  * household made tells apart: shown with everyone it may be, never dropped and never given to one of them by guess. */
 /** `sameName`: every candidate has the printed name itself; false when each only fits part of it ("Wei Jie" and "Wei"). */
@@ -149,14 +152,49 @@ function sharedNameMatch(name: string, documentId: string, family: FamilyMember[
  * match off that document; null when it said nothing, and the name decides as before. A name matched by hand to two
  * people (an older build) decides nothing. */
 export function householdRecord(name: string, documentId: string, family: FamilyMember[]): { member: FamilyMember } | "nobody" | null {
-  const key = nameKey(name);
-  const on = (list: { documentId: string; name: string }[] | undefined) => (list ?? []).some((p) => p.documentId === documentId && nameKey(p.name) === key);
-  const chosen = family.filter((m) => on(m.chosenAs));
-  if (chosen.length === 1) return { member: chosen[0] };
-  if (family.some((m) => on(m.notThem))) return "nobody";
+  // Every printed name stored for this document, with the household's word on it (chosen for someone, not family, or
+  // neither). The cover's own printing of a name can differ from the stored one: "Ortega, Ana", "Sra. Ana Ortega",
+  // "陈伟明（受保人）". So it is compared as the matcher reads names, by words, and the closest stored name decides.
+  type Said = { name: string; who: string | "nobody" | null };
+  const said: Said[] = [];
+  const seen = new Set<string>();
+  const add = (n: string, who: Said["who"]) => { const k = `${nameKey(n)}|${who}`; if (!seen.has(k)) { seen.add(k); said.push({ name: n, who }); } };
+  for (const m of family) {
+    for (const p of m.chosenAs ?? []) if (p.documentId === documentId) add(p.name, m.id);
+    for (const p of m.notThem ?? []) if (p.documentId === documentId) add(p.name, "nobody");
+  }
+  // The document's other printed names, which the household has said nothing about (a name it answered is listed once).
+  const answered = new Set(said.map((x) => nameKey(x.name)));
+  for (const m of family) for (const p of m.namedOn ?? []) if (p.documentId === documentId && !answered.has(nameKey(p.name))) add(p.name, null);
+  const printed = nameWords(name);
+  const closeness = (stored: string): number => {
+    if (nameKey(stored) === nameKey(name)) return 3;
+    const own = nameWords(stored);
+    if (!own.length || !printed.length) return 0;
+    if ([...own].sort().join(" ") === [...printed].sort().join(" ")) return 2;
+    // Every word of the stored name is printed, with more around it (a title, a role): closer the more words it shares.
+    return own.every((w) => printed.includes(w)) ? 1 + own.length / 1000 : 0;
+  };
+  const scored = said.map((s) => ({ ...s, score: closeness(s.name) })).filter((s) => s.score > 0);
+  const best = Math.max(0, ...scored.map((s) => s.score));
+  const closest = scored.filter((s) => s.score === best);
+  const answers = new Set(closest.map((s) => s.who));
+  if (answers.size > 1) {
+    // Stored names this close disagree on who it is: no one rather than possibly the wrong person.
+    if ([...answers].some((a) => a !== null)) return "nobody";
+  } else if (answers.size === 1) {
+    const who = [...answers][0];
+    if (who === "nobody") return "nobody";
+    if (who) { const member = family.find((m) => m.id === who); if (member) return { member }; }
+  }
   const named = findFamilyMatchWithKind(name, family);
   if (named && (named.member.excludedFrom ?? []).includes(documentId)) return "nobody";
   return null;
+}
+
+/** The words of a name in any script, ignoring case and punctuation (full-width brackets and commas included). */
+function nameWords(name: string): string[] {
+  return name.normalize("NFKC").toLocaleLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
 }
 
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
@@ -171,7 +209,12 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     if (record === "nobody") { unmatched.push(c); continue; }
     const named = record ?? findFamilyMatchWithKind(c.person, family);
     const shared = named ? null : sharedNameMatch(c.person, r.documentId, family);
-    if (shared && "candidates" in shared) { ambiguous.push({ cover: c, documentId: r.documentId, candidates: shared.candidates, sameName: shared.sameName }); continue; }
+    if (shared && "candidates" in shared) {
+      // Someone the household took off this document is not offered as who it might be.
+      const candidates = shared.candidates.filter((k) => !(family.find((f) => f.id === k.id)?.excludedFrom ?? []).includes(r.documentId));
+      if (candidates.length) ambiguous.push({ cover: c, documentId: r.documentId, candidates, sameName: shared.sameName }); else unmatched.push(c);
+      continue;
+    }
     const match = named ?? shared;
     if (!match) { unmatched.push(c); continue; }
     found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });

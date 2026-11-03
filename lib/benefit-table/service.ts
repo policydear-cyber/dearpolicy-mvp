@@ -52,7 +52,7 @@ async function withDocumentLinks(db: Db, accountId: string, people: FamilyMember
   // family's. A table not created yet (sql/policy-member-exclusions.sql, sql/detected-name-dismissals.sql) has none.
   const [links, printed, excluded, dismissed] = await Promise.all([
     db("SELECT policy_id, family_member_id, source FROM policy_members WHERE account_id=$1 AND source<>'scheme_reference_match'", [accountId]).catch(() => []),
-    db("SELECT policy_id, detected_name, matched_family_member_id FROM policy_detected_people WHERE account_id=$1 AND matched_family_member_id IS NOT NULL", [accountId]).catch(() => []),
+    db("SELECT policy_id, detected_name, matched_family_member_id FROM policy_detected_people WHERE account_id=$1", [accountId]).catch(() => []),
     // Asked only of a table that exists, so a missing one never fails a statement (and its transaction).
     db("SELECT to_regclass('public.policy_member_exclusions') IS NOT NULL AS ok", []).then((r) => r[0]?.ok === true
       ? db("SELECT policy_id, family_member_id FROM policy_member_exclusions WHERE account_id=$1", [accountId]) : []).catch(() => []),
@@ -61,12 +61,13 @@ async function withDocumentLinks(db: Db, accountId: string, people: FamilyMember
   ]);
   const byHand = new Set(links.filter((l) => l.source === "user_declared").map((l) => `${l.policy_id}|${l.family_member_id}`));
   const notThem = dismissed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
+  const namedOn = printed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
   return people.map((p) => ({ ...p,
     documents: links.filter((l) => String(l.family_member_id) === p.id).map((l) => String(l.policy_id)),
     printedAs: printed.filter((d) => String(d.matched_family_member_id) === p.id).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })),
     chosenAs: printed.filter((d) => String(d.matched_family_member_id) === p.id && byHand.has(`${d.policy_id}|${p.id}`)).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })),
     excludedFrom: excluded.filter((x) => String(x.family_member_id) === p.id).map((x) => String(x.policy_id)),
-    notThem }));
+    notThem, namedOn }));
 }
 
 /** What a document's own record says about it, for naming it to the household (lib/policies/inventory.ts documentName)
