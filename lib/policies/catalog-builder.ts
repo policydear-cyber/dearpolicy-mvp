@@ -23,9 +23,15 @@ import { pageCurrency } from "@/lib/simple-chat/verify";
 const BESIDE_BARE_FIGURE=new Set(("up to upto maximum max min minimum per each any one lump sum of a an the and or for in on at to by is are be will "
   +"we you your our pay pays paid payable benefit benefits limit limits limited amount total aggregate overall only lifetime policy plan year years "
   +"yearly annual annually month months monthly week weeks weekly day days daily night nights visit visits claim claims trip trips event events "
-  +"incident admission period insured person life covered cover with without under from after before within not exceeding exceed subject "
+  +"incident admission admissions disability diagnosis accident period insured person life covered cover with without under from after before within not exceeding exceed subject "
   +"sehingga maksimum setiap sehari bagi untuk dan atau hari tahun tuntutan lawatan").split(" "));
 const BESIDE_BARE_CJK=/^(?:最高|上限|每日|每天|每次|每年|每宗|每项|每項|限额|限額|至|为|為)+$/u;
+/** Currency words in many markets, as a belt beside the allow-lists: any of them in the printed value or quote gives none. */
+const CURRENCY_WORD=/(?<!\p{L})(?:francs?|baht|rupees?|shillings?|dirhams?|riyals?|rials?|yuan|renminbi|pesos?|rand|lira|liras|lire|zloty|zlotys|kron[aeoru]r?|dong|won|kyat|taka|ringgit|rupiah|dollars?|euros?|pounds?|sterling|yen|dinars?|reais|real|lei|leu|forint|koruna|pataca|pataka|nairas?|cedis?|kwacha|lempira|quetzal|sol|soles|hryvnia|rubles?|roubles?|tenge|som|manat|lari|dram|afghani|ngultrum|kina|vatu|tala|pa['’]?anga)(?!\p{L})/iu;
+/** Words that may follow "in" or "to" in a quoted payout sentence without naming a currency. */
+const IN_WORD_OK=new Set(("hospital respect case cases full total addition excess any each which accordance lieu advance arrears one lump the a an this that "
+  +"your our his her their its insured person life policy claim claims event benefit benefits patient treatment year years month day days "
+  +"singapore malaysia force line relation regard place connection").split(" "));
 const besideOk=(w:string)=>BESIDE_BARE_FIGURE.has(w.toLowerCase())||BESIDE_BARE_CJK.test(w);
 const FIGURE=/\d[\d.,'\u00a0\u202f ]*\d|\d/g;
 /** A page that pays some figures in another currency than the one it declares: "in the local currency", "the currency of
@@ -44,7 +50,11 @@ export function unmarkedPageCurrency(printed:string|null|undefined,pageText:stri
   if(statedCurrencyCode(text)||/\p{L}\$|\$\p{L}|[€£¥₹₱₩฿₫₺₦₽₴₪]|\b(?:RM|Rp|Fr|kr|SGD|USD|MYR|HKD|EUR|GBP|AUD|IDR|INR|PHP|THB|CNY|RMB|JPY)\b/iu.test(text))return null;
   const bare=text.replace(/(^|[^\p{L}])\$(?=\s*\d)/gu,"$1 ");
   if(/\$/.test(bare))return null;
+  if(CURRENCY_WORD.test(bare))return null;
   if(beside){
+    // A currency named later in the clause ("5,000 in Swiss francs", "payable in baht"): any "in <word>" whose word is not
+    // in a closed list gives none (Critic H1b on #293).
+    for(const m of bare.matchAll(/\b(?:in|into|converted\s+(?:in)?to)\s+(?:the\s+|a\s+)?(\p{L}+)/giu))if(!IN_WORD_OK.has(m[1].toLowerCase()))return null;
     const figures=[...bare.matchAll(FIGURE)];
     if(!figures.length)return null;
     for(const f of figures){

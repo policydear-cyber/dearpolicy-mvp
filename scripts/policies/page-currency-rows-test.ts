@@ -51,7 +51,11 @@ async function main() {
   await test("U12 a quoted sentence: only the words beside each figure decide", () => {
     assert.equal(unmarkedPageCurrency("We pay up to $5,000 per visit for outpatient treatment.", SG, true), "SGD");
     assert.equal(unmarkedPageCurrency("We pay 5,000 for each claim, subject to the terms of this policy.", SG, true), "SGD");
-    for (const q of ["We pay up to 5,000 francs for each claim.", "We pay Rs 50,000 on diagnosis.", "Benefit: 2,000 baht per day.", "We pay up to 500 yuan per visit."])
+    for (const q of ["We pay up to 5,000 for each claim.", "We pay 50,000 lump sum on diagnosis.", "We pay 1,000 per day in hospital.", "We pay 2,000 to the insured person."])
+      assert.equal(unmarkedPageCurrency(q, SG, true), "SGD", q);
+    for (const q of ["We pay up to 5,000 in Swiss francs for each claim.", "We pay up to 5,000 per day, payable in baht.", "The benefit is 10,000 in rupees per admission.",
+      "We will pay 2,000 to the insured in Kenyan shillings.", "Up to 3,000 per visit, reimbursed in dirhams.", "We pay 5,000, converted into the local denomination.",
+      "We pay up to 5,000 francs for each claim.", "We pay Rs 50,000 on diagnosis.", "Benefit: 2,000 baht per day.", "We pay up to 500 yuan per visit."])
       assert.equal(unmarkedPageCurrency(q, SG, true), null, q);
   });
   await test("U13 a page that pays in a local or other currency, or prints another code, declares none (Critic H2, TE note 2)", () => {
