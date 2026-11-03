@@ -1,6 +1,6 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
-import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
@@ -960,6 +960,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       });
     } catch (error) { console.warn("Member tiers could not be written for policy " + args.policyId + ":", error instanceof Error ? error.message : error); }
     await progress(args, "finalising", 97, "Final checks and portfolio update…", "indexing");
+    // Read without its cover reading: the stored reason says "it will try again" only when a retry is really scheduled
+    // (the last automatic retry, or one that could not be scheduled, says to use Read again instead).
+    const retryScheduled = readInPart ? await scheduleDeferredRead(args) : false;
     await query(
       `UPDATE policies SET processing_status='ready',processing_stage='complete',processing_progress=100,
        processing_message=$3,
@@ -969,15 +972,15 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
+      [args.policyId, args.accountId, readInPart ? (retryScheduled ? DOCUMENT_READ_IN_PART_MESSAGE : DOCUMENT_READ_IN_PART_FINAL_MESSAGE) : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
         ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
       await query(
         `UPDATE policies SET needs_review=true,review_reason=concat_ws('; ',nullif(review_reason,''),$3::text) WHERE id=$1 AND account_id=$2`,
-        [args.policyId, args.accountId, "DearPolicy has not finished reading who this document covers and its cover amounts; it will try again automatically"],
+        [args.policyId, args.accountId, retryScheduled ? "DearPolicy has not finished reading who this document covers and its cover amounts; it will try again automatically"
+          : "DearPolicy could not finish reading who this document covers and its cover amounts; use Read again to try once more"],
       ).catch(() => undefined);
-      await scheduleDeferredRead(args);
     }
     // The Coverage Ledger gains this document's rows the moment it is ready,
     // so the next payout question is a lookup rather than a read.
