@@ -13,6 +13,8 @@ export type SimpleModelReply = { json: unknown; stopReason: string | null; model
 export type SimpleModel = { choice: ModelChoice; call(args: SimpleModelCall): Promise<SimpleModelReply> };
 
 export const MAX_OUTPUT_TOKENS = 8000;
+/** How much the model reasons before it answers (see anthropicRequest). */
+export const SIMPLE_EFFORT = "low" as const;
 
 /** The cloud environment reserves ANTHROPIC_API_KEY, so DearPolicy's own DEARPOLICY_ANTHROPIC_KEY comes first. Only a
  * variable's name is ever reported, never its value. */
@@ -51,7 +53,11 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
       { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } },
     ],
     messages: [...alternating(args.history).map((t) => ({ role: t.role, content: t.text })), { role: "user" as const, content: args.question }],
-    output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
+    // "low": the answer's time is almost all the model writing (about 4.4s + 7ms per output token over 53 recorded
+    // answers), and "medium" made direct answers miss 10s. Paid comparison, 3 Nov 2026, 8 questions on two made-up
+    // households: low averaged 6.1s (max 7.8s) against 9.7s (max 15.8s), and no answer was less correct
+    // (/mnt/project-files/chat-speed/effort.md). Every amount is still checked by the server (verify.ts).
+    output_config: { effort: SIMPLE_EFFORT, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
     // Server-side refusal fallback (routes a declined request to a fallback model within the same call).
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default" as const,

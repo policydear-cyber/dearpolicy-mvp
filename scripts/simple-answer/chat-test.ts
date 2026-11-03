@@ -159,6 +159,8 @@ async function main() {
     assert.equal(r.output_config.format.schema, SIMPLE_ANSWER_SCHEMA);
     assert.deepEqual(r.messages.map((m) => [m.role, m.content]), [["user", "a\n\nb"], ["assistant", "c"], ["user", "q"]]);
     assert.ok(!("temperature" in r));
+    // Low effort keeps answers inside the launch time targets (paid comparison 3 Nov 2026, lib/simple-chat/model.ts).
+    assert.equal(r.output_config.effort, "low");
     assert.deepEqual(alternating([{ role: "user", text: "only" }]), []);
   });
 
