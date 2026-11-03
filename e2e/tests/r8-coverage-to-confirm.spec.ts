@@ -85,7 +85,12 @@ test("R34-2: a guessed accident medical row does not say medical costs were foun
 test("R32-1: Family and Documents mark unconfirmed cover", async ({ page }) => {
   await mock(page);
   await page.goto("/family");
-  await expect(page.locator(".profile-card").filter({ hasText: "Alex Tan" })).toContainText("Accidents and injuries (to confirm)");
+  // Changed 31 Oct (owner rule, 28 Oct: a plan type is not proof of cover): Family's "Covered for" no longer lists a kind
+  // only a plan type suggests ("Accidents and injuries (to confirm)"), as on Home and Documents; Coverage still shows the
+  // row and what is unread (R32-1 above). The original assertion expected the "(to confirm)" kind; see the PR body.
+  const alexCard = page.locator(".profile-card").filter({ hasText: "Alex Tan" });
+  await expect(alexCard).toContainText("Covered for Death");
+  await expect(alexCard).not.toContainText("Accidents and injuries");
   await page.goto("/policies");
   // Changed 28 Oct (owner rule: a plan type is not proof of cover): the Documents card no longer prints a
   // plan-type guess ("Plans like this usually include ..."); a document with only guessed rows shows no found line.

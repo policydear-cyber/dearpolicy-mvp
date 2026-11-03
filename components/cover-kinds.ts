@@ -248,17 +248,16 @@ export function scheduleOnlyLines<L extends ScheduleLine>(lines: L[], rows: (Kin
   return out;
 }
 
-/** What Family lists for each person of a household on Coverage rows (GET /api/ledger): each kind found, "(to confirm)"
- * when only a plan type's usual benefit suggests it. A schedule line (scheduleLines), confirmed and checked against its
- * page, is cover as on Home, even when it prints no amount and so has no Coverage row. */
+/** What Family lists for each person of a household on Coverage rows (GET /api/ledger): only the kinds the documents
+ * establish -- a confirmed row, the wording, the household's own entry, or a schedule line (scheduleLines), confirmed
+ * and checked against its page, which is cover as on Home even when it prints no amount and so has no Coverage row. A
+ * kind only a plan type's usual benefit suggests (isToConfirm) is not listed, as on Home and Documents (owner rule,
+ * 28 Oct: a plan type is not proof of cover); Coverage still shows that row with what is unread (cross-page check, 31 Oct). */
 export function ledgerKindsByPerson(rows: (KindRow & { familyMemberId: string })[], lines: ScheduleLine[] = []): Record<string, string[]> {
-  const by: Record<string, Map<string, boolean>> = {};
-  for (const r of rows) if (r.status !== "rejected") {
-    const kinds = by[r.familyMemberId] ??= new Map(), id = kindOfRow(r).id;
-    kinds.set(id, kinds.get(id) === true || !isToConfirm(r));
-  }
-  for (const line of lines) (by[line.familyMemberId] ??= new Map()).set(kindOfCategory(line.category).id, true);
-  return Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => found.get(k.id) ? k.label : `${k.label} (to confirm)`)]));
+  const by: Record<string, Set<string>> = {};
+  for (const r of rows) if (r.status !== "rejected" && !isToConfirm(r)) (by[r.familyMemberId] ??= new Set()).add(kindOfRow(r).id);
+  for (const line of lines) (by[line.familyMemberId] ??= new Set()).add(kindOfCategory(line.category).id);
+  return Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label)]));
 }
 
 /** One person on Coverage (a household on Coverage rows): the kinds of cover found, each with its rows and the schedule

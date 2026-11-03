@@ -136,7 +136,9 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
 {
   const s = "m-sg";
   const rows = [row({ familyMemberId: s, policyId: "pol-sg-a", eventType: "accidental_death", status: "proposed" })];
-  t("SG: a plan-type guess alone stays 'to confirm'", JSON.stringify(ledgerKindsByPerson(rows, [])[s]) === JSON.stringify(["Accidents and injuries (to confirm)"]));
+  // Changed 31 Oct (owner rule, 28 Oct: a plan type is not proof of cover; #273): Family no longer lists a kind only a plan
+  // type suggests, as on Home and Documents. The original check expected "Accidents and injuries (to confirm)".
+  t("SG: a plan-type guess alone is not listed on Family", ledgerKindsByPerson(rows, [])[s] === undefined, ledgerKindsByPerson(rows, []));
   const lines = scheduleOnlyLines([line(s, "pol-sg-b", "Personal Accident")], rows);
   t("SG: a schedule line from another policy confirms it", JSON.stringify(ledgerKindsByPerson(rows, lines)[s]) === JSON.stringify(["Accidents and injuries"]), ledgerKindsByPerson(rows, lines));
   const cov = coveragePersonKinds(rows, rows, lines);
@@ -160,7 +162,8 @@ t("an unknown category is Other, never a guess", kindOfCategory("Pet insurance")
     row({ familyMemberId: a, policyId: "pol-tk", eventType: "tpd", status: "proposed", origin: "schedule" })];
   const lines = scheduleOnlyLines([line(a, "pol-tk", "Death")], rows);
   t("proposed death row + Death line: the line is kept to confirm the kind", lines.length === 1 && lines[0].confirmsOnly === true, lines);
-  t("... Family: Death confirmed, TPD still to confirm", JSON.stringify(ledgerKindsByPerson(rows, lines)[a]) === JSON.stringify(["Death", "Disability (to confirm)"]), ledgerKindsByPerson(rows, lines));
+  // Changed 31 Oct (#273, same owner rule): the plan type's TPD guess is no longer listed as "Disability (to confirm)".
+  t("... Family: Death confirmed, the TPD guess not listed", JSON.stringify(ledgerKindsByPerson(rows, lines)[a]) === JSON.stringify(["Death"]), ledgerKindsByPerson(rows, lines));
   const cov = coveragePersonKinds(rows, rows, lines);
   const death = cov.kinds.find((k) => k.id === "death")!;
   t("... Coverage: Death is not 'to confirm', and the line is not drawn again beside its row", !death.toConfirm && death.lines.length === 0 && death.rows.length === 1, death);
