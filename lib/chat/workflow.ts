@@ -973,7 +973,7 @@ export function notInDocuments(args:{question:string;people:ClaimPerson[];contra
   for(const kind of POLICY_KINDS){
     if(!kind.asked.test(lower))continue;
     // A plan is held when its name, its lines or its stored type say so ("Jelajah Tahunan", stored as Travel, is a travel policy).
-    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")+" "+c.documents.map(d=>d.policy_type??"").join(" ")));
+    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")+" "+(c.documents??[]).map(d=>d.policy_type??"").join(" ")));
     if(!held){
       const who=whose==="Your"?"You have":whose==="Your family’s"?"Your family has":whose.replace(/’s$/,"")+" has";
       return who+" no "+kind.kind+" policy on file, so your documents don’t say anything about this. The "+plural+" on file "+(args.contracts.length===1?"is":"are")+": "+named+". If there is a "+kind.kind+" policy, upload it and ask again.";
