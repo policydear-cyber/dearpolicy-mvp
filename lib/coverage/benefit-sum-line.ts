@@ -73,6 +73,18 @@ export function lineLabel(evidenceText: string | null | undefined, amount: numbe
   return before.slice(start + 1).trim();
 }
 
+/** The words of a line stored with no figure: its first cell, up to a tab or a placeholder dash ("WAIVER OF PREMIUM ON TPD
+ * BENEFIT\t-", "Premium Waiver -"), when that cell prints no figure. The same head rules then decide: a waiver or premium
+ * line stored under a cover's category ("Waiver of Premium on TPD" under TPD) is no cover there. "" when the first cell
+ * holds a figure or no words, so the line stays a cover. */
+function labelWithoutFigure(evidenceText: string | null | undefined): string {
+  const first = String(evidenceText ?? "").split("\n").find((l) => l.trim()) ?? "";
+  const cell = (first.split("\t").find((c) => c.trim()) ?? "").replace(/\s+[-–—]+\s*$/u, "").trim();
+  return /\d/.test(cell) || !/\p{L}{3}/u.test(cell) ? "" : cell;
+}
+
+const WAIVER_LINE = /^(?:(?:waiver|exemption)\s+of\s+(?:future\s+)?(?:premiums?|contributions?)\b|(?:premiums?|contributions?)\s+(?:waiver|exemption)\b|payor['’]?s?\s+(?:benefit|rider|waiver)\b|payer\s+(?:benefit|rider)\b|(?:pengecualian|pembebasan)\s+(?:sumbangan|caruman|premium|premi|kontribusi)\b|exon[ée]ration\s+des\s+(?:primes|cotisations)\b|beitragsbefreiung|保费豁免|保費豁免|豁免保费|豁免保費)/iu;
+
 /** The label with brackets, the currency and linking words before the figure taken off. */
 function trimmedLabel(label: string): string {
   // Brackets, also the full-width ones Chinese and Japanese schedules print ("身故保险金（保费豁免除外）").
@@ -119,8 +131,11 @@ export type BenefitSumKind = "sum" | "not_a_sum" | "withhold";
  * "sum": the figure is the cover's sum. Anything doubtful is kept as a cover, never dropped on a guess.
  */
 export function benefitSumKind(line: { evidenceText?: string | null; amount?: number | null }): BenefitSumKind {
-  const label = lineLabel(line.evidenceText, line.amount ?? null);
+  const label = line.amount == null ? labelWithoutFigure(line.evidenceText) : lineLabel(line.evidenceText, line.amount);
   if (!label) return "sum";
+  // A line with no figure that is a waiver of premium by its first words pays nothing out: it is no cover of the category
+  // it is stored under, in any of the closed languages ("Waiver of Premium Rider (Critical Illness)", "Payor Benefit").
+  if (line.amount == null && WAIVER_LINE.test(trimmedLabel(label).trim())) return "not_a_sum";
   const kind = kindOfLabel(label);
   // Strict (coordinator, 31 Oct): a not-a-sum term ANYWHERE inside a bracket ("Death Benefit (Premium Waiver)",
   // "身故保险金（保费豁免）", "(Excess: S$100)", "(excluding premium waiver)") means the line keeps its cover but shows no
