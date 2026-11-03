@@ -570,7 +570,15 @@ export const LUMP_SUM_CATEGORIES = new Set(["Death", "Total Permanent Disability
 export type HeldCover = { coverKey: string; holding?: string; name: string; documentId: string | null; sumInsured: number | null; currency?: string | null;
   /** The sum its page prints but says is not what is paid (lib/documents/notional-sum): a schedule line of that document
    * with this amount is the same notional figure, so it is named with no amount, never added up. */
-  notionalSum?: number | null };
+  notionalSum?: number | null;
+  /** The policy number its page prints, if any, and every number its other copies print (PersonCover.copyNumbers): two
+   * covers printing different numbers are never one policy here. */
+  policyNumber?: string | null; copyNumbers?: string[];
+  /** Every document a copy of it was printed on (PersonCover.copyDocuments): all count as its own documents. */
+  copyDocumentIds?: string[];
+  /** Its document is about the product, not a contract (a policy wording, product summary or benefit guide, by its stored
+   * role or its reading's kind): it can never be a second policy. */
+  reference?: boolean };
 /** One policy's part of a lump-sum tile. `accelerates`: the cover pays its sum early out of a death benefit (its own words
  * say it accelerates), so it is paid instead of that death benefit, never on top of it (Evidence Reviewer, 27 Oct). */
 /** The fixed sums of a tile's policies added up, when another policy's amount is not a fixed sum (`without` names it). */
@@ -627,7 +635,7 @@ const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figur
  * amount. The total is given only when every part has an amount in one currency and nothing may be one policy counted
  * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
 export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null; known: KnownSum | null } {
-  const covers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
+  const allCovers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
     const own = held.filter((h) => policyOf(h) === key);
     const sums = new Map<string, { amount: number; currency: string }>();
     for (const r of list) {
@@ -659,9 +667,40 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     // sums, for death and for each injury), else its one printed sum. The line carries the currency.
     const sum = insured.size === 1 ? [...insured][0] : fits ? one!.amount : null;
     const accelerates = category !== "Death" && acceleratesText([...list.flatMap((r) => [r.benefit, r.section, r.cover, ...r.conditions]), ...own.map((h) => h.name)]);
-    return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+    const names = { product: nameKey(list[0].product), plan: nameKey(list[0].plan), cover: nameKey(list[0].cover) };
+    return { key, coverKey: list[0].coverKey, docs: coverDocs(key, list, held), holding: list[0].holding, sum, accelerates, conditional, names,
+      rider: (list[0].coverKey ?? "").split("|").length > 3, plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
+  // One policy read under two names on two of its documents: its wording names the person's cover after the plan itself
+  // ("Kestrel CritiCare II", sum insured 300,000) while its schedule names the plan's covers by their benefits
+  // ("Comprehensive Critical Illness Benefit" 300,000, "Death Benefit" 5,000), so the table holds the plan twice (3 Nov:
+  // one CI sum counted twice, and the Death tile lost its total). The plan-named cover is that schedule's plan only when
+  // this is positively shown (twinDocument): the same product and plan, neither a rider, on another document, no two
+  // different printed policy numbers (and the same number printed on both, unless it sits on the plan's wording), and its sum insured, in the same stated currency, is that of exactly one named cover
+  // of the plan there. On a tile it is then counted once, as the schedule's own named cover there whose sum is every plain
+  // sum it prints here (else its sum insured). Where the plan's named covers sit on another document but this is not
+  // shown (no cover, or several, agree), which policy it is cannot be told, so the tile gives no total. Two named covers
+  // (a basic plan and its rider, two benefits) are never joined by this.
+  const absorbed = new Set<(typeof allCovers)[number]>();
+  let twoNames = false;
+  for (const w of allCovers) {
+    const twin = twinDocument(w.coverKey, held);
+    if (twin === undefined) continue;
+    if (twin === null) { twoNames = true; continue; }
+    const given = w.plainSums.length ? w.plainSums
+      : [...w.insured].flatMap((amount) => [...w.heldCurrency].map((currency) => ({ amount, currency })));
+    const here = allCovers.filter((c) => c !== w && !absorbed.has(c) && !c.rider && c.heldDocs.has(twin) && c.names.product === w.names.product
+      && c.names.plan === w.names.plan && !!c.names.cover && c.names.cover !== c.names.product && c.names.cover !== c.names.plan);
+    // No named cover of the plan on this tile (a life plan's accelerated CI benefit is not on Death): nothing is counted twice.
+    if (!here.length) continue;
+    const agrees = here.filter((c) => c.sum != null && given.length > 0
+      && given.every((g) => g.amount === c.sum && !!g.currency && [...c.heldCurrency, c.part.currency ?? ""].filter(Boolean).every((x) => x === g.currency)));
+    if (agrees.length !== 1) { twoNames = true; continue; }
+    absorbed.add(w);
+    for (const d of w.docs) agrees[0].docs.add(d);
+  }
+  const covers = allCovers.filter((c) => !absorbed.has(c));
   // Where the person holds several policies of a cover type here (printed policy numbers differ), through a row or a
   // confirmed line's document, the tile gives no total: a different number does not prove a second policy (a renewal, a
   // scheme's group number beside a certificate number), and a policy whose own document gives the tile no row may or may
@@ -671,7 +710,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
     ...held.filter((h) => h.holding && !!h.documentId && lines.some((l) => l.documentIds.includes(h.documentId!))).map((h) => h.coverKey)]);
   // A different printed number does not prove a second policy: a renewal, a scheme's group number beside a certificate
   // number, or an endorsement can re-number one policy (Critic R258 H1). Such parts are listed, never added up.
-  let unsure = split.size > 0;
+  let unsure = split.size > 0 || twoNames;
   const taken = new Set<(typeof covers)[number]>();
   const lineCover = new Map<ConfirmedLine, (typeof covers)[number]>();
   // A schedule line that prints a held cover's notional sum, from that cover's own document, is that notional figure: no
@@ -727,6 +766,50 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
       otherTile: parts.filter((p) => p.otherTile).map((p) => p.name) } : null;
   return { parts, total, known };
 }
+
+const nameKey = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+/** Stored document roles, and reading kinds, of a document about a product rather than a contract: a closed list. */
+// Benefit guides are left out: certificate parts and personal benefit summaries are stored under that role (TE pr303 T5).
+export const REFERENCE_DOCUMENT_ROLES = new Set(["policy_wording", "product_summary", "brochure"]);
+export const REFERENCE_DOCUMENT_KINDS = new Set(["policy_wording", "product_summary"]);
+/** Whether a held cover sits only on documents about the product: EVERY document it was printed on (each copy's, in
+ * whatever order they were read) is one by its stored role or by its reading's kind (Critic R303 H2). */
+export function referenceCover(c: { source?: { documentId: string } | null; documentKind?: string | null; copyDocuments?: { documentId: string; kind: string | null }[] },
+  referenceDocs: Set<string>): boolean {
+  const copies = c.copyDocuments?.length ? c.copyDocuments : c.source?.documentId ? [{ documentId: c.source.documentId, kind: c.documentKind ?? null }] : [];
+  return copies.length > 0 && copies.every((x) => referenceDocs.has(x.documentId) || REFERENCE_DOCUMENT_KINDS.has(x.kind ?? ""));
+}
+const keyParts = (coverKey: string | undefined) => (coverKey ?? "").split("|");
+/** Whether a cover is named after its own plan (its cover name is the product's or the plan's), and not a rider. */
+const planNamed = (coverKey: string | undefined) => { const [product, cover, plan, rider] = keyParts(coverKey); return !!product && !rider && (cover === product || cover === plan); };
+/** For a held cover named after its own plan: the other document whose one named cover of that plan has its sum insured,
+ * in the same stated currency, with no different printed policy number (that document holds the same plan under its
+ * benefits' names). null: the plan's named covers sit on another document, but none or several agree. undefined: not
+ * such a cover, or no named cover of its plan on another document. */
+function twinDocument(coverKey: string | undefined, held: HeldCover[]): string | null | undefined {
+  if (!planNamed(coverKey)) return undefined;
+  const own = held.filter((h) => h.coverKey === coverKey && !!h.documentId);
+  if (!own.length) return undefined;
+  const [product, , plan] = keyParts(coverKey), docs = new Set(own.flatMap((h) => [h.documentId!, ...(h.copyDocumentIds ?? [])]));
+  const named = held.filter((h) => { const [p, c, pl, rider] = keyParts(h.coverKey); return !rider && p === product && pl === plan && c !== p && c !== pl && !!h.documentId
+    && [h.documentId, ...(h.copyDocumentIds ?? [])].every((d) => !docs.has(d)); });
+  if (!named.length) return undefined;
+  const sums = new Set(own.map((h) => h.sumInsured)), currencies = new Set(own.map((h) => h.currency ? normalizeCurrencyCode(h.currency, "") : ""));
+  const printed = (h: HeldCover) => [h.policyNumber, ...(h.copyNumbers ?? [])].map((n) => n ? numberKey(n) : "").filter(Boolean);
+  const numbers = new Set(own.flatMap(printed));
+  if (sums.size !== 1 || [...sums][0] == null || currencies.size !== 1 || ![...currencies][0]) return null;
+  // Two contracts of one plan and sum (two policies bought, one page naming the plan, the other its benefit) are joined
+  // only when both print the same number; a page about the product (its wording) is never a second policy, so it joins
+  // where no number differs (TE pr303 T1).
+  const reference = own.every((h) => h.reference);
+  const agree = named.filter((h) => h.sumInsured === [...sums][0] && !!h.currency && normalizeCurrencyCode(h.currency, "") === [...currencies][0]
+    && (!numbers.size || printed(h).every((n) => numbers.has(n))) && (!printed(h).length || [...numbers].every((n) => printed(h).includes(n)))
+    && (reference || (numbers.size > 0 && printed(h).length > 0)));
+  const agreeDocs = new Set(agree.map((h) => h.documentId!));
+  return agree.length === 1 && agreeDocs.size === 1 ? [...agreeDocs][0] : null;
+}
+/** A printed policy number by its letters and digits alone, without leading zeros. */
+const numberKey = (n: string) => n.toUpperCase().replace(/[^A-Z0-9]+/g, "").replace(/^0+(?=.)/, "");
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);
 function productWords(name: string | null | undefined): string[] {
