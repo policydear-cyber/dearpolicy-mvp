@@ -10576,3 +10576,11 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - #297 7d339da READY (claims:test fix for validateCatalogFormula); #298 fdae3ee READY (rag2:tools F4).
 - #299 9059d6d READY: one page's first-year premium line no longer counted once per plan (p299-case).
 - #300 words-then-figure shares → 965f41e READY: a share whose words and bracket disagree ("fifty percent (100%)") now gives no figure; matching shares and rider rows unchanged (p300). Gate: ci 0, benefit-table 107/0, replay 22/22, r5 21/21, tsc 0, build 0, 0 Edge warnings.
+
+## R522 — 3 Nov: #301–#305 (made-up households only; probes in the shared critic folder)
+- #301 live-run guard resolves the model from the env it checks → a88a0e4 (L1: trial-guard.ts had the same bug) → bae308b READY. Production callers all still resolve from process.env. live-ledger 3/10 → 9/10 (10/10 with #304).
+- #302 ocr:openai-test on a PGlite ledger, check 9 = spend cap fails closed → 9351f26 READY.
+- #303 Home CI: a cover named after the plan is joined with the schedule's benefit-named cover. 4f20480 H1: the dedup keeps the first copy, so a later contract's different number was lost (P3 300,000 vs P3r null). → 1b6aec5 copyNumbers → 8a280ab H2: `reference` was taken from the kept copy only, so a wording read first hid a number-less contract (P2 300,000 vs P2r null). L3: benefit_summary is not a role. → a8d730e READY: copyDocuments, and referenceCover only when every copy is a reference. p303-probe gives no total in every read order (SG/MY/UK). DB suites and build green.
+- #304 rebuilt fx-live-2 run.json (script-built, marked reconstructed, must equal the ledger, never overwrites) → f0fcab7 READY. A re-run of the script gives the identical file.
+- #305 claims scale check: conditions that never read the benefit are worked out once per answer → e168998 READY. List checked against every evaluateCondition branch. A mutant that adds payment_precondition is caught by 10b.
+- Lesson: when a dedup keeps one copy, every join guard must read ALL copies (numbers, documents, roles). Probe each guard in both read orders.
