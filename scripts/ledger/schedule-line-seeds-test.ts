@@ -91,6 +91,41 @@ async function main() {
     { category: "Death", amount: 1200, currency: "AUD", quote: "Term Life Premium A$1,200" },
     { category: "Death", amount: 45000, currency: "MYR", quote: "Nilai tunai / Cash value\tRM45,000" },
   ]);
+  // Lines that pay a rate or reimburse up to a limit, printed as such (£, RM, S$).
+  const rates = await person("Femi Adeyemi", "sibling");
+  await schedule(rates, "Kestrel Income Protection", [{ category: "Disability Income", amount: 2400, currency: "GBP", quote: "Monthly benefit\t£2,400" }]);
+  await schedule(rates, "Puffin Annual Multi-Trip", [
+    { category: "Travel", amount: 10000000, currency: "GBP", quote: "Emergency medical expenses\t£10,000,000" },
+    { category: "Travel", amount: 1500, currency: "GBP", quote: "Baggage\t£1,500 per person" },
+  ]);
+  await schedule(rates, "Selasih Hospital Cash", [{ category: "Hospital Cash", amount: 200, currency: "MYR", quote: "Elaun hospital harian / Daily hospital allowance\tRM200" }]);
+  const yearly = await person("Wei Ling Ong", "sibling");
+  await schedule(yearly, "Merlion Disability Income", [{ category: "Disability Income", amount: 30000, currency: "SGD", quote: "Annual disability benefit\tS$30,000" }]);
+  // Sub-limits, other benefits and totals printed beside the plan's own lines (Critic H1-M3 on #294, S$ and £).
+  const subs = await person("Kofi Mensah", "sibling");
+  await schedule(subs, "Harbour Travel Guard", [
+    { category: "Travel", amount: 1000000, currency: "SGD", quote: "Medical evacuation and repatriation\tS$1,000,000" },
+    { category: "Travel", amount: 20000, currency: "SGD", quote: "Post-trip medical expenses in Singapore\tS$20,000" },
+    { category: "Travel", amount: 500, currency: "SGD", quote: "Baggage delay\tS$500" },
+    { category: "Travel", amount: 2000, currency: "SGD", quote: "Cancellation due to terrorism (sub-limit)\tS$2,000" },
+    { category: "Travel", amount: 200000, currency: "SGD", quote: "Overseas medical expenses\tS$200,000" },
+    { category: "Travel", amount: 5000, currency: "SGD", quote: "Loss of baggage and personal belongings\tS$5,000" },
+    { category: "Travel", amount: 15000, currency: "SGD", quote: "Trip cancellation\tS$15,000" },
+  ]);
+  await schedule(subs, "Harbour Prime Hospital", [{ category: "Hospitalisation", amount: 150000, currency: "SGD", quote: "Annual limit\tS$150,000" }]);
+  await schedule(subs, "Harbour Shield Hospital", [
+    { category: "Hospitalisation", amount: 500, currency: "SGD", quote: "Room & Board limit\tS$500" },
+    { category: "Hospitalisation", amount: 10000, currency: "SGD", quote: "Surgical limit\tS$10,000" },
+    { category: "Hospitalisation", amount: 150000, currency: "SGD", quote: "Annual limit\tS$150,000" },
+  ]);
+  const totals = await person("Hana Sato", "sibling");
+  await schedule(totals, "Osprey Income Protection", [{ category: "Disability Income", amount: 57600, currency: "GBP", quote: "Monthly benefit payable for up to 24 months, total\t£57,600" }]);
+  await schedule(totals, "Osprey Hospital Cash", [{ category: "Hospital Cash", amount: 36500, currency: "GBP", quote: "Daily hospital cash, overall maximum\t£36,500" }]);
+  await schedule(totals, "Osprey Travel", [
+    { category: "Travel", amount: 50000, currency: "GBP", quote: "Medical expenses\t£50,000" },
+    { category: "Travel", amount: 25000, currency: "GBP", quote: "Overseas medical expenses\t£25,000" },
+  ]);
+  await schedule(totals, "Osprey Health", [{ category: "Hospitalisation", amount: 1200, currency: "GBP", quote: "Intensive care unit limit\t£1,200" }]);
   const unstated = await schedule(sg, "Lighthouse Term Plan", [{ category: "Death", amount: 150000, currency: null, quote: "Sum assured\t$150,000" }]);
 
   // Rows an older rule seeded beside the £ life line: one untouched, one a person changed, one a person rejected.
@@ -103,8 +138,8 @@ async function main() {
   const rejected = (await old("critical_illness", null)).rows[0].id;
   await query("UPDATE coverage_rules SET status='rejected' WHERE id=$1", [rejected]);
 
-  const rows = async (member: string) => (await query<{ id: string; event_type: string; amount: string | null; currency: string; origin: string; status: string }>(
-    "SELECT id,event_type,amount::text,currency,origin,status FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 ORDER BY event_type", [ACCOUNT, member])).rows;
+  const rows = async (member: string) => (await query<{ id: string; event_type: string; amount: string | null; currency: string; origin: string; status: string; pays_kind: string }>(
+    "SELECT id,event_type,amount::text,currency,origin,status,pays_kind FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 ORDER BY event_type", [ACCOUNT, member])).rows;
 
   try {
     await seedLedger(ACCOUNT);
@@ -148,6 +183,53 @@ async function main() {
     await test("'Group Term Life' and 'Group Personal Accident' keep their own sums (S$)", async () => {
       const got = figures(await rows(grp)).filter((x) => x[1] != null);
       assert.deepEqual(got, [["accidental_death", 600000, "SGD"], ["death", 1000000, "SGD"]]);
+    });
+    await test("a printed monthly benefit, daily allowance or travel limit keeps its amount with how it pays (£, RM)", async () => {
+      const got = (await rows(rates)).filter((x) => x.amount != null).map((x) => [x.event_type, x.pays_kind, Number(x.amount), x.currency]);
+      assert.deepEqual(got, [["disability_income", "per_month", 2400, "GBP"], ["hospital_daily_cash", "per_day", 200, "MYR"], ["travel_medical", "reimbursement_cap", 10000000, "GBP"]]);
+    });
+    await test("a rate the line doesn't state as monthly, or a limit per person, keeps no figure, never a lump sum (S$, £)", async () => {
+      assert.deepEqual((await rows(yearly)).filter((x) => x.amount != null), []);
+      assert.ok(!(await rows(rates)).some((x) => x.event_type === "baggage" && x.amount != null));
+    });
+    await test("only a plan's own travel or hospital limit carries a figure; evacuation, post-trip, delay, sub-limits and room/surgical limits never do (S$)", async () => {
+      const got = (await rows(subs)).filter((x) => x.amount != null).map((x) => [x.event_type, x.pays_kind, Number(x.amount), x.currency]);
+      // The ledger keeps one line per plan and cover kind, whichever it reads first. Whichever it is, a figure is only ever
+      // a whole-benefit line's own (medical S$200,000, cancellation S$15,000, baggage S$5,000, the plan's Annual limit),
+      // never evacuation S$1,000,000, post-trip S$20,000, delay S$500, a terrorism sub-limit or a Room & Board/Surgical limit.
+      const allowed = new Set(["travel_medical|200000", "trip_cancellation|15000", "baggage|5000", "hospital_medical_expense|150000"]);
+      assert.ok(got.every((x) => x[1] === "reimbursement_cap" && x[3] === "SGD" && allowed.has(x[0] + "|" + x[2])), JSON.stringify(got));
+      assert.ok(got.some((x) => x[0] === "hospital_medical_expense" && x[2] === 150000), JSON.stringify(got));
+      assert.ok(got.filter((x) => x[0] === "hospital_medical_expense").length === 1, JSON.stringify(got));
+    });
+    await test("a total, an overall maximum, two lines for one benefit or an ICU sub-limit keep no figure (£)", async () => {
+      assert.deepEqual((await rows(totals)).filter((x) => x.amount != null).map((x) => [x.event_type, x.pays_kind, Number(x.amount)]), []);
+    });
+    await test("line by line: only a whole-benefit label or the plan's own limit says how it pays (S$, £, €, RM, 中文)", async () => {
+      const { scheduleLineEvent, scheduleLinePays } = await import("@/lib/ledger/events");
+      const pays = (category: string, printed: string) => { const e = scheduleLineEvent(category, printed.split("\t")[0], printed); return e ? `${e.event}:${e.pays === "stated" ? scheduleLinePays(e.event, printed) ?? "stated" : e.pays}` : null; };
+      for (const [c, t] of [["Travel", "Medical evacuation and repatriation\tS$1,000,000"], ["Travel", "Emergency medical evacuation\tUnlimited"], ["Travel", "Post-trip medical expenses in Singapore\tS$20,000"], ["Travel", "Overseas hospital cash allowance\tS$5,000"], ["Travel", "Hospital visit by a relative\tS$10,000"], ["Travel", "Medical expenses (insured aged 70 and above)\tS$50,000"], ["Travel", "Baggage delay\tS$500"], ["Travel", "Baggage - maximum per item\tS$500"], ["Travel", "Cancellation due to terrorism (sub-limit)\tS$2,000"], ["Travel", "Compassionate visit / child guard - hospital stay\tS$5,000"], ["Travel", "Overseas medical expenses / Medical evacuation\tS$1,000,000"]])
+        assert.equal(pays(c, t), null, t);
+      for (const [c, t] of [["Disability Income", "Monthly benefit payable for up to 24 months, total\t£57,600"], ["Disability Income", "Benefit (75% of monthly salary)\t£2,400"], ["Long Term Care", "Monthly benefit for 6 years; maximum total\tS$129,600"], ["Hospital Cash", "Daily hospital cash, overall maximum\tS$36,500"], ["Hospitalisation", "Room & Board limit\tS$500"], ["Hospitalisation", "Surgical limit\tS$10,000"], ["Hospitalisation", "Overall limit per policy year\tS$1,000,000"], ["Hospitalisation", "Pre-hospital treatment limit (90 days)\tS$5,000"], ["Hospitalisation", "Outpatient cancer treatment - up to\tS$60,000"], ["Hospitalisation", "Intensive care unit limit\tS$1,200"], ["Disability Income", "Monthly benefit £2,400 or annual £28,800\t£2,400"]])
+        assert.ok(String(pays(c, t)).endsWith(":stated"), `${t} -> ${pays(c, t)}`);
+      for (const [c, t, want] of [["Travel", "Overseas medical expenses\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Frais médicaux à l'étranger\t€150,000", "travel_medical:reimbursement_cap"], ["Travel", "Perbelanjaan perubatan luar negara / Overseas medical expenses\tRM200,000", "travel_medical:reimbursement_cap"], ["Travel", "海外医疗费用\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Trip cancellation\tS$15,000", "trip_cancellation:reimbursement_cap"], ["Travel", "Loss of baggage and personal belongings\tS$5,000", "baggage:reimbursement_cap"], ["Disability Income", "Faedah bulanan / Monthly benefit\tRM3,000", "disability_income:per_month"], ["Hospital Cash", "Daily hospital cash\tS$200", "hospital_daily_cash:per_day"], ["Hospitalisation", "Annual limit\tS$150,000", "hospital_medical_expense:reimbursement_cap"]])
+        assert.equal(pays(c, t), want, t);
+      for (const t of ["Benefit limit\tS$500 per day", "Sum insured\tS$2,000,000 per lifetime", "Annual limit\tS$150,000 per person", "Overall limit\tS$1,000 daily"])
+        assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
+      for (const t of ["Monthly benefit\t£2,400 or 75% of salary, whichever is lower", "Monthly benefit\tAs charged", "Monthly benefit\t75% of salary up to £2,400", "Monthly benefit\tUp to £2,400", "Monthly benefit\tMaximum S$5,000"])
+        assert.ok(String(pays("Disability Income", t)).endsWith(":stated"), t);
+      assert.ok(String(pays("Long Term Care", "Monthly payout\t50% of sum assured, S$1,000")).endsWith(":stated"));
+      assert.ok(String(pays("Hospital Cash", "Daily hospital cash\tUp to RM200")).endsWith(":stated"));
+      assert.equal(pays("Hospital Cash", "Daily hospital cash\tRM200 per day"), "hospital_daily_cash:per_day");
+      for (const t of [] as string[])
+        assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
+    });
+    await test("a printed rate keeps its figure only when it is the plan's one such line, and never when the lines could not be read", async () => {
+      const { onlyPrintedRateLine } = await import("@/lib/ledger/events");
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", ["Overseas medical expenses\tS$200,000", "Baggage delay\tS$500"]), true);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", ["Medical expenses\t£50,000", "Overseas medical expenses\t£25,000"]), false);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", null), false);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", []), false);
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);
