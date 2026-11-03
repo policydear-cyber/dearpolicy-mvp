@@ -187,15 +187,42 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
   return {documents,contracts:buildContracts(documents,people,coverages),coverages};
 }
 function escaped(value:string){return value.replace(/[.*+?^$()|[\]\\]/g,"\\$&");}
+/** Which product section each page of a booklet belongs to, for naming the benefits read from it.
+ *
+ * A page starts a product's section only when the product name stands as a heading near the top: a line of its own,
+ * optionally numbered ("2.", "Section 3 -", "BENEFIT 1:", "PRODUCT SUMMARY:") or followed by a closed list of plan
+ * words ("Insurance", "Plan", "Rider", "Benefits"). A name used in a sentence ("No Benefit is payable for ...
+ * continuous hospitalisation"), a table row ("Hospitalisation visit  S$5,000", or the label on the line above its
+ * figure) or a contents entry ("1. Group Term Life  2") is not a section heading, so it never renames the rest of the
+ * booklet (live 3 Nov: Death, TPD and travel endorsement rows were stored under "Hospitalisation", a benefit the
+ * reading listed among the products). Pages before any heading have no section: the caller names them after the
+ * document's own plan. */
 export function pageProductScopes(pages:{page_number:number;text:string}[],products:string[]) {
   const result=new Map<number,string[]>();let current:string[]=[];
   const names=[...new Set(products.filter(Boolean))].sort((a,b)=>b.length-a.length);
   for(const page of [...pages].sort((a,b)=>a.page_number-b.page_number)){
-    const found=names.filter(name=>new RegExp("(?:BENEFIT\\s*\\d+\\s*[:.-]\\s*|(?:PRODUCT\\s+SUMMARY\\s*[:.-]?\\s*)?)"+escaped(name)+"\\b","i").test(page.text.slice(0,650)));
+    const lines=page.text.slice(0,650).split(/\r?\n/).map(line=>line.trim());
+    const found=names.filter(name=>lines.some((line,i)=>headingOf(line,name)&&!figureFollows(lines,i)));
     if(found.length)current=found.filter(name=>!found.some(other=>other!==name&&productIdentity(other).startsWith(productIdentity(name)+" ")));
     result.set(page.page_number,[...current]);
   }
   return result;
+}
+const HEADING_PREFIX=/^(?:(?:section|part|benefit|plan|product(?:\s+summary)?)\s*\d*\s*[:.\-–—]?\s*|\d{1,2}\s*[.)]\s*|[A-Z]\s*[.)]\s+)?/i;
+const PLAN_WORDS=/^(?:\s+(?:insurance|assurance|plan|rider|benefits?|cover(?:age)?|policy|scheme|product\s+summary|summary))*\s*$/i;
+/** The line is the product's heading: the name with at most a numbering prefix and plan words after it, nothing else
+ * (no figure, no page number, no other words). */
+function headingOf(line:string,name:string){
+  if(!line||/\d\s*$/.test(line)&&!/\d\s*$/.test(name))return false;
+  const rest=line.replace(HEADING_PREFIX,"");
+  const at=rest.toLowerCase().indexOf(name.toLowerCase());
+  if(at!==0)return false;
+  return PLAN_WORDS.test(rest.slice(name.length).replace(/[:\-–—]\s*$/,""));
+}
+/** A label whose figure is printed on the next line ("Hospitalisation" then "S$5,000") is a table row. */
+function figureFollows(lines:string[],index:number){
+  const next=lines.slice(index+1).find(line=>line.length>0);
+  return !!next&&(/^(?:[A-Z]{0,3}\s?[$€£¥₹]|(?:RM|Rp|USD|SGD|MYR|HKD|EUR|GBP|IDR|THB|PHP|INR|AUD)\s?\d)/.test(next)||/^\d{1,3}(?:[,.\s]\d{3})+\b|^\d{3,}\b|^\d+(?:\.\d+)?\s*%/.test(next));
 }
 /** Retrieval depth per document.
  *

@@ -495,9 +495,11 @@ export default function PoliciesPage() {
             </>;
           })()}
 
+          {/* Names printed in it and matched to someone: one quiet line with a way to change each, on every kind of document
+              (a wording or summary that prints a name is linked by it too, live check 3 Nov). */}
+          {!processing && policy.detected_people.some((p) => p.matchedFamilyMemberId) && <MatchedNames policy={policy} family={family} onMove={(name, to) => to === "__not_family" ? markNotFamily(policy.id, name) : linkPerson(policy.id, name, to)} />}
           {!processing && policy.personal_coverage_confirmed ? <>
-            {/* Names printed in it: matched ones in one quiet line; each unmatched one asks who it is. */}
-            {policy.detected_people.some((p) => p.matchedFamilyMemberId) && <MatchedNames policy={policy} family={family} onMove={(name, to) => to === "__not_family" ? markNotFamily(policy.id, name) : linkPerson(policy.id, name, to)} />}
+            {/* Each unmatched printed name asks who it is. */}
             {!!unmatched.length && <div className="detected-block">{unmatched.map((person) => <div className="detected-row" key={person.name}>
               <label htmlFor={`who-${policy.id}-${person.name}`}>&ldquo;{person.name}&rdquo; is named in it. Who is this?</label>
               <select id={`who-${policy.id}-${person.name}`} defaultValue="" onChange={(e) => { const select = e.target; if (select.value === "__not_family") void markNotFamily(policy.id, person.name).then((taken) => { if (!taken) select.value = ""; }); else if (select.value) void linkPerson(policy.id, person.name, select.value); }}><option value="">Choose a family member…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
