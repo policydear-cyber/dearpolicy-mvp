@@ -643,7 +643,7 @@ const PAYS_DEATH_BENEFIT = [
   /\bmanfaat\s+kematian\s+(?:akan\s+)?(?:dibayar|dibayarkan|didahulukan)\b/i,
 ];
 /** Words that a rider pays something beside the plan's death benefit: never folded into the plan. */
-const BESIDE_PLAN = /\b(?:additional|additionally|extra|in\s+addition|on\s+top|over\s+and\s+above|plus|top[\s-]?up|besides|as\s+well\s+as|further|double|tambahan|selain|di\s+samping|suppl[ée]mentaire|en\s+plus|zus[äa]tzlich|again|twice|also|its\s+own|rider\s+sum|rider\s+schedule|sum\s+assured\s+of\s+(?:this|the)\s+rider|lagi|sekali\s+lagi|juga)\b|額外|额外|追加/i;
+const BESIDE_PLAN = /\b(?:additional|additionally|extra|in\s+addition|on\s+top|over\s+and\s+above|plus|top[\s-]?up|besides|as\s+well\s+as|further|double|tambahan|selain|di\s+samping|suppl[ée]mentaire|en\s+plus|zus[äa]tzlich|again|twice|also|its\s+own|rider\s+sum|rider\s+schedule|sum\s+assured\s+of\s+(?:this|the)\s+rider|lagi|sekali\s+lagi|juga|(?:of|under|for|from)\s+(?:this|the)\s+(?:rider|supplementary\s+(?:benefit|contract)|endorsement)|(?:di\s+bawah\s+)?rider\s+ini|du\s+pr[ée]sent\s+avenant|de\s+cet\s+avenant)\b|額外|额外|追加|本附加/i;
 /** The death benefit paid together with something else ("the death benefit and the funeral expense benefit"): a second
  * sum beside it, unless the sentence says it is not paid (an exclusion: "we will not pay the death benefit and will refund"). */
 const JOINED = /\bdeath\s+benefit\s+(?:and|plus|together\s+with|with)\b|\bmanfaat\s+kematian\s+(?:rider|dan)\b/i;

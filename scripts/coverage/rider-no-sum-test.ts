@@ -132,7 +132,9 @@ for (const { m, cur, plan: PLAN, rider: RIDER, says: SAYS } of MARKETS) {
   for (const says of ["we pay the death benefit again on the death of the second life insured.",
     "this rider pays its death benefit, equal to the rider sum assured shown in the rider schedule.",
     "we will pay the death benefit stated in the rider schedule.", "we will pay the death benefit and the funeral expense benefit.",
-    "kami akan membayar manfaat kematian dan manfaat perbelanjaan pengebumian."]) {
+    "kami akan membayar manfaat kematian dan manfaat perbelanjaan pengebumian.",
+    "We will pay the death benefit of this rider on diagnosis.", "we will pay the death benefit under this rider.",
+    "kami akan membayar manfaat kematian di bawah rider ini.", "nous versons le capital décès du présent avenant."]) {
     const r = tile([planDoc({ says }), ...others], lines);
     t(`${m} R12 a TI rider whose words say it pays more stays listed: "${says.slice(0, 40)}"`, names(r).includes(RIDER) && r.total === null && (r.known === null || r.known.without.includes(RIDER)), show(r));
   }
