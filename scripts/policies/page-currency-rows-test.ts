@@ -38,6 +38,27 @@ async function main() {
   await test("U7 'unless stated otherwise' declares none", () => assert.equal(unmarkedPageCurrency("$100,000.00", schedule("All amounts are in Singapore Dollars unless stated otherwise.", ROWS)), null));
   await test("U8 no declaration: none (a bare $ may be any dollar)", () => assert.equal(unmarkedPageCurrency("$100,000.00", schedule("Policy Date\t:\t21 Sep 2020", ROWS)), null));
   await test("U9 a page listing currency options declares none", () => assert.equal(unmarkedPageCurrency("$100,000.00", SG + "\nSix currency options are available: SGD, USD, AUD, GBP, EUR, JPY."), null));
+  // An allow-list (Critic H1): a figure beside any word outside the closed limit/period words may carry a currency the page
+  // does not declare, so it gets none; the closed words keep the page's currency.
+  await test("U10 a figure with its own currency word never takes the page's", () => {
+    for (const f of ["Ksh 500,000", "Rs 50,000", "5,000 francs", "2,000 baht", "R 5 000", "Dh 2,000", "Bt 1,000", "500 yuan", "10,000 rupees", "Lei 500", "zł 4,000", "50,000 (in US Dollars)", "₺ 9,000", "₦ 5,000"])
+      assert.equal(unmarkedPageCurrency(f, SG), null, f);
+  });
+  await test("U11 limit and period words keep the page's currency", () => {
+    for (const f of ["Up to $5,000 per claim", "Maximum 100,000", "$300 per day", "1,000 each visit", "Lump sum $20,000", "Sehingga 5,000 setiap tuntutan", "每日最高 300"])
+      assert.equal(unmarkedPageCurrency(f, SG), "SGD", f);
+  });
+  await test("U12 a quoted sentence: only the words beside each figure decide", () => {
+    assert.equal(unmarkedPageCurrency("We pay up to $5,000 per visit for outpatient treatment.", SG, true), "SGD");
+    assert.equal(unmarkedPageCurrency("We pay 5,000 for each claim, subject to the terms of this policy.", SG, true), "SGD");
+    for (const q of ["We pay up to 5,000 francs for each claim.", "We pay Rs 50,000 on diagnosis.", "Benefit: 2,000 baht per day.", "We pay up to 500 yuan per visit."])
+      assert.equal(unmarkedPageCurrency(q, SG, true), null, q);
+  });
+  await test("U13 a page that pays in a local or other currency, or prints another code, declares none (Critic H2, TE note 2)", () => {
+    for (const extra of ["Emergency evacuation (payable in the currency of the country of treatment)", "All overseas benefits are paid in the local currency of the claim.",
+      "Claims are paid in the currency in which the expense was incurred.", "Tuntutan dibayar dalam mata wang tempatan.", "海外医疗费用以当地货币支付。", "Benefits in Macau are paid in MOP."])
+      assert.equal(unmarkedPageCurrency("$100,000.00", SG + "\n" + extra), null, extra);
+  });
 
   const url = process.env.DATABASE_URL ?? "";
   if (process.env.DEARPOLICY_DISPOSABLE_DB === "1" && /@(localhost|127\.0\.0\.1)[:/]|host=\//.test(url)) {
