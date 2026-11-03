@@ -59,13 +59,13 @@ export default function PrivacyPage() {
       <section className="section">
         <h2>Who helps us run the service</h2>
         <ul>
-          <li><strong>Anthropic</strong> reads your documents and writes the answers to your questions, using its Claude models. The pages and questions it needs are sent to it for that purpose only. <ToConfirm>Anthropic&rsquo;s commercial terms say it does not use information sent through its API to train its models; check the current terms and the retention period before publishing.</ToConfirm></li>
+          <li><strong>Anthropic</strong> reads your documents and writes the answers to your questions, using its Claude models. The pages and questions it needs are sent to it for that purpose only. Under Anthropic&rsquo;s commercial terms, information sent through its API is not used to train its models, and Anthropic deletes what it is sent and what it writes back within 30 days (longer only if a request is flagged for misuse). DearPolicy uses only Anthropic&rsquo;s standard API, not its file storage or batch services.</li>
           <li><strong>Supabase</strong> stores your records and files and handles signing in.</li>
           <li><strong>Vercel</strong> hosts the website.</li>
           <li><strong>Pinecone</strong> keeps passages of your documents, as search entries, so the right page can be found when you ask a question. This is used only when that search is switched on, and a document&rsquo;s passages are removed from it when you delete the document.</li>
-          <li><strong>Checking uploads for malware:</strong> when this is switched on, only a fingerprint of each file (a code worked out from the file, from which the file cannot be rebuilt) is checked with VirusTotal. The file itself is not sent. A file VirusTotal flags is refused; a file it has no record of is marked &ldquo;not malware-scanned&rdquo;. <ToConfirm>whether malware checking is switched on for the beta (it is off today, so every file is marked not malware-scanned), and which scanner is used.</ToConfirm></li>
+          <li><strong>Checking uploads for malware:</strong> when this is switched on, only a fingerprint of each file (a code worked out from the file, from which the file cannot be rebuilt) is checked with VirusTotal. The file itself is not sent. A file VirusTotal flags is refused; a file it has no record of is marked &ldquo;not malware-scanned&rdquo;. Malware checking is off for the beta today, so every file is shown as &ldquo;not malware-scanned&rdquo;. We will update this notice before switching it on.</li>
         </ul>
-        <p>Your information is kept in <ToConfirm>the country or region where the database and files are hosted.</ToConfirm></p>
+        <p>Your records and files are kept in Singapore (Supabase&rsquo;s Southeast Asia region), and the website runs in Singapore (Vercel). Anthropic and Pinecone are outside Singapore: <ToConfirm>where Anthropic processes what it is sent (mainly the United States), and whether document search (Pinecone, United States by default) is switched on for the beta.</ToConfirm></p>
       </section>
 
       <section className="section">
@@ -91,9 +91,9 @@ export default function PrivacyPage() {
       <section className="section">
         <h2>How we protect it</h2>
         <p>
-          <ToConfirm>information is encrypted while it travels and where it is stored (check the hosting and database settings).</ToConfirm>{" "}
+          Information travels only over encrypted connections: the website is served over HTTPS only, and the connection to our database must use verified encryption (DearPolicy refuses to start in production without it). Our database and file storage provider, Supabase, encrypts stored data.{" "}
           Every request is checked against your own household, so one household cannot read another&rsquo;s records.
-          No system is perfectly safe. <ToConfirm>if something goes wrong that affects your information, how and how quickly we tell you.</ToConfirm>
+          No system is perfectly safe. If something goes wrong that affects your information, we will email the affected households <ToConfirm>within how many days, and whether the regulator is told too (as the applicable law requires).</ToConfirm>
         </p>
       </section>
 
