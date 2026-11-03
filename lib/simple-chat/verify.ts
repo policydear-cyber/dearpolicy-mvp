@@ -458,7 +458,38 @@ function sumInsuredBase(st: ModelStatement, found: Found, household: Household, 
  * percentage could not be tied to a table row, or its row prints no sum it is a percentage of. A row whose table prints its
  * own base has settled the base, and every other refusal (a cap, another cover's sum) stands (Critic R126-1). */
 const NO_PRINTED_BASE = "the row prints no sum it is a percentage of";
-const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figure", NO_PRINTED_BASE]);
+const NOT_ROW_FIGURE = "the percentage is not the quoted row's own figure";
+const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
+/** The cap a percentage row prints with its own currency ("25% of Sum Assured per claim, maximum RM 50,000 per claim",
+ * "15% of the Sum Insured, up to S$50,000"), read from the row's own line and the lines that continue it, when:
+ * - the row (with its continuation) prints exactly one money figure, it carries a currency sign, and a cap word stands
+ *   right before it ("up to", "maximum", "not exceeding", "limited to", "capped at"): a row with a second figure (an
+ *   overall limit, another benefit's sum) or a bare number gives nothing;
+ * - the statement names a household member, the document is linked to them, and the page names no other life.
+ * The cap is then checked as a plain amount (plainAmount) on that row. Fail-safe: anything else gives null and the
+ * percentage stays a fact with no amount. */
+function rowCap(st: ModelStatement, at: Found, household: Household, person: string | null): { found: Found; raw: string; amount: NonNullable<Checked["amount"]> } | null {
+  if (!person) return null;
+  const doc = household.documents[at.docIndex];
+  const page = doc.pages.find((p) => p.page === at.page);
+  if (!page || !doc.linkedPeople.some((p) => baseName(p) === person)) return null;
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  if (otherLife(page.text, person, people)) return null;
+  const row = rowLine(page.text, at.offset);
+  // The row's own line, with the lines that continue its sentence ("... 15% of Sum Insured" / "or up to S$50,000, whichever
+  // is lesser"); a line that starts a new label ("Overall limit for all early stage claims: RM 100,000") is another row.
+  const whole = rowWithContinuation(page.text, at.offset), extra = whole.slice(row.text.length).trim();
+  const continues = /^[a-z(]/.test(extra) || /^(?:or|and|whichever|subject|less|plus|but)\b/i.test(extra);
+  const text = extra && continues ? whole : row.text;
+  const figures = moneyFiguresIn(text);
+  if (new Set(figures.map((f) => f.value)).size !== 1 || numbersIn(text.replace(/\d+(?:\.\d+)?\s*%/g, " ")).some((n) => !sameValue(n, figures[0].value))) return null;
+  const fig = figures[0];
+  const i = text.indexOf(fig.raw);
+  if (!fig.currency || i < 0 || !CAP_BEFORE.test(text.slice(Math.max(0, i - 40), i))) return null;
+  const found: Found = { docIndex: at.docIndex, page: at.page, excerpt: text.trim().replace(/[ \t]+/g, " "), offset: row.start };
+  const plain = plainAmount({ ...st, percentOf: null, amount: fig.raw, quote: found.excerpt }, found, household);
+  return plain.ok && /^Up to /.test(plain.amount.text) ? { found, raw: fig.raw, amount: plain.amount } : null;
+}
 /** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
  * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
  * - it is in the same document as the wording, or in a document with the same policy number;
@@ -626,7 +657,7 @@ function checkAmount(st: ModelStatement, quoted: Found, household: Household, pe
     let found = quoted;
     if (ownPcts(found).at(-1) !== pct) {
       const row = ownPcts(found).length ? null : rowFor(st, quoted, household);
-      if (!row) return { ok: false, why: "the percentage is not the quoted row's own figure" };
+      if (!row) return { ok: false, why: NOT_ROW_FIGURE };
       found = row;
     }
     const r = percentAmount(st, found, household, person);
@@ -1570,13 +1601,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         }
       }
       if (!r.ok) {
-        if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
+        // The row's own printed cap ("25% of Sum Assured per claim, maximum RM 50,000 per claim") is the most it pays,
+        // whatever the percentage works out to: it is shown as that cap, with the row's conditions, while the percentage
+        // stays unworked (TE #311 round 3). Only when the percentage is this row's own figure, and rowCap's checks hold.
+        const cap = st.percentOf && r.why !== NOT_ROW_FIGURE ? rowCap(st, r.found ?? found, household, person) : null;
+        if (!r.asFact && !cap) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
         // A percentage that is not worked out is kept as the printed percentage, without an amount. A benefit table's label
         // does not print the percentage (the card's own line does), so it is said here.
         if (st.percentOf) {
           const pct = serverWords.has(st.text) ? `${st.text.replace(/\.\s*$/, "")}: ${st.percentOf.percent}% of ${st.percentOf.baseQuote ? "the sum insured" : "the figure its table prints"}.` : st.text;
-          checked.push({ s: { ...st, text: pct, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found: r.found ?? found, amount: null, person, note: null });
+          if (cap) checked.push({ s: { ...st, text: pct, kind: "amount", amount: cap.raw, percentOf: null, alternativeGroup: null }, found: cap.found, amount: cap.amount, person, note: null });
+          else checked.push({ s: { ...st, text: pct, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found: r.found ?? found, amount: null, person, note: null });
         }
         continue;
       }
