@@ -144,5 +144,23 @@ t("in answers, a passage outside any section of a multi-product booklet is not u
   assert.equal(kept(contract([doc({ products: ["Group Term Life"] })]), source("booklet", [])), 1, "a single-product document");
   assert.equal(kept(contract([doc({ product_name: "Group Term Life" })]), source("booklet", [])), 1, "a document named after the owned product");
 });
+t("a word before a product's name names a different product (dependants, spouse, Pasangan) unless it is before every product heading: the employee's product never names it", () => {
+  const Q = ["Group Term Life", "Group Personal Accident"], B = "\nBenefits\n• Death\tS$100,000";
+  assert.deepEqual(scopes(["Group Term Life" + B, "Group Personal Accident" + B, "Dependants Group Term Life" + B, "Dependants Group Personal Accident" + B], Q),
+    ["Group Term Life", "Group Personal Accident", "", ""]);
+  assert.deepEqual(scopes(["Dependants Group Term Life" + B, "Dependants Group Personal Accident" + B, "Group Term Life" + B], Q), ["", "", "Group Term Life"]);
+  assert.deepEqual(scopes(["Takaful Hayat" + B, "Takaful Mulia" + B, "Pasangan Takaful Hayat" + B, "Pasangan Takaful Mulia" + B], ["Takaful Hayat", "Takaful Mulia"]),
+    ["Takaful Hayat", "Takaful Mulia", "", ""]);
+  assert.deepEqual(scopes(["Harbour Group Term Life" + B, "Harbour Group Personal Accident" + B], Q), ["Group Term Life", "Group Personal Accident"]);
+});
+t("only the same short line on most pages is a running header; a product named in sentences on many pages still starts its section at its heading", () => {
+  const Q = ["Group Term Life", "Group Personal Accident"];
+  assert.deepEqual(scopes(["Group Term Life\nKey Features", "Group Personal Accident claims go to the GTL desk.", "Group Personal Accident\nKey Features"], Q),
+    ["Group Term Life", "", "Group Personal Accident"]);
+});
+t("a page with two products' headings (a contents list without page numbers) starts no section", () => {
+  assert.deepEqual(scopes(["Contents\n1.0 Group Term Life\n2.0 Group Personal Accident\n3.0 Claims", "Welcome\nThis booklet explains your benefits.", "1.0 Group Term Life\nKey Features", "2.0 Group Personal Accident\nKey Features"],
+    ["Group Term Life", "Group Personal Accident"]), ["", "", "Group Term Life", "Group Personal Accident"]);
+});
 console.log(`\nproduct scopes: ${passed} passed, ${failed.length} failed`);
 if (failed.length) process.exit(1);

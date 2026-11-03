@@ -206,31 +206,39 @@ function escaped(value:string){return value.replace(/[.*+?^$()|[\]\\]/g,"\\$&");
 export function pageProductScopes(pages:{page_number:number;text:string}[],products:string[]) {
   const result=new Map<number,string[]>();let current:string[]=[];
   const names=[...new Set(products.filter(name=>!!name&&!!nameWords(name).length))].sort((a,b)=>b.length-a.length);
-  const ordered=[...pages].sort((a,b)=>a.page_number-b.page_number).map(page=>({page,lines:page.text.slice(0,650).split(/\r?\n/).map(line=>line.normalize("NFKC").trim())}));
-  const mentionedOn=new Map(names.map(name=>[name,ordered.filter(({lines})=>lines.some(line=>mentions(line,name))).length]));
-  const runningHeader=(name:string)=>ordered.length>=3&&(mentionedOn.get(name)??0)>=Math.ceil(ordered.length*0.6);
-  // A word printed before the heading of two or more different products ("Harbourlife Group Term Life", "Harbourlife
-  // Group Personal Accident") is the insurer's brand, not part of another product's name.
+  const read=[...pages].sort((a,b)=>a.page_number-b.page_number).map(page=>({page,lines:page.text.slice(0,650).split(/\r?\n/).map(line=>line.normalize("NFKC").trim())}));
+  // A running header: the same short line printed on most pages (3 or more). It says nothing about the page's section.
+  const lineCount=new Map<string,number>();
+  for(const {lines} of read)for(const key of new Set(lines.filter(line=>line&&line.length<=80).map(line=>line.toLowerCase())))lineCount.set(key,(lineCount.get(key)??0)+1);
+  const repeated=(line:string)=>read.length>=3&&(lineCount.get(line.toLowerCase())??0)>=Math.ceil(read.length*0.6);
+  const ordered=read.map(({page,lines})=>({page,lines:lines.map(line=>repeated(line)?"":line)}));
+  // A word before a listed product's heading ("Harbour Group Term Life") is the insurer's brand only when it is printed
+  // before two or more products' headings and no listed product's heading is ever printed without it. Otherwise it
+  // names a different product ("Dependants Group Term Life", "Supplementary ..."), for which nothing is known.
+  const allLines=ordered.flatMap(({lines})=>lines).filter(Boolean);
+  const prefixed=(line:string,name:string)=>{const m=/^(\S+(?:\s+\S+){0,2}?)\s+(.+)$/u.exec(line.replace(HEADING_PREFIX,""));return m&&headingOf(m[2],name)?m[1].toLowerCase():null;};
+  const bareHeading=allLines.some(line=>names.some(name=>headingOf(line,name)));
   const brandFor=new Map<string,Set<string>>();
-  for(const {lines} of ordered)for(const line of lines){const m=/^(\p{Lu}[\p{L}\p{N}'’]*)\s+(.+)$/u.exec(line);if(m)for(const name of names)if(headingOf(m[2],name)){const k=m[1].toLowerCase();if(!brandFor.has(k))brandFor.set(k,new Set());brandFor.get(k)!.add(name);}}
-  const brands=new Set([...brandFor].filter(([word,named])=>named.size>=2&&!COVER_WORDS.has(word)&&!NEUTRAL_WORDS.has(word)).map(([word])=>word));
+  for(const line of allLines)for(const name of names){const word=prefixed(line,name);if(word&&/^\p{Lu}/u.test(line.replace(HEADING_PREFIX,""))&&!/\s/.test(word)){if(!brandFor.has(word))brandFor.set(word,new Set());brandFor.get(word)!.add(name);}}
+  const brands=new Set(bareHeading?[]:[...brandFor].filter(([word,named])=>named.size>=2&&!COVER_WORDS.has(word)&&!NEUTRAL_WORDS.has(word)).map(([word])=>word));
   const heading=(line:string,name:string)=>headingOf(line,name,brands);
   for(const {page,lines} of ordered){
     const headed=names.filter(name=>lines.some((line,i)=>heading(line,name)&&!figureFollows(lines,i)));
-    const starts=headed.filter(name=>!coverOnly(name)&&!runningHeader(name)&&!headed.some(other=>other!==name&&!coverOnly(other)&&containsName(other,name)));
-    if(starts.length)current=starts;
+    const starts=headed.filter(name=>!coverOnly(name)&&!headed.some(other=>other!==name&&!coverOnly(other)&&containsName(other,name)));
+    // Two products' headings on one page (a contents list, an overview) say nothing about which one the page is.
+    if(starts.length)current=starts.length===1?starts:[];
     else if(current.length){
-      const ends=names.some(name=>{
-        if(current.includes(name)||runningHeader(name))return false;
-        return lines.some(line=>{
-          // Another name standing as a heading ends the section unless the line is the section's own heading.
-          if(heading(line,name))return !current.some(own=>heading(line,own));
-          // Any other mention of a different product (its words left once the section's own names are taken out).
-          if(coverOnly(name))return false;
-          const rest=current.reduce((text,own)=>text.replace(mentionPattern(own,"giu"),"  "),line);
-          return mentions(rest,name);
-        });
-      });
+      const ends=lines.some(line=>line&&names.some(name=>{
+        // A listed name with other words in front that are not the brand: a different product, even the section's own.
+        if(!heading(line,name)&&prefixed(line,name)!==null)return true;
+        if(current.includes(name))return false;
+        // Another name standing as a heading ends the section unless the line is the section's own heading.
+        if(heading(line,name))return !current.some(own=>heading(line,own));
+        // Any other mention of a different product (its words left once the section's own names are taken out).
+        if(coverOnly(name))return false;
+        const rest=current.reduce((text,own)=>text.replace(mentionPattern(own,"giu"),"  "),line);
+        return mentions(rest,name);
+      }));
       if(ends)current=[];
     }
     result.set(page.page_number,[...current]);
