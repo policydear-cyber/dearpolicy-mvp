@@ -123,6 +123,15 @@ async function main() {
     for (const e of ["TERMINAL ILLNESS\t-", "Total and Permanent Disability\t-", "Payout Benefit\t-", "Hospital Cash Benefit - Premium Plan\t-", "Return of Premium Benefit\t-",
       "Contribution Takaful Plan\t-", "Lim Ah Kow\tS$600,000", "Premium S$100", "Premium Waiver S$3,000", "Kematian dan Hilang Upaya\t-", "身故保险金\t-", ""])
       assert.deepEqual(asBenefitLine({ amount: null }, e), { amount: null }, e);
+    // A waiver joined to a real cover names that cover too, so the line stays (Critic H1, TE V1 on #292): dropping it would let
+    // a tile show a known total as complete while a real cover with an unknown sum is left out.
+    for (const e of ["Premium Waiver and Critical Illness Benefit\t-", "Waiver of Premium plus Accidental Death\t-", "Payor Benefit with TPD cover\t-",
+      "Premium waiver; Death benefit\t-", "Contribution exemption & Takaful TPD\t-", "Premium Waiver / Early CI Payout\t-",
+      "Waiver of premium (CI) – lump sum CI benefit included\t-", "Payor's Rider TPD and Death\t-", "保费豁免及重大疾病保险金\t-",
+      "WAIVER OF PREMIUM AND TPD BENEFIT\t-", "Premium Waiver with Accelerated TPD Benefit\t-", "Waiver of premium & Total Permanent Disability\t-",
+      "Pengecualian Caruman dan Hilang Upaya Kekal\t-", "保费豁免及全残保险金\t-", "Exonération des primes et capital invalidité\t-",
+      "Beitragsbefreiung und Berufsunfähigkeitsrente\t-", "Payor Benefit plus TPD cover\t-", "Total Permanent Disability (with waiver of premium)\t-"])
+      assert.notEqual(benefitSumKind({ evidenceText: e, amount: null }), "not_a_sum", e);
     // With a figure, the rules for a figure decide, as before ("Payor Benefit S$5,000" keeps its line, figure withheld).
     assert.deepEqual(asBenefitLine({ amount: 5000 }, "Payor Benefit\tS$5,000"), { amount: null });
     assert.deepEqual(asBenefitLine({ amount: 3000 }, "Death Benefit (Premium Waiver) S$3,000"), { amount: null });
