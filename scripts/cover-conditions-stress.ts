@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { applyCoverConditions,conditionIsDecidable,describeCondition,evaluateCondition,
+import { ITEM_FREE_KINDS,applyCoverConditions,conditionIsDecidable,describeCondition,evaluateCondition,
   type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import type { ClaimItem } from "@/types";
 import type { SubjectFacts } from "@/lib/chat/types";
@@ -366,6 +366,31 @@ export function runCoverConditionsStress(){
       carveOut:null,quote:"survive 30 days from diagnosis"}))});
     assert.ok(flood.length<=10,"one page cannot contribute an unbounded number of conditions: "+flood.length);
     checks++;
+  }
+
+  // ---------------------------------------------------------------------
+  // 10b. A kind worked out once per answer must not read the benefit. Every
+  //      kind applyCoverConditions shares across benefits gives the same
+  //      outcome for very different benefits under the same facts and dates.
+  // ---------------------------------------------------------------------
+  {
+    const EVENTS=["death","tpd","critical_illness","hospitalisation",undefined];
+    for(let round=0;round<3000;round++){
+      const raw=randomCondition();
+      const kind=pick([...ITEM_FREE_KINDS]);
+      const shared={...raw,kind};
+      const facts=randomFacts();
+      const coverStart=pick(COVER_STARTS);
+      const tenureStart=pick([undefined,null,"2020-01-01"]);
+      const outcomes=Array.from({length:4},()=>evaluateCondition(shared,{item:item({title:pick(["A · Death","B · Fracture","C · Ward"]),
+        calculatedAmount:pick([undefined,0,1_000,350_000,1_000_000]),coverAmount:pick([1_000,1_000_000,null as unknown as number]),
+        calculationKind:pick(["sum_insured","per_day","reimbursement"]) as ClaimItem["calculationKind"],
+        payingEvent:pick(EVENTS) as ClaimItem["payingEvent"],coverLabel:pick(["Living Care","Group Term Life",""])}),
+        facts,coverStart,tenureStart,today:TODAY}));
+      for(const outcome of outcomes.slice(1))
+        if(JSON.stringify(outcome)!==JSON.stringify(outcomes[0]))fail("a kind shared across benefits read the benefit",{kind,outcomes});
+      checks++;
+    }
   }
 
   // ---------------------------------------------------------------------
