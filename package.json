@@ -256,6 +256,7 @@
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
     "policies:not-sure-owner-test": "node --import tsx --test scripts/policies/not-sure-owner-test.ts",
     "policies:not-fully-read-test": "node --import tsx scripts/policies/not-fully-read-test.ts",
+    "documents:scramble-currency-test": "node --import tsx --test scripts/documents/scramble-currency-test.ts",
     "documents:cover-reading-pending-test": "node --import tsx --test scripts/documents/cover-reading-pending-test.ts",
     "policies:capped-share-test": "node --import tsx scripts/policies/capped-share-test.ts",
     "policies:page-currency-rows-test": "node --import tsx scripts/policies/page-currency-rows-test.ts",

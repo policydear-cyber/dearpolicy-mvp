@@ -12,12 +12,29 @@
  * decimals ("1.235", "4.125%", "01.10.2026") is not glued (TE U-F3). */
 const GLUED = /\d\.\d{2}\d[\d,]*\.\d{2}(?!\d)/;
 const UNGLUE = /(\d\.\d{2})(?=\d[\d,]*\.\d{2}(?!\d))/g;
-/** An amount: two decimals or comma groups. A page number or an age is not one. */
-const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+/;
+/** An amount: two decimals or thousands groups, written either way ("12,000.00", "12.000,00", "250,00"). A page number or
+ * an age is not one. */
+const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)/;
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
-const NUMBERS_ONLY = /^[\s\d,.\-–—%$SGDU]*\d[\s\d,.\-–—%$SGDU]*$/;
+/** A line holding only figures, each with or without its currency: any currency symbol, with the letters a market prints
+ * before it ("S$", "US$", "HK$", "R$"); an ISO code ("SGD", "MYR", "GBP", "IDR"); or a market's own short form ("RM",
+ * "Rp", "Rs", "kr"). Before, only "$" and the letters of "SGD"/"USD" counted, so a ringgit, pound or rupiah table whose
+ * labels came out before their values was never seen as scrambled (TE #324). Closed lists: any other word keeps the
+ * line a label line. */
+const ISO_CURRENCIES = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY"]);
+const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh"]);
+const CURRENCY_MARK = /[A-Z]{0,3}\p{Sc}/gu;
+const NUMBERS_ONLY = {
+  test(line: string): boolean {
+    const bare = line.replace(CURRENCY_MARK, " ").replace(/[\p{L}]+\.?/gu, (word) => {
+      const w = word.replace(/\.$/, "");
+      return ISO_CURRENCIES.has(w) || LOCAL_CURRENCY_FORMS.has(w) ? " " : word;
+    });
+    return /^[\s\d,.\-–—%]*\d[\s\d,.\-–—%]*$/.test(bare);
+  },
+};
 const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && /[A-Za-z]{3}/.test(line);
 
 /** Signs that a page's table text came out scrambled: glued figures, or a run of labels with no figures followed by a run
