@@ -886,7 +886,10 @@ function shareStandsAlone(text:string,benefitName:string|null|undefined){
   for(const m of before.matchAll(new RegExp(SHARE_COUNT_SOURCE,"giu")))
     if(!EVENT_PERCENT_BEFORE.test(before.slice(0,m.index))&&!EVENT_PERCENT_AFTER.test(before.slice(m.index!+m[0].length)))return false;
   // "per eye", "for each hand": the share is for each such part, which changes nothing (Critic R450 low).
-  const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ").replace(PER_BODY_PART," ");
+  // "of the Sum Assured of this Basic Benefit": whose sum it is, the row's own kind (ownSumPhrase). "of the Basic Benefit"
+  // from another row may be another cover's sum, so only "this" is read.
+  const after=rest.slice(main.index+main[0].length).replace(new RegExp(OF_INSURED,"giu")," ").replace(PER_BODY_PART," ")
+    .replace(new RegExp("^\\s*"+ownSumPhrase(benefitName).source,"u")," ");
   // A second share anywhere after it ("50% of the Sum Insured. 25% for children.") is another rule for some claims.
   if(new RegExp(SHARE_COUNT_SOURCE,"iu").test(after))return false;
   // The rest of the share's own sentence: harmless words, or a condition on when it is paid that does not touch the amount.
@@ -921,10 +924,24 @@ const ANY_COVERED_CONDITION=/\b(?:up)?on\s+(?:the\s+)?diagnosis\s+of\s+any\s+(?:
 const HARMLESS_REFERENCE=/\b(?:as\s+)?(?:listed|set\s+out|described|defined|shown|named)\s+in\s+(?:the\s+)?(?:schedule|appendix|annex(?:ure)?|lampiran|jadual)(?:\s+[a-z0-9]{1,3})?\b|,?\s*\bsubject\s+to\s+(?:a|the)\s+(?:survival|waiting)\s+period\s+of\s+\d{1,4}\s+(?:days?|months?|hari|bulan)\b/giu;
 const SUBJECT_TO_THE_POLICY=/\bsubject\s+to\s+the\s+(?:terms\s+and\s+)?(?:provisions|conditions|terms)(?:\s+and\s+conditions)?\s+of\s+this\s+(?:policy|rider|supplementary\s+agreement|contract)\b/giu;
 const CAP_SCOPE_WORD=/^(?:total|aggregate|all|across|lifetime|combined|overall|child|children|adult|adults|juvenile|minor|plus|double|doubled|triple|half|halved|increase\w*|decrease\w*|reduc\w*|less|more|maximum|minimum|limit\w*|any|other|each)$/u;
+/** "of the Sum Assured of this Basic Benefit": whose sum the share is of, said as the row's own kind. On a rider or
+ * supplementary row only "this rider" or "this supplementary benefit" is its own: "this Plan" or "this Policy" there may be
+ * the basic plan, whose sum is another (TE pr300 P1). On any other row, "this basic benefit", "this rider" or "this
+ * supplementary benefit": a rider's row is often named for its benefit, so "this plan" may still be the basic plan (TE pr300
+ * P1b) and stays in the passage, read as before. */
+const RIDER_ROW=/\b(?:riders?|supplementary|add[- ]?on|tambahan)\b/iu;
+function ownSumPhrase(benefitName:string|null|undefined){
+  return RIDER_ROW.test(normalText(benefitName??""))
+    ?/\bof\s+this\s+(?:rider|supplementary\s+benefit)\b/gu
+    :/\bof\s+this\s+(?:basic\s+benefit|rider|supplementary\s+benefit)\b/gu;
+}
 function capPassageHarmless(rest:string,benefitName:string|null|undefined){
   // The name's words, but never one that scopes or changes a cap, whatever the name ("Total and Permanent Disability").
   const own=new Set(normalText(benefitName??"").split(/[^\p{L}]+/u).filter(w=>w&&!CAP_SCOPE_WORD.test(w)));
-  const words=normalText(rest).replace(CAP_PASSAGE_PHRASES," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
+  const plain=normalText(rest).replace(CAP_PASSAGE_PHRASES," ");
+  // On a rider, "of this Policy" or "this Plan" may be the basic plan's sum (TE pr300 P1).
+  if(RIDER_ROW.test(normalText(benefitName??""))&&/\bthis\s+(?:basic\s+)?(?:policy|plan|benefit)\b/u.test(plain))return false;
+  const words=plain.replace(ownSumPhrase(benefitName)," ").replace(ANY_COVERED_CONDITION," ").replace(/[,.;:()\-–—'’"“”]/g," ").split(/\s+/).filter(Boolean);
   return words.every(w=>CAP_PASSAGE_WORDS.has(w)||own.has(w));
 }
 const ORDINAL_CLAIM=/\b(?:additional|subsequent|further|first|second|later|next)\s+(?:claims?|events?|conditions?|diagnos[ie]s)\b/iu;
@@ -945,8 +962,57 @@ function withoutLeadingName(quote:string,benefitName:string|null|undefined){
   const m=lead.exec(quote.normalize("NFKC"));
   return m?quote.normalize("NFKC").slice(m[0].length):quote;
 }
+/** A figure written twice, in words and then in brackets, as contracts in many markets print it: "one hundred percent
+ * (100%)", "one (1) lump sum", "Twenty-Five Thousand Singapore Dollars (SGD 25,000)". Read once: the bracketed figure for a
+ * share or an amount, the words for a count. Positive and whole-match: the words must spell exactly the bracketed number,
+ * a share must be a share on both sides, and a named currency must be the bracket's own (a closed list); anything else is
+ * left as printed, so it still counts as two figures and the share stays unsure. */
+const NUMBER_WORDS:Record<string,number>={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,
+  twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,
+  fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+const SCALE_WORDS:Record<string,number>={hundred:100,thousand:1_000,million:1_000_000};
+function spelledNumber(words:string):number|null{
+  let total=0,part=0,any=false;
+  for(const w of words.toLowerCase().split(/[\s-]+/u).filter(x=>x&&x!=="and")){
+    if(w in NUMBER_WORDS){part+=NUMBER_WORDS[w];any=true;}
+    else if(w==="hundred"){part=(part||1)*100;any=true;}
+    else if(w in SCALE_WORDS){total+=(part||1)*SCALE_WORDS[w];part=0;any=true;}
+    else return null;
+  }
+  return any?total+part:null;
+}
+const CURRENCY_NAMES:[RegExp,RegExp][]=[
+  [/^singapore\s+dollars?$/u,/^(?:sgd|s\$)$/u],[/^(?:malaysian\s+)?ringgit(?:\s+malaysia)?$/u,/^(?:myr|rm)$/u],
+  [/^(?:us|united\s+states)\s+dollars?$/u,/^(?:usd|us\$)$/u],[/^hong\s+kong\s+dollars?$/u,/^(?:hkd|hk\$)$/u],
+  [/^(?:pounds?(?:\s+sterling)?|british\s+pounds?)$/u,/^(?:gbp|£)$/u],[/^euros?$/u,/^(?:eur|€)$/u],
+];
+const NUMBER_WORD_SOURCE="(?:"+[...Object.keys(NUMBER_WORDS),...Object.keys(SCALE_WORDS),"and"].join("|")+")";
+const WORDS_THEN_FIGURE=new RegExp(String.raw`\b((?!and\b)${NUMBER_WORD_SOURCE}(?:[\s-]+${NUMBER_WORD_SOURCE})*)(\s+(?:per\s?cent|percent))?((?:\s+\p{L}+){0,3}?)\s*\(\s*((?:sgd|myr|usd|hkd|gbp|eur|rm|s\$|us\$|hk\$|£|€)\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?\s*(%)?\s*\)`,"giu");
+export function figureOnce(text:string):string{
+  return text.normalize("NFKC").replace(WORDS_THEN_FIGURE,(whole,words:string,percent:string|undefined,named:string,sign:string|undefined,figure:string,cents:string|undefined,mark:string|undefined)=>{
+    const spelled=spelledNumber(words.trim());
+    if(spelled==null||spelled!==Number(figure.replace(/,/g,""))||(cents&&cents!=="00")||!!percent!==!!mark)return whole;
+    const name=named.trim().toLowerCase();
+    if(name){
+      if(!sign||!CURRENCY_NAMES.some(([n,c])=>n.test(name)&&c.test(sign.trim().toLowerCase())))return whole;
+      return sign.trim()+" "+figure+(cents?"."+cents:"");
+    }
+    if(sign)return whole;
+    return mark?figure+"%":words;
+  });
+}
+/** A share spelled in words whose bracketed figure is another ("fifty percent (100%)"): which one is meant is not known. */
+function spelledShareDisagrees(text:string){
+  for(const m of text.normalize("NFKC").matchAll(WORDS_THEN_FIGURE)){
+    if(!m[2]&&!m[7])continue;
+    const spelled=spelledNumber(m[1].trim());
+    if(spelled!=null&&spelled!==Number(m[5].replace(/,/g,"")))return true;
+  }
+  return false;
+}
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
-  const text=withoutLeadingName(quote??"",benefitName);
+  if(spelledShareDisagrees(quote??""))return {kind:"unsure"};
+  const text=withoutLeadingName(figureOnce(quote??""),benefitName);
   // "subject to the terms and conditions of this policy" refers to the whole policy, not to a cap (TE pr222 S15).
   const plain=normalText(text).replace(SUBJECT_TO_THE_POLICY," ").replace(HARMLESS_REFERENCE," ").replace(ILLNESS_NUMBER,"$1$2");
   if(!printsAnAmount(plain))return shareStandsAlone(plain,benefitName)?{kind:"none"}:{kind:"unsure"};
@@ -974,7 +1040,7 @@ export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
   if(benefit.formulaKind!=="none")return null;
   // A schedule term is never turned into a payout rule.
   if(isScheduleTerm(benefit.rowKind))return null;
-  const quote=benefit.quote??"";
+  const quote=figureOnce(benefit.quote??"");
   const text=normalText(quote);
   const propose=(input:Parameters<typeof validateCatalogFormula>[0])=>{
     const read=validateCatalogFormula({...input,benefitName:benefit.benefitName});
@@ -1027,6 +1093,8 @@ export function validateCatalogFormula(input:{
   factKey:string|null;offsetDays:number|null;maximumDays:number|null;coverageCurrency?:string|null;benefitName?:string|null;
 }):Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">{
   const none={formulaKind:"none" as const,formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null};
+  // A figure printed in words and again in brackets is read once (figureOnce).
+  input={...input,quote:figureOnce(input.quote)};
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
