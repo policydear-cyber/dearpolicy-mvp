@@ -326,8 +326,18 @@ async function settleSameSchedule(args: ProcessPolicyArgs, extraction: PolicyExt
       // cannot be compared, or where the one to set aside adds a figured row (a rider added on reissue) are not filed as
       // copies: neither is set aside, and each differing amount keeps its conflict note, so no newer figure and no added
       // cover is hidden (v11 E2: the 2026 schedule was filed as a copy of 2025's; Critic #325 M1, M2).
-      if (!(await isCopyOf(args.accountId, older, newer))) continue;
-      note = `Same schedule as “${newerFile}”, uploaded again${keepMine || !myNative ? " as a photo or scan" : ""}; kept as a copy, and answers use “${newerFile}”.`;
+      // When the one first chosen to give way states more (a rider added on reissue) and the other is a copy of it, the
+      // other gives way instead, whichever was uploaded first or is the PDF (TE #325: both stayed current and the base
+      // cover was listed twice).
+      let fuller = false;
+      if (!(await isCopyOf(args.accountId, older, newer))) {
+        if (!(await isCopyOf(args.accountId, newer, older))) continue;
+        [older, newer, olderFile, newerFile] = [newer, older, newerFile, olderFile];
+        fuller = true;
+      }
+      note = fuller
+        ? `Same schedule as “${newerFile}”, which states everything this one does and more; kept as a copy, and answers use “${newerFile}”.`
+        : `Same schedule as “${newerFile}”, uploaded again${keepMine || !myNative ? " as a photo or scan" : ""}; kept as a copy, and answers use “${newerFile}”.`;
     } else if (myEnd && theirEnd) {
       const mineNewer = myEnd > theirEnd;
       [older, newer, olderFile, newerFile] = mineNewer ? [other.id, args.policyId, other.original_filename ?? "an earlier upload", myFile] : [args.policyId, other.id, myFile, other.original_filename ?? "an earlier upload"];

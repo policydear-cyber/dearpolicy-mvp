@@ -135,6 +135,12 @@ async function main() {
       const oneWard = await doc(account, person, [rows[0]]);
       assert.equal(await isCopyOf(account, oneWard, first), false, "a photo that read one of the two rates is not proven the same: kept, safe direction");
     });
+    await test("R13 intake sets aside whichever schedule states less, in either upload order (TE #325: the base cover was listed twice)", async () => {
+      const src = (await import("node:fs")).readFileSync("lib/rag/ingest.ts", "utf8");
+      const settle = src.slice(src.indexOf("async function settleSameSchedule"), src.indexOf("async function progress("));
+      assert.match(settle, /if \(!\(await isCopyOf\(args\.accountId, older, newer\)\)\) \{\s*if \(!\(await isCopyOf\(args\.accountId, newer, older\)\)\) continue;\s*\[older, newer, olderFile, newerFile\] = \[newer, older, newerFile, olderFile\];/);
+      assert.match(settle, /which states everything this one does and more/);
+    });
     await test("N no request left this machine", async () => assert.equal(outbound, 0));
   } finally {
     for (const acct of [account, other]) {
