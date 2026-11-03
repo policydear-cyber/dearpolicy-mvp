@@ -56,6 +56,8 @@ test("a share written in words and figures keeps its figure, on stored and fresh
   // Withheld: a mismatch, a cap in another currency, another cover's sum, a changer, a second figure.
   for (const [name, quote] of [
     ["Critical Illness Benefit", "We will pay twenty percent (25%) of the Sum Assured."],
+    // The spelled share and its figure disagree: which is meant is not known (Critic R300 L).
+    ["Critical Illness Benefit", "We pay fifty percent (100%) of the Sum Assured."],
     ["Critical Illness Benefit", "We will pay one hundred percent (100%) of the Sum Assured of the Basic Benefit."],
     ["Critical Illness Benefit", "We will pay one hundred percent (100%) of the Sum Assured, less any amounts owing to Us."],
     ["Critical Illness Benefit", "We will pay fifty percent (50%) of the Sum Assured for one (1) child."],

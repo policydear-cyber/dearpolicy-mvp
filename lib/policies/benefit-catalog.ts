@@ -1000,7 +1000,17 @@ export function figureOnce(text:string):string{
     return mark?figure+"%":words;
   });
 }
+/** A share spelled in words whose bracketed figure is another ("fifty percent (100%)"): which one is meant is not known. */
+function spelledShareDisagrees(text:string){
+  for(const m of text.normalize("NFKC").matchAll(WORDS_THEN_FIGURE)){
+    if(!m[2]&&!m[7])continue;
+    const spelled=spelledNumber(m[1].trim());
+    if(spelled!=null&&spelled!==Number(m[5].replace(/,/g,"")))return true;
+  }
+  return false;
+}
 export function shareBound(quote:string|null|undefined,benefitName?:string|null):ShareBound{
+  if(spelledShareDisagrees(quote??""))return {kind:"unsure"};
   const text=withoutLeadingName(figureOnce(quote??""),benefitName);
   // "subject to the terms and conditions of this policy" refers to the whole policy, not to a cap (TE pr222 S15).
   const plain=normalText(text).replace(SUBJECT_TO_THE_POLICY," ").replace(HARMLESS_REFERENCE," ").replace(ILLNESS_NUMBER,"$1$2");
