@@ -1,0 +1,22 @@
+{
+  "runId": "fx-live-2",
+  "testedCodeSha": "c4edd48cf8b01054fc2f592516ebd7cdec07407a",
+  "model": "gpt-6-luna",
+  "preflight": false,
+  "budgetUsed": {
+    "spentUsd": 0.029663,
+    "reservedUsd": 0,
+    "calls": 23,
+    "refusals": 0,
+    "failed": 0
+  },
+  "estimatedCostUsd": 0.012903,
+  "upperBoundCostUsd": 0.029663,
+  "reconstructed": true,
+  "reconstructedFrom": [
+    "docs/rag-migration/live/LEDGER.json",
+    "docs/rag-migration/live/RUN-fx-live-2-2026-10-20T02-39-03/responses.jsonl"
+  ],
+  "reconstructedAt": "2026-11-03",
+  "note": "Summary record REBUILT after the run, not written at the time: the original run.json was never committed. Every figure is recomputed by scripts/rag2-live/reconstruct-run-record.ts from this folder's responses.jsonl (each response's own usage, priced with lib/ai/providers.ts) and equals the LEDGER.json entry exactly; spentUsd is the upper bound without the cached-input discount, estimatedCostUsd applies it. Neither is provider-billed. The full record is README.md, report.md and responses.jsonl in this folder."
+}
