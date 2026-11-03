@@ -52,10 +52,30 @@ t("the closest stored name decides: a fuller name the household did not answer i
   assert.equal(householdRecord("Sra. Ana Ortega", "d1", fam), null, "closest is 'Ana Ortega', which the household did not answer");
   assert.equal((householdRecord("Sra. Ana", "d1", fam) as { member: FamilyMember }).member.id, "b");
 });
+t("a stored name inside a longer printed name only counts beside a title or role word, never another name word (Critic H2)", () => {
+  const on = (n: string) => ({ documentId: "d1", name: n });
+  // Case A: the household matched the short "Ana" to the holder by hand; the daughter's and Tomás's names are printed too.
+  const a = [m("ana", "Ana", { chosenAs: [on("Ana")] }), m("lucia", "Ana Lucia Ortega"), m("tomas", "Tomás Ortega")];
+  for (const printed of ["Ana Lucia Ortega", "Mrs Ana Lucia Ortega", "Ana Ortega", "Tomás Ortega Ana", "Tan Ana"]) {
+    const got = householdRecord(printed, "d1", a);
+    assert.ok(!(got && typeof got === "object" && got.member.id === "ana"), `${printed} must not follow the hand match to Ana`);
+  }
+  assert.equal((householdRecord("Mrs Ana", "d1", a) as { member: FamilyMember }).member.id, "ana");
+  // Case B: "Ana Ortega" was moved to the daughter; the holder's own name is "Ana Ortega Perez".
+  const b = [m("ana", "Ana Ortega Perez"), m("lucia", "Ana Lucia Ortega", { chosenAs: [on("Ana Ortega")] })];
+  const got = householdRecord("Ana Ortega Perez", "d1", b);
+  assert.ok(!(got && typeof got === "object" && got.member.id === "lucia"), "the holder's own full name stays hers");
+  // Titles aside, the printed name IS the stored one the household answered: its answer holds.
+  const c = [m("ana", "Ana"), m("lucia", "Ana Lucia", { chosenAs: [on("Ana Lucia")] })];
+  assert.equal((householdRecord("Dr Ana Lucia", "d1", c) as { member: FamilyMember }).member.id, "lucia");
+});
 t("two stored names equally close with different answers: nobody, never a guess", () => {
   const on = (n: string) => ({ documentId: "d1", name: n });
-  const fam = [m("a", "Wei", { chosenAs: [on("Tan Wei")] }), m("b", "Jie", { chosenAs: [on("Wei Jie")] })];
-  assert.equal(householdRecord("Tan Wei Jie", "d1", fam), "nobody");
+  const fam = [m("a", "Wei", { chosenAs: [on("TAN  Wei")] }), m("b", "Jie", { chosenAs: [on("Tan Wei")] })];
+  assert.equal(householdRecord("Tan Wei", "d1", fam), "nobody", "same words, two answers");
+  // A printed name that is neither stored name (another name word beside each) is not decided by either answer.
+  const two = [m("a", "Wei", { chosenAs: [on("Tan Wei")] }), m("b", "Jie", { chosenAs: [on("Wei Jie")] })];
+  assert.equal(householdRecord("Tan Wei Jie", "d1", two), null);
 });
 t("no answer on the document: unchanged behaviour even with every printed name listed", () => {
   const on = (n: string) => ({ documentId: "d1", name: n });

@@ -172,8 +172,10 @@ export function householdRecord(name: string, documentId: string, family: Family
     const own = nameWords(stored);
     if (!own.length || !printed.length) return 0;
     if ([...own].sort().join(" ") === [...printed].sort().join(" ")) return 2;
-    // Every word of the stored name is printed, with more around it (a title, a role): closer the more words it shares.
-    return own.every((w) => printed.includes(w)) ? 1 + own.length / 1000 : 0;
+    // Every word of the stored name is printed, and every other printed word is a title or a role word ("Sra.",
+    // "(Life Assured)", "（受保人）"), never another name word: "Ana Lucia Ortega" is not the household's "Ana".
+    const extra = printed.filter((w) => !own.includes(w));
+    return own.every((w) => printed.includes(w)) && extra.every((w) => NOT_NAME_WORDS.has(w)) ? 1 : 0;
   };
   const scored = said.map((s) => ({ ...s, score: closeness(s.name) })).filter((s) => s.score > 0);
   const best = Math.max(0, ...scored.map((s) => s.score));
@@ -191,6 +193,17 @@ export function householdRecord(name: string, documentId: string, family: Family
   if (named && (named.member.excludedFrom ?? []).includes(documentId)) return "nobody";
   return null;
 }
+
+/** Words printed around a name that are never part of it: titles and honorifics, and the role a document gives the
+ * person, in the languages DearPolicy reads (closed list; anything else beside a name counts as a name word). */
+const NOT_NAME_WORDS = new Set([
+  // Not here, because they are also names or initials: "Tan" (a surname, and "Tan Sri"), "Don", "M", "Haji".
+  "mr", "mrs", "ms", "mdm", "madam", "miss", "mx", "dr", "prof", "sr", "sra", "srta", "doña", "mme", "mlle",
+  "encik", "puan", "cik", "tuan",
+  "先生", "女士", "小姐", "太太",
+  "insured", "assured", "life", "policyholder", "policy", "holder", "owner", "member", "principal", "dependant", "dependent",
+  "受保人", "被保险人", "被保人", "投保人", "保单持有人", "assuré", "assurée", "asegurado", "asegurada", "tertanggung", "pemegang", "polisi", "diinsuranskan",
+]);
 
 /** The words of a name in any script, ignoring case and punctuation (full-width brackets and commas included). */
 function nameWords(name: string): string[] {
