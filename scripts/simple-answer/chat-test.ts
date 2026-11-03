@@ -113,6 +113,12 @@ async function main() {
     const whole = { ...h.documents[0], uncheckedPages: [], unreadablePages: [] };
     assert.doesNotMatch(renderLibrary({ ...h, documents: [whole] }), /reading_status/);
     assert.match(libraryFact(h, whole), /was read\./);
+    // Pages left out of the message count the unreadable page too (Critic #327 L1).
+    assert.match(renderLibrary(h, new Set([`${pid}#1`])), /<pages_not_sent count="2" of="4"/);
+    // Every page unreadable: never "read in part" (Critic #327 L2).
+    const none = { ...h.documents[0], uncheckedPages: [], unreadablePages: [1, 2, 3, 4, 5], pages: [] };
+    assert.match(renderLibrary({ ...h, documents: [none] }), /reading_status="could not be read: no page of it could be read, so nothing in it is known"[^>]*>\n<no_readable_text\/>/);
+    assert.match(libraryFact(h, none), /\(Schedule scan\.pdf\) could not be read: no page of it could be read, so nothing in it was used\./);
     // A failed document says it could not be read, never "read in part".
     assert.match(renderLibrary({ ...h, documents: [{ ...only, processingStatus: "failed" }] }), /reading_status="could not be read \(failed\)"/);
     assert.match(SIMPLE_SYSTEM_PROMPT, /When it names pages that could not be read at all and the answer would rely on that document, say which pages could not be read/);

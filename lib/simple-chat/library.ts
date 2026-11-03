@@ -186,6 +186,8 @@ export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[
 export const readInPart = (doc: HouseholdDocument) => {
   const whole = doc.uncheckedPages ?? [], part = doc.partCheckedPages ?? [], lost = doc.unreadablePages ?? [];
   if ((!whole.length && !part.length && !lost.length) || unreadable(doc)) return null;
+  // Every page unreadable: nothing was read, so it is never called read in part (Critic #327 L2).
+  if (lost.length && !doc.pages.length) return `${NOT_READABLE}: no page of it could be read, so nothing in it is known`;
   return "read in part: " + [lost.length ? `${pageList(lost)} could not be read at all, so nothing printed only there is known; ${lost.length === 1 ? "it is" : "they are"} not sent` : null,
     whole.length ? `${pageList(whole)} could not be checked against the page image; no amount from ${whole.length === 1 ? "it" : "them"} is used` : null,
     part.length ? `some amounts on ${pageList(part)} could not be checked against the page image and show as "[amount not checked]"; they are not used` : null].filter(Boolean).join("; ");
@@ -206,7 +208,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
     : [...sent.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`),
-      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
+      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length + (doc.unreadablePages?.length ?? 0)}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
   return `${head}\n${pages}\n</document>`;
 }
 

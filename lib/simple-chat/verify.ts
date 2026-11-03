@@ -1358,6 +1358,8 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
     : onHold(d) ? `${named} is ${onHoldWords(d)}${d.holdLabel ? ` (${d.holdLabel})` : ""}, so nothing in it is used yet.`
     : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}${failedWhy(d)}`
+    // Every page unreadable: nothing was read (Critic #327 L2).
+    : d.unreadablePages?.length && !d.pages.length ? `${named} could not be read: no page of it could be read, so nothing in it was used.`
     : d.uncheckedPages?.length || d.partCheckedPages?.length || d.unreadablePages?.length ? `${named} was read in part:`
       // A page that could not be read at all: named first, since nothing printed only there is known (#324 follow-up).
       + `${d.unreadablePages?.length ? ` ${sentence(pageList(d.unreadablePages))} couldn't be read, so anything printed only there is not known.` : ""}`
