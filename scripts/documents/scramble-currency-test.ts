@@ -29,6 +29,7 @@ const MARKETS: Record<string, string[]> = {
   "Hong Kong dollars (HK$)": ["HK$250.00", "HK$500.00", "HK$12,000.00", "HK$30,000.00"],
   "Singapore dollars (S$)": ["S$250.00", "S$500.00", "S$12,000.00", "S$30,000.00"],
   "Singapore dollars (SGD)": ["SGD 250.00", "SGD 500.00", "SGD 12,000.00", "SGD 30,000.00"],
+  "Swiss francs (CHF, apostrophe thousands)": ["CHF 250.00", "CHF 500.00", "CHF 12'000.00", "CHF 30’000.00"],
   "plain figures": ["250.00", "500.00", "12,000.00", "30,000.00"],
 };
 
@@ -45,6 +46,8 @@ test("a line with any other word is still a label line: no scramble from rows th
     ["Plan A 1,000.00", "Plan B 2,000.00", "Plan C 3,000.00", "Plan D 4,000.00"],
     ["Age 35 1,000.00", "Age 40 2,000.00", "Age 45 3,000.00", "Age 50 4,000.00"],
     ["RMX 250.00", "RMX 500.00", "RMX 12,000.00", "RMX 30,000.00"],
+    // Capitals glued to a symbol are a currency only when they are a market's own prefix (Critic #329 L3).
+    ["MAX$1,500.00", "MAX$2,500.00", "MAX$12,000.00", "MAX$30,000.00"],
   ]) assert.ok(!scrambleSigns(scrambled(values)).includes(SIGN), values[0]);
 });
 

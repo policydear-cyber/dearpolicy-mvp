@@ -14,7 +14,7 @@ const GLUED = /\d\.\d{2}\d[\d,]*\.\d{2}(?!\d)/;
 const UNGLUE = /(\d\.\d{2})(?=\d[\d,]*\.\d{2}(?!\d))/g;
 /** An amount: two decimals or thousands groups, written either way ("12,000.00", "12.000,00", "250,00"). A page number or
  * an age is not one. */
-const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)/;
+const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d{1,3}(?:['’]\d{3})+/;
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
@@ -25,14 +25,16 @@ const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
  * line a label line. */
 const ISO_CURRENCIES = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY"]);
 const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh"]);
-const CURRENCY_MARK = /[A-Z]{0,3}\p{Sc}/gu;
+// The letters a market prints before its symbol, a closed list (Critic #329 L3): "MAX$1,500" stays a label line.
+const CURRENCY_MARK = /(?<![A-Za-z])(?:S|US|HK|A|AU|NZ|NT|R|C|CA|MX|N|J|B|BZ|T|TT|Z|RD|CI|EC|FJ|G|GY|L|SI|SG)?\p{Sc}/gu;
 const NUMBERS_ONLY = {
   test(line: string): boolean {
     const bare = line.replace(CURRENCY_MARK, " ").replace(/[\p{L}]+\.?/gu, (word) => {
       const w = word.replace(/\.$/, "");
       return ISO_CURRENCIES.has(w) || LOCAL_CURRENCY_FORMS.has(w) ? " " : word;
     });
-    return /^[\s\d,.\-–—%]*\d[\s\d,.\-–—%]*$/.test(bare);
+    // Swiss thousands are written with an apostrophe ("1'500.00", "1’500.00"; Critic #329 L2).
+    return /^[\s\d,.'’\-–—%]*\d[\s\d,.'’\-–—%]*$/.test(bare);
   },
 };
 const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && /[A-Za-z]{3}/.test(line);
