@@ -18,13 +18,24 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { timeOffWork, printedWaitingPeriod, compareWithWaiting, waitingPeriodSentence } = await import("@/lib/chat/deferred-period");
+  const { timeOffWork, printedWaitingPeriod, compareWithWaiting, waitingPeriodSentence, asksAboutIncomeCover } = await import("@/lib/chat/deferred-period");
   await test("the time off work is read once, in digits or words, in any unit; two lengths or none give nothing", () => {
     assert.deepEqual(timeOffWork("Tom has been off work for 3 months, can he claim on his income protection?"), { min: 84, max: 93, text: "3 months" });
     assert.deepEqual(timeOffWork("She's been off sick for the past six weeks"), { min: 42, max: 42, text: "6 weeks" });
     assert.deepEqual(timeOffWork("He was signed off 10 days ago"), { min: 10, max: 10, text: "10 days" });
     assert.deepEqual(timeOffWork("unable to work for a year now"), { min: 365, max: 366, text: "1 year" });
     for (const m of ["off work for 2 weeks and then 3 months more", "he hurt his back", "How long is the deferred period?", "off work since 3 March", "in hospital for 3 days"]) assert.equal(timeOffWork(m), null, m);
+  });
+  await test("a length that is the plan's period, or time off still to come, is never read as time already off", () => {
+    for (const m of ["Tom has been off work since his accident; his deferred period is 13 weeks. Can he claim?", "off sick, and the 4 weeks waiting period has passed?",
+      "Tom can't work for the next 2 months after surgery, can he claim on his income protection?", "She will be off work for 6 weeks", "he is going to be off work for three months",
+      "off work, my brother was off for 3 months last year"]) assert.equal(timeOffWork(m), null, m);
+  });
+  await test("only a question about the income plan, and about nothing else that happened, gets the comparison", () => {
+    for (const m of ["Tom has been off work for 3 months, can he claim on his income protection?", "Mei has been off sick for 10 days. Can she claim on her salary continuance?", "Is his deferred period over? He's been off work 14 weeks"])
+      assert.equal(asksAboutIncomeCover(m), true, m);
+    for (const m of ["Tom broke his leg and has been off work for 6 weeks, what can he claim?", "off work for 6 weeks after a hospital stay, can he claim on his income protection?", "He's been off work for 3 months, what can he claim?"])
+      assert.equal(asksAboutIncomeCover(m), false, m);
   });
   await test("only a line that is the period's label and one length is the period", () => {
     assert.deepEqual(printedWaitingPeriod("Deferred period\t13 weeks"), { label: "deferred period", span: { min: 91, max: 91, text: "13 weeks" } });
@@ -67,6 +78,7 @@ async function main() {
         await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [A, id, page]);
       };
       await doc("Tom Bennett", "Income Protection", "Disability", "Income Protection - Policy schedule\nMember: Tom Bennett\nMonthly benefit\t£2,400\nDeferred period\t13 weeks\nBenefit payment period\tTo age 67\nMonthly contribution\t£41.20");
+      await doc("Tom Bennett", "Accident Guard", "Personal Accident", "Accident Guard - schedule\nInsured: Tom Bennett\nFracture of leg\t£1,500\nHospital cash\t£100 per day");
       await doc("Mei Tan", "Salary Continuance Plan", "Disability Income", "Salary Continuance Plan\nInsured: Mei Tan\nMonthly benefit\tA$4,000\nWaiting period: 30 days\nBenefit period\t2 years");
       const ask = (question: string) => askContextualDearPolicy({ accountId: A, familyMemberId: null, scope: "family", question });
       const said = (r: Awaited<ReturnType<typeof ask>>) => [r.answer.summary, ...(r.answer.details ?? [])].join("\n");
@@ -82,6 +94,11 @@ async function main() {
       await test("database: asked as a what-if, the same comparison is given", async () => {
         const text = said(await ask("What if Tom is off work for 4 months, could he claim on his income protection?"));
         assert.match(text, /off work for 4 months, which is longer than the deferred period of 13 weeks that Income Protection prints/, text);
+      });
+      await test("database: a broken leg with time off work is still the accident claim, never only the deferred period", async () => {
+        const text = said(await ask("Tom broke his leg and has been off work for 6 weeks, what can he claim?"));
+        assert.doesNotMatch(text, /deferred period of 13 weeks/, text);
+        assert.match(text, /broken leg|fracture/i, text);
       });
       await test("database: a waiting period in days, on a plan named in another market's words, gives the days still to go", async () => {
         const text = said(await ask("Mei has been off sick for 10 days. Can she claim on her salary continuance?"));

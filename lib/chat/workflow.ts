@@ -2,7 +2,7 @@ import { z } from "zod";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
-import { printedWaitingPeriod, timeOffWork, waitingPeriodSentence } from "./deferred-period";
+import { asksAboutIncomeCover, printedWaitingPeriod, timeOffWork, waitingPeriodSentence } from "./deferred-period";
 import { householdModelFailure,readableModelFailure,structuredCompletion } from "@/lib/ai/llm";
 import { SpendCapReached } from "@/lib/ai/ledger";
 import { outsideHouseholdSubject,resolveClaimPerson,resolveRelativePerson,type ClaimPerson,type ClaimPersonResolution } from "@/lib/claims/person";
@@ -874,7 +874,7 @@ function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
  * compared in code (lib/chat/deferred-period). Null unless the message states one length off work and exactly one
  * such plan of theirs prints exactly one such period. */
 async function waitingPeriodAnswer(accountId:string,people:ClaimPerson[],message:string):Promise<{summary:string;line:string;citation:ChatCitation}|null>{
-  const off=timeOffWork(message);
+  const off=asksAboutIncomeCover(message)?timeOffWork(message):null;
   if(!off||people.length!==1)return null;
   const rows=(await query<{id:string;product:string|null;insurer:string|null;type:string|null;role:string|null;page_number:number;text:string}>(
     `SELECT p.id::text,p.product_name AS product,p.insurer,p.policy_type AS type,p.document_role AS role,pg.page_number,pg.text FROM policies p
