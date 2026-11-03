@@ -11,16 +11,17 @@ export type OverrideInput = {
 };
 
 /** The line to show, or null. Shown only when the chosen person is still in the household, is not covered by the
- * document, and at least one printed name was matched to someone else. */
+ * document, and at least one printed name was matched to someone else whom the document is used for (linked). */
 export function uploadOverrideLine(input: OverrideInput, family: { id: string; display_name: string }[]): string | null {
   const chosen = input.uploadChoice ? family.find((m) => m.id === input.uploadChoice) : undefined;
   if (!chosen || input.linkedIds.includes(chosen.id)) return null;
-  const matched = input.named.filter((p) => p.memberId);
-  const others = [...new Map(matched.filter((p) => p.memberId !== chosen.id)
-    .map((p) => [p.memberId as string, family.find((m) => m.id === p.memberId)?.display_name]))]
+  // Only people the document is used for now (linked): a name matched to someone the household later moved away from,
+  // or matched to someone not linked yet, names nobody here.
+  const theirs = input.named.filter((p) => p.memberId && p.memberId !== chosen.id && input.linkedIds.includes(p.memberId));
+  const others = [...new Map(theirs.map((p) => [p.memberId as string, family.find((m) => m.id === p.memberId)?.display_name]))]
     .filter((entry): entry is [string, string] => !!entry[1]).map(([, name]) => name);
   if (!others.length) return null;
-  const several = matched.length > 1;
+  const several = new Set(theirs.map((p) => p.name)).size > 1;
   return `You uploaded this for ${chosen.display_name}. The ${several ? "names" : "name"} printed in it ${several ? "match" : "matches"} ${listNames(others)}, so it is used for ${others.length > 1 ? "them" : others[0]}.`;
 }
 

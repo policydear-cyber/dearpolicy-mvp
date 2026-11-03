@@ -37,6 +37,14 @@ test("the card line: shown only when a printed name put it with someone other th
   // The same person under two printed names is named once.
   assert.equal(uploadOverrideLine({ uploadChoice: "m-siti", linkedIds: ["m-omar"], named: [{ name: "Omar Rahman", memberId: "m-omar" }, { name: "O. Rahman", memberId: "m-omar" }] }, family),
     "You uploaded this for Siti. The names printed in it match Omar Rahman, so it is used for Omar Rahman.");
+  // Only people it is used for now: the household moved Omar's name to Siti, or nobody is linked yet, or one of two is.
+  assert.equal(uploadOverrideLine({ uploadChoice: "m-nadia", linkedIds: ["m-siti"], named: [{ name: "Omar Rahman", memberId: "m-omar" }] }, family), null);
+  assert.equal(uploadOverrideLine({ uploadChoice: "m-nadia", linkedIds: [], named: [{ name: "Omar Rahman", memberId: "m-omar" }] }, family), null);
+  assert.equal(uploadOverrideLine({ uploadChoice: "m-nadia", linkedIds: ["m-omar"], named: [{ name: "Omar Rahman", memberId: "m-omar" }, { name: "李明", memberId: "m-li" }] }, family),
+    "You uploaded this for Nadia Rahman. The name printed in it matches Omar Rahman, so it is used for Omar Rahman.");
+  // The chosen person's own printed name (not linked) is not one of the names that put it elsewhere.
+  assert.equal(uploadOverrideLine({ uploadChoice: "m-nadia", linkedIds: ["m-omar"], named: [{ name: "Nadia Rahman", memberId: "m-nadia" }, { name: "Omar Rahman", memberId: "m-omar" }] }, family),
+    "You uploaded this for Nadia Rahman. The name printed in it matches Omar Rahman, so it is used for Omar Rahman.");
   assert.equal(listNames(["A", "B", "C"]), "A, B and C");
 });
 
