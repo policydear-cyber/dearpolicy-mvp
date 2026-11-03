@@ -479,7 +479,8 @@ export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
 /** Schedule terms (round 5 typed rows): cost-sharing and limits printed in a
  * benefit table. Stated as the document prints them; never calculated. */
 /** A row whose own name is a share the household pays. */
-const COST_SHARE_TITLE = /\b(?:excess(?:es)?|deductibles?|co-?pay(?:ment)?s?|co-?insurance)\b/i;
+// ("Excess baggage" is a travel benefit, not a share the household pays.)
+const COST_SHARE_TITLE = /\b(?:excess(?:es)?(?!\s+(?:baggage|luggage|weight))|deductibles?|co-?pay(?:ment)?s?|co-?insurance)\b/i;
 const COST_SHARING_KINDS = new Set(["deductible", "co_insurance", "co_payment", "co_payment_cap", "pro_ration", "policy_year_limit", "family_limit"]);
 function scheduleTermText(kind: string, value: number | null, currency: string | null): { text: string; amount: number | null } | null {
   const amount = value != null && value > 0 && currency ? value : null;

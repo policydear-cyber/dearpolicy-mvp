@@ -26,7 +26,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 async function main() {
   const { planKind } = await import("@/lib/chat/plan-kinds");
   await test("a plan stored as Health, Medical, Hospitalisation or Perubatan is a health plan, whatever its name", () => {
-    for (const [product, type] of [["Heron Family Care", "Health"], ["VitalCare Family", "Medical"], ["MyCare Plus", "Hospitalisation"], ["Pelan Prima", "Perubatan"], ["Premier Care", "Hospital and Surgical"]])
+    for (const [product, type] of [["Heron Family Care", "Health"], ["VitalCare Family", "Medical"], ["MyCare Plus", "Hospitalisation"], ["Pelan Prima", "Perubatan"], ["Premier Care", "Hospital and Surgical"], ["Lotus Family Plan", "醫療"], ["Keluarga Sehat", "Asuransi Kesehatan"], ["Familienschutz", "Krankenversicherung"], ["Plan Familia", "Seguro de salud"]])
       assert.equal(planKind({ product, type }), "health", product);
     // A name that says another kind wins nothing: it is neither kind.
     for (const [product, type] of [["Early Critical Protector", "Health"], ["Hospital Cash Plus", "Medical"], ["Accident Care", "Medical"]])
@@ -50,7 +50,7 @@ async function main() {
         for (const p of Object.values(ids)) await query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [id, p, A]);
         await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [A, id, page]);
       };
-      await doc("Wanderlust Annual", "Travel", "Wanderlust Annual - certificate\nEmergency medical expenses\t€5,000,000\nHospital benefit abroad\t€50 per day\nExcess\t€75 per claim");
+      await doc("Wanderlust Annual", "Travel", "Wanderlust Annual - certificate\nEmergency medical expenses\t€5,000,000\nHospital benefit abroad\t€50 per day\nExcess baggage charges\tUp to €200\nExcess\t€75 per claim");
       await doc("Accident Guard", "Personal Accident", "Accident Guard schedule\nAccidental death\t€100,000\nHospital income after an accident\t€100 per day");
       await doc("VitalCare Family", "Medical", "VitalCare Family - membership certificate\nIn-patient and day-patient treatment\tFull cover\nOut-patient consultations\tUp to €1,000 per member per year\nExcess\t€250 per member per year");
       const ask = (question: string) => askContextualDearPolicy({ accountId: A, familyMemberId: null, scope: "family", question });
@@ -63,6 +63,12 @@ async function main() {
         assert.match(text, /VitalCare Family — In-patient and day-patient treatment: Full cover/, text);
         assert.doesNotMatch(text, /Wanderlust|Accident Guard/, text);
         assert.deepEqual((r.answer.policyStatedLimits ?? []).filter((l) => /excess|deductible|co-?pay/i.test(l.benefitTitle)).map((l) => l.amountText), [], text);
+      });
+      await test("database: an 'Excess baggage' benefit is still a limit the travel plan pays, unlike its excess", async () => {
+        const r = await ask("What does Wanderlust Annual cover?");
+        const titles = (r.answer.policyStatedLimits ?? []).map((l) => l.benefitTitle + " " + l.amountText);
+        assert.ok(titles.some((t) => /baggage/i.test(t) && /€200/.test(t)), JSON.stringify(titles) + "\n" + said(r));
+        assert.ok(!titles.some((t) => /€75/.test(t)), JSON.stringify(titles));
       });
       await test("database: 'the excess on our hospital plan' is the hospital plan's, never the travel plan's", async () => {
         const text = said(await ask("What is the excess on our hospital plan?"));

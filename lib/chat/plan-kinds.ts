@@ -4,11 +4,12 @@
  * Shared by the chat's readers so every page and answer agrees on which plan is which (#296). */
 export type PlanKind = "travel" | "life" | "health" | "income" | "other";
 const TYPE_KINDS = new Map<string, PlanKind>([
-  ...["travel", "travel insurance", "travel takaful", "perjalanan", "takaful perjalanan", "insurans perjalanan", "旅游保险", "旅行保险", "旅游", "旅行", "voyage", "assurance voyage", "viagem", "seguro viagem", "reise", "reiseversicherung", "viaje"].map((t) => [t, "travel"] as const),
+  ...["travel", "travel insurance", "travel takaful", "perjalanan", "takaful perjalanan", "insurans perjalanan", "旅游保险", "旅行保险", "旅游", "旅行", "voyage", "assurance voyage", "viagem", "seguro viagem", "reise", "reiseversicherung", "viaje", "seguro de viaje", "asuransi perjalanan", "旅遊保險", "旅行保險", "旅遊"].map((t) => [t, "travel"] as const),
   ...["life", "life insurance", "life assurance", "term", "term life", "term assurance", "term insurance", "whole life", "whole life assurance", "whole life insurance", "endowment",
-    "hayat", "insurans hayat", "takaful hayat", "keluarga takaful", "family takaful", "takaful keluarga", "vida", "seguro de vida", "assurance vie", "lebensversicherung", "risikolebensversicherung", "人寿", "人寿保险", "寿险"].map((t) => [t, "life"] as const),
+    "hayat", "insurans hayat", "takaful hayat", "keluarga takaful", "family takaful", "takaful keluarga", "vida", "seguro de vida", "assurance vie", "lebensversicherung", "risikolebensversicherung", "人寿", "人寿保险", "寿险", "人壽", "人壽保險", "壽險", "asuransi jiwa"].map((t) => [t, "life"] as const),
   ...["health", "health insurance", "medical", "medical insurance", "hospitalisation", "hospitalization", "hospital and surgical", "hospital & surgical", "integrated shield",
-    "integrated shield plan", "private medical", "private medical insurance", "perubatan", "insurans perubatan", "takaful perubatan", "医疗", "医疗保险"].map((t) => [t, "health"] as const),
+    "integrated shield plan", "private medical", "private medical insurance", "perubatan", "insurans perubatan", "takaful perubatan", "医疗", "医疗保险", "醫療", "醫療保險", "健康保險", "健康保险",
+    "kesehatan", "asuransi kesehatan", "santé", "assurance santé", "salud", "seguro de salud", "seguro médico", "saúde", "seguro saúde", "krankenversicherung", "private krankenversicherung"].map((t) => [t, "health"] as const),
   ...["disability", "disability income", "income protection", "berufsunfähigkeit", "berufsunfähigkeitsversicherung", "invalidez", "salary continuance", "permanent health", "permanent health insurance"].map((t) => [t, "income"] as const),
   ...["critical illness", "ci", "early critical illness", "personal accident", "accident", "long-term care", "long term care", "ltc", "careshield", "eldershield", "dental", "maternity",
     "hospital cash", "hospital income", "motor", "car", "home", "household", "contents", "investment", "investment-linked", "ilp", "annuity", "savings"].map((t) => [t, "other"] as const),
