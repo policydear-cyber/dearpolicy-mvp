@@ -59,8 +59,11 @@ export async function completePdfPagesWithOcr(args: {
   if (!pageNumbers.length) return args.pages;
   // No reader looks at the scanned pages: they are marked as not read (never as read and empty), so the document is
   // not called "no readable text" for a reason that is not the file's (new-household audit, 3 Nov).
+  // Both flags: a document whose other pages carry enough text is still read, and its note names each scanned page
+  // that was not read (Critic #323 M1: with scans switched off they were dropped without a word).
   const unread = new Set(pageNumbers);
-  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "")) return args.pages.map((page) => (unread.has(page.pageNumber) ? { ...page, notRead: true } : page));
-  if (!documentReaderFor()) return args.pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
+  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || !documentReaderFor()) {
+    return args.pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
+  }
   return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages: args.pages, pageNumbers });
 }

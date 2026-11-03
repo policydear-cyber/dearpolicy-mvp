@@ -24,12 +24,12 @@ test("no reader configured: the scanned page is marked not read (and unread), th
   assert.equal(fetches, 0);
 });
 
-test("reading scans switched off: the scanned page is marked not read, nothing else changes", async () => {
+test("reading scans switched off: the scanned page is marked not read and unread (so its note names it), nothing else changes", async () => {
   process.env.OCR_ENABLED = "off";
   try {
     const { completePdfPagesWithOcr } = await import("@/lib/documents/ocr");
     const out = await completePdfPagesWithOcr({ accountId: "a", bytes: new Uint8Array(), pages });
-    assert.deepEqual(out.map((p) => [p.pageNumber, !!p.notRead, !!p.unreadable, p.text.length > 0]), [[1, true, false, false], [2, false, false, true]]);
+    assert.deepEqual(out.map((p) => [p.pageNumber, !!p.notRead, !!p.unreadable, p.text.length > 0]), [[1, true, true, false], [2, false, false, true]]);
   } finally { delete process.env.OCR_ENABLED; }
 });
 
