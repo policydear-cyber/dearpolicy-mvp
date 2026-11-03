@@ -108,3 +108,66 @@ test("the Benefits rows query reads its optional columns once per row", () => {
   assert.match(rows, /k\.id=x\.duplicate_of::uuid/);
   assert.match(rows, /ORDER BY [^`]*,x\.tier`/);
 });
+
+test("a remembered check is found without the pages' text, and gives the same table and document states", async () => {
+  const { installDatabase } = await import("../r6/fixture");
+  const db = await installDatabase();
+  await db.exec(readFileSync("sql/benefit-table.sql", "utf8"));
+  const { pagesPrint, tableFor } = await import("@/lib/benefit-table/service");
+  const A = "00000000-0000-4000-8000-0000000000b5", AISHA = "00000000-0000-4000-8000-0000000000b6", BEN = "00000000-0000-4000-8000-0000000000b7";
+  const doc = (n: number) => "00000000-0000-4000-8000-0000000001" + String(n).padStart(2, "0");
+  await db.query("INSERT INTO accounts(id,name) VALUES($1,'Made-up household')", [A]);
+  await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Aisha Rahman','self'),($3,$2,'Ben Carter','spouse')", [AISHA, A, BEN]);
+  // A ringgit schedule, a pound booklet with mirrored columns and curly quotes, a letter enclosing a schedule (no reading),
+  // and a schedule with no reading (its state comes from its page count alone).
+  const pages: Record<number, string[]> = {
+    1: ["POLICY SCHEDULE\nLife Assured: Aisha Rahman\nSum Assured\tRM250,000\nPolicy No. LX-77120934", "Hospital Income\tRM200 per day\nIntensive Care Unit — RM400 per day"],
+    2: ["£1,000.00\tLoss of one limb\n“Accident” means a sudden event\nBen Carter", "£50,000\tAccidental death", "Exclusions: war; self‑inflicted injury"],
+    3: ["Dear Aisha Rahman,\nThank you for your payment.", "POLICY SCHEDULE\nPolicy No. QB-55410021\nLife Assured: Aisha Rahman\nSum Assured\tS$100,000"],
+    4: ["CERTIFICATE OF INSURANCE\nInsured: Ben Carter\nSum Insured\t€30.000"],
+  };
+  const roles: Record<number, string> = { 1: "personal_schedule", 2: "policy_wording", 3: "insurer_letter", 4: "certificate" };
+  for (const n of [1, 2, 3, 4]) {
+    await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,document_role,quarantine_status)
+      VALUES($1,$2,$3,$4,$5,'ready',$6,'scan_clean')`, [doc(n), A, n % 2 ? AISHA : BEN, `doc-${n}.pdf`, `k/${n}`, roles[n]]);
+    for (const [i, text] of pages[n].entries()) await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [A, doc(n), i + 1, text]);
+  }
+  const reading = (n: number, person: string, figure: number, quote: string, benefits: [string, string, number][]) => ({ document: {
+    document: { kind: roles[n], product: "Plan " + n, insurer: null, namedPeople: [person], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person, product: "Plan " + n, cover: n === 1 ? "Death" : "Accident", plan: null, sumInsured: figure, asOf: null, page: 1, quote }],
+    benefits: benefits.map(([benefit, q, page]) => ({ section: null, column: null, benefit, pays: "words", value: null, percentOf: null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page, quote: q })) }, pages: [] });
+  await db.query("INSERT INTO benefit_readings(policy_id,account_id,reading,model,prompt_version) VALUES($1,$2,$3,'test','test'),($4,$2,$5,'test','test')", [
+    doc(1), A, JSON.stringify(reading(1, "Aisha Rahman", 250000, "Sum Assured\tRM250,000", [["Hospital Income", "Hospital Income\tRM200 per day", 2], ["ICU", "Intensive Care Unit - RM400 per day", 2]])),
+    doc(2), JSON.stringify(reading(2, "Ben Carter", 50000, "£50,000\tAccidental death", [["Loss of one limb", "£1,000.00\tLoss of one limb", 1], ["Nowhere", "a quote printed nowhere", 3]]))]);
+  let textRows = 0;
+  const appDb = async (sql: string, params: unknown[]) => { const r = (await db.query<Record<string, unknown>>(sql, params)).rows; if (/page_number, text FROM/.test(sql)) textRows += r.length; return r; };
+  textRows = 0; const first = await tableFor(appDb, A); const firstRows = textRows;
+  textRows = 0; const second = await tableFor(appDb, A); const secondRows = textRows;
+  assert.equal(firstRows, 7, "first load: the two read documents' pages and the letter's");
+  assert.equal(secondRows, 2, "after that: only the letter's pages, which the misfiled rule reads every time");
+  assert.deepEqual(second, first, "the same table, documents and states");
+  assert.ok(first.table.people.length > 0);
+  assert.deepEqual(first.documents.slice(0, 2).map((d) => d.state), ["read", "read"]);
+  // The unread certificate's state comes from its page count (now read in the database), the same as from its pages.
+  assert.equal(first.documents[3].state, "table_unread");
+  // The database's fingerprint is the one the check is remembered under, for any text (not only ASCII).
+  for (const n of [1, 2, 3, 4]) {
+    const sqlPrint = (await db.query<{ p: string }>(`SELECT md5(string_agg(page_number::text || ':' || md5(coalesce(text, '')), ',' ORDER BY page_number)) AS p FROM policy_pages WHERE policy_id=$1`, [doc(n)])).rows[0].p;
+    assert.equal(sqlPrint, pagesPrint(pages[n].map((text, i) => ({ page: i + 1, text }))), "document " + n);
+  }
+  // A database that cannot give the fingerprints is sent every document's pages, and gives the same table.
+  textRows = 0;
+  const noPrints = async (sql: string, params: unknown[]) => { if (/md5\(string_agg/.test(sql)) throw new Error("no md5 here"); return appDb(sql, params); };
+  assert.deepEqual(await tableFor(noPrints, A), first);
+  assert.equal(textRows, 8, "every document's pages (2 + 3 + 2 + 1), as before");
+  // An edited page is fetched and checked again: the edited booklet no longer finds its limb row.
+  await db.query("UPDATE policy_pages SET text=replace(text,'Loss of one limb','Loss of two limbs') WHERE policy_id=$1 AND page_number=1", [doc(2)]);
+  textRows = 0; const edited = await tableFor(appDb, A);
+  assert.equal(textRows, 5, "the edited booklet's pages and the letter's");
+  assert.notDeepEqual(edited.table, first.table);
+  // A new reading of a document is checked afresh too.
+  await db.query("UPDATE benefit_readings SET reading=$2 WHERE policy_id=$1", [doc(1), JSON.stringify(reading(1, "Aisha Rahman", 250000, "Sum Assured\tRM250,000", [["Hospital Income", "Hospital Income\tRM200 per day", 2]]))]);
+  textRows = 0; await tableFor(appDb, A);
+  assert.equal(textRows, 4, "the re-read schedule's pages and the letter's");
+  await db.close();
+});

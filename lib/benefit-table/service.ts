@@ -65,22 +65,36 @@ export type DocumentFile = { original_filename: string; product_name: string | n
 type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
-async function documents(db: Db, accountId: string, policyId?: string): Promise<HouseholdDoc[]> {
+async function documents(db: Db, accountId: string, policyId?: string, pick?: (docs: HouseholdDoc[]) => Promise<HouseholdDoc[]>): Promise<HouseholdDoc[]> {
   const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status, scan_result_detail,
       ${policyJobLive("policies")} AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
-  // A page whose table text could not be checked (lib/documents/layout-check.ts) is not searched: no row's quote is found on it.
-  const pages = await db("SELECT policy_id, page_number, text FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked' ORDER BY policy_id, page_number",
-    [accountId, docs.map((d) => String(d.id))]);
-  return docs.map((d) => ({
+  const shaped = docs.map((d) => ({
     id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true, scanLive: d.scan_live === true,
-    pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
+    pages: [] as { page: number; text: string }[], people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
       policy_number: text(d.policy_number), quarantine: text(d.quarantine_status), scan_detail: text(d.scan_result_detail) },
   }));
+  // Without a choice, every document's pages; otherwise only the ones it asks for (load(): pages already checked are not
+  // fetched again).
+  const want = pick ? await pick(shaped) : shaped;
+  if (want.length) {
+    const pages = await db(`SELECT policy_id, page_number, text FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND ${CHECKED_PAGE} ORDER BY policy_id, page_number`,
+      [accountId, want.map((d) => d.id)]);
+    const byDoc = new Map<string, { page: number; text: string }[]>();
+    for (const p of pages) { const id = String(p.policy_id); if (!byDoc.has(id)) byDoc.set(id, []); byDoc.get(id)!.push({ page: Number(p.page_number), text: String(p.text ?? "") }); }
+    for (const d of want) d.pages = byDoc.get(d.id) ?? [];
+  }
+  return shaped;
 }
+// A page whose table text could not be checked (lib/documents/layout-check.ts) is not searched: no row's quote is found on it.
+const CHECKED_PAGE = "coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked'";
+/** pagesPrint in the database, for each document: its checked pages' count and fingerprint, without sending their text. */
+const PAGES_PRINT_SQL = `SELECT policy_id, count(*)::int AS pages,
+    md5(string_agg(page_number::text || ':' || md5(coalesce(text, '')), ',' ORDER BY page_number)) AS print
+  FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND ${CHECKED_PAGE} GROUP BY policy_id`;
 const text = (v: unknown) => (v == null ? null : String(v));
 
 /** Statuses of a document intake is still working on (lib/rag/ingest.ts); Read again puts a document back to "queued". */
@@ -168,8 +182,16 @@ export function checkStored(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * of them, so a re-read, an edited page or a renamed person checks afresh; a copy is handed out, so nothing a caller
  * changes is remembered. At most 200 documents are kept. */
 const checkedCache = new Map<string, CheckedReading>();
+/** A document's pages as one fingerprint: each page's number and the md5 of its text, in page order. The same as
+ * PAGES_PRINT_SQL computes in the database, so a remembered check can be found without fetching the pages' text. */
+export function pagesPrint(pages: { page: number; text: string }[]): string {
+  const md5 = (s: string) => createHash("md5").update(s, "utf8").digest("hex");
+  return md5(pages.map((p) => `${p.page}:${md5(p.text)}`).join(","));
+}
+const checkKey = (doc: Omit<SourceDoc, "pages">, print: string, stored: StoredReading) =>
+  createHash("sha256").update(JSON.stringify([doc.id, doc.name, doc.readable, doc.people ?? null, print, stored])).digest("base64");
 export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReading {
-  const hash = createHash("sha256").update(JSON.stringify([doc.id, doc.name, doc.readable, doc.people ?? null, doc.pages, stored])).digest("base64");
+  const hash = checkKey(doc, pagesPrint(doc.pages), stored);
   let hit = checkedCache.get(hash);
   if (!hit) {
     hit = checkStored(doc, stored);
@@ -208,11 +230,32 @@ type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (Sect
   documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[] };
 
 async function load(db: Db, accountId: string): Promise<Loaded> {
-  const [members, docs] = await Promise.all([family(db, accountId), documents(db, accountId)]);
+  const storedOnce = db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId])
+    .then((rows) => new Map(rows.map((r) => [String(r.policy_id), (typeof r.reading === "string" ? JSON.parse(r.reading) : r.reading) as StoredReading])));
+  storedOnce.catch(() => undefined);
+  // Each document's page count and fingerprint, read in the database: a document whose check this server already holds
+  // (checkedOnce) is not sent its pages' text again, which was most of a warm load's time on a large library. Pages are
+  // fetched for every other document that reads them: a stored reading to check, or a letter that may enclose a schedule.
+  const counts = new Map<string, number>(), remembered = new Map<string, CheckedReading>(), fetched = new Set<string>();
+  const [members, docs] = await Promise.all([family(db, accountId), documents(db, accountId, undefined, async (all) => {
+    // A database that cannot give the fingerprints (an older engine, a test double) is sent every document's pages, as before.
+    const [stored, prints] = await Promise.all([storedOnce, db(PAGES_PRINT_SQL, [accountId, all.map((d) => d.id)]).catch(() => null)]);
+    if (!prints) { for (const d of all) fetched.add(d.id); return all; }
+    const printOf = new Map(prints.map((p) => [String(p.policy_id), String(p.print)]));
+    for (const p of prints) counts.set(String(p.policy_id), Number(p.pages));
+    const want = all.filter((d) => {
+      if (!stored.has(d.id)) return NON_COVER_ROLES.has(d.file.document_role ?? "");
+      if (!d.readable) return false;
+      const hit = checkedCache.get(checkKey(d, printOf.get(d.id) ?? pagesPrint([]), stored.get(d.id)!));
+      if (hit) remembered.set(d.id, structuredClone(hit));
+      return !hit;
+    });
+    for (const d of want) fetched.add(d.id);
+    return want;
+  })]);
   const people = await withDocumentLinks(db, accountId, members);
-  const stored = new Map((await db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId]))
-    .map((r) => [String(r.policy_id), (typeof r.reading === "string" ? JSON.parse(r.reading) : r.reading) as StoredReading]));
-  const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [checkedOnce(d, stored.get(d.id)!)] : []));
+  const stored = await storedOnce;
+  const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));
@@ -221,7 +264,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations,
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: d.pages.length, live: d.live, scanLive: d.scanLive,
+    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: fetched.has(d.id) ? d.pages.length : counts.get(d.id) ?? 0, live: d.live, scanLive: d.scanLive,
       misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
