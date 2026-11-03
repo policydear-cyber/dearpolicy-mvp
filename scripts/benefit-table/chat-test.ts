@@ -1169,7 +1169,8 @@ test("asking for a most with nothing described never hides a card as 'not descri
   // Allow-list (Critic and TE #319): any word off the closed list may tell of an event, in any language, so the card stays hidden.
   for (const q of ["What's the most I can claim for my dengue?", "Max payout for my wife's cancer?", "What's the most I can get for a dog bite?", "My car was stolen, what's the most I can claim?",
     "We lost our luggage, what's the maximum?", "Flight delayed 6 hours, what's the most?", "My son was bitten by a dog, max payout?", "We were in a car crash, what's the most we can claim?",
-    "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
+    "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "I was at the hospital, what's the most I can claim?", "We are at the hospital, what's the max?",
+    "There was a fire at our home, what's the most the plan pays?", "Our home had a fire, max payout?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
     assert.equal(shown(q), 0, q);
   for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？", "What's the cap on my hospital plan?"]) assert.equal(shown(q), 1, q);
   // A product the household holds counts only as its whole name; one word of it is often an illness or a place (Critic #319).

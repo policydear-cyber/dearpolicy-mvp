@@ -671,15 +671,15 @@ function nameHead(row: ChatRow): string | null {
  * "bitten", "stolen", "crash", or a language the list does not hold) may tell of an event, so the answer is no (Critic
  * and TE #319: an event deny-list let 21 of 25 event questions through). "What's the most my hospital plan pays?" is
  * about the plan, not a stay. */
-const MOST_ONLY_PHRASES = /\b(?:critical\s+illness(?:es)?|personal\s+accident|hospital\s+cash|hospital\s+income|daily\s+cash|room\s+and\s+board|integrated\s+shield|term\s+life|whole\s+life|up\s+to)\b/g;
-const MOST_ONLY_WORDS = new Set(("what what's whats how much many is are was the a an my our your his her their its me i we us you can could would will does do did should "
+const MOST_ONLY_PHRASES = /\b(?:(?:hospital|hospitalisation|hospitalization|travel|life|medical|health|critical\s+illness(?:es)?|personal\s+accident|term\s+life|whole\s+life|daily|integrated\s+shield)\s+(?:cash|income|plans?|polic(?:y|ies)|cover|coverage|insurance|benefits?|schemes?)|room\s+and\s+board|up\s+to|had\s+(?:maksimum|keseluruhan))\b/g;
+// No word of state or pointing ("was", "are", "there", "at", "this"): "I was at the hospital" tells of a stay (TE #319 round 2).
+const MOST_ONLY_WORDS = new Set(("what what's whats how much many is the a an my our your his her their me i we us you can could would will does do should "
   + "get gets give gives pay pays paid payout payouts payable claim claims claimable cover covers covered coverage plan plans policy policies scheme schemes insurance insurer "
-  + "benefit benefits most maximum max highest limit limits cap caps capped ceiling in total totals overall altogether combined under from for of on to by with it this that "
-  + "these those each per year yearly annual annually lifetime amount amounts sum sums at all any there which be been hospital hospitalisation hospitalization medical health "
-  + "travel life cash daily income plan's policy's scheme's group family whole term "
+  + "benefit benefits most maximum max highest limit limits cap caps capped ceiling in total totals overall altogether combined under from for of on to by with "
+  + "each per year yearly annual annually lifetime amount amounts sum sums any which plan's policy's scheme's "
   // Malay, French and Spanish: the same kinds of words only.
-  + "apakah apa berapa had maksimum maksima paling tinggi banyak polisi pelan insurans saya kami kita anda bayar dibayar membayar yang boleh tuntut dituntut jumlah untuk "
-  + "quel quelle est le la les l' maximum que qu'il mon ma mes notre nos votre contrat contrats police assurance paie paye verse rembourse plafond montant de du des pour "
+  + "apakah apa berapa maksimum maksima paling tinggi banyak polisi pelan insurans saya kami kita anda bayar dibayar membayar yang boleh tuntut dituntut jumlah untuk "
+  + "quel quelle est le la les l' maximum que mon ma mes notre nos votre contrat contrats police assurance paie paye verse rembourse plafond montant de du des pour "
   + "cuál cual es el la los las máximo maximo que mi mis nuestra nuestro su póliza poliza pólizas seguro paga cubre tope monto de del por").split(" "));
 /** Chinese has no spaces: these words, in any order, and nothing else. */
 const MOST_ONLY_CJK = /我的|我们的|我們的|保单|保單|保险|保險|计划|計劃|最多|最高|上限|封顶|封頂|可以|能|赔|賠|付|多少|是|的|总共|總共|一共/g;
