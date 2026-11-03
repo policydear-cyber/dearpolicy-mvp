@@ -38,11 +38,28 @@ const rows: [string, string][] = [
   ["Morte da infortunio", "accidental_death"], ["Malattie gravi", "critical_illness"], ["Tử vong do tai nạn", "accidental_death"], ["Bệnh hiểm nghèo", "critical_illness"],
   // English names keep their mapping
   ["Death benefit", "death"], ["Hospital income", "hospital_daily_cash"], ["Disability income benefit", "disability_income"], ["Income protection", "disability_income"],
-  ["Total and permanent disability", "tpd"], ["Room and board per day", "hospital_daily_cash"], ["Annual limit", "other"], ["Premium waiver", "other"],
+  ["Total and permanent disability", "tpd"], ["Room and board per day", "hospital_medical_expense"], ["Annual limit", "other"], ["Premium waiver", "other"],
   // Liability to others stays "other" in any language, whatever else it names
   ["Liabiliti Pihak Ketiga (Kematian)", "other"], ["Responsabilidad civil", "other"], ["Responsabilité civile décès", "other"], ["第三者责任 身故", "other"],
   // Words that only look alike stay "other"
-  ["Had tahunan", "other"], ["Bilik dan Makan", "other"],
+  ["Had tahunan", "other"],
+  // A room and board line is a limit on the room charge, a hospital bill, in any language: never a cash amount per night
+  // (cross-page check, 1 Nov; before, "Room and board per day" was read as daily hospital cash)
+  ["Bilik dan Makan", "hospital_medical_expense"], ["Bilik dan Makan (sehari)", "hospital_medical_expense"], ["Room & Board (per day)", "hospital_medical_expense"],
+  ["Daily room charges", "hospital_medical_expense"], ["房间及膳食", "hospital_medical_expense"], ["Zimmerzuschlag pro Tag", "hospital_medical_expense"],
+  // ...while a cash amount per day stays daily cash
+  // Cash words in any language keep a room line a cash benefit (Critic #285 M1)
+  ["Bilik dan makan - elaun harian", "hospital_daily_cash"], ["Biaya kamar - santunan harian", "hospital_daily_cash"], ["Kamar dan makan (tunjangan tunai harian)", "hospital_daily_cash"],
+  ["Chambre particulière - indemnité journalière forfaitaire", "hospital_daily_cash"], ["Zimmerzuschlag (Krankenhaustagegeld)", "hospital_daily_cash"],
+  ["Bilik dan Makan (elaun tunai)", "other"], ["Elaun Bilik dan Makan Harian", "hospital_daily_cash"], ["Wang tunai bilik dan makan sehari", "hospital_daily_cash"],
+  ["Uang harian kamar dan makan", "hospital_daily_cash"], ["Indemnité journalière chambre et pension", "hospital_daily_cash"], ["房间及膳食津贴 每日", "hospital_daily_cash"],
+  ["病房费现金 每日", "hospital_daily_cash"], ["Tiền phòng trợ cấp mỗi ngày", "hospital_daily_cash"],
+  // 房租 alone is rent (TE #285 F2)
+  ["Loss of rent (房租损失)", "other"],
+  // TE #285 G1
+  ["Subsidio diario habitación y alimentación", "hospital_daily_cash"], ["Room & board: daily payment of S$150", "hospital_daily_cash"],
+  ["Room and board per diem payment", "hospital_daily_cash"], ["Room and board limit, cash-less admission", "hospital_medical_expense"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
+  ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
   ["Pembebasan Premi karena Penyakit Kritis", "other"], ["Exención de primas por invalidez total y permanente", "other"], ["身故豁免保费", "other"],
@@ -107,12 +124,46 @@ const limits: [string, string | undefined, string][] = [
   ["Annual limit", "ClearSight Vision Health Insurance", "other"],
   ["Had Tahunan", "Asuransi Kesehatan Gigi", "other"],
   ["Annual limit", "Bloom Maternity Health Insurance", "other"],
-  ["Annual limit", "Hospital and Surgical Plan", "other"],
+  // "Hospital and Surgical" names one hospital plan, not two covers (cross-page check, 1 Nov)
+  ["Annual limit", "Hospital and Surgical Plan", "hospital_medical_expense"],
+  ["Annual limit", "Lotus Hospital & Surgical Plan", "hospital_medical_expense"],
+  ["Annual limit", "Pelan Hospital dan Pembedahan", "hospital_medical_expense"],
+  ["Had tahunan", "Teratai MediCare", "hospital_medical_expense"],
+  // A Medi* plan is a hospital plan only when nothing else in its name says what it is (Critic #285 M2)
+  ["Sum assured", "Medicover Term Life", "death"],
+  ["Sum insured", "MediCare Accident Plan", "accidental_death"],
+  ["Annual limit", "MediCare Critical Illness Plan", "other"],
+  ["Annual limit", "MediCare Dental", "other"],
+  ["Annual limit", "MediCare Cancer Plan", "other"],
+  // "Hospital & Surgical Cash Plan" is a cash plan (Critic #285 L1)
+  ["Annual limit", "Hospital & Surgical Cash Plan", "other"],
   ["Annual limit", "Teratai Family Takaful", "other"],
   ["Annual limit", "Savings Endowment 20", "other"],
   ["Annual limit", undefined, "other"],
   ["Had Tahunan", "Insurans Hayat Bakti", "other"],
-  ["Room and board limit", "Harbour Hospital Plan", "other"],
+  // A room and board limit is a hospital bill limit (cross-page check, 1 Nov)
+  ["Room and board limit", "Harbour Hospital Plan", "hospital_medical_expense"],
+  // On a hospital cash or income plan a room line is that plan's daily amount, never a bill limit (Critic #285 M1)
+  ["Room and board", "Hospital Income Plan", "hospital_daily_cash"],
+  ["Daily room and board benefit", "Hospital Income Plan", "hospital_daily_cash"],
+  ["Room & Board (per day)", "Hospital & Surgical Cash Plan", "hospital_daily_cash"],
+  ["Bilik dan Makan (sehari)", "Pelan Elaun Hospital", "hospital_daily_cash"],
+  ["房间及膳食津贴", "住院现金计划", "other"],
+  // A cash word that is no plan type, or a reimbursement plan word, never makes a cash plan (Critic #285 M1, round 3)
+  ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
+  ["Room & Board", "Hospital & Surgical Plan with Income Protection", "hospital_medical_expense"],
+  ["Room & Board (per day)", "Sentinel Hospital Income Plan", "hospital_daily_cash"],
+  ["Room & Board (per day)", "Lion Hospital Cash Plan", "hospital_daily_cash"],
+  // Both a cash-plan phrase and a reimbursement word: unsure, so other (Critic #285 low, round 4)
+  ["Room and board", "Medic Hospital Cash Plan", "other"],
+  ["Room and board", "住院医疗现金", "other"],
+  ["Room and board", "Hospital Cash Plan (with surgical benefit)", "other"],
+  ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
+  // A daily-allowance plan with words between 住院 and 津贴; a "reimbursement" cash plan is mixed, so other (TE #285 round 6)
+  ["房间及膳食 每日", "住院期间每日津贴计划", "hospital_daily_cash"],
+  ["Room and board", "Hospital Cash Reimbursement Plan", "other"],
+  ["房间及膳食 每日", "住院医疗费用报销计划", "hospital_medical_expense"],
+  ["Room and board", "Krankenhaustagegeldversicherung", "hospital_daily_cash"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
   ["Deductible", "Harbour Hospital Plan", "other"],
