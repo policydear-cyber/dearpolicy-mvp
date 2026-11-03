@@ -101,7 +101,7 @@
     "policies:home-premium-note-test": "node --import tsx scripts/policies/home-premium-note-test.ts",
     "policies:retry-read-test": "node --import tsx scripts/policies/retry-read-stalled-test.ts",
     "security:infrastructure-tables-test": "node --import tsx scripts/infrastructure-table-permissions-regressions.ts",
-    "ai:spend-check-fails-closed-test": "node --import tsx scripts/ai/spend-check-fails-closed-test.ts",
+    "ai:spend-check-fails-closed-test": "node --import tsx scripts/rag2-spend-check-fails-closed-test.ts",
     "security:policy-state-test": "node --import tsx scripts/policy-state-protection-regressions.ts",
     "claims:composition-test": "node --import tsx scripts/claim-composition-regressions.ts",
     "lifecycle:claim-snapshot-scrub-test": "node --import tsx scripts/lifecycle/claim-snapshot-scrub-test.ts",
