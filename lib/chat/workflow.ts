@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
+import { printedWaitingPeriod, timeOffWork, waitingPeriodSentence } from "./deferred-period";
 import { householdModelFailure,readableModelFailure,structuredCompletion } from "@/lib/ai/llm";
 import { SpendCapReached } from "@/lib/ai/ledger";
 import { outsideHouseholdSubject,resolveClaimPerson,resolveRelativePerson,type ClaimPerson,type ClaimPersonResolution } from "@/lib/claims/person";
@@ -868,6 +869,30 @@ export function catalogueCoverageAnswer(args:{question:string;people:ClaimPerson
   return {topics:topics.map(t=>t.label),lines,citations,limits};
 }
 function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
+/** "Tom has been off work for 3 months, can he claim on his income protection?": the time off the message states,
+ * against the deferred or waiting period printed on the person's own income protection or disability income plan,
+ * compared in code (lib/chat/deferred-period). Null unless the message states one length off work and exactly one
+ * such plan of theirs prints exactly one such period. */
+async function waitingPeriodAnswer(accountId:string,people:ClaimPerson[],message:string):Promise<{summary:string;line:string;citation:ChatCitation}|null>{
+  const off=timeOffWork(message);
+  if(!off||people.length!==1)return null;
+  const rows=(await query<{id:string;product:string|null;insurer:string|null;type:string|null;role:string|null;page_number:number;text:string}>(
+    `SELECT p.id::text,p.product_name AS product,p.insurer,p.policy_type AS type,p.document_role AS role,pg.page_number,pg.text FROM policies p
+       JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id JOIN policy_pages pg ON pg.policy_id=p.id AND pg.account_id=p.account_id
+      WHERE p.account_id=$1 AND pm.family_member_id=$2 AND p.processing_status='ready' AND p.superseded_at IS NULL AND ${activePredicate("p")}
+      ORDER BY p.created_at,pg.page_number`,[accountId,people[0].id]).catch(()=>({rows:[]}))).rows;
+  const incomePlan=(r:{product:string|null;type:string|null})=>/income protection|salary continuance|permanent health|disab|\bsalary\b/i.test((r.product??"")+" "+(r.type??""))
+    &&!/critical|accident|long[- ]term care|careshield|eldershield|\btpd\b|total (?:and )?permanent/i.test((r.product??"")+" "+(r.type??""));
+  const found=rows.filter(incomePlan).flatMap(r=>r.text.split(/\r?\n/).map(l=>({r,line:l.trim(),printed:printedWaitingPeriod(l)}))).filter(x=>x.printed);
+  const plans=new Set(found.map(x=>x.r.id)),periods=new Set(found.map(x=>x.printed!.span.min+"-"+x.printed!.span.max));
+  if(plans.size!==1||periods.size!==1)return null;
+  const {r,line,printed}=found[0];
+  const plan=r.product??"the plan";
+  const who=people[0].preferred_name?.trim()||people[0].display_name.split(/\s+/)[0];
+  return {summary:waitingPeriodSentence(who,off,printed!,plan),line:plan+" — "+line.replace(/\t+/g,": ").replace(/\s{2,}/g," ")+" (page "+r.page_number+").",
+    citation:{chunkId:"waiting:"+r.id+":"+r.page_number,policyId:r.id,policyName:plan,insurer:r.insurer??undefined,pageStart:r.page_number,pageEnd:r.page_number,documentRole:r.role}};
+}
+
 /** Round 12: "show me the full list", "all of them", "the rest": every line of the answer just given. */
 const FULL_LIST_FOLLOW_UP=/^\s*(?:(?:ok(?:ay)?|yes|sure|please|pls)[,!.\s]+)?(?:(?:can you |could you |pls |please )?(?:show|give|list|tell|send)(?: me| us)?(?: the)? (?:full list|whole list|full details|all(?: of)?(?: them| it| the lines| the rest)?|everything|the rest|the other lines|the other \d+(?: lines)?|more)|(?:the )?full list|all of (?:them|it)|the rest)\b/i;
 /** "Upload the latest premium receipt or renewal notice for Jamie’s TravelSafe Annual Family to confirm it is still in force." */
@@ -2424,6 +2449,19 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // and misreading that in either direction is what sent a question about
         // a fall into a national health scheme's deductible table.
         if(state.intent==="claim")delete state.claimSetAside;
+        // Round 5 (walkthrough, 3 Nov): "Tom has been off work for 3 months, can he claim on his income protection?" -- as
+        // a claim, a what-if or a plain question, the time off against the deferred period his own plan prints, computed
+        // in code (lib/chat/deferred-period.ts). Only when the message states one length off work and one such plan of
+        // the person prints exactly one such period; everything else goes on as before.
+        const waitingNow=await waitingPeriodAnswer(request.accountId,context.people,request.submittedQuestion??request.question).catch(()=>null);
+        if(waitingNow){
+          answer.summary=waitingNow.summary;answer.details=[waitingNow.line];answer.citations=[waitingNow.citation];answer.claimItems=[];
+          if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+          answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+          await check();dedupeCitations(answer);
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          return {answer,retrieved:[]};
+        }
         const reportsAnEvent=!state.claimSetAside&&contracts.some(contract=>
           eventTraits(state.subjects[contract.ownerId]??{},(state.scenarios?.[contract.ownerId]??[]).flatMap(s=>s.traits)).length>0);
         // The Coverage Ledger: one row per (person, plan, event, pays). A payout
