@@ -68,6 +68,19 @@ async function main() {
       assert.ok(!pool.length || pool.length === 1, q + " -> " + pool.join(" | "));
     }
   });
+  await test("a plan whose stored type says another kind is never this kind, whatever its name says (TE K1)", () => {
+    const rows: [string, [string, string][], string][] = [
+      ["What does my life insurance pay?", [["Takaful Keluarga Hayat", "Family Takaful"], ["Life Secure Critical Illness", "Critical Illness"]], "Takaful Keluarga Hayat"],
+      ["What does my health insurance cover?", [["Pelan Perubatan Prima", "Perubatan"], ["Medical Waiver Rider", "Life"]], "Pelan Perubatan Prima"],
+      ["Does my travel policy cover ski?", [["Voyage Annuel Famille", "Voyage"], ["Single-Trip Accident Guard", "Personal Accident"]], "Voyage Annuel Famille"],
+      ["What does my income protection pay?", [["Gehaltsschutz Plus", "Berufsunfähigkeit"], ["Severe Disability Care", "Long-term Care"]], "Gehaltsschutz Plus"],
+    ];
+    for (const [q, pair, right] of rows) assert.deepEqual(kinds(q, pair.map(([p, t]) => D(p, t))), [right], q);
+    // With no plan of the kind asked, a plan named like one but stored as another kind is never picked: nothing is narrowed.
+    for (const [q, p, t] of [["my term life plan premium?", "Mid-Term Savings Endowment", "Savings"], ["What does my health insurance cover?", "Hospital Visit Cover", "Personal Accident"],
+      ["Does Kai's medical plan pay for physio?", "Overseas Medical Student Cover", "Travel"], ["Does my travel policy cover ski?", "Trip Saver Endowment", "Savings"]])
+      assert.deepEqual(kinds(q, [D(p, t), D("Level Term", "Life"), D("Heron Family Health", "Health"), D("Jelajah", "Travel")]).includes(p), false, q);
+  });
   await test("a plan of no known kind is never left out by a kind; with no plan of the kind asked, nothing is narrowed", () => {
     // "Voyager Gold" (no type) may be the travel plan, so it stays in; "Premier Care" (no type) may be the hospital plan.
     assert.deepEqual(kinds("When does Tom's travel policy end?", [D("Voyager Gold", null), D("Annual Multi-Trip", "Travel"), D("Level Term", "Life")]), ["Voyager Gold", "Annual Multi-Trip"]);
