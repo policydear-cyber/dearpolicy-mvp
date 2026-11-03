@@ -25,29 +25,48 @@ const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread"
 export const OWNED_BY_MEMBER = (member: string, cache = false) => `(EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=${member})
   OR (p.family_member_id=${member} AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)${cache ? ` AND NOT coalesce(p.reading_cache ? '${UNSURE_KEY}',false)` : ""}))`;
 
-export async function notFullyRead(accountId: string, familyMemberId: string, tableDocuments: { id: string; state: string }[] = []): Promise<NotFullyRead> {
-  try {
-    const cache = await readingCacheReady();
-    // Waiting for Read again holds cover whatever its stored role (a misfiled pack); the other states follow the role rule.
-    const readAgain = tableDocuments.filter((d) => d.state === "table_unread").map((d) => d.id);
-    const unread = tableDocuments.filter((d) => UNREAD_STATES.has(d.state)).map((d) => d.id);
-    const rows = await query<{ id: string; product_name: string | null; original_filename: string | null; insurer: string | null; document_role: string | null; policy_number: string | null }>(
-      `SELECT p.id::text AS id,p.product_name,p.original_filename,p.insurer,p.document_role,p.policy_number FROM policies p
-        WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND ${OWNED_BY_MEMBER("$2", cache)}
+/** The reading-did-not-finish rule shared by a person's count and the household's unlinked "Not sure" uploads.
+ * Parameters: $1 account, $3 read-in-part note, $4 benefit read failure key, $5 no-cover roles, $6 Read again ids,
+ * $7 scan-goes-on states, $8 unread ids. */
+const NOT_FULLY_READ = (cache: boolean) => `p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL
           AND (p.id::text=ANY($6::text[]) OR (NOT (coalesce(p.document_role,'')=ANY($5::text[])) AND (
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
               OR NOT (coalesce(p.quarantine_status,'')=ANY($7::text[]))))
             OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message=$3
               OR NOT EXISTS(SELECT 1 FROM policy_pages pp WHERE pp.policy_id=p.id AND pp.account_id=p.account_id)
-              ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))
+              ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))`;
+
+/** `owner` limits the rows to whose documents they are ($2 is the person, or null for the household's unowned ones). */
+async function unread(accountId: string, owner: (cache: boolean) => string | null, member: string | null, tableDocuments: { id: string; state: string }[]): Promise<NotFullyRead> {
+  try {
+    const cache = await readingCacheReady();
+    const who = owner(cache);
+    if (!who) return { count: 0, names: [], ids: [] };
+    // Waiting for Read again holds cover whatever its stored role (a misfiled pack); the other states follow the role rule.
+    const readAgain = tableDocuments.filter((d) => d.state === "table_unread").map((d) => d.id);
+    const unreadIds = tableDocuments.filter((d) => UNREAD_STATES.has(d.state)).map((d) => d.id);
+    const rows = await query<{ id: string; product_name: string | null; original_filename: string | null; insurer: string | null; document_role: string | null; policy_number: string | null }>(
+      `SELECT p.id::text AS id,p.product_name,p.original_filename,p.insurer,p.document_role,p.policy_number FROM policies p
+        WHERE ${NOT_FULLY_READ(cache)} AND ${who}
         ORDER BY p.created_at`,
-      [accountId, familyMemberId, DOCUMENT_READ_IN_PART_MESSAGE, cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unread]);
+      [accountId, member, DOCUMENT_READ_IN_PART_MESSAGE, cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unreadIds]);
     return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id) };
   } catch (error) {
     console.warn("Could not count documents not fully read:", error instanceof Error ? error.message : error);
     return { count: 0, names: [], ids: [] };
   }
+}
+
+export async function notFullyRead(accountId: string, familyMemberId: string, tableDocuments: { id: string; state: string }[] = []): Promise<NotFullyRead> {
+  return unread(accountId, (cache) => OWNED_BY_MEMBER("$2", cache), familyMemberId, tableDocuments);
+}
+
+/** Uploads whose person was "Not sure" and that nobody is linked to yet (nobody's, so no person counts them) whose
+ * reading did not finish. Home names them once for the household, so a failed or stalled one never vanishes. */
+export async function unownedNotFullyRead(accountId: string, tableDocuments: { id: string; state: string }[] = []): Promise<NotFullyRead> {
+  return unread(accountId, (cache) => cache ? `$2::uuid IS NULL AND coalesce(p.reading_cache ? '${UNSURE_KEY}',false)
+          AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)` : null, null, tableDocuments);
 }
 
 /** The line a "Not found" tile (short) or Coverage answer adds when some of the person's documents were not fully read. */
