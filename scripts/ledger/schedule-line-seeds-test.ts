@@ -214,6 +214,19 @@ async function main() {
         assert.ok(String(pays(c, t)).endsWith(":stated"), `${t} -> ${pays(c, t)}`);
       for (const [c, t, want] of [["Travel", "Overseas medical expenses\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Frais médicaux à l'étranger\t€150,000", "travel_medical:reimbursement_cap"], ["Travel", "Perbelanjaan perubatan luar negara / Overseas medical expenses\tRM200,000", "travel_medical:reimbursement_cap"], ["Travel", "海外医疗费用\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Trip cancellation\tS$15,000", "trip_cancellation:reimbursement_cap"], ["Travel", "Loss of baggage and personal belongings\tS$5,000", "baggage:reimbursement_cap"], ["Disability Income", "Faedah bulanan / Monthly benefit\tRM3,000", "disability_income:per_month"], ["Hospital Cash", "Daily hospital cash\tS$200", "hospital_daily_cash:per_day"], ["Hospitalisation", "Annual limit\tS$150,000", "hospital_medical_expense:reimbursement_cap"]])
         assert.equal(pays(c, t), want, t);
+      for (const t of ["Benefit limit\tS$500 per day", "Sum insured\tS$2,000,000 per lifetime", "Annual limit\tS$150,000 per person", "Overall limit\tS$1,000 daily"])
+        assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
+      for (const t of ["Monthly benefit\t£2,400 or 75% of salary, whichever is lower", "Monthly benefit\tAs charged"])
+        assert.ok(String(pays("Disability Income", t)).endsWith(":stated"), t);
+      for (const t of [] as string[])
+        assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
+    });
+    await test("a printed rate keeps its figure only when it is the plan's one such line, and never when the lines could not be read", async () => {
+      const { onlyPrintedRateLine } = await import("@/lib/ledger/events");
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", ["Overseas medical expenses\tS$200,000", "Baggage delay\tS$500"]), true);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", ["Medical expenses\t£50,000", "Overseas medical expenses\t£25,000"]), false);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", null), false);
+      assert.equal(onlyPrintedRateLine("Travel", "Travel", "travel_medical", []), false);
     });
     await test("a line whose currency is unstated seeds nothing, never S$", async () => {
       assert.deepEqual(await rows(sg), []);

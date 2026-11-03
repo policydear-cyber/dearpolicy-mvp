@@ -260,6 +260,11 @@ const HOSPITAL_PLAN_LIMIT=/^(?:(?:overall|annual|yearly|policy[- ]year)\s+)?(?:l
 export function scheduleLinePays(event:EventType,printed:string|null|undefined):PaysKind|null{
   // A bilingual label ("Elaun hospital harian / Daily hospital allowance") is read one language at a time.
   const parts=printedLabel(printed).split(/\s+\/\s+/).map((p)=>p.trim()).filter(Boolean);
+  // The value cell must be the figure itself: "£2,400 or 75% of salary, whichever is lower" or "As charged" is not a
+  // rate or limit this line can carry (Critic p294).
+  const text=String(printed??"");
+  const figures=text.match(/(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|HK\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[];
+  if(figures.length!==1||/\b(?:or|whichever|lower|higher|lesser|greater|as charged)\b|%/i.test(text.slice(text.indexOf(figures[0])+figures[0].length)))return null;
   const kinds=new Set(parts.map((label)=>labelPays(event,label,printed)));
   return kinds.size===1?[...kinds][0]:null;
 }
@@ -273,8 +278,17 @@ function labelPays(event:EventType,label:string,printed:string|null|undefined):P
     return /^(?:(?:daily (?:hospital )?(?:cash|income|allowance|benefit))|(?:hospital )?(?:cash|income|allowance) harian|(?:hospital )?(?:cash|income|allowance) per (?:day|night)|elaun (?:hospital )?harian(?: hospital)?)$/i.test(label)&&!NOT_A_RATE.test(label.replace(/\bper (?:day|night)\b/i,""))?"per_day":null;
   if(event==="travel_medical"||event==="trip_cancellation"||event==="baggage")
     return /\bper\b|\/\s?(?:day|month|year|annum|item|person)/i.test(text)?null:"reimbursement_cap";
-  if(event==="hospital_medical_expense")return HOSPITAL_PLAN_LIMIT.test(label)?"reimbursement_cap":null;
+  // A rate in the value cell ("Benefit limit  S$500 per day", "Sum insured  S$2,000,000 per lifetime") is not the
+  // plan's whole-bill limit (Critic H4 on #294).
+  if(event==="hospital_medical_expense")return HOSPITAL_PLAN_LIMIT.test(label)&&!/\bper\b|\/\s?(?:day|night|month|year|annum|item|person|life)|\b(?:a|each) (?:day|night)\b|\bdaily\b/i.test(text)?"reimbursement_cap":null;
   return null;
+}
+/** Whether a line's printed rate or limit is the one such line its plan printed for that benefit. Every line the plan
+ * printed under that cover kind is read; when they could not be read (null), the answer is no, so the line keeps no
+ * figure: a figure is never given because a second line went unchecked (Critic H1/M5 on #294). */
+export function onlyPrintedRateLine(category:string,name:string,event:EventType,printedLines:string[]|null):boolean{
+  if(!printedLines||!printedLines.length)return false;
+  return printedLines.filter(t=>{const e=scheduleLineEvent(category,name,t);return e?.event===event&&e.pays==="stated"&&!!scheduleLinePays(event,t);}).length===1;
 }
 /** What a plan of a given kind pays, when only its schedule line is on file.
  * These are the industry's standard shapes, and every row seeded from them
