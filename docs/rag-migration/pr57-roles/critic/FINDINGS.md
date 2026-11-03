@@ -10557,3 +10557,14 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - M2: same-name rows from two covers of the product are both borrowed (two different daily amounts on one card). Fix: borrow only from a single coverKey.
 - L1: a percent row with no base is borrowed under a cover printing another sum. Fix: require base === cover.sumInsured.
 - #282 → ce2af8b READY: M1 (compare names up to ":" only), M2 (one coverKey only), L1/M3 (share or percent rows need base = line sum and same currency) fixed; probe p282 24 cases clean; gate + next build green (dashboard-dynamic ended-trip same as main).
+
+## R520 — 1–3 Nov: #283–#293 (made-up households only; probes in the shared critic folder)
+- #283 c196f39 READY: other-language "death due to cancer" wordings give Death like English; p283 0 mismatches; ci-by-cover 207/0; gate + next build green.
+- #284 efefb734, #285 2746a27, #287 f7f64b5, #288 ceafe1b READY (1 Nov). #288 still fixes ledger:schedule-lines and no-guessed-cover red on main.
+- #286: 11f4e56 M2 (a role sentence "Omar paid the bill, not Tia" moved the claim to the wrong person) → a9df00c READY: correction must be only a frame + the name; p286 60 rows, misses only on the safe side; 45 related suites identical to main.
+- #289: eac8346 H1 (wrapped label confirmed but stored text stayed split) → 01eaf70 READY: row rebuilt in the image's order, lent line emptied; p289 5/5; gate + next build green, 0 Edge warnings.
+- #290 d80d1dc → 4bbae9b8 READY (test-only, DC yes 1 Nov 06:08Z): every date-based "ended" expectation replaced by a stricter in-force check. Unmasked a pre-existing main failure: system-regressions.ts:739, validateCatalogFormula withholds a correctly quoted "25% of the Sum Insured"; plus rag2:tools F4. Sent as separate work on main.
+- #291 notional sum: e69a99e H1 (9 ordinary wordings, e.g. "Sum Assured does not represent the surrender value", "coverage amount does not equal the premiums paid", matched as notional and would withhold real sums), M2 slips, M3 Home vs stored-line pages, L4 riders → c546f22 READY: positive whole-clause patterns, riders keep sums; p291 22/22; 47/0 own test.
+- #292 waiver lines: e32189a H1 (prefix match dropped combined riders "Premium Waiver and Critical Illness Benefit") → 6168e7b READY: whole-label allow-list; p292 40/40; coverage suites identical to main.
+- #293 page currency: 8612f9e H1 (currency words "Ksh", "Rs", "francs", "baht" took the page's SGD), H2 (local-currency pages) → 0cc2d57 H1b (quote path checked only neighbours: "5,000 in Swiss francs") → 2697b60 READY: allow-list words beside figures, "in <word>" closed list, currency-word list; p293 clean; DB test 16/0.
+- Lesson: a suite in the 45-suite run stops local Postgres; check pg_lsclusters after long queues and treat ECONNREFUSED rows as not run.
