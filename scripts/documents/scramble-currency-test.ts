@@ -57,3 +57,53 @@ test("a table's own column header still pairs its rows, in another currency too"
   // A contents list's page numbers are not amounts.
   assert.deepEqual(scrambleSigns(["Contents", "Definitions", "Benefits", "Exclusions", "3", "7", "12", "15"].join("\n")), []);
 });
+
+// TE #329 blind gate: what counts as an amount on a value line, in any market's way of writing numbers.
+test("space thousands are amounts: a kronor, złoty or euro table written '2 500' is seen as scrambled", () => {
+  for (const values of [
+    ["2 500 kr", "5 000 kr", "120 000 kr", "300 000 kr"],
+    ["2 500 kr", "5 000 kr", "120 000 kr", "300 000 kr"], // no-break space
+    ["2 500 zł", "5 000 zł", "120 000 zł", "300 000 zł"], // narrow no-break space
+    ["2 500 €", "5 000 €", "120 000 €", "300 000 €"],
+    ["SEK 2 500", "SEK 5 000", "SEK 120 000", "SEK 300 000"],
+    ["2 500", "5 000", "120 000", "300 000"],
+  ]) {
+    assert.ok(scrambleSigns(scrambled(values)).includes(SIGN), values[0]);
+    assert.ok(!scrambleSigns(paired(values)).includes(SIGN), values[0] + " paired");
+  }
+});
+
+test("a date is never an amount, and years side by side are no space thousands", () => {
+  for (const values of [
+    ["01.10.2026", "01.11.2026", "01.11.2027"],
+    ["01/10/2026", "01/11/2026", "01/11/2027"],
+    ["2026-10-01", "2026-11-01", "2027-11-01"],
+    ["2019 2021", "2022 2024", "2025 2026"], // years side by side are not space thousands
+  ]) assert.deepEqual(scrambleSigns(scrambled(values)), [], values[0]);
+  // The safe reading stays: one dot group with nothing to say it is a rate is thousands, so it is checked.
+  assert.ok(scrambleSigns(scrambled(["250", "1.500", "12.000", "400"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["Rp 250.000", "Rp 500.000", "Rp 750.000", "Rp 900.000"])).includes(SIGN));
+  // Dates among amounts do not hide the amounts.
+  assert.ok(scrambleSigns(scrambled(["01.10.2026", "12,000.00", "1,500.00", "400.00"])).includes(SIGN));
+});
+
+test("one dot group is always thousands, whatever else its run prints: the safe reading (TE #330)", () => {
+  for (const values of [
+    ["Rp 250.000", "Rp 750.000", "Rp 500.000", "2.5%"],
+    ["Rp 250.000", "Rp 750.000", "Rp 500.000", "0.5"],
+    ["250.000 đ", "750.000 đ", "500.000 đ", "1.25"],
+    ["€ 1.500", "€ 2.500", "€ 4.000", "0.75"],
+    ["1.500", "2.500", "4.000", "12.5%"], // a percent beside bare dot groups: they stay thousands
+  ]) assert.ok(scrambleSigns(scrambled(values)).includes(SIGN), values.join(" "));
+  // Labels in any script count: Vietnamese labels have no three Latin letters in a row.
+  assert.ok(scrambleSigns(["Bảng quyền lợi", "Nằm viện", "Phẫu thuật", "Chuyên khoa", "Hệ số", "250.000 đ", "750.000 đ", "500.000 đ", "1.25"].join("\n")).includes(SIGN));
+  // The currency printed only in the table's heading: bare values beside a bare decimal are still amounts (TE #330 round 2).
+  assert.ok(scrambleSigns(["Tabel Manfaat (Rp)", ...LABELS, "250.000", "750.000", "500.000", "0.5"].join("\n")).includes(SIGN));
+  assert.ok(scrambleSigns(["Tabel Manfaat (Rp)", ...LABELS, "250.000", "750.000", "500.000", "1.5"].join("\n")).includes(SIGN));
+  // So a rate card is checked against the image too: one reading call, never amounts paired by guess.
+  assert.ok(scrambleSigns(scrambled(["1.235", "2.450", "3.875", "0.925"])).includes(SIGN));
+  // Yen, yuan and won written with their own character are currencies.
+  assert.ok(scrambleSigns(scrambled(["5,000円", "12,000円", "30,000円", "100,000円"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["5,000元", "12,000元", "30,000元", "100,000元"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["50,000원", "120,000원", "300,000원", "1,000,000원"])).includes(SIGN));
+});
