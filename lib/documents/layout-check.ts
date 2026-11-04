@@ -12,9 +12,18 @@
  * decimals ("1.235", "4.125%", "01.10.2026") is not glued (TE U-F3). */
 const GLUED = /\d\.\d{2}\d[\d,]*\.\d{2}(?!\d)/;
 const UNGLUE = /(\d\.\d{2})(?=\d[\d,]*\.\d{2}(?!\d))/g;
-/** An amount: two decimals or thousands groups, written either way ("12,000.00", "12.000,00", "250,00"). A page number or
- * an age is not one. */
-const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d{1,3}(?:['’]\d{3})+/;
+/** An amount: two decimals or thousands groups, in any market's way of writing them ("12,000.00", "12.000,00", "250,00",
+ * "12'000", "2 500"). A page number or an age is not one.
+ *
+ * Space thousands ("2 500 kr", "120 000 zł", with a plain, no-break or narrow space) are amounts: before, a Swedish,
+ * Polish or French table whose labels came out before their values was never seen as scrambled, so its amounts were used
+ * without the image check (TE #329). One dot group ("1.500") is always read as thousands, the safe reading: by its figures
+ * alone a rate card ("1.235", "0.925") cannot be told from a rupiah table whose currency is printed only in its heading
+ * ("250.000", "0.5"), and a missed table pairs amounts by guess while a flagged rate card costs one image reading (TE #330
+ * round 2). */
+const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d{1,3}(?:['’]\d{3})+|(?<!\d)\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?!\d)/;
+/** Whether a value line prints an amount. A date is never one ("01.10.2026" is a date, not "01.10"; TE #329). */
+const amountOn = (line: string) => AMOUNT.test(line.replace(new RegExp(DATE, "gi"), " "));
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
@@ -24,7 +33,7 @@ const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
  * labels came out before their values was never seen as scrambled (TE #324). Closed lists: any other word keeps the
  * line a label line. */
 const ISO_CURRENCIES = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY"]);
-const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh"]);
+const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh", "đ", "円", "元", "원"]);
 // The letters a market prints before its symbol, a closed list (Critic #329 L3): "MAX$1,500" stays a label line.
 const CURRENCY_MARK = /(?<![A-Za-z])(?:S|US|HK|A|AU|NZ|NT|R|C|CA|MX|N|J|B|BZ|T|TT|Z|RD|CI|EC|FJ|G|GY|L|SI|SG)?\p{Sc}/gu;
 const NUMBERS_ONLY = {
@@ -37,7 +46,9 @@ const NUMBERS_ONLY = {
     return /^[\s\d,.'’\-–—%]*\d[\s\d,.'’\-–—%]*$/.test(bare);
   },
 };
-const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && /[A-Za-z]{3}/.test(line);
+// Letters of any script count: Vietnamese "Nằm viện" or "Hệ số" has no three Latin letters in a row, so its labels were
+// never seen and its scrambled table never checked (TE #330).
+const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && (line.match(/\p{L}/gu) ?? []).length >= 3;
 
 /** Signs that a page's table text came out scrambled: glued figures, or a run of labels with no figures followed by a run
  * of lines holding only figures (labels read before values). */
@@ -48,14 +59,16 @@ export function scrambleSigns(text: string): string[] {
   for (let i = 0; i < lines.length; i++) {
     let labels = 0;
     while (i + labels < lines.length && LABEL_ONLY(lines[i + labels])) labels++;
-    let values = 0, amounts = 0;
-    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) amounts += Number(AMOUNT.test(lines[i + labels + values++]));
+    let values = 0;
+    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) values++;
+    const run = lines.slice(i + labels, i + labels + values);
+    const amounts = run.filter(amountOn).length;
     // A table's own column header over its rows ("Age  Male  Female" over "35  120.50  110.20") is not scrambled, and
     // a contents list's page numbers are not amounts (TE U-F2).
     const cells = (line: string) => line.split("\t").length;
     // Only a header whose rows carry their own key in the first cell ("35" for an age) pairs each row; rows of amounts
     // alone under "Sum Assured  Premium" still leave the plan labels above unpaired (TE UC-2).
-    const rows = lines.slice(i + labels, i + labels + values);
+    const rows = run;
     const header = labels > 0 && cells(lines[i + labels - 1]) >= 2 && values > 0 && rows.every((r) => cells(r) === cells(lines[i + labels - 1]) && !AMOUNT.test(r.split("\t")[0]));
     if (labels >= 3 && values >= 3 && amounts >= 2 && !header) { signs.push("labels came out before their values"); break; }
     i += Math.max(0, labels - 1);
