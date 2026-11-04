@@ -153,7 +153,7 @@ export function coverReadingPending(message: string | null | undefined): { what:
  * found by its own exact shape wherever it sits, and only that sentence is ever shown: never other stored text. The
  * card showed nothing, so a household could not tell that a page of its schedule was missing. Allow-list: any other
  * wording gives null. */
-const UNREADABLE_PAGES = /(?:^|\s)((?:Page \d+|Pages \d+(?:, \d+)* and \d+) could not be read, so anything printed only there is not available\.)(?=\s|$)/;
+const UNREADABLE_PAGES = new RegExp(String.raw`(?:^|\s)((?:Page \d+|Pages \d+(?:, \d+)* and \d+) could not be read, so anything printed only there is not available\.)(?=\s|$)`);
 export function unreadablePagesAdvice(message: string | null | undefined): { title: string; what: string; next: string } | null {
   const found = (message ?? "").match(UNREADABLE_PAGES);
   if (!found) return null;
@@ -173,10 +173,21 @@ export function unreadablePagesAdvice(message: string | null | undefined): { tit
 /** Scanned pages of a ready document that no reader looked at (lib/documents/processing-errors.ts notReadPagesNote).
  * Found by its own exact shape wherever it sits, like the note above. Nothing is known to be wrong with those pages, so
  * the next step never asks for a clearer copy. Allow-list: any other wording gives null. */
-const NOT_READ_PAGES = /(?:^|\s)((?:Page \d+ is a scanned page that has|Pages \d+(?:, \d+)* and \d+ are scanned pages that have) not been read yet, so anything printed only there is not available\.)(?=\s|$)/;
+const NOT_READ_PAGES = new RegExp(String.raw`(?:^|\s)((?:Page \d+ is a scanned page that has|Pages \d+(?:, \d+)* and \d+ are scanned pages that have) not been read yet, so anything printed only there is not available\.)(?=\s|$)`);
 export function notReadPagesAdvice(message: string | null | undefined): { title: string; what: string; next: string } | null {
   const found = (message ?? "").match(NOT_READ_PAGES);
   if (!found) return null;
   const one = /^Page \d/.test(found[1]);
   return { title: one ? "A page hasn’t been read yet" : "Some pages haven’t been read yet", what: found[1], next: `Use Read again later to read ${one ? "it" : "them"}.` };
+}
+
+/** The exact shapes of the page notes a ready document's stored message carries when some of its pages give nothing: a
+ * page that could not be read (unreadablePagesAdvice) and a scanned page not read yet (notReadPagesAdvice). One list,
+ * so every surface that asks "was this document fully read?" judges it the same way: the Documents card shows the note,
+ * and Home's and Coverage's "Not found" counts the document as not fully read (lib/policies/not-fully-read.ts, which
+ * passes these patterns to the database as they are; both engines read them alike). Critic #332 M1. */
+export const PAGE_NOT_READ_PATTERNS: readonly string[] = [UNREADABLE_PAGES.source, NOT_READ_PAGES.source];
+/** Whether a ready document's stored message says some of its pages give nothing (PAGE_NOT_READ_PATTERNS). */
+export function hasPagesNotRead(message: string | null | undefined): boolean {
+  return PAGE_NOT_READ_PATTERNS.some((pattern) => new RegExp(pattern).test(message ?? ""));
 }

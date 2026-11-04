@@ -2,6 +2,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { DOCUMENT_READ_IN_PART_MESSAGES } from "@/lib/documents/processing-errors";
+import { PAGE_NOT_READ_PATTERNS } from "@/lib/documents/failure-advice";
 import { BENEFIT_READ_FAILURE_KEY, readingCacheReady } from "@/lib/policies/read-failures";
 import { UNSURE_KEY } from "@/lib/policies/upload-owner";
 import { documentCardTitle } from "@/lib/policies/document-name";
@@ -12,7 +13,8 @@ import { SCAN_GOES_ON } from "@/lib/benefit-table/service";
  * "you have no such cover". Counted: a failed read; a document read in part (pages that could not be checked give no
  * amounts) or whose cover reading stopped; one intake has not finished with and that Home no longer shows as being read
  * (no change for 30 minutes, the window Home's reading count uses: stalled, or held for its scan) or whose upload the
- * scan rejected; a ready document with no pages; and any document the benefit table says is stalled, held, not readable
+ * scan rejected; a ready document with no pages, or with a page that could not be read or a scanned page not read yet
+ * (its stored page note, Critic #332 M1); and any document the benefit table says is stalled, held, not readable
  * or waiting for Read again (its states, passed in by the caller, cover misfiled packs). Not counted: a superseded or
  * deleted copy, and a receipt or letter, which intake never reads cover from (unless the table says it is a misfiled
  * pack). */
@@ -27,13 +29,14 @@ export const OWNED_BY_MEMBER = (member: string, cache = false) => `(EXISTS(SELEC
 
 /** The reading-did-not-finish rule (the caller adds activePredicate inline, where the lifecycle guard reads it) shared by a person's count and the household's unlinked "Not sure" uploads.
  * Parameters: $1 account, $3 read-in-part notes (exact, or followed by more text), $4 benefit read failure key, $5 no-cover roles, $6 Read again ids,
- * $7 scan-goes-on states, $8 unread ids. */
+ * $7 scan-goes-on states, $8 unread ids, $9 the page-note patterns (a page that could not be read, or a scanned page not read
+ * yet: lib/documents/failure-advice.ts PAGE_NOT_READ_PATTERNS, the same shapes the Documents card shows). */
 const NOT_FULLY_READ = (cache: boolean) => `p.account_id=$1 AND p.superseded_at IS NULL
           AND (p.id::text=ANY($6::text[]) OR (NOT (coalesce(p.document_role,'')=ANY($5::text[])) AND (
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
               OR NOT (coalesce(p.quarantine_status,'')=ANY($7::text[]))))
-            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR EXISTS(SELECT 1 FROM unnest($3::text[]) AS note(m) WHERE p.processing_message=note.m OR left(p.processing_message,length(note.m)+1)=note.m||' ')
+            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message ~ ANY($9::text[]) OR EXISTS(SELECT 1 FROM unnest($3::text[]) AS note(m) WHERE p.processing_message=note.m OR left(p.processing_message,length(note.m)+1)=note.m||' ')
               OR NOT EXISTS(SELECT 1 FROM policy_pages pp WHERE pp.policy_id=p.id AND pp.account_id=p.account_id)
               ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))`;
 
@@ -50,7 +53,7 @@ async function unread(accountId: string, owner: (cache: boolean) => string | nul
       `SELECT p.id::text AS id,p.product_name,p.original_filename,p.insurer,p.document_role,p.policy_number FROM policies p
         WHERE ${activePredicate("p")} AND ${NOT_FULLY_READ(cache)} AND ${who}
         ORDER BY p.created_at`,
-      [accountId, member, [...DOCUMENT_READ_IN_PART_MESSAGES], cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unreadIds]);
+      [accountId, member, [...DOCUMENT_READ_IN_PART_MESSAGES], cache ? BENEFIT_READ_FAILURE_KEY : "", [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unreadIds, [...PAGE_NOT_READ_PATTERNS]]);
     return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id) };
   } catch (error) {
     console.warn("Could not count documents not fully read:", error instanceof Error ? error.message : error);
