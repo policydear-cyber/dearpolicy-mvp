@@ -44,6 +44,38 @@ test("rows quoting an unreadable or unchecked page are left out; every allowed m
   assert.equal(documents[0].state, "read");
 });
 
+test("a document whose every page is unreadable or unchecked is not readable, never read with nothing in it (TE #328)", async () => {
+  const { installDatabase } = await import("../r6/fixture");
+  const db = await installDatabase();
+  await db.exec(readFileSync("sql/benefit-table.sql", "utf8"));
+  await db.exec("ALTER TABLE policy_pages ADD COLUMN IF NOT EXISTS extraction_method text");
+  const { tableFor } = await import("@/lib/benefit-table/service");
+  const A = "00000000-0000-4000-8000-0000000004a1", LIM = "00000000-0000-4000-8000-0000000004a2";
+  await db.query("INSERT INTO accounts(id,name) VALUES($1,'Made-up household')", [A]);
+  await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Teo Ramírez','self')", [LIM, A]);
+  const docs: [string, string, (string | null)[]][] = [
+    ["00000000-0000-4000-8000-0000000004b1", "personal_schedule", ["unreadable", "unreadable"]],
+    ["00000000-0000-4000-8000-0000000004b2", "personal_schedule", ["unchecked", "unreadable"]],
+    ["00000000-0000-4000-8000-0000000004b3", "personal_schedule", ["unreadable", "native"]],
+  ];
+  for (const [D, role, methods] of docs) {
+    await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,document_role,quarantine_status)
+      VALUES($1,$2,$3,$4,$5,'ready',$6,'scan_clean')`, [D, A, LIM, D.slice(-2) + ".pdf", "k/" + D, role]);
+    for (const [i, m] of methods.entries()) await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text,extraction_method) VALUES($1,$2,$3,$4,$5)",
+      [A, D, i + 1, `POLICY SCHEDULE\nInsured: Teo Ramírez\nSum Insured\tMXN 800,000\nTrip cancellation\tMXN 40,000`, m]);
+    const reading = { document: { document: { kind: role, product: "Made-up Travel Cover", insurer: null, namedPeople: ["Teo Ramírez"], plan: null, periodFrom: null, periodTo: null },
+      covers: [{ person: "Teo Ramírez", product: "Made-up Travel Cover", cover: "Travel", plan: null, sumInsured: 800000, asOf: null, page: 1, quote: "Sum Insured\tMXN 800,000" }], benefits: [] }, pages: [] };
+    await db.query("INSERT INTO benefit_readings(policy_id,account_id,reading,model,prompt_version) VALUES($1,$2,$3,'test','test')", [D, A, JSON.stringify(reading)]);
+  }
+  const appDb = async (sql: string, params: unknown[]) => (await db.query<Record<string, unknown>>(sql, params)).rows;
+  const { documents } = await tableFor(appDb, A);
+  const state = (id: string) => documents.find((d) => d.id === id)?.state;
+  assert.equal(state(docs[0][0]), "not_readable");
+  assert.equal(state(docs[1][0]), "not_readable");
+  // One page the table reads is enough: read, as before.
+  assert.equal(state(docs[2][0]), "read");
+});
+
 test("the filter is the allow-list, in the page query and the fingerprint query alike", () => {
   const src = readFileSync("lib/benefit-table/service.ts", "utf8");
   assert.match(src, /const CHECKED_PAGE = `coalesce\(to_jsonb\(pp\)->>'extraction_method', ''\) IN \(\$\{TABLE_PAGE_METHODS/);
