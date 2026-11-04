@@ -24,18 +24,56 @@ export const MALAY = /\b(?:apa|saya|anda|insurans|perlindungan|boleh(?:kah)?|tun
 const SPANISH_ETC = /\b(?:qu[eé]|cubre|p[oó]liza|seguro|cu[aá]nto|c[oó]mo|puedo|tengo|mi|mis|el|los|las|una?|est[aá]|por|para|quel|quelle|assurance|couvre|mon|wie|meine|versicherung)\b/gi;
 export const ENGLISH = /\b(?:what|is|are|my|the|claim|cover|covered|policy|insurance|hospital|premium|how|much|does|do|can|have|has|for|and|who|when|which|i|we|you|pay|plan|get|got|or|not|of|in|on)\b/gi;
 
-/** DearPolicy answers in English only (owner's rule, 4 Nov 2026). A message is not in English when it is mostly another
- * script, or when words of another Latin-script language outnumber its English words two to one (TE #343: "rumah saya
- * banjir, insurans boleh claim tak" borrows "claim" and is still Malay). Read on the message as typed, before any
- * spelling fix ("insurans" would become "insurance"). Unsure stays English, so an English question is never refused. */
-export function notEnglish(message: string): boolean {
+/** Everyday English words a question is made of (closed allow-list; insurance words are INSURANCE_WORDS). */
+const ENGLISH_WORDS = new Set(("a an the and or but if so than then not no yes ok okay please pls is are am was were be been being do does did doing done " +
+  "have has had having can could will would should shall may might must need needs want wants know tell show check find give see look " +
+  "what whats what's who whom whose when where which why how much many long often any all some each every both either more most less " +
+  "i me my mine we us our ours you your yours he him his she her hers it its they them their this that these those there here " +
+  "of in on at to for from with without by about after before during until since under over per into out up down off again also just only still even " +
+  "get gets got getting go goes going went come came make made take took pay paid paying pays say said ask asked " +
+  "year years month months day days night nights week weeks time today yesterday tomorrow now ago next last first new old total amount left used " +
+  "mum mom mother dad father wife husband son daughter child children kid kids baby brother sister grandma grandpa family parents " +
+  "lah leh lor ah meh sia hi hello thanks thank").split(" "));
+/** DearPolicy answers in English only (owner's rule, 4 Nov 2026). Closed allow-list (TE #343: per-language word lists
+ * missed Tagalog, Vietnamese, Italian, Dutch and Portuguese): a message is English only when its own words are, in fair
+ * share, English or insurance words. It is not English when another script dominates, when another language's words
+ * outnumber its English words two to one, or when fewer than a fifth of its words (at least five counted) are English.
+ * Short notes of names and places ("Ang mo kio polyclinic") stay English, and a capitalised word after the first is taken as
+ * a name ("physiotherapy at Raffles Medical Holland Village").
+ * The household's own names and plan names are not counted either way, nor are strings that are no word at all
+ * ("asdkjh", "zzz"), which the chat answers as unclear. Read on the message as typed, before any spelling fix
+ * ("insurans" would become "insurance"). Unsure stays English, so an English question is never refused. */
+export function notEnglish(message: string, known: string[] = []): boolean {
   const text = stripEmoji(message ?? "").replace(/\s+/g, " ").trim();
   const otherScript = (text.match(OTHER_SCRIPT) ?? []).length;
   const latinLetters = (text.match(/[A-Za-z]/g) ?? []).length;
   if (otherScript >= 2 && otherScript >= latinLetters / 3) return true;
-  const english = (text.match(ENGLISH) ?? []).length;
-  const foreign = Math.max((text.match(MALAY) ?? []).length, (text.match(SPANISH_ETC) ?? []).length);
-  return foreign >= 2 && foreign > 2 * english;
+  // The household's own names and plan names, and any capitalised word after the first (a name or a place: "Raffles
+  // Medical", "Tan Tock Seng"), are taken out before anything is counted (Critic #343: "Mi Mi's assurance plan?").
+  const names = new Set(known.flatMap((n) => (n ?? "").toLowerCase().split(/[^\p{L}]+/u)).filter(Boolean));
+  const kept = (text.match(/\p{L}+(?:['’]\p{L}+)?/gu) ?? []).filter((typed, i) => {
+    const bare = typed.toLowerCase().replace(/['’]s$/, "");
+    if (names.has(bare)) return false;
+    // An English or insurance word stays whatever its case ("TPD", "Hospital").
+    if (englishWord(typed.toLowerCase())) return true;
+    return !(i > 0 && /^\p{Lu}/u.test(typed));
+  }).map((t) => t.toLowerCase());
+  const rest = kept.join(" ");
+  const english = (rest.match(ENGLISH) ?? []).length;
+  const foreign = Math.max((rest.match(MALAY) ?? []).length, (rest.match(SPANISH_ETC) ?? []).length);
+  if (foreign >= 2 && foreign > 2 * english) return true;
+  let words = 0, englishWords = 0;
+  for (const w of kept) {
+    if (englishWord(w)) { words++; englishWords++; continue; }
+    // Not a word at all ("asdkjh", "zzz"): neither English nor another language.
+    if (/^[a-z]+$/.test(w) && (!/[aeiouy]/.test(w) || /[bcdfghjklmnpqrstvwxz]{5,}/.test(w))) continue;
+    words++;
+  }
+  return words >= 5 && englishWords * 5 < words;
+}
+function englishWord(w: string): boolean {
+  const plain = w.replace(/['’]s$/, "").replace(/['’]/g, "");
+  return ENGLISH_WORDS.has(w) || ENGLISH_WORDS.has(plain) || INSURANCE_WORDS.test(w);
 }
 
 const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings|salam|assalamualaikum|selamat (?:pagi|petang|malam|tengah hari)|ni hao|你好)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there|what can you do|what do you do|how does (?:this|it) work))?[\s!.?]*$/i;
@@ -105,7 +143,7 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
   const hello = "Hi! Ask me what anyone in your household is covered for — premiums, deductibles, renewal dates — or tell me what happened and I’ll help with a claim, one question at a time.";
   if (GREETING.test(text) && !args.pending) return reply("greeting", hello);
   // Another script, or a Latin-script language with little English in it.
-  if (notEnglish(text))
+  if (notEnglish(text, [...(args.products ?? []), ...(args.family ?? []).flatMap((p) => [p.display_name, p.preferred_name ?? ""])]))
     return pick(reply("language", "Sorry, I can only answer in English for now. Please ask again in English — for example: " + example));
   const english = (text.match(ENGLISH) ?? []).length;
 

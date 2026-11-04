@@ -49,7 +49,9 @@ delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
  * fails CI. In brackets, main before this round with the same harness (facts / behaviour / full pass). */
 const FLOORS: Record<string, { facts: number; behaviour: number; fullPass: number }> = {
   "H1-tan": { facts: 189, behaviour: 219, fullPass: 167 }, // final 190 / 220 / 168 (main before: 172 / 187 / 130)
-  "H2-aisyah": { facts: 195, behaviour: 221, fullPass: 172 }, // final 196 / 222 / 173 (main before: 175 / 184 / 128)
+  // English only (owner's decision, 4 Nov 2026): the Malay conversation H2-C10 (turns "Saya demam, nak jumpa GP, boleh claim?",
+  // "berapa kali setahun", ...) now gets the English-only reply, so the H2 floors are one below that run (192 / 218 / 169).
+  "H2-aisyah": { facts: 191, behaviour: 217, fullPass: 168 }, // final 196 / 222 / 173 before English only (main before: 175 / 184 / 128)
   // English only (owner's decision, 4 Nov 2026): the Malay and Chinese battery messages (H3-S100, S106-S110, H3-C10
   // turns 1-6) are now answered as out of scope with no figure, so the H3 floors are one below that run (195 / 212 / 177).
   "H3-ong": { facts: 194, behaviour: 211, fullPass: 176 }, // final 197 / 217 / 180 before English only (main before: 149 / 163 / 113)
