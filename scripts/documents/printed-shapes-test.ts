@@ -65,9 +65,17 @@ check("a premium table with no section after it hides its rows to the foot of th
   const text = ["Premium rate table", "Age band\tRate", "Under 26\t3.10", "26 to 30\t4.25", "Accidental death\t100% of Sum Insured"].join("\n");
   assert.equal(rows(text).length, 0, JSON.stringify(rows(text)));
 });
-check("a bullet that starts a new table section ends it whatever the bullet glyph", () => {
-  const text = ["Schedule of premiums", "Age band\tRate", "Under 26\t3.10", "▪\tCover", "Accidental death\t100% of Sum Insured"].join("\n");
-  assert.equal(find(text, "Accidental death")?.value, "100% of Sum Insured");
+check("a schedule heading ends a premium table, with a bullet of any glyph or none", () => {
+  for (const heading of ["▪\tHospital Benefits", "Schedule of Benefits", "●\tAccident Benefit Schedule"]) {
+    const text = ["Schedule of premiums", "Age band\tRate", "Under 26\t3.10", heading, "Accidental death\t100% of Sum Insured"].join("\n");
+    assert.equal(find(text, "Accidental death")?.value, "100% of Sum Insured", heading);
+  }
+});
+check("a line that only looks like a heading never ends a premium table", () => {
+  for (const heading of ["▪\tCover", "•\tImportant notes", "Notes", "•\tHospital Benefits payable by you", "Benefit premiums", "•\tCover for 5 years", "•\tBenefits"+"\tS$100"]) {
+    const text = ["Schedule of premiums", "Age band\tRate", "Under 26\t3.10", heading, "Age 30\tS$1.20"].join("\n");
+    assert.deepEqual(rows(text).filter((r) => /^Age 30/.test(r.label)), [], heading);
+  }
 });
 
 // Critic and TE #347: a bullet that is not a benefit heading never ends a premium table.
