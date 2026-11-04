@@ -25,6 +25,9 @@ const unknown = [
   "Up to S$100 for 30 days", "Up to S$100 per month for 6 months", "Up to S$100 for each session",
   // A unit word that only begins with a period is not that period (Critic M2 on #338).
   "S$100 per weekday", "S$100 per monthly instalment", "S$100 per daycare session", "S$100 per annum",
+  // Shorter periods however written, and a second figure (a sub-limit) in the trailer (Critic L2 on #338).
+  "Up to S$100 in any one quarter", "Up to S$100 quarterly", "Up to S$100 within 24h", "Up to S$100 in any 24 hrs",
+  "Up to S$1,000 per policy year, S$100 per visit", "Up to S$5,000 per accident (S$500 per item)",
 ];
 for (const cell of unknown) check(`"${cell}" gives no amount`, () => assert.equal(parseBenefitValue(cell), null, JSON.stringify(parseBenefitValue(cell))));
 
@@ -44,7 +47,7 @@ const caps: [string, number][] = [
   // A ceiling for the year is one total for the year (scripts/fixtures/r5/make.py, r6 chat-quality regressions).
   ["Up to S$300 per year", 300], ["Up to S$300 per annum", 300], ["Up to S$300 in any one year", 300],
   ["Up to S$5,000 in any one claim", 5000], ["Up to S$5,000 per event, per insured person", 5000],
-  ["Up to S$2,000 per life assured", 2000], ["Up to S$800 per treatment", 800], ["Up to S$500 per child", 500],
+  ["Up to S$2,000 per life assured", 2000], ["Up to S$800 per treatment", 800], ["Up to S$500 per child", 500], ["Up to S$4,500 per calendar year", 4500],
 ];
 for (const [cell, v] of caps) check(`"${cell}" stays a ceiling of ${v}`, () => {
   const p = parseBenefitValue(cell);
@@ -54,6 +57,7 @@ for (const [cell, v] of caps) check(`"${cell}" stays a ceiling of ${v}`, () => {
 // The English per-day rate is still a daily rate.
 check(`"RM 600 per day" is a daily rate`, () => { const p = parseBenefitValue("RM 600 per day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 600); });
 check(`"S$100 a day" is a daily rate`, () => { const p = parseBenefitValue("S$100 a day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 100); });
+check(`"$4,500 per calendar year" is a yearly amount`, () => { const p = parseBenefitValue("$4,500 per calendar year"); assert.equal(p?.kind, "fixed"); assert.equal(p?.value, 4500); assert.equal(p?.period, "year"); });
 check(`"S$300 per year" is a yearly amount`, () => { const p = parseBenefitValue("S$300 per year"); assert.equal(p?.kind, "fixed"); assert.equal(p?.period, "year"); });
 check(`"S$30 per day" is a daily rate`, () => { const p = parseBenefitValue("S$30 per day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 30); });
 

@@ -147,17 +147,18 @@ export function basisForRow(bases:{index:number;basis:PercentageBasis}[],rowInde
 /** The units after "per"/"each" that name an event, a person or the policy year, never a shorter period: a figure printed
  * "per claim" or "each accident" is one fixed payment for that event, and a ceiling "per year" or "per policy year" is one
  * total for the year. Closed list, whole unit only. */
-const PER_EVENT_BODY=String.raw`(?:(?:insured\s+)?(?:person|life|member|child|family)|insured|life\s+assured|policy(?:\s+(?:year|term))?|lifetime|year|annum|`
+const PER_EVENT_BODY=String.raw`(?:(?:insured\s+)?(?:person|life|member|child|family)|insured|life\s+assured|policy(?:\s+(?:year|term))?|lifetime|(?:calendar\s+)?year|annum|`
   +String.raw`(?:(?:any\s+)?one\s+)?(?:claim|incident|accident|event|occurrence|loss|disability|injury|illness|condition|admission|confinement|`
   +String.raw`hospitali[sz]ation|surgery|operation|treatment|visit|trip|journey|item|article|bag)s?)`;
 const PER_EVENT_UNIT=new RegExp("^"+PER_EVENT_BODY+"$","i");
 const PER_EVENT_AFTER=new RegExp(String.raw`^\s*(?:and\s+every\s+)?`+PER_EVENT_BODY+String.raw`(?![\p{L}\p{N}])`,"iu");
 /** A period shorter than a year anywhere in a ceiling's trailer makes it a rate, never one total: "in any one day",
  * "incurred per day", "as daily allowance", "during each 24 hours", "per visit, per day". */
-const SHORT_PERIOD=/(?<![\p{L}\p{N}])(?:days?|nights?|hours?|hrs?|weeks?|fortnights?|months?|daily|nightly|hourly|weekly|fortnightly|monthly|diem)(?![\p{L}\p{N}])/iu;
+const SHORT_PERIOD=/(?<![\p{L}\p{N}])(?:days?|nights?|hours?|hrs?|weeks?|fortnights?|months?|quarters?|daily|nightly|hourly|weekly|fortnightly|monthly|quarterly|diem|\d+\s?h(?:rs?)?)(?![\p{L}\p{N}])/iu;
 /** What may follow a ceiling's figure and leave it one total. The whole trailer is checked:
  * - no period shorter than a year anywhere (SHORT_PERIOD);
  * - every "per", "each", "every" or "/" in it is followed by a closed-list unit (PER_EVENT_AFTER);
+ * - no second money figure (a sub-limit);
  * - and then it is nothing, a "per"/"each" clause, punctuation alone, or an English connector from a closed list
  *   ("for surgery", "in total", "subject to ...").
  * Anything else, an unknown unit or a word in another language, is not, and the row stays as printed. */
@@ -165,6 +166,9 @@ function capTrailerKnown(rest:string){
   const t=rest.trim().replace(/\s+/g," ");
   if(!t)return true;
   if(SHORT_PERIOD.test(t))return false;
+  // A second figure in the trailer is a sub-limit or another rule ("per policy year, S$100 per visit"): one total would
+  // show more than the sub-limit, so the row stays as printed.
+  if(new RegExp(MONEY,"i").test(t))return false;
   for(const m of t.matchAll(/(?<![\p{L}\p{N}])(?:per|each|every)(?![\p{L}\p{N}])|\//giu))
     if(!PER_EVENT_AFTER.test(t.slice((m.index??0)+m[0].length)))return false;
   const opened=/^[,;(.:]/.test(t),clause=t.replace(/^[,;(.:\s]+/,"");
@@ -230,7 +234,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // "S$30 per day" / "$689/month"
   // A rate printed with no currency at all ("150 per day") is still the rate
   // the schedule states; it is kept with currency null -- never given one.
-  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)\b`,"i"))
+  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(?:calendar\s+(?=year))?(day|night|week|month|year)\b`,"i"))
     ??text.match(new RegExp(String.raw`^(${NUMBER})\s*(?:per|/|a)\s*(day|night|week|month|year)\b`,"i"));
   if(periodic){
     const rate=amount(periodic[1],text);
@@ -247,7 +251,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     // "per <unit>" keeps a figure fixed only when the unit is a closed-list event ("per claim", "each accident"). Any
     // other unit -- a period in another language ("per hari", "per jour"), "per hour", "per km" -- is a rate this
     // grammar does not know, and a rate stored as a lump sum is a wrong amount, so the row stays as printed.
-    if(flat[2]!=null&&(!PER_EVENT_UNIT.test(flat[2].trim().replace(/\s+/g," "))||/^(?:year|annum)s?$/i.test(flat[2].trim())))return null;
+    if(flat[2]!=null&&(!PER_EVENT_UNIT.test(flat[2].trim().replace(/\s+/g," "))||/^(?:(?:calendar\s+)?year|annum)s?$/i.test(flat[2].trim().replace(/\s+/g," "))))return null;
     const value=amount(flat[1],text);
     if(value!=null)return {kind:"fixed",value,currency,basis:"the amount printed in the schedule"};
   }
