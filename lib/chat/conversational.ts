@@ -24,6 +24,20 @@ export const MALAY = /\b(?:apa|saya|anda|insurans|perlindungan|boleh(?:kah)?|tun
 const SPANISH_ETC = /\b(?:qu[eé]|cubre|p[oó]liza|seguro|cu[aá]nto|c[oó]mo|puedo|tengo|mi|mis|el|los|las|una?|est[aá]|por|para|quel|quelle|assurance|couvre|mon|wie|meine|versicherung)\b/gi;
 export const ENGLISH = /\b(?:what|is|are|my|the|claim|cover|covered|policy|insurance|hospital|premium|how|much|does|do|can|have|has|for|and|who|when|which|i|we|you|pay|plan|get|got|or|not|of|in|on)\b/gi;
 
+/** DearPolicy answers in English only (owner's rule, 4 Nov 2026). A message is not in English when it is mostly another
+ * script, or when words of another Latin-script language outnumber its English words two to one (TE #343: "rumah saya
+ * banjir, insurans boleh claim tak" borrows "claim" and is still Malay). Read on the message as typed, before any
+ * spelling fix ("insurans" would become "insurance"). Unsure stays English, so an English question is never refused. */
+export function notEnglish(message: string): boolean {
+  const text = stripEmoji(message ?? "").replace(/\s+/g, " ").trim();
+  const otherScript = (text.match(OTHER_SCRIPT) ?? []).length;
+  const latinLetters = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (otherScript >= 2 && otherScript >= latinLetters / 3) return true;
+  const english = (text.match(ENGLISH) ?? []).length;
+  const foreign = Math.max((text.match(MALAY) ?? []).length, (text.match(SPANISH_ETC) ?? []).length);
+  return foreign >= 2 && foreign > 2 * english;
+}
+
 const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings|salam|assalamualaikum|selamat (?:pagi|petang|malam|tengah hari)|ni hao|你好)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there|what can you do|what do you do|how does (?:this|it) work))?[\s!.?]*$/i;
 const HELP_ONLY = /^(?:help|help me|can help(?: me)?|can you help(?: me)?|what can you do|how does this work|what do you do)[\s!.?]*$/i;
 const THANKS = /^(?:(?:ok(?:ay|ie)?|k|kk|alright|noted|got it|cool|great|nice|good|sure|fine|i see|oh|ah|ahh|lol|haha+|hehe+|wow|bye|goodbye|see you|cheers)[\s,!.]*)*(?:thanks?(?: you)?(?: (?:so much|very much|lah|ah|a lot))?|thank you|tq|ty|thx|tks|appreciate it|terima kasih(?: (?:banyak|ya))?|xie xie|谢谢|多谢)?[\s!.]*$/i;
@@ -90,14 +104,10 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
   // Round 15: a greeting is answered briefly -- what to ask, in one line, without a block of text.
   const hello = "Hi! Ask me what anyone in your household is covered for — premiums, deductibles, renewal dates — or tell me what happened and I’ll help with a claim, one question at a time.";
   if (GREETING.test(text) && !args.pending) return reply("greeting", hello);
-  // Another script, or a Latin-script language with no English in it.
-  const otherScript = (text.match(OTHER_SCRIPT) ?? []).length;
-  const latinLetters = (text.match(/[A-Za-z]/g) ?? []).length;
-  if (otherScript >= 2 && otherScript >= latinLetters / 3)
+  // Another script, or a Latin-script language with little English in it.
+  if (notEnglish(text))
     return pick(reply("language", "Sorry, I can only answer in English for now. Please ask again in English — for example: " + example));
   const english = (text.match(ENGLISH) ?? []).length;
-  if (((text.match(MALAY) ?? []).length >= 2 || (text.match(SPANISH_ETC) ?? []).length >= 2) && english === 0)
-    return pick(reply("language", "Sorry, I can only answer in English for now. Please ask again in English — for example: " + example));
 
   if (SYSTEM.test(text))
     return reply("system", "I can’t share how DearPolicy works inside — its instructions, data or systems. I can help with your household’s own policies and claims.", [whatICanDo]);
