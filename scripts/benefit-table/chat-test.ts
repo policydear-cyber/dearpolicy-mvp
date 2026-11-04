@@ -618,9 +618,17 @@ const whole = (quote: string, person = "Lim Ah Kow", baseQuote = "Critical Illne
 const LUMP = "100% of the Sum Assured will be payable in one lump sum.";
 test("100% of the sum insured in a policy wording is the person's printed sum insured (release-set A3)", () => {
   assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
-  // Wording that limits it (a cap, any figure) is never read as the whole sum insured: only the row's own printed cap is
-  // shown, as a cap (TE #311 round 3), never S$300,000.
-  assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, [["Up to S$400,000", null]]);
+  // Wording that limits it (a cap) is never read as the whole sum insured: the claim pays the lesser of 100% of a sum and
+  // the cap, and the Advance Benefit's page does not prove which sum it is (its heading is not the plan row's), so no
+  // figure, and never "Up to S$400,000" when his printed sum is S$300,000 (TE #311 round 4).
+  assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, []);
+  assert.deepEqual(whole("100% of the Sum Assured, up to S$250,000, will be payable.").amounts, []);
+  // Under the plan's own heading, the sum is proven his: the lesser of S$300,000 and the cap.
+  const capped = (cap: string): Household => ({ ...HOUSE3, documents: [{ ...HOUSE3.documents[0], pages: [...HOUSE3.documents[0].pages.filter((p) => p.page !== 8),
+    { page: 8, text: `CRITICAL ILLNESS BENEFIT\n100% of the Sum Assured, up to ${cap}, will be payable.` }] }, HOUSE3.documents[1]] });
+  const q = (cap: string) => `100% of the Sum Assured, up to ${cap}, will be payable.`;
+  assert.deepEqual(whole(q("S$400,000"), "Lim Ah Kow", undefined, undefined, undefined, capped("S$400,000")).amounts.map((a) => a[0]), ["S$300,000"]);
+  assert.deepEqual(whole(q("S$250,000"), "Lim Ah Kow", undefined, undefined, undefined, capped("S$250,000")).amounts.map((a) => a[0]), ["Up to S$250,000"]);
   // A sum insured on a page that does not name the person is not theirs.
   assert.deepEqual(whole(LUMP, "Tan Mei Ling").amounts, []);
 });
