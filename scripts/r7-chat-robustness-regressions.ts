@@ -50,7 +50,9 @@ delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
 const FLOORS: Record<string, { facts: number; behaviour: number; fullPass: number }> = {
   "H1-tan": { facts: 189, behaviour: 219, fullPass: 167 }, // final 190 / 220 / 168 (main before: 172 / 187 / 130)
   "H2-aisyah": { facts: 195, behaviour: 221, fullPass: 172 }, // final 196 / 222 / 173 (main before: 175 / 184 / 128)
-  "H3-ong": { facts: 196, behaviour: 216, fullPass: 179 }, // final 197 / 217 / 180 (main before: 149 / 163 / 113)
+  // English only (owner's decision, 4 Nov 2026): the Malay and Chinese battery messages (H3-S100, S106-S110, H3-C10
+  // turns 1-6) are now answered as out of scope with no figure, so the H3 floors are one below that run (195 / 212 / 177).
+  "H3-ong": { facts: 194, behaviour: 211, fullPass: 176 }, // final 197 / 217 / 180 before English only (main before: 149 / 163 / 113)
 };
 // Round 16: a full pass now also requires the citation check (scripts/r7-robust/battery.ts passed()). Floors unchanged.
 // Main before Round 16, rescored that way: 167 / 172 / 179 full pass (3 items failed only the citation check);
@@ -65,13 +67,15 @@ const TRAP_ITEMS: Record<string, string[]> = {
     "H1-S088", "H1-S089", "H1-C06#6", "H1-S009", "H1-S004", "H1-S011", "H1-S124"],
   // lapse then reinstatement (status, what was paid, "lapsed?"); a Malay question; USD stays USD; the dental rider
   // without its base plan; the travel limits, the documents to submit and an injury overseas; CareShield.
-  "H2-aisyah": ["H2-S057", "H2-S058", "H2-S060", "H2-S068", "H2-S069", "H2-S073", "H2-S075", "H2-S076", "H2-S040", "H2-S041", "H2-S021", "H2-S022",
+  "H2-aisyah": ["H2-S057", "H2-S058", "H2-S060", "H2-S068", "H2-S073", "H2-S075", "H2-S076", "H2-S040", "H2-S041", "H2-S021", "H2-S022",
     "H2-S033", "H2-S037", "H2-S002", "H2-S006"],
+  // H2-S069 (a Malay question) left the list with English only (4 Nov 2026): it is answered as out of scope, with no figure.
   // the endorsement over the 2021 schedule (sum assured, premium now, the old figure never quoted as current);
   // SecureCare Plus vs Pro ("the Pro", "the Pro is mine"); the joint policy; the premium receipt paid for the wife's
   // plan; the deleted home policy; a Chinese question.
   "H3-ong": ["H3-S001", "H3-S002", "H3-S005", "H3-S093", "H3-S021", "H3-S022", "H3-S024", "H3-S025", "H3-S039", "H3-C02#2", "H3-C02#9", "H3-S048",
-    "H3-S049", "H3-C06#6", "H3-S072", "H3-C14#1", "H3-S106", "H3-S120"],
+    "H3-S049", "H3-C06#6", "H3-S072", "H3-C14#1", "H3-S120"],
+  // H3-S106 (a Chinese question) left the list with English only (4 Nov 2026): it is answered as out of scope, with no figure.
 };
 
 /** Battery items judged wrong for this application and not scored (listed with the reason in the round's report). */

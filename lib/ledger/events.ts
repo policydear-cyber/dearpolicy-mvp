@@ -465,23 +465,12 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
-/** A row named for an accident: "accident", or an injury named as the cause ("Death due to Injury", "TPD resulting from
- * injury", "Injury Death Benefit") when the name names no illness ("injury or illness" is either cause). An injury the
- * name only mentions is not the cause: "Death or injury to any person", "Death (including death due to injury)",
- * "Death (excluding self-inflicted injury)", "Injury overseas with a hospital stay" (TE #343 round 3). Unsure is any
- * cause, which never counts an accident-only sum toward a death from illness. */
-const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^injury\s+death\b/;
-function namesAccident(n:string){
-  if(/\baccident/.test(n))return true;
-  return INJURY_CAUSE.test(n)&&!/\b(?:including|incl\.?|excluding|except|exclusive of|other than|not|self[- ]inflicted|or)\b[^.;]*\binjur/.test(n)
-    &&!/\b(?:illness|sickness|disease)/.test(n);
-}
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
   // An income paid while unable to work is its own benefit, not the total and permanent disability lump sum.
   if(/disability income|income (?:protection|replacement)|loss of income|salary continuance/.test(n))return {event:"disability_income",detail:name};
-  const accident=namesAccident(n);
+  const accident=/\baccident/.test(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
   if(/\b(?:total (?:and|&) permanent|tpd|permanent (?:total )?disab)/.test(n))return {event:accident?"accidental_disablement":"tpd",detail:null};
@@ -514,7 +503,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
  * Recuperation" pays for a hospital stay, but only one an accident caused. */
 export function causeForBenefit(name:string,requires:string[]=[]):"accident"|"illness"|null{
   const n=withoutNegatedAccident(name).toLowerCase();
-  if(requires.includes("accident")||namesAccident(n))return "accident";
+  if(requires.includes("accident")||/\baccident/.test(n))return "accident";
   if(requires.includes("illness")||/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n))return "illness";
   return null;
 }
