@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { simpleChatEnabled, simpleChatModel } from "../../lib/simple-chat/flag";
 import { readHousehold, renderLibrary, type Household } from "../../lib/simple-chat/library";
-import { alternating, anthropicRequest, ledgerUsage, type SimpleModel } from "../../lib/simple-chat/model";
+import { alternating, anthropicRequest, callUsd, LIBRARY_CACHE_WRITE_RATE, ledgerUsage, type SimpleModel } from "../../lib/simple-chat/model";
 import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-chat/prompt";
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
 import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, libraryFact, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
@@ -154,7 +154,7 @@ async function main() {
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
     const r = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" }, { library: renderLibrary(HOUSE), history: [{ role: "assistant", text: "stray" }, { role: "user", text: "a" }, { role: "user", text: "b" }, { role: "assistant", text: "c" }], question: "q" });
-    assert.equal(r.system[1].cache_control?.ttl, "5m");
+    assert.equal(r.system[1].cache_control?.ttl, "1h");
     assert.match(r.system[1].text, /<page n="13">/);
     assert.equal(r.output_config.format.schema, SIMPLE_ANSWER_SCHEMA);
     assert.deepEqual(r.messages.map((m) => [m.role, m.content]), [["user", "a\n\nb"], ["assistant", "c"], ["user", "q"]]);
@@ -339,7 +339,7 @@ async function main() {
     assert.equal(call.history.length, 2);
     assert.ok(!call.library.includes("someone-else"));
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
-    assert.deepEqual(state.simpleChat.turns[0].usage, { input: 62600, output: 400, cached: 0 });
+    assert.deepEqual(state.simpleChat.turns[0].usage, { input: 100100, output: 400, cached: 0 }, "the 50,000-token library write is booked at the 1-hour cache price, 2x");
   });
 
   await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
@@ -1237,6 +1237,21 @@ async function main() {
   });
   await check("ledger usage counts 5-minute cache writes at 1.25x the input price", () => {
     assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }), { input: 1135, output: 5, cached: 1000 });
+  });
+  await check("the household's library is cached for an hour, and the chat books its cache writes at the 1-hour 2x price", () => {
+    const req = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" } as never, { library: "LIB", history: [], question: "q" });
+    const cached = req.system.filter((b) => "cache_control" in b && b.cache_control);
+    assert.equal(cached.length, 1);
+    assert.equal(cached[0].text, "LIB");
+    assert.deepEqual(cached[0].cache_control, { type: "ephemeral", ttl: "1h" });
+    assert.equal(LIBRARY_CACHE_WRITE_RATE, 2);
+    assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }, LIBRARY_CACHE_WRITE_RATE), { input: 1210, output: 5, cached: 1000 });
+    assert.equal(callUsd({ input: 1, output: 0, cachedInput: 0.1 }, { input: 0, cacheWrite: 1e6, cacheRead: 0, output: 0 }), 2);
+    // Every place the chat books a reply uses the library's write rate, so the spend cap never under-counts a write.
+    const hook = readFileSync("lib/simple-chat/hook.ts", "utf8");
+    const calls = [...hook.matchAll(/ledgerUsage\(([^)]*)\)/g)].map((m) => m[1]);
+    assert.ok(calls.length >= 2, calls.join(" | "));
+    for (const c of calls) assert.match(c, /, LIBRARY_CACHE_WRITE_RATE$/, c);
   });
 
   // The real household, when its snapshot is here (it is real data and lives outside the repo).
