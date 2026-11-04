@@ -21,6 +21,9 @@ export type PdfPage = {
   /** OCR was needed and the reader returned nothing for this page even after
    * a retry: anything printed only here is not available. */
   unreadable?: boolean;
+  /** OCR was needed but no reader looked at the page (none is configured, or reading scans is switched off): it is not
+   * known whether anything is printed there, so the document is never called unreadable because of it. */
+  notRead?: boolean;
   /** Round 10: the reader said the page is hard to read (handwriting, a
    * smudged photo): only parts of it were transcribed with confidence. */
   legibility?: "poor";
