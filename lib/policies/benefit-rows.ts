@@ -166,6 +166,15 @@ function capTrailerKnown(rest:string){
   const t=rest.trim().replace(/\s+/g," ");
   if(!t)return true;
   if(SHORT_PERIOD.test(t))return false;
+  // A bracketed sub-limit for a named part of the benefit -- "Up to S$3,000 per accident (traditional Chinese medicine
+  // up to S$300)" -- leaves the ceiling of the whole as printed: the bracket limits only the part it names. The part must
+  // be a name (it never starts with per/each/every/any/all or an ordinal), the bracket must be the last thing printed and
+  // hold one figure; the rest of the trailer is still checked as before.
+  const part=t.match(new RegExp(String.raw`\(\s*(?!(?:for\s+)?(?:per|each|every|any|all|first|second|third|subsequent|thereafter|maximum|max|total|overall|aggregate|combined|and|or|plus|including|less)\b)(?:for\s+)?[a-z][a-z'’&\-]*(?:\s+[a-z][a-z'’&\-]*){0,6}\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`\s*\)$`,"i"));
+  if(part&&part.index!=null){
+    const before=t.slice(0,part.index).trim();
+    if(!new RegExp(MONEY,"i").test(before))return capTrailerKnown(before);
+  }
   // A second figure in the trailer is a sub-limit or another rule ("per policy year, S$100 per visit"): one total would
   // show more than the sub-limit, so the row stays as printed.
   if(new RegExp(MONEY,"i").test(t))return false;

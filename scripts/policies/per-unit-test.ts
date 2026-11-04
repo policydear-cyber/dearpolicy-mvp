@@ -28,6 +28,10 @@ const unknown = [
   // Shorter periods however written, and a second figure (a sub-limit) in the trailer (Critic L2 on #338).
   "Up to S$100 in any one quarter", "Up to S$100 quarterly", "Up to S$100 within 24h", "Up to S$100 in any 24 hrs",
   "Up to S$1,000 per policy year, S$100 per visit", "Up to S$5,000 per accident (S$500 per item)",
+  // A bracket that is not a named part's sub-limit still gives no amount (TE r9 on #338).
+  "Up to S$3,000 (each visit up to S$300)", "Up to S$3,000 (per visit up to S$100)", "Up to S$3,000 (TCM up to S$300 per day)",
+  "Up to S$3,000 (S$300 for TCM)", "Up to S$3,000 (dental up to S$300) and S$50 per x-ray", "Up to S$3,000 per day (dental up to S$300)",
+  "Up to S$3,000 per fortnite (dental up to S$300)", "Up to S$3,000 (any one item up to S$500)", "Up to S$3,000 (maximum S$300 per visit)",
 ];
 for (const cell of unknown) check(`"${cell}" gives no amount`, () => assert.equal(parseBenefitValue(cell), null, JSON.stringify(parseBenefitValue(cell))));
 
@@ -47,6 +51,9 @@ const caps: [string, number][] = [
   // A ceiling for the year is one total for the year (scripts/fixtures/r5/make.py, r6 chat-quality regressions).
   ["Up to S$300 per year", 300], ["Up to S$300 per annum", 300], ["Up to S$300 in any one year", 300],
   ["Up to S$5,000 in any one claim", 5000], ["Up to S$5,000 per event, per insured person", 5000],
+  // A bracketed sub-limit for a named part leaves the ceiling of the whole (TE r9 on #338).
+  ["Up to S$3,000 per accident (traditional Chinese medicine up to S$300)", 3000], ["Up to S$3,000 (physiotherapy limited to S$500)", 3000],
+  ["Up to US$10,000 per trip (for dental treatment up to US$500)", 10000], ["Maximum S$2,000 per policy year (chiropractic maximum of S$200)", 2000],
   ["Up to S$2,000 per life assured", 2000], ["Up to S$800 per treatment", 800], ["Up to S$500 per child", 500], ["Up to S$4,500 per calendar year", 4500],
 ];
 for (const [cell, v] of caps) check(`"${cell}" stays a ceiling of ${v}`, () => {
