@@ -605,7 +605,8 @@ async function main() {
   await check("R52: a cap on the row's next line stops the card; 'greater than' as a row label does not", () => {
     const house: Household = { ...SI_HOUSE, documents: [{ ...SI_HOUSE.documents[0], pages: [...SI_HOUSE.documents[0].pages, { page: 9, text: "Schedule\n(% of Sum Insured)\n- Equals to or greater than 8%\t100%\n•\tDeath due to natural catastrophe\t15% of Sum Insured\nor up to S$50,000, whichever is lesser\n•\tDisappearance\t100% of Sum Insured" }] }, SI_HOUSE.documents[1]] };
     const one = (quote: string, percent: number) => verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022", quote, percent)] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
-    assert.deepEqual(one("Death due to natural catastrophe\t15% of Sum Insured", 15), []);
+    // The 15% is never worked out (no S$60,000); only the row's own printed cap is shown, as a cap (TE #311 round 3).
+    assert.deepEqual(one("Death due to natural catastrophe\t15% of Sum Insured", 15), ["Up to S$50,000"]);
     assert.deepEqual(one("- Equals to or greater than 8%\t100%", 100), ["S$400,000"]);
     // R55-1: a threshold in the row label is never the row's percentage.
     assert.deepEqual(one("- Equals to or greater than 8%\t100%", 8), []);
