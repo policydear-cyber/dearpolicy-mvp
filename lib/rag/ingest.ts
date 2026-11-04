@@ -2,7 +2,7 @@ import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
 import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote, notReadPagesNote, withPageNotes } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
-import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
+import { annotateCoverageEvidence, annotateLedgerEvidence, isCopyOf, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { createHash, randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
@@ -283,6 +283,7 @@ async function readBundleParts(args: ProcessPolicyArgs, bytes: Uint8Array, segme
         [partId, args.accountId, parent.family_member_id, filename, storageKey, fileHash, "Read from " + (parent.original_filename ?? "a file that held several policies") + ".", parent.quarantine_status, parent.scan_provider, parent.scanned_at]);
       // A part of a "Not sure" upload is nobody's until someone is linked to it, like the file it came from.
       if (!args.linkUploadMember) { const { noteOwnerUnsure } = await import("@/lib/policies/upload-owner"); await noteOwnerUnsure(args.accountId, partId); }
+      else { const { copyOwnerChosen } = await import("@/lib/policies/upload-owner"); await copyOwnerChosen(args.accountId, args.policyId, partId); }
     }
     try {
       await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType });
@@ -321,7 +322,23 @@ async function settleSameSchedule(args: ProcessPolicyArgs, extraction: PolicyExt
     if (samePeriod) {
       const keepMine = myNative && !other.native;
       [older, newer, olderFile, newerFile] = keepMine ? [other.id, args.policyId, other.original_filename ?? "an earlier upload", myFile] : [args.policyId, other.id, myFile, other.original_filename ?? "an earlier upload"];
-      note = `Same schedule as “${newerFile}”, uploaded again${keepMine || !myNative ? " as a photo or scan" : ""}; kept as a copy, and answers use “${newerFile}”.`;
+      // A copy is proven to state the same amounts, and the one set aside states no amount the kept one lacks. Two
+      // schedules of one policy and period that state another amount (reissued after a change of cover), whose amounts
+      // cannot be compared, or where the one to set aside adds a figured row (a rider added on reissue) are not filed as
+      // copies: neither is set aside, and each differing amount keeps its conflict note, so no newer figure and no added
+      // cover is hidden (v11 E2: the 2026 schedule was filed as a copy of 2025's; Critic #325 M1, M2).
+      // When the one first chosen to give way states more (a rider added on reissue) and the other is a copy of it, the
+      // other gives way instead, whichever was uploaded first or is the PDF (TE #325: both stayed current and the base
+      // cover was listed twice).
+      let fuller = false;
+      if (!(await isCopyOf(args.accountId, older, newer))) {
+        if (!(await isCopyOf(args.accountId, newer, older))) continue;
+        [older, newer, olderFile, newerFile] = [newer, older, newerFile, olderFile];
+        fuller = true;
+      }
+      note = fuller
+        ? `Same schedule as “${newerFile}”, which states everything this one does and more; kept as a copy, and answers use “${newerFile}”.`
+        : `Same schedule as “${newerFile}”, uploaded again${keepMine || !myNative ? " as a photo or scan" : ""}; kept as a copy, and answers use “${newerFile}”.`;
     } else if (myEnd && theirEnd) {
       const mineNewer = myEnd > theirEnd;
       [older, newer, olderFile, newerFile] = mineNewer ? [other.id, args.policyId, other.original_filename ?? "an earlier upload", myFile] : [args.policyId, other.id, myFile, other.original_filename ?? "an earlier upload"];

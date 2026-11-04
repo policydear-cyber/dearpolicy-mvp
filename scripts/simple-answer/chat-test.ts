@@ -91,6 +91,39 @@ async function main() {
     await assert.rejects(readHousehold(HOUSE.accountId, leaky), /another household/);
   });
 
+  await check("a page that could not be read at all is named, and whatever a reader made of it is never sent (#324 follow-up)", async () => {
+    const acc = HOUSE.accountId, pid = "33333333-3333-4333-8333-333333333333";
+    const run = async (sql: string) => /FROM family_members/.test(sql) ? [] : /FROM policies p/.test(sql)
+      ? [{ account_id: acc, id: pid, original_filename: "Schedule scan.pdf", product_name: "Example Shield Plan", processing_status: "ready" }]
+      : /FROM policy_pages/.test(sql) ? [1, 2, 3, 4].map((n) => ({ account_id: acc, policy_id: pid, page_number: n,
+        text: n === 4 ? "Fr4ctur3 0f ar|n 9,8OO" : n === 2 ? "Room and board EUR 250 per day" : "Policy Number: EX-1001", method: n === 4 ? "unreadable" : n === 2 ? "unchecked" : "native" })) : [];
+    const h = await readHousehold(acc, run as never);
+    assert.deepEqual(h.documents[0].unreadablePages, [4]);
+    assert.deepEqual(h.documents[0].pages.map((p) => p.page), [1, 2, 3]);
+    const lib = renderLibrary(h);
+    assert.match(lib, /reading_status="read in part: page 4 could not be read at all, so nothing printed only there is known; it is not sent; page 2 could not be checked against the page image; no amount from it is used"/);
+    assert.doesNotMatch(lib, /9,8OO|Fr4ctur3/);
+    assert.doesNotMatch(lib, /<page n="4">/);
+    assert.match(libraryFact(h, h.documents[0]), /^Example Shield Plan \(Schedule scan\.pdf\) was read in part: Page 4 couldn't be read, so anything printed only there is not known\. Page 2 couldn't be checked/);
+    // Several pages, and the page alone with nothing unchecked.
+    const only = { ...h.documents[0], uncheckedPages: [], unreadablePages: [5, 7, 9] };
+    assert.match(renderLibrary({ ...h, documents: [only] }), /reading_status="read in part: pages 5, 7 and 9 could not be read at all, so nothing printed only there is known; they are not sent"/);
+    assert.match(libraryFact(h, only), /was read in part: Pages 5, 7 and 9 couldn't be read, so anything printed only there is not known\. It /);
+    // A document with no such page is unchanged.
+    const whole = { ...h.documents[0], uncheckedPages: [], unreadablePages: [] };
+    assert.doesNotMatch(renderLibrary({ ...h, documents: [whole] }), /reading_status/);
+    assert.match(libraryFact(h, whole), /was read\./);
+    // Pages left out of the message count the unreadable page too (Critic #327 L1).
+    assert.match(renderLibrary(h, new Set([`${pid}#1`])), /<pages_not_sent count="2" of="4"/);
+    // Every page unreadable: never "read in part" (Critic #327 L2).
+    const none = { ...h.documents[0], uncheckedPages: [], unreadablePages: [1, 2, 3, 4, 5], pages: [] };
+    assert.match(renderLibrary({ ...h, documents: [none] }), /reading_status="could not be read: no page of it could be read, so nothing in it is known"[^>]*>\n<no_readable_text\/>/);
+    assert.match(libraryFact(h, none), /\(Schedule scan\.pdf\) could not be read: no page of it could be read, so nothing in it was used\./);
+    // A failed document says it could not be read, never "read in part".
+    assert.match(renderLibrary({ ...h, documents: [{ ...only, processingStatus: "failed" }] }), /reading_status="could not be read \(failed\)"/);
+    assert.match(SIMPLE_SYSTEM_PROMPT, /When it names pages that could not be read at all and the answer would rely on that document, say which pages could not be read/);
+  });
+
   await check("a document with pages the upload check could not check says so, even when those pages are not sent (live 32fa444 E2, A1)", async () => {
     const acc = HOUSE.accountId, pid = "22222222-2222-4222-8222-222222222222";
     const run = async (sql: string) => /FROM family_members/.test(sql) ? [] : /FROM policies p/.test(sql)
