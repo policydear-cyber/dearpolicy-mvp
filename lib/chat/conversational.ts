@@ -34,15 +34,21 @@ const ENGLISH_WORDS = new Set(("a an the and or but if so than then not no yes o
   "year years month months day days night nights week weeks time today yesterday tomorrow now ago next last first new old total amount left used " +
   "mum mom mother dad father wife husband son daughter child children kid kids baby brother sister grandma grandpa family parents " +
   "lah leh lor ah meh sia hi hello thanks thank").split(" "));
-/** Function words of other Latin-script languages (closed list): Tagalog, Italian, Portuguese, Spanish, Dutch, French,
- * German, Malay and Indonesian. Only a sign, never enough on its own: the message must also be mostly not English. */
-const OTHER_FUNCTION_WORDS = new Set(("ako ay ba ng ito sa ang mga aking ko niya namin " +
-  "il lo la gli mio mia miei è stato ieri della dello di che sono quanto " +
+/** Letters that mark a language other than English (closed set): Vietnamese, Portuguese, Spanish, German ß, Polish, Czech,
+ * Turkish, Nordic. Not é, è, ê, ô, â, ï, ë, ö, ü: English borrows them ("café", "naïve", "Zoë", "résumé"). */
+const LANGUAGE_LETTERS = /[ơưđăạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹãõñßłąęśźżćńřěůčšžğışåø]/u;
+/** Function words of other Latin-script languages (Singlish particles such as la, lah, ang are not here) (closed list): Tagalog, Italian, Portuguese, Spanish, Dutch, French,
+ * German, Polish, Swedish, Turkish, Malay and Indonesian. Only a sign, never enough on its own: the message must also be mostly not English. */
+const OTHER_FUNCTION_WORDS = new Set(("ako ay ba ng ito sa mga aking ko niya namin " +
+  "il lo gli mio mia miei è stato ieri della dello di che sono quanto " +
   "o meu minha foi não está pelo pela do da dos das em " +
   "mi mis el los las por para es está qué cuánto " +
   "mijn het een ik niet voor van de wat hoeveel " +
   "le les mon ma est pour du des je " +
   "das der die ist mein meine für ich nicht wie " +
+  "moje moja mój jest nie się " +
+  "hur mycket för och jag är inte " +
+  "için kadar nedir bir ve " +
   "apa saya anda yang untuk dengan tidak berapa bagaimana adakah ke tak nak").split(" "));
 /** DearPolicy answers in English only (owner's rule, 4 Nov 2026). Closed allow-list (TE #343: per-language word lists
  * missed Tagalog, Vietnamese, Italian, Dutch and Portuguese): a message is English only when its own words are, in fair
@@ -75,8 +81,8 @@ export function notEnglish(message: string, known: string[] = []): boolean {
   if (foreign >= 2 && foreign > 2 * english) return true;
   // The share rule refuses only on a positive sign of another language (Critic #343: "laptop stolen overseas police
   // report filed" is terse English): two words from a closed list of other languages' function words, or written with
-  // letters English does not use ("bệnh", "für", "hôpital").
-  const signal = kept.filter((w) => OTHER_FUNCTION_WORDS.has(w) || /[^\x00-\x7f]/.test(w.replace(/['’]/g, ""))).length;
+  // letters that mark another language ("bệnh", "płaci", "não"); an accent English borrows ("café", "zoë") is no sign.
+  const signal = kept.filter((w) => OTHER_FUNCTION_WORDS.has(w) || LANGUAGE_LETTERS.test(w)).length;
   if (signal < 2) return false;
   let words = 0, englishWords = 0;
   for (const w of kept) {
