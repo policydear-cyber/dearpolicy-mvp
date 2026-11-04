@@ -229,6 +229,14 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     if (NOT_MONEY_BEFORE.test(text.slice(Math.max(0, at - 24), at))) continue;
     spans.push([at, end]);
   }
+  // Bare groups one space before a figure that delimits itself may be its leading thousands ("S$ 1 500.00", "₹ 1 50,000",
+  // "RM 1 250,000"): the split is not known, so neither the groups nor the figure print (TE #335).
+  for (const m of text.matchAll(/(?<![\d.,'’]|\d[ \u00a0\u202f])(?:\d+[ \u00a0\u202f])*\d{1,3}[ \u00a0\u202f]\d{2,3}(?:[.,]\d+)+(?![\d]|[.,'’]\d)/g)) {
+    const at = m.index!, end = at + m[0].length;
+    if (spans.some(([from, to]) => at < to && end > from)) continue;
+    if (NOT_MONEY_BEFORE.test(text.slice(Math.max(0, at - 24), at))) continue;
+    spans.push([at, end]);
+  }
   return { figures, spans };
 }
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped

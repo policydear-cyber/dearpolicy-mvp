@@ -65,6 +65,8 @@ for (const [text, never] of [
   ["Sum assured S$ 1 500 000", [500, 1, 1_500_000]], ["Zimmer EUR 1 250 2 500", [250, 2_500, 1_250]], ["Hospital ₹ 1 50 000", [50_000, 150_000, 50]],
   ["Sjukhus kr 2 500 3 500", [2_500, 3_500, 500]], ["Rawat inap Rp 1 500 000", [500, 1_500_000]], ["Room HK$ 500 800 1 000", [500, 800, 1_000]],
   ["Cover US$ 100 000 200 000", [100_000, 200_000, 100]], ] as [string, number[]][]) t(`${text}: no part of the run prints`, never.every((v) => !has(text, v)), numbersIn(text));
+for (const [text, never] of [["Room S$ 1 500.00", [1, 500, 1_500]], ["Room ₹ 1 50,000", [1, 50_000, 150_000]], ["Bilik RM 1 250,000", [1, 250_000, 1_250_000]], ["Room USD 2 500.50", [2, 500.5, 2_500.5]], ["Room S$ 1 250 500.00", [250, 500, 1]]] as [string, number[]][])
+  t(`${text}: bare groups before a figure that delimits itself print nothing`, never.every((v) => !has(text, v)), numbersIn(text));
 t("figures that delimit themselves still print one by one", has("Room and board S$1,500 2,000 2,500", 1_500) && has("Room and board S$1,500 2,000 2,500", 2_000) && has("Bilik RM 250.00 300.00 400.00", 300) && !has("Room and board S$1,500 2,000 2,500", 1_500_002));
 t("columns parted by tabs or wider gaps still print", has("Room\tS$150\tS$250", 150) && has("Room\tS$150\tS$250", 250) && has("Plan A   150   250", 250) && has("Daily room S$150 S$250 S$350", 250));
 t("a section number is no money run", has("Section 3 100", 100));
