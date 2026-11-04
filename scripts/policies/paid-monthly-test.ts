@@ -22,6 +22,9 @@ const MONTHLY: [string, string][] = [
   ["Carer Allowance", "Carer Allowance $1,500/month"],
   ["Disability Income", "Disability Income one twelfth of the Sum Insured each month"],
   ["Long Term Care Benefit", "Long Term Care Benefit S$600 every month"],
+  ["Monthly Disability Income", "Monthly Disability Income S$3,000"],
+  ["Monthly Income", "Monthly Income S$1,000 for 24 months"],
+  ["Disability Income", "Monthly Disability Income: One twelfth of Sum Insured"],
 ];
 const NOT_MONTHLY: [string, string][] = [
   ["Disability Benefit", "Disability Benefit One twelfth of Sum Insured"],
@@ -33,6 +36,15 @@ const NOT_MONTHLY: [string, string][] = [
   ["Income Benefit", "Income Benefit S$2,000 for 12 months"],
   ["Monthly Income", "Monthly Income paid as a lump sum of S$20,000"],
   ["Recovery Benefit", "Recovery Benefit S$500 per month or S$100 per day, whichever is lower"],
+  // TE #351: "monthly" or "a month" that is not the figure's own unit.
+  ["Monthly Disability Income", "Monthly Disability Income: up to S$60,000 in total"],
+  ["Monthly Hospital Income", "Monthly Hospital Income: maximum S$36,000 per disability"],
+  ["Accidental Death", "Accidental Death S$100,000, payable if death occurs within a month of the accident"],
+  ["Income Benefit", "Income Benefit S$24,000, paid in 12 monthly instalments"],
+  ["Family Income Benefit", "Family Income Benefit S$120,000, payable monthly over 10 years"],
+  ["Income Benefit", "50% of Sum Insured, payable in monthly instalments over 24 months"],
+  ["Waiver", "Waiver of monthly premium S$120"],
+  ["Monthly Income", "Monthly Income S$1,000 or S$12,000 at once"],
 ];
 for (const [name, quote] of MONTHLY) check(`monthly: ${quote}`, () => assert.equal(paidMonthly(name, quote), true));
 for (const [name, quote] of NOT_MONTHLY) check(`no period: ${quote}`, () => assert.equal(paidMonthly(name, quote), false));
