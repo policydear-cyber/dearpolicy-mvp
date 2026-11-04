@@ -19,33 +19,51 @@ export function printsAmount(quote:string|null|undefined){
   if(/\bas\s+charged\b/i.test(q))return true;
   return /(?:^|\s)\d[\d,]*(?:\.\d{1,2})?$/.test(q)&&!/\b(?:days?|months?|years?|age|weeks?|hours?)\s+\d[\d,]*$/i.test(q);
 }
-/** A price, not a benefit: a premium, cost or price word together with a figure ("Pay a monthly premium of S$12.50",
- * "costs only S$0.40 a day"). Waiving or refunding a premium is a benefit, never a price. A cover figure and a daily rate
- * together ("Hospital Income up to S$36,500 at S$100 per day") is a benefit, so the shape alone never decides. */
+const key=(text:string)=>text.normalize("NFKC").toLowerCase().replace(/^[\s•▪●◦‣⁃\-–]+|^\(?[a-z0-9ivx]{1,4}[.)]\s+/giu,"").replace(/[^\p{L}\p{N}]+/gu," ").trim();
+/** The passage opens with the benefit's own name ("Funeral costs up to S$5,000", "Get Well Benefit S$500"): it is the
+ * benefit's own row, never a price, clause or feature line, whatever words follow (Critic #348 H1b). */
+export function startsWithName(name:string,quote:string){
+  const n=key(name),q=key(quote);
+  return n.length>=4&&(q===n||q.startsWith(n+" "));
+}
+/** A price, not a benefit, by its shape only (Critic #348): a cover figure and what it costs ("insured up to S$1,000,000
+ * at S$1.37 per day"), or a premium word with a figure and no benefit verb ("Annual premium S$420"). "We pay the premiums
+ * of S$800 a year", a waiver or a refund is a benefit. "Cost" is a benefit word in travel and accident cover, never a price
+ * word on its own. */
 export function statesAPrice(quote:string|null|undefined){
   const q=(quote??"").replace(/\s+/g," ");
   if(!new RegExp(MONEY,"i").test(q))return false;
-  if(/\b(?:waive|waiver|refund|return)\w*/i.test(q))return false;
-  return /\b(?:premiums?|costs?|costing|priced?|prices)\b/i.test(q);
+  if(new RegExp(String.raw`\b(?:insured|covered|coverage|cover)\b[^.;]*?${MONEY}[^.;]*?\bat\s+(?:only\s+|just\s+)?${MONEY}\s*(?:per|a|an|/|each)\s*(?:day|week|month|year|annum)\b`,"i").test(q))return true;
+  if(/\b(?:waive|waiver|refund|return|reimburs)\w*/i.test(q))return false;
+  if(/\b(?:we|will|shall|company|insurer)\s+(?:will\s+|shall\s+)?pay\b/i.test(q))return false;
+  return /\bpremiums?\b/i.test(q);
 }
-/** A clause about a claim, never a benefit: a survival period, a condition before a claim is admitted, a "for the
- * avoidance of doubt" note, or a passage saying something is not payable. Closed list. */
+/** A clause about a claim, never a benefit, and only when it prints no figure: a survival period, a condition before a
+ * claim, a "for the avoidance of doubt" note, a passage saying something is not payable. A note with an amount is a
+ * benefit with a condition and is kept. */
 export function statesAClause(quote:string|null|undefined){
   const q=(quote??"").replace(/\s+/g," ");
-  return /\b(?:survives?|survived|survival period|before a claim|claim (?:can|will|may) (?:only )?be admitted|for the avoidance of doubt|(?:is|are|shall not be|will not be) not payable|no benefit (?:is|shall be|will be) payable)\b/i.test(q);
+  if(printsAmount(q))return false;
+  return /\b(?:survives?|survived|survival period|before a claim|claim (?:can|will|may) (?:only )?be admitted|for the avoidance of doubt|(?:is|are) not payable|no benefit (?:is|shall be|will be) payable)\b/i.test(q);
 }
-/** A marketing feature line on a summary page, never a benefit row: it starts with what the buyer gets to do. Closed list. */
+/** A marketing feature line on a summary page: it opens with a verb phrase for what the buyer gets to do. Closed list of
+ * phrases, never a bare "Get" (Get Well Benefit). */
 export function statesAFeature(quote:string|null|undefined){
   const q=(quote??"").replace(/^[\s•▪●◦‣⁃\-–]+/u,"");
-  return /^(?:receive|enjoy|get|choose|be (?:insured|covered)|pay the same|no medical check-up|no underwriting)\b/i.test(q);
+  return /^(?:receive|enjoy|choose|get\s+(?:covered|insured|protected|up\s+to|a\s+payout|paid)|be\s+(?:insured|covered|protected)|pay\s+the\s+same|no\s+medical\s+check-?up|no\s+underwriting)\b/i.test(q);
 }
-/** keep: stored as today. named: kept, with no amount printed in its passage. drop: only on positive evidence that the
- * row is not a benefit -- a price, a claim clause or a feature line (Critic #348 H1: for a lost cover, keep is the safe
- * side, so anything not proven a non-benefit is kept: a cover named in running text, a status cell such as "Included" or
- * "Unlimited", a bullet with words after the name). */
-export function modelRowWithoutRule(_name:string,quote:string,_pageText:string):"keep"|"named"|"drop"{
-  if(statesAPrice(quote)||statesAClause(quote)||statesAFeature(quote))return "drop";
-  return printsAmount(quote)?"keep":"named";
+/** keep: stored as today. named: kept, with no amount printed in its passage. drop: only on proof the row is not a
+ * benefit -- a price shape, a claim clause with no figure, or a feature line -- and the last two never when the passage
+ * opens with the benefit's own name, or a feature line for a benefit named "... Benefit/Cover/Allowance" (Critic #348 H1: for a lost
+ * cover, keep is the safe side). */
+export function modelRowWithoutRule(name:string,quote:string,_pageText:string):"keep"|"named"|"drop"{
+  const amount=printsAmount(quote)?"keep":"named";
+  // A price by shape drops even under its own name ("Annual premium S$420").
+  if(statesAPrice(quote))return "drop";
+  if(startsWithName(name,quote))return amount;
+  if(statesAClause(quote))return "drop";
+  if(statesAFeature(quote)&&!/\b(?:benefit|cover|coverage|allowance)s?\s*$/i.test(name.trim()))return "drop";
+  return amount;
 }
 /** The passage points to an amount printed somewhere else ("the amount shown in the schedule on page 5"). */
 export function pointsElsewhere(quote:string|null|undefined){
