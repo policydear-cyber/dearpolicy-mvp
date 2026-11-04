@@ -161,6 +161,11 @@ const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|I
 // Currencies whose market groups thousands with dots, and the three-decimal ones (KD, BHD): the only signs beside which a
 // lone dot group is read whole.
 const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
+// Currencies whose markets group thousands with spaces: the only signs beside which space groups join (Critic #333 H1).
+// Never the $-family, RM, Rp, ₹, ¥, ₩, ₱, ฿, which group with commas or dots.
+const SPACE_MARKET = /^(?:kr\.?|SEK|NOK|DKK|zł|PLN|Kč|CZK|Ft|HUF|lei|RON|CHF|Fr\.|₽|RUB|₴|UAH|ZAR|€|EUR)$/u;
+// A count after a figure: its last group is no thousands group ("S$ 100 365 days").
+const UNIT_AFTER = /^[ \u00a0\u202f]*(?:days?|nights?|visits?|weeks?|months?|years?|times|sessions?|treatments?|jours?|nuits?|Tage?n?|Nächte|dagar|dager|dni|dnů|dní|napo?k?)\b/iu;
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
 /** Space-grouped figures read whole, and where they stand. A market that groups thousands with spaces ("EUR 80 000",
  * "120 000 kr", "CHF 12 500,50", with a plain, no-break or narrow space) prints its figure whole, by the rule evidence.ts's
@@ -173,23 +178,31 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
   for (const m of text.matchAll(new RegExp(String.raw`(?<![\d.,'’]|\d[ \u00a0\u202f])(\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:,\d{1,2})?)(?![\d]|[.,'’]\d|[ \u00a0\u202f]\d)`, "g"))) {
     const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
     if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
-    const sign = (s: RegExpMatchArray | null) => (!s ? false : s[1] ? DOT_CODES.test(s[1]) : true);
+    // Only a currency of a market that groups thousands with spaces joins the groups (Critic #333 H1): "S$ 150 250 350",
+    // "RM 200 300" and "500 750 SGD" are plan columns a space apart, in markets that group with commas, and read as pieces.
+    const spaceSign = (s: RegExpMatchArray | null) => !!s && SPACE_MARKET.test((s[1] ?? s[0]).trim());
+    // "Member ID 123 456 EUR 50 000" reads no 123 456: two groups of three digits never join (below).
+    const signAfter = spaceSign(after.match(SIGN_AFTER));
+    const signed = signAfter || spaceSign(before.match(SIGN_BEFORE));
+    const decimals = /,\d{2}$/.test(raw);
+    // A unit after the figure makes its last group a count of its own ("100 365 days", "250 120 nights").
+    if (UNIT_AFTER.test(after)) continue;
     // Two columns a single space apart join into one run ("EUR 250 100 000", "EUR 100 000 200 000"), and by its figures
     // alone the split is not known: a run of four or more groups, or of three whose first group has three digits, reads
-    // nothing whole (TE #333). "1 200 000" and "12 500 000" read whole; a sum of a hundred million or more in a market
-    // that groups with spaces is rare, and the cost is only that no figure shows.
-    // Beside a currency, such a run prints nothing at all, not even its pieces ("Room 250 120 000 EUR" prints no 120).
-    // A currency after the figure is the next figure's when a figure follows it ("Member ID 123 456 EUR 50 000").
-    const signAfter = sign(after.match(SIGN_AFTER)) && !/^[ \u00a0\u202f]?\S+[ \u00a0\u202f]?\d/.test(after);
+    // nothing whole (TE #333). Beside a space-grouping currency such a run prints nothing at all, not even its pieces
+    // ("Room 250 120 000 EUR" prints no 120); elsewhere its pieces read as before.
     const groups = raw.split(",")[0].split(/[ \u00a0\u202f]/);
     if (groups.length >= 4 || (groups.length === 3 && groups[0].length === 3)) {
-      if (signAfter || sign(before.match(SIGN_BEFORE))) spans.push([at, at + raw.length]);
+      if (signed) spans.push([at, at + raw.length]);
       continue;
     }
+    // Two groups of three digits ("150 250 €") may be two columns too; read whole only when the last group is a round
+    // thousand ("EUR 150 000") or a comma decimal closes it.
+    if (groups.length === 2 && groups[0].length === 3 && groups[1] !== "000" && !decimals) continue;
     // A currency after the figure is no scale word ("1 500 000 Kč" is koruna, not thousands); any other scale word after
     // it reads nothing whole.
     if (!signAfter && !new RegExp("^" + NO_SCALE_AFTER).test(after)) continue;
-    if (!sign(before.match(SIGN_BEFORE)) && !signAfter && !/,\d{2}$/.test(raw)) continue;
+    if (!signed && !decimals) continue;
     const [whole, cents] = raw.split(",");
     const n = Number(whole.replace(/[ \u00a0\u202f]/g, "") + (cents ? "." + cents : ""));
     if (!Number.isFinite(n)) continue;

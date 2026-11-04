@@ -52,6 +52,15 @@ t("1'250'000 needs no currency", has("Todesfallkapital\t1'250'000", 1_250_000));
 t("a lone apostrophe group with no currency is no figure", !has("Art. 12'000", 12_000));
 // A currency after a figure belongs to the next figure when one follows it.
 t("Member ID 123 456 EUR 50 000 prints no 123,456", !has("Member ID 123 456 EUR 50 000", 123_456) && has("Member ID 123 456 EUR 50 000", 50_000));
+// Comma-grouping markets: plan columns a space apart stay separate figures (Critic #333 H1).
+for (const [text, keep, never] of [
+  ["Daily room S$ 150 250 350", [150, 250, 350], 150_250_350], ["Room and board RM 200 300 per day", [200, 300], 200_300],
+  ["Hospital cash S$ 100 365 days", [100, 365], 100_365], ["Surgery 500 750 SGD", [500, 750], 500_750],
+  ["Zimmer 150 250 €", [150, 250], 150_250], ["Room USD 200 300 per day", [200, 300], 200_300],
+  ["Krankenhaus EUR 100 365 Tage", [100, 365], 100_365], ["Rp 1 500 000", [], 1_500_000],
+] as [string, number[], number][]) t(`${text}: separate figures`, keep.every((v) => has(text, v)) && !has(text, never), numbersIn(text));
+t("EUR 150 000 is still one figure", has("Capital EUR 150 000", 150_000) && !has("Capital EUR 150 000", 150));
+t("150 250,00 € is one figure", has("Zimmer 150 250,00 €", 150_250));
 t("a currency after the figure, then words, still counts", has("Capital décès 80 000 € par sinistre", 80_000));
 // Other groupings unchanged.
 t("comma grouping unchanged", has("Sum assured\tS$600,000", 600_000));
