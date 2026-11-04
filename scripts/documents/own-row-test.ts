@@ -30,5 +30,15 @@ test("a row whose amount stops mid-phrase still takes the rest from the line bel
   const got = rows("POLICY SCHEDULE\n\nRoom and board\tS$250 per day\nHearing Loss in\t15% of the Sum Insured, up to\nOne Ear\tof S$10,000\nAnnual limit\tS$150,000");
   assert.ok(got.some(([, v]) => /15% of the Sum Insured, up to of S\$10,000|15% of the Sum Insured, up to S\$10,000|15% of the Sum Insured, up to\s+of S\$10,000/.test(v)), JSON.stringify(got));
 });
+// A printed qualifier line is never dropped: it finishes the row above or is a row of its own (Critic M1 on #342).
+for (const [first, second, piece] of [
+  ["Medical expenses\tUp to S$5,000", "Including Physiotherapy\tsub-limit S$500", "S$500"],
+  ["Hospitalisation\tUp to S$1,000", "Per Policy Year\t(S$300 per visit)", "S$300 per visit"],
+  ["Daily hospital cash\tS$200 per day", "In ICU\tdouble, up to S$400 per day", "S$400 per day"],
+  ["Accidental Death\tS$600,000", "Benefit\t(S$1,200,000 if on public transport)", "S$1,200,000"],
+] as const) test(`the qualifier "${second.replace("\t", " | ")}" stays in the reading`, () => {
+  const got = rows(`POLICY SCHEDULE\n\n${first}\n${second}\nAnnual limit\tS$150,000`);
+  assert.ok(got.some(([l, v]) => (l + " " + v).includes(piece)), JSON.stringify(got));
+});
 console.log(`own row: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
