@@ -749,7 +749,7 @@ const FAMILY_WORDS = /\b(?:wife|husband|spouse|partner|son|sons|daughter|daughte
 export function namesSomeone(said: string[], household: Household): boolean {
   const text = said.join(" ").normalize("NFKC").toLowerCase();
   if (FAMILY_WORDS.test(text)) return true;
-  const words = (n: string) => baseName(n).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 3);
+  const words = (n: string) => baseName(n).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
   const people = household.members.map((m) => m.name);
   const heard = new Set(text.split(/[^\p{L}]+/u));
   // Any word of a member's name, shared or not: "Is Tan covered?" names one of several Tans (Critic #345).
@@ -770,21 +770,23 @@ const POLICY_NOUN = /^(?:polic(?:y|ies)|plans?|schemes?|group|insurers?|insuranc
  * family word, not the speaker alone, no third-person pronoun, no possessive "'s" on anything but the policy, and every
  * "the …" or "our …" is the policy itself ("our helper", "the maid", "the employee", "the boy" point at someone). */
 export function asksForNobody(said: string[], household: Household, rows: readonly ChatRow[] = []): boolean {
-  const text = said.join(" ").normalize("NFKC").replace(/[’`]/g, "'");
+  // "Tell me", "show me", "give me" ask for the answer, not about the speaker (TE #345).
+  const text = said.join(" ").normalize("NFKC").replace(/[’`]/g, "'").replace(/\b(?:tell|show|give)\s+me\b/gi, "tell");
   if (namesSomeone(said, household) || FIRST_PERSON.test(text) || ONE_PERSON.test(text)) return false;
-  for (const m of text.matchAll(/\b([\p{L}]+)'s?\b/gu)) if (/'s?$/.test(m[0]) && !POLICY_NOUN.test(m[1])) return false;
-  for (const m of text.matchAll(/\b(?:the|our|this|that|these|those)\s+([\p{L}]+)/giu)) if (!POLICY_NOUN.test(m[1])) return false;
-  if (MANY_PEOPLE.test(text)) return true;
-  // About the policy alone: every word is a question, policy or pay word, or a word of a benefit's or product's name the
-  // household holds ("How much hospital cash does the group policy pay?"). Any other word ("grandson", "mak") may be a
-  // person, so no (Critic #345).
+  // The words of the benefits, products and covers the household holds: "the ambulance benefit" is about the policy.
   const own = new Set(rows.flatMap((r) => `${r.benefit} ${r.product ?? ""} ${r.cover ?? ""}`.toLowerCase().split(/[^\p{L}\d]+/u)).filter((w) => w.length >= 3));
+  const policyWord = (w: string) => POLICY_NOUN.test(w) || own.has(w.toLowerCase());
+  for (const m of text.matchAll(/\b([\p{L}]+)'s?\b/gu)) if (/'s?$/.test(m[0]) && !policyWord(m[1])) return false;
+  for (const m of text.matchAll(/\b(?:the|our|this|that|these|those)\s+([\p{L}]+)/giu)) if (!policyWord(m[1])) return false;
+  // Several people, or the policy alone: every word is a question, policy, pay or several-people word, or a word of a
+  // benefit's or product's name the household holds ("How much hospital cash does the group policy pay?", "Who gets
+  // hospital cash?"). Any other word ("grandson", "mak", "junior", "maid") may be a person, so no (Critic #345).
   const words = text.toLowerCase().split(/[^\p{L}\d']+/u).filter(Boolean);
   return words.length > 0 && words.every((w) => POLICY_ONLY_WORDS.has(w) || own.has(w));
 }
-const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does do the a an can will would pay pays paid payout payable claim claimable cover covers covered "
+const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does do the a an can will would pay pays paid payout payable claim claimable cover covers covered tell "
   + "coverage plan plans policy policies scheme group insurance insurer benefit benefits amount amounts sum get gets give gives for of on under from in per day year total "
-  + "most maximum max limit there any which").split(" "));
+  + "most maximum max limit there any which we our ours us everyone everybody each both all who whose anyone anybody person family day days").split(" "));
 /** `forNobody`: the chat is about no one in particular and the household's words ask for nobody (asksForNobody). Then a
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
