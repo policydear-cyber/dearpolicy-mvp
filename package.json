@@ -78,6 +78,7 @@
     "policies:index": "node --import tsx scripts/build-benefit-catalog.ts",
     "policies:report": "node --import tsx scripts/policy-linkage-report.ts",
     "policies:cut-name-test": "node --import tsx scripts/policies/cut-name-test.ts",
+    "policies:paid-monthly-test": "node --import tsx scripts/policies/paid-monthly-test.ts",
     "policies:home-view-test": "node --import tsx scripts/policies/home-view-test.ts",
     "claims:test": "node --import tsx scripts/claim-smoke.ts",
     "claims:table-test": "node --import tsx scripts/claim-table-benefits-regressions.ts",

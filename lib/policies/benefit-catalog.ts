@@ -1,5 +1,6 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { replacedFigures } from "./amendments";
+import { paidMonthly } from "./paid-monthly";
 import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-failures";
 import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
@@ -1279,10 +1280,13 @@ export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"
     // A share its passage caps is said with the cap in the same line: "20% of the sum insured" alone reads as 20% of a
     // large plan, when the passage pays at most its printed cap (the same cap assessCatalogBenefit pays up to).
     const bound=benefit.reviewedAt||benefit.quote==null?{kind:"none" as const}:shareBound(benefit.quote,benefit.benefitName);
-    return (Math.round(value*1000)/10)+"% of the sum insured on your schedule"+(bound.kind==="cap"?", up to "+formatMoney(bound.amount,bound.currency):"");
+    // A share paid every month says so ("One twelfth of Sum Insured" under "Monthly Disability Income"): read as one
+    // payment it understated a monthly income. Only when the row's own words say monthly (paidMonthly fails closed).
+    const monthly=paidMonthly(benefit.benefitName,benefit.quote);
+    return (Math.round(value*1000)/10)+"% of the sum insured on your schedule"+(monthly?", paid each month":"")+(bound.kind==="cap"?", up to "+formatMoney(bound.amount,bound.currency):"")+(bound.kind==="cap"&&monthly?" a month":"");
   }
   if(benefit.formulaKind==="fixed"&&value!=null)
-    return money(value,currency);
+    return money(value,currency)+(paidMonthly(benefit.benefitName,benefit.quote)?" a month":"");
   if(benefit.formulaKind==="expense_cap"&&value!=null)
     return "Reimburses "+(benefit.factKey?"the ":"")+factKeyLabel(benefit.factKey)+", up to "+money(value,currency);
   if(benefit.formulaKind==="daily"&&value!=null){
