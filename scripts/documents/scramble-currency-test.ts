@@ -87,3 +87,17 @@ test("a date is never an amount, and a run that prints a decimal-only figure is 
   // Dates among amounts do not hide the amounts.
   assert.ok(scrambleSigns(scrambled(["01.10.2026", "12,000.00", "1,500.00", "400.00"])).includes(SIGN));
 });
+
+test("a figure printed with its own currency is never a rate, and a percentage is no evidence of rates (TE #330)", () => {
+  for (const values of [
+    ["Rp 250.000", "Rp 750.000", "Rp 500.000", "2.5%"],
+    ["Rp 250.000", "Rp 750.000", "Rp 500.000", "0.5"],
+    ["250.000 đ", "750.000 đ", "500.000 đ", "1.25"],
+    ["€ 1.500", "€ 2.500", "€ 4.000", "0.75"],
+    ["1.500", "2.500", "4.000", "12.5%"], // a percent beside bare dot groups: they stay thousands
+  ]) assert.ok(scrambleSigns(scrambled(values)).includes(SIGN), values.join(" "));
+  // Labels in any script count: Vietnamese labels have no three Latin letters in a row.
+  assert.ok(scrambleSigns(["Bảng quyền lợi", "Nằm viện", "Phẫu thuật", "Chuyên khoa", "Hệ số", "250.000 đ", "750.000 đ", "500.000 đ", "1.25"].join("\n")).includes(SIGN));
+  // A rate card with a decimal-only figure and no currency stays rates.
+  assert.deepEqual(scrambleSigns(scrambled(["1.235", "2.450", "3.875", "0.925"])), []);
+});

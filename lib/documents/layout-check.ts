@@ -24,12 +24,16 @@ const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d
 // A dotted figure no thousands grouping prints: a leading 0 ("0.925") or a group not of three digits ("2.45", "1.2").
 const ONLY_DECIMAL = /(?<![\d.,])(?:0\.\d+|\d+\.(?:\d{1,2}|\d{4,}))(?![\d.,])/;
 const ONE_DOT_GROUP = /(?<![\d.,])\d{1,3}\.\d{3}(?![\d.,])/g;
-/** Whether a value line prints an amount. A date is never one ("01.10.2026" is a date, not "01.10"; TE #329), and in a
- * run that is rates, one dot group is a rate. */
+/** Whether a value line prints an amount. A date is never one ("01.10.2026" is a date, not "01.10"; TE #329). In a run
+ * that is rates, one dot group on a line with no currency is a rate; a figure printed with its own currency is always an
+ * amount ("Rp 250.000" beside "2.5%" is still rupiah, TE #330). */
 function amountOn(line: string, rates: boolean): boolean {
   const bare = line.replace(new RegExp(DATE, "gi"), " ");
-  return AMOUNT.test(rates ? bare.replace(ONE_DOT_GROUP, " ") : bare);
+  return AMOUNT.test(rates && !hasCurrency(line) ? bare.replace(ONE_DOT_GROUP, " ") : bare);
 }
+/** Rates evidence: a figure only a decimal can be, on a line that prints no currency and no percent sign (a percentage
+ * says what it is, and tells nothing about the amounts beside it; TE #330). */
+const ratesEvidence = (line: string) => !hasCurrency(line) && !line.includes("%") && ONLY_DECIMAL.test(line.replace(new RegExp(DATE, "gi"), " "));
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
@@ -39,9 +43,14 @@ const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
  * labels came out before their values was never seen as scrambled (TE #324). Closed lists: any other word keeps the
  * line a label line. */
 const ISO_CURRENCIES = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY"]);
-const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh"]);
+const LOCAL_CURRENCY_FORMS = new Set(["RM", "Rp", "Rs", "kr", "Kr", "zł", "Kč", "Ft", "lei", "TL", "KSh", "Ksh", "đ"]);
 // The letters a market prints before its symbol, a closed list (Critic #329 L3): "MAX$1,500" stays a label line.
 const CURRENCY_MARK = /(?<![A-Za-z])(?:S|US|HK|A|AU|NZ|NT|R|C|CA|MX|N|J|B|BZ|T|TT|Z|RD|CI|EC|FJ|G|GY|L|SI|SG)?\p{Sc}/gu;
+/** Whether a line prints a currency: a symbol (with its market's letters), an ISO code, or a market's own short form. */
+function hasCurrency(line: string): boolean {
+  if (new RegExp(CURRENCY_MARK.source, "u").test(line)) return true;
+  return (line.match(/[\p{L}]+/gu) ?? []).some((w) => ISO_CURRENCIES.has(w) || LOCAL_CURRENCY_FORMS.has(w));
+}
 const NUMBERS_ONLY = {
   test(line: string): boolean {
     const bare = line.replace(CURRENCY_MARK, " ").replace(/[\p{L}]+\.?/gu, (word) => {
@@ -52,7 +61,9 @@ const NUMBERS_ONLY = {
     return /^[\s\d,.'’\-–—%]*\d[\s\d,.'’\-–—%]*$/.test(bare);
   },
 };
-const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && /[A-Za-z]{3}/.test(line);
+// Letters of any script count: Vietnamese "Nằm viện" or "Hệ số" has no three Latin letters in a row, so its labels were
+// never seen and its scrambled table never checked (TE #330).
+const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && (line.match(/\p{L}/gu) ?? []).length >= 3;
 
 /** Signs that a page's table text came out scrambled: glued figures, or a run of labels with no figures followed by a run
  * of lines holding only figures (labels read before values). */
@@ -66,7 +77,7 @@ export function scrambleSigns(text: string): string[] {
     let values = 0;
     while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) values++;
     const run = lines.slice(i + labels, i + labels + values);
-    const rates = run.some((l) => ONLY_DECIMAL.test(l.replace(new RegExp(DATE, "gi"), " ")));
+    const rates = run.some(ratesEvidence);
     const amounts = run.filter((l) => amountOn(l, rates)).length;
     // A table's own column header over its rows ("Age  Male  Female" over "35  120.50  110.20") is not scrambled, and
     // a contents list's page numbers are not amounts (TE U-F2).
