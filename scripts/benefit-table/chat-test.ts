@@ -93,6 +93,13 @@ test("a chat for nobody in particular names every insured person's own card for 
   assert.deepEqual(who(answer([hip("Tan Mei Ling")], rows, true)), ["Lim Ah Kow: S$450,000", "Tan Mei Ling: S$150,000"]);
   // Given once each when the model already gave both.
   assert.deepEqual(who(answer([amb("Lim Ah Kow"), amb("Tan Mei Ling")], rows, true)), ["Lim Ah Kow: Up to S$500", "Tan Mei Ling: Up to S$500"]);
+  // A person's own card from the model, with its own conditions, is never replaced by one spread from an earlier card.
+  const per = { text: "Paid once per incident.", quote: "Up to S$500 per incident" };
+  const conds = (r: ReturnType<typeof answer>, person: string) => r.statements.filter((x) => x.amount && x.personName === person).map((x) => (x.conditions ?? []).map((c) => typeof c === "string" ? c : (c as { text: string }).text));
+  assert.deepEqual(conds(answer([amb("Lim Ah Kow"), { ...amb("Tan Mei Ling"), conditions: [per] }], rows, true), "Tan Mei Ling"), [[per.text]]);
+  // A spread card takes the model's conditions for the same benefit, but never one that names a member.
+  const both = answer([{ ...amb("Lim Ah Kow"), conditions: [per, { text: "Lim Ah Kow must be the one injured.", quote: "Up to S$500 per incident" }] }], rows, true);
+  assert.deepEqual(conds(both, "Tan Mei Ling"), [[per.text]], JSON.stringify(both.statements));
   // A chat about one person, or a question naming one, keeps to the card asked for.
   assert.deepEqual(who(answer([amb("Lim Ah Kow")])), ["Lim Ah Kow: Up to S$500"]);
   // A row printed for a qualified column ("Child", an employee-only column) is never spread to another person.

@@ -837,6 +837,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
+  // Every row the model itself gives a card for: a person's own card from the model (with its own conditions) is never
+  // replaced by a spread one made from another person's card (forNobody).
+  const modelRows = pointed.flatMap((x) => { const r = x && x.kind === "amount" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined; return r ? [r] : []; });
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
@@ -939,7 +942,13 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // The same row of every other member, when the chat is for nobody in particular (forNobody).
     const others = forNobody ? rows.filter((o) => o.personId !== row.personId && !given.has(o.id) && !ruledOut.has(o.id) && o.docIndex === row.docIndex
       && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
-      && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+      && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
+      && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    // A spread card is the same benefit on the same page, so the model's conditions for it hold for every holder; one that
+    // names any member is said only for the person it was given for.
+    const memberWords = household.members.flatMap((m) => m.name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 2));
+    const sharedConditions = (Array.isArray(raw.conditions) ? raw.conditions as { text?: unknown }[] : [])
+      .filter((c) => typeof c?.text === "string" && !c.text.toLowerCase().split(/[^a-z]+/).some((w) => memberWords.includes(w)));
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -947,7 +956,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // A total limit's card always says what the limit is printed for (its sentence), whatever the model gave: its name
       // alone ("Limit in total on Critical Illness Benefit claims") would leave out a scope such as early stages only.
       const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
-      const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
+      const spread = others.includes(r) ? [...own, ...sharedConditions.filter((c) => !own.some((k) => k.text.toLowerCase().replace(/\.$/, "") === String(c.text).trim().toLowerCase().replace(/\.$/, "")))] : null;
+      const conditions = spread ?? (r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined);
       const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || others.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
       // A printed cover period never changes what a card says: every policy on file is treated as in force (DC, 31 Oct).
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out

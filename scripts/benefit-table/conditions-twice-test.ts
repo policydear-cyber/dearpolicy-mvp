@@ -82,7 +82,8 @@ const cards = (st: Shown[]) => st.filter((x) => x.amount).map((x) => [x.personNa
 void (async () => {
   await test("a condition the card itself shows is not said again under it (live run 25 Oct)", async () => {
     const st = await turn([{ row: rowOf("Lim Ah Kow", "Ambulance Cost").id, person: "Lim Ah Kow", conditions: [NEEDS] }]);
-    assert.deepEqual(cards(st), [["Lim Ah Kow", "Up to S$500", [NEEDS.text]]], JSON.stringify(st));
+    // Nobody is named, so the same card is given for the other holder too (walkthrough gap 2), with the same condition.
+    assert.deepEqual(cards(st), [["Lim Ah Kow", "Up to S$500", [NEEDS.text]], ["Tan Mei Ling", "Up to S$500", [NEEDS.text]]], JSON.stringify(st));
     assert.deepEqual(points(st), [], JSON.stringify(st));
   });
   await test("the same for two people's cards: the shared point goes when both cards show it", async () => {
