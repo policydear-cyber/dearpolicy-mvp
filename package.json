@@ -6,6 +6,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "ledger:injury-cause-test": "node --import tsx scripts/ledger/injury-cause-test.ts",
     "chat:kin-words-test": "node --import tsx scripts/chat/kin-words-test.ts",
     "dev": "next dev",
     "build": "next build",

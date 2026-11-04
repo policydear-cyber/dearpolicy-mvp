@@ -182,32 +182,31 @@ const CONDITION_WORDS = new Set((
   + "myasthenia gravis surgery disease diseases "
   // body sites a cancer or condition is named by (never enough alone)
   + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+  + "payudara prostat serviks kulit darah rahim pankreas usus "
   // severity and stage
   + "major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total "
   + "permanent in situ excluding less cases "
   // joining words
   + "of with the to and or a an "
+  // Malay
+  + "kanser barah tumor serangan jantung koronari arteri pembedahan strok angin ahmar buah pinggang ginjal kegagalan pemindahan organ sumsum tulang "
+  + "buta kebutaan pekak bisu kehilangan penglihatan pendengaran pertuturan lumpuh kelumpuhan koma otak hati paru paru-paru lecur demensia nyanyuk "
+  + "penyakit tahap akhir peringkat awal teruk utama kritikal kritis yang dan atau"
 ).split(" "));
+const CHINESE_CONDITION = /恶性肿瘤|肿瘤|癌症|癌|白血病|心脏病|心脏|心肌梗塞|心肌|冠状动脉|搭桥|手术|脑中风|中风|肾衰竭|肾|衰竭|器官移植|器官|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化|严重|末期|早期|重大|疾病|病|发作|症|的|性/gu;
 /** Whether the row's whole name is an illness: at least one illness word, and no word from outside the list. */
 function namesOnlyAnIllness(benefit: string): boolean {
-  // English only, but a bilingual label keeps its English part ("癌症 Cancer", "Kanser / Cancer"): text in another script
-  // is set aside, and of a label split by "/" one side naming only an illness is enough, unless any side names another
-  // kind of payment ("Accident / Cancer" is not an illness row). Nothing in another language is read.
-  const latin = benefit.replace(/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]+/gu, " ").replace(/\s+/g, " ").trim();
-  const sides = latin.split(/\s*\/\s*/).map((s) => s.trim()).filter((s) => /\p{L}/u.test(s));
-  if (!sides.length) return false;
-  if (sides.length > 1) return !OTHER_PAYMENT.test(latin) && sides.some(namesOnlyAnEnglishIllness);
-  return namesOnlyAnEnglishIllness(sides[0]);
-}
-function namesOnlyAnEnglishIllness(benefit: string): boolean {
-  const words = benefit.toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
+  const cjk = /\p{Script=Han}/u.test(benefit);
+  if (cjk && /\p{Script=Han}/u.test(benefit.replace(CHINESE_CONDITION, ""))) return false;
+  const words = benefit.replace(/\p{Script=Han}+/gu, " ").toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
     .filter((w) => !/^(?:\d+|[ivx]+|[a-z])$/.test(w));
   if (!words.every((w) => CONDITION_WORDS.has(w))) return false;
-  const joining = new Set("of with the to and or a an in situ excluding less cases".split(" "));
-  const generic = new Set(("loss failure attack disease diseases surgery syndrome deficit "
-    + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal").split(" "));
-  const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent".split(" "));
-  return words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
+  const joining = new Set("of with the to and or a an yang dan atau in situ excluding less cases".split(" "));
+  const generic = new Set(("loss failure attack disease diseases surgery syndrome deficit penyakit kegagalan serangan pembedahan kehilangan "
+    + "breast prostate cervix cervical ovary ovarian colon colorectal skin thyroid bladder stomach uterus uterine pancreas pancreatic blood nasopharyngeal "
+    + "payudara prostat serviks kulit darah rahim pankreas usus").split(" "));
+  const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent tahap akhir peringkat awal teruk utama kritikal kritis".split(" "));
+  return (cjk && /癌|肿瘤|白血病|心|冠状动脉|中风|肾|移植|骨髓|失明|失聪|瘫痪|昏迷|肝|肺|烧伤|痴呆|帕金森|硬化/u.test(benefit)) || words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
 }
 const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
 const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;

@@ -465,12 +465,20 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
+/** A row named for an accident: "accident", or an injury ("Death due to Injury") when the name names no illness ("injury
+ * or illness" is either cause) and the injury is not negated ("other than by injury"). (TE #343: "Death due to Injury"
+ * read as any death, so an accident-only sum would count toward a death from illness.) */
+function namesAccident(n:string){
+  if(/\baccident/.test(n))return true;
+  return /(?<!\b(?:other than|not|excluding|except|exclusive of)\s+(?:due to\s+|caused by\s+|by\s+|from\s+|an?\s+)?)\binjur(?:y|ies)\b/.test(n)
+    &&!/\b(?:illness|sickness|disease)/.test(n);
+}
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
   // An income paid while unable to work is its own benefit, not the total and permanent disability lump sum.
   if(/disability income|income (?:protection|replacement)|loss of income|salary continuance/.test(n))return {event:"disability_income",detail:name};
-  const accident=/\baccident/.test(n);
+  const accident=namesAccident(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
   if(/\b(?:total (?:and|&) permanent|tpd|permanent (?:total )?disab)/.test(n))return {event:accident?"accidental_disablement":"tpd",detail:null};
@@ -503,7 +511,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
  * Recuperation" pays for a hospital stay, but only one an accident caused. */
 export function causeForBenefit(name:string,requires:string[]=[]):"accident"|"illness"|null{
   const n=withoutNegatedAccident(name).toLowerCase();
-  if(requires.includes("accident")||/\baccident/.test(n))return "accident";
+  if(requires.includes("accident")||namesAccident(n))return "accident";
   if(requires.includes("illness")||/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n))return "illness";
   return null;
 }

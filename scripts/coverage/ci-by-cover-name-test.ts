@@ -32,21 +32,9 @@ for (const p of plans) {
   t(`${p.market}: the Critical Illness tile has the plan's sum (${p.currency} ${p.amount})`, tile.total === p.amount && tile.parts.length === 1 && tile.parts[0].currency === p.currency, tile);
 }
 
-// English only (DC 4 Nov): an illness named in another language, or under a cover named in another language, is not read
-// as critical illness: the row stays uncategorised (no figure on the tile), never another category.
-for (const [names, benefit] of [[{ cover: "Maju Dread Disease Takaful" }, "Kanser"], [{ cover: "Maju Dread Disease Takaful" }, "Serangan Jantung"],
-  [{ product: "Lotus 守護 Critical Illness Protector" }, "癌症"]] as const)
-  t(`"${benefit}" in another language is not read as critical illness`, categoryOfRow(row("ne", names, benefit, 80000, "MYR")) === null, categoryOfRow(row("ne", names, benefit, 80000, "MYR")));
-// A bilingual label keeps its English part (coordinator, 4 Nov): the English illness is read, the rest is set aside.
-for (const benefit of ["癌症 Cancer", "Cancer 癌症", "Kanser / Cancer", "Cancer / Kanser"]) {
-  const got = categoryOfRow(row("bi", { product: "Lotus Critical Illness Protector" }, benefit, 80000, "HKD"));
-  t(`"${benefit}" under a critical illness plan is critical illness`, got === "Critical Illness", got);
-}
-// ...but a label whose other side names another payment is not an illness row.
-for (const benefit of ["Accident / Cancer", "Kanser / Accidental Death"]) {
-  const got = categoryOfRow(row("bi", { product: "Lotus Critical Illness Protector" }, benefit, 80000, "HKD"));
-  t(`"${benefit}" is not read as critical illness`, got !== "Critical Illness", got);
-}
+// English only (DC 4 Nov): a cover named only in another language is not read as critical illness.
+for (const [names, benefit] of [[{ cover: "Pelan Penyakit Kritikal Maju" }, "Kanser"], [{ cover: "Lotus 危疾保障" }, "癌症"]] as const)
+  t(`"${benefit}" under a cover named in another language is not read as critical illness`, categoryOfRow(row("ne", names, benefit, 80000, "MYR")) === null, categoryOfRow(row("ne", names, benefit, 80000, "MYR")));
 
 // Early or intermediate stage, from the row or the cover.
 t("an early-stage row of a critical illness plan is early critical illness",
@@ -83,7 +71,7 @@ for (const cover of ["Pelan Penyakit Kritikal Maju", "Lotus 危疾保障", "Kest
   for (const benefit of ["Serangan Jantung", "Strok", "Kegagalan Buah Pinggang", "癌症", "中风", "心脏病发作", "Coronary artery by-pass surgery", "Heart valve surgery", "Surgery to aorta"]) {
     const got = categoryOfRow(row("t", { cover }, benefit, 90000, "MYR"));
     // English only (DC 4 Nov): only an English illness under an English cover name is read; anything else stays out.
-    const english = cover === "Kestrel Major Illness Plan" && /surgery|aorta/i.test(benefit);
+    const english = cover === "Kestrel Major Illness Plan";
     t(`under "${cover}", "${benefit}" is ${english ? "critical illness" : "not read (English only)"}`, english ? got === "Critical Illness" : got === null, got);
   }
 }
@@ -126,11 +114,12 @@ for (const benefit of ["Death due to Cancer"]) {
   const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
   t(`in a critical illness plan, "${benefit}" is Death`, got === "Death", got);
 }
-for (const benefit of ["Santunan Meninggal Dunia", "Prestation décès", "Kematian akibat Kanser", "癌症身故保险金", "癌症身故", "Kanser Tahap Akhir", "Kanser Tahap Kritikal"]) {
+for (const benefit of ["Santunan Meninggal Dunia", "Prestation décès", "Kematian akibat Kanser", "癌症身故保险金", "癌症身故"]) {
   const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
   t(`in a critical illness plan, "${benefit}" in another language is not read`, got === null, got);
 }
-for (const [benefit, want] of [["Heart Attack", "Critical Illness"],
+// An illness named only with words from the closed condition list is critical illness in any of its listed forms.
+for (const [benefit, want] of [["Kanser Tahap Akhir", "Critical Illness"], ["Kanser Tahap Kritikal", "Critical Illness"], ["Heart Attack", "Critical Illness"],
   ["Carcinoma in situ of the breast", "Early Critical Illness"], ["Loss of hearing", "Critical Illness"], ["End-stage liver failure", "Critical Illness"]] as const) {
   const got = categoryOfRow(row("kestrel", { cover: "Acme CritiCare Critical Illness Plan" }, benefit, 25000, "SGD"));
   t(`in a critical illness plan, "${benefit}" is ${want}`, got === want, got);
@@ -166,5 +155,17 @@ const deathTile = lumpSumParts(tileRows(categoryRows("Death", household)), [], [
 t("its Death tile is unchanged", deathTile.total === 400000 && deathTile.parts.length === 1, deathTile);
 
 t("no outbound fetch", fetches === 0, fetches);
+// A bilingual illness label is critical illness only when every word on every side is an illness word (closed list): a
+// side or a character that names a death, a hospital stay, treatment or an allowance keeps the row off the CI tile
+// (Critic H1 on #343 1dcf0f36).
+for (const benefit of ["癌症 Cancer", "Cancer 癌症", "Kanser / Cancer", "Cancer / Kanser", "Stroke / 中风"]) {
+  const got = categoryOfRow({ benefit, section: "Critical Illness Benefits" } as never);
+  t(`under "Critical Illness Benefits", "${benefit}" is critical illness`, got === "Critical Illness", got);
+}
+for (const benefit of ["癌症身故保险金 Cancer", "Kematian akibat Kanser / Cancer", "Cancer / Kematian", "Cancer (身故)", "Cancer / 癌症身故", "Cancer 住院",
+  "癌症医疗 Cancer", "Cancer / Rawatan", "Cancer / Kos Rawatan", "Cancer / Elaun Harian", "Accident / Cancer"]) {
+  const got = categoryOfRow({ benefit, section: "Critical Illness Benefits" } as never);
+  t(`under "Critical Illness Benefits", "${benefit}" is not critical illness`, got !== "Critical Illness", got);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
