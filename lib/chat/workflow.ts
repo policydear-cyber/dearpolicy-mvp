@@ -112,7 +112,7 @@ import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { answerPolicyQuestion,conciseDetails,withoutListedLimitCards,FULL_LIST,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
 import { printedRuleLines } from "./printed-rules";
-import { conversationalReply,dishonestReply } from "./conversational";
+import { conversationalReply,dishonestReply,notEnglish } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM,dependantPremiumAnswer,DEPENDANT_PREMIUM_QUESTION } from "./premium-answer";
 import { registryAnswer, otherPoliciesOnFile } from "./registry-answers";
@@ -369,9 +369,12 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
       WHERE p.account_id=$1 AND p.processing_status='ready' AND ${activePredicate("p")} GROUP BY p.id,p.product_name,p.insurer`,[request.accountId]).catch(()=>({rows:[] as {product_name:string|null;insurer:string|null;owners:string[]|null}[]}))).rows;
   if(!request.personChoiceId){
     const typed=request.question;
-    let words=householdWords(typed);
+    // A message not in English is left as typed, so the chat says it answers in English (TE #343: a spelling fix turned
+    // "insurans" into "insurance" and the Malay question was then answered as a "not found").
+    const foreign=notEnglish(typed);
+    let words=foreign?typed:householdWords(typed);
     // Round 15: "endownment premuim", "equlife endorsment": insurance words and the household's own plan names, spelt right.
-    words=correctTypos(words,[...new Set(policyRows.flatMap(r=>[r.product_name,r.insurer]).filter((n):n is string=>!!n))]);
+    if(!foreign)words=correctTypos(words,[...new Set(policyRows.flatMap(r=>[r.product_name,r.insurer]).filter((n):n is string=>!!n))]);
     const asked=policyNumberAsked(words);
     if(asked){
       const numbered=(await query<{id:string;policy_number:string|null;product_name:string|null;owners:string[]|null}>(`SELECT p.id::text,p.policy_number,p.product_name,(SELECT array_agg(pm.family_member_id::text) FROM policy_members pm WHERE pm.policy_id=p.id) owners FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND p.policy_number IS NOT NULL`,[request.accountId]).catch(()=>({rows:[] as {id:string;policy_number:string|null;product_name:string|null;owners:string[]|null}[]}))).rows;
