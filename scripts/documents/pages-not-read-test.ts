@@ -70,8 +70,11 @@ test("pages no reader looked at: their own note and card, never 'could not be re
   assert.equal(notMany, "Pages 3, 6 and 9 are scanned pages that have not been read yet, so anything printed only there is not available.");
   assert.equal(errors.notReadPagesNote([2, 5]), "Pages 2 and 5 are scanned pages that have not been read yet, so anything printed only there is not available.");
   for (const note of [notOne, notMany]) assert.doesNotMatch(note, /could not be read|unreadable|clearer/i);
-  assert.deepEqual(notReadPagesAdvice("Ready. " + notOne), { what: notOne, next: "Use Read again later to read it." });
-  assert.deepEqual(notReadPagesAdvice("Ready. " + notMany), { what: notMany, next: "Use Read again later to read them." });
+  assert.deepEqual(notReadPagesAdvice("Ready. " + notOne), { title: "A page hasn’t been read yet", what: notOne, next: "Use Read again later to read it." });
+  assert.deepEqual(notReadPagesAdvice("Ready. " + notMany), { title: "Some pages haven’t been read yet", what: notMany, next: "Use Read again later to read them." });
+  // One page or several, in the unreadable card's heading too (TE #332 nit).
+  assert.equal(unreadablePagesAdvice("Ready. " + one)!.title, "A page couldn’t be read");
+  assert.equal(unreadablePagesAdvice("Ready. " + many)!.title, "Some pages couldn’t be read");
   // Neither notice takes the other's sentence.
   assert.equal(unreadablePagesAdvice("Ready. " + notMany), null);
   assert.equal(notReadPagesAdvice("Ready. " + many), null);
@@ -99,5 +102,6 @@ test("the writer splits the two kinds, and the card shows the not-read one", () 
   assert.match(ingest, /notReadPagesNote\(pages\.filter\(\(p\) => p\.notRead\)/);
   const page = readFileSync("app/policies/page.tsx", "utf8");
   assert.match(page, /const unread = !processing && policy\.processing_status === "ready" \? notReadPagesAdvice\(policy\.processing_message\) : null;/);
-  assert.match(page, /\{unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>Some pages haven&rsquo;t been read yet<\/b>/);
+  assert.match(page, /\{unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>\{unread\.title\}<\/b>/);
+  assert.match(page, /\{missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>\{missing\.title\}<\/b>/);
 });

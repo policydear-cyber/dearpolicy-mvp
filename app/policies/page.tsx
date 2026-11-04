@@ -493,8 +493,8 @@ export default function PoliciesPage() {
             // Scanned pages no reader looked at: not read yet, never "couldn't be read" (#323 follow-up).
             const unread = !processing && policy.processing_status === "ready" ? notReadPagesAdvice(policy.processing_message) : null;
             return <>
-              {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>Some pages couldn&rsquo;t be read</b><span>{missing.what}</span><small>{missing.next}</small></div>}
-              {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>Some pages haven&rsquo;t been read yet</b><span>{unread.what}</span><small>{unread.next}</small></div>}
+              {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{missing.next}</small></div>}
+              {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small></div>}
               {part && <div className="accuracy-warning" data-testid="read-in-part"><b>Read in part</b><span>{part.what}</span><small>{part.next}</small></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{pending.next}</small></div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}

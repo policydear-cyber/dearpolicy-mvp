@@ -154,10 +154,12 @@ export function coverReadingPending(message: string | null | undefined): { what:
  * card showed nothing, so a household could not tell that a page of its schedule was missing. Allow-list: any other
  * wording gives null. */
 const UNREADABLE_PAGES = /(?:^|\s)((?:Page \d+|Pages \d+(?:, \d+)* and \d+) could not be read, so anything printed only there is not available\.)(?=\s|$)/;
-export function unreadablePagesAdvice(message: string | null | undefined): { what: string; next: string } | null {
+export function unreadablePagesAdvice(message: string | null | undefined): { title: string; what: string; next: string } | null {
   const found = (message ?? "").match(UNREADABLE_PAGES);
   if (!found) return null;
   return {
+    // One page or several, in the heading too (TE #332 nit).
+    title: /^Page \d/.test(found[1]) ? "A page couldn’t be read" : "Some pages couldn’t be read",
     what: found[1],
     // True whatever left the page unread (an illegible scan, scan reading off, the reading service failing on its
     // last try), and whatever else the card says: so it never blames the file, and never says the rest is used
@@ -172,9 +174,9 @@ export function unreadablePagesAdvice(message: string | null | undefined): { wha
  * Found by its own exact shape wherever it sits, like the note above. Nothing is known to be wrong with those pages, so
  * the next step never asks for a clearer copy. Allow-list: any other wording gives null. */
 const NOT_READ_PAGES = /(?:^|\s)((?:Page \d+ is a scanned page that has|Pages \d+(?:, \d+)* and \d+ are scanned pages that have) not been read yet, so anything printed only there is not available\.)(?=\s|$)/;
-export function notReadPagesAdvice(message: string | null | undefined): { what: string; next: string } | null {
+export function notReadPagesAdvice(message: string | null | undefined): { title: string; what: string; next: string } | null {
   const found = (message ?? "").match(NOT_READ_PAGES);
   if (!found) return null;
   const one = /^Page \d/.test(found[1]);
-  return { what: found[1], next: `Use Read again later to read ${one ? "it" : "them"}.` };
+  return { title: one ? "A page hasn’t been read yet" : "Some pages haven’t been read yet", what: found[1], next: `Use Read again later to read ${one ? "it" : "them"}.` };
 }
