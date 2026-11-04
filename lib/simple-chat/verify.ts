@@ -1358,7 +1358,12 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
     : onHold(d) ? `${named} is ${onHoldWords(d)}${d.holdLabel ? ` (${d.holdLabel})` : ""}, so nothing in it is used yet.`
     : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}${failedWhy(d)}`
-    : d.uncheckedPages?.length || d.partCheckedPages?.length ? `${named} was read in part:${d.uncheckedPages?.length ? ` ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
+    // Every page unreadable: nothing was read (Critic #327 L2).
+    : d.unreadablePages?.length && !d.pages.length ? `${named} could not be read: no page of it could be read, so nothing in it was used.`
+    : d.uncheckedPages?.length || d.partCheckedPages?.length || d.unreadablePages?.length ? `${named} was read in part:`
+      // A page that could not be read at all: named first, since nothing printed only there is known (#324 follow-up).
+      + `${d.unreadablePages?.length ? ` ${sentence(pageList(d.unreadablePages))} couldn't be read, so anything printed only there is not known.` : ""}`
+      + `${d.uncheckedPages?.length ? ` ${d.unreadablePages?.length ? sentence(pageList(d.uncheckedPages)) : pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
       // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
     : `${named} was read.`;
@@ -1371,7 +1376,7 @@ const failedWhy = (d: HouseholdDocument) => { const f = failureAdvice(d); return
 /** Who a file was uploaded for, when that is news: someone it is not linked to. Said of a file linked to the same person,
  * it only repeats the line before it (live 7e6d50e, E1). */
 const uploadedApart = (d: HouseholdDocument) => !!d.uploadedFor && !d.linkedPeople.some((p) => baseName(p) === baseName(d.uploadedFor!));
-const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages?.length && !d.partCheckedPages?.length;
+const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages?.length && !d.partCheckedPages?.length && !d.unreadablePages?.length;
 
 /** Points about several files, for a question about the documents: the files read in full, listed together under the
  * people each is linked to, then one sentence for each file that is news on its own (read in part, unreadable, linked to
