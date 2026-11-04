@@ -58,7 +58,16 @@ for (const [text, keep, never] of [
   ["Hospital cash S$ 100 365 days", [100, 365], 100_365], ["Surgery 500 750 SGD", [500, 750], 500_750],
   ["Zimmer 150 250 €", [150, 250], 150_250], ["Room USD 200 300 per day", [200, 300], 200_300],
   ["Krankenhaus EUR 100 365 Tage", [100, 365], 100_365], ["Rp 1 500 000", [], 1_500_000],
-] as [string, number[], number][]) t(`${text}: separate figures`, keep.every((v) => has(text, v)) && !has(text, never), numbersIn(text));
+] as [string, number[], number][]) t(`${text}: no piece and no joined figure prints`, keep.every((v) => !has(text, v)) && !has(text, never), numbersIn(text));
+// A figure counts as printed only as a whole run, never as a part of one (Critic #333 M1): which digits belong to which
+// figure is not known, in any market or grouping.
+for (const [text, never] of [
+  ["Sum assured S$ 1 500 000", [500, 1, 1_500_000]], ["Zimmer EUR 1 250 2 500", [250, 2_500, 1_250]], ["Hospital ₹ 1 50 000", [50_000, 150_000, 50]],
+  ["Sjukhus kr 2 500 3 500", [2_500, 3_500, 500]], ["Rawat inap Rp 1 500 000", [500, 1_500_000]], ["Room HK$ 500 800 1 000", [500, 800, 1_000]],
+  ["Cover US$ 100 000 200 000", [100_000, 200_000, 100]], ["Room 150.00 250.00", [150, 250]],
+] as [string, number[]][]) t(`${text}: no part of the run prints`, never.every((v) => !has(text, v)), numbersIn(text));
+t("columns parted by tabs or wider gaps still print", has("Room\tS$150\tS$250", 150) && has("Room\tS$150\tS$250", 250) && has("Plan A   150   250", 250) && has("Daily room S$150 S$250 S$350", 250));
+t("a percent or a section number is no money run", has("Section 3 100", 100) || numbersIn("Section 3 100").length > 0);
 t("EUR 150 000 is still one figure", has("Capital EUR 150 000", 150_000) && !has("Capital EUR 150 000", 150));
 t("150 250,00 € is one figure", has("Zimmer 150 250,00 €", 150_250));
 t("a currency after the figure, then words, still counts", has("Capital décès 80 000 € par sinistre", 80_000));

@@ -178,8 +178,12 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
   for (const m of text.matchAll(new RegExp(String.raw`(?<![\d.,'’]|\d[ \u00a0\u202f])(\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:,\d{1,2})?)(?![\d]|[.,'’]\d|[ \u00a0\u202f]\d)`, "g"))) {
     const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
     if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    // Any other run of space groups prints no figure but itself read whole: none of its pieces is a figure of its own
+    // (Critic #333 M1). Read as pieces, "S$ 1 500 000" printed a 500 and "RM 200 300" a 200 and a 300, and which digits
+    // belong to which is not known. Every path below that does not read the run whole therefore withholds it.
+    spans.push([at, at + raw.length]);
     // Only a currency of a market that groups thousands with spaces joins the groups (Critic #333 H1): "S$ 150 250 350",
-    // "RM 200 300" and "500 750 SGD" are plan columns a space apart, in markets that group with commas, and read as pieces.
+    // "RM 200 300" and "500 750 SGD" may be plan columns a space apart, in markets that group with commas.
     const spaceSign = (s: RegExpMatchArray | null) => !!s && SPACE_MARKET.test((s[1] ?? s[0]).trim());
     // "Member ID 123 456 EUR 50 000" reads no 123 456: two groups of three digits never join (below).
     const signAfter = spaceSign(after.match(SIGN_AFTER));
@@ -189,13 +193,9 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     if (UNIT_AFTER.test(after)) continue;
     // Two columns a single space apart join into one run ("EUR 250 100 000", "EUR 100 000 200 000"), and by its figures
     // alone the split is not known: a run of four or more groups, or of three whose first group has three digits, reads
-    // nothing whole (TE #333). Beside a space-grouping currency such a run prints nothing at all, not even its pieces
-    // ("Room 250 120 000 EUR" prints no 120); elsewhere its pieces read as before.
+    // nothing whole (TE #333).
     const groups = raw.split(",")[0].split(/[ \u00a0\u202f]/);
-    if (groups.length >= 4 || (groups.length === 3 && groups[0].length === 3)) {
-      if (signed) spans.push([at, at + raw.length]);
-      continue;
-    }
+    if (groups.length >= 4 || (groups.length === 3 && groups[0].length === 3)) continue;
     // Two groups of three digits ("150 250 €") may be two columns too; read whole only when the last group is a round
     // thousand ("EUR 150 000") or a comma decimal closes it.
     if (groups.length === 2 && groups[0].length === 3 && groups[1] !== "000" && !decimals) continue;
@@ -205,8 +205,7 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     if (!signed && !decimals) continue;
     const [whole, cents] = raw.split(",");
     const n = Number(whole.replace(/[ \u00a0\u202f]/g, "") + (cents ? "." + cents : ""));
-    if (!Number.isFinite(n)) continue;
-    figures.push(n); spans.push([at, at + raw.length]);
+    if (Number.isFinite(n)) figures.push(n);
   }
   // Swiss thousands with an apostrophe ("CHF 12'000", "12’500.50 CHF"): read whole beside a currency, or when two or more
   // groups show the grouping ("1'250'000"), and its pieces are then no figures of their own (TE #333).
@@ -217,6 +216,17 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     if (!sign(before.match(SIGN_BEFORE)) && !sign(after.match(SIGN_AFTER)) && !/^\d{1,3}(?:['’]\d{3}){2,}/.test(raw)) continue;
     const n = Number(raw.replace(/['’]/g, ""));
     if (Number.isFinite(n)) { figures.push(n); spans.push([at, at + raw.length]); }
+  }
+  // Any other run of bare figures a single space apart ("EUR 1 250 2 500", "₹ 1 50 000", "kr 2 500 3 500") is read as
+  // nothing at all: which digits belong to which figure is not known, and a piece read alone ("EUR 250") passed as
+  // printed (Critic #333 M1). Tabs and wider gaps still part columns. Not before a percent sign, nor after a section,
+  // table, year or rate word, where the pieces are no money.
+  for (const m of text.matchAll(/(?<![\d.,'’]|\d[ \u00a0\u202f])\d+(?:[.,]\d+)?(?:[ \u00a0\u202f]\d+(?:[.,]\d+)?)+(?![\d]|[.,'’]\d)/g)) {
+    const at = m.index!, end = at + m[0].length;
+    if (spans.some(([from, to]) => at < to && end > from)) continue;
+    const before = text.slice(Math.max(0, at - 24), at), after = text.slice(end, end + 12);
+    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    spans.push([at, end]);
   }
   return { figures, spans };
 }
@@ -356,7 +366,9 @@ export function dateOnPage(date: string | null, pageText: string): string | null
   if (!date) return null;
   const digits = date.match(/\d+/g);
   if (!digits) return null;
-  const page = numbersIn(pageText.replace(/[/.-]/g, " ")).map(String);
+  // Each part of a printed date is read on its own ("31 12 2025" and "31 Dec 2025" print 31, 12 and 2025): the parts are
+  // parted by tabs, so they are no space-grouped run (numbersIn reads such a run only whole).
+  const page = numbersIn(pageText.replace(/[/.-]/g, " ").replace(/(\d)[ \u00a0\u202f]+(?=\d)/g, "$1\t")).map(String);
   return digits.every((d) => page.includes(String(Number(d)))) ? date : null;
 }
 const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
