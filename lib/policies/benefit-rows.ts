@@ -144,6 +144,22 @@ export function basisForRow(bases:{index:number;basis:PercentageBasis}[],rowInde
   for(const entry of bases){if(entry.index<=rowIndex)found=entry.basis;else break;}
   return found;
 }
+/** The units after "per"/"each" that name an event or a person, never a period: a figure printed "per claim" or
+ * "each accident" is one fixed payment for that event. Closed list, whole unit only. */
+const PER_EVENT_UNIT=new RegExp(String.raw`^(?:(?:insured\s+)?(?:person|life|member|child|family)|insured|policy(?:\s+(?:year|term))?|lifetime|`
+  +String.raw`(?:(?:any\s+)?one\s+)?(?:claim|incident|accident|event|occurrence|loss|disability|injury|illness|condition|admission|confinement|`
+  +String.raw`hospitali[sz]ation|surgery|operation|visit|trip|journey|item|article|bag)s?)$`,"i");
+/** What may follow a ceiling's figure and leave it one total: nothing, or (after any punctuation) an English connector from a closed list ("for surgery", "in total", "subject to ..."); or "per"/"each"/"for each" + a
+ * PER_EVENT_UNIT. A period ("per day", "/hari", "par jour", "for every 6 hours") or an unknown word is not. */
+function capTrailerKnown(rest:string){
+  const t=rest.trim().replace(/\s+/g," ");
+  if(!t)return true;
+  const opened=/^[,;(.:]/.test(t),clause=t.replace(/^[,;(.:\s]+/,"");
+  const per=clause.match(/^(?:(?:for\s+)?(?:per|each|every)\b|\/)\s*([^,;().]*)/i);
+  if(per)return PER_EVENT_UNIT.test(per[1].trim());
+  if(opened&&!clause)return true;
+  return /^(?:for|in|under|on|during|within|subject|including|inclusive|excluding|overall|total|of|while|when|if|after|before|from|towards?|incurred|payable|paid|reimbursed|as|across|combined|aggregate|limit|maximum|max|see|refer|unless|except|provided|where|less)\b/i.test(clause);
+}
 export function parseBenefitValue(cell:string,options?:{percentageBasis?:PercentageBasis|null}):ParsedBenefitValue|null{
   const text=(cell??"").replace(/\s+/g," ").trim();
   if(!text||text.length>80)return null;
@@ -192,6 +208,10 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // "Up to S$500 per incident" — a reimbursement ceiling, never a payout.
   const cap=text.match(new RegExp(String.raw`^(?:(?:reimbursed\s+)?up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
   if(cap){
+    // A ceiling "per day" or "par jour" is a rate, not one total (finding 1, real-model run on d687296f): what follows
+    // the figure must be nothing, a clause the closed list knows, or "per"/"each" + a closed-list event. Anything else
+    // stays as printed.
+    if(!capTrailerKnown(text.slice((cap.index??0)+cap[0].length)))return null;
     const limit=amount(cap[1],text);
     if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};
   }
@@ -210,8 +230,12 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // A bare figure in the limit column.
   // "S$50,000 payable on 2040-06-01" / "payable at maturity": the figure is
   // the benefit; when it is paid stays in the quoted row.
-  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20}|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
+  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+([a-z ]{3,20})|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
   if(flat){
+    // "per <unit>" keeps a figure fixed only when the unit is a closed-list event ("per claim", "each accident"). Any
+    // other unit -- a period in another language ("per hari", "per jour"), "per hour", "per km" -- is a rate this
+    // grammar does not know, and a rate stored as a lump sum is a wrong amount, so the row stays as printed.
+    if(flat[2]!=null&&!PER_EVENT_UNIT.test(flat[2].trim().replace(/\s+/g," ")))return null;
     const value=amount(flat[1],text);
     if(value!=null)return {kind:"fixed",value,currency,basis:"the amount printed in the schedule"};
   }
