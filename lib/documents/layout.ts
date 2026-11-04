@@ -235,6 +235,7 @@ export function renderPageLayout(items:TextItem[],pageWidth:number):PageLayout{
   // exact-quote check keeps working against this text.
   return {text:lines.map(line=>line.text).join("\n"),lines};
 }
+import { WORDED_SHARE_CELL } from "@/lib/policies/word-fractions";
 /** A printed currency marker in front of an amount: a dollar sign with its
  * country prefix (S$, US$, HK$, A$ …), an ISO code (SGD, USD, EUR …), RM, € or
  * £. Only "S$"-style cells used to count, so a travel schedule printing
@@ -249,6 +250,8 @@ const VALUE_START=new RegExp(String.raw`^(?:${CURRENCY_MARKER}\s?\d|\d)`);
 const BARE_RATE=/^\d[\d,]*(?:\.\d{1,2})?\s*(?:per|\/|a)\s*(?:day|night|week|month|year)\b/i;
 function isValueCell(cell:string){
   if(cell.length<=80&&BARE_RATE.test(cell))return true;
+  // "One twelfth of Sum Insured": a share printed in words is the row's amount, on a closed list of fractions.
+  if(WORDED_SHARE_CELL.test(cell.replace(/\s+/g," ").trim()))return true;
   if(!AMOUNT.test(cell)||cell.length>80)return false;
   // "As charged, up to RM 30,000": a reimbursement with its cap is an amount cell (stored as as-charged, never a formula).
   return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from|as charged)\b/i.test(cell);
@@ -355,8 +358,17 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
         break;
       }
     }
+    // "15% of Sum Insured or" / "up to S$50,000, whichever is lesser": an amount that stops on "or" or "and" goes on in
+    // the line below when that line is only the rest of it, one cell in lower case with an amount ("up to …", "or …").
+    // Left apart, the row was stored as half a rule ("15% of Sum Insured or") and shown as not readable.
+    const restOfChoice=next===index+1&&/\b(?:or|and)$/i.test(value.trim())&&line.cells.length===1&&/^[a-z]/.test(left)
+      &&AMOUNT.test(left)&&left.length<=70;
+    if(restOfChoice){valueLine=line.text;consumed=next;valueSuffix=" "+left.replace(/\s+/g," ");break;}
     if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
+    // "th" printed on a line of its own is the raised end of an ordinal in the row below ("from the 11<sup>th</sup> day"),
+    // never part of a name: a name ending in it no longer matches its own quoted row.
+    if(/^\p{L}{1,2}$/u.test(piece))break;
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;
     // "15% of Sum Insured or" / "up to S$50,000, whichever is lesser": the
     // second line finishes the AMOUNT, not the name. Reading it as part of the
@@ -376,6 +388,9 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
     // two-column page that line belongs to the other column.
     if(!UNFINISHED.test(text)&&text.length<8)break;
     if(!UNFINISHED.test(text)&&!/^[a-z]/.test(piece)&&!/\)$/.test(piece))break;
+    // "Terminal age | Seventy (70)" under a finished name is a row of its own (a name and its own cell), never the rest
+    // of the name above.
+    if(!UNFINISHED.test(text)&&line.cells.length>=2&&/^\p{Lu}/u.test(line.cells[0]))break;
     if(text.length+piece.length+1>140)break;
     text=text+" "+piece;
   }
@@ -386,6 +401,8 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
  * is not cover and must never appear as cover. */
 const NOT_A_BENEFIT_TABLE=/pro-?ration factor|premium rate|schedule of premiums|premium table/i;
 const NEW_TABLE=/^table\s+[a-z][:.]/i;
+/** A bulleted heading or point, which starts a new part of a summary page: "• Disability Benefit Schedule". */
+const NEW_SECTION=/^[\u2022\u25aa\u25cf\u25e6\u2023\u2043]\s*\S/u;
 /** A band in a burns table -- "Equals to or greater than 10% but less than 15%".
  * The percentage in the row is a percentage of the BODY; the percentage beside
  * it is the payout. Read on its own the row means nothing, which is why the
@@ -515,7 +532,9 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     if(inTable.has(index)||consumedLines.has(index))continue;
     const whole=line.text.replace(/\s+/g," ").trim();
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
-    else if(suppressed&&NEW_TABLE.test(whole))suppressed=false;
+    // A premium table ends where the next table or the next bulleted section starts ("• Disability Benefit Schedule"):
+    // left on to the foot of the page, it hid the benefit schedule printed under the premium rates.
+    else if(suppressed&&(NEW_TABLE.test(whole)||NEW_SECTION.test(whole)))suppressed=false;
     if(suppressed)continue;
     const valueIndex=line.cells.findIndex(isValueCell);
     if(valueIndex<0||line.cells.length<2){
