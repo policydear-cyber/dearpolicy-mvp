@@ -3,6 +3,7 @@ import { refreshSupabaseSession } from "@/lib/supabase/middleware";
 import { isProduction } from "@/lib/launch/guards";
 import { checkRequestOrigin } from "@/lib/http/csrf";
 import { CORRELATION_ID_HEADER, resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { isWarmPing } from "@/lib/http/warm-ping";
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
@@ -118,6 +119,9 @@ export async function middleware(request: NextRequest) {
   // session at all -- exempt from the session requirement below for the
   // same reason they are exempt from the CSRF check above.
   if (OPEN_PATHS.has(pathname) || isInternalCallback) return withCorrelationId(response);
+  // The Benefits keep-awake ping (lib/http/warm-ping.ts): exactly GET /api/benefits?warm=1. The route answers it with
+  // an empty 204 before reading any session or household, so letting it through signed out exposes nothing.
+  if (isWarmPing(request)) return withCorrelationId(response);
   if (user) return withCorrelationId(response);
   if (devAuthEnabled()) return withCorrelationId(response);
 
