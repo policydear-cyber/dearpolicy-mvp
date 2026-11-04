@@ -19,7 +19,7 @@ function test(name: string, fn: () => void) {
   try { fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
-const doc = (policyId: string, name: string, linked: string[], text: string) => ({ policyId, name, insurer: "Example Insurance", productName: name.replace(/\.pdf$/, ""), policyNumber: null,
+const doc = (policyId: string, name: string, linked: string[], text: string) => ({ policyId, name, insurer: "Example Insurance", productName: name.replace(/\.pdf$/, ""), policyNumber: null as string | null,
   documentType: null, documentRole: null, effectiveDate: null, expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: linked, supersededAt: null, processingStatus: "ready",
   pages: [{ page: 1, text }] });
 function house(members: string[], docs: ReturnType<typeof doc>[]): Household {
