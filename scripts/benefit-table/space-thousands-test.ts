@@ -37,6 +37,22 @@ t("Policy year 2 026 is no figure", !has("Policy year 2 026", 2_026));
 t("25 000 times is no figure", !has("Up to 25 000 times salary", 25_000));
 t("12 500 % is no figure", !has("Rate 12 500 % EUR", 12_500));
 t("a three-letter word is no currency", !has("TPD 80 000", 80_000));
+// Two columns a single space apart join into one run: by its figures alone the split is not known, so nothing is read
+// whole (TE #333). Four or more groups, or three whose first group has three digits.
+t("EUR 250 100 000 is no 250,100,000", !has("Plan\tEUR 250 100 000", 250_100_000));
+t("EUR 100 000 200 000 is no 100,000,200,000", !has("Plan A Plan B\tEUR 100 000 200 000", 100_000_200_000));
+t("Room 250 120 000 EUR is no 250,120,000", !has("Room 250 120 000 EUR", 250_120_000));
+t("EUR 1 500 000 000 reads nothing whole", !has("Limit\tEUR 1 500 000 000", 1_500_000_000));
+t("12 500 000 still reads whole", has("Pojistná částka\t12 500 000 Kč", 12_500_000));
+t("beside a currency, an unclear run prints none of its pieces", !has("Room 250 120 000 EUR", 120) && !has("Room 250 120 000 EUR", 250));
+// Swiss apostrophe thousands, read whole beside a currency or with two or more groups.
+t("CHF 12'000", has("Taggeld\tCHF 12'000", 12_000) && !has("Taggeld\tCHF 12'000", 12));
+t("12’500.50 CHF", has("Leistung\t12’500.50 CHF", 12_500.5));
+t("1'250'000 needs no currency", has("Todesfallkapital\t1'250'000", 1_250_000));
+t("a lone apostrophe group with no currency is no figure", !has("Art. 12'000", 12_000));
+// A currency after a figure belongs to the next figure when one follows it.
+t("Member ID 123 456 EUR 50 000 prints no 123,456", !has("Member ID 123 456 EUR 50 000", 123_456) && has("Member ID 123 456 EUR 50 000", 50_000));
+t("a currency after the figure, then words, still counts", has("Capital décès 80 000 € par sinistre", 80_000));
 // Other groupings unchanged.
 t("comma grouping unchanged", has("Sum assured\tS$600,000", 600_000));
 t("dot grouping unchanged", has("Uang Pertanggungan\tRp 500.000.000", 500_000_000));

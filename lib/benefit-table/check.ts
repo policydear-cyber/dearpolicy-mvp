@@ -174,7 +174,18 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
     if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
     const sign = (s: RegExpMatchArray | null) => (!s ? false : s[1] ? DOT_CODES.test(s[1]) : true);
-    const signAfter = sign(after.match(SIGN_AFTER));
+    // Two columns a single space apart join into one run ("EUR 250 100 000", "EUR 100 000 200 000"), and by its figures
+    // alone the split is not known: a run of four or more groups, or of three whose first group has three digits, reads
+    // nothing whole (TE #333). "1 200 000" and "12 500 000" read whole; a sum of a hundred million or more in a market
+    // that groups with spaces is rare, and the cost is only that no figure shows.
+    // Beside a currency, such a run prints nothing at all, not even its pieces ("Room 250 120 000 EUR" prints no 120).
+    // A currency after the figure is the next figure's when a figure follows it ("Member ID 123 456 EUR 50 000").
+    const signAfter = sign(after.match(SIGN_AFTER)) && !/^[ \u00a0\u202f]?\S+[ \u00a0\u202f]?\d/.test(after);
+    const groups = raw.split(",")[0].split(/[ \u00a0\u202f]/);
+    if (groups.length >= 4 || (groups.length === 3 && groups[0].length === 3)) {
+      if (signAfter || sign(before.match(SIGN_BEFORE))) spans.push([at, at + raw.length]);
+      continue;
+    }
     // A currency after the figure is no scale word ("1 500 000 Kč" is koruna, not thousands); any other scale word after
     // it reads nothing whole.
     if (!signAfter && !new RegExp("^" + NO_SCALE_AFTER).test(after)) continue;
@@ -183,6 +194,16 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     const n = Number(whole.replace(/[ \u00a0\u202f]/g, "") + (cents ? "." + cents : ""));
     if (!Number.isFinite(n)) continue;
     figures.push(n); spans.push([at, at + raw.length]);
+  }
+  // Swiss thousands with an apostrophe ("CHF 12'000", "12’500.50 CHF"): read whole beside a currency, or when two or more
+  // groups show the grouping ("1'250'000"), and its pieces are then no figures of their own (TE #333).
+  for (const m of text.matchAll(/(?<![\d.,'’])(\d{1,3}(?:['’]\d{3})+(?:\.\d{1,2})?)(?![\d]|[.,'’]\d)/g)) {
+    const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
+    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before) || !new RegExp("^" + NO_SCALE_AFTER).test(after)) continue;
+    const sign = (s: RegExpMatchArray | null) => (!s ? false : s[1] ? DOT_CODES.test(s[1]) : true);
+    if (!sign(before.match(SIGN_BEFORE)) && !sign(after.match(SIGN_AFTER)) && !/^\d{1,3}(?:['’]\d{3}){2,}/.test(raw)) continue;
+    const n = Number(raw.replace(/['’]/g, ""));
+    if (Number.isFinite(n)) { figures.push(n); spans.push([at, at + raw.length]); }
   }
   return { figures, spans };
 }
