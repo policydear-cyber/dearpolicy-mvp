@@ -154,7 +154,10 @@ export function documentState(d: { status: string; pages: number; live: boolean;
     return "stalled";
   }
   if (d.status !== "ready") return "not_readable";
-  if (hasReading) return "read";
+  // A stored reading with no page the table reads (every page unreadable or unchecked, lib/benefit-table/service.ts
+  // CHECKED_PAGE) gives no row: it is not "read", which showed it as read with nothing in it (TE #328). It follows the
+  // rules below, where a document with no pages is not readable.
+  if (hasReading && d.pages) return "read";
   if (NO_COVER_READING_ROLES.includes(d.file.document_role ?? "")) {
     if (!d.misfiled || !d.pages || !NON_COVER_ROLES.has(d.file.document_role ?? "")) return "no_table";
     if (d.live === true) return "waiting";
