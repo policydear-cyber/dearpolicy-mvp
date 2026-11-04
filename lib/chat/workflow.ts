@@ -371,7 +371,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
     const typed=request.question;
     // A message not in English is left as typed, so the chat says it answers in English (TE #343: a spelling fix turned
     // "insurans" into "insurance" and the Malay question was then answered as a "not found").
-    const foreign=notEnglish(typed);
+    const foreign=notEnglish(typed,[...family.flatMap(p=>[p.display_name,p.preferred_name??""]),...policyRows.flatMap(r=>[r.product_name??"",r.insurer??""])]);
     let words=foreign?typed:householdWords(typed);
     // Round 15: "endownment premuim", "equlife endorsment": insurance words and the household's own plan names, spelt right.
     if(!foreign)words=correctTypos(words,[...new Set(policyRows.flatMap(r=>[r.product_name,r.insurer]).filter((n):n is string=>!!n))]);
