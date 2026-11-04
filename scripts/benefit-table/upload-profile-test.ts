@@ -109,6 +109,26 @@ async function main() {
     await test("only the upload-profile link and a match by hand count as the household's word; an automatic link does not", async () => {
       assert.deepEqual(await products("Sam Rivera"), []);
     });
+
+    // The upload choice counts only while the printed name matches nobody by name: a person added or renamed later so the
+    // name is theirs must never have their cover shown for the upload profile (Critic H1 on #341).
+    await query("UPDATE policy_members SET source='upload_hint' WHERE policy_id=$1", [hinted]);
+    await test("back as an upload-profile link, the cover is the upload profile's again", async () => {
+      assert.deepEqual(await products("Sam Rivera"), ["Kestrel Hospital Plan"]);
+    });
+    await query("UPDATE family_members SET display_name='Rowan Ellery Hart' WHERE id=$1", [P["Noor Haddad"]]);
+    await test("a person renamed later to the printed name: the upload profile no longer takes the cover", async () => {
+      assert.deepEqual(await products("Sam Rivera"), []);
+    });
+    await query("UPDATE family_members SET display_name='Noor Haddad' WHERE id=$1", [P["Noor Haddad"]]);
+    const added = (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,'Rowan Hart','child') RETURNING id", [ACCOUNT])).rows[0].id;
+    await test("a person added later whose name the printed name holds: the upload profile no longer takes the cover", async () => {
+      assert.deepEqual(await products("Sam Rivera"), []);
+    });
+    await query("DELETE FROM family_members WHERE id=$1", [added]);
+    await test("once that person is gone, the upload choice counts again", async () => {
+      assert.deepEqual(await products("Sam Rivera"), ["Kestrel Hospital Plan"]);
+    });
   } finally {
     for (const t of ["benefit_links", "benefit_readings", "policy_detected_people", "policy_members", "policy_pages", "policy_name_dismissals"])
       await query(`DELETE FROM ${t} WHERE account_id=$1`, [ACCOUNT]).catch(() => undefined);

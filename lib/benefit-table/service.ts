@@ -12,6 +12,7 @@ import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
+import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
@@ -63,13 +64,19 @@ async function withDocumentLinks(db: Db, accountId: string, people: FamilyMember
   // personal document that matched nobody, linked to the profile the household uploaded it to (upload_hint; lib/rag/ingest.ts
   // writes it only then, flagged "Named in it: … Change"). Home and Family count that link (policy_members), so Coverage
   // does too: one rule for both (TE real-model run, 4 Nov: Home said covered, Coverage "Not in your family").
-  const byHand = new Set(links.filter((l) => l.source === "user_declared" || l.source === "upload_hint").map((l) => `${l.policy_id}|${l.family_member_id}`));
+  // An upload_hint counts only while the printed name still matches no active person by name: once someone is added or
+  // renamed so the name is theirs, the old upload choice must never hand that person's cover to the upload profile.
+  const byHand = new Set(links.filter((l) => l.source === "user_declared").map((l) => `${l.policy_id}|${l.family_member_id}`));
+  const byUpload = new Set(links.filter((l) => l.source === "upload_hint").map((l) => `${l.policy_id}|${l.family_member_id}`));
+  const nobodyByName = (name: string) => !people.some((q) => findFamilyMatchWithKind(name, [q]));
+  const chosen = (d: Record<string, unknown>, id: string) => byHand.has(`${d.policy_id}|${id}`)
+    || (byUpload.has(`${d.policy_id}|${id}`) && nobodyByName(String(d.detected_name)));
   const notThem = dismissed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
   const namedOn = printed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
   return people.map((p) => ({ ...p,
     documents: links.filter((l) => String(l.family_member_id) === p.id).map((l) => String(l.policy_id)),
     printedAs: printed.filter((d) => String(d.matched_family_member_id) === p.id).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })),
-    chosenAs: printed.filter((d) => String(d.matched_family_member_id) === p.id && byHand.has(`${d.policy_id}|${p.id}`)).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })),
+    chosenAs: printed.filter((d) => String(d.matched_family_member_id) === p.id && chosen(d, p.id)).map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) })),
     excludedFrom: excluded.filter((x) => String(x.family_member_id) === p.id).map((x) => String(x.policy_id)),
     notThem, namedOn }));
 }
