@@ -250,7 +250,8 @@ const BARE_RATE=/^\d[\d,]*(?:\.\d{1,2})?\s*(?:per|\/|a)\s*(?:day|night|week|mont
 function isValueCell(cell:string){
   if(cell.length<=80&&BARE_RATE.test(cell))return true;
   if(!AMOUNT.test(cell)||cell.length>80)return false;
-  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
+  // "As charged, up to RM 30,000": a reimbursement with its cap is an amount cell (stored as as-charged, never a formula).
+  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from|as charged)\b/i.test(cell);
 }
 export type BenefitRow={label:string;value:string;line:string;
   /** Where this row sits in the page's lines, so a heading above it (for
@@ -346,6 +347,10 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
     // The line is printed with the rest of the row, so it is quoted with it: half a rule quoted is a wrong rule.
     // In a two-column row both cells wrap ("Angioplasty … for | … up to maximum" / "Coronary Artery | of S$25,000"):
     // the left cell finishes the name and the right one the amount, never one run into the other.
+    // A line printed as a row of its own (a capitalised name in the left cell, an amount in the right one) never finishes
+    // the row above unless that row stops mid-phrase: "Intensive care | RM 600 per day" / "Surgical fees | As charged, up to
+    // RM 30,000" are two benefits, never one ICU amount that swallows the surgical cap (TE real-model run, 4 Nov).
+    if(labelAmountRow(line)&&/^\p{Lu}/u.test(left)&&!UNFINISHED.test(text)&&!VALUE_UNFINISHED.test(value.trim())&&!/(?:\bor|\band|,)$/i.test(value.trim()))break;
     if(AMOUNT.test(piece)||/whichever/i.test(piece)){
       valueLine=line.text;consumed=next;
       const cells=line.cells.map(cell=>cell.replace(/\s+/g," ").trim()).filter(Boolean);

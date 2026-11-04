@@ -80,6 +80,7 @@
     "claims:table-test": "node --import tsx scripts/claim-table-benefits-regressions.ts",
     "replay": "node --import tsx -e \"import('./scripts/real-household-replay.ts').then(m=>m.runRealHouseholdReplay())\"",
     "ocr:test": "node --import tsx scripts/ocr-regressions.ts",
+    "documents:own-row-test": "node --import tsx scripts/documents/own-row-test.ts",
     "documents:amount-whole-test": "node --import tsx scripts/documents/amount-whole-test.ts",
     "documents:ocr-not-read-test": "node --import tsx --test scripts/documents/ocr-not-read-test.ts",
     "ocr:openai-test": "node --import tsx scripts/ocr-openai-regressions.ts",
