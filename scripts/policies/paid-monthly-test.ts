@@ -23,7 +23,9 @@ const MONTHLY: [string, string][] = [
   ["Long Term Care Benefit", "Long Term Care Benefit S$600 every month"],
   ["Hospital Income", "Hospital Income S$1,500 per month of hospitalisation"],
   ["Income Benefit", "Income Benefit S$2,000 per month, for 5 years"],
-  ["Income Benefit", "Income Benefit S$2,000 per month from the month after approval"],
+  ["Disability Income", "Disability Income S$3,000 monthly, from the fourth month"],
+  ["Disability Income", "Disability Income S$3,000 a month from month 4"],
+  ["Disability Income", "Disability Income S$3,000 a month from the 4th month of disability"],
   ["Income Benefit", "Income Benefit S$2,000 a month up to 24 months"],
   ["Income Benefit", "Income Benefit S$2,000 per month."],
 ];
@@ -67,6 +69,10 @@ const NOT_MONTHLY: [string, string][] = [
   ["Recovery Benefit", "Recovery Benefit S$5,000 one month later"],
   ["Income Benefit", "Income Benefit S$5,000 a month of the claim"],
   ["Income Benefit", "Income Benefit S$5,000 a month once disability is confirmed"],
+  ["Cancer Benefit", "Cancer Benefit S$20,000 a month from diagnosis"],
+  ["Income Benefit", "Income Benefit S$2,000 per month from the month after approval"],
+  ["Income Benefit", "Income Benefit S$2,000 a month from the date of the claim"],
+  ["Income Benefit", "Income Benefit S$2,000 a month from discharge"],
 ];
 for (const [name, quote] of MONTHLY) check(`monthly: ${quote}`, () => assert.equal(paidMonthly(name, quote), true));
 for (const [name, quote] of NOT_MONTHLY) check(`no period: ${quote}`, () => assert.equal(paidMonthly(name, quote), false));
