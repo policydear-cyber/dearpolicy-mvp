@@ -474,11 +474,11 @@ const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?r
  * any-cause row read as accident-only only loses a claim it could have made. */
 const ACCIDENT_WORD=/\baccident/;
 const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^(?:accidental\s+)?injury\s+death\b/;
-const ANOTHER_CAUSE=/\b(?:or|otherwise|any\s+(?:other\s+)?(?:cause|reason)s?|natural|illness(?:es)?|sickness(?:es)?|disease|diseases|including|includes|excluding|excludes|except|other than|not|no|non|self[- ]inflicted|whether|and illness|and sickness)\b|;/;
+const ANOTHER_CAUSE=/\b(?:or|otherwise|any\s+(?:other\s+)?(?:cause|reason)s?|natural|illness(?:es)?|sickness(?:es)?|disease|diseases|including|includes|excluding|excludes|except|other than|not|no\s+(?:accident|injury|injuries|waiting)|non|self[- ]inflicted|whether|and illness|and sickness)\b|[;(]/;
 export function namesOnlyAnAccidentCause(n:string){
   const t=n.toLowerCase();
   if(!ACCIDENT_WORD.test(t)&&!INJURY_CAUSE.test(t))return false;
-  return !ANOTHER_CAUSE.test(t.replace(/\(accident\)/g," "));
+  return !ANOTHER_CAUSE.test(t.replace(/\((?:accidents?|accidental|injury|injuries)(?:\s+only)?\)/g," "));
 }
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();

@@ -44,5 +44,8 @@ for (const n of ANY_CAUSE) {
 t(`"Total and Permanent Disability due to Injury" is accidental disablement`, () => assert.equal(eventForBenefitName("Total and Permanent Disability due to Injury").event, "accidental_disablement"));
 t(`"Total and Permanent Disability due to Injury or Illness" is any-cause TPD`, () => assert.equal(eventForBenefitName("Total and Permanent Disability due to Injury or Illness").event, "tpd"));
 t(`"Injury overseas with a hospital stay" is not accident-only`, () => assert.notEqual(causeForBenefit("Injury overseas with a hospital stay"), "accident"));
+t(`"No Claim Bonus Accidental Death" is still accidental death`, () => assert.equal(eventForBenefitName("No Claim Bonus Accidental Death").event, "accidental_death"));
+t(`"Death due to Injury (accident only)" is accidental death`, () => assert.equal(eventForBenefitName("Death due to Injury (accident only)").event, "accidental_death"));
+t(`"Death due to Injury (see clause 4)" is not accident-only`, () => assert.notEqual(eventForBenefitName("Death due to Injury (see clause 4)").event, "accidental_death"));
 console.log(`accident only: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
