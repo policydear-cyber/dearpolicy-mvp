@@ -16,15 +16,16 @@ const share = (benefitName: string, quote: string, value = 1 / 12) => describeBe
 const fixed = (benefitName: string, quote: string, value: number) => describeBenefitFormula({ ...base, formulaKind: "fixed", formulaValue: value, currency: "SGD", benefitName, quote });
 
 const MONTHLY: [string, string][] = [
-  ["Monthly Disability Income", "Monthly Disability Income One twelfth of Sum Insured"],
   ["Income Benefit", "Income Benefit S$2,000 per month"],
   ["Income Benefit", "Income Benefit S$2,000 a month for up to 24 months"],
   ["Carer Allowance", "Carer Allowance $1,500/month"],
   ["Disability Income", "Disability Income one twelfth of the Sum Insured each month"],
   ["Long Term Care Benefit", "Long Term Care Benefit S$600 every month"],
-  ["Monthly Disability Income", "Monthly Disability Income S$3,000"],
-  ["Monthly Income", "Monthly Income S$1,000 for 24 months"],
-  ["Disability Income", "Monthly Disability Income: One twelfth of Sum Insured"],
+  ["Hospital Income", "Hospital Income S$1,500 per month of hospitalisation"],
+  ["Income Benefit", "Income Benefit S$2,000 per month, for 5 years"],
+  ["Income Benefit", "Income Benefit S$2,000 per month from the month after approval"],
+  ["Income Benefit", "Income Benefit S$2,000 a month up to 24 months"],
+  ["Income Benefit", "Income Benefit S$2,000 per month."],
 ];
 const NOT_MONTHLY: [string, string][] = [
   ["Disability Benefit", "Disability Benefit One twelfth of Sum Insured"],
@@ -53,12 +54,25 @@ const NOT_MONTHLY: [string, string][] = [
   ["Monthly Income", "Monthly Income S$3,000, benefit term 5 years"],
   ["Disability Income", "Disability Income: S$2,000 per month, up to S$48,000 in total"],
   ["Income Benefit", "Income Benefit S$2,000 per month or S$20,000 at once"],
+  // Critic #351: a "Monthly ..." label alone is not the figure's own unit; the figure may be a total.
+  ["Monthly Disability Income", "Monthly Disability Income One twelfth of Sum Insured"],
+  ["Monthly Disability Income", "Monthly Disability Income S$3,000"],
+  ["Monthly Income", "Monthly Income S$1,000 for 24 months"],
+  ["Disability Income", "Monthly Disability Income: One twelfth of Sum Insured"],
+  // Critic #351: a monthly unit followed by a timing is not a rate.
+  ["Income Benefit", "Income Benefit S$5,000, a month after the claim is admitted"],
+  ["Critical Illness", "Critical Illness S$50,000 a month after diagnosis"],
+  ["Income Benefit", "Income Benefit S$5,000 a month following the date of disability"],
+  ["Income Benefit", "Income Benefit S$5,000 a month before the claim"],
+  ["Recovery Benefit", "Recovery Benefit S$5,000 one month later"],
+  ["Income Benefit", "Income Benefit S$5,000 a month of the claim"],
+  ["Income Benefit", "Income Benefit S$5,000 a month once disability is confirmed"],
 ];
 for (const [name, quote] of MONTHLY) check(`monthly: ${quote}`, () => assert.equal(paidMonthly(name, quote), true));
 for (const [name, quote] of NOT_MONTHLY) check(`no period: ${quote}`, () => assert.equal(paidMonthly(name, quote), false));
 
 check("a share paid every month says so", () =>
-  assert.equal(share("Monthly Disability Income", "Monthly Disability Income One twelfth of Sum Insured"), "8.3% of the sum insured on your schedule, paid each month"));
+  assert.equal(share("Disability Income", "Disability Income one twelfth of the Sum Insured each month"), "8.3% of the sum insured on your schedule, paid each month"));
 check("a share whose row names no period stays as it was", () =>
   assert.equal(share("Disability Benefit", "Disability Benefit One twelfth of Sum Insured"), "8.3% of the sum insured on your schedule"));
 check("a fixed amount paid every month says a month", () =>
