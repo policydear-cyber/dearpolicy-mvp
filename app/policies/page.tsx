@@ -13,6 +13,7 @@ import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { uploadOverrideLine } from "@/lib/policies/upload-override";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -51,6 +52,8 @@ type Policy = {
   processing_stalled?: boolean;
   linked_people: LinkedPerson[];
   detected_people: DetectedPerson[];
+  /** Who was chosen at upload, as chosen (none for "Not sure" or an older upload). */
+  upload_choice?: string | null;
   /** Cover tiers the document describes (e.g. Employee / Spouse / Child). */
   tier_options?: string[];
   /** Who the document names, and as which tier. */
@@ -572,7 +575,12 @@ function MatchedNames({ policy, family, onMove }: { policy: Policy; family: Memb
     return { ...p, member, byPart };
   });
   const anyByPart = shown.some((p) => p.byPart);
+  // The names printed in it put it with someone other than the person chosen at upload: said once, beside the way to
+  // change it (lib/policies/upload-override.ts).
+  const override = uploadOverrideLine({ uploadChoice: policy.upload_choice, linkedIds: policy.linked_people.map((l) => l.id),
+    named: policy.detected_people.map((p) => ({ name: p.name, memberId: p.matchedFamilyMemberId })) }, family);
   return <div className="matched-names">
+    {override && <p className="document-override" data-testid="upload-override">{override}</p>}
     <p className="document-names">Named in it: {shown.map((p, i) => <span key={p.name}>{i ? ", " : ""}{p.name} ({p.member?.display_name ?? "matched"}{p.byPart ? ", matched by part of the name" : ""})</span>)}{" "}
       <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : anyByPart ? "Not them? Change" : "Change"}</button></p>
     {open && <div className="detected-block">{shown.map((p) => <div className="detected-row" key={p.name}>

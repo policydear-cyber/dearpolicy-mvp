@@ -355,6 +355,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-for b, .document-found b { color: var(--ink); margin-right: 4px; }
 .document-found.warn { color: var(--warn-text); }
 .document-names { font-size: var(--fs-xs); color: var(--muted); }
+.document-override { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .document-title .status { justify-self: start; margin-top: 4px; font-style: normal; text-transform: none; white-space: nowrap; }
 .detected-row label { font-size: var(--fs-sm); color: var(--ink); }
 .document-authority { font-size: var(--fs-xs); font-weight: 650; border-radius: 999px; padding: 5px 10px; }
