@@ -1,6 +1,6 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
-import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote, withPageNotes } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
@@ -980,7 +980,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? (retryScheduled ? DOCUMENT_READ_IN_PART_MESSAGE : DOCUMENT_READ_IN_PART_FINAL_MESSAGE) : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
+      // A document whose cover reading did not finish keeps its page notes after that lead (a page not read, pages not
+      // checked, pages turned), so what is missing from it is still said (TE and Critic #323: the lead replaced them all).
+      [args.policyId, args.accountId, readInPart
+        ? withPageNotes(retryScheduled ? DOCUMENT_READ_IN_PART_MESSAGE : DOCUMENT_READ_IN_PART_FINAL_MESSAGE, [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)), unreadableNote, readyNote(extraction, pages, messyNotes)])
+        : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber), pages.filter((p) => p.partChecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
         ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
