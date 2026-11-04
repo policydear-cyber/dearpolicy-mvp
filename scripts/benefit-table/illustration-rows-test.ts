@@ -5,7 +5,7 @@
  * stored changes. Real benefits beside them, and rows whose line holds a word in any script, are kept. Made-up
  * households in SGD, MYR, HKD, EUR and IDR. No model, no database, no network.
  *   npm run benefit-table:illustration-rows-test */
-import { checkReading, printsAWord } from "@/lib/benefit-table/check";
+import { checkReading, isFiguresRow, printsAWord } from "@/lib/benefit-table/check";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(k)) delete process.env[k];
@@ -18,6 +18,13 @@ function t(id: string, ok: boolean, detail?: unknown) { if (ok) pass++; else { f
 t("figures and percentages only: no word", !printsAWord("15\t48,437\t101.10%\t0.10%"));
 t("currency marks and codes are no word", !printsAWord("10\tRM 25,300\tRM 31,200") && !printsAWord("SGD 48,437") && !printsAWord("€ 1.500,00") && !printsAWord("HK$12,000\tHK$15,500"));
 t("a word in any script", printsAWord("Age 15") && printsAWord("入院 HK$300") && printsAWord("Décès €80,000") && printsAWord("Rawat inap Rp 500.000"));
+
+t("an initialism with & or dots is a word", printsAWord("A&E £200") && printsAWord("RM 100 p.d."));
+t("a row keyed by its year or age, then figures, is an illustration row",
+  isFiguresRow("Year 15\tRM 48,437\tRM 52,100") && isFiguresRow("Age 65\tHK$1,200,000\tHK$1,350,000") && isFiguresRow("End of policy year 20\tS$61,250\tS$64,900")
+  && isFiguresRow("Tahun 10 Rp 30.000.000 Rp 41.000.000") && isFiguresRow("第10年\tHK$24,000\tHK$33,800") && isFiguresRow("15\t48,437\t101.10%\t0.10%"), null);
+t("one figure with no word is no row (its label on the line above)", !isFiguresRow("S$250") && !isFiguresRow("S$1.5M") && !isFiguresRow("Age 65\tS$10,000"));
+t("a line with a benefit's words is no row", !isFiguresRow("A&E\t£200\t£400") && !isFiguresRow("Year 1 waiting period\tS$100\tS$200") && !isFiguresRow("Room and board\tS$150\tS$250"));
 
 type Row = { name: string; quote: string; pays?: string; value?: number | null };
 type Case = { market: string; person: string; product: string; text: string; cover: { quote: string; sum: number }; junk: Row[]; real: Row[] };
@@ -48,6 +55,12 @@ const CASES: Case[] = [
     cover: { quote: "Uang Pertanggungan\tRp 500.000.000", sum: 500_000_000 },
     junk: [{ name: "12.500.000", quote: "5\tRp 12.500.000\tRp 15.000.000", pays: "amount", value: 12_500_000 }, { name: "Nilai tunai", quote: "10\tRp 30.000.000\tRp 41.000.000", pays: "amount", value: 30_000_000 }],
     real: [{ name: "Rawat inap per hari", quote: "Rawat inap per hari\tRp 500.000", pays: "per_day", value: 500_000 }] },
+  { market: "UK", person: "Oliver Price", product: "Rowan Health and Life",
+    text: "POLICY SCHEDULE\nInsured: Oliver Price\nLife cover\t£250,000\nA&E\t£200\nPhysiotherapy per session\n£60.00\nILLUSTRATION\nPolicy year\tFund value\tSurrender value\nYear 15\t£48,437\t£52,100\nEnd of policy year 20\t£61,250\t£64,900\nAge 65\t£120,000\t£135,000",
+    cover: { quote: "Life cover\t£250,000", sum: 250_000 },
+    junk: [{ name: "Fund value", quote: "Year 15\t£48,437\t£52,100", pays: "amount", value: 48_437 }, { name: "Surrender value", quote: "£64,900", pays: "amount", value: 64_900 },
+      { name: "Death benefit", quote: "Age 65\t£120,000\t£135,000", pays: "amount", value: 120_000 }],
+    real: [{ name: "A&E", quote: "A&E\t£200", pays: "amount", value: 200 }, { name: "Physiotherapy per session", quote: "£60.00", pays: "amount", value: 60 }] },
 ];
 const b = (r: Row) => ({ section: "SCHEDULE", column: null, benefit: r.name, pays: r.pays ?? "words", value: r.value ?? null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null,
   baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: r.quote });

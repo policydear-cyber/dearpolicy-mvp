@@ -270,11 +270,23 @@ export function startDay(text: string): number | null | undefined {
   return days.size === 0 ? (limit ? null : undefined) : days.size === 1 ? [...days][0] : null;
 }
 /** Whether a printed line holds a word once figures, percentages, ordinals and currency marks or codes are taken out:
- * two letters of any script in a row ("Age", "Décès", "入院"), or one letter of a script with no spaces between words. */
+ * two letters of any script in a row ("Age", "Décès", "入院"), one letter of a script with no spaces between words, or an
+ * initialism written with "&" or dots ("A&E", "p.d.", TE #334). */
 export function printsAWord(text: string): boolean {
   const bare = text.replace(/(?<![A-Za-z])(?:[A-Z]{1,3}\$|\p{Sc}|Rp\.?|RM|Rs\.?|kr|zł|Kč)/gu, " ").replace(/\b[A-Z]{3}\b/g, (code) => (isoCodes().has(code) ? " " : code))
     .replace(/\d[\d,.'’ \u00a0\u202f]*(?:%|st|nd|rd|th)?/gu, " ");
-  return /\p{L}{2}/u.test(bare) || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(bare);
+  return /\p{L}{2}/u.test(bare) || /\p{L}[&.]\p{L}/u.test(bare) || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(bare);
+}
+// The key an illustration or projection table's row starts with: its policy year or the insured's age ("15", "Year 15",
+// "End of policy year 20", "Age 65", "Tahun 10", "Année 5", "第10年", "65歲"). A closed list.
+const ROW_KEY = /^\s*(?:(?:end\s+of\s+)?(?:policy\s+)?(?:year|yr|age|tahun|umur|usia|ann[ée]e|[âa]ge|jahr|alter|a[ñn]o|edad)\s*:?\s*\d{1,3}\b|第\s*\d{1,3}\s*(?:年|保單年度)|\d{1,3}\s*(?:歲|岁|세|歳))/iu;
+/** Whether a printed line is a row of an illustration or projection table: two or more figures and no word once the row's
+ * own key (its year or age) is taken out ("15 48,437 101.10% 0.10%", "Year 15 RM 48,437 RM 52,100"). A single figure
+ * with no word ("S$250", its label on the line above) is no such row and is kept (TE #334). */
+export function isFiguresRow(line: string): boolean {
+  const rest = line.replace(ROW_KEY, " ");
+  if (printsAWord(rest)) return false;
+  return (rest.match(/\d[\d,.'’]*/g) ?? []).length >= 2;
 }
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
@@ -575,6 +587,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     return at(f);
   };
+  // The whole printed line (or lines) the quote sits on, so a quote of one cell is judged with the row it stands in.
+  const printedLineOf = (src: Source) => {
+    const p = placed.get(src), text = pageText(src.page);
+    if (!p) return src.excerpt;
+    const from = p.start > 0 ? text.lastIndexOf("\n", p.start - 1) + 1 : 0, end = text.indexOf("\n", p.end);
+    return text.slice(from, end < 0 ? text.length : end);
+  };
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
@@ -675,12 +694,12 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const source = find(quote, int(b.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     // A row of an illustration or projection table ("15  48,437  101.10%  0.10%": a policy year, then values) is no
-    // benefit: its "name" is one of its own figures, or its printed line holds no word at all, so nothing in it says what
-    // is paid for. Shown, it is a line named "48,437" in Coverage and the chat's table (live check, 4 Nov). The same
+    // benefit: its "name" is one of its own figures, or the printed line its quote sits on holds two or more figures and no
+    // word besides its year or age key (isFiguresRow), so nothing in it says what is paid for. Shown, it is a line named "48,437" in Coverage and the chat's table (live check, 4 Nov). The same
     // name rule as the Benefits page (lib/policies/benefit-catalog.ts namesNoBenefit); dropped when read, so nothing
     // stored changes.
     if (namesNoBenefit(benefit)) { out.dropped.push({ what: label, why: "its name names no benefit (a figure, a table cell or a piece of a sentence)" }); continue; }
-    if (!printsAWord(source.excerpt)) { out.dropped.push({ what: label, why: "its printed line holds only figures, as an illustration or projection table's row does" }); continue; }
+    if (isFiguresRow(printedLineOf(source))) { out.dropped.push({ what: label, why: "its printed line holds only figures, as an illustration or projection table's row does" }); continue; }
     let value = num(b.value);
     if (value != null && !printsNumber(source.excerpt, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional
