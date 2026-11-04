@@ -117,7 +117,9 @@ test("whose words: a member's own name word or a family word names someone; 'my'
   for (const q of ["Is she covered for hospital cash?", "Does he get the dental benefit?", "What does his policy pay for ICU?", "What about her?", "Can the missus claim outpatient?",
     "How much for the hubby's surgery?", "Our helper was warded, how much?", "Is the maid covered?", "The boy broke his arm, how much?", "Grandson got dengue, how much hospital cash?",
     "Mak was warded, how much?", "Appa had surgery, what's covered?", "Is the toddler covered?", "How much for the twins?", "What's the hospital cash for the employee?", "Is Tan covered?",
-    "What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "I broke my hip, how much?", "Berapa saya boleh tuntut?", "How much for Mei Ling?"])
+    "What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "I broke my hip, how much?", "Berapa saya boleh tuntut?", "How much for Mei Ling?",
+    "Can we claim for mak hospital stay?", "Who covers grandson for dental?", "Can we claim hospital cash for junior?", "We want hospital cash for boyfriend",
+    "Everyone covered for dental incl. maid?", "How much each day for nephew?", "How much for Li?", "How much would Encik Ahmad get?"])
     assert.equal(asksForNobody([q], H4, own), false, q);
 });
 
