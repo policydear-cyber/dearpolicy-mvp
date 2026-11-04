@@ -17,6 +17,14 @@ const unknown = [
   "Up to Rp 750.000 per hari", "Up to S$100 per day", "Up to S$100 (per day)", "Up to S$1,000, per day",
   "Up to €50, par jour", "Up to RM 50 sehari", "Up to S$500/day", "Up to S$200 for every 6 hours",
   "Maximum US$150 per week", "Not exceeding £80 per night", "Limited to S$1,000 per month", "Up to S$300 each day",
+  // The whole trailer is read, not just its first word or first "per" clause (Critic H1 and TE on #338).
+  "Up to S$100 in any one day", "Up to S$100 in a day", "Up to S$100 on each day", "Up to S$100 incurred per day",
+  "Up to S$100 payable per day", "Up to S$100 for ICU per day", "Up to S$100 towards each day", "Up to S$100 as daily allowance",
+  "Up to S$100 during each 24 hours", "Up to S$100 per visit, per day", "Up to S$500 per accident, per day",
+  "Up to S$100 per claim (per day)", "Up to S$100 for hospitalisation, daily", "Up to S$100 within 24 hours",
+  "Up to S$100 for 30 days", "Up to S$100 per month for 6 months", "Up to S$100 for each session",
+  // A unit word that only begins with a period is not that period (Critic M2 on #338).
+  "S$100 per weekday", "S$100 per monthly instalment", "S$100 per daycare session", "S$100 per annum",
 ];
 for (const cell of unknown) check(`"${cell}" gives no amount`, () => assert.equal(parseBenefitValue(cell), null, JSON.stringify(parseBenefitValue(cell))));
 
@@ -33,6 +41,10 @@ const caps: [string, number][] = [
   ["Up to US$2,000 per accident", 2000], ["Up to S$500 for each claim", 500], ["Up to S$5,000", 5000], ["Up to S$5,000 per policy year", 5000],
   ["Up to S$1,000, subject to the overall limit", 1000], ["Up to S$100 (per claim)", 100], ["Up to S$5,000 in total", 5000],
   ["Up to S$500 for surgery", 500], ["Maximum S$300 per trip", 300], ["Up to S$100.", 100],
+  // A ceiling for the year is one total for the year (scripts/fixtures/r5/make.py, r6 chat-quality regressions).
+  ["Up to S$300 per year", 300], ["Up to S$300 per annum", 300], ["Up to S$300 in any one year", 300],
+  ["Up to S$5,000 in any one claim", 5000], ["Up to S$5,000 per event, per insured person", 5000],
+  ["Up to S$2,000 per life assured", 2000], ["Up to S$800 per treatment", 800], ["Up to S$500 per child", 500],
 ];
 for (const [cell, v] of caps) check(`"${cell}" stays a ceiling of ${v}`, () => {
   const p = parseBenefitValue(cell);
@@ -41,6 +53,8 @@ for (const [cell, v] of caps) check(`"${cell}" stays a ceiling of ${v}`, () => {
 
 // The English per-day rate is still a daily rate.
 check(`"RM 600 per day" is a daily rate`, () => { const p = parseBenefitValue("RM 600 per day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 600); });
+check(`"S$100 a day" is a daily rate`, () => { const p = parseBenefitValue("S$100 a day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 100); });
+check(`"S$300 per year" is a yearly amount`, () => { const p = parseBenefitValue("S$300 per year"); assert.equal(p?.kind, "fixed"); assert.equal(p?.period, "year"); });
 check(`"S$30 per day" is a daily rate`, () => { const p = parseBenefitValue("S$30 per day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 30); });
 
 console.log(`per-unit: ${pass} passed, ${fail} failed`);
