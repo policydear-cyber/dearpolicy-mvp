@@ -23,6 +23,8 @@ t("an initialism with & or dots is a word", printsAWord("A&E £200") && printsAW
 t("a row keyed by its year or age, then figures, is an illustration row",
   isFiguresRow("Year 15\tRM 48,437\tRM 52,100") && isFiguresRow("Age 65\tHK$1,200,000\tHK$1,350,000") && isFiguresRow("End of policy year 20\tS$61,250\tS$64,900")
   && isFiguresRow("Tahun 10 Rp 30.000.000 Rp 41.000.000") && isFiguresRow("第10年\tHK$24,000\tHK$33,800") && isFiguresRow("15\t48,437\t101.10%\t0.10%"), null);
+t("more row keys", isFiguresRow("Polisjahr 15\t€ 48.437\t€ 52.100") && isFiguresRow("Năm 15\t48.437.000 ₫\t52.100.000 ₫") && isFiguresRow("15th year\tS$48,437\tS$52,100") && isFiguresRow("Tahun ke-15 Rp 30.000.000 Rp 41.000.000"));
+t("an age band keeps its words", !isFiguresRow("Age 18 - 40\tS$200,000\tS$300,000") && !isFiguresRow("Age 41 to 60\tS$100,000\tS$150,000"));
 t("one figure with no word is no row (its label on the line above)", !isFiguresRow("S$250") && !isFiguresRow("S$1.5M") && !isFiguresRow("Age 65\tS$10,000"));
 t("a line with a benefit's words is no row", !isFiguresRow("A&E\t£200\t£400") && !isFiguresRow("Year 1 waiting period\tS$100\tS$200") && !isFiguresRow("Room and board\tS$150\tS$250"));
 

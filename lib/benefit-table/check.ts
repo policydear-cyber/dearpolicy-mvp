@@ -278,8 +278,9 @@ export function printsAWord(text: string): boolean {
   return /\p{L}{2}/u.test(bare) || /\p{L}[&.]\p{L}/u.test(bare) || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(bare);
 }
 // The key an illustration or projection table's row starts with: its policy year or the insured's age ("15", "Year 15",
-// "End of policy year 20", "Age 65", "Tahun 10", "Année 5", "第10年", "65歲"). A closed list.
-const ROW_KEY = /^\s*(?:(?:end\s+of\s+)?(?:policy\s+)?(?:year|yr|age|tahun|umur|usia|ann[ée]e|[âa]ge|jahr|alter|a[ñn]o|edad)\s*:?\s*\d{1,3}\b|第\s*\d{1,3}\s*(?:年|保單年度)|\d{1,3}\s*(?:歲|岁|세|歳))/iu;
+// "End of policy year 20", "15th year", "Age 65", "Tahun ke-15", "Năm 15", "Polisjahr 15", "Année 5", "第10年", "65歲"). A
+// closed list. An age band ("Age 18 - 40") is no row key, so its words keep the row.
+const ROW_KEY = /^\s*(?:(?:(?:end\s+of\s+)?(?:policy\s+)?(?:year|yr|age|tahun(?:\s+ke-?)?|umur|usia|n[ăa]m|ann[ée]e|[âa]ge|polisjahr|jahr|alter|a[ñn]o|edad)\s*:?\s*\d{1,3}|\d{1,3}(?:st|nd|rd|th)\s+(?:policy\s+)?year)\b(?!\s*(?:-|–|to|bis|à|hingga|sampai)\s*\d)|第\s*\d{1,3}\s*(?:年|保單年度)|\d{1,3}\s*(?:歲|岁|세|歳))/iu;
 /** Whether a printed line is a row of an illustration or projection table: two or more figures and no word once the row's
  * own key (its year or age) is taken out ("15 48,437 101.10% 0.10%", "Year 15 RM 48,437 RM 52,100"). A single figure
  * with no word ("S$250", its label on the line above) is no such row and is kept (TE #334). */
