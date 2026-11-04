@@ -162,15 +162,26 @@ const SHORT_PERIOD=/(?<![\p{L}\p{N}])(?:days?|nights?|hours?|hrs?|weeks?|fortnig
  * - and then it is nothing, a "per"/"each" clause, punctuation alone, or an English connector from a closed list
  *   ("for surgery", "in total", "subject to ...").
  * Anything else, an unknown unit or a word in another language, is not, and the row stays as printed. */
+/** Treatments and services a schedule may give a sub-limit of their own inside a wider ceiling. Closed list, whole phrase. */
+const SUB_LIMIT_SERVICE=String.raw`(?:traditional\s+chinese\s+medicine|tcm|physiotherapy|chiropractic|chiropractor|acupuncture|osteopathy|`
+  +String.raw`dental|dentistry|optical|x-?rays?|diagnostic\s+(?:tests?|x-?rays?|imaging)|laboratory\s+tests?|ambulance|`
+  +String.raw`prescribed\s+medicines?|prescription\s+drugs?|homeopathy|speech\s+therapy|occupational\s+therapy)`
+  +String.raw`(?:\s+(?:treatments?|services?|charges|fees|costs|expenses))?`;
+/** The closed-list treatment sub-limit printed in brackets after a ceiling, so the card can show it as a condition. */
+export function treatmentSubLimit(cell:string){
+  const m=(cell??"").replace(/\s+/g," ").trim().match(new RegExp(String.raw`\(\s*((?:for\s+)?(?:${SUB_LIMIT_SERVICE})\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`)\s*\)$`,"i"));
+  return m?m[1]:null;
+}
 function capTrailerKnown(rest:string){
   const t=rest.trim().replace(/\s+/g," ");
   if(!t)return true;
   if(SHORT_PERIOD.test(t))return false;
-  // A bracketed sub-limit for a named part of the benefit -- "Up to S$3,000 per accident (traditional Chinese medicine
-  // up to S$300)" -- leaves the ceiling of the whole as printed: the bracket limits only the part it names. The part must
-  // be a name (it never starts with per/each/every/any/all or an ordinal), the bracket must be the last thing printed and
-  // hold one figure; the rest of the trailer is still checked as before.
-  const part=t.match(new RegExp(String.raw`\(\s*(?!(?:for\s+)?(?:per|each|every|any|all|first|second|third|subsequent|thereafter|maximum|max|total|overall|aggregate|combined|and|or|plus|including|less)\b)(?:for\s+)?[a-z][a-z'’&\-]*(?:\s+[a-z][a-z'’&\-]*){0,6}\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`\s*\)$`,"i"));
+  // A bracketed sub-limit for a named TREATMENT or SERVICE -- "Up to S$3,000 per accident (traditional Chinese medicine
+  // up to S$300)" -- leaves the ceiling of the whole as printed: the bracket limits only that treatment. Closed list,
+  // anchored as the whole phrase (Critic #338): a bracket for a person ("children up to S$25,000"), a place ("overseas"),
+  // a condition ("pre-existing conditions"), panel status or an "if" clause limits the very claim it names, so the row
+  // stays as printed. The bracket must be the last thing printed and hold one figure.
+  const part=t.match(new RegExp(String.raw`\(\s*(?:for\s+)?(?:${SUB_LIMIT_SERVICE})\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`\s*\)$`,"i"));
   if(part&&part.index!=null){
     const before=t.slice(0,part.index).trim();
     if(!new RegExp(MONEY,"i").test(before))return capTrailerKnown(before);

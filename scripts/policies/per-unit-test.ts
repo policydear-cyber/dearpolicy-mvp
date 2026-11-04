@@ -3,7 +3,7 @@
  * becomes a lump sum or one total: the row stays as printed, with no figure (real-model run on d687296f, finding 1).
  * Made-up cells only; no model, no network. */
 import assert from "node:assert/strict";
-import { parseBenefitValue } from "../../lib/policies/benefit-rows";
+import { parseBenefitValue, treatmentSubLimit } from "../../lib/policies/benefit-rows";
 
 let pass = 0, fail = 0;
 function check(name: string, fn: () => void) {
@@ -32,6 +32,13 @@ const unknown = [
   "Up to S$3,000 (each visit up to S$300)", "Up to S$3,000 (per visit up to S$100)", "Up to S$3,000 (TCM up to S$300 per day)",
   "Up to S$3,000 (S$300 for TCM)", "Up to S$3,000 (dental up to S$300) and S$50 per x-ray", "Up to S$3,000 per day (dental up to S$300)",
   "Up to S$3,000 per fortnite (dental up to S$300)", "Up to S$3,000 (any one item up to S$500)", "Up to S$3,000 (maximum S$300 per visit)",
+  // Critic #338: a bracket for a person, a place, a condition, panel status or an "if" limits the very claim it names.
+  "Up to S$100,000 per person (children up to S$25,000)", "Up to S$100,000 (children under age ten up to S$25,000)",
+  "Up to S$200,000 (spouse up to S$100,000)", "Up to S$50,000 (dependants limited to S$10,000)", "Up to S$500,000 (juveniles capped at S$50,000)",
+  "Up to S$3,000 per accident (overseas up to S$1,000)", "Up to S$5,000 (outside Singapore up to S$2,000)",
+  "Up to S$10,000 (pre-existing conditions up to S$1,000)", "Up to S$20,000 (if hospitalised overseas up to S$5,000)",
+  "Up to S$1,000 (non-panel clinics up to S$300)", "Up to S$100,000 (death by natural causes up to S$20,000)",
+  "Up to S$3,000 (TCM up to S$300) per year", "Up to S$3,000 (dental treatment for children up to S$300)",
 ];
 for (const cell of unknown) check(`"${cell}" gives no amount`, () => assert.equal(parseBenefitValue(cell), null, JSON.stringify(parseBenefitValue(cell))));
 
@@ -67,6 +74,11 @@ check(`"S$100 a day" is a daily rate`, () => { const p = parseBenefitValue("S$10
 check(`"$4,500 per calendar year" is a yearly amount`, () => { const p = parseBenefitValue("$4,500 per calendar year"); assert.equal(p?.kind, "fixed"); assert.equal(p?.value, 4500); assert.equal(p?.period, "year"); });
 check(`"S$300 per year" is a yearly amount`, () => { const p = parseBenefitValue("S$300 per year"); assert.equal(p?.kind, "fixed"); assert.equal(p?.period, "year"); });
 check(`"S$30 per day" is a daily rate`, () => { const p = parseBenefitValue("S$30 per day"); assert.equal(p?.kind, "daily"); assert.equal(p?.value, 30); });
+
+check("a treatment sub-limit is read out for the card", () => {
+  assert.equal(treatmentSubLimit("Up to S$3,000 per accident (traditional Chinese medicine up to S$300)"), "traditional Chinese medicine up to S$300");
+  assert.equal(treatmentSubLimit("Up to S$100,000 per person (children up to S$25,000)"), null);
+});
 
 console.log(`per-unit: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
