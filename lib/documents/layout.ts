@@ -401,14 +401,16 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
  * is not cover and must never appear as cover. */
 const NOT_A_BENEFIT_TABLE=/pro-?ration factor|premium rate|schedule of premiums|premium table/i;
 const NEW_TABLE=/^table\s+[a-z][:.]/i;
-/** A premium table ends only on a positive signal: a line that is a benefit-schedule heading and nothing else
- * ("Disability Benefit Schedule", "• Hospital Benefits", "Schedule of Benefits"). Coordinator and Critic #347: not the shape
- * of a line (a bullet, a heading-like look) -- what its words say. The heading must END in a schedule noun ("benefits",
- * "benefit schedule", "schedule of benefits", "table of benefits"), carry no figure, and no premium, rate, charge, cost,
- * rider or guarantee word. Anything else, a bulleted premium row, a rider price, a note, stays in the premium table and
- * fails closed. */
+/** A premium table ends only on a positive signal (Coordinator and Critic #347): a line that is a recognised
+ * benefit-schedule heading and nothing else -- "Disability Benefit Schedule", "Schedule of Benefits", "Table of
+ * Benefits", "Summary of Benefits", "Benefits Table". A cover name ("• Hospital Cover", "• Critical Illness Benefit",
+ * "▪ Basic Benefits") is not one: premium tables are grouped under cover names. The heading must name a schedule,
+ * table or summary of benefits, carry no figure and no premium, rate, charge, cost, rider or guarantee word. And the
+ * first row under it must not be an age or band row ("Age 30 to 39", "Under 26", "26 to 30"), which is a premium
+ * row whatever the heading says. Anything else stays in the premium table and fails closed. */
 const BULLET=/^[\u2022\u25aa\u25cf\u25e6\u2023\u2043]\s*/u;
-const SCHEDULE_HEADING=/^(?:[a-z&'’\/-]+\s+){0,4}(?:benefits?(?:\s+(?:schedule|table|summary))?|schedule\s+of\s+benefits|table\s+of\s+benefits)$/i;
+const SCHEDULE_HEADING=/^(?:[a-z&'’\/-]+\s+){0,4}(?:benefits?\s+(?:schedule|table|summary)|(?:schedule|table|summary)\s+of\s+benefits)$/i;
+const BAND_ROW=/^(?:(?:age|ages|aged|anb|alb|age next birthday|band|class|tier)\b|under\s+\d|below\s+\d|up to age\b|\d{1,3}\s*(?:to|-|–|and)\s*\d{1,3}\b|\d{1,3}\s*(?:and|or)\s+(?:above|over|below|under)\b)/i;
 function startsBenefitSchedule(line:PageLine){
   const cells=line.cells.map(cell=>cell.replace(BULLET,"").trim()).filter(Boolean);
   if(cells.length!==1)return false;
@@ -416,6 +418,15 @@ function startsBenefitSchedule(line:PageLine){
   if(!heading||heading.length>60||/\d/.test(heading))return false;
   if(/\b(?:premiums?|rates?|charges?|costs?|prices?|fees?|loadings?|discounts?|riders?|guaranteed|payable by|you pay)\b/i.test(heading))return false;
   return SCHEDULE_HEADING.test(heading);
+}
+/** The first line after `from` that carries a value: an age or band row means the premium table goes on. */
+function firstValueRowIsBand(lines:PageLine[],from:number){
+  for(let i=from+1;i<lines.length;i++){
+    const line=lines[i];
+    if(line.cells.length<2||!line.cells.some(isValueCell))continue;
+    return BAND_ROW.test(line.cells[0].replace(BULLET,"").trim());
+  }
+  return false;
 }
 /** A band in a burns table -- "Equals to or greater than 10% but less than 15%".
  * The percentage in the row is a percentage of the BODY; the percentage beside
@@ -548,7 +559,7 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
     // A premium table ends where the next table or the next bulleted section starts ("• Disability Benefit Schedule"):
     // left on to the foot of the page, it hid the benefit schedule printed under the premium rates.
-    else if(suppressed&&(NEW_TABLE.test(whole)||startsBenefitSchedule(line)))suppressed=false;
+    else if(suppressed&&(NEW_TABLE.test(whole)||(startsBenefitSchedule(line)&&!firstValueRowIsBand(lines,index))))suppressed=false;
     if(suppressed)continue;
     const valueIndex=line.cells.findIndex(isValueCell);
     if(valueIndex<0||line.cells.length<2){

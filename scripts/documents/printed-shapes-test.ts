@@ -2,7 +2,8 @@
  * Summary-booklet shapes the table reader missed (MINDEF re-read, 4 Nov). Each one is a general layout, shown on a
  * made-up English booklet:
  *  1. A premium-rate table hid every row under it to the foot of the page, so a benefit schedule printed below the
- *     premium rates ("• Disability Benefit Schedule") was never read. It now ends at the next bulleted section.
+ *     premium rates ("• Disability Benefit Schedule") was never read. It now ends only on a recognised benefit-schedule
+ *     heading whose first row is not an age or band row; a cover name never ends it.
  *  2. A share printed in words ("One twelfth of Sum Insured") is an amount cell, on a closed list of fractions.
  *  3. An amount that stops on "or" ("15% of Sum Insured or") goes on in the line below when that line is only the rest
  *     of it ("up to S$50,000, whichever is lesser"), so the row is the whole choice, read back with its cap.
@@ -66,7 +67,7 @@ check("a premium table with no section after it hides its rows to the foot of th
   assert.equal(rows(text).length, 0, JSON.stringify(rows(text)));
 });
 check("a schedule heading ends a premium table, with a bullet of any glyph or none", () => {
-  for (const heading of ["▪\tHospital Benefits", "Schedule of Benefits", "●\tAccident Benefit Schedule"]) {
+  for (const heading of ["▪\tHospital Benefits Table", "Schedule of Benefits", "●\tAccident Benefit Schedule", "Summary of Benefits", "•\tTable of Benefits"]) {
     const text = ["Schedule of premiums", "Age band\tRate", "Under 26\t3.10", heading, "Accidental death\t100% of Sum Insured"].join("\n");
     assert.equal(find(text, "Accidental death")?.value, "100% of Sum Insured", heading);
   }
@@ -85,6 +86,15 @@ const PREMIUM_BULLETS: [string, string[]][] = [
   ["a bulleted note inside the table", ["Premium Rates (per S$1,000 sum insured)", "•\tRates are guaranteed for 5 years", "Age 30\tS$1.20", "Age 40\tS$2.10"]],
   ["a bulleted rate heading", ["Schedule of Premiums", "•\tRates per S$1,000 sum assured", "Age 25\tS$1.20", "Age 35\tS$2.40"]],
   ["a bulleted premium heading with a benefit word", ["Premium rate table", "•\tPremium for the Hospital Benefit", "Age 25\tS$1.20"]],
+  // TE #347 433f4985: a cover name under a rider premium table.
+  ["a cover name over a rider price", ["Rider premium table", "•\tHospital Cover", "Plan A\tS$210", "Plan B\tS$340"]],
+  // Critic #347 H1b: a premium table grouped under cover headings, one of them ending in "Benefit".
+  ["premiums grouped under cover names", ["Schedule of Premiums", "•\tHospital Cover", "Age 30 to 39\tS$420", "Age 40 to 49\tS$610", "•\tCritical Illness Benefit", "Age 30 to 39\tS$180"]],
+  ["premium rates grouped under plan benefits", ["Premium rates (annual, S$)", "\u25aa\tBasic Benefits", "Under 26\t95.00", "26 to 30\t120.00"]],
+  ["bare cover names of any kind", ["Premium Table", "•\tBenefits", "Plan A\tS$210", "•\tAccident Benefit", "Plan B\tS$90", "Hospital Benefits", "Plan C\tS$45"]],
+  // A schedule heading whose first row is an age band is still the premium table.
+  ["a schedule heading over age bands", ["Schedule of Premiums", "Age 25\tS$1.20", "•\tBenefit Schedule", "Age 30 to 39\tS$420", "Under 26\tS$95"]],
+  ["a schedule heading over ANB rows", ["Premium rate table", "Summary of Benefits", "ANB 30\tS$3.10", "Accidental death\t100% of Sum Insured"]],
 ];
 for (const [what, lines] of PREMIUM_BULLETS)
   check(`a premium table keeps its rows out with ${what}`, () => assert.deepEqual(rows(lines.join("\n")), []));
