@@ -165,8 +165,15 @@ export function validateAnalysis(raw:PolicyAnalysis,sources:PolicySource[],contr
       .flatMap(c=>{const text=writtenOrQuoted(c.text,[c.evidence]);return text?[{...c,text}]:[];}),
   }));
   const ownedProducts=new Set(contract.coverages.map(c=>productIdentity(c.productName??c.policyName)));
+  // A passage outside any product section counts only when its document is about one product, or is named after a
+  // product this contract owns: a multi-product booklet page with no section may be another product's terms.
+  const unscopedOwned=(s:PolicySource)=>{
+    const doc=[...contract.documents,...contract.references].find(d=>d.id===s.policyId);
+    if(!doc)return false;
+    return new Set((doc.products??[]).map(productIdentity).filter(Boolean)).size<=1||ownedProducts.has(productIdentity(doc.product_name));
+  };
   const grounded=(items:PolicyAnalysis["observations"])=>items.filter(item=>item.evidence.every(q=>validQuote(q,sources)&&
-    sources.some(s=>s.id===q.sourceId&&(!s.productScopes.length||s.productScopes.some(p=>ownedProducts.has(productIdentity(p))))))&&safeObservation(item.text,item.evidence))
+    sources.some(s=>s.id===q.sourceId&&(s.productScopes.length?s.productScopes.some(p=>ownedProducts.has(productIdentity(p))):unscopedOwned(s))))&&safeObservation(item.text,item.evidence))
     .flatMap(item=>{const text=writtenOrQuoted(item.text,item.evidence);return text?[{...item,text}]:[];});
   return {benefits,observations:grounded(raw.observations),nextSteps:grounded(raw.nextSteps)};
 }
