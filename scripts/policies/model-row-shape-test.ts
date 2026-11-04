@@ -76,6 +76,15 @@ const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   ["Premium Waiver", "Premium Waiver: future premiums of S$1,200 a year are paid for you", wording, "keep"],
   ["Payor Benefit", "Payor Benefit: we pay the premiums of S$800 a year if the payor dies", wording, "keep"],
   ["Payor Benefit", "On the payor's death we will pay the premiums of S$800 a year", wording, "keep"],
+  // Critic #348 M1 and TE #348: a hospital cash benefit prints a cover-and-rate shape, "paid by us" is a benefit verb, and a
+  // negated survival requirement is a benefit's wording.
+  ["Hospital Cash Cover", "Hospital Cash Cover: up to S$36,500 at S$100 per day", summary, "keep"],
+  ["Daily Hospital Income", "Covered up to S$18,250 at S$50 per day of hospitalisation", summary, "keep"],
+  ["Hospital Income", "Hospital income coverage of S$100 per day, up to S$10,000 at S$100 per day", summary, "keep"],
+  ["Payor Rider", "Payor Rider: premiums of S$600 are paid by us on the payor's death", wording, "keep"],
+  ["Death Benefit", "The death benefit is payable if the life assured dies; the life assured need not survive any period", wording, "named"],
+  ["Cover Price", "Protection from S$0.30 a day", summary, "drop"],
+  ["Survival", "A survival period of 14 days applies", wording, "drop"],
   // a named cover with no printed amount: kept, said to print no amount
   ["Premium Waiver", "We will waive premiums falling due while a benefit is payable under this policy.", wording, "named"],
   ["Compassionate Allowance", "A compassionate allowance is payable on the death of the Insured Person.", wording, "named"],

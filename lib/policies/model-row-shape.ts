@@ -26,25 +26,31 @@ export function startsWithName(name:string,quote:string){
   const n=key(name),q=key(quote);
   return n.length>=4&&(q===n||q.startsWith(n+" "));
 }
-/** A price, not a benefit, by its shape only (Critic #348): a cover figure and what it costs ("insured up to S$1,000,000
- * at S$1.37 per day"), or a premium word with a figure and no benefit verb ("Annual premium S$420"). "We pay the premiums
- * of S$800 a year", a waiver or a refund is a benefit. "Cost" is a benefit word in travel and accident cover, never a price
- * word on its own. */
+/** A price, not a benefit, by its shape only (Critic #348): a marketing line that opens "Be insured/covered/protected up
+ * to MONEY at MONEY per day", or a figure with a price marker ("for only S$0.40 a day", "as low as", "from S$1 a day"), or
+ * a premium word with a figure and no benefit verb ("Annual premium S$420"). A hospital cash benefit prints the same
+ * cover-and-rate shape ("up to S$36,500 at S$100 per day"), so a passage that names a hospital stay is never a price, and
+ * "we pay the premiums", "paid by us", a waiver or a refund is a benefit. "Cost" is a benefit word, never a price word. */
 export function statesAPrice(quote:string|null|undefined){
-  const q=(quote??"").replace(/\s+/g," ");
+  const q=(quote??"").replace(/^[\s•▪●◦‣⁃\-–]+/u,"").replace(/\s+/g," ");
   if(!new RegExp(MONEY,"i").test(q))return false;
-  if(new RegExp(String.raw`\b(?:insured|covered|coverage|cover)\b[^.;]*?${MONEY}[^.;]*?\bat\s+(?:only\s+|just\s+)?${MONEY}\s*(?:per|a|an|/|each)\s*(?:day|week|month|year|annum)\b`,"i").test(q))return true;
+  if(/\bhospital(?:i[sz]ation|i[sz]ed)?\b|\b(?:stay|confinement|ward)\b/i.test(q))return false;
+  const PERIOD=String.raw`\s*(?:per|a|an|/|each)\s*(?:day|week|month|year|annum)\b`;
+  if(new RegExp(String.raw`^be\s+(?:insured|covered|protected)\b[^.;]*?${MONEY}[^.;]*?\bat\s+(?:only\s+|just\s+)?${MONEY}${PERIOD}`,"i").test(q))return true;
+  if(new RegExp(String.raw`\b(?:for\s+only|for\s+just|only|just|as\s+low\s+as|from)\s+${MONEY}${PERIOD}`,"i").test(q))return true;
   if(/\b(?:waive|waiver|refund|return|reimburs)\w*/i.test(q))return false;
-  if(/\b(?:we|will|shall|company|insurer)\s+(?:will\s+|shall\s+)?pay\b/i.test(q))return false;
+  if(/\b(?:we|will|shall|company|insurer)\s+(?:will\s+|shall\s+)?pay\b|\bpaid\s+(?:by\s+us|for\s+you|on\s+your\s+behalf)\b|\b(?:are|is|will\s+be)\s+paid\b/i.test(q))return false;
   return /\bpremiums?\b/i.test(q);
 }
-/** A clause about a claim, never a benefit, and only when it prints no figure: a survival period, a condition before a
- * claim, a "for the avoidance of doubt" note, a passage saying something is not payable. A note with an amount is a
- * benefit with a condition and is kept. */
+/** A clause about a claim, never a benefit, and only when it prints no figure: a survival requirement ("must survive for
+ * 30 days", "a survival period of 14 days"), a condition before a claim, a "for the avoidance of doubt" note, a passage
+ * saying something is not payable. A negated requirement ("need not survive any period") is a benefit's wording, and a
+ * note with an amount is a benefit with a condition: both are kept (TE #348). */
 export function statesAClause(quote:string|null|undefined){
   const q=(quote??"").replace(/\s+/g," ");
   if(printsAmount(q))return false;
-  return /\b(?:survives?|survived|survival period|before a claim|claim (?:can|will|may) (?:only )?be admitted|for the avoidance of doubt|(?:is|are) not payable|no benefit (?:is|shall be|will be) payable)\b/i.test(q);
+  if(/\b(?:need\s+not|does\s+not\s+need\s+to|do\s+not\s+need\s+to|no\s+need\s+to|without\s+(?:a|any)\s+need\s+to)\s+survive\b/i.test(q))return false;
+  return /\bmust\s+(?:first\s+)?survive\b|\bsurviv(?:es|al period)\s+(?:of|for)\s+(?:\d+|[a-z]+\s+\(\d+\))|\bbefore a claim\b|\bclaim (?:can|will|may) (?:only )?be admitted\b|\bfor the avoidance of doubt\b|\b(?:is|are) not payable\b|\bno benefit (?:is|shall be|will be) payable\b/i.test(q);
 }
 /** A marketing feature line on a summary page: it opens with a verb phrase for what the buyer gets to do. Closed list of
  * phrases, never a bare "Get" (Get Well Benefit). */
