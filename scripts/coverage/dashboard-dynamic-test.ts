@@ -96,6 +96,14 @@ async function main() {
     return id;
   }
 
+  /** The document's intake job, which reads it into the table and links its sections (lib/rag/ingest.ts): live while
+   * it runs, then done. Home waits on a ready document only while this job is live (lib/rag/live-job.ts). */
+  async function job(account: string, policyId: string, state: "live" | "done") {
+    if (state === "live") await query(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'policy_processing',$2,'{}'::jsonb)
+      ON CONFLICT DO NOTHING`, [account, policyId]);
+    else await query("UPDATE background_jobs SET status='succeeded' WHERE job_type='policy_processing' AND idempotency_key=$1", [policyId]);
+  }
+
   type Tile = { category: string; status: string; amount: number | null; currency: string; parts: { name: string; amount: number | null; currency: string | null }[] | null };
   async function tiles(account: string, member?: string, poll = false) {
     process.env.DEV_ACCOUNT_ID = USERS[account];
@@ -160,7 +168,11 @@ async function main() {
         assert.equal((await tiles(m.account, self)).reading, 0);
         const pending = await upload(plan("Beacon Life Plan", m.b, { read: false, line: false }), self);
         await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [pending]);
-        assert.equal((await tiles(m.account, self)).reading, 1, "ready, but its reading is not stored yet");
+        await job(m.account, pending, "live");
+        assert.equal((await tiles(m.account, self)).reading, 1, "ready, but its intake job is still reading it into the table");
+        await job(m.account, pending, "done");
+        assert.equal((await tiles(m.account, self)).reading, 0, "its intake job ended with no reading: nothing more is coming");
+        await job(m.account, pending, "live");
         await query("UPDATE policies SET processing_completed_at=now()-interval '20 minutes' WHERE id=$1", [pending]);
         assert.equal((await tiles(m.account, self)).reading, 0, "a document that never gets a reading stops counting");
         await query("UPDATE policies SET processing_status='extracting',updated_at=now() WHERE id=$1", [pending]);
@@ -172,11 +184,13 @@ async function main() {
         // No schedule line: the tile can only get it from the benefit table, once the document's section is linked.
         const doc = await upload(plan("Anchor Life Plan", 70000, { relink: false, line: false }), self);
         await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [doc]);
+        await job(m.account, doc, "live");
         try {
         const read = await tiles(m.account, self);
         assert.equal(read.reading, 1, "read but not linked yet: still waited for");
         assert.equal(tile(read, "Death").amount, m.a, "not on the tile before it is linked");
         await relink(appDb, model(null), m.account);
+        await job(m.account, doc, "done");
         const linked = await tiles(m.account, self);
         assert.equal(linked.reading, 0, "linked: no longer waited for");
         assert.equal(tile(linked, "Death").amount, m.a + 70000, "on the tile once linked");
@@ -238,7 +252,9 @@ async function main() {
       await query("UPDATE policies SET document_role='insurer_letter' WHERE id=$1", [receipt]);
       assert.equal((await tiles(SG, me)).reading, 0);
       await query("UPDATE policies SET document_role='schedule' WHERE id=$1", [receipt]);
+      await job(SG, receipt, "live");
       assert.equal((await tiles(SG, me)).reading, 1, "a schedule with no reading yet is still waited for");
+      await job(SG, receipt, "done");
       await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [receipt]);
     });
 
@@ -268,7 +284,30 @@ async function main() {
           assert.equal(b.reading, 0, `a household with no section to link stops waiting (${JSON.stringify(odd)})`);
         }
         await store({ document: { covers: [], benefits: [] }, pages: [{ page: 2, json: { benefits: [{ benefit: "Death Benefit" }] } }] });
-        assert.equal((await tiles(acct)).reading, 1, "a section found only by a page read again is still waited for until it is linked");
+        await job(acct, doc, "live");
+        assert.equal((await tiles(acct)).reading, 1, "a section found only by a page read again is still waited for while its job links it");
+        await job(acct, doc, "done");
+        assert.equal((await tiles(acct)).reading, 0, "its job ended: no longer waited for");
+      } finally { await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [doc]); }
+    });
+
+    await test("sections whose cover names nobody in the family stop the wait once the intake job ends (TE real-model run, 4 Nov)", async () => {
+      const acct = EMPTY2;
+      const me = (await query<{ id: string }>("SELECT id FROM family_members WHERE account_id=$1", [acct])).rows[0].id;
+      // Read for a name the family does not have: the reading has a section, but no family cover for the linker to choose,
+      // so no link is ever written. Home used to wait for one for 10 minutes after every document had finished.
+      const doc = await upload({ account: acct, person: "Rowan Achterberg", product: "Kestrel Hospital Plan", currency: "SGD", symbol: "S$", sum: 250, category: "Hospitalisation",
+        benefit: "Room and board", relink: false, line: false }, me);
+      await query("UPDATE policies SET processing_completed_at=now()-interval '20 minutes' WHERE account_id=$1 AND id<>$2", [acct, doc]);
+      await query("UPDATE policies SET processing_completed_at=now() WHERE id=$1", [doc]);
+      try {
+        await job(acct, doc, "live");
+        assert.equal((await tiles(acct)).reading, 1, "while its intake job runs it is still being read");
+        const before = (await query<{ n: number }>("SELECT count(*)::int AS n FROM benefit_links WHERE account_id=$1", [acct])).rows[0].n;
+        await relink(appDb, model(null), acct);
+        await job(acct, doc, "done");
+        const after = (await query<{ n: number }>("SELECT count(*)::int AS n FROM benefit_links WHERE account_id=$1 AND updated_at>now()-interval '1 minute'", [acct])).rows[0].n;
+        assert.equal((await tiles(acct)).reading, 0, `the job ended with no link to write (links before ${before}, new ${after}): Home stops waiting`);
       } finally { await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [doc]); }
     });
 
