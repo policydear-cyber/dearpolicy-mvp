@@ -1156,6 +1156,33 @@ test("a benefit the question asks about by name is never hidden as not described
   assert.equal(shown("I broke my wrist. What does my personal accident cover pay?"), 0);
 });
 
+test("asking for a most with nothing described never hides a card as 'not described' (live 637c547: hospital cash)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const cash: ChatRow = { ...amb, id: "R961", benefit: "Daily Hospital Cash" };
+  const shown = (question: string, row = cash) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, cash], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
+  assert.equal(shown("What's the most my hospital plan pays in total?"), 1);
+  assert.equal(shown("what is the maximum our insurance pays?", amb), 1);
+  assert.equal(shown("Berapa maksimum pelan saya bayar?"), 1);
+  // Something has happened, or may: the missing step stays missing and the card stays hidden.
+  for (const q of ["She had an accident, what's the most she can get?", "I'm in hospital for 3 days, what's the maximum?", "what's the most I can claim if I get sick?", "Broke my arm yesterday. Max payout?", "What can my plan pay?"])
+    assert.equal(shown(q), 0, q);
+  // Allow-list (Critic and TE #319): any word off the closed list may tell of an event, in any language, so the card stays hidden.
+  for (const q of ["What's the most I can claim for my dengue?", "Max payout for my wife's cancer?", "What's the most I can get for a dog bite?", "My car was stolen, what's the most I can claim?",
+    "We lost our luggage, what's the maximum?", "Flight delayed 6 hours, what's the most?", "My son was bitten by a dog, max payout?", "We were in a car crash, what's the most we can claim?",
+    "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "I was at the hospital, what's the most I can claim?", "We are at the hospital, what's the max?",
+    "There was a fire at our home, what's the most the plan pays?", "Our home had a fire, max payout?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
+    assert.equal(shown(q), 0, q);
+  for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？", "What's the cap on my hospital plan?"]) assert.equal(shown(q), 1, q);
+  // A product the household holds counts only as its whole name; one word of it is often an illness or a place (Critic #319).
+  const named = { ...cash, id: "R962", product: "Dengue Shield" };
+  const shownNamed = (question: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: named.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, named], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
+  assert.equal(shownNamed("What's the most my Dengue Shield pays?"), 1);
+  assert.equal(shownNamed("What's the maximum for my dengue?"), 0);
+  assert.equal(shownNamed("What's the most the shield pays?"), 0);
+});
+
 test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const rec: ChatRow = { ...amb, id: "R962", benefit: "J, Accidental Hospital Recuperation Benefit" }, cef: ChatRow = { ...amb, id: "R963", benefit: "K. Child Education Fund Benefit" };
