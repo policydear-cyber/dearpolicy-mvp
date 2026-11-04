@@ -73,12 +73,11 @@ test("space thousands are amounts: a kronor, złoty or euro table written '2 500
   }
 });
 
-test("a date is never an amount, and a run that prints a decimal-only figure is rates", () => {
+test("a date is never an amount, and years side by side are no space thousands", () => {
   for (const values of [
     ["01.10.2026", "01.11.2026", "01.11.2027"],
     ["01/10/2026", "01/11/2026", "01/11/2027"],
     ["2026-10-01", "2026-11-01", "2027-11-01"],
-    ["1.235", "2.450", "3.875", "0.925"], // a rate card: 0.925 can only be a decimal
     ["2019 2021", "2022 2024", "2025 2026"], // years side by side are not space thousands
   ]) assert.deepEqual(scrambleSigns(scrambled(values)), [], values[0]);
   // The safe reading stays: one dot group with nothing to say it is a rate is thousands, so it is checked.
@@ -88,7 +87,7 @@ test("a date is never an amount, and a run that prints a decimal-only figure is 
   assert.ok(scrambleSigns(scrambled(["01.10.2026", "12,000.00", "1,500.00", "400.00"])).includes(SIGN));
 });
 
-test("a figure printed with its own currency is never a rate, and a percentage is no evidence of rates (TE #330)", () => {
+test("one dot group is always thousands, whatever else its run prints: the safe reading (TE #330)", () => {
   for (const values of [
     ["Rp 250.000", "Rp 750.000", "Rp 500.000", "2.5%"],
     ["Rp 250.000", "Rp 750.000", "Rp 500.000", "0.5"],
@@ -98,6 +97,13 @@ test("a figure printed with its own currency is never a rate, and a percentage i
   ]) assert.ok(scrambleSigns(scrambled(values)).includes(SIGN), values.join(" "));
   // Labels in any script count: Vietnamese labels have no three Latin letters in a row.
   assert.ok(scrambleSigns(["Bảng quyền lợi", "Nằm viện", "Phẫu thuật", "Chuyên khoa", "Hệ số", "250.000 đ", "750.000 đ", "500.000 đ", "1.25"].join("\n")).includes(SIGN));
-  // A rate card with a decimal-only figure and no currency stays rates.
-  assert.deepEqual(scrambleSigns(scrambled(["1.235", "2.450", "3.875", "0.925"])), []);
+  // The currency printed only in the table's heading: bare values beside a bare decimal are still amounts (TE #330 round 2).
+  assert.ok(scrambleSigns(["Tabel Manfaat (Rp)", ...LABELS, "250.000", "750.000", "500.000", "0.5"].join("\n")).includes(SIGN));
+  assert.ok(scrambleSigns(["Tabel Manfaat (Rp)", ...LABELS, "250.000", "750.000", "500.000", "1.5"].join("\n")).includes(SIGN));
+  // So a rate card is checked against the image too: one reading call, never amounts paired by guess.
+  assert.ok(scrambleSigns(scrambled(["1.235", "2.450", "3.875", "0.925"])).includes(SIGN));
+  // Yen, yuan and won written with their own character are currencies.
+  assert.ok(scrambleSigns(scrambled(["5,000円", "12,000円", "30,000円", "100,000円"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["5,000元", "12,000元", "30,000元", "100,000元"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["50,000원", "120,000원", "300,000원", "1,000,000원"])).includes(SIGN));
 });
