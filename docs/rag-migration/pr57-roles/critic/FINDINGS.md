@@ -10644,3 +10644,10 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - #342 own-row split (MY Surgical). 4fb29c6 M1: an extra break dropped printed qualifier lines (sub-limits). → 5e1c629 READY.
 - #344 wrapped caps finish the row above. 9ae1dad READY. Drop scripts/zz342.ts. L: an r10 fixture "100% of sum assured, S$50,000" now gives null.
 - #343 English-only word removal. f105b81 H1 wrong person: KIN also guards self-resolve, so "My ibu fell…, do I have cover?" resolved to the speaker. M2: a Malay threshold exemption was kept while its "daripada" guard was removed. Pending fix.
+  → 1dcf0f3 NOT READY: bilingual set-aside made "Cancer / Elaun Harian" and similar rows Critical Illness. → 34e7595 restored main's illness words. → 8a8856c H1: the injury rule made all-cause death rows accident-only ("Death due to injury or natural causes"); M1: r7:chat-robustness red (non-English items now out of scope). → c2439d0 READY: injury rule moved out to its own PR, r7 floors and trap list updated with English-only comments, build 0 Edge warnings.
+- #344 d54bcbb READY (final).
+- #345 forNobody word allow-list. ef61baa READY. → 39379c1 M1: a spread card copies person-specific conditions ("Your husband's…", "AhKow's…") to the other holder. Pending.
+- #346 warm ping. 865e47b READY (57 security and warm suites).
+- #311 SIMPLE_EFFORT low. 14c0b18 READY on TE round 4. Separate bug on main: "25% of SA, max RM50,000" shown as "Up to RM50,000".
+- #347 summary-booklet table shapes. 3eae293 H1: any bulleted line ended a premium table, so premiums became cover. → 433f498 H1b: a premium table grouped under cover headings still leaked. → 88ec28b READY: ends only on a schedule-of-benefits heading whose first row is not an age band.
+- #348 model rows with no rule. 7a07b63 H1: real covers dropped (status cells, running text, bullets with words). → 621a04e H1: drop words "cost", "get" and clause words lose covers with amounts. Pending.
