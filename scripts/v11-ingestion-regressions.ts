@@ -484,6 +484,15 @@ async function partA() {
 }
 
 // --- Synthetic documents ----------------------------------------------------
+/** A made-up 16x16 grey PNG: drawn on a PDF page, it is an image-only page with no text layer. */
+async function greyPng() {
+  const { deflateSync } = await import("node:zlib");
+  const crc = (buf: Buffer) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (type: string, data: Buffer) => { const t = Buffer.from(type); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const c = Buffer.alloc(4); c.writeUInt32BE(crc(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(16, 0); ihdr.writeUInt32BE(16, 4); ihdr[8] = 8; ihdr[9] = 0;
+  const raw = Buffer.concat(Array.from({ length: 16 }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(16, 0x80)])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
 type Row = [string, string];
 async function schedulePdf(opts: { product: string; policyNumber: string; insured: string; pages: (string | Row)[][]; sumInsured?: number; category?: string }) {
   const { PDFDocument, StandardFonts } = await import("pdf-lib");
@@ -788,6 +797,36 @@ async function partB() {
       await assert.rejects(processPolicy({ accountId: a, familyMemberId: josephine, policyId: doc.policyId, storageKey: doc.storageKey, attempt: { number: 1, max: 5 } }));
       const [p] = await rows(`SELECT processing_status,processing_error,processing_message FROM policies WHERE id=$1`, [doc.policyId]);
       assert.equal(p.processing_status, "failed"); assert.equal(p.processing_error, errors.UNREADABLE_DOCUMENT_MESSAGE);
+    });
+    await t("E5: a scan no reader looked at (reading scans off) is a service failure, never 'no readable text, upload a clearer scan'", async () => {
+      const { PDFDocument } = await import("pdf-lib");
+      const scan = await PDFDocument.create(); const page = scan.addPage([595, 842]); const image = await scan.embedPng(await greyPng());
+      page.drawImage(image, { x: 0, y: 0, width: 595, height: 842 });
+      const doc = await insert(a, josephine, "scan-reader-off.pdf", Buffer.from(await scan.save()));
+      const before = process.env.OCR_ENABLED; process.env.OCR_ENABLED = "off";
+      try {
+        await assert.rejects(processPolicy({ accountId: a, familyMemberId: josephine, policyId: doc.policyId, storageKey: doc.storageKey, attempt: { number: 1, max: 1 }, deferredRetry: true }));
+      } finally { if (before === undefined) delete process.env.OCR_ENABLED; else process.env.OCR_ENABLED = before; }
+      const [p] = await rows(`SELECT processing_status,processing_error FROM policies WHERE id=$1`, [doc.policyId]);
+      assert.equal(p.processing_status, "failed");
+      assert.equal(p.processing_error, errors.DOCUMENT_READING_SERVICE_MESSAGE);
+      assert.notEqual(p.processing_error, errors.UNREADABLE_DOCUMENT_MESSAGE);
+    });
+    await t("E5: reading scans off, a text page plus a scanned page: the document is read and its note names the scanned page as not read (Critic #323 M1)", async () => {
+      const { PDFDocument } = await import("pdf-lib");
+      const mixed = await PDFDocument.load(await schedulePdf({ product: "Lantern Personal Accident", policyNumber: "LPA-55001", insured: "Josephine Example", pages: [] }));
+      const scanned = mixed.addPage([595, 842]); scanned.drawImage(await mixed.embedPng(await greyPng()), { x: 0, y: 0, width: 595, height: 842 });
+      const scannedPage = mixed.getPageCount();
+      const doc = await insert(a, josephine, "mixed-scan-off.pdf", Buffer.from(await mixed.save()));
+      const before = process.env.OCR_ENABLED; process.env.OCR_ENABLED = "off";
+      try {
+        await processPolicy({ accountId: a, familyMemberId: josephine, policyId: doc.policyId, storageKey: doc.storageKey, attempt: { number: 1, max: 1 } });
+      } finally { if (before === undefined) delete process.env.OCR_ENABLED; else process.env.OCR_ENABLED = before; }
+      const [p] = await rows(`SELECT processing_status,processing_message FROM policies WHERE id=$1`, [doc.policyId]);
+      assert.equal(p.processing_status, "ready");
+      assert.ok(String(p.processing_message).includes(`Page ${scannedPage} could not be read`), String(p.processing_message));
+      const [stored] = await rows(`SELECT extraction_method FROM policy_pages WHERE policy_id=$1 AND page_number=$2`, [doc.policyId, scannedPage]);
+      if (stored && "extraction_method" in stored) assert.equal(stored.extraction_method, "unreadable");
     });
     await t("E5: a damaged file -> 'could not be opened' message; the parser's error only in diagnostics", async () => {
       const doc = await insert(a, josephine, "damaged.pdf", Buffer.from("%PDF-1.7\n" + "garbage ".repeat(200)));
