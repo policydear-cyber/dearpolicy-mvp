@@ -95,6 +95,10 @@ test("a chat for nobody in particular names every insured person's own card for 
   assert.deepEqual(who(answer([amb("Lim Ah Kow"), amb("Tan Mei Ling")], rows, true)), ["Lim Ah Kow: Up to S$500", "Tan Mei Ling: Up to S$500"]);
   // A chat about one person, or a question naming one, keeps to the card asked for.
   assert.deepEqual(who(answer([amb("Lim Ah Kow")])), ["Lim Ah Kow: Up to S$500"]);
+  // A row printed for a qualified column ("Child", an employee-only column) is never spread to another person.
+  const childCash = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Hospital cash")!;
+  assert.ok(childCash.qualifier && rows.some((r) => r.person === "Tan Mei Ling" && r.benefit === "Hospital cash"));
+  assert.deepEqual(who(answer([{ row: childCash.id, person: "Lim Ah Kow", quote: "Hospital cash S$50 per day", eventFit: "any_event" }], rows, true)).filter((x) => /Tan/.test(x)), []);
   // A benefit another member has no row for is given only for the person who has it.
   const surrender = rows.find((r) => r.benefit === "Surrender value")!;
   assert.deepEqual(who(answer([{ row: surrender.id, person: "Lim Ah Kow", quote: "Non-Guaranteed Surrender Value S$12,400", eventFit: "any_event" }], rows, true)), ["Lim Ah Kow: S$12,400"]);
@@ -104,11 +108,17 @@ test("whose words: a member's own name word or a family word names someone; 'my'
     assert.equal(namesSomeone([q], HOUSE), true, q);
   for (const q of ["What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "What do we get if our house floods?", "How much is the ambulance benefit?"])
     assert.equal(namesSomeone([q], HOUSE), false, q);
-  // The speaker alone is the account's own member, so only "we", "our" and impersonal questions ask for nobody.
-  for (const q of ["What do we get if our house floods?", "How much is the ambulance benefit?", "What's the most the hospital plans pay?", "我们的保险赔多少？"])
-    assert.equal(asksForNobody([q], HOUSE), true, q);
-  for (const q of ["What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "I broke my hip, how much?", "Berapa saya boleh tuntut?", "我住院可以赔多少", "How much for Mei Ling?"])
-    assert.equal(asksForNobody([q], HOUSE), false, q);
+  // Allow-list (Critic #345): several people asked for, or the policy alone in the household's own benefit words. Anything
+  // that may point at one person (a pronoun, "the maid", "our helper", a possessive, a shared surname, an unknown word) does not spread.
+  const H4 = { ...HOUSE, members: [{ name: "Alex Tan", relationship: "self" }, { name: "Mary Tan", relationship: "spouse" }, { name: "Ben Tan", relationship: "child" }, { name: "Siti Aminah", relationship: "other" }] } as Household;
+  const own = [{ ...rows[0], benefit: "Hospital cash", product: "Group Scheme", cover: "Group Personal Accident" }] as ChatRow[];
+  for (const q of ["How much do we each get?", "Who gets hospital cash?", "How much hospital cash does the group policy pay?", "How much do we get for hospital cash?"])
+    assert.equal(asksForNobody([q], H4, own), true, q);
+  for (const q of ["Is she covered for hospital cash?", "Does he get the dental benefit?", "What does his policy pay for ICU?", "What about her?", "Can the missus claim outpatient?",
+    "How much for the hubby's surgery?", "Our helper was warded, how much?", "Is the maid covered?", "The boy broke his arm, how much?", "Grandson got dengue, how much hospital cash?",
+    "Mak was warded, how much?", "Appa had surgery, what's covered?", "Is the toddler covered?", "How much for the twins?", "What's the hospital cash for the employee?", "Is Tan covered?",
+    "What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "I broke my hip, how much?", "Berapa saya boleh tuntut?", "How much for Mei Ling?"])
+    assert.equal(asksForNobody([q], H4, own), false, q);
 });
 
 test("the table block numbers every row and states the figure the Coverage page shows", () => {

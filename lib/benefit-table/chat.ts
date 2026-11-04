@@ -744,8 +744,7 @@ function readsAsLimit(r: ChatRow): boolean {
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
 /** Whether the household's words name one of its members: a word of a member's name that no other member shares, or a
- * family word (closed list, in the languages households write in). "My" and "I" alone name nobody when the chat is about
- * no one in particular: the account is shared, so they do not settle whose. */
+ * family word (closed list, in the languages households write in). */
 const FAMILY_WORDS = /\b(?:wife|husband|spouse|partner|son|sons|daughter|daughters|child|children|kid|kids|baby|mother|father|mum|mom|dad|mummy|daddy|parents?|brother|sister|grandma|grandpa|grandmother|grandfather|isteri|suami|anak|ibu|ayah|emak|bapa|esposa|esposo|hijo|hija|madre|padre|femme|mari|fils|fille|m[eè]re|p[eè]re)\b|妻子|老婆|丈夫|老公|儿子|兒子|女儿|女兒|孩子|妈妈|媽媽|爸爸|父亲|父親|母亲|母親/i;
 export function namesSomeone(said: string[], household: Household): boolean {
   const text = said.join(" ").normalize("NFKC").toLowerCase();
@@ -753,15 +752,39 @@ export function namesSomeone(said: string[], household: Household): boolean {
   const words = (n: string) => baseName(n).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 3);
   const people = household.members.map((m) => m.name);
   const heard = new Set(text.split(/[^\p{L}]+/u));
-  return people.some((p) => words(p).some((w) => heard.has(w) && !people.some((o) => o !== p && words(o).includes(w))));
+  // Any word of a member's name, shared or not: "Is Tan covered?" names one of several Tans (Critic #345).
+  return people.some((p) => words(p).some((w) => heard.has(w)));
 }
 /** The speaker alone ("I", "my", "saya", "我", "je", "yo"): the account's own member (relationship "self") is meant, as
  * the model is told, so the words ask for one person. "We", "our" and "我们" ask for the household. Closed list. */
 const FIRST_PERSON = /\b(?:i|me|my|mine|myself|i'm|i’m|im|i've|i’ve|i'd|i’d|i'll|i’ll|saya|aku|daku|je|j'|moi|mon|ma|mes|yo|mi|mis|me)\b|我(?![们們])/i;
 /** Whether the household's words ask for nobody in particular: no member named (namesSomeone), and not the speaker alone. */
-export function asksForNobody(said: string[], household: Household): boolean {
-  return !namesSomeone(said, household) && !said.some((t) => FIRST_PERSON.test(t.normalize("NFKC")));
+/** Words that ask for more than one person (closed list). */
+const MANY_PEOPLE = /\b(?:we|our|ours|us|everyone|everybody|each|both|all\s+of\s+us|the\s+family|who|whose|anyone|anybody|per\s+person|each\s+person)\b/i;
+/** Words that point at one person without naming them: a third-person pronoun (closed list). */
+const ONE_PERSON = /\b(?:he|she|him|her|his|hers|they|them|their|theirs|himself|herself|themselves)\b/i;
+/** What "the", "our" or a possessive may be about without pointing at a person: the policy itself (closed list). */
+const POLICY_NOUN = /^(?:polic(?:y|ies)|plans?|schemes?|group|insurers?|insurance|family|cover|coverage)$/i;
+/** Whether the household's words ask for nobody in particular: allow-list, default no (Critic #345). They must ask for
+ * several people (MANY_PEOPLE) or be about the policy alone, and never point at one person: no member's name word, no
+ * family word, not the speaker alone, no third-person pronoun, no possessive "'s" on anything but the policy, and every
+ * "the …" or "our …" is the policy itself ("our helper", "the maid", "the employee", "the boy" point at someone). */
+export function asksForNobody(said: string[], household: Household, rows: readonly ChatRow[] = []): boolean {
+  const text = said.join(" ").normalize("NFKC").replace(/[’`]/g, "'");
+  if (namesSomeone(said, household) || FIRST_PERSON.test(text) || ONE_PERSON.test(text)) return false;
+  for (const m of text.matchAll(/\b([\p{L}]+)'s?\b/gu)) if (/'s?$/.test(m[0]) && !POLICY_NOUN.test(m[1])) return false;
+  for (const m of text.matchAll(/\b(?:the|our|this|that|these|those)\s+([\p{L}]+)/giu)) if (!POLICY_NOUN.test(m[1])) return false;
+  if (MANY_PEOPLE.test(text)) return true;
+  // About the policy alone: every word is a question, policy or pay word, or a word of a benefit's or product's name the
+  // household holds ("How much hospital cash does the group policy pay?"). Any other word ("grandson", "mak") may be a
+  // person, so no (Critic #345).
+  const own = new Set(rows.flatMap((r) => `${r.benefit} ${r.product ?? ""} ${r.cover ?? ""}`.toLowerCase().split(/[^\p{L}\d]+/u)).filter((w) => w.length >= 3));
+  const words = text.toLowerCase().split(/[^\p{L}\d']+/u).filter(Boolean);
+  return words.length > 0 && words.every((w) => POLICY_ONLY_WORDS.has(w) || own.has(w));
 }
+const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does do the a an can will would pay pays paid payout payable claim claimable cover covers covered "
+  + "coverage plan plans policy policies scheme group insurance insurer benefit benefits amount amounts sum get gets give gives for of on under from in per day year total "
+  + "most maximum max limit there any which").split(" "));
 /** `forNobody`: the chat is about no one in particular and the household's words ask for nobody (asksForNobody). Then a
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
@@ -913,7 +936,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     }
     // The same row of every other member, when the chat is for nobody in particular (forNobody).
     const others = forNobody ? rows.filter((o) => o.personId !== row.personId && !given.has(o.id) && !ruledOut.has(o.id) && o.docIndex === row.docIndex
-      && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
+      && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
       && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
