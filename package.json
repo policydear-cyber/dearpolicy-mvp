@@ -27,6 +27,7 @@
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
     "benefit-table:share-test": "node --import tsx scripts/benefit-table/share-test.ts",
     "benefit-table:parity-test": "node --import tsx scripts/benefit-table/parity-test.ts",
+    "benefit-table:table-pages-test": "node --import tsx --test scripts/benefit-table/table-pages-test.ts",
     "benefit-table:intake-test": "node --import tsx scripts/benefit-table/intake-limits-test.ts",
     "benefit-table:scale-words-test": "node --import tsx scripts/benefit-table/scale-words-test.ts",
     "benefit-table:family-ended-test": "node --import tsx scripts/benefit-table/family-ended-test.ts",
