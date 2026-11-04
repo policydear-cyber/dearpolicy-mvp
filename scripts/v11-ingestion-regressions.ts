@@ -416,6 +416,9 @@ async function partA() {
     assert.equal(errors.unreadablePagesNote([3]), "Page 3 could not be read, so anything printed only there is not available.");
     assert.equal(errors.unreadablePagesNote([4, 2, 3]), "Pages 2, 3 and 4 could not be read, so anything printed only there is not available.");
     assert.equal(errors.unreadablePagesNote([]), null);
+    assert.equal(errors.notReadPagesNote([3]), "Page 3 is a scanned page that has not been read yet, so anything printed only there is not available.");
+    assert.equal(errors.notReadPagesNote([4, 2, 3, 2]), "Pages 2, 3 and 4 are scanned pages that have not been read yet, so anything printed only there is not available.");
+    assert.equal(errors.notReadPagesNote([]), null);
   });
   await t("R3 amendments: a later endorsement of the plan replaces the older value; anything else stays a conflict", async () => {
     const { resolveStatements } = await import("@/lib/documents/evidence-store");
@@ -824,7 +827,9 @@ async function partB() {
       } finally { if (before === undefined) delete process.env.OCR_ENABLED; else process.env.OCR_ENABLED = before; }
       const [p] = await rows(`SELECT processing_status,processing_message FROM policies WHERE id=$1`, [doc.policyId]);
       assert.equal(p.processing_status, "ready");
-      assert.ok(String(p.processing_message).includes(`Page ${scannedPage} could not be read`), String(p.processing_message));
+      // Not read yet, never "could not be read": no reader looked at it, so nothing is known to be wrong with it.
+      assert.ok(String(p.processing_message).includes(`Page ${scannedPage} is a scanned page that has not been read yet, so anything printed only there is not available.`), String(p.processing_message));
+      assert.ok(!String(p.processing_message).includes("could not be read"), String(p.processing_message));
       const [stored] = await rows(`SELECT extraction_method FROM policy_pages WHERE policy_id=$1 AND page_number=$2`, [doc.policyId, scannedPage]);
       if (stored && "extraction_method" in stored) assert.equal(stored.extraction_method, "unreadable");
     });
