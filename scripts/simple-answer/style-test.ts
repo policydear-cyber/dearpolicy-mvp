@@ -90,6 +90,15 @@ t("a figure whose currency the document does not state says so on its card; othe
   assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
   assert.match(card(true, "benefit_terms"), /Policy terms, not worked out for this case/);
 });
+t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
+  const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+    statements: [{ id: "s2", kind: "fact", personName: "Ana Ruiz", text: "The group scheme pays a daily hospital cash amount from the 11th day of a stay.", fullText: null, conditions, amount }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+  const one = html(null, ["Pays for at most 30 days of continuous hospitalisation"]);
+  assert.match(one, /Condition from the document:<\/p><ul class="answer-card-conditions"><li>Pays for at most 30 days/);
+  assert.match(html(null, ["Paid per stay", "Not paid outside Malaysia"]), /Conditions from the document:/);
+  assert.doesNotMatch(html(null, []), /from the document:/);
+  assert.doesNotMatch(html({ text: "RM 80", currencyResolved: true, illustration: false }, ["Paid per stay"]), /from the document:/);
+});
 // ------------------------------------------------------------------ second round (DC, 22 Oct: live answers on 159b954)
 t("the same benefit printed with and without its row letter in two documents loses the letter", () => {
   const rows = [{ benefit: "J, Accidental Hospital Recuperation Benefit", coverKey: "gpa" }, { benefit: "Accidental Hospital Recuperation Benefit", coverKey: "gpa" },

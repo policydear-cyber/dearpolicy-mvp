@@ -1106,6 +1106,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .answer-card-text { font-weight: 600; color: var(--ink); }
 .answer-card-basis { font-size: var(--fs-sm); color: var(--ink-2); }
 .answer-card-conditions { margin: 2px 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-point-conditions-label { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--ink-2); font-weight: 600; }
 .answer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .answer-chip { font-size: var(--fs-xs); border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 3px 10px; color: var(--brand-ink); font-weight: 600; }
 .answer-chip.muted { color: var(--ink-2); font-weight: 500; }
