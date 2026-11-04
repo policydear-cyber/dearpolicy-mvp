@@ -103,8 +103,13 @@ async function documents(db: Db, accountId: string, policyId?: string, pick?: (d
   }
   return shaped;
 }
-// A page whose table text could not be checked (lib/documents/layout-check.ts) is not searched: no row's quote is found on it.
-const CHECKED_PAGE = "coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked'";
+// Only pages whose words are the page's own are searched (an allow-list of how a page was read, lib/rag/ingest.ts): read
+// natively or by OCR, checked line by line ("part_checked" keeps only its confirmed figures), or stored before methods
+// were recorded. A page whose table text could not be checked ("unchecked", lib/documents/layout-check.ts), one that
+// could not be read at all ("unreadable": whatever a reader made of it), or any method added later is not read into
+// the table and no row's quote is found on it (Critic #327 L3). Read time only: no stored reading is re-read.
+export const TABLE_PAGE_METHODS = ["", "native", "ocr", "part_checked"] as const;
+const CHECKED_PAGE = `coalesce(to_jsonb(pp)->>'extraction_method', '') IN (${TABLE_PAGE_METHODS.map((m) => `'${m}'`).join(", ")})`;
 /** pagesPrint in the database, for each document: its checked pages' count and fingerprint, without sending their text. */
 const PAGES_PRINT_SQL = `SELECT policy_id, count(*)::int AS pages,
     md5(string_agg(page_number::text || ':' || md5(coalesce(text, '')), ',' ORDER BY page_number)) AS print
