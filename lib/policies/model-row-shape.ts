@@ -19,26 +19,35 @@ export function printsAmount(quote:string|null|undefined){
   if(/\bas\s+charged\b/i.test(q))return true;
   return /(?:^|\s)\d[\d,]*(?:\.\d{1,2})?$/.test(q)&&!/\b(?:days?|months?|years?|age|weeks?|hours?)\s+\d[\d,]*$/i.test(q);
 }
-/** A price, not a benefit: a cover figure charged "at … per day/month/year", or a premium with a figure. */
+/** A price, not a benefit: a premium, cost or price word together with a figure ("Pay a monthly premium of S$12.50",
+ * "costs only S$0.40 a day"). Waiving or refunding a premium is a benefit, never a price. A cover figure and a daily rate
+ * together ("Hospital Income up to S$36,500 at S$100 per day") is a benefit, so the shape alone never decides. */
 export function statesAPrice(quote:string|null|undefined){
   const q=(quote??"").replace(/\s+/g," ");
-  // "insured up to S$1,000,000 at S$1.37 per day": a cover figure, then what it costs. One figure alone ("hospital cash at
-  // S$100 per day") is a benefit's rate.
-  if(new RegExp(String.raw`${MONEY}\b.*\bat\s+(?:only\s+|just\s+)?${MONEY}\s*(?:per|a|/|each)\s*(?:day|week|month|year|annum)\b`,"i").test(q))return true;
-  return /\bpremiums?\b/i.test(q)&&new RegExp(MONEY,"i").test(q)&&!/\b(?:waive|waiver|refund|return)\w*/i.test(q);
+  if(!new RegExp(MONEY,"i").test(q))return false;
+  if(/\b(?:waive|waiver|refund|return)\w*/i.test(q))return false;
+  return /\b(?:premiums?|costs?|costing|priced?|prices)\b/i.test(q);
 }
-/** The benefit's name printed as a heading of its own on the page: a line that is the name and nothing else, after a
- * bullet, a number or a trailing colon. */
-export function namedAsHeading(name:string,pageText:string){
-  const key=(text:string)=>text.normalize("NFKC").toLowerCase().replace(/[*^#†‡]+/g,"").replace(/\s+/g," ").trim();
-  const wanted=key(name);
-  if(wanted.length<4)return false;
-  return pageText.split("\n").some(line=>key(line.replace(/\t/g," ").replace(/^\s*(?:[•▪●◦‣⁃\-–]|\(?[a-z0-9ivx]{1,4}[.)])\s*/i,"").replace(/:\s*$/,""))===wanted);
+/** A clause about a claim, never a benefit: a survival period, a condition before a claim is admitted, a "for the
+ * avoidance of doubt" note, or a passage saying something is not payable. Closed list. */
+export function statesAClause(quote:string|null|undefined){
+  const q=(quote??"").replace(/\s+/g," ");
+  return /\b(?:survives?|survived|survival period|before a claim|claim (?:can|will|may) (?:only )?be admitted|for the avoidance of doubt|(?:is|are|shall not be|will not be) not payable|no benefit (?:is|shall be|will be) payable)\b/i.test(q);
 }
-/** keep: stored as today (its passage prints an amount the reader could not turn into a rule). named: a cover the page
- * names as a heading, stored and said to print no amount. drop: a sentence about the plan, never a benefit row. */
-export function modelRowWithoutRule(name:string,quote:string,pageText:string):"keep"|"named"|"drop"{
-  if(statesAPrice(quote))return "drop";
-  if(printsAmount(quote))return "keep";
-  return namedAsHeading(name,pageText)?"named":"drop";
+/** A marketing feature line on a summary page, never a benefit row: it starts with what the buyer gets to do. Closed list. */
+export function statesAFeature(quote:string|null|undefined){
+  const q=(quote??"").replace(/^[\s•▪●◦‣⁃\-–]+/u,"");
+  return /^(?:receive|enjoy|get|choose|be (?:insured|covered)|pay the same|no medical check-up|no underwriting)\b/i.test(q);
+}
+/** keep: stored as today. named: kept, with no amount printed in its passage. drop: only on positive evidence that the
+ * row is not a benefit -- a price, a claim clause or a feature line (Critic #348 H1: for a lost cover, keep is the safe
+ * side, so anything not proven a non-benefit is kept: a cover named in running text, a status cell such as "Included" or
+ * "Unlimited", a bullet with words after the name). */
+export function modelRowWithoutRule(_name:string,quote:string,_pageText:string):"keep"|"named"|"drop"{
+  if(statesAPrice(quote)||statesAClause(quote)||statesAFeature(quote))return "drop";
+  return printsAmount(quote)?"keep":"named";
+}
+/** The passage points to an amount printed somewhere else ("the amount shown in the schedule on page 5"). */
+export function pointsElsewhere(quote:string|null|undefined){
+  return /\b(?:schedule|page\s+\d+|table|shown in|stated in|specified in|set out in)\b/i.test(quote??"");
 }

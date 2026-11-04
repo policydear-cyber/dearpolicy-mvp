@@ -1,7 +1,8 @@
 /**
- * A model-read row with no rule is stored only when its passage prints an amount, or when the page names the benefit as
- * a heading of its own (then it is said to print no amount, never "tell DearPolicy what this pays"). A feature line, a
- * price or a clause is never a benefit row (MINDEF re-read, 4 Nov). Made-up English booklets. No database, no model.
+ * A model-read row with no rule is dropped only on positive evidence that it is not a benefit: a price, a claim clause or a
+ * marketing feature line (MINDEF re-read, 4 Nov). Everything else is kept (Critic #348 H1: for a lost cover, keep is the
+ * safe side). A kept row whose passage prints no amount is said to print none beside it, never "tell DearPolicy what this
+ * pays". Made-up English booklets. No database, no model.
  */
 import assert from "node:assert/strict";
 import { modelRowWithoutRule, printsAmount, statesAPrice } from "../../lib/policies/model-row-shape";
@@ -35,12 +36,30 @@ const table = ["Outpatient Care", "Benefits Limits Per Visit\t(S$)", "Clinic Vis
 const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   // descriptive feature lines and prices on a summary page
   ["Daily Hospital Cash Benefit", "Receive daily hospital cash benefit", summary, "drop"],
-  ["Ambulance Cost Reimbursement", "Reimbursement of ambulance cost", summary, "drop"],
+  ["Ambulance Cost Reimbursement", "Reimbursement of ambulance cost", summary, "named"],
   ["Term Life Cover", "Be insured up to a maximum coverage of S$500,000 at S$0.95 per day", summary, "drop"],
   ["Monthly Premium", "Pay a monthly premium of S$12.50 for this cover", summary, "drop"],
   // a clause about a claim, not a benefit
   ["Survival Period", "The Insured Person must survive for 14 days before a claim can be admitted.", wording, "drop"],
   ["Linked Claims", "In the three (3) months after payments end, payments may resume without a new deferred period.", wording, "named"],
+  ["Not covered", "No benefit is payable for a disability caused by war.", wording, "drop"],
+  ["Rider cost", "The rider costs S$4.20 a month", summary, "drop"],
+  ["Low price", "Cover of S$200,000 for a price of S$0.40 a day", summary, "drop"],
+  ["Choose cover", "Choose cover from S$50,000 to S$500,000", summary, "drop"],
+  ["Enjoy", "• Enjoy cover for 37 critical illnesses", summary, "drop"],
+  // Critic #348 H1: real covers with no figure are kept, whatever their shape on the page.
+  ["Premium Waiver Benefit", "This policy includes a Premium Waiver Benefit on diagnosis of a critical illness.", "Your Plan", "named"],
+  ["Premium Waiver", "• Premium Waiver on critical illness", "Riders", "named"],
+  ["Payor Benefit", "2. Payor Benefit (Rider)", "Riders", "named"],
+  ["Premium Waiver", "Premium Waiver Included", table, "named"],
+  ["Emergency Evacuation", "Emergency Evacuation Covered", table, "named"],
+  ["Repatriation", "Repatriation ✓", table, "named"],
+  ["Emergency Medical Evacuation", "Emergency Medical Evacuation Unlimited", table, "named"],
+  ["Ward Charges", "Ward Charges Full cover", table, "named"],
+  ["Total and Permanent Disability", "TOTAL AND PERMANENT DISABILITY", "SECTION 3", "named"],
+  ["Accidental Death Benefit", "We pay the amount shown in the schedule on page 5.", "Benefits", "named"],
+  ["Hospital Income", "Hospital Income up to S$36,500 at S$100 per day", summary, "keep"],
+  ["Maternity", "Maternity cover after a 10-month waiting period", wording, "named"],
   // a named cover with no printed amount: kept, said to print no amount
   ["Premium Waiver", "We will waive premiums falling due while a benefit is payable under this policy.", wording, "named"],
   ["Compassionate Allowance", "A compassionate allowance is payable on the death of the Insured Person.", wording, "named"],
@@ -64,12 +83,18 @@ check("amounts in any printed form count", () => {
 });
 check("waiving or refunding a premium is not a price", () => {
   assert.equal(statesAPrice("We waive the premium of S$20 a month while you are disabled"), false);
-  assert.equal(statesAPrice("Cover of S$200,000 at only S$0.40 a day"), true);
+  assert.equal(statesAPrice("Hospital Income up to S$36,500 at S$100 per day"), false);
+  assert.equal(statesAPrice("Pay a premium of S$20 a month"), true);
 });
 check("a named cover with no amount is shown as named, never as asking what it pays", () => {
   const pays = describeBenefitFormula({ formulaKind: "none", formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null,
     quote: "We will waive premiums falling due while a benefit is payable under this policy.", benefitName: "Premium Waiver" });
-  assert.equal(pays, "Named in the policy, with no amount printed for it");
+  assert.equal(pays, "Named in the policy; no amount is printed beside it here");
+});
+check("a passage that points to a schedule elsewhere never says the policy prints no amount", () => {
+  const pays = describeBenefitFormula({ formulaKind: "none", formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null,
+    quote: "We pay the amount shown in the schedule on page 5.", benefitName: "Accidental Death Benefit" });
+  assert.equal(pays, "No amount printed beside it here; check the schedule");
 });
 check("a row whose passage prints an amount it could not read still asks", () => {
   const pays = describeBenefitFormula({ formulaKind: "none", formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null,
