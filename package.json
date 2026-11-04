@@ -84,6 +84,7 @@
     "ocr:openai-test": "node --import tsx scripts/ocr-openai-regressions.ts",
     "eval:extraction": "node --import tsx scripts/extraction-eval.ts",
     "system:test": "node --import tsx scripts/system-database-regressions.ts",
+    "documents:reissued-schedule-test": "node --import tsx scripts/documents/reissued-schedule-test.ts",
     "ledger:row-names-test": "node --import tsx scripts/ledger/row-names-test.ts",
     "claims:evidence-test": "node --import tsx scripts/claim-evidence-regressions.ts",
     "claims:evidence-provenance-test": "node --import tsx scripts/evidence-provenance-regressions.ts",

@@ -225,6 +225,53 @@ async function markDuplicates(accountId: string, group: GroupPolicy[]) {
   return marked;
 }
 
+/** The amounts a document states, one entry per benefit or cover: its key (benefits: the whole name in any script,
+ * ignoring case and spacing, with tier, row kind and kind; covers: the person, category and tier), the set of amounts
+ * stated under that key, and the set of currencies printed with them. A benefit printed twice under one key (two wards'
+ * room rates) is one entry with both amounts, never two figures paired across. Rows marked a duplicate of a third
+ * document are left out ($3 is the document they may be a duplicate of). */
+const STATED = (doc: string, partner: string) => `
+  SELECT 'b|'||regexp_replace(lower(trim(benefit_name)),'\\s+',' ','g')||'|'||coalesce(lower(trim(tier)),'')||'|'||coalesce(row_kind,'benefit')||'|'||formula_kind AS k,
+         array_agg(DISTINCT formula_value ORDER BY formula_value) AS amounts,
+         array_remove(array_agg(DISTINCT upper(currency) ORDER BY upper(currency)),NULL) AS currencies
+    FROM policy_benefits WHERE account_id=$1 AND policy_id=${doc} AND formula_kind<>'none' AND formula_value IS NOT NULL
+     AND (duplicate_of_policy_id IS NULL OR duplicate_of_policy_id=${partner}) GROUP BY 1
+  UNION ALL
+  SELECT 'c|'||family_member_id::text||'|'||regexp_replace(lower(trim(category)),'\\s+',' ','g')||'|'||coalesce(lower(trim(tier)),''),
+         array_agg(DISTINCT amount ORDER BY amount), array_remove(array_agg(DISTINCT upper(currency) ORDER BY upper(currency)),NULL)
+    FROM policy_coverages WHERE account_id=$1 AND policy_id=${doc} AND amount IS NOT NULL
+     AND (duplicate_of_policy_id IS NULL OR duplicate_of_policy_id=${partner}) GROUP BY 1`;
+
+/** Whether two documents are proven to state the same amounts: at least one benefit or cover is stated with amounts in
+ * BOTH, and every one stated in both has the same set of amounts (and the same currencies wherever both print one).
+ * Proof of sameness, never the absence of a difference: a document whose amounts were not read (a reading cut short,
+ * figures withheld from unchecked pages) proves nothing, so it is never filed as a copy of another (Critic #325 M1).
+ * A benefit or cover only one states is neither proof nor difference, so a photo that read fewer figures is still a
+ * copy when what it read agrees. Covers are compared per person (TE #325: two people's covers on one schedule). */
+export async function provesSameAmounts(accountId: string, policyId: string, otherId: string): Promise<boolean> {
+  const result = await query<{ n: number; differ: number }>(
+    `WITH a AS (${STATED("$2", "$3")}), b AS (${STATED("$3", "$2")})
+     SELECT count(*)::int AS n,
+            count(*) FILTER (WHERE a.amounts<>b.amounts OR (cardinality(a.currencies)>0 AND cardinality(b.currencies)>0 AND a.currencies<>b.currencies))::int AS differ
+       FROM a JOIN b ON b.k=a.k`,
+    [accountId, policyId, otherId]);
+  const row = result.rows[0];
+  return !!row && row.n > 0 && row.differ === 0;
+}
+
+/** Whether `setAsideId` may be filed as a copy of `keptId`: the two are proven to state the same amounts, and the one set
+ * aside states no benefit or cover with an amount that the kept one does not state (a rider added on reissue is never
+ * hidden behind the schedule without it; Critic #325 M2). A photo that read fewer figures than the kept PDF still
+ * qualifies: what it states is a subset. */
+export async function isCopyOf(accountId: string, setAsideId: string, keptId: string): Promise<boolean> {
+  if (!(await provesSameAmounts(accountId, setAsideId, keptId))) return false;
+  const extra = await query<{ extra: boolean }>(
+    `WITH a AS (${STATED("$2", "$3")}), b AS (${STATED("$3", "$2")})
+     SELECT EXISTS(SELECT 1 FROM a WHERE NOT EXISTS(SELECT 1 FROM b WHERE b.k=a.k)) AS extra`,
+    [accountId, setAsideId, keptId]);
+  return !extra.rows[0]?.extra;
+}
+
 /** Contradictory amounts or currencies for the same benefit -- two pages of
  * one document, or two current versions of the same plan -- are never
  * silently collapsed: every row involved is kept and carries a
