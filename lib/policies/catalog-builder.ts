@@ -7,7 +7,7 @@ import type { ScenarioTrait } from "@/lib/chat/types";
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { CURRENCY_MARKER,benefitRowsFromText,costSharingRowsFromText } from "@/lib/documents/layout";
 import { deterministicConditions } from "@/lib/policies/condition-catalog";
-import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode } from "./benefit-rows";
+import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode,treatmentSubLimit } from "./benefit-rows";
 import { pageProductScopes } from "./inventory";
 import { benefitTraits,replaceBenefitCatalog,requiredTraits,validateCatalogFormula,type CatalogBenefit } from "./benefit-catalog";
 import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,ensureEvidenceSchema,methodFor,readingModelIdentity,type ExtractionMethod } from "@/lib/documents/evidence";
@@ -380,7 +380,10 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
         offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
         sourcePage:page.page_number,quote,
-        conditions:parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+"."]:[],
+        // A treatment's own sub-limit inside the ceiling is shown with it (its words as printed), never hidden behind the
+        // larger figure.
+        conditions:[...(parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+"."]:[]),
+          ...(parsed.kind==="expense_cap"&&treatmentSubLimit(row.value)?["The policy states this benefit as including "+treatmentSubLimit(row.value)+"."]:[])],
         requirements:[],
         // A daily rate with no cap stated in its own row is not yet payable,
         // and a rule taken from a heading is confirmed by a person first.
