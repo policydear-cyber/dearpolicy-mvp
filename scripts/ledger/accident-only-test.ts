@@ -47,5 +47,13 @@ t(`"Injury overseas with a hospital stay" is not accident-only`, () => assert.no
 t(`"No Claim Bonus Accidental Death" is still accidental death`, () => assert.equal(eventForBenefitName("No Claim Bonus Accidental Death").event, "accidental_death"));
 t(`"Death due to Injury (accident only)" is accidental death`, () => assert.equal(eventForBenefitName("Death due to Injury (accident only)").event, "accidental_death"));
 t(`"Death due to Injury (see clause 4)" is not accident-only`, () => assert.notEqual(eventForBenefitName("Death due to Injury (see clause 4)").event, "accidental_death"));
+// Critic #350: a name that prints "accident" stays accident-only unless it names a non-accident cause outright.
+for (const n of ["Accidental Death Benefit (excluding war)", "Accidental Death Benefit (not payable for suicide)", "Accidental Death or Dismemberment",
+  "Accidental Death; double on public transport", "Accidental Death (including murder)", "Accidental Death Benefit - Non-Scheduled Flights",
+  "Accidental Death (whether at work or not)", "Accident Death Benefit (Plan A)", "Accidental Death Benefit (Double Indemnity)"])
+  t(`"${n}" stays accidental death`, () => assert.equal(eventForBenefitName(n).event, "accidental_death"));
+t(`"Accidental TPD (no waiting period)" stays accidental disablement`, () => assert.equal(eventForBenefitName("Accidental TPD (no waiting period)").event, "accidental_disablement"));
+for (const n of ["Death due to accident or illness", "Death by accident or natural causes", "Death from accident or any other cause"])
+  t(`"${n}" is any-cause death`, () => assert.equal(eventForBenefitName(n).event, "death"));
 console.log(`accident only: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }

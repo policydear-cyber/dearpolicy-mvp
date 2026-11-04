@@ -465,20 +465,26 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
-/** A row whose ONLY cause is an accident or an injury: "Accidental Death", "Death due to Injury", "TPD resulting from
- * bodily injury", "Injury Death Benefit". A closed rule (TE and Critic #343): any word that opens another cause or a
- * second clause ("or", "otherwise", "any cause", "natural", "illness", "including", "excluding", "self-inflicted", "not",
- * "no", ";") and the row is any cause. An injury counts only as the cause ("due to", "caused by", "resulting from",
- * "following", "from" an injury, or "Injury Death"), never one the name just mentions ("Death or injury to any person",
- * "Injury overseas"). Unsure is any cause: an accident-only sum is never counted toward a death from illness, and an
- * any-cause row read as accident-only only loses a claim it could have made. */
+/** A row that pays only for an accident or an injury. Two rules, kept apart (Critic #350):
+ * (a) A name that prints "accident" stays accident-only, as before, whatever else it says ("Accidental Death Benefit
+ *     (excluding war)", "Accidental Death or Dismemberment", "Accident Death Benefit (Plan A)"): reading such a row as any
+ *     cause would count an accident-only sum toward a death from illness. It is any cause only when the name names a
+ *     non-accident cause outright, from a closed list: illness, sickness, disease, natural causes, any (other) cause,
+ *     all causes, otherwise ("Death due to accident or illness").
+ * (b) A name that prints only an injury ("Death due to Injury", "TPD resulting from bodily injury", "Injury Death") is
+ *     accident-only only when the injury is its SOLE cause (TE and Critic #343): any word that opens another cause or a
+ *     second clause ("or", "including", "not", "no", ";", a bracket) and the row is any cause. An injury counts only as
+ *     the cause ("due to", "caused by", "resulting from", "following", "from" an injury, or "Injury Death"), never one the
+ *     name just mentions ("Death or injury to any person", "Injury overseas"). */
 const ACCIDENT_WORD=/\baccident/;
+const NON_ACCIDENT_CAUSE=/\b(?:illness(?:es)?|sickness(?:es)?|diseases?|natural(?:\s+causes?)?|any\s+(?:other\s+)?(?:cause|reason)s?|all\s+causes|otherwise)\b/;
 const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^(?:accidental\s+)?injury\s+death\b/;
 const ANOTHER_CAUSE=/\b(?:or|otherwise|any\s+(?:other\s+)?(?:cause|reason)s?|natural|illness(?:es)?|sickness(?:es)?|disease|diseases|including|includes|excluding|excludes|except|other than|not|no\s+(?:accident|injury|injuries|waiting)|non|self[- ]inflicted|whether|and illness|and sickness)\b|[;(]/;
 export function namesOnlyAnAccidentCause(n:string){
   const t=n.toLowerCase();
-  if(!ACCIDENT_WORD.test(t)&&!INJURY_CAUSE.test(t))return false;
-  return !ANOTHER_CAUSE.test(t.replace(/\((?:accidents?|accidental|injury|injuries)(?:\s+only)?\)/g," "));
+  if(ACCIDENT_WORD.test(t))return !NON_ACCIDENT_CAUSE.test(t);
+  if(!INJURY_CAUSE.test(t))return false;
+  return !ANOTHER_CAUSE.test(t.replace(/\((?:injury|injuries)(?:\s+only)?\)/g," "));
 }
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
