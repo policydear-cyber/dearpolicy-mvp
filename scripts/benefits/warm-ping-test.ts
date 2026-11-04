@@ -49,8 +49,25 @@ test("the ping is decided before the route reads a session or household", async 
   const { readFileSync } = await import("node:fs");
   const route = readFileSync("app/api/benefits/route.ts", "utf8");
   const body = route.slice(route.indexOf("export async function GET("));
-  assert.ok(body.indexOf("if(isWarmPing(request))return warmPing();") > 0);
-  assert.ok(body.indexOf("if(isWarmPing(request))return warmPing();") < body.indexOf("requireHouseholdContext"));
+  const line = 'if(isWarmPing(request))return limitOpenEndpoint(request,"warm")??warmPing();';
+  assert.ok(body.indexOf(line) > 0);
+  assert.ok(body.indexOf(line) < body.indexOf("requireHouseholdContext"));
   const start = route.indexOf("async function warmPing()"), warm = route.slice(start, route.indexOf("\n}\n", start));
   assert.doesNotMatch(warm, /account|household|family|policies|request/i, "the ping reads nothing about anyone");
+});
+
+test("a caller looping on the ping gets an empty 429 from the open-endpoint brake; other callers and /api/health keep going", async () => {
+  await installDatabase();
+  const { GET } = await import("../../app/api/benefits/route");
+  const { OPEN_ENDPOINT_MAX, limitOpenEndpoint } = await import("../../lib/http/open-endpoint-limit");
+  const from = (ip: string) => new NextRequest("http://localhost/api/benefits?warm=1", { headers: { "x-forwarded-for": `${ip}, 10.0.0.1` } });
+  for (let i = 0; i < OPEN_ENDPOINT_MAX; i++) assert.equal((await GET(from("203.0.113.77"))).status, 204, "ping " + (i + 1));
+  const stopped = await GET(from("203.0.113.77"));
+  assert.equal(stopped.status, 429);
+  assert.equal(await stopped.text(), "");
+  assert.ok(Number(stopped.headers.get("retry-after")) >= 1);
+  assert.match(stopped.headers.get("cache-control") ?? "", /no-store/);
+  assert.equal((await GET(from("198.51.100.77"))).status, 204, "another IP is not affected");
+  assert.equal(limitOpenEndpoint(new Request("http://localhost/api/health", { headers: { "x-forwarded-for": "203.0.113.77" } }), "health"), null, "the ping keeps its own count");
+  assert.equal(fetches, 0);
 });
