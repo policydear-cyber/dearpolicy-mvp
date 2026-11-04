@@ -5,7 +5,7 @@ import { lineFigure, linePeriodWords } from "@/lib/coverage/line-period";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
-import { coverReadingPending, failedDocumentAdvice, readInPartAdvice } from "@/lib/documents/failure-advice";
+import { coverReadingPending, failedDocumentAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -491,7 +491,10 @@ export default function PoliciesPage() {
             const part = !processing && policy.processing_status === "ready" ? readInPartAdvice(policy.processing_message) : null;
             // Cover reading not finished: its own reason and next step, never "could not be matched to the page" (audit 3 Nov).
             const pending = !part && !processing && policy.processing_status === "ready" ? coverReadingPending(policy.processing_message) : null;
+            // A page that could not be read at all: said on the card, whatever else the document's state is.
+            const missing = !processing && policy.processing_status === "ready" ? unreadablePagesAdvice(policy.processing_message) : null;
             return <>
+              {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>Some pages couldn&rsquo;t be read</b><span>{missing.what}</span><small>{missing.next}</small></div>}
               {part && <div className="accuracy-warning" data-testid="read-in-part"><b>Read in part</b><span>{part.what}</span><small>{part.next}</small></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{pending.next}</small></div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
