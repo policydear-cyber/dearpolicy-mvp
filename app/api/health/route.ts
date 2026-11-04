@@ -5,6 +5,7 @@ import { describeChoice,modelFor } from "@/lib/ai/providers";
 import { describePineconeState,pineconeEnabled } from "@/lib/rag/pinecone";
 import { simpleChatModel } from "@/lib/simple-chat/flag";
 import { truthy } from "@/lib/launch/guards";
+import { limitOpenEndpoint } from "@/lib/http/open-endpoint-limit";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -15,7 +16,11 @@ export const ROUTE_AUTH = "public" as const;
  * person set up, so when one is down the fix is theirs to make — and the
  * message must say what to do, not print a connection string. */
 export type ServiceState={ok:boolean;label:string;detail:string;fix?:string};
-export async function GET(){
+export async function GET(request:Request){
+  // Open to anyone signed out, and each call checks the database and the search service: a per-IP brake
+  // (lib/http/open-endpoint-limit.ts), far above any real poller.
+  const limited=limitOpenEndpoint(request,"health");
+  if(limited)return limited;
   const database:ServiceState=await query("SELECT 1").then(()=>({ok:true,label:"Database",detail:"Connected"}))
     .catch(error=>({ok:false,label:"Database",detail:/ECONNREFUSED/.test(String(error?.message))?"Not running":"Cannot connect",
       fix:"Check the DATABASE_URL environment variable in your hosting dashboard."}));
