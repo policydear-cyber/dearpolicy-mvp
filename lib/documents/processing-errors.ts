@@ -80,6 +80,16 @@ export function unreadablePagesNote(pageNumbers: number[]): string | null {
   return list + ", so anything printed only there is not available.";
 }
 
+/** Scanned pages of an otherwise readable document that no reader looked at (none was configured, or reading scans was
+ * switched off): never said to be unreadable, since nothing is known to be wrong with them. One sentence, built only
+ * from page numbers (lib/documents/failure-advice.ts notReadPagesAdvice matches it exactly). */
+export function notReadPagesNote(pageNumbers: number[]): string | null {
+  const pages = [...new Set(pageNumbers)].filter((n) => Number.isInteger(n) && n > 0).sort((a, b) => a - b);
+  if (!pages.length) return null;
+  const list = pages.length === 1 ? "Page " + pages[0] + " is a scanned page that has not been read yet" : "Pages " + pages.slice(0, -1).join(", ") + " and " + pages[pages.length - 1] + " are scanned pages that have not been read yet";
+  return list + ", so anything printed only there is not available.";
+}
+
 /** A ready document's stored message: its lead (the cover reading not finished) followed by its page notes, so the notes
  * are never lost behind the lead. Readers match the lead itself, or the lead and a space (lib/documents/failure-advice.ts,
  * lib/policies/not-fully-read.ts). A note's own "Read in part." is dropped: the lead already says the document is not
