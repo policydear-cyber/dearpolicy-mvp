@@ -16,6 +16,15 @@ for (const n of ["Death due to Injury or Illness", "Death due to illness or inju
   t(`"${n}" is any death`, () => assert.equal(eventForBenefitName(n).event, "death"));
   t(`"${n}" is not restricted to an accident`, () => assert.notEqual(causeForBenefit(n), "accident"));
 }
+for (const n of ["Death (including death due to injury)", "Death, including death from injury", "Death (excluding self-inflicted injury)",
+  "Death; self-inflicted injury is excluded", "Death or injury to any person covered by this policy",
+  "Death or bodily injury to any person covered under this policy", "Death due to self-inflicted injury"]) {
+  t(`"${n}" is not restricted to an accident`, () => assert.notEqual(causeForBenefit(n), "accident"));
+  t(`"${n}" is not accidental death`, () => assert.notEqual(eventForBenefitName(n).event, "accidental_death"));
+}
+for (const n of ["Total and Permanent Disability resulting from Injury", "Death caused by bodily injury", "Death following an injury"])
+  t(`"${n}" needs an accident`, () => assert.equal(causeForBenefit(n), "accident"));
+t(`"Injury overseas with a hospital stay" is not an accident-only row`, () => assert.notEqual(causeForBenefit("Injury overseas with a hospital stay"), "accident"));
 t(`"Accidental Death" is still accidental death`, () => assert.equal(eventForBenefitName("Accidental Death").event, "accidental_death"));
 console.log(`injury cause: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }

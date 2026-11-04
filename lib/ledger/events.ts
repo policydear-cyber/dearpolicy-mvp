@@ -465,12 +465,15 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
-/** A row named for an accident: "accident", or an injury ("Death due to Injury") when the name names no illness ("injury
- * or illness" is either cause) and the injury is not negated ("other than by injury"). (TE #343: "Death due to Injury"
- * read as any death, so an accident-only sum would count toward a death from illness.) */
+/** A row named for an accident: "accident", or an injury named as the cause ("Death due to Injury", "TPD resulting from
+ * injury", "Injury Death Benefit") when the name names no illness ("injury or illness" is either cause). An injury the
+ * name only mentions is not the cause: "Death or injury to any person", "Death (including death due to injury)",
+ * "Death (excluding self-inflicted injury)", "Injury overseas with a hospital stay" (TE #343 round 3). Unsure is any
+ * cause, which never counts an accident-only sum toward a death from illness. */
+const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^injury\s+death\b/;
 function namesAccident(n:string){
   if(/\baccident/.test(n))return true;
-  return /(?<!\b(?:other than|not|excluding|except|exclusive of)\s+(?:due to\s+|caused by\s+|by\s+|from\s+|an?\s+)?)\binjur(?:y|ies)\b/.test(n)
+  return INJURY_CAUSE.test(n)&&!/\b(?:including|incl\.?|excluding|except|exclusive of|other than|not|self[- ]inflicted|or)\b[^.;]*\binjur/.test(n)
     &&!/\b(?:illness|sickness|disease)/.test(n);
 }
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
