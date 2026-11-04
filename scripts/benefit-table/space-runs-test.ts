@@ -12,7 +12,9 @@ function check(name: string, fn: () => void) {
 
 // Unclear runs print nothing at all.
 const nothing = ["Death benefit S$ 120 000", "Room S$ 1 500 per day", "Hospital cash £ 2 500", "S$ 150 250 350",
-  "S$ 1 500.00", "Cover US$ 2 500 000", "CHF 12'000", "Benefit 12'500.50", "Limit 1 250 000", "3,00", "Fee 150,00", "S$ 1 500", "S$ 1 500"];
+  "S$ 1 500.00", "Cover US$ 2 500 000", "CHF 12'000", "Benefit 12'500.50", "Limit 1 250 000", "3,00", "Fee 150,00", "S$ 1 500", "S$ 1 500",
+  // Still unclear: each could be one space-grouped figure.
+  "100 200 300", "50 100", "1 600,000", "S$ 1 500 000", "Plan A Plan B Plan C\n250 300 400"];
 for (const line of nothing) check(`"${line}" prints no figure`, () => assert.deepEqual(numbersIn(line), [], JSON.stringify(numbersIn(line))));
 
 // Whole figures grouped with commas, and columns of them, still read.
@@ -20,6 +22,11 @@ const whole: [string, number[]][] = [
   ["S$600,000", [600000]], ["S$1,500 2,000 2,500", [1500, 2000, 2500]], ["RM 250.00 300.00", [250, 300]], ["Ward 4 1,200.00", [4, 1200]],
   ["Death S$600,000\tTPD S$600,000", [600000, 600000]], ["1.5 million", [1500000]], ["Rp 250.000", [250000]], ["Rp 500.000.000", [500000000]],
   ["Room and board S$300 per day, up to 120 days", [300, 120]], ["Section 3 120 000", [3, 120, 0]], ["RM 1,000 500 000", [1000]],
+  // Separate figures a space apart stay separate: a figure carries on the one before only as an exact 3-digit group after
+  // 1 to 3 plain digits, and never as a count or a date (Critic and TE on #339).
+  ["Accidental death 600000 1000000", [600000, 1000000]], ["2025 600,000", [2025, 600000]], ["15 48,437 101.10%", [15, 48437, 101.1]],
+  ["S$250 120 days", [250, 120]], ["RM 150 30 days", [150, 30]], ["S$50 10 visits", [50, 10]], ["£50 1 day excess", [50, 1]],
+  ["S$200 01 Jan 2024 31 Dec 2024", [200, 1, 2024, 31, 2024]], ["S$200 01/01/2024", [200, 1, 1, 2024]],
 ];
 for (const [line, want] of whole) check(`"${line}" reads ${JSON.stringify(want)}`, () => assert.deepEqual(numbersIn(line), want));
 

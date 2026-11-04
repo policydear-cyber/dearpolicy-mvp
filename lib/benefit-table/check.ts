@@ -163,6 +163,8 @@ const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|I
 const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
 const RUN_SPACE = "[ \\u00a0\\u202f]";
+/** A word right after a figure that makes it a count or part of a date, never a thousands group of the figure before. */
+const COUNT_OR_DATE_AFTER = /^\s*(?:days?|nights?|hours?|hrs?|weeks?|months?|years?|yrs?|visits?|sessions?|treatments?|times|claims?|admissions?|trips?|persons?|people|children|members?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i;
 /** A figure as printed: digits, with any comma, dot or apostrophe groups ("1,500", "250.00", "12'000"). */
 const TOKEN = String.raw`\d+(?:[.,'’]\d+)*`;
 /** Where the printed line holds a figure whose digits cannot be told apart safely. No figure inside such a span is read
@@ -182,9 +184,14 @@ function unclearRuns(text: string): [number, number][] {
     const delimited = (t: string) => /[.,'’]/.test(t);
     const parts: (typeof tokens)[] = [];
     for (const [i, t] of tokens.entries()) {
-      const firstGroup = t.raw.match(/^\d+/)![0].length;
-      if (i === 0 || delimited(tokens[i - 1].raw) || (delimited(t.raw) && (firstGroup < 2 || firstGroup > 3))) parts.push([t]);
-      else parts[parts.length - 1].push(t);
+      // A figure carries on the one before it as a thousands group only when it could be one: the one before is 1 to 3
+      // plain digits or already in the run, and this one's first group is exactly 3 digits and is
+      // no count or date ("S$250 120 days", "S$200 01 Jan 2024", "2025 600,000", "600000 1000000" are separate figures).
+      const prev = tokens[i - 1], part = parts[parts.length - 1];
+      const firstGroup = t.raw.match(/^\d+/)![0];
+      const carries = i > 0 && (part.length > 1 || /^\d{1,3}$/.test(prev.raw)) && firstGroup.length === 3
+        && !COUNT_OR_DATE_AFTER.test(text.slice(t.at + t.raw.length, t.at + t.raw.length + 14));
+      if (carries) part.push(t); else parts.push([t]);
     }
     for (const part of parts) {
       if (part.length < 2) continue;
