@@ -22,7 +22,7 @@ import { pool } from "@/lib/db/client";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
-import { noteOwnerUnsure } from "@/lib/policies/upload-owner";
+import { noteOwnerChosen, noteOwnerUnsure } from "@/lib/policies/upload-owner";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -157,6 +157,8 @@ export async function acceptPolicyUpload(args: {
     );
     // "Not sure": the owner above is only a placeholder, so the document is nobody's until someone is linked to it.
     if (!args.explicitFamilyMember) await noteOwnerUnsure(ctx.householdId, policyId);
+    // Who was chosen, kept as chosen: the card says so when the names printed in it put it with someone else.
+    else await noteOwnerChosen(ctx.householdId, policyId, outcome.familyMemberId);
     if (outcome.verifiedSupersedesId) {
       await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });
     }

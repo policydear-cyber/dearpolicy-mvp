@@ -283,6 +283,7 @@ async function readBundleParts(args: ProcessPolicyArgs, bytes: Uint8Array, segme
         [partId, args.accountId, parent.family_member_id, filename, storageKey, fileHash, "Read from " + (parent.original_filename ?? "a file that held several policies") + ".", parent.quarantine_status, parent.scan_provider, parent.scanned_at]);
       // A part of a "Not sure" upload is nobody's until someone is linked to it, like the file it came from.
       if (!args.linkUploadMember) { const { noteOwnerUnsure } = await import("@/lib/policies/upload-owner"); await noteOwnerUnsure(args.accountId, partId); }
+      else { const { copyOwnerChosen } = await import("@/lib/policies/upload-owner"); await copyOwnerChosen(args.accountId, args.policyId, partId); }
     }
     try {
       await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType });

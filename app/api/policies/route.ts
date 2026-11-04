@@ -14,6 +14,8 @@ import { planChoiceAsked } from "@/lib/policies/plan-choice";
 import { simpleChatEnabled } from "@/lib/simple-chat/flag";
 import { READING_POLICY_SQL } from "@/lib/policies/document-filter";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
+import { readingCacheReady } from "@/lib/policies/read-failures";
+import { CHOSEN_KEY } from "@/lib/policies/upload-owner";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -27,6 +29,8 @@ type PolicyRow = {
   linked_people: { id: string; name: string; relationship: string; source: string; planTier: string | null }[];
   insured_hints: { name: string | null; hint: string | null }[] | null;
   detected_people: { name: string; matchedFamilyMemberId: string | null }[]; created_at: Date;
+  /** The person chosen at upload, as chosen (null when "Not sure", or uploaded before this was kept). */
+  upload_choice: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -51,10 +55,11 @@ export async function GET(request: NextRequest) {
       // false where this database has no benefit readings.
       const readings = await client.query<{ ok: boolean }>("SELECT to_regclass('public.benefit_readings') IS NOT NULL AS ok");
       const readingPolicy = readings.rows[0]?.ok ? READING_POLICY_SQL : "false";
+      const uploadChoice = await readingCacheReady() ? `p.reading_cache->'${CHOSEN_KEY}'->>'member'` : "NULL";
       const result = await client.query<PolicyRow>(
         `SELECT p.id,p.family_member_id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.policy_type,p.document_role,
          p.personal_coverage_confirmed,p.document_authority,p.document_authority_label,p.needs_review,
-         ${readingPolicy} AS reading_policy,p.review_reason,p.status,
+         ${readingPolicy} AS reading_policy,${uploadChoice} AS upload_choice,p.review_reason,p.status,
          p.processing_status,p.processing_stage,p.processing_progress,p.processing_message,p.quarantine_status,p.scan_result_detail,p.original_filename,p.page_count,p.processing_error,p.created_at,
          COALESCE((SELECT json_agg(json_build_object('id',f.id,'name',f.display_name,'relationship',f.relationship,'source',pm.source,'planTier',pm.benefit_tier) ORDER BY f.display_name)
            FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND ${activePredicate("f")}),'[]'::json) AS linked_people,
