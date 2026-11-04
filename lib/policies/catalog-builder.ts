@@ -23,16 +23,14 @@ import { pageCurrency } from "@/lib/simple-chat/verify";
 const BESIDE_BARE_FIGURE=new Set(("up to upto maximum max min minimum per each any one lump sum of a an the and or for in on at to by is are be will "
   +"we you your our pay pays paid payable benefit benefits limit limits limited amount total aggregate overall only lifetime policy plan year years "
   +"yearly annual annually month months monthly week weeks weekly day days daily night nights visit visits claim claims trip trips event events "
-  +"incident admission admissions disability diagnosis accident period insured person life covered cover with without under from after before within not exceeding exceed subject "
-  +"sehingga maksimum setiap sehari bagi untuk dan atau hari tahun tuntutan lawatan").split(" "));
-const BESIDE_BARE_CJK=/^(?:最高|上限|每日|每天|每次|每年|每宗|每项|每項|限额|限額|至|为|為)+$/u;
+  +"incident admission admissions disability diagnosis accident period insured person life covered cover with without under from after before within not exceeding exceed subject").split(" "));
 /** Currency words in many markets, as a belt beside the allow-lists: any of them in the printed value or quote gives none. */
 const CURRENCY_WORD=/(?<!\p{L})(?:francs?|baht|rupees?|shillings?|dirhams?|riyals?|rials?|yuan|renminbi|pesos?|rand|lira|liras|lire|zloty|zlotys|kron[aeoru]r?|dong|won|kyat|taka|ringgit|rupiah|dollars?|euros?|pounds?|sterling|yen|dinars?|reais|real|lei|leu|forint|koruna|pataca|pataka|nairas?|cedis?|kwacha|lempira|quetzal|sol|soles|hryvnia|rubles?|roubles?|tenge|som|manat|lari|dram|afghani|ngultrum|kina|vatu|tala|pa['’]?anga)(?!\p{L})/iu;
 /** Words that may follow "in" or "to" in a quoted payout sentence without naming a currency. */
 const IN_WORD_OK=new Set(("hospital respect case cases full total addition excess any each which accordance lieu advance arrears one lump the a an this that "
   +"your our his her their its insured person life policy claim claims event benefit benefits patient treatment year years month day days "
   +"singapore malaysia force line relation regard place connection").split(" "));
-const besideOk=(w:string)=>BESIDE_BARE_FIGURE.has(w.toLowerCase())||BESIDE_BARE_CJK.test(w);
+const besideOk=(w:string)=>BESIDE_BARE_FIGURE.has(w.toLowerCase());
 const FIGURE=/\d[\d.,'\u00a0\u202f ]*\d|\d/g;
 /** A page that pays some figures in another currency than the one it declares: "in the local currency", "the currency of
  * the country of treatment", "paid in the currency in which ...", Malay "mata wang tempatan", Chinese 当地货币 (Critic H2),

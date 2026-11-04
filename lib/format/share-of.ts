@@ -8,7 +8,7 @@
  * made of letters, and then either
  *   - nothing more (an optional full stop or semicolon), or
  *   - an optional comma or bracket and a cap opener from a closed list ("up to", "max", "maximum", "subject to a
- *     maximum", "limited to", "not exceeding", "capped at", "whichever is lower/less", "sehingga", "maksimum", "hingga").
+ *     maximum", "limited to", "not exceeding", "capped at", "whichever is lower/less").
  * Before the percentage, on its line and any line above it, there may be only the row's own benefit name or heading (opts.name), a bullet or
  * numbering, punctuation, or a closed lead-in ("Pays", "We will pay", "Benefit", "Payable", "Bayaran"): a condition printed
  * first ("After 2 years, 10% of Sum Insured") makes the share conditional, so it gives null. A phrase naming a currency
@@ -18,9 +18,9 @@
  */
 const PERCENT = /\p{Nd}+(?:[.,]\p{Nd}+)?\s*%/gu;
 const WORD = String.raw`\p{L}[\p{L}'’-]*`;
-const CAP_OPENER = String.raw`(?:subject[ \t]+to[ \t]+(?:a[ \t]+)?maximum|up[ \t]+to|maximum|max\.?|limited[ \t]+to|not[ \t]+exceeding|capped[ \t]+at|whichever[ \t]+is[ \t]+(?:lower|less)|sehingga|maksimum|hingga)`;
+const CAP_OPENER = String.raw`(?:subject[ \t]+to[ \t]+(?:a[ \t]+)?maximum|up[ \t]+to|maximum|max\.?|limited[ \t]+to|not[ \t]+exceeding|capped[ \t]+at|whichever[ \t]+is[ \t]+(?:lower|less))`;
 const SHARE = new RegExp(
-  String.raw`(\p{Nd}+(?:[.,]\p{Nd}+)?)[ \t]*%[ \t]*(?:of|daripada|dari)[ \t]+(${WORD}(?:[ \t]+${WORD}){0,5}?)` +
+  String.raw`(\p{Nd}+(?:[.,]\p{Nd}+)?)[ \t]*%[ \t]*(?:of)[ \t]+(${WORD}(?:[ \t]+${WORD}){0,5}?)` +
   String.raw`(?:[ \t]*[.;]?\s*$|[ \t]*[,(]?[ \t]*${CAP_OPENER}(?![\p{L}\p{Nd}]))`, "iu");
 /** A phrase that ends on one of these was cut short ("10% of the", "10% of Sum Insured minus"): no share. */
 const DANGLING = new Set(("the a an of your its his her their and or but nor by to for per with than in on at from after before if upon " +

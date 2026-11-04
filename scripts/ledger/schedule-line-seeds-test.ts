@@ -98,7 +98,7 @@ async function main() {
     { category: "Travel", amount: 10000000, currency: "GBP", quote: "Emergency medical expenses\t£10,000,000" },
     { category: "Travel", amount: 1500, currency: "GBP", quote: "Baggage\t£1,500 per person" },
   ]);
-  await schedule(rates, "Selasih Hospital Cash", [{ category: "Hospital Cash", amount: 200, currency: "MYR", quote: "Elaun hospital harian / Daily hospital allowance\tRM200" }]);
+  await schedule(rates, "Selasih Hospital Cash", [{ category: "Hospital Cash", amount: 200, currency: "MYR", quote: "Daily hospital allowance\tRM200" }]);
   const yearly = await person("Wei Ling Ong", "sibling");
   await schedule(yearly, "Merlion Disability Income", [{ category: "Disability Income", amount: 30000, currency: "SGD", quote: "Annual disability benefit\tS$30,000" }]);
   // Sub-limits, other benefits and totals printed beside the plan's own lines (Critic H1-M3 on #294, S$ and £).
@@ -212,8 +212,10 @@ async function main() {
         assert.equal(pays(c, t), null, t);
       for (const [c, t] of [["Disability Income", "Monthly benefit payable for up to 24 months, total\t£57,600"], ["Disability Income", "Benefit (75% of monthly salary)\t£2,400"], ["Long Term Care", "Monthly benefit for 6 years; maximum total\tS$129,600"], ["Hospital Cash", "Daily hospital cash, overall maximum\tS$36,500"], ["Hospitalisation", "Room & Board limit\tS$500"], ["Hospitalisation", "Surgical limit\tS$10,000"], ["Hospitalisation", "Overall limit per policy year\tS$1,000,000"], ["Hospitalisation", "Pre-hospital treatment limit (90 days)\tS$5,000"], ["Hospitalisation", "Outpatient cancer treatment - up to\tS$60,000"], ["Hospitalisation", "Intensive care unit limit\tS$1,200"], ["Disability Income", "Monthly benefit £2,400 or annual £28,800\t£2,400"]])
         assert.ok(String(pays(c, t)).endsWith(":stated"), `${t} -> ${pays(c, t)}`);
-      for (const [c, t, want] of [["Travel", "Overseas medical expenses\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Frais médicaux à l'étranger\t€150,000", "travel_medical:reimbursement_cap"], ["Travel", "Perbelanjaan perubatan luar negara / Overseas medical expenses\tRM200,000", "travel_medical:reimbursement_cap"], ["Travel", "海外医疗费用\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Trip cancellation\tS$15,000", "trip_cancellation:reimbursement_cap"], ["Travel", "Loss of baggage and personal belongings\tS$5,000", "baggage:reimbursement_cap"], ["Disability Income", "Faedah bulanan / Monthly benefit\tRM3,000", "disability_income:per_month"], ["Hospital Cash", "Daily hospital cash\tS$200", "hospital_daily_cash:per_day"], ["Hospitalisation", "Annual limit\tS$150,000", "hospital_medical_expense:reimbursement_cap"]])
+      for (const [c, t, want] of [["Travel", "Overseas medical expenses\tS$200,000", "travel_medical:reimbursement_cap"], ["Travel", "Trip cancellation\tS$15,000", "trip_cancellation:reimbursement_cap"], ["Travel", "Loss of baggage and personal belongings\tS$5,000", "baggage:reimbursement_cap"], ["Disability Income", "Faedah bulanan / Monthly benefit\tRM3,000", "disability_income:stated"], ["Hospital Cash", "Daily hospital cash\tS$200", "hospital_daily_cash:per_day"], ["Hospitalisation", "Annual limit\tS$150,000", "hospital_medical_expense:reimbursement_cap"]])
         assert.equal(pays(c, t), want, t);
+      // English only (DC 4 Nov): a label only in another language is not read: no figure, never how it pays.
+      for (const t of ["Frais médicaux à l'étranger\t€150,000", "海外医疗费用\tS$200,000", "Perbelanjaan perubatan luar negara / Overseas medical expenses\tRM200,000"]) assert.equal(pays("Travel", t), null, t);
       for (const t of ["Benefit limit\tS$500 per day", "Sum insured\tS$2,000,000 per lifetime", "Annual limit\tS$150,000 per person", "Overall limit\tS$1,000 daily"])
         assert.ok(String(pays("Hospitalisation", t)).endsWith(":stated"), t);
       for (const t of ["Monthly benefit\t£2,400 or 75% of salary, whichever is lower", "Monthly benefit\tAs charged", "Monthly benefit\t75% of salary up to £2,400", "Monthly benefit\tUp to £2,400", "Monthly benefit\tMaximum S$5,000"])

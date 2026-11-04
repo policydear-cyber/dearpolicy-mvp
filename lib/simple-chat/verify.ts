@@ -225,10 +225,10 @@ export function pageCurrency(pageText: string): string | null {
   for (const [code, name, sign] of CURRENCY_NAMES) {
     // The name may carry its code or sign in brackets: "Singapore Dollar (SGD)", "Ringgit Malaysia (RM)".
     const named = String.raw`(?:${name}${sign ? `|${sign}` : ""})(?:[ ]*\((?:[A-Z]{2,3}|[A-Z]{0,2}\$)\))?`;
-    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency|mata\s+wang)(?:\s+(?:polisi|kontrak))?[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
+    const field = new RegExp(String.raw`(?:^|\t)[ ]*(?:policy\s+|contract\s+)?(?:currency)[ \t]*:?[ \t]*${named}[ ]*(?:\t|$)`, "im");
     const value = new RegExp(String.raw`^[ \t]*:[ \t]*${named}[ ]*$`, "im");
     const all = new RegExp(String.raw`\ball\s+amounts\s+(?:are|quoted\s+are|shown\s+are)\s+in\s+(?:${name})\b`, "i");
-    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency|mata\s+wang(?:\s+(?:polisi|kontrak))?)[ ]*(?:\t|$)/im.test(t))) said.add(code);
+    if (field.test(t) || all.test(t) || (value.test(t) && /(?:^|\t)[ ]*(?:currency)[ ]*(?:\t|$)/im.test(t))) said.add(code);
     // A page listing the currencies a policy can be in ("Six currency options are available: SGD, USD, ...") declares none.
     if (new RegExp(String.raw`currency\s+options|currencies\s+are\s+available`, "i").test(t)) return null;
   }
@@ -469,13 +469,13 @@ const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
  * The cap is then checked as a plain amount (plainAmount) on that row. Fail-safe: anything else gives null and the
  * percentage stays a fact with no amount. */
 /** What a cap's percentage may be of: the benefit's own sum (closed list, in the languages households' documents use). */
-const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|jumlah\s+(?:di)?(?:insuranskan|diinsuranskan|perlindungan)|(?:the\s+)?capital\s+assur[ée]|suma\s+asegurada|versicherungssumme|保额|保額|保险金额|保險金額)\b/i;
+const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|(?:the\s+)?capital\s+assur[ée])\b/i;
 /** A row that is a share the household pays or a charge, never a cap on what the policy pays (closed list). */
 const CHARGE_ROW = /\b(?:co-?insurance|co-?pay(?:ment)?s?|excess(?:es)?|deductibles?|premiums?|loading|contributions?|fees?|charges?|levy|tax)\b/i;
 /** Words that may follow a row's cap figure: what it is per, and the lesser-of rule (closed list). */
 const CAP_TAIL = new Set(["per", "each", "any", "one", "a", "an", "the", "in", "for", "of", "all", "and", "claim", "claims", "accident", "accidents", "admission",
   "admissions", "bone", "bones", "fracture", "fractures", "injury", "event", "illness", "condition", "policy", "year", "lifetime", "aggregate", "overall", "only",
-  "whichever", "is", "lesser", "will", "shall", "be", "payable", "paid", "lower", "less", "smaller", "life", "insured", "person", "setiap", "tuntutan", "setahun", "par", "sinistre", "an", "année"]);
+  "whichever", "is", "lesser", "will", "shall", "be", "payable", "paid", "lower", "less", "smaller", "life", "insured", "person", "an"]);
 function rowCap(st: ModelStatement, at: Found, household: Household, person: string | null): { found: Found; raw: string; amount: NonNullable<Checked["amount"]> } | null {
   if (!person) return null;
   const doc = household.documents[at.docIndex];

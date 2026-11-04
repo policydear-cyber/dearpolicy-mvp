@@ -136,7 +136,7 @@ function namedPeople(text: string, family: ClaimPerson[]): ClaimPerson[] {
   const rel = (re: RegExp) => family.filter((p) => re.test(p.relationship ?? ""));
   if (/\b(?:kids?|children|child|sons?|daughters?)\b/i.test(text)) return rel(/^(?:child|son|daughter)$/i);
   if (/\b(?:wife|husband|spouse)\b/i.test(text)) return rel(/^(?:spouse|wife|husband)$/i);
-  if (/\b(?:dad|father|papa|mum|mom|mother|mama|parents?|bapa|ibu)\b/i.test(text)) return rel(/^(?:parent|father|mother)$/i);
+  if (/\b(?:dad|father|papa|mum|mom|mother|mama|parents?)\b/i.test(text)) return rel(/^(?:parent|father|mother)$/i);
   // Any other relationship the household page records ("our helper", "my sister", "grandma").
   const byRelation = family.filter((p) => { const r = (p.relationship ?? "").toLowerCase().trim(); return r.length >= 3 && !/^(?:self|other)$/.test(r) && new RegExp("\\b" + r.replace(/[^a-z ]/g, "") + "s?\\b", "i").test(text); });
   return byRelation;
@@ -215,7 +215,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     if (!m || !namedPeople(m[1], args.family).length) return false;
     const nameWords = new Set(args.family.flatMap((p) => (p.display_name + " " + (p.preferred_name ?? "")).toLowerCase().split(/[^\p{L}]+/u)).filter(Boolean));
     return m[1].toLowerCase().replace(/['’]s\b/g, "").split(/[^\p{L}]+/u).filter(Boolean)
-      .every((w) => nameWords.has(w) || /^(?:my|our|his|her|the|dad|father|papa|mum|mom|mother|mama|wife|husband|spouse|son|daughter|kids?|children|bapa|ibu)$/.test(w) || w.length <= 2);
+      .every((w) => nameWords.has(w) || /^(?:my|our|his|her|the|dad|father|papa|mum|mom|mother|mama|wife|husband|spouse|son|daughter|kids?|children)$/.test(w) || w.length <= 2);
   })();
   const listAsked = LIST_POLICIES.test(text) || WHICH_COVER.test(text) || onlyPerson;
   const endingAsked = ENDING_SOON.test(text);

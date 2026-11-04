@@ -56,16 +56,12 @@ function confirmStatedCause(answer:ChatAnswer,state:ConversationState,message:st
 const HYPOTHETICAL=new WeakMap<ChatAnswer,string>();
 /** Every answer is saved through here: a concluded claim answer gets its
  * last touches (employer group cover, lib/chat/claim-completion.ts) first. */
-const LANGUAGE_READING=new WeakMap<object,EnglishReading>();
 /** Round 15: a question asked while the claim interview waits on one of its own questions is answered by a turn
  * run on the side (SIDE_TURNS); that turn's save is held (SIDE_SAVED) and the claim's own state is what is saved. */
 const SIDE_TURNS=new WeakSet<object>();
 const SIDE_SAVED=new WeakMap<object,Parameters<typeof storeTurn>[0]>();
 const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   if(SIDE_TURNS.has(args.conversation)){SIDE_SAVED.set(args.conversation,args);return;}
-  // Round 7 (port): an answer to a question read from Malay or Chinese says so, and what it was read as.
-  const reading=LANGUAGE_READING.get(args.conversation);
-  if(reading){LANGUAGE_READING.delete(args.conversation);const note=languageNote(reading);if(!args.answer.summary.startsWith(note))args.answer.summary=note+" "+args.answer.summary;}
   // Round 9: a car or home damage event the claim interview found nothing for (or offered hospital cover
   // for) is answered from the car or home policy instead.
   const damage=DAMAGE_FALLBACK.get(args.conversation);
@@ -118,7 +114,6 @@ import { answerPolicyQuestion,conciseDetails,withoutListedLimitCards,FULL_LIST,i
 import { printedRuleLines } from "./printed-rules";
 import { conversationalReply,dishonestReply } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
-import { englishReading,languageNote,type EnglishReading } from "./language";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM,dependantPremiumAnswer,DEPENDANT_PREMIUM_QUESTION } from "./premium-answer";
 import { registryAnswer, otherPoliciesOnFile } from "./registry-answers";
 import { amendmentAnswer } from "./amendment-answers";
@@ -152,8 +147,6 @@ export type ChatRequest={
   submittedQuestion?:string;
   /** Round 9: the household's message as typed, when the chat reads it in plainer words (lib/chat/plain-questions.ts). */
   displayQuestion?:string;
-  /** Round 7 (port): the English a Malay or Chinese question was read as (lib/chat/language.ts). */
-  languageReading?:EnglishReading;
 };
 export type ChatContext={
   request:ChatRequest;family:ClaimPerson[];people:ClaimPerson[];
@@ -386,13 +379,10 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
       const hits=[...new Set(matched.map(p=>p.product_name!))];
       if(hits.length===1)numberedPolicy={ids:matched.map(p=>p.id),product:hits[0],number:asked.token,owners:[...new Set(matched.flatMap(p=>p.owners??[]))]};
       if(hits.length===1){
-        const rest=words.replace(asked.token,"").replace(/\b(?:my|the|policy|polisi|number|no\.?|is|ending|ends?|with|in|last|4|four|digits?|numbers?)\b/gi,"").replace(/[^\p{L}]+/gu," ").trim();
-        words=rest.split(/\s+/).filter(Boolean).length<=2&&!questionTopics(words).length?"What does the "+hits[0]+" cover?":words.replace(new RegExp("(?:\\b(?:policy|polisi)\\s*(?:no\\.?|number|#)?\\s*(?:is\\s*)?)?"+asked.token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"),"the "+hits[0]);
+        const rest=words.replace(asked.token,"").replace(/\b(?:my|the|policy|number|no\.?|is|ending|ends?|with|in|last|4|four|digits?|numbers?)\b/gi,"").replace(/[^\p{L}]+/gu," ").trim();
+        words=rest.split(/\s+/).filter(Boolean).length<=2&&!questionTopics(words).length?"What does the "+hits[0]+" cover?":words.replace(new RegExp("(?:\\bpolicy\\s*(?:no\\.?|number|#)?\\s*(?:is\\s*)?)?"+asked.token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"),"the "+hits[0]);
       }else if(!hits.length)unknownPolicyNumber=asked.token;
     }
-    // Round 7 (port): a question in Malay or Chinese is answered in English, from the English it was read as (said in the answer).
-    const reading=englishReading(typed);
-    if(reading&&!asked){words=reading.english;request={...request,languageReading:reading};}
     if(words!==typed)request={...request,question:words,displayQuestion:request.displayQuestion??typed};
   }
   const previousId=request.conversationId??request.claimSessionId;
@@ -471,7 +461,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
     !/\b(?:my|our|his|her)\s+(?:mak|emak|ibu|mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband|grand\w+)\b/i.test(personMessage);
   let resolution:ClaimPersonResolution=chosen?{status:"resolved" as const,person:chosen,explicit:true}:claimant?{status:"resolved" as const,person:claimant,explicit:false}:
     ownQuestion?{status:"resolved" as const,person:ownQuestion,explicit:true}:pendingReply?{status:"resolved" as const,person:pendingReply,explicit:false}:
-    // "mak", "our helper", "my son" (bin) / "my daughter" (binte), "Aminah binti Ismail".
+    // "our helper", "my son" (bin) / "my daughter" (binte), "Aminah binti Ismail".
     // Mid-claim, "do i need a lawyer?" is the speaker asking about the claim in hand, not about their own cover.
     (midClaimSpeaker?null:householdPersonFromWords(tripReason??speakerWords,family,holdings.map(h=>h.product_name),context?"":request.familyMemberId??previous?.family_member_id??""))??
     // "and his wife?" is relative to the person this chat was about.
@@ -567,7 +557,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   // Round 9: "my son Irfan and my mum were both in the car and got injured": everyone named is acknowledged; the claim
   // goes one person at a time, starting with the person resolved.
   const alsoInEvent=people.length===1&&!chosen&&!tripReason&&!outside&&REPORTS_AN_EVENT.test(personMessage)&&!/\b(?:if|what if|suppose|in case)\b/i.test(personMessage)
-    ?[...explicitPeople(personMessage,family),...[...personMessage.matchAll(/\b(?:(?:my|our)\s+)?(mak|emak|ibu|mum|mom|mother|mama|amma|dad|father|papa|appa|ayah|abah|son|daughter|wife|husband|brother|sister|helper|maid)\b(?!['’]s)/gi)]
+    ?[...explicitPeople(personMessage,family),...[...personMessage.matchAll(/\b(?:(?:my|our)\s+)?(mum|mom|mother|mama|dad|father|papa|son|daughter|wife|husband|brother|sister|helper|maid)\b(?!['’]s)/gi)]
       .map(m=>{const r=householdPersonFromWords("my "+m[1],family);return r?.status==="resolved"?r.person:null;}).filter((p):p is ClaimPerson=>!!p)]
       .filter((p,i,all)=>p.id!==people[0].id&&all.findIndex(q=>q.id===p.id)===i)
     :[];
@@ -987,7 +977,7 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
     .replace(/^(?:and\s+)?(?:what|which|how\s+(?:much|long|many))\s+(?:is|are|was|were|does|do)\s+/i,"")
     .replace(/^(?:does|do|is|are|has|have)\s+(?:she|he|they|i|we|it|my|her|his|their|anyone|anybody|someone|any of us)\s+(?:have|has|get|got)\s+(?:an?\s+)?/i,"")
     .replace(/^(?:so\s+|and\s+)?(?:is|are|am)\s+(?:she|he|they|i|we|it|you)\s+(?:still\s+|also\s+)?(?:covered|insured)\s+(?:for|against)\s+/i,"")
-    .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|mak|emak|ibu|dad|father|bapa|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
+    .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|dad|father|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
   // What is left must read as a thing, not as the question handed back
   // ("When is the policy due for renewal", "can reduce or not").
   // Round 7 (port): chat words left in the topic ("GTL ah, the wife ask") hand the question back garbled.
@@ -1694,7 +1684,6 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   if(context.chatPath==="simple")return (await import("@/lib/simple-chat/hook")).runSimpleChat(context,{check:options?.check,jobId:options?.jobId});
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).runLoopChat(context,{save:saveTurn,check:options?.check,jobId:options?.jobId});
   const {conversation}=context;let {request}=context;
-  if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);
   const report=options?.report??(async()=>undefined);
   const check=options?.check??(async()=>undefined);
   await check();

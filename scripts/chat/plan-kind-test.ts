@@ -40,10 +40,12 @@ async function main() {
   const kinds = (q: string, from = docs) => planKindDocs(q, from).map((d) => d.product);
 
   await test("a plan is the kind its stored type says, when its name doesn't say it", () => {
-    assert.deepEqual(kinds("When does Tom's travel policy start?"), ["Annual Multi-Trip Family", "Jelajah Tahunan", "Single Trip Europe", "Lifestyle Travel Medical"]);
+    // English only (DC 4 Nov): a type stored in another language ("Insurans Hayat") is no known kind, so that plan is never
+    // left out by a kind: it may be the plan asked about, and the answer reads its document.
+    assert.deepEqual(kinds("When does Tom's travel policy start?"), ["Annual Multi-Trip Family", "Jelajah Tahunan", "Single Trip Europe", "Lifestyle Travel Medical", "Pelan Hayat Berkala"]);
     assert.deepEqual(kinds("What is Siti's life insurance policy number?"), ["Level Term", "Pelan Hayat Berkala", "Whole Life Plus", "Group Term Life", "Endowment Saver"]);
-    assert.deepEqual(kinds("What's the excess on our health insurance?"), ["Heron Family Health", "MediKad Keluarga", "MyCare Plus", "Premier Care", "MediShield Life", "Smart Life Health"]);
-    assert.deepEqual(kinds("what is the policy number of his income protection?"), ["Income Protection", "Salary Shield", "Short-Term Disability Plan"]);
+    assert.deepEqual(kinds("What's the excess on our health insurance?"), ["Pelan Hayat Berkala", "Heron Family Health", "MediKad Keluarga", "MyCare Plus", "Premier Care", "MediShield Life", "Smart Life Health"]);
+    assert.deepEqual(kinds("what is the policy number of his income protection?"), ["Pelan Hayat Berkala", "Income Protection", "Salary Shield", "Short-Term Disability Plan"]);
   });
   await test("a kind is never another kind that shares a word with it, whatever its stored type (Critic H1)", () => {
     const life = kinds("When does Tom's term policy end?"), health = kinds("Does my medical plan cover physiotherapy?");
@@ -71,11 +73,15 @@ async function main() {
   await test("a plan whose stored type says another kind is never this kind, whatever its name says (TE K1)", () => {
     const rows: [string, [string, string][], string][] = [
       ["What does my life insurance pay?", [["Takaful Keluarga Hayat", "Family Takaful"], ["Life Secure Critical Illness", "Critical Illness"]], "Takaful Keluarga Hayat"],
-      ["What does my health insurance cover?", [["Pelan Perubatan Prima", "Perubatan"], ["Medical Waiver Rider", "Life"]], "Pelan Perubatan Prima"],
-      ["Does my travel policy cover ski?", [["Voyage Annuel Famille", "Voyage"], ["Single-Trip Accident Guard", "Personal Accident"]], "Voyage Annuel Famille"],
-      ["What does my income protection pay?", [["Gehaltsschutz Plus", "Berufsunfähigkeit"], ["Severe Disability Care", "Long-term Care"]], "Gehaltsschutz Plus"],
     ];
     for (const [q, pair, right] of rows) assert.deepEqual(kinds(q, pair.map(([p, t]) => D(p, t))), [right], q);
+    // English only (DC 4 Nov): a type stored in another language is no known kind; with no plan of the kind asked, nothing
+    // is narrowed, so the plan is never picked as that kind by its foreign type.
+    for (const [q, pair] of [
+      ["What does my health insurance cover?", [["Pelan Perubatan Prima", "Perubatan"], ["Medical Waiver Rider", "Life"]]],
+      ["Does my travel policy cover ski?", [["Voyage Annuel Famille", "Voyage"], ["Single-Trip Accident Guard", "Personal Accident"]]],
+      ["What does my income protection pay?", [["Gehaltsschutz Plus", "Berufsunfähigkeit"], ["Severe Disability Care", "Long-term Care"]]],
+    ] as [string, [string, string][]][]) assert.deepEqual(kinds(q, pair.map(([p, t]) => D(p, t))), [], q);
     // With no plan of the kind asked, a plan named like one but stored as another kind is never picked: nothing is narrowed.
     for (const [q, p, t] of [["my term life plan premium?", "Mid-Term Savings Endowment", "Savings"], ["What does my health insurance cover?", "Hospital Visit Cover", "Personal Accident"],
       ["Does Kai's medical plan pay for physio?", "Overseas Medical Student Cover", "Travel"], ["Does my travel policy cover ski?", "Trip Saver Endowment", "Savings"]])

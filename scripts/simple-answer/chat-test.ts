@@ -266,10 +266,11 @@ async function main() {
     assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "US Dollars"))), [["US$100,000", true]]);
     // The usual Malaysian and bracketed wordings, and a sign as the value (TE pr191 F1, F2).
     assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Currency\t:\tRinggit Malaysia"))), [["RM100,000", true]]);
-    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Mata wang\t:\tRinggit Malaysia"))), [["RM100,000", true]]);
+    // A currency label in another language is not read (English only): the bare "$" stays unresolved, never a guess.
+    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Mata wang\t:\tRinggit Malaysia"))), [["$100,000", false]]);
     assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "Singapore Dollar (SGD)"))), [["S$100,000", true]]);
     assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "S$"))), [["S$100,000", true]]);
-    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Mata Wang Polisi\t:\tRM"))), [["RM100,000", true]]);
+    assert.deepEqual(ask(pack(schedule.replace("Currency\t:\tSingapore Dollar", "Mata Wang Polisi\t:\tRM"))), [["$100,000", false]]);
     assert.deepEqual(ask(pack(schedule.replace("Singapore Dollar", "US$"))), [["US$100,000", true]]);
     // A bare "RM" in prose (a relationship manager, a form number) is not a currency, so the declaration stands (Critic R359 M1).
     for (const prose of ["Please contact your RM", "Relationship Manager (RM): Ada Tan", "Form RM-2 Claim form", "paid by RM bank transfer", "FORM RM-12"]) {

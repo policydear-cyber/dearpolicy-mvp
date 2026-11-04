@@ -1163,7 +1163,8 @@ test("asking for a most with nothing described never hides a card as 'not descri
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, cash], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
   assert.equal(shown("What's the most my hospital plan pays in total?"), 1);
   assert.equal(shown("what is the maximum our insurance pays?", amb), 1);
-  assert.equal(shown("Berapa maksimum pelan saya bayar?"), 1);
+  // English only (DC 4 Nov): a question in another language is not read as asking for a most: the card stays hidden.
+  assert.equal(shown("Berapa maksimum pelan saya bayar?"), 0);
   // Something has happened, or may: the missing step stays missing and the card stays hidden.
   for (const q of ["She had an accident, what's the most she can get?", "I'm in hospital for 3 days, what's the maximum?", "what's the most I can claim if I get sick?", "Broke my arm yesterday. Max payout?", "What can my plan pay?"])
     assert.equal(shown(q), 0, q);
@@ -1173,7 +1174,8 @@ test("asking for a most with nothing described never hides a card as 'not descri
     "What's the most my plan pays for a hospital stay?", "Apa had maksimum untuk denggi saya?", "I was at the hospital, what's the most I can claim?", "We are at the hospital, what's the max?",
     "There was a fire at our home, what's the most the plan pays?", "Our home had a fire, max payout?", "我得了癌症，最多可以赔多少？", "Quel est le maximum pour mon cancer ?", "¿Cuál es el máximo por mi cáncer?"])
     assert.equal(shown(q), 0, q);
-  for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？", "What's the cap on my hospital plan?"]) assert.equal(shown(q), 1, q);
+  assert.equal(shown("What's the cap on my hospital plan?"), 1);
+  for (const q of ["Quel est le maximum que mon contrat paie ?", "¿Cuál es el máximo que paga mi póliza?", "我的保单最多赔多少？"]) assert.equal(shown(q), 0, q);
   // A product the household holds counts only as its whole name; one word of it is often an illness or a place (Critic #319).
   const named = { ...cash, id: "R962", product: "Dengue Shield" };
   const shownNamed = (question: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
@@ -2036,16 +2038,8 @@ test("asked for the most paid in total, the clause's total limit is shown as a l
     "is there a lifetime limit on this plan?",
     "if I claim for two different early stage illnesses over the years, what's the most it pays?",
     "if I make several claims, what is the maximum the plan pays?",
-    "每次多次理赔最多赔多少？",
-    "Si je fais plusieurs réclamations, quel est le maximum ?",
-    "Si hago varias reclamaciones, ¿cuál es el máximo?",
+    // English only (DC 4 Nov): the same questions in other languages are no longer read as asking for the total limit.
     "what's the most my total and permanent disability cover pays over the years for all my claims?",
-    "berapa jumlah maksimum yang dibayar untuk semua tuntutan?",
-    "Apakah had maksimum seumur hidup?",
-    "所有重疾理赔总共最多赔多少？",
-    "我的保险终身最高赔付总额是多少？",
-    "Quel est le plafond global de mes remboursements ?",
-    "¿Cuál es el tope acumulado de todas mis reclamaciones?",
   ]) for (const fit of ["on_list", "any_event", "no_event"]) {
     const r = ask(question, fit);
     assert.ok(shows(r), `${fit}: ${question} ${JSON.stringify(r.amounts)} ${JSON.stringify(r.report.dropped)}`);

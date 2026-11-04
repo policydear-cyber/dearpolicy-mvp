@@ -41,8 +41,10 @@ test("a passage with no fixed amount says why, for any policy: a premium waiver,
   const { unreadAmountLine } = await import("@/lib/policies/unread-amount-line");
   const why = (q: string) => unreadAmountLine(7, q);
   for (const q of ["We will not charge future premiums due under the basic benefit contract beginning from the date the life insured is diagnosed with total and permanent disability (TPD).",
-    "Premiums will be waived from the date of diagnosis.", "Kami akan mengecualikan premium; the waiver of premium applies from the 2nd year."])
+    "Premiums will be waived from the date of diagnosis."])
     assert.equal(why(q), "The passage on page 7 waives future premiums. This benefit pays no amount itself.", q);
+  // English only (DC 4 Nov): a passage that opens in another language is not read: it only says the amount was not read.
+  assert.equal(why("Kami akan mengecualikan premium; the waiver of premium applies from the 2nd year."), "The amount on page 7 could not be read.");
   for (const q of ["we will pay the TI benefit as an advancement of the death benefit. However, this will not be more than the TI/Critical Illness (CI) limit.",
     "This benefit is an acceleration of the death benefit and is paid within 30 days."])
     assert.equal(why(q), "The passage on page 7 pays this in advance from the death benefit, so its amount follows the death benefit, within any limit the policy sets.", q);
@@ -132,13 +134,15 @@ test("a table line cut off before its maximum keeps its printed share and says t
   for (const [q, share, name] of [
     ["(a) Angioplasty and Other Invasive Treatment for : 10% of Prevailing Insured Amount, up to maximum", "10% of Prevailing Insured Amount", "Angioplasty and Other Invasive Treatment for Coronary Artery Disease"],
     ["Keyhole surgery: 20% of the Sum Assured, subject to a maximum of", "20% of the Sum Assured", "Keyhole surgery"],
-    ["Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum", "10% of Jumlah Diinsuranskan", "Rawatan"],
     ["Minor surgery 15% of the sum insured, limited to", "15% of the sum insured", "Minor surgery"],
     ["Dental 25% of the benefit amount up to a limit of", "25% of the benefit amount", "Dental"],
     ["Carcinoma in situ 12.5 % of Basic Coverage Amount, capped at", "12.5% of Basic Coverage Amount", "Carcinoma in situ"],
     ["Prothèse: 30% of the Insured Sum (maximum", "30% of the Insured Sum", "Prothèse"],
     ["Pays 10% of the Sum Insured, up to maximum", "10% of the Sum Insured", null],
   ] as [string, string, string | null][]) assert.equal(unreadAmountLine(34, q, name), cut(share), q);
+  // English only (DC 4 Nov): a share worded in another language keeps no share: the line only says the maximum is further down.
+  assert.equal(unreadAmountLine(34, "Rawatan: 10% daripada Jumlah Diinsuranskan, sehingga maksimum", "Rawatan"),
+    "The passage on page 34 stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down page 34.");
   // A condition printed before the share, a share whose name is not given, or a currency named as the base (the figure
   // wrapped onto the next line): no share is said, and the line stays as before (Critic M3, test engineer F1).
   for (const [q, name] of [["After 2 years, 10% of Prevailing Insured Amount, up to maximum", "Angioplasty"], ["If hospitalised overseas, 10% of Sum Insured, up to maximum", "Hospital cash"],

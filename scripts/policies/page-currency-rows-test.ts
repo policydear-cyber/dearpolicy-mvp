@@ -30,7 +30,8 @@ async function main() {
   await test("U1 a bare $ on a page whose Currency field says Singapore Dollar: SGD", () => assert.equal(unmarkedPageCurrency("$100,000.00", SG), "SGD"));
   await test("U2 a figure with no sign on that page: SGD", () => assert.equal(unmarkedPageCurrency("100,000.00", SG), "SGD"));
   await test("U3 Hong Kong Dollar declared: a bare $ is HKD", () => assert.equal(unmarkedPageCurrency("$500,000", schedule("Currency: Hong Kong Dollar", ROWS)), "HKD"));
-  await test("U4 Malay field 'Mata Wang : Ringgit Malaysia': MYR", () => assert.equal(unmarkedPageCurrency("50,000.00", schedule("Mata Wang\t:\tRinggit Malaysia", ROWS.replace(/\$/g, ""))), "MYR"));
+  // English only (DC 4 Nov): a currency field labelled in another language is not read, so the figure gets no currency.
+  await test("U4 Malay field 'Mata Wang : Ringgit Malaysia': no currency (English only)", () => assert.equal(unmarkedPageCurrency("50,000.00", schedule("Mata Wang\t:\tRinggit Malaysia", ROWS.replace(/\$/g, ""))), null));
   await test("U5 a figure with its own other mark never takes the page's", () => {
     for (const f of ["US$100,000", "HK$100,000", "RM 100,000", "€100.000", "£100,000", "USD 100,000", "A$100,000"]) assert.equal(unmarkedPageCurrency(f, SG), null, f);
   });
@@ -45,8 +46,10 @@ async function main() {
       assert.equal(unmarkedPageCurrency(f, SG), null, f);
   });
   await test("U11 limit and period words keep the page's currency", () => {
-    for (const f of ["Up to $5,000 per claim", "Maximum 100,000", "$300 per day", "1,000 each visit", "Lump sum $20,000", "Sehingga 5,000 setiap tuntutan", "每日最高 300"])
+    for (const f of ["Up to $5,000 per claim", "Maximum 100,000", "$300 per day", "1,000 each visit", "Lump sum $20,000"])
       assert.equal(unmarkedPageCurrency(f, SG), "SGD", f);
+    // English only (DC 4 Nov): limit and period words in another language are not read, so the bare figure gets no currency.
+    for (const f of ["Sehingga 5,000 setiap tuntutan", "每日最高 300"]) assert.equal(unmarkedPageCurrency(f, SG), null, f);
   });
   await test("U12 a quoted sentence: only the words beside each figure decide", () => {
     assert.equal(unmarkedPageCurrency("We pay up to $5,000 per visit for outpatient treatment.", SG, true), "SGD");

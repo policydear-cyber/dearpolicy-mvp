@@ -18,8 +18,8 @@ export function nameKey(value: string) {
 }
 type Gender = "f" | "m" | null;
 /** Round 9: what the household itself wrote about someone (relationship, preferred name: "mother", "Papa"). */
-const FEMALE_WORD = /\b(?:mother|mum|mom|mummy|mommy|mama|mak|emak|ibu|amma|ah ma|grandmother|grandma|daughter|sister|wife|aunt|auntie)\b/i;
-const MALE_WORD = /\b(?:father|dad|daddy|papa|appa|ayah|abah|bapa|ah pa|grandfather|grandpa|son|brother|husband|uncle)\b/i;
+const FEMALE_WORD = /\b(?:mother|mum|mom|mummy|mommy|mama|grandmother|grandma|daughter|sister|wife|aunt|auntie)\b/i;
+const MALE_WORD = /\b(?:father|dad|daddy|papa|grandfather|grandpa|son|brother|husband|uncle)\b/i;
 /** A Malay patronymic says whether someone is a son (bin, s/o) or a daughter (binte/binti, d/o); so does a gendered relationship
  * or preferred name the household entered ("mother", "Papa"). */
 function genderOf(p: ClaimPerson): Gender {
@@ -31,10 +31,10 @@ function genderOf(p: ClaimPerson): Gender {
 const rel = (p: ClaimPerson) => (p.relationship ?? "").toLowerCase().trim();
 const isParent = (p: ClaimPerson) => /^(?:parent|mother|father|mum|mom|dad|mama|papa)$/.test(rel(p));
 const KIN: { re: RegExp; group: (p: ClaimPerson) => boolean; gender: Gender; label: string }[] = [
-  { re: /\b(?:mak|emak|ibu|mum|mom|mummy|mommy|mother|mama|amma)\b/i, group: isParent, gender: "f", label: "mother" },
-  { re: /\b(?:ayah|abah|bapa|dad|daddy|father|papa|appa)\b/i, group: isParent, gender: "m", label: "father" },
-  { re: /\b(?:son|anak lelaki|boy)\b/i, group: (p) => rel(p) === "child", gender: "m", label: "son" },
-  { re: /\b(?:daughter|anak perempuan|girl)\b/i, group: (p) => rel(p) === "child", gender: "f", label: "daughter" },
+  { re: /\b(?:mum|mom|mummy|mommy|mother|mama)\b/i, group: isParent, gender: "f", label: "mother" },
+  { re: /\b(?:dad|daddy|father|papa)\b/i, group: isParent, gender: "m", label: "father" },
+  { re: /\b(?:son|boy)\b/i, group: (p) => rel(p) === "child", gender: "m", label: "son" },
+  { re: /\b(?:daughter|girl)\b/i, group: (p) => rel(p) === "child", gender: "f", label: "daughter" },
   { re: /\b(?:brother|abang|adik lelaki)\b/i, group: (p) => rel(p) === "sibling", gender: "m", label: "brother" },
   { re: /\b(?:sister|adik perempuan)\b/i, group: (p) => rel(p) === "sibling", gender: "f", label: "sister" },
   { re: /\b(?:helper|maid|domestic (?:helper|worker)|fdw|amah)\b/i, group: (p) => /helper|maid|domestic/.test(rel(p)), gender: null, label: "helper" },
@@ -42,7 +42,7 @@ const KIN: { re: RegExp; group: (p: ClaimPerson) => boolean; gender: Gender; lab
 /** "my car", "my home insurance", "my deductible": the speaker's own policy, whoever else the sentence mentions. */
 const OWN_THING = /\bmy (?:own )?(?:car|vehicle|motor|home|house|flat|hdb|ilp|shield|mediguard|hospital plan|polic(?:y|ies)|plans?|insurance|excess|deductible|premiums?|rider)\b/i;
 /** Another person's relative ("his wife", "Farah's mother", "her brother"): the claims resolver anchors those. */
-const RELATIVE_OF = /\b(?:his|her|their|(?!(?:what|that|it|who|there|here|he|she|let|where|how)['’]s)[\p{L}]+['’]s)\s+(?:mak|emak|ibu|mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband)\b/iu;
+const RELATIVE_OF = /\b(?:his|her|their|(?!(?:what|that|it|who|there|here|he|she|let|where|how)['’]s)[\p{L}]+['’]s)\s+(?:mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband)\b/iu;
 
 export function householdPersonFromWords(message: string, family: ClaimPerson[], products: string[] = [], selectedId = ""): ClaimPersonResolution | null {
   const text = nameKey(message);
