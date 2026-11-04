@@ -43,6 +43,9 @@ export type HouseholdDocument = {
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
   partCheckedPages?: number[];
+  /** Pages that could not be read at all (an illegible scan, or a reader that gave nothing back): nothing printed only
+   * there is known, and their text, if any, is not sent (lib/documents/processing-errors.ts unreadablePagesNote). */
+  unreadablePages?: number[];
   pages: HouseholdPage[];
 };
 export type Household = {
@@ -101,8 +104,10 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
-      // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote.
-      pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
+      unreadablePages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unreadable").map((p) => Number(p.page_number)),
+      // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote. A
+      // page that could not be read is not sent: whatever a reader made of it is not the page's words.
+      pages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method !== "unreadable").map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
     })),
   };
 }
@@ -179,9 +184,12 @@ export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[
 /** Said for a document with unchecked pages whichever of its pages are sent, so the answer never calls it fully read
  * (live 32fa444 E2: PruLink's unchecked pages were not sent, so the chat never saw the notice). */
 export const readInPart = (doc: HouseholdDocument) => {
-  const whole = doc.uncheckedPages ?? [], part = doc.partCheckedPages ?? [];
-  if ((!whole.length && !part.length) || unreadable(doc)) return null;
-  return "read in part: " + [whole.length ? `${pageList(whole)} could not be checked against the page image; no amount from ${whole.length === 1 ? "it" : "them"} is used` : null,
+  const whole = doc.uncheckedPages ?? [], part = doc.partCheckedPages ?? [], lost = doc.unreadablePages ?? [];
+  if ((!whole.length && !part.length && !lost.length) || unreadable(doc)) return null;
+  // Every page unreadable: nothing was read, so it is never called read in part (Critic #327 L2).
+  if (lost.length && !doc.pages.length) return `${NOT_READABLE}: no page of it could be read, so nothing in it is known`;
+  return "read in part: " + [lost.length ? `${pageList(lost)} could not be read at all, so nothing printed only there is known; ${lost.length === 1 ? "it is" : "they are"} not sent` : null,
+    whole.length ? `${pageList(whole)} could not be checked against the page image; no amount from ${whole.length === 1 ? "it" : "them"} is used` : null,
     part.length ? `some amounts on ${pageList(part)} could not be checked against the page image and show as "[amount not checked]"; they are not used` : null].filter(Boolean).join("; ");
 };
 
@@ -200,7 +208,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
     : [...sent.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`),
-      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
+      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length + (doc.unreadablePages?.length ?? 0)}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
   return `${head}\n${pages}\n</document>`;
 }
 
