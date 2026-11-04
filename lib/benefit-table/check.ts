@@ -191,7 +191,17 @@ function unclearRuns(text: string): [number, number][] {
       const firstGroup = t.raw.match(/^\d+/)![0];
       const carries = i > 0 && (part.length > 1 || /^\d{1,3}$/.test(prev.raw)) && firstGroup.length === 3
         && !COUNT_OR_DATE_AFTER.test(text.slice(t.at + t.raw.length, t.at + t.raw.length + 14));
-      if (carries) part.push(t); else parts.push([t]);
+      // A lakh grouping printed with a space ("₹ 1 50,000" is 1,50,000): a 1-digit figure, or a 1-2 digit one right after
+      // a currency sign, before a figure grouped in twos then three, is one figure, never 50,000 (TE #339).
+      const lakh = i === 1 && /^\d{1,2}$/.test(prev.raw) && /^\d{2}(?:,\d{2})*,\d{3}(?:\.\d+)?$/.test(t.raw)
+        && (prev.raw.length === 1 || /(?:₹|rs\.?|inr|[$£€]|[A-Z]{3})\s*$/i.test(text.slice(Math.max(0, m.index! - 6), m.index!)));
+      if (carries || lakh) part.push(t); else parts.push([t]);
+    }
+    // A run of plain figures with a percent sign after it ("Co-insurance 10 20 %") is one unclear share, never 10.
+    const lastToken = tokens[tokens.length - 1];
+    if (tokens.length > 1 && /^\d+$/.test(lastToken.raw) && /^\s*%/.test(text.slice(lastToken.at + lastToken.raw.length))) {
+      spans.push([tokens[0].at, lastToken.at + lastToken.raw.length]);
+      continue;
     }
     for (const part of parts) {
       if (part.length < 2) continue;

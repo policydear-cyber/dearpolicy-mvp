@@ -14,7 +14,9 @@ function check(name: string, fn: () => void) {
 const nothing = ["Death benefit S$ 120 000", "Room S$ 1 500 per day", "Hospital cash £ 2 500", "S$ 150 250 350",
   "S$ 1 500.00", "Cover US$ 2 500 000", "CHF 12'000", "Benefit 12'500.50", "Limit 1 250 000", "3,00", "Fee 150,00", "S$ 1 500", "S$ 1 500",
   // Still unclear: each could be one space-grouped figure.
-  "100 200 300", "50 100", "1 600,000", "S$ 1 500 000", "Plan A Plan B Plan C\n250 300 400"];
+  "100 200 300", "50 100", "1 600,000", "S$ 1 500 000", "Plan A Plan B Plan C\n250 300 400",
+  // A lakh grouping printed with a space, and plain figures before a spaced percent sign (TE #339).
+  "Room ₹ 1 50,000", "Room 1 50,000", "Rs 12 50,000", "Co-insurance 10 20 %", "10 20%"];
 for (const line of nothing) check(`"${line}" prints no figure`, () => assert.deepEqual(numbersIn(line), [], JSON.stringify(numbersIn(line))));
 
 // Whole figures grouped with commas, and columns of them, still read.
@@ -26,7 +28,7 @@ const whole: [string, number[]][] = [
   // 1 to 3 plain digits, and never as a count or a date (Critic and TE on #339).
   ["Accidental death 600000 1000000", [600000, 1000000]], ["2025 600,000", [2025, 600000]], ["15 48,437 101.10%", [15, 48437, 101.1]],
   ["S$250 120 days", [250, 120]], ["RM 150 30 days", [150, 30]], ["S$50 10 visits", [50, 10]], ["£50 1 day excess", [50, 1]],
-  ["S$200 01 Jan 2024 31 Dec 2024", [200, 1, 2024, 31, 2024]], ["S$200 01/01/2024", [200, 1, 1, 2024]],
+  ["S$200 01 Jan 2024 31 Dec 2024", [200, 1, 2024, 31, 2024]], ["S$200 01/01/2024", [200, 1, 1, 2024]], ["15 48,437", [15, 48437]], ["Co-pay 10%", [10]],
 ];
 for (const [line, want] of whole) check(`"${line}" reads ${JSON.stringify(want)}`, () => assert.deepEqual(numbersIn(line), want));
 
