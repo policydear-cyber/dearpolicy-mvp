@@ -64,6 +64,7 @@
     "simple:compare": "node --import tsx scripts/simple-answer/compare.ts",
     "simple:app-run": "node --import tsx scripts/simple-answer/app-run.ts",
     "simple:chat-test": "node --import tsx scripts/simple-answer/chat-test.ts",
+    "simple:all-accounts-test": "node --import tsx --test scripts/simple-answer/all-accounts-test.ts",
     "simple:still-reading-test": "node --import tsx scripts/simple-answer/still-reading-test.ts",
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
     "chat:no-expiry-wording-test": "node --import tsx scripts/chat/no-expiry-wording-test.ts",

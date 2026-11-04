@@ -137,7 +137,7 @@ import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } fro
 // Conversational RAG (Prompt 2): DEARPOLICY_RAG_LOOP (default off) hands the turn to the model-driven loop; the loop
 // module is loaded only when the flag is on (lib/rag2/loop/hook.ts).
 import { ragLoopEnabled } from "@/lib/rag2/loop/flag";
-import { simpleChatEnabled } from "@/lib/simple-chat/flag";
+import { simpleChatFor } from "@/lib/simple-chat/for-household";
 import { householdHomeCountry } from "@/lib/claims/household-home";
 
 
@@ -361,7 +361,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
-  if(simpleChatEnabled(process.env,request.accountId))return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
+  if(await simpleChatFor(request.accountId))return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).prepareLoopChat(request);
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new ChatConflict("Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.");
