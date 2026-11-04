@@ -213,6 +213,7 @@
     "v1:retrieval-test": "node --import tsx scripts/v1-retrieval-regressions.ts",
     "v1:chat-contract-test": "node --import tsx scripts/v1-chat-contract-regressions.ts",
     "v1:chat-fix-test": "node --import tsx scripts/v1-chat-fix-regressions.ts",
+    "benefit-table:space-runs-test": "node --import tsx scripts/benefit-table/space-runs-test.ts",
     "v11:ingestion-test": "node --import tsx scripts/v11-ingestion-regressions.ts",
     "r5:ingestion-test": "node --import tsx scripts/r5-ingestion-regressions.ts",
     "v11:answer-test": "node --import tsx scripts/v11-answer-regressions.ts",
