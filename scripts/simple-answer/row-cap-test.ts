@@ -179,9 +179,10 @@ test("negative: two different sums assured in the document (basic plan and rider
 });
 
 test("every sum a document prints for the person: the cap shows only when each works out to at least the cap", () => {
-  const cert = (sums: string) => house(["Lim Ah Kow", "Tan Mei Ling"], [
-    doc("k6", "Scheme Schedule.pdf", ["Lim Ah Kow", "Tan Mei Ling"], "Group Scheme\nSchedule\nDeath due to natural catastrophe\t15% of Sum Insured\nor up to S$50,000, whichever is lesser"),
-    doc("k7", "Scheme Certificate.pdf", ["Lim Ah Kow", "Tan Mei Ling"], `CERTIFICATE OF GROUP INSURANCE\n${sums}`)]);
+  // The scheme's schedule and its certificate print the same policy number: the certificate's sums are this policy's.
+  const cert = (sums: string, number = "GS-100") => house(["Lim Ah Kow", "Tan Mei Ling"], [
+    { ...doc("k6", "Scheme Schedule.pdf", ["Lim Ah Kow", "Tan Mei Ling"], "Group Scheme\nSchedule\nDeath due to natural catastrophe\t15% of Sum Insured\nor up to S$50,000, whichever is lesser"), policyNumber: "GS-100" },
+    { ...doc("k7", "Scheme Certificate.pdf", ["Lim Ah Kow", "Tan Mei Ling"], `CERTIFICATE OF GROUP INSURANCE\n${sums}`), policyNumber: number }]);
   const one = (h: Household, base: string, line: string) => verifyAnswer(h, readModelAnswer({ bottomLine: "", nextSteps: [], question: null, statements: [{ kind: "amount", text: "Natural catastrophe death benefit.", person: "Tan Mei Ling", document: "D1",
     quote: "Death due to natural catastrophe\t15% of Sum Insured", amount: null, percentOf: { percent: 15, baseAmount: base, baseDocument: "D2", baseQuote: line }, conditions: [], alternativeGroup: null }] })!).answer.statements!.filter((s) => s.amount).map((s) => s.amount!.text);
   // S$1,000,000 and S$400,000 both give at least S$50,000 (S$150,000 and S$60,000): the cap is what she can claim.
@@ -191,6 +192,15 @@ test("every sum a document prints for the person: the cap shows only when each w
   // A line naming her with two figures, or a sum in another currency, is a doubt: none is shown.
   assert.deepEqual(one(cert("Tan Mei Ling\tS$1,000,000\tS$400,000"), "S$1,000,000", "Tan Mei Ling\tS$1,000,000\tS$400,000"), []);
   assert.deepEqual(one(cert("Tan Mei Ling\tS$1,000,000\nTan Mei Ling\tUS$400,000"), "S$1,000,000", "Tan Mei Ling\tS$1,000,000"), []);
+  // Critic #349 H1: the sums of another policy (another number, or none) say nothing about this policy's own sum.
+  const good = "Lim Ah Kow\tS$1,000,000\nTan Mei Ling\tS$1,000,000\nLim Ah Kow\tS$600,000\nTan Mei Ling\tS$400,000";
+  assert.deepEqual(one(cert(good, "WL-9"), "S$400,000", "Tan Mei Ling\tS$400,000"), []);
+  assert.deepEqual(one(cert(good, ""), "S$400,000", "Tan Mei Ling\tS$400,000"), []);
+  const other = house(["Tan Mei Ling"], [doc("k9", "Personal Accident Plan.pdf", ["Tan Mei Ling"], "Personal Accident Plan\nInsured: Tan Mei Ling\nFractures: 15% of the Sum Insured or up to S$50,000, whichever is lesser"),
+    doc("k10", "Whole Life Plan.pdf", ["Tan Mei Ling"], "Whole Life Plan\nTan Mei Ling Sum Assured S$1,000,000")]);
+  const r = verifyAnswer(other, readModelAnswer({ bottomLine: "", nextSteps: [], question: null, statements: [{ kind: "amount", text: "Fractures.", person: "Tan Mei Ling", document: "D1", quote: "Fractures: 15% of the Sum Insured",
+    amount: null, percentOf: { percent: 15, baseAmount: "S$1,000,000", baseDocument: "D2", baseQuote: "Tan Mei Ling Sum Assured S$1,000,000" }, conditions: [], alternativeGroup: null }] })!);
+  assert.deepEqual(r.answer.statements!.filter((s) => s.amount).map((s) => s.amount!.text), []);
 });
 
 test("negative: a worked-out percentage is never shown above a limit printed on its own row that cannot be read as a cap", () => {

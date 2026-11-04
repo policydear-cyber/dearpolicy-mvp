@@ -587,7 +587,7 @@ function capBase(st: ModelStatement, row: Found, household: Household, person: s
  * every line of that document naming the person with one such figure (each of their sums there: a life cover's, an
  * accident cover's) works out to at least the cap ("15% of Sum Insured or up to S$50,000, whichever is lesser" with
  * sums of S$400,000 and S$1,000,000 pays S$50,000 on either). Any line that works out lower, or any doubt: false. */
-function capBindsForEverySum(st: ModelStatement, household: Household, person: string, capValue: number, capCurrency: string): boolean {
+function capBindsForEverySum(st: ModelStatement, row: Found, household: Household, person: string, capValue: number, capCurrency: string): boolean {
   const po = st.percentOf;
   if (!po?.baseQuote || !(po.percent > 0)) return false;
   const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
@@ -595,6 +595,11 @@ function capBindsForEverySum(st: ModelStatement, household: Household, person: s
   if (!bf) return false;
   const doc = household.documents[bf.docIndex];
   if (!doc.linkedPeople.some((p) => baseName(p) === person)) return false;
+  // The sums must be this policy's: the base is in the row's own document, or in one printing the same policy number. A
+  // whole life plan's S$1,000,000 says nothing about an accident plan's own sum (Critic #349 H1).
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const rowDoc = household.documents[row.docIndex];
+  if (bf.docIndex !== row.docIndex && !(number(rowDoc) && number(rowDoc) === number(doc))) return false;
   const who = tokens(person);
   const sums: number[] = [];
   let quotedIsOne = false;
@@ -1780,7 +1785,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         }
         const worked = own ? Math.round(own.value * st.percentOf!.percent) / 100 : null;
         const capCurrency = moneyFiguresIn(rowCapped?.raw ?? "")[0]?.currency ?? "";
-        const cap = rowCapped && (worked != null ? worked >= rowCapped.amount.value : capBindsForEverySum(st, household, person!, rowCapped.amount.value, capCurrency)) ? rowCapped : null;
+        const cap = rowCapped && (worked != null ? worked >= rowCapped.amount.value : capBindsForEverySum(st, rowCapped.found, household, person!, rowCapped.amount.value, capCurrency)) ? rowCapped : null;
         if (rowCapped && own && worked != null && worked < rowCapped.amount.value) {
           // The model may also have written the cap as its own card, already turned into this figure: one card.
           const twin = checked.findIndex((c) => c.person === person && c.amount && sameValue(c.amount.value, worked) && c.found?.docIndex === rowCapped.found.docIndex);
