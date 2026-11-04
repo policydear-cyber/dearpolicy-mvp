@@ -364,3 +364,10295 @@ Not release-ready.
 - **Fix before release:** F1 (reference wording quoted as if it answers a cover question), A2 (another person's policies named as this person's) and A3 (a documented accident medical benefit could be hidden behind a stated absence). Each is a small change at the place named.
 - **Fix in C2, or list accurately as open:** A1, F2 and F3.
 - Everything else reviewed in C2 holds: the table-condition boundary, the sickness wording, the Living Care sentence, read-in-full, and M4 without the rag2 import.
+
+---
+
+# Round 6: final adversarial review of C3 `17668630` (full diff `4956588..17668630`, delta `98ada99..17668630`)
+
+Method: read the C3 product delta (`absence-scope.ts`, `loop.ts`, `statement-render.ts`, `event-relations.ts`) and the
+Developer's `RELEASE-REPORT.md` / corrected `C1.md` (`427d1d4`). Ran `decideNotFound` from C3 and from C2 directly (a scratch copy
+with the store import stubbed; no DB, no model, no spend) on the fracture fixture's certificate (`CERT_P1`) and Benefit Summary
+page 1 (`BS_P1`, the OPMC roster), plus one extra page per case. Ran `isPersonCorrection` from C3 on 12 messages. Line numbers
+are on C3.
+
+## New findings
+
+**R6-1. High (for the GP-bill repair; no wrong amount): G1 now fires only when the member's display name equals the certificate
+cell exactly.** `absence-scope.ts:125` builds the row matcher from `displayName` alone, as a whole tab-delimited cell. The fracture
+fixture passes because its member is named `"Lee Wei Ming, Daniel"`, the same as the cell (`fracture-conversation.ts:21`). The
+repo's own other households show the usual shape: member `"Daniel Lee Wei Ming"`, preferred name `"Daniel"`, certificate cell
+`"Lee Wei Ming, Daniel"` (`actual-lib.ts:34` vs `:142`, `booklet.ts:31` vs `:46`). Reproduced: with the display name
+`"Daniel Lee Wei Ming"`, C2 says the G1 answer, but C3 refuses with `printed=[]`. On the GP path the household then gets "I could not
+confirm from your documents what pays for the bill you mentioned" (`loop.ts:2149`), which is DC's original complaint. That is
+safe, but the release report's line "DC's GP-bill question gets an answer" holds only where the names happen to match. DC's real
+member name versus his certificate cell is unchecked, because the production read was blocked. Fix (small): match rows the way the
+table selector already does (`tables.ts:604-609`: display name or preferred name, word-bounded, at least 3 letters). Then drop a row
+that also matches another household member's name, which keeps A2 closed. Add a GP variant where the member name is in app order.
+
+**R6-2. Medium-High: the A3 change narrowed round-4 condition 5, so a documented medical-expense benefit can again be hidden behind
+a stated absence.** C2 vetoed G1 when any medical-bill term ("medical expenses", ...) was printed outside the policy list. C3
+replaces that with `medicalExpenseSentences` (`absence-scope.ts:95`), which needs a payment verb in the same sentence. A page that
+prints the benefit as a label and a limit ("G. Medical Expenses Benefit / Up to $2,000 per Accident for medical expenses incurred
+following an Accident") has no "reimburse/pay". Reproduced: C2 refuses and quotes both lines. C3 lets G1 fire and states "Daniel's
+documents ... do not describe a benefit for GP or outpatient treatment" next to that benefit. Fix: keep C2's term veto (outside
+the policy list) as well as the new sentence rule, and add this label-style control beside GP.b1.
+
+**R6-3. Low-Medium (already in C2; C3 now quotes it first): an exclusion counts as medical-expense wording.** `PAYS` matches "We
+will not pay any medical expenses arising from a pre-existing condition". It refuses the absence and is quoted ahead of other
+lines as what the documents print for the GP bill, with the heading merged in ("General Exclusions We will not pay ..."). That
+attaches another benefit's exclusion to a fall. Fix: skip sentences with a negation before the payment verb (not / no / never /
+excluded). Inpatient-only wording ("... while hospitalised as an inpatient") is also counted. It is quoted verbatim, so this is
+listed only.
+
+**R6-4. Low (cosmetic, also in C2):** the G1 sentence reads "Outpatient Medicare Policy Policy (OPMC)".
+
+## Round-5 items on C3
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| A1 too/also block | closed | block removed (`loop.ts:116`). 9/12 messages as intended. Residual (Low, accepted trade-off): "Daniel fell too, not Grace though, she was fine" and "Daniel also fell, it wasn't Grace who pushed him" now read as corrections (reversible) |
+| A2 spouse's products named | closed, but over-tight (R6-1) | only rows naming the subject are read (`absence-scope.ts:125-133`); subject scope only (`:64`) |
+| A3 doctor/practitioner wording | closed for sentence wording; regressed for label-style wording (R6-2) | "reimburse the reasonable charges for treatment by a Registered Medical Practitioner" now refuses |
+| F1 policy list quoted | closed | `chosen` never takes an `inPolicyList` line (`:70`); repeat with nothing quotable is left out (`statement-render.ts:314`); reproduced `printed=[]` |
+| F2 G2 note after refusal | closed | `loop.ts:2149` says "could not confirm" after a refusal |
+| F3 partial sentence, other subject | closed | subject-matched in `statement-render.ts:328-329` and the new `withPartialAbsence` (`loop.ts:2563`) |
+| F4 quoted bare "$" | holds by reading; still no test | the bare-currency gates run on the full text, quotes included, before the payout check blanks quotes (`compose.ts:1121-1150`) |
+| C1-3 re-analysis in place | listed open with the corrected reason | `developer/C1.md:25-29`, `RELEASE-REPORT.md` |
+
+## UX regressions
+
+- **X-ray card (FX-K4B): fixed.** The own-section filter now runs before the relevance and "unprinted requirement" checks
+  (`loop.ts:1182-1217`), so a mobility-aid passage no longer justifies a fracture question.
+- **Dental "couldn't confirm" (FX-K6B): fixed.** `withPartialAbsence` adds the server's "what was read" statement for the same
+  subject when the reply has no absence of its own. Bonus: the GP-path merge now keeps `absenceChecks` (`loop.ts:2152`), so that
+  saved absence can be withdrawn on reopen. It was lost on C2.
+- **Correction line (superseded answers not marked): not fixed; listed open.** Medium. After a correction, the earlier answer's
+  figures (S$2,500 / S$300,000) stay on screen and after reload with no "replaced" marking. This is also on main, so it is not a
+  regression. It is next to the worst-bug class (a withdrawn figure readable as current), so fix it before public launch.
+- Death abroad (L2): the repatriation benefit is now a death benefit (label-only rule, `event-relations.ts:16`) and keeps its
+  printed condition, quoted.
+
+## Correction handling, household isolation, applicability, fallbacks
+
+- Corrections: as A1 above. No new crossing.
+- Household isolation: members are read per account (`checkNotFound`), and `partialAbsence` is per turn and per subject. No crossing
+  found.
+- Applicability: R6-1, R6-2, R6-3. Quoted reference wording still carries no "scheme wording, not proof of cover" qualifier when
+  the quoted document is not the person's certificate (Medium-Low, widened by A3). List it as open.
+- Fallbacks: F1-F3 and FX-K6B hold. Where G1 does not fire, the answer is the neutral "could not confirm", never a false absence,
+  except in R6-2.
+
+## Release verdict on C3
+
+**Not release-ready.** Two small fixes, both in `absence-scope.ts`, plus two scripted controls:
+1. R6-1: match certificate rows by display or preferred name, as the table selector does, excluding rows that name another member.
+2. R6-2: restore C2's medical-term veto beside the new sentence rule.
+
+After that, list as open: R6-3, R6-4, the reference-quote qualifier, superseded answers not marked, C1-3, travel trip dates, the
+F4 test, and no live run. All C3 evidence is scripted (OpenAI configuration). The Claude switch (PR #59) needs its own check.
+Nothing found in C3 states a wrong claimable amount.
+
+---
+
+# Round 7: final review of C4 `fbeed4af` (delta `17668630..fbeed4af`; product code in 3 files)
+
+Method: read the delta. Re-ran round 6's `decideNotFound` cases on C4 (stubbed store; no DB, no model, no spend), plus two A2
+cases. Ran the new travel-trip predicate (copied verbatim from `loop.ts:1648-1656`) on seven schedules. The rest of the full diff
+from `4956588` is unchanged since round 6.
+
+## Round-6 items on C4
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R6-1 name matching | closed | "Daniel Lee Wei Ming" with the cell "Lee Wei Ming, Daniel" now gives the G1 answer (case 2) |
+| R6-2 term veto | closed | the label-style "Medical Expenses Benefit" refuses and is quoted again (case 3); the OPMC roster still lets G1 fire (case 1) |
+| A2 (spouse's products) | mostly holds; see R7-2 | a row naming another household member is dropped (case 7) |
+| R6-3 exclusion counted | open, as listed | case 4 unchanged |
+| R6-4 "Policy Policy" | open, cosmetic | case 1 |
+
+## New findings
+
+**R7-1. High: the travel suppression hides a matching trip's Accidental Death benefit.** `otherTrip` (`loop.ts:1648-1656`) drops a
+record from the death answer when the schedule's period has ended *before today*, or when the current message does not contain its
+printed destination word. Reproduced, each suppressing a S$100,000 benefit that does apply:
+- "Adrian died in a car accident in Japan on 5 March" on a Japan trip of 1-10 March 2026. Deaths are reported after the trip, and
+  `ended` compares with today (`new Date()`), not with the date of death or `input.asOf`.
+- "died in Tokyo" on a Japan schedule.
+- "Destination: Asia" or "Worldwide (excluding USA)" with "died in Japan".
+- The place was given in an earlier turn ("what happens now that Adrian has died?").
+
+At C3 these were shown (without trip dates, the Evidence Reviewer's point). At C4 they disappear with no sentence about the travel
+policy. That hides a documented benefit with a claimable amount: a regression in exactly the death-abroad journey. Fix: never drop
+the record. Keep the line and add the printed destination and period as its own qualifier ("for the trip to Indonesia, 1-10 March
+2025"). That fixes the reviewer's misleading amount without guessing applicability. If the Developer keeps a suppression, it must use
+the reported date of death and `asOf`, and treat region or worldwide destinations and an unknown place as "show with the qualifier".
+
+**R7-2. Low: a preferred name alone can claim a non-member's certificate row.** `namesMember` (`absence-scope.ts:291`) accepts the
+preferred name word-bounded anywhere in the row. A row "Lee Jun Hao, Daniel" for a son who is not entered as a member is read as
+Daniel's, so "Group Critical Illness" was listed as on Daniel's certificate (case 6). That is a product name only, with no amount,
+and dropped when the son is a member (case 7). Fix if cheap: accept a preferred-name-only match only when no other row under any
+heading also matches it, or require every word of the display name.
+
+**R7-3. Low (cosmetic):** the closed-fracture note can read "whether a open fracture is one" (`statement-render.ts:186`). The
+wording otherwise matches the record: it says what is undefined and that the insurer decides, with no new figure. The partial-copy
+wording (`absence-scope.ts:229-234`) is fine.
+
+## Release verdict on C4
+
+**Not release-ready: one blocker, R7-1.** It is small and local: keep the travel line with its printed trip qualifier instead of
+dropping it. R6-1 and R6-2 are closed. Nothing in C4 states a wrong claimable amount. The remaining items stay listed as open:
+R6-3, R6-4, R7-2, R7-3, the reference-quote qualifier, superseded answers not marked, C1-3, the F4 test, no live run, and the
+Claude switch unverified.
+
+---
+
+# Round 8: final review of C5 `177c0734` (delta `fbeed4af..177c0734`; product code in 3 files)
+
+## R7-1: closed
+
+C4's `otherTrip` suppression is removed. `loop.ts` at C5 is byte-identical to C3 (same blob hash). No death benefit is dropped for
+a trip any more. The travel amount is now said with what its own page prints: `tripLimits` (`statement-render.ts:78-90`) appends
+the "Insured Person", "Period of Insurance" and "Destination" lines verbatim, each cited by an exact span (`evidenceAt`), and says the
+insurer confirms whether the trip fits. That meets the contract: the qualifier is kept and the benefit is not hidden.
+
+## Other C5 changes
+
+- The partial-copy wording is definite only when the stored distinct pages are fewer than a known page count
+  (`absence-scope.ts:233`). Correct.
+- "an open fracture" (R7-3): closed.
+
+## New finding
+
+**R8-1. Low-Medium (wording; no amount changes): the "trip" sentence also fires on annual schedules.** `tripLimits` runs for any
+record whose source page has a line starting "Period of Insurance:" *or* "Destination:". Annual schedules print a period too.
+The repo's own Tan household PA schedule prints "Period of Insurance: 01/03/2026 to 28/02/2027"
+(`scripts/fixtures/reliable-chat/tan.ts:24`). A benefit sourced from such a page gets "... the period of insurance
+“01/03/2026 to 28/02/2027”; whether that trip fits this event is for the insurer to confirm". That reads as if a Personal Accident
+benefit depended on a trip. The quoted period itself is useful. Fix (one condition): say "trip" only when a Destination line is
+printed; otherwise "whether this period covers the date of the event is for the insurer to confirm". The Test engineer should check
+whether any Tan expectation now sees the added sentence.
+
+## Full diff `4956588..177c0734`
+
+Nothing new. Every product-code change since round 5 is covered by rounds 6-8. The round-6 cases (R6-1, R6-2) depend only on
+`absence-scope.ts`, whose only C5 change is the partial-copy wording, so they stand as reproduced on C4.
+
+## Final release verdict (Critic) on C5
+
+**No Critic blocker remains.** Nothing found in C5 states a wrong claimable amount, hides a documented benefit, or crosses
+between people.
+
+C5 is release-ready from the code review, provided the PR lists these as open, accepted items:
+- R8-1 (trip wording on annual schedules; recommended as a quick follow-up);
+- R6-3 (exclusion sentences counted as medical-expense wording);
+- R6-4 ("Policy Policy");
+- R7-2 (a non-member's row sharing a preferred name);
+- quoted scheme wording without a "not proof of cover" qualifier;
+- superseded answers not marked after a correction (fix before public launch);
+- C1-3 (re-analysis in place);
+- no test for F4.
+
+Evidence limit, unchanged: all evidence is scripted or replay on the OpenAI configuration. The model-facing changes (absence
+refusals, server quotes, the GP fallback) have had no live run. A live check needs DC's authorisation, and the Claude switch
+(PR #59) needs its own check. Whether to ship before that live check is DC's call.
+
+---
+
+# Round 9: final review of C6 `f4937ef1` (delta `177c0734..f4937ef1`; product code in 2 files)
+
+- **R8-1: closed.** "whether that trip fits this event" is said only when a Destination line is printed. A schedule that prints only
+  a period gets "whether this period of insurance covers the date of the event" (`statement-render.ts:90`).
+- **Partial-copy wording: correct.** "the text of the X (pages 1-4 and 8 of 37 pages) ... The text of the other pages was not stored"
+  matches what the check knows (pages counted from the stored rows; no claim about the upload itself). The refusal problem the
+  model sees is unchanged.
+- **Corrected hip note: no figure changes; one wording risk.**
+
+**R9-1. Low-Medium (wording only; no amount changes).** The new `bothKinds` note (`statement-render.ts:212`) says "these documents do
+not define either kind". It is gated on the *same policy's* records having no definitions, and `definitions` are read only from a
+record's own document (`benefit-records.ts:48-50,151-155`). Suppose a household's policy wording defines Simple Fracture while the
+table sits in a separate summary document. The note then claims all the documents are silent, though one defines it. It errs toward
+"the insurer decides", so no claim is overstated, but the absence statement can be false. Fix (one word): say "this document does
+not define either kind", or check every record in scope for a Simple/Other Fracture definition. The existing tagged note
+("these documents do not define which fractures count as ...") has the same ungated wording since C4; the same fix covers it.
+
+## Final release verdict (Critic) on C6
+
+**No Critic blocker remains.** Nothing in C6 states a wrong claimable amount, hides a documented benefit, or crosses between people.
+The full-diff position of round 8 stands: `loop.ts` and the G1 / absence logic are unchanged except the wording above.
+
+List as accepted open items: R9-1, R6-3, R6-4, R7-2, the scheme-quote qualifier, superseded answers not marked after a correction
+(fix before public launch), C1-3, and the F4 test.
+
+Evidence limit, unchanged: all evidence is scripted or replay (OpenAI configuration), with no live run. The Claude switch (PR #59)
+is unverified. Shipping before a live check is DC's call.
+
+---
+
+# Round 10: PR #64 (live GP-bill fix), head `235d2623c45dc4ba4ebff56fdd461d362cad3bd7`, base main `ca6af69`
+
+Method: read the product diff (`absence-scope.ts` ranking, `loop.ts` G2 terms, `compose.ts` `sayBack`). Ran `decideNotFound` from
+`235d262` directly (store stubbed; no DB, no model, no spend) on the fixture certificate and BS page 1. I added the Developer's
+invented overseas page (`gp-bill-live-repro.ts` P20) and a panel GP page like P25, with its section heading naming the Outpatient
+Medicare Policy, the policy Daniel's certificate does not list.
+
+**R10-1. High: a panel GP line from a policy the certificate does not list is now quoted as the GP-bill answer, and G1's "his
+certificate does not list OPMC" sentence disappears.** In case A, the server quotes "Consultation at a panel GP clinic in Singapore: no
+charge to the Insured Person. Non-panel GP consultation: up to $30 per visit." for Daniel. That line is any hit outside the scheme's
+policy list, so G1 no longer fires (`absence-scope.ts:64`). Nothing in the answer says the wording comes from a scheme document, or
+that Daniel's certificate (as of 6 October 2022) lists Term Life, PA, Living Care and Living Care Plus but not Outpatient Medicare.
+In DC's real scheme, panel GP is most likely the OPMC's benefit; QC's ground truth says his certificate does not list it. The answer
+would then read as "free panel GP, $30 otherwise" beside an $800 bill. That is reference wording presented as personal cover, with an
+amount: next to the worst-bug class. The PR body says the reconstruction's invented page has no section owner, so this was not
+tested. Fix before merge: when a quoted line comes from a document that is not the person's confirmed certificate, keep the G1
+facts with it. Say what his certificate lists (dated), name the section or policy the quoted line sits under when its page heading
+names one, and say only the insurer can confirm it applies to him. If the section's policy is one the certificate does not list,
+say so plainly.
+
+**R10-2. Medium: ranking overseas-only lines last is not enough.**
+- Case B: when the only wording printed is the overseas clause, it is still quoted alone for a GP bill at home. That is the live
+  symptom, so ranking cannot stop it.
+- Case C: `ABROAD` also demotes a line that covers home, "Medical expenses incurred in Singapore or overseas are reimbursed under
+  Benefit G", behind the overseas-only clause.
+- The rank applies to every repeated refusal (`statement-render.ts`), not only the bill. A question about cover abroad gets its own
+  answer lines pushed behind unrelated ones.
+
+Fix: on the G2 bill path, unless the household's words place the bill abroad, do not quote a line limited to treatment abroad. Treat
+"outside Singapore" or "overseas" as a limit only when the line has no "Singapore or overseas" / "in Singapore" inclusion. If only
+such lines remain, say it in a sentence ("the only outpatient wording printed is for treatment outside Singapore"), never as the
+answer. Keep the ranking out of non-bill topics.
+
+**R10-3. Low: household isolation and person attribution.** The new terms do not widen scope: `scopeDocs` is unchanged, with the
+person's linked documents plus documents linked to nobody. A panel GP page in an *unlinked* document, such as a spouse's employer
+plan uploaded without a person, is still quoted for this person, with no "whose" wording. This is the existing open item (scheme or
+unlinked quotes carry no qualifier), now on the main GP path. The fix for R10-1 covers it.
+
+**R10-4. Low (cosmetic):** the line's own heading ("Panel GP Benefit") is quoted as the second line. The containment check only drops
+a heading that sits inside the chosen line, and an mixed-case heading ranks with sentences.
+
+**`sayBack`: fine.** Words with no subject are quoted ("You told me: “tripped on the kerb”"). Pronoun- and article-led words keep the
+old path. I found no regression.
+
+## Verdict on PR #64
+
+**Not ready to merge.** R10-1 is the blocker: as it stands, the PR can turn a scheme's panel GP wording for a policy Daniel does not
+hold into an apparent answer to his GP bill. Fix R10-2 in the same change; it is small. No paid run was made; this is a scripted
+reconstruction only.
+
+---
+
+# Round 11: PR #64 head `094da7b` (re-review after R10 fixes)
+
+Method: ran `decideNotFound` from `094da7b` (store stubbed; no DB, no model, no spend) with round 10's pages: fixture certificate,
+BS page 1 (OPMC roster), overseas clause P20, and a panel GP page under "SECTION 6: CLINICAL BENEFITS (OUTPATIENT MEDICARE POLICY)".
+Added a "Singapore or overseas" line, a spouse with OPMC on the shared certificate, and Daniel himself with OPMC. Ran the new
+`bill_place` detector (`loop.ts:2141-2143`, copied verbatim) on seven messages.
+
+## R10 items
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R10-1 panel GP of an unlisted policy | fixed when Daniel does not hold OPMC | case A: quote, then "Daniel's certificate lists ... (as of 6 October 2022) ... OPMC, which that certificate does not list" and "sits under 'SECTION 6 ... (OUTPATIENT MEDICARE POLICY)', which Daniel's certificate does not list. Only the insurer ... can confirm"; **but see R11-1** |
+| R10-2 overseas ranking | fixed for "unknown" and "home" | case B: the overseas clause is never the answer, only said apart with "applies only if the treatment was abroad"; case C: "Singapore or overseas" is quoted; **but see R11-2** |
+| R10-3 unlinked / whose | fixed by the same note | any quoted line not from the person's confirmed certificate gets "does not say whose cover that line is" and the insurer line |
+| R10-4 heading quoted | fixed | "Panel GP Benefit" is no longer quoted |
+
+## New findings
+
+**R11-1. High: the new note can tell the person he does not hold the cover he does hold.** `whoseLines` decides "not listed" by a
+literal phrase search of the whole certificate text (`absence-scope.ts:313`, `listed`).
+- The scheme name is searched as "Outpatient Medicare Policy" and the section as "CLINICAL BENEFITS (OUTPATIENT MEDICARE". A
+  certificate heading "GROUP OUTPATIENT MEDICARE(POLICY NO ...)" or "GROUP OPMC(POLICY NO ...)" matches neither.
+- Case E (Daniel's own rows include Group Outpatient Medicare): the answer says "Daniel's certificate lists ... Group Outpatient
+  Medicare ..." and then "names the scheme's Outpatient Medicare Policy (OPMC), which that certificate does not list" and "sits under
+  ... (OUTPATIENT MEDICARE POLICY), which Daniel's certificate does not list".
+- Case E2 ("GROUP OPMC"): the second claim is still made.
+
+That is a false statement about his own cover, sitting beside the panel GP benefit that applies to him. It can stop a valid claim:
+the hides-a-benefit class. Also, `listed` reads the whole certificate, not his rows, so a spouse's matching heading would suppress the
+sentence for him (an A2 cousin, not reproduced). Fix: compare against `cert.products` (his rows only) with the same normalisation
+G1's must-not-fire checks use (name without "Policy"/"Group", or the abbreviation). Read a policy name from the section heading
+only from an explicit "(... POLICY)" or "... POLICY" phrase. When unsure, say only that the document does not say whose cover it is;
+never "does not list".
+
+**R11-2. Medium-High: the "abroad" detector fires on ordinary Singapore messages, and then the overseas clause is quoted first
+with no caveat.** `away` matches any "in <Capitalised word>": "saw a GP in Tampines", "GP in Raffles Place" and "fell in Grace's
+room" all read as abroad. It also reads every earlier user turn (`userTexts`), so a Japan death two turns ago makes today's GP bill
+"abroad". With `bill_place = "abroad"`, `billLines` quotes abroad-only lines first and drops the "applies only if abroad" sentence.
+That is the live symptom again. Fix: "abroad" only on explicit words (overseas, abroad, on holiday, travelling, a trip) in the
+current message, and default to "unknown", which is already safe. Even for "abroad", keep the "outside Singapore" line's own wording
+quoted, which it is.
+
+**R11-3. Low-Medium: the whose-cover facts are a trailing note, not a statement next to the quote.** They go into `notes`
+(`loop.ts:2156`), appended after all sentences. They are not evidence-checked, and if the composer drops the quote they remain
+alone ("does not say whose cover that line is" with no line). Ask the Test engineer for one render check that the note sits
+directly under the quote and that returned = saved = reopened. Better: emit it as a server statement right after the quote.
+
+**R11-4. Low (wording):** "The only line found is in the Scheme X Group Insurance (page 2) prints a benefit for treatment outside
+Singapore" is ungrammatical (`loop.ts:2158`). Also "Outpatient Medicare Policy Policy" (R6-4) now appears here too.
+
+## Verdict on PR #64 at `094da7b`
+
+**Not ready to merge.** R11-1 is the blocker: in a household whose certificate does list the outpatient policy, the answer says it
+does not. R11-2 should be fixed with it; both are small and local. R10-1 to R10-4 are fixed for the cases they were raised on.
+No paid run; scripted reproductions only.
+
+---
+
+# Round 12: PR #64 head `7f4dbd3`
+
+Method: the same `decideNotFound` reproductions as rounds 10-11, from `7f4dbd3` (store stubbed; no DB, no model, no spend), plus the
+new `bill_place` detector copied verbatim (`loop.ts:2143-2144`).
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R11-1 false "does not list" | fixed | E ("GROUP OUTPATIENT MEDICARE" on Daniel's rows) and E2 ("GROUP OPMC"): no "does not list" anywhere; the section is named and the insurer line kept. A: still says OPMC is not on his certificate (true). D (spouse holds OPMC on the shared certificate): judged on Daniel's rows only, so "does not list" stays (true) |
+| R11-2 abroad detector | fixed | "GP in Tampines", "GP in Raffles Place", "fell in Grace's room" and a trip in an earlier turn all give `unknown`; only "on holiday" etc. in the current message gives `abroad` |
+| R11-3 note placement | fixed in substance | the note is added only when the quote survives composing, and first among this step's notes (`loop.ts:2168`) |
+| R11-4 wording | fixed | "The only line found for this is in the ..."; no "Policy Policy" (G1 and the new note) |
+| R10-1 to R10-4 | still fixed | A, B, C as round 11 |
+
+The new "does not list" rule only speaks when none of the person's own products shares a distinctive word with the policy name or
+its abbreviation. G1's must-not-fire gains the same check. Both err toward silence, which is the safe side.
+
+## Residual (Low, not blocking)
+
+- **R12-1:** `merged.notes` puts the earlier reply's notes before this step's, so when the model's own reply carried notes, the
+  whose-cover note is not strictly directly under the quote (`loop.ts:2169`). Worth one render check by the Test engineer
+  (returned = saved = reopened, and the order).
+- **R12-2:** with an unknown place, the "only for treatment outside Singapore" sentence is now pushed before the home quote, so it
+  reads first. It carries its own caveat, so this is order only.
+- **R12-3:** the note is matched to the kept quote by its first 60 characters. Composing never edits a quote today (no S$ rewrite
+  of a quoted bare "$"), but if that changes, the note would silently drop.
+
+## Verdict on PR #64 at `7f4dbd3`
+
+**Ready to merge from the Critic's side.** No blocker remains. Nothing reproduced states a wrong claimable amount, quotes an
+overseas-only line as the answer for a bill at home, presents another policy's wording as his cover, or says he lacks cover his
+certificate lists. The evidence is scripted reconstruction only (no live run; OpenAI configuration). The model-dependent parts are
+unshown, and so is whether DC's real scheme prints its panel GP under a "... POLICY" heading.
+
+---
+
+# Round 13: PR #65 (UI polish), head `72568be4f5ab814155914811cab3520d14c77fbb`, base main `ca6af69`
+
+Scope: `app/chat/page.tsx`, `app/policies/page.tsx`, `components/source-list.tsx`, `components/AppShell.tsx`, `app/globals.css`.
+Nothing under `lib/` changes. Read-only review; nothing run against a database or model.
+
+**1. "Try reading it again" (`app/policies/page.tsx:164-181`).** It posts `{ policyId }` to the existing
+`/api/policies/reprocess`.
+- **No cross-household reach.** The route resolves the policy with `id=$1 AND account_id=<household>` under the user's own client,
+  returns 404 otherwise, and re-checks the quarantine state (`route.ts:29-47`). The button adds no new server path; the household
+  could already call it through the locked-PDF form. Double taps are guarded (`retryingId`, and the route's `AlreadyProcessing`).
+- **R13-1. Low (C1-3 now one tap away).** Re-reading rewrites `policy_pages` in place with the same id and hash, and
+  `stale-answers.ts:56-69` withdraws a saved absence only on a hash change or scope growth. The button shows on any document with a
+  non-password `processing_error`. A document can have that error after some pages were stored. In that case a saved "what was
+  read" answer, or a citation into those pages, is not withdrawn when the re-read changes them. The partial-scope wording
+  understates ("could not be checked"), so it does not overclaim. No amount rests on an unreadable document's pages in any case I
+  traced. Accept under C1-3, or show the button only when the document has no stored page text.
+
+**2. One source row per document (`components/source-list.tsx`).** Nothing is hidden:
+- every distinct page is listed;
+- every distinct excerpt is kept, deduplicated only on identical text;
+- rows are keyed by `policyId`, so two people's certificates, or two versions of a product (different ids), stay separate rows.
+
+Citations carry no person, and a shared scheme booklet is one document, so one row is correct. This was an improvement: the old
+list showed no words at all.
+- **R13-2. Low:** the label, document date and "does not confirm cover today" flag come from the document's *first* citation. For
+  one document these should agree, but if a later citation alone carried `notConfirmedCurrent`, the flag would be lost. Take
+  `some(...)` for the flag.
+- **R13-3. Low:** excerpts over 320 characters are cut with "…" in the panel. A long passage's qualifier could fall past the cut.
+  The answer text itself keeps it, and "Open in Documents" reaches the page. Consider cutting at a sentence end, or not cutting.
+- If `policyId` were ever empty, the key falls back to `policyName`, and two same-named documents would merge with one "Open in
+  Documents" link. The type makes `policyId` required, so this is noted, not a finding.
+
+**3. Bold "bottom line" (`answer-lead`).** The class bolds the whole `message.content` paragraph that was already shown first. It
+moves no sentence and splits nothing from its qualifier: the server writes each amount's qualifier inside the same sentence
+(calculation and terms statements, round 6-9 checks). Details still render below as before. No way found for it to present a
+qualifier-less amount as the answer. If the content holds several statements, the whole block is bold, which is cosmetic.
+
+## Verdict on PR #65 at `72568be`
+
+**No blocker from the Critic.** It is presentation only: no change to answer text, citations, isolation or saved answers. R13-1 is
+an existing accepted risk (C1-3) made more reachable. R13-2 and R13-3 are small polish. The mobile e2e spec needs the Test
+engineer's update (Claims and Household are now under More), as the PR says.
+
+---
+
+# Round 14: PR #66 ("what do i do now"), head `23af18248495ccf79e9ff60678964b8a0f5f9ed2`, base main `ca6af69`
+
+Read-only review of `loop.ts` `whatToDo` (`:2578-2589`) and the `contactStepFor` change (`:1682`). Nothing run.
+
+**R14-1. High: the repeated steps are the model's raw `next_steps` arguments, not the steps the household was shown.** The PR says
+it repeats "the server's own rendered steps". The code reads `t.toolCalls[...].args.next_steps` from earlier turns (`:2581`), and
+`args` is `call.arguments` as the model sent it (`record(call.name, call.arguments, ...)`, `:2245`, `:2331`). Composition filters
+steps *after* that point (`compose.ts:1417-1440`):
+- it drops a step that states a figure ("a next step may not state a figure");
+- it drops a step that names the wrong insurer;
+- it drops a "must / required / need to submit" requirement no document prints;
+- it drops a step that promises cover or money (`unsafeNextStep`);
+- it labels unsupported paperwork.
+
+`whatToDo` puts the raw strings straight into `composed.nextSteps`, past all of those. So "what do i do now" can show:
+- "Claim S$2,500 under Simple Fracture" (an amount without its conditions);
+- "You must submit the claim form with receipts" (the exact general advice the composer removed in the live turn 7);
+- a step naming another household member's insurer.
+
+The answer is then saved and reopened that way. Fix: repeat the steps the earlier answers actually showed (their saved, composed
+`nextSteps`), or run the repeated strings through the same step filters before showing them.
+
+**R14-2. High: no person or scenario boundary.** `earlier` takes every turn before this one (`:2581`), whatever its subject. Some
+steps were given for Grace before "it was Daniel, not Grace". Some came from a superseded scenario, or from an answer later
+withdrawn by a correction. All are repeated, newest first, deduplicated, under "the next step from my earlier answer". This breaks
+the contract that a correction must not contaminate another person's later scenario. Fix:
+- take steps only from turns whose answer subject is the current subject;
+- take them only since the latest correction, reassignment or new scenario for that person;
+- never from an answer the conversation withdrew.
+
+If that cannot be told, show only the open question.
+
+**R14-3. Medium: `contactStepFor` takes the event from all earlier user messages** (`:1682`). After a death question then a fracture
+question, `familiesOf(userTexts.join(" "))` holds both. The first certificate record matching either family supplies the insurer
+contact step, so the step can belong to the previous scenario's benefit. Fix: use the latest message that names an event, not the
+union.
+
+**R14-4. Low: the open question.** It is read from the current `state.pending`, so it is this conversation's live question; a fact
+already supplied would have closed it, and none is re-asked. But `requirementQuestion` / `conditionQuestion` run *after* `whatToDo`
+and can turn the reply into an ask card for the same question. The note "One thing I asked is still open: ..." then sits above the
+same question card: a duplicate. Check that order with one scripted render.
+
+**Returned = saved = reopened.** It goes through the normal composed path, so it is consistent. Under R14-1 and R14-2, though, it
+is consistently wrong.
+
+## Verdict on PR #66 at `23af182`
+
+**Not ready to merge.** R14-1 and R14-2 are blockers: the fallback can surface amounts and requirements the composer had removed,
+and steps for the wrong person or an earlier scenario. Both fixes are local to `whatToDo`. Without them the safe fallback is to show
+only the open question, plus the server's own insurer contact step for the current event.
+
+---
+
+# Round 15: short-answer cards (PR #65 branch head `989f34b`, cards commit `2d56c27`)
+
+Scope: `components/answer-cards.tsx`, the cards switch in `app/chat/page.tsx` (:327-331, :410, :415), and the fixture
+`scripts/fixtures/ux/answer-cards-fr1.json`. This was read only, with no build and no model calls. The server does not send
+`statements[]` or `bottomLine` yet, so on today's server the cards path never runs and production answers render as before.
+The findings below are about what happens once the Developer's answer-fields change starts sending those fields.
+
+## R15-1 (High): an amount card never says whose amount it is
+
+`AmountCard` (answer-cards.tsx:39-57) renders `amount`, `text`, `basis`, `conditions`, the source and the date. It never renders
+`personName`. In the fixture, card s1 shows "S$1,250 · Simple Fracture · arm, elbow, wrist or ribs" with no name. Only the bottom
+line says Grace. In a whole-family answer, two people's cards would look identical. That breaks "each benefit stays tied to its
+person". Fix: put `personName` on the card, and keep a card hidden when `personName` is missing and the answer is about more than
+one person.
+
+## R15-2 (High): qualifiers leave the card
+
+- The card shows the short `text`. `fullText` holds the conditional wording ("If the Simple Fracture benefit applies to Grace's
+  case …"), and that wording is never shown. The card keeps only the label "illustration".
+- In s2, the qualifier "The documents do not define which fractures count as Other Fracture, so the insurer decides" sits in
+  `source.note`. That only renders inside the collapsed "Where this comes from" section (:71). The amount S$120,000 shows
+  without it.
+- A `benefit_terms` (or any) statement with `amount: null` renders as a bare `<p>{text}</p>` (:92). Its `basis` and
+  `conditions` are dropped, not even collapsed.
+- The "not a payment or an insurer's decision" footer appears only when at least one amount is an illustration (:94). The type
+  says `text` has no "not a payment" tail. So a printed amount (illustration=false) loses that qualifier entirely.
+
+Fix: on the card itself, show a qualifier line whenever `fullText` starts with a condition or `source.note` names a limit on
+cover. Render `basis` and `conditions` for every statement, not only amount ones. Show the footer for printed amounts too.
+
+## R15-3 (High): cards replace the whole answer text
+
+When `statements[]` is present, page.tsx:330-331 drops `message.content`, and :410 drops `answer.details`. Anything the prose
+says that is not one of the statements disappears. Examples are a scheme or certificate listing, the death-completion sentence,
+a second benefit, or a "not found in these documents" scope line. Hiding a documented benefit is a failure. Fix, either of:
+(a) the server guarantees, and a test checks, that every sentence of `content` and `details` maps to a statement; or (b) the UI
+shows the remaining prose sentences under the cards, or at least a "Full answer" disclosure with `content` and `details`.
+
+## R15-4 (High): statements skip the server's money checks, so returned and reopened answers can differ
+
+`sanitizeStoredAnswer` → `enforceLiveChatMonetaryBoundary` (monetary-boundary.ts:304-323, :248-271) runs when a saved answer is
+reopened. It rewrites `claimItems`, `policyStatedLimits`, `potentialPayoutTotals` and `payoutQualifiers`. It does not touch
+`statements[]`. `verifyAnswerFigures` (answer-verification.ts:1294) and `invalidateAnswersWithDeletedPolicies` also read only the
+existing fields. So when the boundary strips an amount from the prose on reopen, the card still shows it. A statement can also
+carry a figure that verification never checked. Fix (Developer, with the fields change): run `statements[].amount`, `basis` and
+`conditions` through the same verification and monetary boundary as the prose, on both the live path and the reopen path, and drop
+the card when its figure is removed. A test should compare the cards for one answer as returned, saved and reopened.
+
+## R15-5 (Medium): the fallback can show a sentence twice, and the bottom line has no link to its qualifier
+
+- With no `bottomLine`, the summary is hidden only when it exactly equals a statement's `fullText ?? text` (:89). A summary
+  that differs by markdown, a date rewrite or one trimmed clause shows next to the card that says the same thing. The two
+  versions can differ in their qualifiers, with the summary carrying the "If …" and the card not. Fix: compare after the same
+  `render` normalisation, or have the server mark which statement the summary is.
+- `bottomLine` renders on its own, in bold, first. Nothing ties it to the conditions it depends on. The fixture's "may be able
+  to claim" is fine, but the UI has no guard. The server contract should require that a `bottomLine` naming an outcome carries
+  its qualifier in the same sentence.
+
+## R15-6 (Low): the wording for an unknown currency assumes a bare "$"
+
+`currencyResolved: false` always renders "The document prints a bare “$”" (:72). That is wrong when the figure has no symbol,
+or prints "dollars". Use "The document does not say which currency" unless the server says a bare $ was printed.
+
+## Answers to the coordinator's four questions
+
+1. Can a card show an amount without its conditions, person or currency status? Person: yes, always (R15-1). Conditions: yes,
+   for the "If … applies" wording and the insurer-decides note (R15-2). Currency status: no, "currency not stated" stays on the
+   card.
+2. Can `bottomLine` appear without its qualifier? Yes, nothing prevents it (R15-5).
+3. Can the fallback mix `fullText` and card fields so a statement shows twice or half? Twice, yes (R15-5). Half, yes, because
+   `text` replaces `fullText` (R15-2) and the rest of the prose is dropped (R15-3).
+4. Do returned, saved and reopened answers render the same? The rendering is the same if the stored JSON keeps `statements`,
+   which it does (`answer_json` is copied whole). But the reopen path re-applies the monetary boundary to the prose and not to
+   the statements, so they can differ (R15-4).
+
+## Verdict on the cards at `989f34b`
+
+**Safe to merge as a dormant change; not safe to switch on.** No server path sends `statements[]` today, so PR #65 changes no live
+answer. R15-1 to R15-4 must be fixed before the Developer's answer-fields change lands. R15-1 to R15-3 are UI fixes. R15-4 belongs
+to the Developer.
+
+---
+
+# Round 16: removing a person from a document (PR #67 head `0b56452`)
+
+Scope: `app/api/policies/link-person/route.ts`, the `assignments` branch, read against `lib/chat/stale-answers.ts`,
+`sql/schema.sql` and the readers of `policy_coverages`. This was read only, with nothing run.
+
+## What holds
+
+- **No other household is touched.** Both ids are checked against the caller's household before any write. Every delete or
+  update filters on `account_id`, `policy_id` and the removed member ids, and the user-table writes run through the RLS client.
+- **The document itself is not deleted or changed,** apart from moving the upload profile.
+- **Nobody still ticked is touched.** The policy-members delete excludes everyone in `ids` and leaves
+  `scheme_reference_match` links alone.
+- **The household's own records survive.** `coverage_rules` keeps rows where `origin='person'`. `premium_records` has no
+  origin column, but its `source_document_id` is only ever written by ingest and linking (`lib/rag/ingest.ts:694-727`,
+  `lib/policies/linking.ts:142`), never by `/api/premiums`. So the delete only reaches rows read from the document.
+- **Rows read for kept people are untouched.**
+
+## R16-1 (High, introduced here): re-ticking the person does not bring their cover back
+
+Removing a person deletes their `policy_coverages`, `premium_records` and `coverage_rules` rows for this document. It also
+clears the detected-name match. Ticking them again only inserts a `user_declared` link (route.ts, insert loop). Nothing re-reads
+their rows. So after a mis-tap and an undo, the person is shown as covered, but:
+
+- the Coverage page and dashboard (`app/api/coverage`, `app/api/dashboard`) show none of their cover from this document;
+- `policy-answer.ts` and `registry-answers.ts` find no premium or coverage row for them.
+
+The chat's rag2 path still reads the pages, so the loop answers are less affected. On main, removal didn't work at all, so this
+loss is new. Hiding a documented benefit is a failure. Fix: when a person is linked again, rebuild their rows from the stored
+reading (the `syncInsuredPersonToMember` path, or a targeted re-read). At minimum, the save response and the screen should say
+"re-analyse to restore their cover details".
+
+## R16-2 (High): saved answers that relied on the removed person are not withdrawn or marked
+
+`invalidateAnswersWithDeletedPolicies` (stale-answers.ts:48-) withdraws an answer only in three cases:
+
+- a cited document is deleted;
+- the file hash changed;
+- an absence scope grew.
+
+A smaller scope is not one of them. So an answer saved before the removal still reopens with no "out of date" note. For example,
+"Grace's fracture illustration is S$1,250 from this document" stays as it was. An answer still being written when the save lands
+is saved under the old links too. This is the same family as the accepted "superseded answers unmarked" item, so fix it before
+public launch: mark answers whose `claimItems` or citations pair this document with a person no longer linked to it.
+
+## R16-3 (Medium): two of the writes are outside the save's transaction
+
+The `policy_coverages` delete and the upload-profile move run with the server `query` after the user transaction has committed
+(route.ts, after `createUserSupabaseClient`). If either fails, the route returns 500 "Link failed", but the links are already
+gone. That leaves half a removal:
+
+- If the coverage delete fails, the Coverage page and the registry answers keep the person's cover from this document.
+- If the profile move fails, `policies.family_member_id` stays on the removed person, and `searchableDocs` and `benefits.ts`
+  still treat them as covered. The chat keeps answering for them from this document, which is the exact bug this PR fixes.
+
+Fix: run both on one connection in one transaction, or make the move idempotent and retry it. At minimum, return the removal
+as partial so the screen doesn't show "Saved".
+
+## R16-4 (Medium): a document read already running can undo the removal
+
+The PR notes that a re-analysis rebuilds name-matched links. It does not cover the case where a read is already running when
+the household saves. The ingest job then re-inserts the `ai_name_match` link, the coverages and the detected match after the
+save. The person comes back while the screen says "Saved". Fix: refuse the save, or queue it, while `processing_status` is not
+`ready`. The stored exclusion the PR offers as a decision would fix both this and the later re-read case.
+
+## R16-5 (Low): refusing "covers nobody" is right, but the message points to deleting
+
+Refusing an empty list is needed while `policies.family_member_id` is NOT NULL and the chat treats the upload profile as
+covered. Reference wording is unaffected, because its links are `scheme_reference_match` and are not shown. The one real case is
+a document for someone outside the family profiles, for example a parent not yet added. There the 409 says to delete it. Better
+wording: "Add the person it covers in Family first, or delete it if it isn't your family's."
+
+## Answers to the coordinator's questions
+
+- Can the clearing delete or change another person's or household's records, or the document? No (see "What holds").
+- Is it scoped to this document and person only? Yes.
+- Are saved answers withdrawn or marked? No (R16-2).
+- Is there a race with an in-flight read? Yes (R16-4).
+- Does "covers nobody" block a legitimate case? Only a document for someone not yet added, and the message could say so (R16-5).
+- Is it reversible by re-linking? The link is, but the person's cover details are not until a re-analysis (R16-1).
+- Also: two writes sit outside the transaction (R16-3).
+
+## Verdict on PR #67 at `0b56452`
+
+**No blocker on scope or safety. Fix R16-1 before merging, or ship it with a screen note.** The scoping is sound, and the PR fixes
+a critical bug on main. But R16-1 means that undoing a mis-tap silently drops the person's cover details from the Coverage page
+and dashboard. The cheapest acceptable fix is to rebuild that person's rows when they are linked again. Failing that, show the
+note "re-analyse to restore". R16-2 and R16-3 should follow before public launch. R16-4 can wait for the stored-exclusion
+decision. The `r5:ux-test` source check that pins the old behaviour is the Test engineer's to update.
+
+---
+
+# Round 17: PR #66 re-check at `c00e41e` (R14 fixes)
+
+Scope: `git diff 23af182 c00e41e -- lib/`, which touches `loop.ts` `whatToDo` and `contactStepFor`, `hook.ts` (sets
+`trace.shown`) and `types.ts`. The repro is a scratch script that mirrors the new selection logic line for line, with no model
+calls. It checks which turn's steps a "what do i do now" repeats and which event the contact step uses.
+
+## R14 re-check
+
+| Finding | Status at `c00e41e` | Evidence |
+|---|---|---|
+| R14-1 raw `args.next_steps` | **Fixed.** The repeat now uses `TraceTurn.shown.nextSteps`, copied from `c.nextSteps`, which are the composed and filtered steps the answer showed (hook.ts, final branch). | The repro repeats only the composed step. |
+| R14-2 person or scenario boundary | **Partly fixed.** It uses one previous answer, only for the same person, and never when this turn corrected or withdrew something. See R17-1 for the gap. | Grace → Daniel (final turn): no repeat. Grace → Daniel (ask turn): no repeat, because the person differs. Correction in this turn: no repeat. |
+| R14-3 event union | **Fixed.** It now uses the latest user message that names an event (`userTexts` includes the current message). | death → fracture → "what do i do now" gives `fracture` only. |
+| R14-4 duplicate open question | **Fixed.** The "still open" note is gone, and the question shows once, as its card. | Code read. |
+
+## R17-1 (High): an ask turn is not a boundary, so an older scenario's steps can come back for the same person
+
+`trace.shown` is set only on the `reply.kind === "final"` branch (hook.ts, after `answer.nextSteps = c.nextSteps`). It is not set
+on the ask branch, the unknown-person branch or the plain-text branch. `whatToDo` takes the latest earlier turn that has `shown`
+(`filter(t => ... && t.shown).at(-1)`), not the immediately previous turn. Repro:
+
+1. Turn 1: "my mum Grace died". The final answer shows "Tell the insurer about the death and ask for the death claim form".
+2. Turn 2: "Grace broke her arm". This becomes an ask card (for example "was it an accident?"), and no `shown` is recorded.
+3. Turn 3: "what do i do now". The reply keeps nothing, and the turn-1 death steps are repeated under "from my last answer".
+
+The repro returns `["Tell the insurer about the death and ask for the death claim form"]`. That is the R14-2 scenario
+contamination again, through a common path, and the code comment ("only the immediately previous answer") does not match.
+
+Fix (hook.ts, a few lines): record `shown` on every branch, with `nextSteps: []` when the turn showed none. Or have `whatToDo` read
+only `state.turns.at(-1)` and repeat nothing if that turn has no `shown`.
+
+## R17-2 (Low): `shown` is copied before the save gate
+
+`trace.shown` is copied before `enforceLiveChatMonetaryBoundary`, `verifyAnswerFigures` and `rescueRejected`. Those can rewrite
+or drop `answer.nextSteps[i]` (answer-verification.ts:1299, :1399). So `shown` can hold a step the household never saw. The later
+turn runs the gate again on the repeated steps, which limits the harm. Copy from `answer.nextSteps` after the final gate so
+"shown" means shown.
+
+## R17-3 (Low): steps from an answer withdrawn later are still repeated
+
+An answer can be withdrawn after it was shown, for example when its document is deleted (`invalidateAnswersWithDeletedPolicies`).
+Its `shown` steps are still repeated by a later "what do i do now". Skip `prev` when any of its cited documents is no longer active,
+or accept this as part of the "superseded answers" item.
+
+## Regressions
+
+There are none outside `whatToDo` and `contactStepFor`. `types.ts` only adds an optional field. Older saved states have no
+`shown`, so the fallback simply does nothing for them, which is safe. The rest of the diff is the Developer's own repro script.
+The returned, saved and reopened answer is still the normal composed path, so it is consistent.
+
+## Verdict on PR #66 at `c00e41e`
+
+**Not ready to merge: one small fix left.** R14-1, R14-3 and R14-4 are fixed. R14-2 is fixed except for R17-1, where an ask turn
+in between lets an older scenario's steps come back for the same person. Recording `shown` on every turn closes it. R17-2 and
+R17-3 can follow.
+
+---
+
+# Round 18: short-answer cards re-check (PR #65 head `91bccc4`, fixes in `3402884`)
+
+Scope: `components/answer-cards.tsx` and the `prose` hand-off in `app/chat/page.tsx`. The repro is a scratch script that runs
+the file's own `norm`, `sentences`, `conditionOf` and `safeBottomLine`, copied verbatim, on sample sentences. No build and no
+model calls.
+
+## R15 re-check
+
+| Finding | Status | Evidence |
+|---|---|---|
+| R15-1 whose amount | **Fixed for named statements.** The card shows "For {personName}". When an answer names more than one person, an amount with no name falls back to its full sentence. See R18-3 for the gap. | Code read. |
+| R15-2 qualifiers | **Mostly fixed.** `source.note`, `basis` and `conditions` now render on every card and point, and the footer covers printed amounts too. The "If …" clause extraction has a real defect, see R18-1. | Script. |
+| R15-3 prose dropped | **Fixed.** `prose` = content + details. Sentences no statement covers show under "Also in this answer", and everything is under a collapsed "Full answer". The matching has a gap, see R18-2. | Code read. |
+| R15-5 shown twice / bottom line | **Improved.** Matching is now normalised. A bottom line with an outcome word and no hedge is hidden, but the hedge list is weak, see R18-4. | Script. |
+| R15-6 bare "$" | **Fixed.** | Code read. |
+| R15-4 statements skip the money checks | **Open.** This is the Developer's, and nothing on this branch changes it. | — |
+
+## R18-1 (High): the "If …" clause extraction can print a wrong amount or cut a condition short
+
+`conditionOf` cuts at the first comma outside “…” and (…). Script output:
+
+- "If the bill exceeds S$1,000, the benefit pays 80% …" → **"If the bill exceeds S$1"**. That is a wrong figure shown on an
+  amount card, which is the worst class of bug.
+- "If Grace is hospitalised for more than 3 days, and the stay is medically necessary, …" → "If Grace is hospitalised for more
+  than 3 days". The second condition is lost.
+- "If the Other Fracture benefit applies, subject to the S$500 deductible, …" → "If the Other Fracture benefit applies". The
+  deductible is lost.
+- Straight quotes `"Arm, Elbow, …"` → `If … case "Arm`. Square brackets `[Plan A, Plan B]` → `[Plan A`.
+- "The illustration is S$1,250 if the benefit applies" → nothing. A condition placed after the amount is not found, so the card
+  shows no condition.
+
+The fixture's own sentence works only because it uses curly quotes. Fix: never parse a condition out of prose in the UI. Either
+the server sends it as its own field, or an amount whose `fullText` carries a condition shows the whole `fullText` on the card. At
+minimum, do not cut at a comma between digits, and fall back to the whole sentence whenever the clause would end inside a number,
+a quote or a bracket.
+
+## R18-2 (Medium): a prose sentence counts as covered when it is any substring of a statement
+
+`isCovered` hides a prose sentence from "Also in this answer" when its normalised text is contained anywhere in a statement's
+text or `fullText` (`c.includes(n)`). In the script, "It is not covered." and "Core Scheme." both count as covered by an
+unrelated statement that happens to contain those words. Short, important sentences are the ones most likely to be hidden. They
+are still under the collapsed "Full answer", but not in view. Fix: treat a sentence as covered only when it equals a statement's
+text or `fullText`.
+
+## R18-3 (Medium): the multi-person fallback only works when someone is named
+
+`asCard` shows a nameless amount card whenever `people.size <= 1`. When no statement has a `personName` (size 0), every amount
+becomes a nameless card, even in a whole-family answer. When one person is named and another amount has no name, that card also
+shows with no name and sits next to the named one. Fix: show a nameless card only when the answer is about exactly one person
+(`answer.resolvedFamilyMemberId` set) and every amount either carries that name or none.
+
+## R18-4 (Medium): the bottom-line guard lets flat outcomes through
+
+`HEDGE` counts "not", "would" and "only" as hedges. These bottom lines all pass, by the script:
+
+- "Grace is not covered for this." (a flat exclusion; missing information is not an exclusion);
+- "Grace would get S$1,250.";
+- "Grace can only claim S$120,000.".
+
+The guard is a backstop. The server contract still has to make sure a bottom line carries its qualifier. At least remove "not",
+"would" and "only" from `HEDGE`, and do not show a bottom line that states an amount unless an amount card shows that same
+figure with its condition.
+
+## Verdict on the cards at `91bccc4`
+
+**Still safe to merge as a dormant change; not yet safe to switch on.** No server path sends `statements[]`, so live answers do
+not change. R15-1, R15-3, R15-5 and R15-6 are fixed or much improved. R18-1 has to be fixed before the server fields go live,
+because it can put a wrong figure on a card. R18-2 to R18-4 are short UI fixes, and R15-4 is still the Developer's.
+
+---
+
+# Round 19: PR #65 merge check at `7ccc837`
+
+Scope: `git diff 91bccc4 7ccc837`, which covers the R18 fixes in `fbe8c0f` and the stalled-read copy in `7ccc837`. I also skimmed
+every live UI change since my last full review at `72568be`: chat sources, dashboard cost, Family, Usage, Records, Ledger and
+Schedule empty states, and the covers picker. Read only.
+
+## R18 re-check
+
+| Finding | Status |
+|---|---|
+| R18-1 clause extraction | **Fixed.** `conditionOf` is removed. The card shows the server's `conditions[]`, or, when there are none, the whole `fullText`. Nothing is cut in the browser. |
+| R18-2 substring coverage | **Fixed.** A prose sentence counts as covered only when it equals a statement's text, its `fullText`, or one whole sentence of either. |
+| R18-3 nameless cards | **Fixed.** An amount without `personName` is never a card. It shows as its full checked sentence with its qualifiers. |
+| R18-4 bottom-line guard | **Moved to the server contract.** Only the server's `bottomLine` is shown, and none is derived in the browser. Acceptable while the field doesn't exist. Carry it into the Developer's answer-fields contract. |
+
+## R19-1 (Low, contract note for the Developer's fields change)
+
+When `conditions[]` is present, the card no longer shows `fullText`. So the "If the … benefit applies to Grace's case" wording
+must also be one of the `conditions[]` items. Otherwise it appears only under the collapsed "Full answer". The same contract
+should also say:
+
+- a `bottomLine` that names an outcome carries its qualifier;
+- statement amounts go through `verifyAnswerFigures` and the monetary boundary on both the live and reopen paths (R15-4).
+
+## Live UI changes since `72568be`
+
+I found no problems in the live UI changes:
+
+- **Chat sources:** source rows add the document type, the household's own file name (from the household-scoped
+  `/api/policies`) and the date. Excerpts are now shown whole, so no end-of-passage qualifier is cut.
+- **Dashboard cost:** shows "Not known yet" instead of S$0.00 when there is no payment evidence.
+- **Family:** no "parent" is guessed by default.
+- **Coverage and Benefits:** a "couldn't be read" state with Try again replaces "still being read" forever.
+- **Previous chats:** the list opens on an empty chat.
+
+None of these touches amounts, people's links or saved answers.
+
+## Verdict on PR #65 at `7ccc837`
+
+**Ready to merge** from the Critic's side. The live UI changes have no blocker. The cards are dormant, because no server path
+sends `statements[]`, and they now hold up against R15 and R18 for when it does. Before the cards are switched on, the Developer's
+fields change must cover R15-4 and R19-1. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
+confirm. The merge is DC's call.
+
+---
+
+# Round 20: PR #66 merge check at `e91d5b7`
+
+Scope: `git diff c00e41e e91d5b7 -- lib/`. In `hook.ts`, `trace.shown` is now set once on the shared tail, after the final
+`verifyAnswerFigures`, for every branch, with `[]` when the turn made a correction or withdrew something. In `loop.ts`,
+`whatToDo` reads only the immediately previous turn. `runLoopChatTurn` has no early return before the tail (hook.ts:163-323), so
+every loop turn records `shown`. The repro is a scratch script that mirrors the new selection logic.
+
+| Check | Result |
+|---|---|
+| R17-1: death → fracture ask card → "what do i do now" | **Fixed.** Nothing is repeated, because the ask turn recorded `shown` with no steps. |
+| R17-2: `shown` copied before the gate | **Fixed.** It is copied from `answer.nextSteps` after the final gate. |
+| R17-3: steps from a withdrawn answer | **Fixed for this turn and the previous one.** A turn that withdrew support records no steps, and this turn's `invalidated` blocks the repeat. |
+| Same scenario: final answer with steps → "what do i do now" | Its steps are repeated, as intended. |
+| Another person in between, or an old saved state with no `shown` | Nothing is repeated. |
+
+**R20-1 (Low, note).** A turn answered outside the loop does not add to `state.turns`, for example a registry or library question
+handled by the older path. So "what do i do now" after one can repeat the loop answer before it. It is still the same person, and
+nothing new in scenario terms came from the loop, so I accept this.
+
+R14 and R17 are all closed, and I found no regressions. The rest of the diff is the Developer's repro script.
+
+## Verdict on PR #66 at `e91d5b7`
+
+**Ready to merge** from the Critic's side. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
+confirm. The merge is DC's call.
+
+---
+
+# Round 21: PR #67 merge and deploy-safety check at `37777de`
+
+Scope: `git diff 0b56452 37777de`. That covers the `coverage-assignments.ts` save and restore, `member-exclusions.ts`,
+`sql/policy-member-exclusions.sql`, the exclusion checks in `linking.ts` and `ingest.ts`, `read-failures.ts` with the Benefits and
+Ledger reading states, and the runbook entry. Read only.
+
+## R16 re-check
+
+| Finding | Status at `37777de` |
+|---|---|
+| R16-1 re-tick restores cover | **Fixed for documents that name the person.** `rebuildForAddedPeople` re-runs `syncInsuredPersonToMember` from the stored reading, with no model call, and resets `ledger_read_at`, so the ledger re-reads and adds rows. For a generic booklet that names nobody, only the ledger rows come back, which matches how they were made. It runs after the save with errors logged and not surfaced, so a failure leaves the person ticked with their cover rebuilt on the next ledger read (R21-3). |
+| R16-3 atomic save | **Fixed.** Links, coverage rows, premiums, detected names, ledger rows, the remembered removal and the upload-profile move all run in one `withServiceTransaction`, every statement scoped by `account_id` and `policy_id`. The ids are authorised through the RLS client first. |
+| R16-4 a re-read or an in-flight read undoing the removal | **Fixed once the migration is applied.** Every automatic link writer skips a remembered pair: name match (`syncInsuredPersonToMember` returns early, before links or coverages), upload profile (`ingest.ts`) and matching wording (`linking.ts`). A read already running when the save lands is covered too, because the check happens at write time. Matching wording no longer overwrites a `user_declared` tick. Before the migration, behaviour is as on main, so a re-read can bring the person back. |
+| R16-5 "covers nobody" copy | **Fixed.** It now says to add them on the Family page first, or delete the document. |
+| R16-2 saved answers not marked | **Still open.** Not in scope here. Fix before public launch, together with "superseded answers unmarked". |
+
+## Deploy safety: code deployed before the migration
+
+- **Every reader of the new table checks first.** `exclusionsReady()` checks `to_regclass` and caches only `true`. Without the
+  table, `notExcludedClause` returns "", `isExcluded` returns false, and `saveDocumentCoverage` skips both exclusion statements.
+  Nothing queries the absent table, so Documents, link-person, re-reads and the chat cannot 500 on it.
+- **The reading-state additions are guarded too.** `readFailureNotes`, `noteReadFailure` and `clearReadFailure` check the
+  `reading_cache` column and swallow their own errors. `reading_cache` already exists in production, written by the ledger since
+  before this PR. So Coverage (`/api/ledger`) and Benefits (`/api/benefits/index`) only gain a `documents` field.
+- **No half-done removal.** The whole save is one transaction, with or without the table.
+- **Result:** deploying code first is safe. Removals made before the table exists are simply not remembered, which is main's
+  behaviour.
+
+## The migration
+
+- **Additive:** it creates one table and two indexes, and changes no existing table, column or row.
+- **Idempotent:** it uses `IF NOT EXISTS`, `DROP POLICY IF EXISTS` and then `CREATE POLICY`.
+- **RLS-scoped:** RLS is enabled with the same `is_household_member(account_id)` policies as `policy_members`, `anon` is revoked,
+  and the table is in `table-inventory.ts`.
+- **Reversible:** `DROP TABLE`, and the runbook gives the checks.
+
+## R21-1 (Low): the exclusion check doesn't compare households
+
+`notExcludedClause` matches on `policy_id` and `family_member_id` only. The RLS insert check is `is_household_member(account_id)`
+only. A signed-in member of household A who knew household B's document and person UUIDs could write a row with A's
+`account_id` through a browser grant. That row would stop B's automatic re-link. The UUIDs are random and never exposed across
+households, so this is not exploitable in practice, but it is cheap to close:
+
+- add `AND x.account_id = <the document's account>` to the clause;
+- add a `WITH CHECK` requiring that `policy_id` and `family_member_id` belong to `account_id`.
+
+This is a follow-up, not a blocker.
+
+## R21-2 (Low): rolling back needs a restart
+
+`exclusionsReady()` caches `true`. If the table is dropped as a rollback, warm servers keep querying it, and link-person saves and
+re-reads error until restarted. Add "redeploy, or restart the functions, after DROP TABLE" to the runbook's rollback line. The
+reverse case is handled: a warm server picks up a newly applied table, because `false` is not cached.
+
+## R21-3 (Low): a failed restore is silent
+
+When `rebuildForAddedPeople` fails, it only logs. The person shows as ticked, and their coverage rows wait for the next ledger
+read or a re-analysis. That is acceptable for now, and it should go on the list of things to show on screen later.
+
+## Verdict on PR #67 at `37777de`
+
+**Ready to merge** from the Critic's side. R16-1, R16-3, R16-4 and R16-5 are fixed, and R16-2 is still open for before launch.
+
+**Safe order:** either order works without errors. The better order is to **apply `sql/policy-member-exclusions.sql` first**
+(staging, then production, with DC's explicit yes, using the runbook's psql line and checks), then merge and deploy. That way
+remembered removals work from the first deploy. Merging first is also safe: removals made before the migration are simply not
+remembered, as on main. The migration and the merge are both DC's call.
+
+---
+
+# Round 22: PR #69 at `7b1574e`: out-of-date notes for removed people and corrected answers
+
+Scope: `lib/chat/stale-answers.ts`, `app/api/chat/history/[id]/route.ts` and `types/index.ts`, read against
+`lib/rag2/calc/engine.ts` (how calculation ids are made), `loop.ts` (where calculations are marked withdrawn) and
+`app/chat/page.tsx`. Read only.
+
+## What holds
+
+- **Another person on the same document is not marked.** Pairs come from each figure binding's and calculation's
+  `subjectId` and `policyId`. A pair counts as covered while any `policy_members` row or the upload profile joins them, so an
+  answer about Daniel stays valid after Grace is removed from the same document.
+- **Superseded is exact.** `calcId` is a content hash of calculator, policy, benefit, person, operands, steps and conditions
+  (engine.ts:89), and `record.id = calcId`. Only an answer carrying that exact calculation is marked. If the same calculation is
+  worked out again after a correction, it is re-recorded with `withdrawn: null` (loop.ts:2673/2698), so the answer comes back,
+  which is right because its inputs are true again.
+- **It follows every way a calculation is withdrawn:** a fact correction (:995), a change of person (:438), the benefit no
+  longer fitting (:416), and a deleted or replaced source (:2796).
+- **Nothing withdrawn is still shown.** Invalidated answers now also drop `figureBindings`, `computations` and `calculations`.
+- **No cross-household effect.** Both queries filter on `account_id`, and pairs are limited to this household's active
+  documents.
+- **Reversible.** Ticking the person again brings the answer back, because nothing is written.
+- **Consistency.** Reopening is deterministic from the stored answer plus the current links and chat state. The returned
+  answer is marked only after a reload (known limit), so returned and reopened differ only in the direction of being more
+  current. Neither shows a withdrawn figure as current once reloaded.
+
+## R22-1 (Medium, fix before or with merge): the alert says a document was deleted, whatever the reason
+
+`app/chat/page.tsx:305` always renders "Out of date. A policy document this answer relied on has been deleted". Under this PR, a
+corrected answer reopens as "This earlier answer was replaced by the corrected answer below" with that alert above it. That tells
+the household a document was deleted when none was. The same false alert already shows for `documents_added`. Fix: one line in
+the page that chooses the alert by `invalidated.reason`, or shows no alert when the summary already says why. The PR names this
+as the designer's copy, but it should land with this PR, not after it.
+
+## R22-2 (Low): an answer about two people is hidden entirely when one is removed
+
+`unlinked` uses `.some`. An answer covering Grace and Daniel on one document is replaced in full when Grace is removed, and
+Daniel's still-valid figures are hidden behind "ask again". That is conservative, the notice is honest, and nothing wrong is
+shown, so I accept it. Ideally only Grace's part would be withdrawn.
+
+## R22-3 (Low): coverage gaps, so the open items are only mostly closed
+
+- An answer with no figure bindings or calculations is never marked `person_unlinked`. For example, "Grace is covered by this
+  document" with no figure.
+- A statement-only answer is not marked `superseded` after a correction (the PR states this).
+- A calculation made outside `state.claim` or `otherClaims` is not tracked, for example an informational what-if with no claim
+  open. So it can't be marked superseded.
+- Until a reload, the earlier answer in the same open chat still shows its withdrawn figure (the PR states this). The corrected
+  answer below does say what no longer applies (hook.ts correction notes), which limits the harm.
+
+**Coverage of the open items:** R16-2 is closed for answers with figures, which are the ones that matter for amounts.
+"Superseded answers unmarked" is closed for calculation answers after a reload. It is still open for statement-only answers and
+within the open session.
+
+## Verdict on PR #69 at `7b1574e`
+
+**Ready to merge once R22-1 is fixed.** That is a one-line alert change, so the chat doesn't tell the household a document was
+deleted when an answer was only corrected or a person removed. The logic is scoped correctly, marks no valid answer about another
+person, and shows no withdrawn figure after a reload. R22-2 and R22-3 can follow. Within them, marking the earlier answer in the
+same open chat is the one that matters most before public launch.
+
+---
+
+# Round 23: PR #70 (answer fields) at `0cd6a49`
+
+Scope: `answer-statements.ts`, `reconcileStatements` in `monetary-boundary.ts`, the `structure()` drafts in
+`statement-render.ts`, the `hook.ts` and `workflow.ts` wiring, `excerptOf` and `sentenceEnd` in `evidence.ts`, and `types`.
+These were read against `lib/chat/stale-answers.ts` and the history route on main `9a76490`. Read only.
+
+## What holds
+
+- **R15-4: fixed.** `reconcileStatements` runs after the figure gate on return (via `buildStatements` in hook.ts), again after
+  the save-time gate in `saveTurn`, and on reopen inside `enforceLiveChatMonetaryBoundary` (`sanitizeStoredAnswer`).
+  - A statement keeps its fields only when its `fullText` is exactly a paragraph that is still shown, its fields state no number
+    the paragraph doesn't, every amount in the paragraph is on the card, an amount names its person, and no scan-unclear figure is
+    in it.
+  - Anything the gate or boundary changed falls back to that paragraph's plain text.
+  - It is pure and idempotent, so returned = saved = reopened.
+- **The plain-text fallback never drops a condition.** The fallback statement is the whole paragraph.
+- **R19-1: fixed for calculations.** The card's short text keeps "If the … applies to Grace's case “…”". The undefined-kind
+  note and the row notes, including the thumb/finger/palm footnote, are in `conditions[]`. Printed benefit terms keep their quoted
+  printed conditions, and trip limits are added to conditions.
+- **R18-4: fixed for server bottom lines.** Every generated bottom line names who decides ("only the insurer decides …"), and
+  `reconcileStatements` drops a bottom line that has no hedge or that states a figure not on a kept amount card.
+- **personName after a correction: no finding.** `personName` is the record's own member at render time (`r.memberName`, the
+  calculation's `who`), not the conversation subject. A correction re-renders for the new person, and PR #69 marks the old
+  answer.
+
+## R23-1 (High, blocker together with PR #65): invalidated answers keep their statements and bottom line
+
+`invalidatedAnswer` (stale-answers.ts) clears summary, details, claim items, citations, limits and, after PR #69, calculations. It
+does not clear `statements` or `bottomLine`. The history route runs `sanitizeStoredAnswer` (and with it `reconcileStatements`)
+before `invalidateAnswersWithDeletedPolicies`. So a reopened answer marked out of date because its document was deleted, its
+person was removed, or it was superseded still carries the old amount cards and the bottom line, for example "Grace's documents
+print either S$1,250 or S$120,000 …". The PR #65 page renders cards whenever `statements` is non-empty, so the withdrawn amounts
+reappear under the out-of-date note. Fix: `invalidatedAnswer` sets `statements: []` and `bottomLine: null`. Running
+`reconcileStatements` afterwards is not enough, because a figure-free bottom line such as "If you go ahead, start here: …"
+passes its checks.
+
+## R23-2 (High): an either-or group takes in every calculated amount, not just the two alternatives
+
+`buildStatements` groups all `kind === "calculation"` amounts once any uncertainty statement names two documents
+(`alternatives = statements.filter(s => s.amount && s.kind === "calculation")`). Example: an answer shows the two fracture
+alternatives plus a third calculated amount for a different benefit, such as a hospital-income illustration for the same
+event. All three get the group, and the bottom line says "Grace's documents print either S$1,250, S$120,000 or S$X for this
+(alternatives, not a total), and only the insurer decides which applies". That tells the household the third amount replaces the
+others, when it may be paid in addition. Fix: group only the calculations the relation note itself rendered. `renderStatements`
+already loops over exactly those (`rendered` / `outs` for the two policies), so record their result ids on the drafts, or key the
+group by those two policy ids and benefit. Leave every other amount ungrouped, and leave the "either" bottom line off when other
+amounts exist (use the "several amounts" line instead).
+
+## R23-3 (Medium): narrowing citations can drop the source of a paragraph the gate shortened
+
+`evidenceOf` keeps a composed sentence's evidence only when the paragraph still contains that sentence's text exactly (after
+squashing spaces). When `rescueRejected` replaces a rejected figure sentence with its figure-free part, the paragraph no longer
+contains the original text. Its evidence is then filtered out of `answer.citations`, even though the shortened paragraph still
+rests on it. The household sees a claim with no source. Fix: also keep evidence for a paragraph that is contained in a composed
+sentence (`squash(s.text).includes(p)`), or carry the evidence ids through `rescueRejected`.
+
+## R23-4 (Low): the excerpt run-on can pull in an unrelated line
+
+`sentenceEnd` continues through up to three following lines that start in lower case and are not table lines. A line that ends
+in a letter and is followed by an unrelated lower-case line, such as a wrapped heading fragment, would join it. This is for
+display only and never chooses support. Stopping at a line that starts with a footnote marker or a numbered clause would be
+enough.
+
+## Verdict on PR #70 at `0cd6a49`
+
+**Not ready to merge.** The money-check wiring (R15-4) and conditions on cards (R19-1, R18-4) are done well, and the fallback is
+safe. But R23-1 and R23-2 are blockers. PR #65 is ready to merge, and its page switches the cards on as soon as this PR sends
+`statements[]`. The two would then show withdrawn amounts under out-of-date notes (R23-1) and frame an independent amount as an
+alternative (R23-2). Both are small, local fixes. R23-3 should go in the same push.
+
+---
+
+# Round 24: PR #70 re-check at `c685b92`
+
+Scope: `git diff 0cd6a49 c685b92 -- lib/`, which covers `stale-answers.ts`, `monetary-boundary.ts`, `answer-statements.ts`,
+`statement-render.ts` and `evidence.ts`. I also read the Developer's repro output `answer-shape-output.txt`. Read only.
+
+## R23 re-check
+
+| Finding | Status |
+|---|---|
+| R23-1 out-of-date answers keep cards | **Fixed twice over.** `invalidatedAnswer` sets `statements: []` and `bottomLine: null`, and `reconcileStatements` empties both for any `answer.invalidated` on return, save and reopen. That also covers the PR #69 reasons. |
+| R23-2 either-or takes every amount | **Fixed.** The group is set only on calculations the two-document relation note re-rendered (`alt`). The "either A or B" bottom line is used only when the group is every amount on the answer. Otherwise the bottom line is the neutral "N amounts that may apply, each with its own conditions". The repro unit check confirms a third amount stays ungrouped. |
+| R23-3 citations of a shortened paragraph | **Fixed.** Evidence is kept when a sentence of the paragraph (40 characters or more) is inside a composed sentence. |
+| R23-4 excerpt run-on | **Fixed.** It continues into one short line only (six words or fewer, and only if that line ends the sentence). |
+
+## The other changes
+
+- **Accident condition (Evidence Reviewer E1):** read from the benefit's own lead-in on the table's page. It is added to the
+  sentence and to `conditions[]` only when the page prints it. The figure checks cover it, because it states no number.
+- **Ruled-out amounts as plain text:** an amount whose printed period has ended, or that another paragraph says does not apply,
+  is sent as its whole sentence, not a card. This only moves amounts toward plain text, which is the safe direction.
+- **Short labels:** the card's text is now a label ("Simple Fracture · Arm, Elbow, Wrist or Ribs"). The "only if … applies" and
+  "not a payment or an insurer's decision" wording moved into `conditions[]`, which the page renders on the card. Nothing is lost.
+- **Bottom line:** a printed amount on its own is never the outcome. The figure check now counts only amounts and percentages, so
+  a page number or date no longer fails it.
+
+## R24-1 (Medium, one line): the bottom-line count leaves out amounts shown as plain text
+
+"Your documents print {count} amounts that may apply" counts only amount cards. In the death answer the Developer named, Term Life
+S$1,000,000 is sent as plain text, so the bottom line says "two amounts" while the answer prints three. A headline that
+undercounts the household's benefits partly hides one. Fix: when any plain-text paragraph that is not ruled out states an amount,
+leave out the number ("Your documents print amounts that may apply …"), or count those paragraphs too.
+
+## R24-2 (Low): two relation notes for one person share a group id
+
+The group id is `alt:${subjectId}`. If one answer has two different benefits, each with its own two-document relation, all four
+illustrations share one group. The bottom line would then say "either A, B, C or D". Add the benefit (or the pair of policy ids)
+to the id.
+
+## Open, not the Critic's to close
+
+The hosted-model path has not been run (it needs a paid run with DC's yes). The cards follow the composed prose, and every
+check runs on the server whichever model writes, so the risk is in what the model writes, not in the fields.
+
+## Verdict on PR #70 at `c685b92`
+
+**Ready to merge once R24-1 is fixed** (one line). R23-1 to R23-4 are fixed, with tests for the two blockers, and the new changes
+only move amounts toward safer display. R24-2 can follow. PR #65 can merge in either order with this one after that.
+
+---
+
+# Round 25: PR #70 at `76de2d8`
+
+Scope: `git diff c685b92 76de2d8 -- lib/`, which covers `answer-statements.ts` (the bottom-line count) and `statement-render.ts`
+(group ids and the trip verdict). The repro is a scratch script that runs the new trip-verdict expressions, copied verbatim, on
+sample household messages. No model calls.
+
+## R24 re-check
+
+| Finding | Status |
+|---|---|
+| R24-1 count leaves out plain-text amounts | **Fixed.** The count is said only when no plain paragraph states money. Otherwise it reads "Your documents print amounts that may apply …". |
+| R24-2 shared group id | **Fixed.** The id is `alt:{member}:{sorted policy pair}:{injury}`, with the injury read from the row label without its kind label. A hip and an arm are separate choices, and a row with no partner stays ungrouped (a singleton group is dropped by reconcile). The bottom line for several groups says "two alternative amounts for each injury below". |
+
+## R25-1 (High, blocker): the new trip verdict tells the household that cover does not fit, from guesses
+
+`tripLimits` now adds "On what you have told me, this trip's cover does not fit this event: …". It does so when either:
+
+- `elsewhere` is set, from the first capitalised word after "in" in the household's words; or
+- the period has ended and `recent` matches.
+
+`recent` includes the bare word "just". The script, on the expressions copied verbatim, gives this:
+
+| Household said | Destination | Result |
+|---|---|---|
+| "My dad died in a car accident in Tokyo" | Japan | "you said it happened in **Tokyo**, not Japan", so **does not fit** |
+| "He broke his leg in March while skiing" | Japan | "you said it happened in **March**, not Japan", so **does not fit** |
+| "Dad died on 12/03/2025 in Japan, I just found the policy" (inside the printed period) | Japan | `recent` from "just", so "ended … before the event you described" and **does not fit** |
+| "She was admitted in Singapore after flying home from Japan" | Japan | "in **Singapore**, not Japan", so **does not fit** |
+
+That sentence then does three things:
+
+- It joins the amount's `conditions[]`.
+- It matches `VERDICT` ("does not fit"), so the amount is demoted from a card to plain text.
+- It becomes the bottom line ("a printed benefit whose condition … is the outcome").
+
+So the headline tells the household a documented benefit doesn't apply, on a misread. That is the "hiding a documented benefit"
+and "missing information is not an exclusion" failure, said as the answer.
+
+Fix: remove the verdict and keep the earlier neutral sentence ("whether that trip fits this event is for the insurer to
+confirm"). If a reason is wanted, say only what is printed next to what the household recorded, without a conclusion. Two
+examples:
+
+- "The period printed is 10/03/2025 to 17/03/2025; you said it happened last week."
+- "The destination printed is Japan."
+
+Use only recorded facts: an event date compared with the period, and a recorded location. Never take a capitalised word after
+"in", and never the word "just".
+
+## Two injuries in one message: "which injury?"
+
+Asking "which injury?" when the household named two, for example "he broke his wrist and his hip", is a problem. Both injuries
+may each have a benefit, and the new grouping already keeps one either/or choice per injury. Making them pick one hides the
+other's amounts, and they may not know that both count. The chat should take both as reported facts and answer each, one group
+per injury. If something is genuinely unknown, it should ask about both at once ("was each from an accident?"), never make
+them choose. I haven't traced where the question comes from in this diff. It belongs to the Developer's injury fact handling,
+as a separate fix, not a blocker for this PR on its own.
+
+## Verdict on PR #70 at `76de2d8`
+
+**Not ready to merge.** R24-1 and R24-2 are closed. R25-1 is new in this push and is a blocker: the trip verdict can turn a
+covered event into "does not fit" as the bottom line. Removing the verdict, which brings back the previous neutral wording, is
+enough to merge.
+
+---
+
+# Round 26: PR #73 (server prefetches `resolve_person`) at `c67c02e`
+
+Scope: `git diff b7e18f8 c67c02e -- lib/`, which covers `loop.ts` (the prefetch) and `scripted-model.ts` (test only). This was
+read against how `resolve_person` results are handled (loop.ts, around :2417, `setSubject`). The repro is a scratch script that
+runs the PR's own `namesFor`, `said` and `named` expressions, copied verbatim, on sample messages. No model calls.
+
+## What holds
+
+- **No other household's people.** Candidates are `input.people`, the household's own members, and the call goes through the
+  same `resolve_person` tool, so no other household's person can be picked.
+- **Same checks as a model call.** The prefetched call runs through the same handler, result recording and evidence path. It is
+  not metered or counted as a step, and `trace.adjusted` records it.
+- **Ambiguous names.** Two members sharing a name means two matches, so there is no prefetch.
+- **Open questions, taps and claims.** It is skipped while a question is open, after a person was tapped, and once a claim
+  exists, so person corrections stay with the existing logic.
+
+## R26-1 (High, blocker): name matching is looser than the model and picks the wrong person
+
+`namesFor` returns every name token of 3 or more letters, so "Tan Hui Min Grace (Grace)" gives Grace, Tan, Hui and Min. `said`
+matches each one **case-insensitively** anywhere in the message. A single match triggers `resolve_person`, and an `ok` result
+calls `setSubject` (loop.ts ~:2423). So the conversation is bound to that person before the model reads the message. Script
+output:
+
+| Message | Prefetch |
+|---|---|
+| "What is the **grace** period for my premium?" | Grace (mention "grace"). "Grace period" is an insurance term. |
+| "**Will** my policy cover dental?" | Will (a member named Will) |
+| "I waited 30 **min** at the clinic, can I claim?" | Grace, through her given name "Min" |
+| "Sarah, **Grace**'s colleague, broke her arm at work" | Grace, though the event is Sarah's, and Sarah is not a member |
+| "Grace broke her arm" | Grace, correct |
+
+Before this change, the model decided whether a word was a name, whether the event was about a non-member ("Sarah"), and whom
+to resolve ("I"). Now the server binds the subject first, and the model starts from that result. A model that does not re-resolve
+answers about the wrong person's policies. That is the wrong-person failure the contract treats as worst. The offline proof
+covers only three clean turns (FR1 t1, K6A, K6B) with unambiguous capitalised names, so it cannot show this.
+
+Fix, all of these:
+
+- Match only the member's display or preferred name, case-sensitively with its capital letter, and never single tokens such as
+  surnames or middle names.
+- Skip tokens that are common words or insurance terms (grace, will, may, hope, joy, mark, min, …).
+- Skip when the message also names someone who is not a household member, or a possessive pattern ("X's colleague / friend /
+  boss").
+- Or, safer: pass the prefetched result to the model as a hint and let the model's own `resolve_person` call `setSubject`. That
+  keeps most of the saving where the model agrees, and none of the risk.
+
+## R26-2 (Low): it isn't limited to the first message about an event
+
+The condition is "no open question, no tap, no claim", not "first message about an event". Informational follow-ups ("and for
+Daniel?") get a prefetch too. That is fine for clean names, but it widens R26-1's exposure to every non-claim turn.
+
+## Second person mentioned later
+
+On a later turn with no claim, R26-1 applies again. With a claim, the prefetch is skipped and the existing correction logic
+decides. So the risk is confined to turns without a claim, which are exactly the informational questions where words like
+"grace period" come up.
+
+## Verdict on PR #73 at `c67c02e`
+
+**Not ready to merge.** R26-1 can bind a conversation to the wrong person on ordinary messages, with no model step to catch it,
+and the PR can't be confirmed live before merge. Either tighten the matching as above, with tests for the four rows in the table,
+or keep the result as a hint that doesn't set the subject. Until then, set `DEARPOLICY_PREFETCH_PERSON=0` as the default.
+
+---
+
+# Round 27: PR #73 at `6e8a09d` (restarted from main `9a76490`)
+
+Scope: `git diff 9a76490 6e8a09d -- lib/`, which covers `prefetchMention`, the prefetch, the context-only handling in
+`loop.ts`, and `scripted-model.ts`. The repro is a scratch script that runs `prefetchMention` and `COMMON_WORD_NAMES`, copied
+verbatim, on 16 messages. No model calls.
+
+## R26 re-check
+
+| Finding | Status |
+|---|---|
+| R26-1 wrong person | **Closed.** The server's lookup no longer calls `setSubject`. Its result carries a note ("Use this person only if the question is about them; otherwise call resolve_person"). The person becomes the subject only when the model's next calls use that `subject_id` without calling `resolve_person` itself, which is what a model-made lookup leads to anyway. Matching needs the member's whole preferred name, capitalised. It skips common words and insurance terms (grace, will, may, min, …), possessives, "Name period/cover/…", and any other capitalised word inside a sentence. Script: "grace period", "Will my policy", "30 min", "Sarah, Grace's colleague", "Daniel's friend", "Daniel … in Japan", and lower or upper case names all give **no prefetch**. "Daniel broke his arm" and "Adrian Tan died last week" give Daniel and Adrian Tan. |
+| R26-2 every non-claim turn | **Closed.** It runs only when `state.history` is empty (the conversation's first message), and it is off by default (`DEARPOLICY_PREFETCH_PERSON=1` turns it on). |
+
+## R27-1 (Low): a non-member named as the first word of a sentence isn't caught
+
+The "other capitalised word" check skips the first word of each sentence (`slice(1)`). So "Sarah fell and Daniel took her to
+hospital" and "Sarah fell. Daniel took her to hospital" prefetch Daniel, although the event is Sarah's and she isn't a member.
+Because the result is now context only, the model still reads the message and is told to resolve someone else if needed, so this
+is a nudge, not a binding. To close it, also check a sentence's first word, skipping only ordinary sentence starters (My, The,
+What, Can, Is, How, Does, Do, When, Where, Why, Who, Please, Hi, Hello, Our, His, Her, If, After, Yesterday, Today, Last, And,
+But, So).
+
+## Verdict on PR #73 at `6e8a09d`
+
+**Ready to merge** from the Critic's side. Off by default, it changes nothing.
+
+**Switching it on by default:** I'd be comfortable once R27-1 is fixed (one line), because the lookup is now context only and
+fires only on a clean first message. Before switching it on, one short paid check with the real model, which DC has approved,
+should include "Sarah fell and Daniel took her to hospital" and one clean message. It should confirm two things: the model
+resolves Sarah itself in the first case, and the model-call count drops in the second. The saving is one model call (about 2.5 to
+3 seconds), and only on a conversation's first message.
+
+---
+
+# Round 28: PR #73 at `69e9065` (R27-1 fix, on by default)
+
+**R27-1 is closed.** A capitalised first word now counts as another name unless it is in `SENTENCE_STARTS`. I re-ran the 16
+messages from round 27 plus 5 more, with the PR's own code copied verbatim:
+
+- "Sarah fell and Daniel took her to hospital" and "Sarah fell. Daniel took her to hospital" now give no prefetch.
+- "Daniel broke his arm", "Yesterday Daniel broke his arm" and "My son Daniel broke his arm" still give Daniel.
+- Every round-26 trap still gives no one.
+
+The default is now on for hosted models, and `DEARPOLICY_PREFETCH_PERSON=0` turns it off.
+
+**Verdict: ready to merge**, with the production checks after deploy as agreed with the coordinator:
+
+- use real member names;
+- read the outcome from the trace;
+- have a deploy slot ready for the switch-off, because turning it off with the env flag needs a redeploy.
+
+---
+
+# Round 29: PR #74 (wrong amounts, either/or alternatives) at `1a73ddd`
+
+Scope: `git diff effa2a2 1a73ddd -- lib app`, which covers `amount-alternatives.ts`, the `ledgerAlternatives` and
+`coverageForLedgerRow` code in `ledger/store.ts`, `events.ts` (liability and per-plan), `extract.ts` `rowSupported`,
+`scale-limit.ts` `statesItsOwnBase`, `benefit-catalog.ts` `coverForEvent`, and the two routes. Read only.
+
+## What holds
+
+- **No alternative is ever summed.** `amountAlternatives` only lists options. Nothing in the diff adds them, and the
+  regressions assert that no S$453,750 or S$121,250 appears anywhere.
+- **No alternative is picked silently.** A group is returned whole or not at all: if any option can't be worked out, there is
+  no group. The same figure printed twice is not offered as an alternative.
+- **No alternative goes to the wrong person.**
+  - The options are worked out per contract (one owner, one scheme's documents), and the sum insured is that owner's cover
+    (`coverageForBenefit(contract, …)`).
+  - `/api/benefits` sends a group only when every contract showing the row produces identical options. So a spouse on a
+    different sum insured gets no shared group.
+  - `/api/ledger` maps options per `benefitId|ownerId`.
+- **Inferred-base rows are unchanged.** `statesItsOwnBase` applies only to rows carrying the "from the heading of the
+  schedule" note. Heading-inferred rows such as the cheekbone S$1,500 still scale (test kept).
+- **The other fixes are sound:**
+  - Accident rows join the accident cover (`coverForEvent`, unresolved when it can't tell).
+  - Per-plan rows and "Not covered" rows carry no figure.
+  - No existing expected value changed.
+
+## R29-1 (Medium, fix before merge): the liability test reads the whole quote, so a real death benefit can be dropped
+
+`rowSupported` rejects any row not mapped to "other" when `THIRD_PARTY_LIABILITY` (`liable|liability|third party|to other
+people`) matches the joined name, detail **and printed quote** (`part`). Personal accident quotes often carry wording such as "the
+Company shall not be liable for death caused by …" or "liability of the Company". An accidental-death row whose quote includes that
+sentence is then dropped from Coverage, so a documented benefit is hidden. Fix: test only the row's name and detail. Or require
+the third-party sense ("liab\w* (?:to|for) … (?:other people|third part)", "third[- ]party liability", "personal liability").
+
+## R29-2 (Medium): alternatives are grouped by row name alone
+
+`rowKey` keeps only letters and digits of the benefit name. Two rows with the same generic name in different tables of one
+scheme are offered as alternatives of each other, even when they pay for different events. Examples are "Others", "Any other
+bone", or "Leg" in a fracture table and a dismemberment table. Fix: also require the same event (`eventForBenefitName(...).event`)
+and the same `requires` (accident). For extra safety, leave out names shorter than about 4 letters, or names that are generic
+("others", "any other", "total").
+
+## R29-3 (Low, the designer's): until the page draws the group, the two rows still read as two benefits
+
+The ledger still has one row per option, each with its own figure, and the new `alternatives` field is only data. Until Coverage
+and Benefits render the group with its note (ux-design/coverage-alternatives-shape.md), the screen shows S$1,250 and S$120,000 as
+two rows with nothing saying "never added together". That is no worse than main, but the page change should follow soon. Also,
+when one option can't be worked out, there is no group, but the remaining row still shows its own single figure. That is the
+existing behaviour.
+
+## Verdict on PR #74 at `1a73ddd`
+
+**Ready to merge once R29-1 is fixed** (one regex). The alternatives can't be summed, picked silently or attached to the wrong
+person, and inferred-base rows are unchanged. R29-2 is a short follow-up, best in the same push. R29-3 is for the designer.
+
+# Round 30: PR #75 household isolation at `6a31182`, PR #76 "Not in my family" at `7e87b9b8`
+
+Asked: can either PR read, write or hide anything across households, and is the code safe while the optional table is absent?
+Read the lib/app/sql diffs against `effa2a2`. No builds, DB suites or paid calls.
+
+## PR #75 at `6a31182`
+
+- `lib/ledger/store.ts` `addLedgerRow`: the INSERT only runs when the person (`family_members.account_id=$1`) and, if given,
+  the document (`policies.account_id=$1`) belong to the caller's household; otherwise no row and the route returns 404
+  (`app/api/ledger/route.ts`). Closes the cross-household write.
+- `lib/lifecycle/coordinator.ts` `requestInvitationRevocation`: the lookup joins the caller's own `household_members` row, so an
+  invitation in another household reads as "not found", and a non-owner gets `NotFoundError`, both before any
+  `deletion_requests` write. Still the plain pool, but now scoped by the caller join; fine.
+- `sql/storage-rls.sql`: adds `household-exports` to the safety-net UPDATE. Only takes effect when DC re-applies the file.
+- No new table, so nothing depends on an optional migration.
+
+**Verdict: ready to merge.** Note for the release list: re-apply `sql/storage-rls.sql` after merge.
+
+## PR #76 at `7e87b9b8`
+
+Isolation checks, all pass:
+- Every dismissal read is tied to the row's own household and document (`name-dismissals.ts` `notDismissedCondition`:
+  `nd.account_id=pd.account_id AND nd.policy_id=pd.policy_id`). A row filed under another household hides nothing (R21-1 lesson
+  applied; the regression at `scripts/system-database-regressions.ts:1357-1367` covers both directions).
+- Writes run in the caller's RLS session after the document is authorised against `ctx.householdId`; the INSERT/UPDATE
+  policies also require `policies.account_id = account_id`, so a browser can't file a dismissal on another household's document
+  or under another household (tests at :1355-1356). DELETEs are scoped by `account_id`.
+- `notFamily: true` checks the name is on that document (404) and unlinked (409) before writing.
+- `refreshReviewState` (link-person `route.ts`) runs on the service pool but only after the household transaction authorised the
+  document, and filters by `account_id` and `policy_id`.
+
+Table absent: `dismissalsReady()` uses `to_regclass`, caches only `true`, and every caller falls back to "" (no filter), so
+GET /api/policies and the dashboard behave exactly as on main; link-person returns `remembered:false` without touching the table.
+No 500 path found.
+
+## R30-1 (Low): a re-read brings the "not linked" review flag back for a dismissed name
+
+`lib/rag/ingest.ts:751-760` counts every unmatched detected name for `needs_review`/`review_reason` and doesn't know about
+dismissals. After a re-read the name stays hidden (correct), but the document is flagged for review again with "1 named insured
+person is not linked", and the household can't clear it because the name is no longer listed. Fix: apply
+`notDismissedClause` (or skip dismissed keys) when ingest computes `unmatched`. Follow-up is fine.
+
+## R30-2 (Low, existing pattern now reached more often): `refreshReviewState` overwrites reasons it doesn't compute
+
+It rebuilds `review_reason` from unmatched names and unverified items only, so the ingest-only reasons ("linked to the profile it
+was uploaded to … Check this is the right person", "not named in it …") are erased. Linking already did this on main; a "Not in
+my family" tap now does it too, which can clear a "check this is the right person" warning that has nothing to do with the
+dismissed name. Fix: keep those reasons (recompute them, or only remove the "not linked" clause). Follow-up is fine.
+
+## R30-3 (Low): saved, then 500
+
+The review refresh now runs after the commit. If it fails, the dismissal or link is saved but the route returns 500. Retrying is
+safe (`ON CONFLICT DO NOTHING`, idempotent DELETE), so this is only a confusing message. Optional: catch and log instead.
+
+## Verdict on PR #76 at `7e87b9b8`
+
+**Ready to merge.** Nothing reads, writes or hides across households, and it is safe before `sql/detected-name-dismissals.sql` is
+applied. Apply that file after `sql/policy-member-exclusions.sql`, in either order relative to the deploy. R30-1 and R30-2 are
+short follow-ups.
+
+# Round 31: PR #74 wrong amounts at `25365a5` (R29-1, R29-2 fixes)
+
+Read `git diff 1a73ddd 25365a5` (extract.ts, amount-alternatives.ts, both regression scripts) and traced the real wrist rows
+(reviewer-confirmations.md §1: Product Summary p13 and Benefit Summary p8 are two separate documents in the household, so the
+new "different documents" rule fits the real case and the DB fixture change matches reality). Scratch check: `eventForBenefitName`
+gives `other` for "Arm , Elbow, Wrist or Ribs 25%" and `fracture` for the "(Other Fracture)" row, so `namedEvent` does not split
+the real pair. No builds, DB suites or paid calls.
+
+R29-1 is fixed for the reported case and R29-2 is fixed (generic names skipped, one-document pairs skipped, conflicting named
+events skipped; four cases plus a control).
+
+## R31-1 (High, fix before merge): the liability guard now trusts the reader's own label, so a liability sum can become the person's death benefit
+
+`extract.ts:112-115` tests `THIRD_PARTY_LIABILITY` only against `benefitName`/`detail`, which are the extraction model's labels
+(kept when ≥60% of their words are on the page, `fact-check.ts:81-92`). The guard exists for rows the model has already
+mis-typed. Trace: a travel or home page prints "Legal liability for accidental death or bodily injury to third parties
+S$500,000". The model returns `benefitName:"Accidental Death"`, `eventType:"accidental_death"`. "Accidental" and "death" are on
+the page, so the name counts as printed; it doesn't match the liability pattern; `eventSupported("accidental_death", names+part)`
+passes because the quote says "accidental death". The row is kept, and S$500,000 owed to other people reads as the person's own
+accidental death cover. That is a wrong claimable amount. Before this push, the quote's "liability" dropped it.
+
+Fix (one regex): keep the name test, and also test the printed quote with the third-party sense only, e.g.
+`/third[- ]part(?:y|ies)\b|\bto other (?:people|persons)\b|\b(?:personal|legal|public) liabilit\w*|\bliab\w* (?:to|for)\b[^.]{0,60}\b(?:others?|third)\b/i`.
+"The Company shall not be liable for death caused by war" matches none of these, so the R29-1 case stays kept. Add the trace above
+as a case next to the R29-1 test.
+
+## R31-2 (Medium, follow-up): exact trait equality may stop DC's real wrist, hip and ankle groups forming
+
+`sameBenefitKey` requires identical `traits`. The two real rows get their traits by different paths (`catalog-builder.ts:165-173`):
+the Product Summary row has no keyword trait, so it takes the categorising model's `respondsTo` as is. The "(Other Fracture)" row
+has the keyword `bodily_injury` plus only the model's traits in the same family. If the model adds `disability` to one, or its call
+fails (keyword `["other"]` against `["bodily_injury"]`), the group silently doesn't form. That is not a wrong amount: each row keeps its own figure, as
+on main. But the fix this PR is for may not show up for the real household, and the DB test hard-codes equal traits. Fix: compare
+only the traits that tell benefits apart (`death`, `disability`, `illness`, `hospitalisation`), not `accident`, `bodily_injury` or
+`other`. Also add the wrist group on Coverage to the post-deploy Live site check.
+
+## R31-3 (Low): two documents' same-name rows with the same traits still group
+
+"Leg 50%" in a fracture table of one document and "Leg 50%" in a dismemberment table of another both read as event `other`. When
+the model gives both the same traits, they are offered as alternatives. Both figures are real and nothing is summed, so the harm
+is a wrong pairing note. Accept for now.
+
+## Verdict on PR #74 at `25365a5`
+
+**Not ready: fix R31-1 first** (one regex plus one case). R31-2 is a follow-up and a post-deploy check. R31-3 is accepted.
+
+# Round 32: PR #77 design pass at `12eac98`
+
+Read the diff from the merge base `0417567` (pages, components, CSS; nothing in lib/ or app/api/). Focus: anything readable as a
+coverage claim (Coverage gaps line, either/or block, amounts without a figure) and whether Family remove and "Not in my family"
+can touch another household. No builds or browser runs.
+
+Passes:
+- Either/or (`components/alternative-amounts.tsx`): drawn only for a complete group (≥2 options), once per person per group,
+  labelled "Either / or" with "or" between options and the server's note; no total is computed anywhere. Benefits draws it only
+  for an established line. It stays dormant until #74 sends `alternatives`.
+- Gaps line wording: "Not found in your uploaded documents" / "in the documents read so far", plus "a plan you haven't uploaded
+  may still cover", "more may appear", or the unreadable-document note. It never says "not covered". Good.
+- Isolation: "Not in my family" and Undo only call #76's `POST /api/policies/link-person`, which authorises the document and
+  name against the caller's household (round 30). The browser fallback keys on `policyId:name`, and policy ids are per household,
+  so it can't hide anything in another household. Family removal still uses the existing server path; "Go to Documents" only
+  replaces the button. `?person=` filters the household's own list in the browser. Pass.
+- Chat: conflict, stopped-waiting and failure messages are kept. The wait names a step only when the server sends `stageId`.
+
+## R32-1 (High, fix before merge): "Covered." is printed for plan-type guesses whose own note says "if covered"
+
+`app/ledger/page.tsx` `amountLine`: any row with `paysKind==="stated"` now reads **"Covered. Your documents don't print an amount
+for this."** (main showed "as stated in the plan — no figure on file"). Many stated rows are not read from any benefit. They are
+seeded from `PRODUCT_DEFAULTS` (`lib/ledger/events.ts:173-200`, `store.ts:164-173`, origin `schedule`, status `proposed`) only
+because a schedule line names a plan type. Their notes are "fractures, **if covered**, are paid from the plan's fracture table",
+"accident medical expenses, **if covered** …", "early-stage conditions, **if covered** …", and the travel, motor and home ones.
+So a Group Personal Accident line alone makes Coverage say "Fracture: Covered." That is an unconfirmed coverage claim, and the
+"if covered" qualifier is stripped. The same rows also feed the Documents "found" line and the Family kinds chips (both read
+`/api/ledger` rows with `status !== "rejected"`), so the document card says it was found to pay for fractures.
+
+Fix: say "Covered." only for a row the person confirmed or one read from the wording (`status==="confirmed" || origin==="wording"`).
+For a proposed schedule row, say something like "Plans like this usually include this. Your documents don't confirm it or print
+an amount." Leave proposed schedule rows out of the Documents "found" line and the Family chips (or label them "to confirm").
+
+## R32-2 (Low): gaps come from Coverage event types only
+
+`coverGaps` maps ledger `eventType`s to kinds. A benefit the reader typed `other` (or one that is only on the Benefits page, not
+in the ledger) doesn't count, so for example "hospital or medical cover" can be listed as not found while Benefits shows a
+hospital benefit. The wording is hedged, so this is a misleading pointer, not a false "not covered". Follow-up: also treat a
+Benefits row of that kind as found, or add "see Benefits by policy" to the line.
+
+## R32-3 (Low): before #76, "Not in my family" shows an error, not the device-only fallback
+
+On main, `link-person` still requires `familyMemberId`, so `{notFamily:true}` gets a 400 and the page shows "Could not save that
+answer". The PR body says it falls back. It's harmless, but merge #76 first.
+
+## R32-4 (Low): device-only answers are not cleared at sign-out
+
+`localStorage["dearpolicy.notFamily"]` keeps document ids and printed names after sign-out on a shared device. Nothing crosses
+households (the ids are per household), but it's a privacy leftover. Optional: clear it on sign-out or once the server remembers.
+
+## Verdict on PR #77 at `12eac98`
+
+**Not ready: fix R32-1 first** (the stated-amount line, plus the found and chips filters). Everything else asked about passes. Merge
+after #76. R32-2..4 are follow-ups.
+
+# Round 33: fix check on PR #74 `361a6ce`, PR #75 `43eeb39`, PR #76 `ef4e968`
+
+Read each diff against the head reviewed before (`25365a5`, `6a31182`, `7e87b9b8`). No builds, DB suites or paid calls.
+
+## PR #74 at `361a6ce`: R31-1 and R31-2 fixed
+
+- R31-1: `rowSupported` (`extract.ts:116`) now drops a non-"other" row when the name matches `THIRD_PARTY_LIABILITY` **or** the
+  printed quote matches `THIRD_PARTY_SENSE` (`events.ts:207`). The traced "Legal liability for accidental death or bodily injury
+  to third parties" row is dropped, and "shall not be liable for death caused by war" is still kept.
+- R31-2: `sameBenefitKey` compares only `death`, `disability`, `illness` and `hospitalisation`. The real wrist pair (both
+  fracture-family, keyword or model traits) now keys the same; a fracture "Leg" and a dismemberment "Leg" still split on
+  `disability`.
+- R33-1 (Low, follow-up): `THIRD_PARTY_SENSE` matches a bare "third party" anywhere in the quote. A personal accident row whose
+  printed line says, say, "including injury caused by assault by a third party" is dropped, which hides a documented benefit.
+  That wording is rare in a benefit row, and it was my suggested regex. Narrow it later to the liability sense, e.g.
+  `third[- ]party (?:liabilit|claim|propert)|liab\w* (?:to|for)[^.]{0,60}(?:others?|third)|to other (?:people|persons)|(?:personal|legal|public) liabilit`.
+
+**Verdict: ready to merge.**
+
+## PR #75 at `43eeb39`: ready to merge
+
+`addLedgerRow` now also requires the person and the document to be active (`activePredicate` on both EXISTS). The three extra
+guards (`stale-answers.ts` covered set, `coverage-assignments.ts` `rebuildForAddedPeople`, `read-failures.ts`) only narrow reads to
+active rows. `activePredicate` is imported in each file. No cross-household path, and no optional-table dependency. Still re-apply
+`sql/storage-rls.sql` after merge.
+
+## PR #76 at `ef4e968`: R30-1, R30-2 and R30-3 fixed; ready to merge
+
+- R30-1: ingest (`lib/rag/ingest.ts`) reads `dismissedNameKeys(account, policy)` (scoped by both, and empty when the table is
+  absent). It skips dismissed names in `unmatched`, so a re-read no longer re-flags them. It also no longer falls back to linking a
+  dismissed name to the upload profile, a good extra. This path is untested locally (the PR says so); add it to the post-deploy
+  check (dismiss a name, re-read the document, and see no "not linked" flag).
+- R30-2: `recountedReview` replaces only the "named insured … not linked" and "coverage item(s) could not be source-verified"
+  parts. Its regex matches both the route's and ingest's wording, and every other reason part is kept.
+- R30-3: a failed recount is logged, and the saved change returns 200.
+- Nit (no action): `nameKey` in JS uses `trim()`/`\s`, and SQL uses `btrim` (spaces only). They differ only for names with tabs or
+  non-breaking spaces at the edges.
+
+**Merge order:** #76 before #77. Apply `sql/detected-name-dismissals.sql` after `sql/policy-member-exclusions.sql`.
+
+# Round 34: PR #77 at `c0969e5` (R32 fixes and the "Who covers" line)
+
+Read `git diff 12eac98 c0969e5` (pages, `components/cover-kinds.ts`, `components/device-memory.ts`, AppShell). No builds or browser runs.
+
+## R32-1 fixed: a "to confirm" row never reads as covered
+
+`isToConfirm` (`cover-kinds.ts`) = status present and not `confirmed`, and origin neither `wording` nor `person`. That covers every
+`scheduleSeeds` row (`store.ts:159-177`, origin `schedule`, status `proposed`), i.e. every PRODUCT_DEFAULTS guess. Checked each surface:
+- Coverage row: `amountLine` returns "Plans like this usually include this. Your documents don't confirm it or print an amount."
+  *before* the "Covered." branch. A guess with a figure (life/PA lump sums) keeps the figure and adds "To confirm: plans like this
+  usually include this, but your documents don't confirm it yet."
+- Coverage chips: a kind whose rows are all guesses is labelled "(to confirm)" with a dashed style.
+- Family chips: a kind counts as plain only if one of its rows is not a guess; otherwise it shows "Label (to confirm)".
+- Documents: guesses are split out of **Found** into "Plans like this usually include …, but this document doesn't confirm it".
+- "Covered." now appears only for a stated row from the wording, a confirmed row, or the household's own entry.
+
+Also fixed: R32-2 (gaps also count `/api/benefits` kinds by owner name, and "other"-typed rows are sorted by name). R32-4 (sign-out
+clears the device-only key). The "Covers nobody yet · choose who it covers" line with a Choose button is fine. It adds no claim, and
+"Done" is now always offered.
+
+## R34-1 (Low): the "to confirm" line under a figure can understate what the schedule prints
+
+For a seeded lump sum (for example a Group Life line printing S$500,000, seeded as death = S$500,000), the line says "your documents
+don't confirm it yet". The schedule does print the plan and its sum. What isn't confirmed is what the plan pays for, which matters
+for TPD and terminal illness, so they are rightly flagged. Optional wording: "Your schedule shows this plan's sum; its wording hasn't
+been read to confirm what it pays for." No wrong amount either way.
+
+## R34-2 (Low): a guessed row can make a gap note say "found"
+
+`coverGaps` counts guessed rows as found. A PA default's `accident_medical_expense` guess turns the hospital gap into "For medical
+costs, only accident medical expenses were found". Optional: skip the RELATED note when its event is only a guess (list the gap as
+missing, or say "may include").
+
+## Verdict on PR #77 at `c0969e5`
+
+**Ready to merge** (after #76). R34-1 and R34-2 are optional wording follow-ups. R32-3 still holds: before #76 merges, "Not in my family"
+shows an error rather than the device fallback.
+
+# Round 35: PR #78 at `d8738d0` (R33-1, narrow THIRD_PARTY_SENSE)
+
+Read `git diff bf228cf d8738d0` (one regex in `lib/ledger/events.ts:208`, two new cases). I ran the new regex in node on 14 wordings.
+
+| Wording | Result |
+|---|---|
+| Legal liability for accidental death or bodily injury to third parties S$500,000 | dropped ✓ |
+| If you are liable for accidental death, injury or damage to other people | dropped ✓ |
+| Third Party Liability S$1,000,000 / Liabilities to third parties / Liability to third parties for death | dropped ✓ |
+| If your legal liability for death of others | dropped ✓ |
+| Accidental Death …, including death from assault by a third party | kept ✓ (R33-1) |
+| … shall not be liable for death caused by war / not liable to pay for death caused by war | kept ✓ |
+| not liable for any claim recoverable from a third party / a third party is responsible | kept ✓ |
+| Compensation for death caused by a third party vehicle | kept ✓ |
+| We will not be liable for death caused **to others** by the insured | dropped (see R35-1) |
+
+The #74 liability guard still holds: the name test (`THIRD_PARTY_LIABILITY`) is unchanged, and every liability-cover phrasing above
+is still dropped through the quote.
+
+## R35-1 (Low, accept): a negated "not liable … to others" exclusion inside a personal accident quote still drops the row
+
+"We will not be liable for death caused to others by the insured" matches `liab… to others`. The old regex dropped it too, and the
+wording is rare in a benefit row. Optional: skip a match preceded by "not (be )?" / "never". No change needed for this PR.
+
+## Verdict on PR #78 at `d8738d0`
+
+**Ready to merge.** R33-1 is fixed, the liability guard holds, and R35-1 is accepted.
+
+# Round 36: PR #71 simple chat at `d17b033`
+
+Read `lib/simple-chat/**` and the wiring (`lib/chat/workflow.ts` two lines, `lib/ai/providers.ts` prices, `package.json`) against
+`main 1ee2aec`. I ran `verify.ts` offline with crafted inputs (sources extracted to the scratchpad, DB client stubbed). No model calls.
+
+Passes:
+- **Off means off.** `simpleChatEnabled()` is checked first in `prepareChat` and `runChatWorkflowInternal`, and the module is only
+  `import()`ed when on. With the flag unset, both functions run the existing path unchanged. Production also needs
+  `DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION=1` (VERCEL / VERCEL_ENV count as production).
+- **Household isolation.** Every library read filters on `account_id`, and `readHousehold` re-checks each row's `account_id`
+  before building the prompt. `runSimpleChat` refuses a library for another account. History (`conversationTurns`) is
+  account-scoped, and saving goes through `saveTurn` (revision check, output guard). The spend cap is checked and usage booked.
+- **Groups.** Either/or only when every excerpt is on the same line of the same page, for one person (`oneRow`). Rows from
+  different rows or documents never group; they get a "not a total; the insurer decides which applies" note.
+- **Page citations.** The page and document shown come from where the server found the quote (`locateQuote`), never from the
+  model.
+
+Probe results (`sentenceProblem` with answer amounts 1,250 / 120,000 / 750, and `verifyAnswer`):
+
+| Input | Result | Should be |
+|---|---|---|
+| "You may get S$1,250-2,000 in total." | kept | dropped (range) |
+| "You may get S$1,250 to 2,000." | kept | dropped (range) |
+| "In total about 121,250 dollars." | kept | dropped (total) |
+| "Together that is S$1,250 plus S$750." | kept | dropped (adds amounts) |
+| "Between S$1,250 and S$2,000." | dropped ✓ | |
+| "up to S$121,250" | dropped ✓ | |
+| amount "S$25", quote "Arm , Elbow, Wrist or Ribs 25%" | **shown as S$25** | dropped |
+| amount "S$30", quote "S$100 per day, up to 30 days" | **shown as S$30** | dropped |
+| 25% (PS p13 row) of S$600,000 (printed on another page of that document) | **shown as S$150,000** | dropped |
+
+## R36-1 (High, before switching on): any number in the quote passes as the amount
+
+`checkAmount` accepts the amount if its value appears among **all** numbers in the excerpt (`numbersIn`), so a percentage, a day
+count, an age or a page number becomes a dollar amount ("S$25" from "25%", "S$30" from "30 days"). That is a wrong claimable amount.
+Fix: compare against the excerpt's money figures only (`moneyFiguresIn(excerpt)`), or at least reject a number followed by
+`%`, `per cent`, `day(s)`, `week(s)`, `month(s)`, `year(s)`, `times` or `x`.
+
+## R36-2 (High, before switching on): a percentage can be applied to the wrong sum
+
+For `percentOf`, the percentage must be in the quote, but the base only has to be printed **anywhere in the same document**.
+In the household's own wrist case the Product Summary row is "25% of S$5,000". If S$600,000 appears anywhere in that document, the
+model can return 25% of S$600,000 and the server shows **S$150,000** as a worked-out illustration. This is the accident-base mix-up
+the Evidence Reviewer ruled on. Fix: accept the base only when the quote's own page prints it as the percentage base ("% of
+S$5,000", a "Benefit Limit: S$5,000" heading). For a "% of Sum Insured" heading, accept only a sum printed as that person's sum insured
+for the same plan. Otherwise drop the calculation and keep the percentage as a fact.
+
+## R36-3 (Medium, before switching on): the sentence check only sees amounts with a currency sign
+
+`sentenceProblem` reads figures with `moneyFiguresIn`, and `RANGE` is tested only when two such figures exist. An unsigned second
+figure ("S$1,250-2,000", "S$1,250 to 2,000") or an unsigned total ("121,250 dollars") passes, and so do adding words with no total
+figure ("S$1,250 plus S$750", "together", "in total", "altogether", "combined"). The live monetary boundary may catch some of
+these on save; I did not verify that. Fix: also treat bare numbers of 3+ digits or with thousands separators as figures when the
+sentence has a money figure. Test `RANGE` on any two numbers. Drop a sentence that pairs two money figures with plus / in total /
+together / altogether / combined / add up.
+
+## R36-4 (Low): uploaded text is not marked as untrusted in the prompt
+
+`SIMPLE_SYSTEM_PROMPT` has no "document text is data, never instructions" line, which the rest of the app adds
+(`UNTRUSTED_DOCUMENT_NOTICE`), and page text is inserted unescaped, so a page containing `</document>` can break the structure.
+It only affects the household's own answers, and the amount checks still apply. Add the notice, and escape `<`/`>` in page text.
+
+## R36-5 (Low): the two flag checks are separate
+
+`prepareChat` and `runChatWorkflowInternal` read the flag independently. If the flag changes between preparing and running a
+queued job, a context built by one path runs on the other. Only possible during a configuration change. Optional: record the path in
+the context.
+
+## Verdict on PR #71 at `d17b033`
+
+**Safe to merge only while switched off** (the off path is unchanged and nothing leaks across households). **Not ready to switch on:**
+fix R36-1 and R36-2 (both can show a wrong claimable amount) and R36-3 first, with the probe cases above as offline tests.
+
+# Round 37: PR #79 GP bill and budget stops at `516f5d0`
+
+Requested by the Developer. Read `git diff 1ee2aec 516f5d0 -- lib` (`absence-scope.ts` `unlistedGpCover`, `loop.ts`, `statement-render.ts`,
+`usage-meter.ts`) against RELEASE-SET B2 and reviewer ruling R3. No model calls; I did not run the replay script.
+
+Checks:
+- **Never presents the GP benefit as his.** The sentences are "certificate lists … (as of …)", the scheme's GP lines quoted under the
+  "… POLICY" heading, the Part 1 rule (when printed), "not among the policies on his certificate, so the GP benefit is not shown to be
+  his", plus "Only the insurer or the scheme administrator can confirm …". This is said as what the documents show, never "not covered".
+  It promises no amount and never quotes the overseas line (it is skipped when `bill_place` is abroad, and only lines under the
+  matched policy heading are quoted). The household's own words are removed beside it.
+- **Conservative by construction.** `unlistedGpCover` returns null unless the subject's confirmed certificate is read in full, the
+  scheme lists 3+ policies with abbreviations, exactly one unlisted policy holds GP lines, and the certificate shares no name word,
+  abbreviation or product word with it. A variant spelling on the certificate ("Out-Patient Medicare") still shares "medicare", so it
+  is treated as listed. If anything fails, it falls back to the existing not-found check.
+- **The accident "specific results" filter is principled enough.** It takes only the lettered benefits under the certificate-listed
+  accident product's own "BENEFIT n:" heading, whose wording opens on an accident and names no death, disablement, dismemberment,
+  disappearance or coma. It quotes the benefit names only (no amounts), each "only if that result happened". That matches B2
+  (ambulance, a 24h+ stay, fracture). Limit: the grave-word test reads the heading and the next two lines only, so a benefit whose
+  death wording comes later could be listed. That is harmless here, because nothing is calculated.
+- **Running outside budget stops** is limited to a reply that left the reported bill unaddressed (`groundedFallback`), for a local or
+  unknown bill place. Loaders are account-scoped, so there's no cross-household path.
+- **Budget stop.** `reportStopAnswer` only answers a bill or stay reported this turn for the current subject, through `groundedFallback`
+  with `budgetStopped` set, so no repair call. `roomForAnother` uses the meter's own limits. Leaving out a refused absence when no
+  further call fits drops a statement, which is the safe direction.
+
+## R37-1 (Low): "what do i do now" replaces "I couldn't confirm an answer" with "Here is what you can do next."
+
+That only applies when the reply has next steps and no sentences, and B2 asks for it. A household that asked something specific in
+the same message is then not told it went unanswered. Accept, or keep the dropped note after the steps when the message also asks a
+question.
+
+## R37-2 (Observation for the coordinator, not a correctness issue): this is a scheme-shaped server answer
+
+`unlistedGpCover` keys on this scheme's layout: "(POLICY NO" headings, the Part 1 sentence, "BENEFIT n:" lettered benefits. DC's
+11:54 direction was no per-scenario rules, and DC chose to build in the simple chat at 15:08. Worth deciding whether to carry this on
+the rag2 path or let the simple chat handle B2.
+
+## Verdict on PR #79 at `516f5d0`
+
+**Ready to merge.** It's correct for B2 and conservative when the documents don't match exactly. R37-1 is accepted. R37-2 is a
+direction question for the coordinator.
+
+# Round 38: PR #71 simple chat at `a4b529f` (R36 fixes)
+
+Read `git diff d17b033 a4b529f`. I re-ran the round-36 probes and new ones offline: crafted inputs plus the real snapshot loaded in
+the scratchpad, never committed. No model calls.
+
+Fixed:
+- R36-1 for the reported cases: "S$25" from "25%" and "S$30" from "30 days" are now dropped.
+- R36-2 for a row under a "% of S$5,000" / "Limit: S$5,000" heading: the base must be the nearest one above the quoted row on its
+  page. 25% of S$600,000 for the PS p13 row is dropped and the percentage is kept as a fact.
+- R36-3 for the reported cases: "S$1,250-2,000", "S$1,250 to 2,000", "plus", "in total" and "121,250 dollars" are all dropped.
+- R36-4: `UNTRUSTED_DOCUMENT_NOTICE` is in the prompt, and `<`/`>` are escaped in every page, attribute and member name. Quotes
+  are unescaped before matching.
+- R36-5: `context.chatPath` decides the run path, so a flag change mid-turn can't mix the paths.
+
+New probes on the real snapshot, BS p8 row "Arm, Elbow, Wrist or Ribs (Other Fracture) 20%" (heading "% of Sum Insured"), person
+Desmond:
+
+| percentOf base | Result |
+|---|---|
+| S$600,000 (his real GPA sum insured, on the certificate) | dropped, kept as the 20% fact |
+| S$400,000 (PS p5 "100% Sum Insured (up to S$400,000)", an advance-payment cap) | **shown: S$80,000** |
+| S$10,000 (PS p28 "monthly premium rate for every S$10,000 Sum Insured") | **shown: S$2,000** |
+| S$50,000 (BS p10 "Comatose State … maximum of $50,000") | **shown: S$10,000** |
+
+Synthetic: amount "S$500", quote "Plan 500 Hospital cash S$100 per day" → **shown: S$500**.
+
+## R38-1 (High, before switching on): the "% of Sum Insured" path accepts any figure on a line that says "sum insured"
+
+`printedSumInsured` accepts the base if *any* line containing "sum insured", in a same-product document linked to the person, prints
+that value. Caps ("up to S$400,000"), premium units ("every S$10,000 Sum Insured") and other benefits' maximums ("maximum of $50,000")
+all qualify, so a wrong base produces a wrong worked-out amount. Meanwhile the true S$600,000 fails: the certificate's product name
+"… SCHEME" doesn't equal "… Group Insurance", and its table doesn't print "sum insured" on the value's line. Fix: accept only the
+person's own sum insured for that plan, as a value, not a cap, rate or maximum. Either reject lines with `%`, "up to", "maximum",
+"max", "per", "every", "for each" or "premium" before the figure, or (better) take it from the person's certificate coverage row
+for the matching benefit, e.g. the app's `policy_coverages` amount for that person and product. Otherwise drop, as it does now.
+Add the four rows above as tests.
+
+## R38-2 (Medium-High, before switching on): a bare 3+ digit number in the quote still counts as money
+
+`checkAmount` uses `moneyValuesIn(excerpt)`, which includes `bareMoneyNumbers`: any unsigned 3+ digit number not followed by a unit.
+"Plan 500", "Class 101", "Section 210" or a table code then becomes an amount ("S$500" was shown). Fix: for `checkAmount`, require a
+currency-signed figure in the excerpt, or a bare number on a page whose column header prints the currency ("(S$)"). In both places,
+exclude numbers right after Plan, Class, Type, Code, Section, Clause, Ward, Room, Tier, Option or No.
+
+## R38-3 (Low): range and both-pay wording the regexes don't see
+
+These are kept when both figures are allowed amounts: "1,250 to 120,000 dollars" (no sign on either side), "At least S$1,250 and as
+much as S$120,000", and "Both pay, so S$1,250 and S$120,000 for her" (which misstates an either/or as both payable). "Anywhere from
+S$1,250 up to S$120,000" is caught. Optional: treat "dollars" as a sign in `RANGE`, add "as much as" / "at least … and", and drop
+"both pay" / "each pay" sentences when the amounts are in an either/or group.
+
+## Verdict on PR #71 at `a4b529f`
+
+**Still safe to merge only while switched off. Not ready to switch on:** fix R38-1 and R38-2 (both can still show a wrong claimable
+amount, R38-1 on the household's own documents). R38-3 is optional.
+
+---
+
+# Round 39: PR #71 (simple chat) at `0091db8`, re-check of round 38
+
+Method: same local probes as round 38 (`lib/simple-chat/verify.ts` run with tsx against the real household snapshot, kept
+out of Git, plus a synthetic household). No paid model calls.
+
+## Round 38 items
+
+- **R38-1 (wrong base for "% of sum insured"): fixed on the real documents.** "Arm, Elbow, Wrist or Ribs (Other Fracture) 20%"
+  for Desmond now uses S$600,000 and gives S$120,000. The S$400,000 cap, S$10,000 premium unit and S$50,000 maximum are now
+  kept as plain facts and never multiplied. For Charmaine the same row gives S$120,000 from S$600,000, which is her own
+  certificate line ("Ong Pei Lin Charmaine S$600,000") under the accident heading, so no cross-person base. A synthetic
+  "50% of Ben's S$300,000" asked for Ann is dropped.
+- **R38-2 (label number read as money): partly fixed.** "Plan 500" is now rejected. **R39-1 (Medium):** "Plan A 500" under a
+  "(S$)" column heading still becomes S$500, because `LABEL_BEFORE` only matches when the label word sits directly before the
+  number (`verify.ts`, `LABEL_BEFORE`). The same applies to "Class B 2", "Ward A1 300" and similar.
+- **R38-3 (range and both-pay wordings): partly fixed.** **R39-2 (Low-Medium):** these sentences still pass the sentence check:
+  "With the fracture and the ambulance she gets S$1,250 and S$200." / "Expect S$1,250 and, if she stays over, another S$200." /
+  "The most she can get is S$120,000." (an either/or shown as a maximum) / "Up to S$120,000 or S$1,250."
+
+## Is this becoming tuned to one household?
+
+Yes. Each round adds another word list (cover kinds, label words, "not a sum insured" words, range words, adding words) and
+another layout guess (headings above a row, person-named lines, column headings). Each list fixes the probes and the next
+wording gets through. This also drifts from DC's "no per-scenario rules" design.
+
+**Recommended simpler rule (safer):**
+1. The model's prose (bottom line, text, conditions, next steps) carries no money figures at all.
+2. Amounts appear only in server-built amount cards, each copied from a currency-signed figure inside the quoted source text.
+3. A percentage is worked out only when its base is printed in the same place ("20% of S$600,000" or a "Limit: S$X" heading
+   on the same page). That path is already passing.
+4. For "% of sum insured", show the percentage and the person's printed sum insured as two separate cited facts, not
+   multiplied, until a structured per-person source (for example `policy_coverages`) exists.
+
+This removes the range and adding word lists entirely, and a wrong total can no longer appear in a sentence.
+
+## Verdict on PR #71 at `0091db8`
+
+**Still safe to merge only while switched off. Not ready to switch on.** R38-1 is fixed. R39-1 can still show a wrong
+claimable amount. Rather than patching R39-1 and R39-2 with more word lists, adopt the simpler rule above.
+
+---
+
+# Round 40: PR #71 (simple chat) at `9757784`, the "no money in prose" rule
+
+Method: local tsx probes of `lib/simple-chat/verify.ts` (statesMoney and verifyAnswer) against the real household snapshot,
+kept out of Git, plus 23 prose wordings. No paid model calls.
+
+## What holds
+
+- Amounts now come only from a currency-signed figure in the located quote, or a percentage of a sum printed in the same
+  table's heading on the same page. Desmond's wrist: S$1,250 (25% of S$5,000, Product Summary p13) as a calculation card;
+  the Benefit Summary p8 "20%" kept as a fact card, never multiplied; S$600,000 from his certificate p1 as its own card.
+  S$120,000 is never computed. The word lists from rounds 36 to 39 are gone, and the design no longer depends on this
+  household's layout.
+- Any prose sentence with a currency sign or code, "dollars", or a thousands separator is dropped (bottom line, card text,
+  conditions, next steps, question): "S$1,250", "SGD1250", "1250 SGD", "$1.25K", "S$ 1,250", "SGD 1.25k", "Total: 1,450".
+- Percentages, days and page numbers survive ("within 30 days", "Page 13 lists 25%").
+
+## Findings
+
+**R40-1 (Medium): a figure still reaches prose when written without a currency sign or separator.** These sentences are
+all kept by `statesMoney` (`verify.ts:154`): "She gets 1.25k", "She gets 1250", "About 120k if you use the sum insured",
+"20% of 600k is the most", "She is covered 600000", "The fracture pays 1 250 and the ambulance 200", "Roughly 1.4
+thousand in total", "one thousand two hundred and fifty dollars", "The ambulance fee is two hundred", "25% of five
+thousand". "About 120k" is exactly the multiplied sum-insured figure this design exists to stop. The model is told not
+to write amounts, so this only bites when it disobeys, but release-set C2 shows it does. The save and reopen boundary
+(`containsMoney` in `lib/chat/monetary-boundary.ts`) has the same gap. A generic fix, not tied to this household: also
+drop a prose sentence that has (a) a number followed by k, m, mn, million, thousand, grand or bn; (b) any of the words
+hundred, thousand, million, billion or grand; or (c) a number of 100 or more not directly followed by %, a time unit
+(day, week, month, year) and not directly after "page".
+
+**R40-2 (Low-Medium, usefulness): an amount card can lose what the amount is for.** When the model writes the figure in
+the card text ("Desmond can claim S$1,250 for the wrist fracture.", the natural wording), the whole sentence is dropped
+and the card reads only "As printed in MINDEF & MHA Group Insurance (Product Summary), page 13." next to S$1,250, with
+no benefit name (`verify.ts:251`). Fact cards already fall back to the quoted words; do the same for amount cards (for
+example "S$1,250 — “Arm, Elbow, Wrist or Ribs 25%”, Product Summary page 13"). Similarly a bottom line that names an
+amount falls back to "Here is what your documents say.", which loses the answer itself; consider asking the model again
+once, or keeping the sentence with the figure removed.
+
+**R40-3 (Low):** two statements quoting the same row produce two identical fact cards (seen with the 20% row).
+
+## Verdict on PR #71 at `9757784`
+
+**Safe to merge while switched off. Close to ready to switch on:** the structure is now right and no longer tuned to
+this household. Fix R40-1 (a small generic rule) before switching on; R40-2 is recommended so the answer stays useful;
+R40-3 is optional.
+
+---
+
+# Round 41: PR #71 (simple chat) at `788f3de`, re-check of round 40
+
+Method: local tsx probes of `statesMoney` and `verifyAnswer` (32 prose wordings, plus the real household snapshot kept out
+of Git). No paid model calls.
+
+## Round 40 items
+
+- **R40-1: fixed.** All ten round-40 slips are now dropped ("1.25k", "1250", "About 120k…", "20% of 600k", "600000",
+  "1 250 … 200", "1.4 thousand", "one thousand two hundred and fifty dollars", "two hundred", "five thousand"), as are
+  "120 K" and "990 over ten days". Kept as they should be: "within 30 days", "within 365 days", "Page 13 lists 25%",
+  "The 2023 schedule", "dated 06/10/2022", "starts 19 Oct 2026", "Clause 4.12", "age 65", "Pages 12 and 13".
+- **R40-2: fixed.** Desmond's wrist card now reads "MINDEF & MHA Group Insurance (Product Summary) prints: “Arm , Elbow,
+  Wrist or Ribs 25%”" beside S$1,250; his S$600,000 card quotes his certificate line. A bottom line that only named an
+  amount becomes "Your documents list this benefit for Tan Yi Chuen Desmond. This is the wrist fracture benefit. The
+  amount is shown below."
+- **R40-3: fixed.** The 20% row now gives one fact card.
+- containsMoney in `monetary-boundary.ts` being unchanged is acceptable: the simple path writes prose only after
+  `withoutMoney`, and amounts only on server cards.
+
+## Remaining (all Low, none blocks switching on)
+
+- **R41-1 (Low):** still kept: "She gets 2000 for the ambulance" and "She gets 1999 in total" (bare 1900 to 2099 read as
+  a year), "Twelve fifty for the fracture", "One twenty k at most", "Several thousands are payable", "It pays hundreds
+  for each night" (`\bhundred\b` misses the plural). Each needs the model to disobey the prompt and pick an unusual
+  wording. Cheap tightening: match `hundreds?|thousands?|millions?`, and exempt a bare 19xx/20xx only after in, since,
+  from, until, by, before, after, of or a month name. The year trade-off is acceptable if left as is.
+- **R41-2 (Low, usefulness):** next steps lose a helpline or policy number ("Call the hotline on 1800 123 4567", "Quote
+  policy number 12345678") and "See p. 113". Acceptable for now; the source cards stay one tap away.
+
+## Verdict on PR #71 at `788f3de`
+
+**Ready to switch on, apart from the one paid smoke test it still needs.** Safe to merge. R41-1 and R41-2 are optional
+tightening.
+
+---
+
+# Round 42: PR #71 (simple chat) at `2717c76`, re-check of round 41
+
+Method: local tsx probes of `statesMoney` and `verifyAnswer` with a synthetic certificate that prints "S$600,000",
+"S$1,250" and "Claims hotline: 6333 1234". No paid model calls.
+
+## Round 41 items
+
+- **R41-1: fixed.** Now dropped: "She gets 2000", "She gets 1999", "Several thousands", "pays hundreds". Still kept as
+  dates: "from 2026", "of 2023", "in October 2022". "Twelve fifty" and "One twenty k" still pass; accepted as Low.
+- **R41-2: works for real numbers.** "Call on 6333 1234 to claim" and "Call the hotline at 1234" are kept. A sentence that
+  also states money is still dropped ("Call 6333 1234 and expect 1250").
+
+## Findings
+
+**R42-1 (Low-Medium): the R41-2 exemption accepts a printed money figure as a phone or policy number.** Kept as next
+steps: "Call 1250 to claim the ambulance fee.", "Call 600000 about your sum insured.", "Quote policy no. 1250 for the
+ambulance.", "Claim no. 600000 applies." The cause is that `labelledNumbersRead` (`verify.ts`) joins every digit in each
+cited excerpt into one string and checks whether the number is inside it. So "1250" matches "S$1,250", and any substring
+across neighbouring numbers matches too. A reader is unlikely to take "Call 1250" as an amount, but it is a path for a
+figure around the money rule and the fix is small: compare whole numbers, not substrings, and never accept a number that
+the excerpt prints with a currency sign. Safer still: accept it only when the excerpt prints the same label (hotline,
+tel, phone, fax, policy/certificate/claim no.) directly before that number.
+
+**R42-2 (Low, usefulness):** "The 2026 schedule applies." is now dropped (a year before a noun, with no introducing word),
+and "See pp. 113 to 115." is dropped because the second page number has no "page" before it. Acceptable.
+
+## Verdict on PR #71 at `2717c76`
+
+**Safe to merge. Ready to switch on once R42-1 is fixed** (a few lines in `labelledNumbersRead`), apart from the one paid
+smoke test. Everything else from rounds 36 to 41 holds.
+
+---
+
+# Round 43: PR #71 (simple chat) at `1a62deb`, re-check of round 42
+
+Local tsx probe with a synthetic certificate printing "S$600,000", "S$1,250", "Claims hotline: 6333 1234", "Policy no. 1250"
+and "Policy no.: 778899". No paid model calls.
+
+- **R42-1: fixed.** Now dropped: "Call 1250…", "Call 600000…", "Quote policy no. 1250…" (even though the page prints
+  "Policy no. 1250", the same value is printed as S$1,250), "Claim no. 600000…", "Call 6333" (partial number) and
+  "Call 778899" (a policy number used under a phone label). Kept: "Quote policy no. 778899 when you call."
+- **R43-1 (Low, usefulness):** when the cited quote has more digits right after the phone number ("Claims hotline: 6333
+  1234 / 24 hours a day"), the label pattern's `[\d\s-]*` runs across the line break and reads "6333123424", so "Call on
+  6333 1234 to claim" is dropped. It fails safe. Stopping the number at a line break or before a space followed by a word
+  would fix it. Optional.
+
+## Verdict on PR #71 at `1a62deb`
+
+**Ready to switch on, apart from the one paid smoke test.** Safe to merge. R43-1 is optional.
+
+---
+
+# Round 44: PR #77 at `3a24587` (two commits on top of `c0969e5`, passed in round 34)
+
+Commits: fb29af8 (`app/api/family/route.ts`) and 3a24587 (`app/api/dashboard/route.ts`). Both counts now join
+`policies p ON p.id=pm.policy_id AND p.account_id=f.account_id AND p.superseded_at IS NULL AND p.lifecycle_state='active'`,
+the same filter GET /api/policies uses (`app/api/policies/route.ts:56`). Read-only review; no DB or paid runs.
+
+- **Removing a person with an active document stays blocked.** The count is only a display hint. The server check is
+  separate and unchanged: DELETE /api/family/[id] calls `requestFamilyMemberDeletion` (`lib/lifecycle/coordinator.ts`,
+  around line 1038). It counts active policies through `policy_members`, the legacy `policies.family_member_id`, chats, claim
+  sessions, coverage rules and premium records, and throws `HasLinkedActivityError` (409) when any exist. An active,
+  current document still counts in the new UI query, so the Family page still shows "Go to Documents" instead of Delete.
+- **Household scoping holds.** `f.account_id=$1`; both joins are tied to `f.account_id`, so another household's policy rows
+  cannot be counted. GET /api/family still runs through the user-scoped client (`createUserSupabaseClient`).
+- **R44-1 (Low, wording only):** the server check does not exclude replaced (superseded) documents and also counts the
+  legacy `policies.family_member_id` column and chats/claims; the new UI count excludes the first and never included the
+  others. A person linked only to a replaced document (or with a chat) now shows "No documents linked yet" and a Delete
+  button, then gets the 409 "has linked documents or activity" message. It fails safe. Optional: align the server's
+  policy_members count with `superseded_at IS NULL` if replaced documents should not block, or keep superseded in the UI
+  count if they should.
+
+## Verdict on PR #77 at `3a24587`
+
+**Ready to merge.** R44-1 is optional.
+
+---
+
+# Round 45: two quick commit checks
+
+**PR #71, c332676 (on top of 1a62deb): test-only, correct.** The commit touches only `scripts/simple-answer/chat-test.ts`.
+The rule it tests was already in `verify.ts` (either/or is drawn only when every grouped amount is on one row of one page
+*and* `new Set(person).size === 1`). The new test puts the same one-row pair on two real household members (Lim Ah Kow,
+Lim Mei Mei, both in HOUSE, so neither resolves to null by accident) and checks two separate cards, no group, and the
+"not a total" note. The single-person either/or case stays covered by the existing test "either/or only for one person's
+amounts on one row of one page" (same pair, same person). No implementation change, so legitimate single-person
+either/or answers are unaffected. Note (no action): two amounts with no named person on one row still group, which is
+fine because they come from one row of one document.
+
+**PR #77, b22e92d on top of 3a24587: test-only.** The range 3a24587..b22e92d (179737e, 852d776, 2e55195, b22e92d) touches
+only `e2e/**` specs and `docs/rag-migration/pr57-roles/test/EXPECTATION-CHANGES.md`; no app, lib or SQL file. The
+EXPECTATION-CHANGES table records each changed check with its "was" and "now", and says each original is kept in a comment
+beside the change. The new household-journey step 21-22 asserts the still-linked alert, "Go to Documents", no "Confirm
+delete", and the child still present, which matches round 44.
+
+**Verdict:** both fine. Nothing changes for #71's or #77's readiness.
+
+---
+
+# Round 46: two quick checks before the merge list
+
+**PR #80 at e743e25: test-only, and the checks can fail.** Against its merge base on main, the only file changed is
+`scripts/infrastructure-table-permissions-regressions.ts` (+28). It appends `sql/policy-member-exclusions.sql` and
+`sql/detected-name-dismissals.sql` to MIGRATION_ORDER after `household-rls.sql`/`infrastructure-rls.sql`, and adds
+section 3b for both tables:
+- anon SELECT, INSERT and DELETE must be denied;
+- household B cannot read A's rows (0 rows), write a row for A, delete A's rows (0 rows), or "forge" a row under its own
+  account that names A's document;
+- controls: a member of A reads its own row and can add one.
+
+`record(ok, label)` pushes a failure whenever `ok` is false, so each line fails if the matching policy is loosened. For
+example, the forged-row check fails if the `EXISTS (… p.account_id = …account_id)` clause is removed from the INSERT
+policy, and the read check fails if SELECT becomes `USING (true)`. The `removable` person used in the exclusion insert
+was soft-deleted earlier in the suite (`finishFamilyMemberDeletion` sets `soft_deleted`, `lib/lifecycle/coordinator.ts`
+~1105) but the row still exists. So the foreign key does not mask the RLS result, and the member control proves the
+insert path works. Not run here (a database suite); this is a code read.
+
+**PR #71 at 260aa95: only `.env.example` changed.** `git diff c332676 260aa95` is 4 added comment lines documenting
+DEARPOLICY_PREFETCH_PERSON, DEARPOLICY_SIMPLE_CHAT, DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION and
+DEARPOLICY_SIMPLE_CHAT_MODEL. They contain no values and no secrets. Nothing else changed, so round 43's verdict stands.
+
+**Verdict:** #80 is ready to merge. #71's readiness is unchanged (ready; switch-on still needs the one paid smoke test).
+
+---
+
+# Round 47: PR #81 at `b29be86` (designer's after-#77 work), against main `64173c7`, with and without #79
+
+Four commits: ea794bb (Coverage wording, R34-1/R34-2), 1d0feb2 (chat on a phone), d4f5f2a (upload on a phone), b29be86
+(Home for returning households). 12 files, no lib/ or SQL changes. The method was a code read, plus a local tsx probe of
+`restates()` copied from `components/answer-cards.tsx`. No build, DB or paid runs.
+
+**With and without #79.** #81 and #79 share no files. A trial merge of main + #81 + #79 is clean in both orders. The new
+stop notice (`components/answer-stopped.tsx`) matches main's stop texts and #79's: `STOPPED` matches "I couldn’t
+finish…", "I couldn’t look that up…" and "I stopped before answering…", and `TOO_BIG` matches "limit set for model use on
+a single question" and "more steps than the limit" in both wordings. Without #79, main's stop text says "ask about one
+person at a time" even when the question already names one person, while the card offers "Ask again". That is consistent
+with #79's intent, so it is fine either way.
+
+## Findings
+
+**R47-1 (Medium-High, qualifier hidden from view): the next-step de-duplication runs the wrong way.** In `AnswerCards`,
+`repeats(s)` drops a prose sentence when `restates(t, s, 0.8)` for any next step `t`, that is, when the step's words are
+inside the sentence. A sentence that adds a condition to a step is therefore hidden from "Also in this answer":
+- "Send the bill within 30 days, but only after he is discharged from hospital." is hidden by the step "Send the bill
+  within 30 days."
+- "Call the claims hotline before any treatment overseas, or the claim may be refused." is hidden by the step "Call the
+  claims hotline."
+
+The words remain only under the collapsed "Full answer", which breaks "never strip a qualifier". Fix: hide only when the
+sentence restates the step (`restates(s, t, 0.8)`) or matches it exactly.
+
+**R47-2 (Medium): a negated sentence counts as a restatement of the bottom line.** `restates(s, bottomLine)` with a 0.7
+share treats "Ah Kow is not covered for the wrist fracture." as repeating the bottom line "Ah Kow is covered for the wrist
+fracture." (5 of 6 content words), so the contradiction is hidden. "only if", "unless" and "after a 30-day waiting
+period" survive in my probes, but only because they add enough words. Fix: never treat a sentence as a restatement when
+it has a limiting word the other lacks: not, no, never, only, unless, except, excluded, without, until, after or before.
+A digit is already handled that way.
+
+**Checked, fine:**
+- Home: data comes only from household-scoped GET /api/policies (server-side name dismissals already applied) and GET
+  /api/claims. "Who is …?" also honours this device's `NOT_FAMILY_KEY`. `#doc-<id>` anchors exist. The `?ask=` question
+  is placed in the chat box, capped at 2,000 characters, and not sent.
+- Upload: the password field shows only for a PDF and is cleared when a non-PDF is chosen. The "not stored" note is kept
+  beside the field. Errors are shown under the button.
+- Coverage: R34-1 and R34-2 wording as agreed. `coverGaps` now gives the "may include … don’t confirm it yet" note when
+  the related row is only a to-confirm guess, so a guess is no longer called "found".
+- The "To confirm" flag on a bottom line appears only with no amount and at least one uncertainty point. The disclaimer
+  is hidden on a stop card only.
+
+## Verdict on PR #81 at `b29be86`
+
+**Not ready to merge yet:** fix R47-1 and R47-2. Both are small changes in `components/answer-cards.tsx`. Everything
+else is ready, and the result is the same with or without #79.
+
+---
+
+# Round 48: PR #81 at `404d54b`, re-check of round 47
+
+Only `components/answer-cards.tsx` and the phone e2e spec changed. Method: local tsx probe of the new `restates()`.
+
+- **R47-1: fixed.** The next-step check now hides a sentence only if it restates the step (`restates(s, t, 0.8)`) or
+  matches it exactly. "Send the bill within 30 days, but only after he is discharged." and "Call the claims hotline before
+  any treatment overseas…" are now shown. A sentence that says less than the step ("Send the claim form." under "Send the
+  claim form and the hospital bill.") is still hidden, which is right.
+- **R47-2: mostly fixed.** Under the bottom line "Ah Kow can claim for the wrist fracture.", these are now shown: "…is
+  not covered…", "…can't claim…", "…provided he was admitted.", "The plan excludes…".
+
+**R48-1 (Medium, same class as R47-2): some conditions and one negation are still hidden as restatements.** Under that
+bottom line, these are hidden:
+- "Ah Kow can claim for the wrist fracture if admitted." ("if" is in `STOP`, and "admitted" alone stays under the 0.7 share)
+- "…subject to approval."
+- "…once discharged."
+- "Ah Kow couldn't claim for the wrist fracture." ("couldnt" is missing from `NEGATION`)
+
+Fix:
+- Take "if" out of `STOP`.
+- Add if, when, once, provided, subject, unless and while to `LIMITS`.
+- Add couldnt, shouldnt, mustnt, neither and nor to `NEGATION`.
+- Simpler still: against the bottom line, hide a sentence only when it adds no content word at all (share 1.0).
+
+Hidden harmlessly: "may claim" for "can claim", and "too" or "also".
+
+## Verdict on PR #81 at `404d54b`
+
+**Not ready yet:** fix R48-1. It is a few words in the same two constants. Everything else from round 47 stands, with
+or without #79.
+
+---
+
+# Round 49: PR #81 at `00a06ff`, re-check of round 48
+
+Only `components/answer-cards.tsx` (2 lines) and the phone e2e spec changed.
+
+- **R48-1: fixed.** Against the bottom line, `restates(s, bottomLine, 1)` hides a sentence only when every content word is
+  already in the bottom line. So "…if admitted", "…subject to approval" and "…once discharged" each add a word and are
+  shown. "couldnt", "shouldnt", "mustnt", "neither" and "nor" are now in NEGATION, so "Ah Kow couldn’t claim…" is shown.
+  The new R48 phone check asserts all four, and that a word-for-word repeat of the bottom line is still hidden.
+- **Expectation change: legitimate.** The removed assertion expected the to-confirm summary sentence ("…usually includes
+  a hospital benefit, but her documents don’t confirm it or print an amount.") to be hidden under the bottom line ("Not
+  confirmed yet: plans like … usually include a hospital benefit, but her documents don’t print one."). That sentence adds
+  "confirm" and "amount", so it is not a pure repeat. Showing it costs one near-duplicate line. Hiding it is the class of
+  error rounds 47 and 48 were about. The "said once" intent is still checked for an exact repeat by the R48 test, and the
+  next-step direction (R47-1) is unchanged and still checked.
+
+## Verdict on PR #81 at `00a06ff`
+
+**Ready to merge**, with or without #79 (no shared files; stop texts match both).
+
+---
+
+# Round 50: PR #82 at `741aba9` (simple chat aiming at 32/32)
+
+Method: code read of `lib/simple-chat/**` and `scripts/simple-answer/app-run.ts`, plus a local tsx probe of `verifyAnswer`
+on the real snapshot (kept out of Git). No paid calls.
+
+**"Both paid runs used the comparison script": confirmed.** `sonnet-run/SCORES.md` names `scripts/simple-answer/compare.ts`
+as the runner, and the side-by-side header has `current: none`. So the app's checks never saw those answers. app-run.ts
+drives `runSimpleChat` with a per-call worst-case cap and writes output only to `--out`. That is the right way to measure
+what ships.
+
+**"% of Sum Insured" on the person's own sum insured: correct on the intended rows.** These match the Evidence Reviewer
+figures:
+- Desmond wrist (BS p8, 20%): S$120,000.
+- Desmond hip (75%): S$450,000.
+- Charmaine wrist: S$120,000.
+
+The Term Life S$1,000,000 offered as the base for a GPA row is refused (kept as a fact). No person means no calculation.
+
+## Findings
+
+**R50-1 (High, wrong amount): a "% of the Sum Insured" sentence below a row is taken as the row's table heading.**
+`rowBase` scans everything before the end of the whole excerpt. So a quote that joins a row to a later sentence with
+"..." makes that sentence the row's base. Probe: "At least 6 months 50% ... Comatose State sum insured will be 15% of the
+Sum Insured" (BS p10) gives **S$300,000** (50% of S$600,000). The document's benefit is 50% of the Comatose State sum
+insured, which is the lesser of 15% of S$600,000 or S$50,000. That is at most S$25,000. The row alone is correctly
+refused. Fix:
+- Find the base above the row's own line: the line holding the percentage, using the first fragment's position, not
+  the excerpt end.
+- Accept "sum_insured" only from a table heading line such as "(% of Sum Insured)". Never accept it from prose.
+- Refuse when the row's own column heading names another base ("percentage of Comatose State Sum Insured").
+
+**R50-2 (Medium-High): prose percentages are multiplied and the cap is lost.** "of 100% of the Sum Insured, up to a
+maximum amount of $400,000" (BS p4, Term Life TPD) gives a S$1,000,000 calculation card. The quote's "$400,000 maximum,
+balance paid later" is not on the card, so a qualifier is stripped. The same fix as R50-1 (a table heading only, not a
+sentence in the quote) stops it.
+
+**R50-3 (Low): the base citation can show another person's line.** With Charmaine's certificate line quoted as
+Desmond's base, Desmond still gets S$120,000. `sumInsuredBase` finds Desmond's own line on the page, but the cited base
+excerpt is Charmaine's line. Fix: require the quoted line itself to name the person.
+
+**R50-4 (Low-Medium, latent): `sectionOf` only records headings that are also certificate covers.** A section the
+certificate does not list (BS p14 "DISABILITY INCOME POLICY", p16 "OUTPATIENT MEDICARE POLICY") does not end the previous
+one, so a "% of Sum Insured" row there would inherit "living care plus". There is no such row in this household today.
+Fix: track every heading, and accept only when the last one matches.
+
+**Checked, fine:**
+- Unreadable files are sent with no text and cannot be quoted (`locateQuote` skips them).
+- `linked_people` always says "nobody" when empty.
+- Conditions must quote words on the statement's own page, and footnote conditions apply only to rows with the same mark.
+- At most one question is kept, and question sentences elsewhere are dropped.
+- The no-money-in-prose rule is unchanged.
+
+## Verdict on PR #82 at `741aba9`
+
+**Not ready:** fix R50-1 and R50-2 (wrong or unqualified amounts) before any paid app-path run. R50-3 and R50-4 are
+small. The approach is sound.
+
+---
+
+# Round 51: PR #83 at `d883368` (document roles)
+
+Method: code read of the `lib/documents` changes. I ran `documents:role-test` locally (tsx, with zod installed in a
+scratch folder) and ran the main and #83 rules on all 8 snapshot documents (kept out of Git), plus 5 new layout probes.
+No database, model or production read.
+
+- **The test can fail and does:** 10/10 pass on #83, and the same file fails 6 of 10 on main.
+- **Snapshot roles change exactly as reported, and nothing else moves:**
+  - Benefit Summary: certificate → benefit_guide.
+  - The FWD summary (…053): policy_wording → personal_schedule.
+  - The FWD wording (…157): endorsement → policy_wording.
+  - The CI II pack (5e58ea7d…): insurer_letter → personal_schedule. `correspondenceRole` is now null because page 3
+    opens with "Policy Schedule".
+  - Product Summary, Certificate, the CI II illustration and the failed invoice are unchanged.
+
+## Findings
+
+**R51-1 (Medium): a generic group summary can become a personal schedule.** The new `personalDocumentTitle` rule needs
+"insurance/policy summary" plus a printed policy number. The `personal` guard is met by any "policy no." together with
+"sum insured". So "Harbour Group Insurance Summary / Group Policy No. G123400 / … The Sum Insured is shown in your
+certificate." is now `personal_schedule`; on main it was null. Generic terms labelled as personal proof is the same error
+class as the Benefit Summary. Fix: skip a *group* policy number, and require a person field with a value on the same
+page (policyholder, insured person or life assured, then ":" and a name).
+
+**R51-2 (Medium, could hide personal cover): the Part 2-only test only recognises three Part 1 phrasings.** A combined
+certificate whose Part 1 says "Life Assured: …" or "Sum Assured S$…" with an effective date, followed by "CERTIFICATE OF
+INSURANCE PART 2: HIGHLIGHTS OF COVER", is now `benefit_guide`. Main had `certificate`. That would drop a person's
+documented cover. DC's own certificate uses "Particulars of Insured Person(s)" and is unaffected. Fix: count a
+certificate as Part 1 present when it prints any personal field (life assured, insured member, name of insured, a name
+line with an amount and "As of"/effective date). Then add this layout as a control.
+
+**R51-3 (Low): a letter that encloses any titled page is no longer correspondence.** That is right for the CI II welcome
+pack, and for a renewal letter enclosing new "Policy Wording" (now policy_wording). But a claim letter that attaches a copy
+of the policy schedule is now a `personal_schedule`, a second copy of existing cover. It is acceptable because the
+schedule is real; the duplicate-handling path should cope.
+
+## Verdict on PR #83 at `d883368`
+
+**Not ready yet:** tighten R51-1 and R51-2. Both are small regex conditions, and each needs one control case. The four
+real fixes are correct and nothing else in this household moves. After merge, DC still needs to re-read the four
+documents (as the report says).
+
+# Round 52: recheck of PR #82 at `897a8a0` (R50-1 to R50-4)
+
+Method: verify.ts at 897a8a0 run offline against the real household snapshot (never committed). Every line with a `%`
+in every document was fed in as a quote with Desmond's accident base, plus targeted probes. 741aba9 was run with the
+same probes for comparison. No model calls.
+
+## Confirmed fixed
+
+- **R50-1:** the Comatose rows ("At least 6 months 50%") now get no card. The joined "… 15% of the Sum Insured" also
+  gets none. Their heading names "Comatose State Sum Insured".
+- **R50-2:** BS p4 TPD "100% of the Sum Insured, up to a maximum amount of $400,000" now gets no card. The BS p10
+  natural catastrophe prose (S$90,000 at 741aba9) now gets no card either.
+- **R50-3:** the base line quoted for Desmond must name Desmond. Charmaine's line gets no card.
+- **R50-4:** headings now end sections.
+- **Evidence Reviewer figures still hold:**
+  - BS wrist S$120,000 and hip S$450,000 for Desmond; wrist S$120,000 for Charmaine.
+  - PS wrist 25% of S$5,000 is S$1,250 and hip is S$3,750.
+  - PS p10 dismemberment rows and the BS split-line rows ("70%" / "(b) Right Hand" gives S$420,000) still work.
+  - A Term Life base on an accident row is refused.
+
+## Findings
+
+**R52-1 (High, wrong amount): a cap on the next line is still dropped.** Product Summary p13 prints "• Death due to
+natural catastrophe\t15% of Sum Insured" with "or up to S$50,000, whichever is lesser" on the *next* line. The row line
+is a short table line ending "% of Sum Insured" with no cap word on it, so Desmond gets a **S$90,000** card. The true
+amount is at most S$50,000. It stays S$90,000 even when the model quotes both lines, because `CAPPED` only tests
+`rowLine(...).text`. The bug was already there at 741aba9 (my miss in round 50). Fix: test `CAPPED` on the whole quoted
+passage and on continuation lines after the row, up to the next bullet or numbered row. A line starting "or", "up to",
+"whichever" or "subject to" always belongs to the row above. Add this row as a control.
+
+**R52-2 (Medium, needless refusal that hides amounts): burns rows now get no card.** `CAPPED` includes `greater`, and
+every burns row prints "Equals to or greater than 8%". So BS p7 and PS p12 third- and second-degree burns rows (for
+example head ≥8% 100%, which is S$600,000, or body 15–20% 75%, which is S$450,000) are now facts with no amount. At
+741aba9 they gave the right cards. Fix: drop `greater` (and `lesser`) when it is not part of "whichever is
+greater/lesser", or match only `whichever\s+is\s+(?:the\s+)?(?:greater|lesser)`. Add one burns row as a control.
+
+**R52-3 (Low, qualifier): PS p10 accident TPD "150% of Sum Insured" gives S$900,000.** The total is right. BS p5 says
+anything above $200,000 is paid as a $200,000 lump sum and the balance in three annual instalments. The card should
+carry that, as a condition from the model or a note. This is not a wrong amount.
+
+**Pre-existing, not new (Low):** PS p5 Term Life "Death 100% of Sum Insured" with Desmond's S$1,000,000 base gets no
+card, because no Term Life heading precedes it in the Product Summary. The certificate prints S$1,000,000 directly, so
+the amount is not hidden.
+
+The new prompt line (give every applicable amount separately, never only the larger, add "uncertainty" when documents
+differ) is consistent with the Evidence Reviewer's rule and with "never added".
+
+## Verdict on PR #82 at `897a8a0`
+
+**Not ready yet:** R52-1 is a wrong claimable amount, and R52-2 hides amounts that 741aba9 showed correctly. Both are
+small changes to `CAPPED` and its scope, each with one control case. R50-1 to R50-4 are fixed.
+
+# Round 53: recheck of PR #83 at `cec8873` (R51-1, R51-2)
+
+Method: `intelligence.ts` and `messy.ts` at cec8873 run offline against the snapshot (never committed) and synthetic
+probes. `npm run documents:role-test` gives 12/12.
+
+## Confirmed
+
+- On the snapshot, the same four roles change as at d883368. Product Summary, Certificate, the CI II illustration and
+  the invoice are unchanged. DC's Benefit Summary stays `benefit_guide`.
+- **R51-1:** "Harbour Group Insurance Summary / Group Policy No. G123400" is null again. A personal travel summary with
+  "Policyholder: Lim Wei Jie" is still `personal_schedule`.
+- **R51-2:** combined certificates whose Part 1 says "Name of Insured Member" or "Life Assured: … Sum Assured S$…" are
+  `certificate` again.
+- **R51-3:** a claim letter enclosing a schedule copy is still `personal_schedule`. This is accepted.
+
+## Findings
+
+**R53-1 (Medium): a definition line counts as a named person.** The person-field patterns accept any two words after the
+colon. Both new rules therefore treat a definitions line as a named person:
+- "Group Insurance Summary / Master Policy No. G123400 / Insured Person: any eligible employee of the company" is
+  `personal_schedule`. Only "group policy" is skipped, not "master policy".
+- A Part 2-only "Highlights of Cover" printing "Insured Person: any member of the Scheme", "Life Assured: the person
+  named in Part 1", or a plan table "Plan A Sum Insured: S$100,000" is `certificate`. At d883368 these were
+  `benefit_guide`, and `detectHighConfidenceReferenceRole` still says `benefit_guide`.
+
+Main also called the Part 2 cases `certificate`, so this is no worse than main. It is the same generic-as-personal error
+R51-1 named, though, and a multi-plan table read as a personal certificate is a route to a wrong amount.
+
+Fix:
+- Reject a field value that starts with any, the, a, an, all, each, every, eligible, means or refers.
+- Skip "master policy" as well as "group policy".
+- Count "Sum Insured: S$…" as Part 1 only when the same line or page also prints a named person (the name-line rule
+  already does this).
+- Add one definitions control.
+
+**R53-2 (Low):** a personal "Policy Summary" whose "Insured Person" label and name sit on separate lines is now null. It
+was `personal_schedule` at d883368. The model's role then stands, so this is acceptable.
+
+## Verdict on PR #83 at `cec8873`
+
+**Not ready yet:** R53-1 needs a stop-word guard on the two person-field patterns, a "master policy" skip, and one
+control. Everything else is confirmed.
+
+# Round 54: review of PR #84 at `97ceaae` (household deletion removes its Pinecone namespace)
+
+Method: read the diff (`lib/rag/pinecone.ts`, `lib/lifecycle/coordinator.ts`, the deletion regression script) and the
+callers in `lib/rag/ingest.ts` and `lib/rag/backfill.ts`. The DB regression suite was not run, because database suites
+are out of scope for this role.
+
+## Answers to the three questions
+
+- **Only the deleted household's namespace?** Yes.
+  - `deleteHouseholdPassages` sends `{deleteAll: true, namespace: namespaceFor(householdId)}`, and `namespaceFor` is
+    the identity function, the same one used for every upsert and search.
+  - It runs only after `deleteHousehold()` has returned. That call already passed the `SELECT … FROM accounts`
+    existence check and the owner/RLS check, so a forbidden or missing household throws before any Pinecone call.
+  - The test asserts exactly one delete-all, scoped to the deleted id, and that the other household's id never appears.
+- **Can a failed Pinecone call block or corrupt the deletion?** No.
+  - The call is awaited inside `.catch(...)`, after the irreversible DB delete. `apiKey()` and `indexHost()` errors are
+    rejections inside the async function, so they are caught too.
+  - It is skipped entirely when `PINECONE_API_KEY` is unset. A 404 (namespace never created) counts as success.
+- **What happens to the rest if it fails?** The household is already fully deleted, and the outcome is still
+  `completed`. Only a `console.warn` records the miss, and the namespace and its passage text remain.
+
+## Findings (all Low, none blocking)
+
+**R54-1 (Low, privacy retention): no retry.** If Pinecone is down at that moment, the deleted household's passage text
+stays in the index forever. Nothing reads it (the namespace is a deleted UUID), but it outlives the deletion. The
+per-document deletes at coordinator.ts:275 and :886 have the same pattern. Suggested later: record the namespace in the
+existing purge queue (`enqueueStoragePurge`-style) or the daily jobs cron, so it is retried.
+
+**R54-2 (Low, race): an upload being indexed during deletion can recreate the namespace.** `ingest.ts` inserts chunks
+and then upserts for up to 120 s (`indexPolicyPassages`). If the household is deleted between those steps, the upsert
+lands after the delete-all and recreates the namespace with that document's passages. Later chunk inserts fail on the
+foreign key, so only an upsert already in flight leaks. R54-1's retry would also close this.
+
+**R54-3 (Low, defensive):** `deleteHouseholdPassages` is exported and would send `namespace: ""` for an empty id, which
+Pinecone treats as the default namespace. Today the only caller has already proved the id exists. A one-line
+`if (!accountId.trim()) throw` would keep any future caller from emptying the default namespace.
+
+**R54-4 (Low):** the cleanup adds up to about 60 s (host lookup 30 s plus delete 30 s) to the DELETE response in the
+worst case, after the household is already gone. That is acceptable.
+
+## Verdict on PR #84 at `97ceaae`
+
+**Ready.** The scope is safe, and a failure cannot block or corrupt the deletion. R54-1 to R54-4 are follow-ups.
+
+# Round 55: recheck of PR #82 at `7089ddd` (R52-1 to R52-3)
+
+Method: as in round 52. Every `%` line of every snapshot document was quoted at 897a8a0 and at 7089ddd and the results
+diffed. The targeted probes were rerun. No model calls.
+
+## Confirmed fixed
+
+- **R52-1:** PS p13 "Death due to natural catastrophe 15% of Sum Insured" with the cap on the next line now gets no card,
+  whether the quote is the row alone or both lines. The separate "S$50,000" card still shows. PS and BS comatose rows
+  get no card.
+- **R52-2:** BS p7 and PS p12 burns rows give cards again (head ≥8% 100% is S$600,000, body 15–20% 75% is S$450,000).
+  The whole-snapshot diff shows no other change: no new refusals and no lost cards. The Evidence Reviewer figures, PS
+  fractures on S$5,000, dismemberment rows and split-line rows are unchanged.
+- **R52-3:** handling it with a prompt rule (the instalment terms as their own fact quoting BS p5) is acceptable. The
+  S$900,000 total is right, and borrowing a condition from another document on the server would be worse. The server
+  does not enforce it; the release set will show whether the model does it.
+
+## Finding
+
+**R55-1 (High, wrong amount; pre-existing, already at 741aba9): a row with two percentages accepts either.** Burns rows
+print a threshold and a payout on one line ("- Equals to or greater than 8%\t100%"). `checkAmount` only asks that the
+stated percent appears somewhere on the row line. So a model statement of 8% gives a **S$48,000** card where the
+document pays 100% (S$600,000). Likewise 5% on "2% but less than 5%\t50%" gives S$30,000, and 40% on "≥40%\t50%" gives
+S$240,000.
+
+The model would have to misread the row, but catching exactly that is this check's job, and R52-2 has just made these
+rows computable again. Fix:
+- When the row line prints more than one percentage, accept only the last one (the compensation column).
+- Or refuse when the stated percent sits inside "greater than / less than / at least … %".
+- Add one burns control with the threshold percent.
+
+## Verdict on PR #82 at `7089ddd`
+
+**Not ready yet, one small fix:** R55-1. R50-1 to R50-4 and R52-1 to R52-3 are all fixed.
+
+# Round 56: recheck of PR #83 at `8022bc1` (R53-1)
+
+Method: as in round 53, with the same probes. role-test gives 13/13.
+
+## Confirmed
+
+- **R53-1 fixed.**
+  - "Group Insurance Summary / Master Policy No. … / Insured Person: any eligible employee" is null.
+  - The Part 2-only definitions probes ("Insured Person: any member", "Life Assured: the person named in Part 1") and a
+    plan table "Plan A Sum Insured: S$100,000" are `benefit_guide` again.
+- **Controls hold.** Combined certificates with "Name of Insured Member" or "Life Assured: Lim Wei Jie" stay
+  `certificate`, and the personal travel summary stays `personal_schedule`.
+- **Snapshot:** the same four roles change and nothing else. DC's Benefit Summary stays `benefit_guide`.
+
+## Notes (Low, not blocking)
+
+- **R56-1:** the name-line rule still accepts any line with an amount and "effective date"/"as of", with no name
+  required. So a Part 2 line like "Ambulance limit S$5,000 effective date: 01/01/2026 for all members" makes the page
+  `certificate`. It is contrived and no worse than main.
+- **R56-2:** `PERSON_VALUE` needs at least two words, so a single-word name ("Insured Person: Madonna") does not count.
+  The cost is a null role, and the model's role then stands.
+- R51-3 and R53-2 remain accepted.
+
+## Verdict on PR #83 at `8022bc1`
+
+**Ready.** After merge, DC re-reads the four documents, as the PR report says.
+
+# Round 57: recheck of PR #82 at `9fe083c` (R55-1)
+
+Method: as in round 55. The whole-snapshot sweep was redone with the *last* `%` on each line as the stated percent, at
+7089ddd and at 9fe083c, and the results diffed. The targeted probes were rerun.
+
+- **R55-1 fixed.** On burns rows, a stated 8%, 5% or 40% (the threshold) now gets no card. The payout figures still give
+  the right cards: head ≥8% 100% is S$600,000, body 15–20% 75% is S$450,000, and PS head 2–5% 50% is S$300,000.
+- **No other change.** The only difference in the snapshot diff is the reason wording on two 0.75% terrorism-limit
+  lines, which already had no card.
+- **Unchanged and still correct:**
+  - The Evidence Reviewer figures (BS wrist S$120,000 and hip S$450,000 for Desmond, wrist S$120,000 for Charmaine).
+  - PS fractures on S$5,000 (S$1,250 and S$3,750).
+  - Dismemberment rows and split-line rows.
+  - No card for comatose, the TPD cap or natural catastrophe (either document).
+  - Another person's base and a Term Life base are refused.
+- **Note (Low):** a row with two payout columns (for example "Plan A 50%  Plan B 30%") accepts only the last column. That
+  errs towards no card, not a wrong amount, and no such row exists in this household.
+
+## Verdict on PR #82 at `9fe083c`
+
+**Ready.** R50-1 to R50-4, R52-1 to R52-3 and R55-1 are fixed, and I found no remaining wrong-amount path.
+
+# Round 58: recheck of PR #83 at `c6e48fb` (Test engineer's policy-wording regression)
+
+Method: as in round 56. role-test gives 15/15.
+
+- **Fix confirmed.** The "Policy wording" rule now needs an exact title line within the first 8 lines of page 1, and is
+  skipped when the opening says "this endorsement". An endorsement that only cites "the policy wording" falls through to
+  `endorsement` again.
+- **Snapshot:** the same four roles change. The travel wording (output_…157) is still `policy_wording`, and DC's Benefit
+  Summary is still `benefit_guide`.
+- **No change on the other probes:** the R51-1, R51-2 and R53-1 controls, the definitions probes, the claim letter and
+  the renewal letter enclosing a wording all give the same roles as at 8022bc1.
+- **Note (Low):** a wording whose title line carries more words ("Example Plan Policy Wording", "Policy Wording (v3)")
+  no longer matches. It falls back to the later rules, which is main's behaviour, so it is no regression against main.
+
+## Verdict on PR #83 at `c6e48fb`
+
+**Ready.**
+
+# Round 59: review of PR #82 at `39ab335` (loosened checks: currency inference, heading-% mapping, wider conditions, perDay, identifiers, file facts)
+
+Method: verify.ts at 39ab335 run offline.
+- The whole-snapshot `%` sweep was diffed against 9fe083c, and all earlier probes were rerun.
+- Synthetic documents were added to a copy of the snapshot household for currency, perDay and condition cases.
+- No model calls. Nothing private is committed.
+
+## Confirmed
+
+- **No change on the snapshot sweep.** The Evidence Reviewer figures, PS fractures on S$5,000, burns payout rows,
+  split-line rows, and no card for comatose, TPD cap and natural catastrophe all hold.
+- **New and correct:** PS p5 Term Life "Death / TPD 100% of Sum Insured" now gives S$1,000,000 for Desmond, because the
+  scheme title is read as that section.
+- **Kept out:** the Benefit Summary's "Core or Voluntary" footnote is still not put on the PS wrist row. A travel
+  policy's personal-accident clauses are not put on the group PA certificate line.
+- **Currency:** a page declaring "Currency : Singapore Dollar" gives S$ to "300,000.00". A US$ amount on an SGD page,
+  and an S$ amount on a US Dollar page, are refused.
+
+## Findings
+
+**R59-1 (High, wrong amount; also reopens R55-1): `rowFor` maps a wrong percentage onto whichever row prints it.** When
+the quoted row's last % differs from the stated one, `rowFor` searches every document for a single tab row ending in the
+stated %. The row qualifies when its label shares two words with the statement's text *or quote*. The overlap count also
+counts repeated label words, so "Loss of or Permanent Total Loss of …" matches on "loss" alone.
+
+| Statement | Card | Correct |
+|---|---|---|
+| Loss of speech, 25%, quote "(% of Sum Insured)" | S$150,000 (hearing in one ear row) | S$300,000 |
+| Loss of sight in one eye, 30% | S$180,000 (a thumb/hand row) | not that row |
+| R55-1 probe: "≥40% → 50%" row quoted, model says 40% | S$240,000 (the "25–40% → 40%" row) | S$300,000 |
+
+The check that existed to catch a wrong percentage now turns it into a different row's amount, labelled with the model's
+words.
+
+Fix:
+- Never map away from a quoted row line that prints a percentage. Use `rowFor` only when the quote prints no row
+  percentage at all (a heading or wording).
+- Count distinct label words, and match on the statement's text only, not the quote.
+- Require *all* label words to match (or name the row exactly), and search only the quoted document.
+- Add controls for speech 25% and burns 40%.
+
+**R59-2 (High, wrong amount): `perDay` ignores other day rules in the same text.**
+- "S$100 per day from the 1st day, ICU S$200 per day for a maximum of 7 days / up to a maximum of 365 days per policy
+  year" with a 30-day stay gives **S$700**. The first "maximum … 7 days" is the ICU cap; the right answer is S$3,000.
+- "S$100 per day, payable after the 3rd day … maximum of 30 days / The benefit is not payable if the stay is less than
+  7 days" with a 5-day stay gives **S$200**, where nothing is payable.
+
+Fix: compute only when the row and its continuation print exactly one daily figure, one start-day rule and one
+maximum-days figure, and no other day count or "not payable / less than / minimum / per admission" wording. Otherwise
+show the daily benefit as a fact.
+
+**R59-3 (Medium, wrong amount): the stay length can come from an unrelated number.** `stayDaysWritten` accepts any "N
+days" the household wrote. "Can I claim within 30 days?" lets a stay of 30 through and gives a S$600 card for a stay no
+one described. Fix: require the number beside stay words ("in hospital for 15 days", "stayed 15 nights", "15-day stay"),
+or ask.
+
+**R59-4 (Medium, borrowed condition): a condition travels between sub-benefits of one benefit.** In the Benefit Summary,
+"A. Death …" to "N. Natural Catastrophe" are not headings, so everything under "BENEFIT 2: GROUP PERSONAL ACCIDENT" is
+one section. The Comatose condition "must be confined to a Hospital for the duration of the Comatose state" is accepted
+on the **Hip fracture** row. It wrongly suggests a fracture claim needs a hospital stay. Fix: treat lettered or numbered
+sub-benefit titles ("M. Comatose State Lump Sum Benefit", "D. Injury due to Accident") as section ends for conditions, or
+keep conditions to the row's own sub-benefit.
+
+**R59-5 (Medium, wrong currency): currency inference on a page that names another currency.** "All amounts are in
+Singapore dollars unless stated otherwise." with a row "Medical expenses overseas (in US$)\t50,000.00" gives
+**S$50,000**. Fix: no inferred currency when the page says "unless stated otherwise/specified", or when the quoted row
+line or its column heading names another currency (US$, USD, RM, HK$, A$, €, £).
+
+**R59-6 (Low-Medium): a non-money figure on a declared-currency page becomes money.** "Currency : SGD / Units
+allocated\t1,250.00" gives an S$1,250 card. Fix: refuse when the row label names units, rate, age, year, points or
+factor.
+
+**Notes (Low):** the file-status facts come from the library record and read correctly. Identifier read-past keeps
+"Call 1250" blocked against S$1,250. One edge: a bare 6+ digit number that the documents print unformatted would be read
+past in prose. None exists in this snapshot.
+
+## Verdict on PR #82 at `39ab335`
+
+**Not ready.** R59-1 and R59-2 are wrong claimable amounts that the previous head refused, and R59-1 reopens R55-1.
+R59-3 to R59-5 should be fixed in the same pass; each needs one control. The other loosenings (scheme-title section, file
+facts, identifiers, unsigned figures on a schedule page) look right.
+
+# Round 60: recheck of PR #82 at `fa0ef79` (R59 fixes, card moves, two-line rows)
+
+Method: verify.ts at fa0ef79 run offline. The round 52/55/57/59 probes, the whole-snapshot `%` sweep and new probes on
+the two new rules were run against the snapshot household, plus a copy with synthetic documents. No model calls.
+
+## Confirmed fixed
+
+- **R59-1:** a quoted row whose last % differs is refused, never moved. Speech 25% and sight 30% now give no card, and
+  the R55-1 burns probe (40%) gives none again. A heading quote with the right % still maps (speech 50% gives
+  S$300,000).
+- **R59-2:** the ICU-cap and minimum-stay texts no longer give a stay card.
+- **R59-3:** "within 30 days?" no longer counts as a stay. "I was in hospital for 15 days" still gives S$150 (S$30 a day
+  from day 11).
+- **R59-4:** the Comatose hospital condition is no longer kept on the Hip row.
+- **R59-5:** "unless stated otherwise" with a US$ row gives no inferred currency.
+- **R59-6:** a "Units allocated" figure is refused.
+- **Snapshot sweep unchanged.** The Evidence Reviewer figures, S$5,000 fractures, burns payouts, and no card for the caps
+  (the natural catastrophe cap now shows as "Up to S$50,000") all hold.
+- **Legitimate moves work:** the PS recuperation S$250 card moves to the BS "$250 per hospitalisation" line with its
+  24-hour condition, and PS child education moves to the BS "$5,000 per child" line with its age and student
+  condition. A recuperation condition offered for the compassionate allowance does not move it.
+
+## Findings
+
+**R60-1 (High, wrong amount): the two-line fallback pairs a row's label with the next row's figure.**
+`acrossTwoLines` only needs every quoted word and figure to appear somewhere on line *i* and line *i+1*. On PS p13:
+
+| Quote | Card | Correct |
+|---|---|---|
+| "Child Education Fund Benefit S$250" | **S$250** (recuperation figure) | S$5,000 per child |
+| "Ambulance Cost Up to S$10,000" | **Up to S$10,000** (mobility-aid figure) | up to S$500 |
+| "Compassionate Death Allowance Benefit S$5,000 per child" | **S$5,000** | up to S$2,000 |
+
+A model that mixes up two adjacent rows is exactly what this check must refuse.
+
+Fix: accept only the H7 shape.
+- The figure and the start of the label are on line *i*.
+- Line *i+1* prints no money figure and does not start a new row (bullet, number, letter or tab-separated label).
+- Line *i+1* is only the label's continuation ("Permanent Disablement*").
+- Add these three as controls.
+
+**R60-2 (Medium-High, borrowed condition and cross-person): a card can move to any document that prints the figure and
+the condition.** `lineWithCondition` ignores whose document it is and which benefit the target line is.
+- Desmond's PS recuperation S$250 card, with a condition quoted from a document linked only to Charmaine ("Only for
+  stays of at least 48 hours"), moves to *Charmaine's* document and keeps her condition.
+- PS child education S$5,000, with a condition quoted from the unlinked CI plan, moves to the CI plan's "Death Benefit
+  of S$5,000" line with "the Policy will terminate".
+
+The figure is the same in both cases, but the card now cites another person's or another product's benefit with that
+benefit's condition. That is the B1 error the rule set out to prevent.
+
+Fix: move only when all of these hold.
+- The target document is linked to the statement's person, or has the same linkage as the quoted one.
+- The target line's section has the same cover as the quoted row's.
+- The target line names the same benefit (its label words match the quoted row's).
+
+**R60-3 (Low-Medium): `SUB_BENEFIT` misses "J, Accidental Hospital Recuperation Benefit"** (BS p9 prints a comma). The
+recuperation text is therefore inside "I. Home Rehabilitation Renovation Expenses", and the home-rehab condition ("a
+self-powered, climbing wheelchair") is accepted on the $250 recuperation card. Fix: allow `[.,)]` after the letter.
+
+**Note (Low):** a moved card takes the target's printed sign, so S$250 becomes "$250" (unresolved currency). This is
+acceptable because it is what that page prints.
+
+## Verdict on PR #82 at `fa0ef79`
+
+**Not ready.**
+- R60-1 is a wrong claimable amount from the new two-line fallback.
+- R60-2 lets the new move rule borrow another person's or another product's line and condition.
+- Both are tight guards with controls, and R60-3 is a one-character regex fix.
+- Every R59 item is fixed.
+
+# Round 61: review of PR #85 at `1b93474` (re-join Coverage rows stored on the wrong cover)
+
+Method: read the diff (`lib/ledger/store.ts` seedLedger, plus a DB regression case), `coverageForLedgerRow` and
+`coverageForBenefit`, the person-edit path (store.ts:106) and the `seedLedger` callers. The DB suite was not run,
+because database suites are out of scope for this role.
+
+## Answers to the three questions
+
+- **Can it move another person's or product's rows?** No.
+  - The SELECT is scoped to `account_id=$1`.
+  - Each row is matched only to a contract whose `ownerId` equals the row's `family_member_id` and which contains the
+    row's `policy_id`.
+  - The new basis comes from `coverageForLedgerRow` on that same person's contract, the same join new rows already use.
+  - Only rows whose stored basis equals one of *that* contract's cover amounts are touched. A printed fixed limit such as
+    S$5,000 is left alone, and the test covers this.
+- **Is it idempotent?** Yes.
+  - After the update the stored basis equals the join, so the next run takes `continue`.
+  - A cleared row (NULL) leaves the `sum_basis IS NOT NULL` set, and the earlier unbased-join block re-tries it each run
+    with the same result.
+  - `updated_at` is not touched (there is no trigger on coverage_rules), so the row stays machine-made and a re-read still
+    replaces it.
+  - Person edits set `updated_at=now()` (store.ts:106), so confirmed, rejected or edited rows are excluded by
+    `updated_at=created_at`, and the test covers this.
+- **Does it rewrite stored data?** **Yes.**
+  - It UPDATEs `coverage_rules.sum_basis` on live rows the next time `seedLedger` runs after deploy. That covers the
+    dashboard load, `/api/ledger`, chat workflow and ingest, and so includes DC's real household.
+  - It is derived machine data, not anything a person typed, and it is the same kind of write the existing join above it
+    already makes.
+  - It is still a data correction that runs automatically on production, so **merging it is DC's yes for that change**.
+    The coordinator should say that plainly when asking.
+  - The old (wrong) S$1,000,000 bases are overwritten and are not kept anywhere, but they can be recomputed from the code.
+
+## Notes (Low, not blocking)
+
+- **R61-1:** when the join is ambiguous (no single cover fits) and the contract's covers have different amounts, the
+  basis is cleared. A row that showed an amount then shows only its percentage. That is consistent with how new rows are
+  joined and better than a possibly wrong cover, but it is a visible change: some rows may lose a figure rather than
+  gain the right one.
+- **R61-2:** a document-printed fixed limit that happens to equal one of the contract's cover amounts (for example "% of
+  S$350,000" where a cover is also S$350,000) would be treated as joined and re-joined. No such case exists in this
+  household.
+- **R61-3:** there is one UPDATE per changed row on every `seedLedger` call until it settles, then none. Concurrent calls
+  write the same value, which is harmless.
+
+## Verdict on PR #85 at `1b93474`
+
+**Ready on the code.** Its scope is limited to the person's own contract, and it is idempotent. Because it rewrites
+stored Coverage data on production when it runs, the merge needs DC's explicit yes, with a one-line explanation that
+the accident rows will switch from S$1,000,000 to S$600,000 and a few ambiguous rows may show only their percentage.
+
+# Round 62: recheck of PR #82 at `844e968` (R60-1 to R60-3, plus the owner's question on certificate-line conditions)
+
+Method: as in round 60. All earlier probes and the snapshot sweep were rerun, with new probes for the certificate-line
+condition path.
+
+## Confirmed fixed
+
+- **R60-1:** "Child Education Fund Benefit S$250", "Ambulance Cost Up to S$10,000" and "Compassionate … S$5,000" give no
+  card. The legitimate H7 mobility-aid row still gives "Up to S$10,000".
+- **R60-2:** no card moves to a Charmaine-only document or to the unlinked CI plan. The legitimate moves (S$250
+  recuperation to the BS line with the 24-hour condition, child education to the BS line with its age condition) still
+  work.
+- **R60-3:** the home-rehab wheelchair condition is no longer kept on the "J, Accidental Hospital Recuperation" card.
+- **No other change:** the snapshot sweep matches, and every round 52–59 probe gives the same result as at fa0ef79.
+
+## The owner's question: yes, restrict it (R62-1)
+
+**R62-1 (Medium-High, cross-person borrowed condition; present since 39ab335, missed in round 59).** The certificate-line
+path in `conditionApplies` accepts a condition from *any* document whose section heading names the same cover.
+- A travel policy linked only to Charmaine, headed "PERSONAL ACCIDENT", prints "The benefit is reduced by 50% for an
+  Insured Person aged 70 or above."
+- That condition is kept on **Desmond's** group PA certificate line (S$600,000).
+- My round 59 probe used "SECTION 2: PERSONAL ACCIDENT", which `coverName` does not read as that cover, so it passed by
+  accident.
+- I could not make the owner's exact case (a BS "BENEFIT 2: GROUP PERSONAL ACCIDENT" summary row taking another
+  document's condition) borrow in this household. The path allows it all the same.
+
+Fix (small): take the cross-document path only when
+- the statement's line names a household member (the certificate's "Name S$… As of …" line), as the owner proposes; and
+- the other document has the same non-empty linked people as the statement's document, the same guard R60-2 uses.
+
+Add the Charmaine-travel control.
+
+## Verdict on PR #82 at `844e968`
+
+**Not ready, one small fix:** R62-1. Everything from R59 and R60 is fixed and confirmed.
+
+# Round 63: review of PR #86 at `c0dbbb9` (reference summaries: "Used for …"; phone Benefits sideways scroll)
+
+Method: read the diff (`app/policies/page.tsx`, `app/globals.css`, two e2e specs). Browser tests were not run.
+
+- **No claim of personal cover.**
+  - `covered` still excludes `scheme_reference_match` links (page.tsx:542), so the "Covers …" line is only ever built
+    from personal links.
+  - A summary linked only by a scheme match now reads "**Used for** Desmond, Charmaine · as the wording for their plan".
+    It does not say "Covers", it names the role (wording for their plan), and the names come from the policy's own
+    `linked_people` in this household.
+  - A document with no links of either kind still says "Covers nobody yet · choose who it covers…".
+  - The open picker keeps "Also available as matching wording for …" (page.tsx:599), and nothing new is written to the
+    database.
+- **Button:** it now reads "Change" rather than "Choose" when only reference links exist. Opening it starts with no
+  personal cover selected, as before, and saving still goes through `saveCoverage`, so a person must pick people
+  explicitly to make it personal cover.
+- **CSS:** `min-width:0; overflow-wrap:anywhere` on benefit items, heads and schedule headings. This is a contained
+  change for long file names, with no layout change elsewhere.
+- **Note (Low):** "Used for" can still be skimmed as cover by a hurried reader. "Wording used for …'s plan" would be
+  harder to misread, but the current text is accurate.
+
+## Verdict on PR #86 at `c0dbbb9`
+
+**Ready.**
+
+# Round 64: recheck of PR #82 at `fe5bd31` (R62-1)
+
+Method: as in round 62. All probes from rounds 52–62 and the snapshot sweep were run at 844e968 and fe5bd31, and the
+outputs diffed.
+
+- **R62-1 fixed.** The Charmaine-only travel policy's "reduced by 50% … aged 70 or above" is no longer kept on
+  Desmond's group PA certificate line. The cross-document path now needs a household member named on the statement's
+  line and a document with the same non-empty linked people.
+- **No other change.** The only difference in the full probe diff is that line. The Evidence Reviewer figures, the
+  refused caps, R55-1, R59-1 to R59-6 and R60-1 to R60-3 all hold, and so do the legitimate moves (S$250 recuperation and
+  child education to the BS lines with their own conditions).
+- **Residual (Low, not blocking):** a different product linked to *exactly the same* people (for example a family travel
+  policy linked to both spouses with a "PERSONAL ACCIDENT" section) can still lend a condition to the group PA
+  certificate line. Conditions never carry money, and the case needs the model to cite that clause. A later tightening
+  could also require the same insurer or scheme reference.
+
+## Verdict on PR #82 at `fe5bd31`
+
+**Ready.** Every wrong-amount and borrowed-condition finding from rounds 50–62 is fixed, and I found no remaining
+wrong-amount path in this household or in the synthetic probes.
+
+---
+
+# Round 65: PR #85 re-review at `10f998e` (benefit summary read as a certificate)
+
+What changed since round 61 (`1b93474`): `lib/policies/inventory.ts` adds `servesAsReference()`, so any document with
+role `certificate` or `personal_schedule` and `personal_coverage_confirmed=false` is now accepted as wording
+(`referenceMatchReason` at inventory.ts:82 and the insurer/product enrichment at inventory.ts:180). One new DB
+regression test was added. `lib/ledger/store.ts` is unchanged.
+
+Checked offline with `buildContracts` on synthetic documents (scratchpad `r65/t65.ts`). Desmond has a confirmed
+certificate on group G-123, and three unconfirmed documents share the same insurer and group:
+
+| Unconfirmed document | Linked people | Bound as wording to Desmond's contract |
+|---|---|---|
+| Benefit Summary, role `certificate`, authority 30 | Desmond | yes (intended) |
+| Certificate the reader did not confirm, authority 80 | Charmaine | **yes** |
+| Personal schedule, no group number, same product name | none | no |
+
+## Findings
+
+**R65-1 (Medium, cross-person amount). inventory.ts:51-53.** The new rule accepts *any* unconfirmed personal-role
+document, not only one that names nobody. Example: a real certificate for another member whose name the reader
+failed to confirm (fact-check.ts:431 and intelligence.ts:192 both drop confirmation on weak name evidence). That
+certificate is now bound as wording to Desmond's contract, so its rows reach Desmond's Coverage ledger, the Benefits
+page and chat through `contract.references`. Its fixed figures would show as Desmond's (store.ts:236/254/271,
+api/benefits/route.ts:88/114, workflow.ts:767). At `1b93474` the same document was ignored, not mis-assigned.
+DC's snapshot does not contain such a document today; the D3 certificate is confirmed for both people.
+
+Suggested narrowing (one line): accept an unconfirmed `certificate`/`personal_schedule` as wording only when it
+proves nobody's cover. Two ways to express that:
+- `document_authority<70` (the Benefit Summary is 30);
+- no `ai_name_match` or `user_declared` link (that is, linked only by `scheme_reference_match`).
+
+Add a test: an unconfirmed certificate name-matched to another member stays out of the owner's references.
+
+**R65-2 (Low, consistency).** Other places still use only `referenceRoles`, so they treat the same document
+differently:
+- `isGroupGuide` (household-status.ts:50) does not call it a group guide.
+- The claim evidence queries (death/ci/disability/medical/travel `*-evidence.ts`, role lists near lines 212–353)
+  still skip it.
+
+This is conservative and does not produce a wrong amount. Note it only.
+
+## Checks the coordinator asked for
+
+- **Reference wording as personal proof:** No. `buildContracts` ownership is unchanged: it still needs
+  confirmed with authority ≥70, or a user declaration. The Benefit Summary only joins `references`, and its rows keep
+  the scheme-wording label: `scheme_reference_match` links are excluded from "covered" (page.tsx:542,
+  coverage-assignments.ts:9). The `personalEvidence` flag at benefit-catalog.ts:585 reads the owner's coverage row,
+  not the reference document's role.
+- **Interaction with #83:** #85 and #83 merge cleanly (`git merge-tree`); #83 touches `lib/documents/intelligence.ts`
+  and its regression script only. The two complement each other. #83 makes a *newly read* Benefit Summary
+  `benefit_guide`, which is already in `referenceRoles`. #85 covers the *stored* row that still says `certificate`
+  until it is re-read. Neither changes the other's decision.
+- **Stored-data rewrite:** The seedLedger block is unchanged. It still updates a row only when the contract is owned by
+  the row's `family_member_id` and the document is in that contract's documents or references. It still requires
+  `origin<>'person'` and `updated_at=created_at`, so it remains idempotent. The only widening is that the Benefit
+  Summary's rows are now in scope for the owner's own contract, which is the purpose of the fix. The merge still
+  rewrites stored `coverage_rules.sum_basis` on production, so it still needs DC's explicit yes (round 61).
+
+## Verdict on PR #85 at `10f998e`
+
+**Not ready: one Medium (R65-1).** The wrist either/or fix is correct for DC's household. Narrow
+`servesAsReference` to unconfirmed personal-role documents that prove nobody's cover, add the cross-member test, and
+it is ready.
+
+---
+
+# Round 66: PR #85 recheck at `c40fca7` (R65-1 fix), combined with main after #83
+
+What changed: `servesAsReference` (inventory.ts:54-61) now accepts an unconfirmed `certificate` or `personal_schedule`
+as wording only when all of these hold:
+- authority is below 70;
+- `named_member_ids` is known and empty, where any link other than `scheme_reference_match` counts as naming someone;
+- there are no declared members.
+
+`loadPolicyInventory` selects `named_member_ids`. A caller that does not supply the field gets `false`, which fails
+safe. The new DB test covers an unconfirmed certificate name-matched to another member.
+
+I re-ran the offline `buildContracts` probe (scratchpad `r65/t66.ts`). Desmond and Charmaine are on one confirmed
+group certificate:
+
+| Unconfirmed document | Authority | Named / declared | Wording for anyone |
+|---|---|---|---|
+| Benefit Summary, linked only by scheme match | 30 | none | yes, for both (intended) |
+| Same, with a leftover `upload_hint` to Desmond | 30 | Desmond | no |
+| Certificate name-matched to Charmaine | 30 | Charmaine | no (R65-1 case) |
+| Certificate, high authority, no names | 80 | none | no |
+| `named_member_ids` not supplied | 30 | unknown | no |
+| Declared by Desmond | 30 | Desmond | no; it stays his own declared contract, as before |
+
+**R65-1: fixed.**
+
+**Combination with main** (`d6c3042`, which includes #83, #82 and #86): `git merge-tree` is clean. #83 makes a newly
+read Benefit Summary `benefit_guide`, which `referenceRoles` already accepts. #85 handles the stored row that still
+says `certificate`. The two rules agree and neither overrides the other.
+
+**Stored-data rewrite:** unchanged since round 65. It is scoped to the row owner's own contract and is idempotent.
+It still needs DC's explicit yes, because it rewrites `coverage_rules.sum_basis` on production.
+
+**R66-1 (Low, verify after merge).** The fix applies to DC's live Benefit Summary only if every one of its member
+links is `scheme_reference_match`. That is likely: ingest.ts:751 runs `linkRelatedReferenceDocuments` after the
+`upload_hint` insert (ingest.ts:622), and that function's `ON CONFLICT ... DO UPDATE` overwrites the hint. I could
+not confirm it without a production read. If a hint survives, the fix is inert and fails safe: no wrong amount, but
+the wrist stays S$1,250 alone. The Live site tester's Coverage check after deploy settles it.
+
+R65-2 (Low) is accepted as is.
+
+## Verdict on PR #85 at `c40fca7`
+
+**Ready.** The merge still needs DC's explicit yes because it rewrites stored data (round 61).
+
+---
+
+# Round 67: PR #87 at `d6770ea` ("Read again" on a ready document)
+
+What changed: `app/policies/page.tsx` adds a two-click "Read again" button on documents whose status is `ready`.
+It calls the existing `retryReading` and `POST /api/policies/reprocess`. The API route is unchanged. There is also a
+source-regex test in `scripts/r5-ux-regressions.ts`. I reviewed the route and the ingest path that a re-read runs
+(`lib/rag/ingest.ts`, `lib/policies/linking.ts`, `lib/policies/benefit-catalog.ts`).
+
+## What a re-read keeps (checked in code)
+
+| Item | Kept? | Where |
+|---|---|---|
+| Document id | yes | the UPDATE runs in place (reprocess route, ingest.ts:600) |
+| `user_declared` links | yes | not in the delete list at ingest.ts:616 |
+| Removals (`policy_member_exclusions`) | yes | `notExcludedClause` for upload hints and reference links; `isExcluded` in `syncInsuredPersonToMember` |
+| Dismissed names | yes | `dismissedNameKeys`, ingest.ts:647 |
+| Benefit rows a person corrected (`reviewed_at`) | yes | `replaceBenefitCatalog` keeps them and drops the fresh duplicate (benefit-catalog.ts:1074-1083) |
+| Person-edited ledger rows (`origin='person'`) | yes | ledger deletes are scoped to `origin<>'person'` |
+| **A name the household linked by hand, and coverage tiers** | **no** | see R67-1 |
+
+**Household scoping:** OK. The policy is read through the RLS client with `account_id=$householdId`, and the requeue
+UPDATE is scoped to `account_id`. Another household's id returns 404, and only server-resolved ids reach the job.
+
+**Mid-read and double-click:** OK.
+- The button only shows when `!processing && status==='ready'`.
+- A fast second request loses the atomic `UPDATE ... WHERE processing_status NOT IN (...)` and gets 409, which the
+  page shows as "This document is already being analysed." No second read starts.
+
+## Findings
+
+**R67-1 (Medium, a household choice is lost).**
+- The PR adds a tooltip at page.tsx:485: "People you chose for it stay chosen." That is not true for two kinds of
+  choice.
+- **Kind 1: a name linked by hand.** When the household links a detected name to a profile on the document,
+  `link-person` calls `syncInsuredPersonToMember` without `link`, so the row is stored as `source='ai_name_match'`
+  (link-person/route.ts:179-185, linking.ts:126).
+- **Kind 2: a tick on a row already linked by name.** A CoversPicker tick on a row already linked by name keeps
+  `ai_name_match` and only sets `benefit_tier` (coverage-assignments.ts:41-44, `ON CONFLICT DO UPDATE SET
+  benefit_tier`).
+- **What a re-read does to both.** It deletes every `ai_name_match` row first (ingest.ts:616), then re-links only
+  names the automatic matcher finds.
+- **Result for a hand-linked person.** The matcher already failed on that name, which is why the household linked it.
+  The person is dropped from the document, and their `policy_coverages` go too (ingest.ts:634).
+- **Result for a re-matched person.** The row is recreated without `benefit_tier`, so a chosen plan tier is lost.
+- Before this PR the re-read was offered only on unreadable documents, which have no such links. Putting it on ready
+  documents makes this reachable in one click.
+- **Fix (pick one):**
+  - store household name links under a source that a re-read keeps (`user_declared`, or a new source counted in
+    `named_member_ids`), and have the CoversPicker tick set that source; or
+  - make ingest keep the household-matched row and its `benefit_tier` across a re-read.
+- **Test to add:** a hand-linked name and a tier survive a re-read. Until the fix lands, remove or soften the tooltip.
+
+**R67-2 (Low, cost and rate; the API exposure is older than this PR).** Each confirmed click runs a full paid read on
+production's key: the structure extraction, the page-by-page benefit catalogue and the conditions pass. Checkpoints
+are cleared for a non-stalled re-read, so nothing is reused. `/api/policies/reprocess` has no rate limit. The only
+guard is one read in flight per document, so a member can re-read every document over and over. The route already
+accepted ready documents before this PR; the button makes it one click. Suggested: a per-household
+`createDbRateLimiter` on the route, for example a few re-reads per document per day.
+
+**R67-3 (Low, note).**
+- While a re-read runs (status `queued`/`extracting`/`indexing`), the document's cover leaves Coverage and chat.
+- A re-read that comes out worse (a role or name read differently) has no undo except reading again.
+- Answers saved from the old pages are not withdrawn. This is C1-3, already accepted, and the PR comment says so.
+
+## Verdict on PR #87 at `d6770ea`
+
+**Not ready: one Medium (R67-1).** Keep hand-linked names and tiers across a re-read (or drop the tooltip's promise
+and add the test). Then it is ready. R67-2 is advisable before launch but not blocking.
+
+---
+
+# Round 68: PR #88 at `a085833` (A&E and stage 3 cancer, simple chat)
+
+What changed in `lib/simple-chat/verify.ts`:
+- **Table currency.** A new `tableCurrency` lets an own-line "(S$)"/"(SGD$)" heading anywhere above the quote price
+  any whole figure that sits alone in a tab cell.
+- **"limit" as a money word.** "limit(s)" now counts as a money word that overrides the count/rate words of R59-6.
+- **Bill card.** A new `billAgainst` card is driven by `ofBill`.
+
+The prompt now covers lump sums, the claims-by-stage table and waiting periods against today's date, and the hook
+adds "(Today is YYYY-MM-DD.)". I probed offline on top of DC's snapshot with one synthetic page per case (scratchpad
+`r68/t68.ts`).
+
+## In DC's snapshot
+
+Every whole cell under an own-line currency heading is money:
+- Product Summary p33 and Benefit Summary p16, Outpatient Medicare: 30, 100, co-payment 10, annual 1,000/500.
+- The p4 premium table has no whole cell.
+
+So the two live cases come out right: A&E S$100 per visit, and "Up to S$100" of an S$800 bill.
+
+## Findings
+
+**R68-1 (High, wrong amount; not reachable in DC's snapshot). verify.ts:155-159 and 399-405.**
+- **The problem.** The "(S$)" heading is not scoped to its table or its column, and "limit" now overrides every
+  count word.
+- **Result.** A count, period, age or percentage cell becomes a dollar amount. On main every one of these was
+  dropped.
+
+| Synthetic page (own-line "(S$)" above) | Model's claim | Card at `a085833` |
+|---|---|---|
+| `Physiotherapy\t80\t12`, header "Maximum visits per year" | 12 | **S$12** |
+| `Age limit\t65` | 65 | **S$65** |
+| `Visit limit\t12` | 12 | **S$12** |
+| `Physio sessions\t6` | 6 | **S$6** |
+| `Co-insurance\t20`, a percent with no sign | 20 | **S$20** |
+| `Plan\t2` | 2 | **S$2** |
+| `Survival period\t30` | 30 | **S$30** |
+| `Policy term\t20` | 20 | **S$20** |
+| A later "Maximum days payable" table, row `Intensive Care Unit\t30` | 30 | dropped (R59-6 "days") |
+
+Fix:
+- Price a whole cell only when the heading heads the row's own table: only table rows or sub-headings lie between
+  them, with no prose and no new heading.
+- Take the figure only from a column the heading covers. A row with more numeric cells than the heading's plan
+  columns does not qualify.
+- Count "limit" as money only in "limit(s) per (visit|claim|policy year|…)" or "annual limit", never after a count
+  word ("age/visit/day limit").
+- Add plan, co-insurance, sessions, visits, period, term and survival to the R59-6 count/rate words.
+- Add tests for the rows above.
+
+**R68-2 (Medium, wrong amount on the bill card). verify.ts:473-476.**
+- **The problem.** The "the household wrote it" test matches `$80` inside "US$80" (and "HK$", "A$"). The bill's sign
+  comes from the model's `ofBill` string, not from what the household wrote.
+
+| Household wrote | Model's `ofBill` | Card |
+|---|---|---|
+| "her bill was US$80" | "$80" | **"Up to S$80"**, "within this limit, up to the whole bill" |
+| "the bill was RM800" | "800" | "Of the **S$800** bill, at most S$100" (the limit is right, the bill is mislabelled) |
+
+The PR's own test (US$800 → no card) passes only because the model's string there carries "US$".
+
+Fix: read the bill's currency from the household's own words. Refuse when they print another currency or a letter
+before "$", or when the sign they wrote does not match the limit's.
+
+**R68-3 (Low–Medium, the bill card's limit test is not scoped).**
+- **Per-day row.** The "Limit(s) Per Visit" heading can be anywhere above on the page. A per-day "Daily benefit\t100"
+  row in a later table on the same page gets "Up to S$100 of the S$800 bill".
+- **Several visits.** A bill the household gave for several visits ("$800 for 3 A&E visits") is set against one
+  visit's limit, which understates up to S$300 as "at most S$100".
+
+Fix: scope the heading to the row's table, as in R68-1. Refuse when the household's sentence about the bill names a
+count of visits or claims above one.
+
+**R68-4 (Low).** hook.ts:56 uses `toISOString()`, a UTC date. Between 00:00 and 08:00 Singapore time it gives
+yesterday, so a waiting period that ends today can be judged as still running. Use the household's time zone (SGT).
+
+**R68-5 (Info, for the Evidence Reviewer).** "Non-Panel Specialist with referral" is 100 in the Product Summary
+(p33) but 30 in the Benefit Summary (p16). That is a real difference between the documents. Answers should state
+both figures, with the documents-differ uncertainty.
+
+The prompt changes are otherwise consistent with the standing rules:
+- The bill and stay cards stay server-computed.
+- "Give no amount" applies at a stage the claims table excludes.
+- A lump sum is still priced only from a certificate or table line the server checks.
+
+## Verdict on PR #88 at `a085833`
+
+**Not ready: one High (R68-1) and one Medium (R68-2).** Both are wrong-amount paths that the server checks exist to
+stop. DC's two live cases are right, and nothing in DC's snapshot hits the new paths wrongly. Scope the table
+currency and the "limit" word, and take the bill's currency from the household's words. Then recheck.
+
+---
+
+# Round 69: PR #87 recheck at `295e13c` (R67-1/2/3)
+
+What changed:
+- link-person hand matches and CoversPicker ticks are now stored as `user_declared`.
+- `syncInsuredPersonToMember` never downgrades a `user_declared` row.
+- ingest reads `householdNameMatches` (hand matches by name key) before it deletes machine links and detected
+  people, then re-applies them.
+- `/api/policies/reprocess` gets a household rate limit of 20 per hour (`createDbRateLimiter`, which fails open on a DB
+  error).
+- The confirm step shows "Coverage for this document is unavailable for a minute…".
+
+## Checks
+
+- **R67-1, the main case: fixed.** A name the household linked by hand, where the matcher found nobody, is matched to
+  the same person again. The read happens before the delete at ingest.ts:619 and before `policy_detected_people` is
+  cleared. The cover is rebuilt and the link stays `user_declared`.
+- **Ticked tiers: fixed.** Ticks are `user_declared`, which ingest does not delete, so `benefit_tier` survives.
+- **R67-2: fixed.** Each household gets 20 re-reads an hour. The limit is per household, not per member. It also
+  counts locked-PDF unlock attempts (the same route), so 20 wrong passwords lock unlocking for an hour. Acceptable.
+- **R67-3: addressed.** The confirm step now says so. A worse read still has no undo, and C1-3 is unchanged; both are
+  accepted.
+- **Semantic change (the coordinator asked about it).** A hand match or tick on an *unconfirmed* document now makes a
+  `declared` contract for that person in `buildContracts`, with indicative amounts. Before, an `ai_name_match` link
+  there made no contract. This is consistent with what a fresh tick already did, because the tick was already
+  `user_declared`. It needs a choice by the household, so it does not move cover to a person nobody named.
+  Probe (scratchpad `r65/t69.ts`): a benefit guide hand-matched to Desmond, who also holds a confirmed certificate,
+  is listed both as his declared contract's document and as wording for his certificate contract.
+
+## Findings
+
+**R69-1 (Medium; the R67-1 correction case is still lost). ingest.ts:665.**
+- **The problem.** The hand match applies only when the automatic matcher found nobody (`!match ? ... : undefined`).
+- **How the household corrects a wrong auto match.** They take person A off the document, which records an
+  exclusion, then link the printed name to B by hand.
+- **What a re-read does.**
+  - The matcher finds A again.
+  - `syncInsuredPersonToMember(A)` returns early because A is excluded.
+  - B's hand match is never applied.
+  - B's `policy_coverages` were already deleted (ingest.ts:637).
+  - `policy_detected_people` now records A, so the next re-read no longer even knows about B.
+- **Result.** B keeps a `user_declared` link with no cover amounts.
+- **Fix (one line).** Look up the hand match first, so the household's match wins over the automatic one:
+  `const hand = family.find(m => m.id === handMatches.get(nameKey(person.name)));`, and if it is found, use it. Also
+  add a test for the correction case.
+
+**R69-2 (Low, double listing).** The double listing in the probe above was already possible from fresh ticks. Hand
+matches on unconfirmed group documents make it more common. Check that Coverage and Benefits do not count the same
+row twice for one person (no wrong total if they dedupe by benefit id).
+
+## Verdict on PR #87 at `295e13c`
+
+**Not ready: one Medium (R69-1), with a one-line fix.** Everything else from round 67 is fixed.
+
+---
+
+# Round 70: PR #89 at `9efe42a` (document Preview)
+
+What changed:
+- New `GET /api/policies/[id]/file`.
+- New `createPolicyFileSignedUrl` in `lib/storage`; the local driver returns null and the route streams the bytes.
+- A `PreviewLink` on the Documents page.
+- Regression script `scripts/policy-preview-regressions.ts` and one e2e spec.
+
+## Checks
+
+- **Cross-household access: OK.**
+  - The household comes from `requireHouseholdContext`: the server resolves it with `resolveActiveHouseholdId` and
+    checks membership.
+  - The service-connection query is scoped to `id=$1 AND account_id=$householdId AND superseded_at IS NULL AND
+    activePredicate()`.
+  - A malformed id, another household's id, a deleted or superseded document, a forged household cookie and a
+    removed member all get 404/401/403. The regression script covers each case and checks that no storage key or
+    internal detail appears in the body.
+- **Scan gate: OK.** The route uses `isPolicyProcessingAllowed`, the same gate as processing (`scan_clean` or
+  `not_scanned_prototype`). Otherwise it returns 409 JSON, and the button is offered only for those two states.
+- **Signed URLs: OK.**
+  - Created only after the checks, for the stored key read from the database (never a client value).
+  - TTL is 300 s (`SIGNED_URL_TTL_SECONDS`, which the script asserts).
+  - The bucket stays private.
+  - The redirect carries `private, no-store`, `Referrer-Policy: no-referrer` and `nosniff`.
+  - The link opens with `rel="noopener noreferrer"`.
+  - The file is served from the Supabase origin, not the app origin, so stored content cannot run script on the
+    app's origin.
+- **Headers: OK.** `Content-Disposition` filenames are sanitised (quotes, backslash, CR/LF, non-ASCII). Every
+  response, including errors, is no-store and nosniff.
+- **Dependency: OK.** `sharp` 0.35.4 is already in `package.json` and the lockfile.
+
+## Findings (all Low)
+
+**R70-1 (Low, merge order).** This PR conflicts textually with #87: both rewrite the same `document-meta` line in
+`app/policies/page.tsx` (checked with `git merge-tree`). Whichever merges second must keep Preview, Read again (with
+its note) and Delete.
+
+**R70-2 (Low, resource use).** Image previews decode the whole stored file with sharp's default `limitInputPixels`
+(about 268 MP). A very large TIFF or PNG can use most of a serverless function's memory before the resize. Suggest
+`sharp(buf, { pages: 1, limitInputPixels: 50_000_000 })`. A failure already returns the plain 500 message.
+
+**R70-3 (Low, accepted pattern).** A signed URL that was already issued stays valid for up to 300 s after the
+document is deleted. It also stays in browser history. This matches the documented claim-evidence behaviour; no new
+link is ever minted for a deleted document.
+
+**R70-4 (Low, cosmetic).**
+- The file type is decided by the file-name extension.
+- A `.doc`, `.xls` or other non-PDF file is served as `application/pdf` inline and shows as broken.
+- A PDF that was uploaded under a `.jpg` name fails in sharp and returns the 500 message.
+- No security impact, because of the nosniff header and the separate origin.
+
+## Verdict on PR #89 at `9efe42a`
+
+**Ready.** I found no cross-household path and no signed-URL leak. Resolve the #87 conflict at merge time.
+
+---
+
+# Round 71: PR #89 delta at `14bc2d6` (R70-2, R70-4)
+
+- **R70-4: fixed.**
+  - The format now comes from the file's first 64 bytes (`sniffFileFormat`, lib/documents/formats.ts:100). On
+    Supabase Storage they are fetched with a server-side `Range: bytes=0-63` request through a fresh signed URL. That
+    URL never leaves the server, and it comes from our own Supabase client, so there is no SSRF.
+  - A PDF redirects to a signed URL.
+  - JPEG, PNG, WebP and TIFF are re-encoded to JPEG.
+  - Anything else, including Word files, old .doc files and unrecognised bytes, gets a download signed URL
+    (`download=` makes Supabase send `attachment`), or `application/octet-stream` with `attachment` on local disk.
+  - A file is never opened inline as something its bytes are not.
+- **R70-2: fixed.** `limitInputPixels: 50_000_000` makes sharp refuse a larger image before decoding it. A failed or
+  oversized photo returns 422 JSON with the private headers.
+- **Unchanged and still OK.** Ownership and scan checks run before any storage access. The signed-URL TTL is 300 s.
+  Every response is no-store, no-referrer and nosniff. The tests were extended for the sniffed formats and the
+  422 case.
+- **New note (Low).** A request may now mint two signed URLs: one to sniff the bytes and one to download. Only the
+  second is ever sent to the browser. A missing or empty object makes the Range fetch throw, and the route returns
+  the plain 500 message.
+
+R70-1 (the merge conflict with #87 on the `document-meta` line) and R70-3 (accepted) still apply.
+
+## Verdict on PR #89 at `14bc2d6`
+
+**Ready.**
+
+---
+
+# Round 72: PR #88 recheck at `0b8e364`
+
+What changed since round 68:
+- **`moneyTable`.** A "(S$)" heading now holds only until another unit heading or a prose line. Its own lines say
+  whether it is per visit.
+- **R59-6 word list.** More count words: plan, co-insurance, sessions, visits, period, term, survival, waiting.
+  "per visit/year" is stripped before the check, and "limit" no longer counts as money.
+- **Bill card.**
+  - It takes the bill and its currency from the household's own words (`moneyFiguresIn`).
+  - It refuses a per-day, per-week or annual row, and a bill the household gave for several visits.
+  - It shows only the limit, with no worked figure.
+- **Date.** The hook's date is now SGT.
+
+I re-ran the round 68 probes and added variants (scratchpad `r72/t68.ts`, on DC's snapshot plus one synthetic page per
+case).
+
+| Case | a085833 | 0b8e364 |
+|---|---|---|
+| Age limit 65 / Visit limit 12 / Physio sessions 6 | S$65 / S$12 / S$6 | dropped |
+| Co-insurance 20 / Plan 2 / Survival period 30 / Policy term 20 | S$20 / S$2 / S$30 / S$20 | dropped |
+| Waiting period (months) 3; a later "days" table | dropped | dropped |
+| Bill: the household wrote US$80, HK$800, A$800, NT$800, RM800 or "800 USD" | wrong bill card | no bill card |
+| Bill: a per-day row under an earlier per-visit heading | "Up to S$100 of S$800" | no bill card |
+| Bill: the household wrote S$800 and the model "$800" | — | card, bill shown as "S$800" (right) |
+| DC's A&E (PS p33 / BS p16), S$800 bill | S$100 + bill card | S$100 + bill card |
+| **Row `Physiotherapy\t80\t12` under columns "Limit Per Visit / Max visits"; the model claims 12** | **S$12** | **S$12** |
+| **`Maximum claims\t3`** | — | **S$3** |
+| **`Hospital stay limit (per admission)\t30`** | — | **S$30** |
+| Bill "$800 for her 2 A&E visits" | — | card: "above the S$100 limit, reimbursed only up to S$100" |
+
+R68-2, R68-4 and R68-5 are fixed. R68-3 is fixed for the per-day case. Most of R68-1 is fixed.
+
+## Findings
+
+**R72-1 (Medium, wrong amount; not in DC's snapshot). verify.ts:412-423.**
+- **Remaining shapes.**
+  - **Count column.** A row with several numeric cells is still priced cell by cell, so a count column under a
+    "(S$)" heading becomes money (S$12 visits).
+  - **Labels the word list misses.** "claims", "stay" and "admission" are not on the list, so S$3 and S$30 still
+    appear.
+- **Why a structural fix.** Word lists will keep missing shapes like these. Suggested rule:
+  - Price a whole cell only when the row has exactly one numeric cell, or when every numeric cell sits under a plan
+    column (the header lines name that many plans, as "Plan A / Plan B" or "(Superior) (Deluxe)" do on DC's pages).
+  - Also add claims, stay(s), admission(s) and nights to the count words.
+- **Effect on DC's pages.** None: "Annual Limits Per Policy Year\t1,000\t500" sits under two plan columns, and every
+  other row there has one cell.
+- **Tests.** Add the three rows above.
+
+**R72-2 (Low, bill card).** The several-visits guard only matches a number placed directly before "visits"
+(`MANY`). So "$800 for her 2 A&E visits" still makes a card that says the bill "could be reimbursed only up to
+S$100". For two visits that understates S$200. Suggested: refuse when the household's sentence about the bill has any
+number other than the bill next to visit/claim words within a few words. Or drop "only up to" from the text and just
+say the limit is per visit.
+
+Everything else holds:
+- No worked figure is shown.
+- A co-payment row is never treated as a limit.
+- The bill is shown exactly as the household wrote it.
+- The prompt line "A limit is not a payment" fits the standing rules.
+
+## Verdict on PR #88 at `0b8e364`
+
+**Not ready: one Medium (R72-1).** DC's live cases are right, and every round 68 probe that produced a wrong amount
+is fixed except the count-column shape. Tie whole-cell pricing to one-cell rows or plan columns, add the missing
+count words, and it is ready.
+
+---
+
+# Round 73: PR #87 delta at `a77723b` (R69-1, R69-2)
+
+- **R69-1: fixed.** `preferHouseholdMatch` (linking.ts:131) is now checked for every printed name, so the household's
+  hand match wins over the automatic match. In the correction flow (A taken off, the name linked to B), a re-read
+  links B as `user_declared` and rebuilds B's cover. A also stays off, because the automatic match is no longer used
+  for that name. The DB regression and e2e spec cover this flow.
+- **R69-2: fixed.** `buildContracts` (inventory.ts:138-142) drops a declared contract only when every one of its
+  documents is already wording for the **same person's** evidenced contract. I probed it offline (scratchpad
+  `r65/t73.ts`):
+  - A booklet claimed for Desmond (who has a certificate) and for Charmaine (who has none) is listed once for
+    Desmond, as wording on his certificate contract. Charmaine keeps her declared contract.
+  - An unrelated booklet claimed for Desmond (a different group and product) keeps its own declared contract.
+  - No benefit is hidden: the document is still read through the evidenced contract's references, which the ledger
+    and benefits use (owner plus document-in-contract scoping is unchanged).
+- **Unchanged:** the rate limit, the confirm note, and the scoping and double-click behaviour from round 67.
+- **R70-1 still applies.** `git merge-tree` still shows a conflict with #89 on the `document-meta` line.
+
+## Verdict on PR #87 at `a77723b`
+
+**Ready.**
+
+---
+
+# Round 74: PR #88 delta at `53f92d2` (R72-1, R72-2)
+
+What changed:
+- **One figure per row.** A whole cell under "(S$)" is priced only when its row prints exactly one numeric cell, or
+  exactly one per "Plan X" column named in the heading's own lines.
+- **More count words.** Claims, stays, admissions and nights are added.
+- **Several visits.** `MANY` now allows up to three words between a count and what it counts, and refuses any plural
+  visits/claims/bills/admissions/sessions/consultations/trips, or "twice".
+
+I re-ran the probes (scratchpad `r72/t68.ts` and `r72/t74.ts`, on DC's snapshot):
+
+| Case | 0b8e364 | 53f92d2 |
+|---|---|---|
+| `Physiotherapy\t80\t12` under "Limit Per Visit / Max visits", model claims 12 | **S$12** | dropped |
+| `Maximum claims\t3` / `Hospital stay limit (per admission)\t30` | **S$3 / S$30** | dropped |
+| Age limit, co-insurance, plan, sessions, survival, term (round 68 set) | dropped | dropped |
+| Bill "$800 for her 2 A&E visits" / "for 3 A&E visits" | card "only up to S$100" | no bill card |
+| Bill, the household wrote S$800 and the model "$800" | card | card (right) |
+| DC's PS p33 / BS p16: A&E 100 with an $800 bill | S$100 + card | S$100 + card |
+| DC's PS p33 / BS p16: Non-Panel GP 30 | S$30 | S$30 |
+| DC's PS p33 / BS p16: "Annual Limits Per Policy Year 1,000 500", Plan B | S$500 | S$500 (two plan columns) |
+
+R72-1 and R72-2 are fixed. I found no new wrong-amount path.
+
+**Note (Low, fails safe).** In a row with a money cell beside a count cell, the money figure is now dropped too
+(`Physiotherapy\t80\t12`, claimed 80, gives no card). That is a missing card, not a wrong amount, and the model's text
+still states the limit. The plan count only recognises "Plan A/B/1/2" labels. A table whose plan columns are named
+otherwise ("Silver/Gold") prices only its one-cell rows, which also fails safe.
+
+## Verdict on PR #88 at `53f92d2`
+
+**Ready.**
+
+---
+
+# Round 75: PR #90 at `cee51fe` (re-join stamped rows; refresh rows seeded under an older rule)
+
+What changed, in `lib/ledger/store.ts`:
+- **Re-join.** The `sum_basis` re-join also takes rows whose `status='proposed'`, even when `updated_at` was stamped
+  (the 27 Sep join stamped 52 rows).
+- **Refresh.** A new `refreshSeededRows` runs before the join. It rewrites a machine row to what its current seed
+  says. A row qualifies only when all of these hold: `origin<>'person'`, `status<>'rejected'`, `updated_at=created_at`,
+  the seed key or legacy key matches, and the seed's `familyMemberId` equals the row's.
+
+## Checks
+
+- **A person's figure is not overwritten: OK, with one Low caveat (R75-1).** The only edit path is PATCH
+  `/api/ledger` → `updateLedgerRow`, which always stamps `updated_at=now()`. Any edit defaults the row to
+  `confirmed` unless the request says otherwise (app/api/ledger/route.ts:73-78). So:
+  - The refresh never touches an edited or confirmed-by-click row: both have a stamped `updated_at`.
+  - The re-join's new `status='proposed'` clause can only reach an edited row if a client sends an edit together with
+    `status:"proposed"`. No UI does that today (I searched `app/`, `components/`).
+  - Rows the household added are `origin='person'` and excluded from both.
+- **Scope: OK.** Both passes are scoped to `account_id`. The refresh needs the seed's person to equal the row's
+  person, so it can never move a row to another person. The re-join still needs the row's owner's contract to hold
+  the document, and the stored basis to be one of that contract's cover amounts, as in round 61.
+- **Idempotent: OK.** The refresh skips rows that already equal their seed. It does not stamp `updated_at`, so a row
+  stays the machine's. `sum_basis` is only overwritten when the seed carries one; otherwise the join decides.
+- **FWD liability row:** the new DB test covers it. The untouched row becomes `other` with no amount. Once a person
+  changes it, it stays theirs.
+- **Stored-data rewrite:** this rewrites `coverage_rules` on production (`amount`, `event_type` and `sum_basis` of
+  machine rows), so the merge needs DC's explicit yes.
+
+## Findings
+
+**R75-1 (Low).** The API still accepts an edit together with `status:"proposed"`. Such a row would then be re-joined
+over the person's typed basis. Either ignore `status:"proposed"` when the same request edits a figure, or make the
+re-join clause require that the basis is one the machine wrote (see option (b) below).
+
+**R75-2 (Info; this matters for option (b)).** `confirmed` does **not** mean that a person confirmed the row. Wording
+rows are seeded `status:"confirmed"` unless the benefit needs confirmation (store.ts:173), and certificate rows are
+seeded `proposed` (store.ts:191). So the 27 Sep-stamped percentage rows that this PR leaves alone are probably
+machine rows seeded `confirmed`, not figures a person typed.
+
+## View on option (b): re-join confirmed rows whose basis is a different cover's amount
+
+- **Do not use status as the test.** Per R75-2, status cannot tell a hand-typed figure from a machine join.
+- **Use time instead.** The stamped `updated_at` can tell them apart.
+  - The old join stamped each row within seconds of its seeding (live: 52 rows within 12 seconds).
+  - A person's PATCH lands whenever they edit.
+- **Recommended rule.** Re-join a machine row (`origin<>'person'`) whose stored basis equals one of its contract's
+  cover amounts and whose `updated_at - created_at` is under 60 seconds. Leave every other stamped row alone. This
+  also closes R75-1.
+- **Why fix them.** Those rows overstate claimable amounts (a percentage of S$1,000,000 instead of S$600,000), which
+  is the worst-bug class. Fixing them matters more than keeping a figure nobody typed.
+- **For DC's 4 live rows,** check their `updated_at - created_at` with a read-only query. A gap of seconds means it was
+  the old join: re-join them. A gap of minutes or more means a person may have typed it: show the row as "this
+  percentage may be of the wrong cover" for DC to decide, and never change it silently.
+- Either way it is a production data change, so it needs DC's yes.
+
+## Verdict on PR #90 at `cee51fe`
+
+**Ready on code.** No other person's rows and no person's typed figure can be overwritten through the UI. The merge
+rewrites stored ledger rows, so it needs DC's explicit yes. For option (b), I recommend the time-gap rule above
+rather than overriding confirmed rows.
+
+---
+
+# Round 76: PR #90 delta at `9352440` (batch rule for machine stamps)
+
+What changed: the re-join now covers every non-rejected machine row (`origin<>'person'`) whose basis is one of its
+contract's cover amounts. Such a row is re-joined when either:
+- it is untouched (`updated_at=created_at`); or
+- at least 5 other machine-made rows in the account were stamped within ±60 s of it (`MACHINE_BATCH`).
+
+Any other changed row is never rewritten. It gets one appended condition, "This may be worked out from the wrong
+cover: S$X is the sum insured of another cover; the cover this pays under is S$Y. Check it before relying on it." The
+note is idempotent and is skipped when it is already present.
+
+## Can the batch rule override a real edit?
+
+**Only in a narrow case.** Every path below needs all three of these together:
+1. A person makes 6 or more ledger PATCHes within about 2 minutes. Each PATCH stamps `updated_at`, and the rows
+   they confirm are machine-made (`origin` wording or schedule), so their clicks count towards the batch.
+2. Inside that window they type a `sumBasis`. Only the operator Coverage page's "Fix" form exposes `sumBasis`
+   (app/operator/coverage/page.tsx:105, 207); the household ledger page does not.
+3. The typed value equals exactly one of the contract's *other* cover amounts. A value no cover carries is skipped
+   before this point.
+
+So no household edit can be overwritten, because a household cannot type a basis. DC confirms they never typed a
+Coverage amount.
+
+**R75-1: closed.** A lone edit sent as `proposed` is no longer re-joined, because status no longer decides.
+
+**R75-2: addressed.** Status is ignored, so machine rows seeded `confirmed` are now re-joined.
+
+**Live fit:** the 52 rows stamped within 12 s qualify as one batch. With 1722–1730 s between created and updated,
+the old 60 s gap rule would have missed them.
+
+**R76-1 (Low, hardening).** `MACHINE_BATCH=5` is low enough that a fast reviewer clicking confirm reaches it. The
+live batch is 52 rows. Raising it to about 20 keeps the live fix and puts the batch out of reach of a person's
+clicking. Alternatively, count only rows whose `sum_basis` also differs from their current join, since a person's
+confirm clicks do not change the basis.
+
+Unchanged and still OK:
+- Every pass is scoped by account, and to the owner's own contract.
+- The refresh still requires `updated_at=created_at` and the same person.
+- No pass stamps `updated_at`.
+- Rejected rows are excluded.
+
+## Verdict on PR #90 at `9352440`
+
+**Ready.** R76-1 is optional. The merge still rewrites stored ledger rows on production, so it needs DC's explicit
+yes.
+
+## Round 77: PR #91 (simple chat: uncovered-bill card, claim-steps prompt), head 2ede3c4 on main 9b76779
+
+Scope: `lib/simple-chat/verify.ts` (billWritten, billUncovered, the `-bill` not_found card, the bottom-line fallback), `lib/simple-chat/prompt.ts` (a4aa437 and the prompt-only 2ede3c4), new chat-test cases. Probes run locally on pr91 lib with DC's snapshot (not committed): `t77.ts` P1-P10, `t77b.ts` next steps.
+
+Wrong amounts: none found. The new card carries no amount (`amount: null`) and echoes the bill only as the household wrote it ("US$800", "800 dollars" stay as written). Printed hotline numbers, office hours ("8.30am to 5.30pm"), day counts and a payee sentence survive `withoutMoney` in nextSteps; a "$10 co-payment" step is still removed.
+
+Snapshot check of the false "not covered" risk for the GP-bill case: the GPA pays fracture percentages and ground ambulance (Benefit Summary p8), not GP bills; Desmond's travel policy pays "Medical expenses incurred in Singapore" only after a trip. So the card is correct for DC's household on L4/L5.
+
+- **R77-1 (Medium, false "not covered")** `lib/simple-chat/verify.ts:906`. The uncovered card is dropped only when a bill card was actually built. When `billAgainst` refuses (bill for several visits, a foreign currency, a per-day or annual row), a kept per-visit limit for the same person stays next to "The $800 bill you gave is not shown to be covered by Ong Pei Lin Charmaine's documents". Probes P2 ("her 2 A&E visits cost $800"), P3 ("US$800") and P4 (limit statement without ofBill) all show the S$100 limit card and the not-covered card together. The prompt makes this pairing likely, since a product missing from the certificate is to be given "only as what would apply if they have it". Fix: drop `uncovered` for a person when any kept amount statement for that person carries `ofBill` (P2/P3). P4 is model inconsistency and can also be covered by dropping it when any kept amount for that person comes from a "Limits Per Visit/Claim" row. Add P2/P3 as tests.
+- **R77-2 (Low)** `verify.ts:1036` fallback. When a bottom line is dropped for stating money and there is no amount card, the first non-card not_found becomes the headline, even a side point. P7: "The documents do not say whether physiotherapy is covered." headlines over a fact that the ambulance is reimbursed. Prefer the not_found that carries `ofBill` (the intended finding), else keep "Here is what your documents say."
+- **R77-3 (Low)** `verify.ts:906` suppression is household-wide. Desmond's bill card hides Charmaine's uncovered card (P6). This is conservative, because her own not_found text still shows. Note only; scoping to the same person would fit naturally with the R77-1 fix.
+- **R77-4 (Low)** `verify.ts:486` billWritten matches the figure in any message of the conversation, so an earlier "$800" premium is echoed as "the $800 bill" (P8). It is an echo only, not a computed amount. Note only.
+- **R77-5 (Nit)** "The 800 dollars bill you gave" (P9) reads oddly; consider "The bill of 800 dollars you gave".
+
+Prompt 2ede3c4 (office hours both, suggestions labelled, payee in full): no conflict with the money rules; no finding.
+
+Verdict: **NOT READY until R77-1 is fixed** (one line plus two tests). R77-2 to R77-5 are optional.
+
+## Round 78: PR #91 delta, head 7fe86f9 (fixes for R77-1..5 and TE Q1-Q12)
+
+Probes: `t77.ts` P1-P10 rerun on 7fe86f9 lib, plus Qa-Qf, with DC's snapshot locally (not committed).
+
+Fixed: R77-1 (P2/P3/P4 no longer show the not-covered card next to the S$100 limit), R77-2 (P7 falls back to "Here is what your documents say."), R77-3 (per person: Qf keeps Charmaine's own finding, and Desmond's limit card no longer affects her card, which is now refused for the documents' dental lines anyway), R77-4 (P8: a figure written as a premium is not a bill), R77-5 ("The bill of 800 dollars"). Card duplicates are keyed per person and bill. A finding whose only sentence stated money still shows its card. There are no wrong amounts: the card carries no amount.
+
+- **R78-1 (Medium, false "not covered")** `lib/simple-chat/verify.ts` `billMayBeUncovered`, last statement. The check that a document "prints a figure for that care" only looks at single lines that contain both the care word and a digit. Benefit tables often print the name on one line and the figures on the next. Probe Qc: "desmond physio bill $800" with the model's not_found shows "The $800 bill you gave is not shown to be covered by Tan Yi Chuen Desmond's documents". But his travel policy (D6, linked to him) p8 prints "Chinese medicine practitioner, physiotherapist and / chiropractor expenses / S$300 S$500 S$500 / Capped at S$50 per visit". The benefit is conditional on a trip, which the card hides, and hiding a documented benefit is a failure. Fix: count a figure on the matching line or the next few lines (for example up to 3), or use `rowLine`/`moneyTable` around each match. Add Qc as a test.
+- **R78-2 (Low)** Bottom-line fallback `finding`. When the card is refused because a document prints that care (DC's L4 GP limit), the model's not_found still becomes a dropped bottom line's headline (Qd: "No cover on her certificate pays this bill."). For L4 that is close to the model's intended bottom line, and the wording is the model's, not the server's. Optionally lead with it only when `c.uncovered` is set.
+- Note: the card now rarely shows for DC's household. GP and A&E lines with figures exist in the scheme documents, so the model's own finding stands alone. This leans safe and is acceptable.
+
+Verdict: **NOT READY until R78-1 is fixed** (widen the figure check to the next lines, plus the Qc test). R78-2 is optional.
+
+## Round 79: PR #91 delta, head 64259c8 (R78 fixes, TE N1-N9)
+
+Probes: `t77.ts` P1-P10 and Qa-Qi rerun on 64259c8 lib with DC's snapshot locally (not committed).
+
+- R78-1 fixed. A care's figure on the matching line or the next three now counts. Qc ("desmond physio bill $800") no longer shows the not-covered card, because his travel policy D6 p8 prints the physio limits two lines below the name.
+- R78-2 fixed. A dropped bottom line leads with the finding only when its card is shown. Qd falls back to "Here is what your documents say."
+- GP words widened (polyclinic, doctor, consultation, medical practitioner, whole words). "specialist doctor" now resolves to GP care first, which only refuses more cards (Qi). That is the safe side.
+- Every probe leans safe: no not-covered card appears beside a limit for the same person, or for a care any of that person's documents print. No new amount is shown anywhere.
+
+No new findings.
+
+Verdict: **READY.**
+
+## Round 80: PR #92 (refresh stored Coverage rows on open), head 4731a9a on main 55abc78
+
+Scope: `app/api/ledger/route.ts` GET, `lib/ledger/store.ts` refreshLedgerOnOpen, the regression test. Read-only review; no DB suite run.
+
+Cross-household scope: OK. accountId comes from `requireHouseholdContext`, and the throttle map is keyed by it. Every statement in `seedLedger`, `refreshSeededRows` and the joins is filtered by `account_id`. The refresh leaves `updated_at` alone, which matches #90's rules.
+
+- **R80-1 (Medium, race with reading)** `app/api/ledger/route.ts:38`. The only guard is `ledgerReadingInProgress(accountId)`, an in-memory map filled only by `readPendingDocuments` on the same server instance. It misses three cases:
+  (a) an upload's own read: `lib/rag/ingest.ts:941` calls `readDocumentIntoLedger` directly after marking the document ready, in the job's own invocation;
+  (b) the dashboard's `after()` read, which runs on whichever instance served the dashboard;
+  (c) any read on another instance.
+  `readDocumentIntoLedger` (`lib/ledger/extract.ts:257-275`) deletes the document's model rows, then re-inserts them one by one, outside a transaction. A Coverage open that lands in that window runs `seedLedger` with `existing` missing those events. `known` then lacks them, so table-parser or schedule seeds are inserted for the same events under their own seed keys. When the read finishes, nothing removes those rows: `refreshSeededRows` only updates rows whose seed is still produced, and the stale-row DELETE only covers vanished `benefit:`/`coverage:` ids. The result is two rows for one event, the model's figure and the parser's or default figure, breaking "rows the model already read outrank the table parser". Before #92, `seedLedger` ran mostly right after a read, on the same path; #92 makes it run on every Coverage open, once per 10 minutes per instance.
+  Fix: guard from the database instead of memory. Skip the refresh when any active document of the household is mid-processing (status not ready/failed), or is ready with `ledger_read_at IS NULL` and due (`pendingDocumentCount(accountId,{dueOnly:true})>0`), as well as the in-memory check. Optionally also make the model-row DELETE+INSERT in `readDocumentIntoLedger` one transaction, which closes the window for every caller.
+- **R80-2 (Low, load cost)** `seedLedger` (inventory, catalog, several queries, one UPDATE per changed row) is awaited before the rows are loaded. On serverless, cold instances make the "once per 10 minutes" per-instance throttle fire on most opens after idle. Usually only the first open pays, and after the first pass there are no row writes. Acceptable for now; consider logging its duration so a slow household shows up.
+- **R80-3 (Nit)** `refreshedOnOpen` grows with each household seen per instance; this is harmless at current scale.
+
+Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **NOT READY until R80-1 is fixed** (database-side guard). R80-2 and R80-3 are optional.
+
+## Round 81: PR #92 delta, head 06feac8 (R80 fixes, TPD on the life cover)
+
+Read-only review of the diff. TPD wording checked in DC's snapshot locally (not committed); no DB suite run.
+
+R80-1 fixed. `ledgerReadUnderway` (`lib/ledger/extract.ts:364`) skips the refresh in three cases: an in-process read; a queued, extracting or indexing document updated within 30 minutes; and a ready document still due for its ledger read. The last case covers an upload's own read at `ingest.ts:941`, since the document is already ready with `ledger_read_at` NULL while it reads. A reprocess goes back to queued, so the second case covers it. A backed-off document does not hold the refresh. These are all the statuses the code writes (queued, extracting, indexing, ready, failed). R80-2 is fixed (duration logged) and so is R80-3 (map pruned above 1,000 entries).
+
+TPD join (`lib/policies/benefit-catalog.ts:1170-1178`). The DC case is right. GTL "Total and Permanent Disability Benefit (TPD) 100% of Sum Insured" (Product Summary p5, Benefit Summary p3) has no disability cover on the contract, so it joins the single life cover, S$1,000,000, matching the Evidence Reviewer. "TPD due to Accident" (150%, Benefit Summary p5), "Mobility aid upon accidental total & permanent disablement" (p8) and the travel policy's personal-accident TPD all name an accident, so they stay off the life sum. The join needs exactly one life/death cover with a figure, so two life lines resolve to nothing.
+
+- **R81-1 (Medium, wrong-amount risk, cheap hardening)** The TPD trigger can come from the quote alone, and the only accident check is a word search over the benefit's name and quote. Benefit Summary p10, "N. Natural Catastrophe", reads: "If an Insured Person sustains bodily injury as a result of an Accident due to a Natural Catastrophe, which ... results in death or Total and Permanent Disability from the date of loss, we will pay an additional fifteen percent (15%) of the Sum Insured or S$50,000, whichever is lesser." Suppose a row is named "Natural Catastrophe", its quote is the contiguous second part ("results in death or Total and Permanent Disability ... fifteen percent (15%) of the Sum Insured"), it has no `requires: accident`, and no product-name match placed it first. That row has a TPD trigger and no "accident"/"injur" word, so it joins GTL: 15% of S$1,000,000 instead of the personal accident S$600,000. Before this change it resolved to no cover and showed no figure. Fix: join to the life cover only when the benefit's own name states TPD (the claim-events TPD pattern on `benefitName`), not when the quote alone does. DC's GTL row ("Total and Permanent Disability Benefit (TPD)") still joins. Add the Natural Catastrophe shape as a test (it should resolve to no life cover).
+- **R81-2 (Low)** A document that is ready and due but that nothing reads holds the refresh back until a reader picks it up. The dashboard's `after()` read does that on any dashboard load, so this resolves itself. Note only.
+
+Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **NOT READY until R81-1 is in** (one condition plus one test). R81-2 is note only.
+
+## Round 82: PR #92 delta, head 24c3cbd (R81-1)
+
+R81-1 fixed (`lib/policies/benefit-catalog.ts:1176`). The life-cover TPD join now needs `benefitTriggerEvents(benefit.benefitName,"")` to give TPD. Only the name is lowercased and matched, so a quote alone never qualifies. "Natural Catastrophe" (death or TPD named only in its wording) no longer joins GTL. DC's "Total and Permanent Disability Benefit (TPD)" still does. The accident-word and injury guards are unchanged. Four new tests in `scripts/system-regressions.ts` cover:
+- GTL TPD joins the life cover;
+- accident TPD joins GPA;
+- a "Permanent Total Disablement" row written about an injury does not join GTL;
+- the Natural Catastrophe shape does not join GTL.
+
+No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **READY** (after DC's yes for the production row rewrite).
+
+## Round 83: PR #93 (Haiku 5.5 price entry), head 67367e6 on main d280550
+
+Diff: `lib/ai/providers.ts` (one entry plus a comment) and two offline checks in `scripts/simple-answer/offline-test.ts`. Read-only review; no paid call.
+
+The price matches the published rate (claude-api skill, Haiku 5.5 section). There are two rate cards chosen by prompt length: $0.10 / $0.50 per MTok up to 100K prompt tokens, and $0.50 / $2.50 above. Cache reads are 0.1x input ($0.05 on the long card), 5-minute cache writes 1.25x and 1-hour writes 2x. The simple chat's library is about 230K tokens, so every call is on the long card. Using the long card for every call can only over-count a short prompt, never under-count.
+
+Cost guard. `anthropicRequest` caches the library with `ttl: "5m"`, and `callUsd` charges cache writes at 1.25x input, which is right for 5-minute writes. `runSet` (`scripts/simple-answer/app-run.ts:48-50`) checks the worst case before every call: the full prefix written to cache, plus fresh input, plus `MAX_OUTPUT_TOKENS` 8000, the cap that includes thinking. Prefix tokens are estimated at length/2.5, which stays conservative even with Haiku 5.5's tokenizer counting about 30% more tokens. `--max-usd` is refused above the authorised cap. A run therefore stops before a call that could pass its cap.
+
+- **R83-1 (Low)** `lib/simple-chat/model.ts:55-56` sends `betas: ["server-side-fallback-2026-07-01"], fallbacks: "default"` for every model. The skill says Haiku 5.5 has no server-side fallback: with `"default"` a declined request simply stays declined (no 400, no extra spend), and a model list would return a 400. So there is no overspend or failure today. Omitting `fallbacks` and the beta header for `claude-haiku-5-5` would match the documented use; this can wait for a later PR.
+- Note: for Opus and Sonnet runs, a server-side fallback is billed at the fallback model's rates, while `callUsd` prices every call at the requested model's rates. A fallback to a dearer model such as Opus 4.8 ($5/$25 against Opus 5.5's $4/$20) would be under-counted for that call. This is not new in #93 and does not apply to Haiku.
+
+Verdict: **READY.** R83-1 is optional.
+
+## Round 84: PR #92 delta, head 83d2707 (NAMED_TPD)
+
+The life-cover TPD join now needs the benefit name to begin with TPD (`NAMED_TPD`, `lib/policies/benefit-catalog.ts:1138`). This only narrows R81-1's check: a name that merely contains TPD ("Natural Catastrophe ... Total and Permanent Disability", or a ledger note naming another benefit) no longer joins. DC's "Total and Permanent Disability Benefit (TPD)" still matches. A name with a leading section letter ("B. Total and Permanent Disability Benefit") would not match and would resolve to no cover. That leans safe: no figure rather than a wrong one. The accident and injury guards and the one-life-cover rule are unchanged. The TE's Natural Catastrophe ledger probe is now an assertion in `scripts/system-database-regressions.ts`.
+
+No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **READY** (after DC's yes).
+
+## Round 85: PR #94 (benefit table behind DEARPOLICY_BENEFIT_TABLE), head edb369b on main c1520b9
+
+Read-only review of `sql/benefit-table.sql`, `lib/benefit-table/*`, the ingest hook, the three routes, and the Coverage switch in `app/ledger/page.tsx`. No DB suite or paid call was run.
+
+What holds:
+- **SQL is additive.** It adds three `CREATE TABLE IF NOT EXISTS` tables and alters, drops or rewrites nothing existing. RLS is enabled with `is_household_member(account_id)` policies and anon is revoked. The write checks tie a reading to a policy, and a confirmation to a family member, of the same household. A rollback line is given. Readers check `to_regclass` first, so code deployed before the SQL is applied keeps the old view.
+- **Cross-household scope.** Every service query filters by `account_id`, including `policy_pages`. The reading upsert's `ON CONFLICT ... WHERE benefit_readings.account_id=EXCLUDED.account_id` cannot overwrite another household's row. Links and confirmations are validated against the household's own sections, covers and people.
+- **Figure checks.** A row is kept only when its quote is located on a stored page and its figure is printed in that quote. A fixed base must be printed on the same page. Day counts must be printed too. A cover needs the person's name on its page. Rows are never added together, and a figure with no stated currency is labelled.
+- **Flag off on the server.** Ingest, the dashboard and chat behave as today, and the routes answer `enabled:false`, 404 or 401.
+
+- **R85-1 (High, wrong amounts)** `lib/benefit-table/assemble.ts:115-121` `columnProblem` decides whether a plan column belongs to a person's cover by raw substring:
+  ```
+  plan && (col.includes(plan) || plan.includes(col))
+  ```
+  A one-letter plan matches almost anything. Plan "A" normalises to "a", and "plan b".includes("a") is true. So a Plan A member's cover accepts a link from the "Plan B" column section, and the person is shown Plan B's figures as theirs. The same happens with "Classic"/"Premier" columns for plan "A", or with any column containing the plan's letters. Two further problems:
+  - When the cover prints no plan, every plan-named column is accepted (`if (!plan) return null`). The doc comment says those are refused. Links to both the Plan A and the Plan B sections then both apply, showing two plans' figures as the person's.
+  - A non-plan column ("Adult", "Child", "Per Visit") is refused whenever the cover has a plan, which hides documented benefits.
+
+  Fix: compare whole tokens. Extract the plan identifier ("plan a", "a", "classic", "premier") and require the column's plan token to equal it. Refuse a plan-named column when the cover has no plan, as the comment says. Treat a column with no plan word as plan-neutral. Add tests: plan A against a "Plan B" column (refused), plan A against "Plan A" (kept), no plan against "Plan B" (refused), plan A against "Adult" (kept).
+- **R85-2 (Medium, projection shown as payable)** `assemble.ts:93-97` relies only on the model's `basis` field, or on the document kind being "illustration", to mark a figure as projected. A yearly policy statement or schedule (kind `personal_proof`) often prints a projected maturity or surrender value table under a "Non-Guaranteed" or "at 4.25% p.a." heading. If the model leaves `basis` null on such a row, the figure shows as a printed amount or as a "value" the person holds. Fix: a server backstop. Mark a row as projected when its quote, section, column or the line above its row prints "non-guaranteed", "not guaranteed", "illustrat", "projected", or an assumed return rate ("at 4.25%", "investment return"). Add a test.
+- **R85-3 (Medium, double paid reading with the flag on)** The flag swaps only the ingest hook (`lib/rag/ingest.ts:944`). With the flag on, ingest no longer sets `ledger_read_at`, so every new document stays "pending" for the old ledger. These callers then read it again with paid model calls and seed the old ledger:
+  - the dashboard's `after()` read (`app/api/dashboard/route.ts:46-54`, on every dashboard load until read);
+  - the ledger POST routes (`app/api/ledger/route.ts:104-112`);
+  - chat (`lib/chat/workflow.ts:2461-2465`).
+  #92's Coverage refresh also keeps running through `/api/ledger` if anything still calls it. Fix: gate those callers on `!benefitTableEnabled()` too, or mark the document ledger-read when the table read succeeds. Decide explicitly whether chat keeps using the old ledger while the flag is on.
+- **R85-4 (Low)** `app/ledger/page.tsx:62-75`. With the flag off, Coverage now waits on `/api/benefit-table` first, and shows "Your coverage could not be loaded" on any non-OK answer (a 500, or a 401 after the session expires) instead of the old view. Today's view is therefore no longer exactly identical with the flag off. Consider falling back to the ledger view on a non-OK answer while the flag is off; the server could also answer `enabled:false` before the auth/DB work when the switch is unset.
+- **R85-5 (Low)** `sql/benefit-table.sql:51-58` grants authenticated users INSERT/UPDATE/DELETE on all three tables. The server uses the service connection. A household member could write a reading or a model-labelled link straight from the browser. The checks re-verify quotes, so no unprinted figure would show, but SELECT-only for `authenticated` (as the comment's purpose implies) is tighter.
+- **R85-6 (Low)** `assemble.ts:128-133`. A correction applies only to the first cover with that person and key. A second copy with a different printed sum (two documents) keeps its printed figure, so one person can show two bases. Apply it to every match, or show the duplicates as a conflict.
+- Note for DC's spend: with the flag on, each document costs one Sonnet 5.5 reading (up to 24K output), up to 12 page re-reads, and a household-wide linking call on each upload. Usage is recorded through `recordUsage`.
+
+Verdict: **NOT READY until R85-1 to R85-3 are fixed.** R85-1 can show another plan's figures as the person's. R85-2 is the projection backstop. R85-3 doubles paid reads with the flag on. R85-4 to R85-6 are optional.
+
+## Round 86: PR #94 delta, head 824823f (R85 fixes)
+
+Read-only review; no paid call.
+
+- **R85-1 fixed.** `assemble.ts:119-141`: plan tokens are now compared whole, with "plan/option/tier/..." removed. "Plan B" is refused for a Plan A cover, a plan column is refused for a cover with no plan, and "Adult"/"Child"/"Per Visit" are neutral. A single letter, a roman numeral, a tier name or a household plan counts as a plan column.
+- **R85-2 fixed.** `PROJECTION` checks the quote, benefit name, section and column for "non-guaranteed", "illustration", "projected", a rate of return, or "at N% p.a.". The check also applies when the model said "guaranteed", because only non_guaranteed and illustrated short-circuit it.
+- **R85-3 fixed.** The gate sits inside `readDocumentIntoLedger`, `readPendingDocuments`, `pendingDocumentCount` and `seedLedger`. With the table live, the upload, the dashboard after(), the ledger routes, chat and #92's refresh all stop paid ledger reads and default seeding.
+- **R85-4 fixed.** Any non-OK answer or fetch error shows the old view. With the flag on, that view can no longer start a paid read.
+- **R85-5 fixed.** Anon and authenticated have all rights revoked and authenticated has SELECT only. The server writes through the service connection.
+- **R85-6 fixed.** A confirmation or correction applies to every copy of the cover for that person.
+
+No wrong-amount regression found. New, all Low:
+- **R86-1 (Low, hides a benefit)** `samePlan` compares every remaining token, so a column carrying a currency or unit ("Plan A (S$)" becomes the tokens "a s", and "Plan A Per Visit" becomes "a per visit") is refused for a Plan A cover. The section then shows as unlinked instead of as the person's benefits. This is safe (no figure rather than a wrong one), but a printed "(S$)" heading is common. Consider dropping currency and unit tokens (s, sgd, usd, per, visit, claim, limit, day, year) before comparing.
+- **R86-2 (Low, product call)** With the flag on, the old ledger is frozen: no reads and no seeding. Chat and claim paths that read `coverage_rules` see nothing for documents uploaded after the switch. Confirm that is intended before DC switches the flag on.
+- **R86-3 (Low)** `benefitTableLive()` runs a `to_regclass` query on every `pendingDocumentCount`, `seedLedger` and `readDocumentIntoLedger` call. It is cheap, but it is called on every dashboard and Coverage load; it could be cached per instance once the tables exist.
+
+Verdict: **READY.** R86-1 to R86-3 are optional, and nothing is switched on until DC sets DEARPOLICY_BENEFIT_TABLE and applies the SQL.
+
+## R87 — PR #94 delta 824823f → 41ab81e (R86-1, R86-3, strict Correct-field amount)
+
+**Verdict: NOT READY** (one Medium, one-line fix).
+
+Probed locally (tsx, `columnProblem` and `parseAmount` on 41ab81e); no DB, no paid calls.
+
+- **R87-1 (Medium, wrong amount backstop weakened)** `lib/benefit-table/assemble.ts:125-127`. `UNIT_WORDS` strips "annual", "annually", "trip", "lifetime" and "policy" from both sides of `samePlan`. These words name plan variants in travel, not units. Cover plan "Annual Gold" with a section column "Gold" (the single-trip column, a tier name, so a plan column) was refused at 824823f and is now ACCEPTED, so single-trip limits can be shown for an annual-plan holder. Same for "Plan A Annual" vs "Plan A". Fix: keep only currency tokens and words that follow "per" (or sit in brackets) in the strip list; drop annual, annually, trip, lifetime, policy. "Plan A (S$)" and "Plan A Per Visit" still match.
+- R86-1 otherwise fixed: "Plan A (S$)" and "Plan A Per Year" now match "Plan A"; "Plan B" vs "Plan A" still refused.
+- R86-3 fixed: `tableReady` caches a yes per `Db` in a WeakSet; `appDb` is a module constant (`lib/benefit-table/app.ts:15`), so it hits. A no is re-checked. Fine.
+- Amount parsing (`lib/benefit-table/amount.ts`): correct. Refuses 0, "250k", "1.5 million", "1,0000", "$1,00", "12.345", "USD 1000". Accepts "S$ 1,000", "1,500,000.00". The preview shows the exact amount before Save, Save is disabled when invalid, and the route (`z.number().positive()`) and `setConfirmation` (`<= 0`) both refuse 0. No issues.
+- R87-2 (Low, pre-existing, not from this delta): a column such as "Annual Gold" or "Single Trip Gold" is not judged a plan column (`namesPlan`, not all tier words), so it is neutral and accepted for any cover. The trip type in travel tables has no guard. Worth a follow-up, not blocking.
+
+## R88 — PR #94 delta 41ab81e → 76cf9d2 (R87-1, R87-2)
+
+**Verdict: NOT READY** (one Medium).
+
+Probed `columnProblem` on 76cf9d2 locally (tsx), no DB, no paid calls.
+
+- R87-1 fixed for unbracketed headings: "Annual Gold" vs "Gold", "Gold" vs "Annual Gold" and "Single Trip Gold" vs "Annual Gold" are all refused. "Plan A (S$)" and "Plan A Per Visit" still match "Plan A". "Plan B" vs "Plan A" is still refused.
+- R87-2 fixed for unbracketed headings: a column naming a tier anywhere is now a plan column.
+- **R88-1 (Medium, wrong amount)** `lib/benefit-table/assemble.ts:128`: `planTokens` drops all bracketed text, not only currency and units. So the variant or tier in brackets is lost:
+  - "Gold (Annual)" is ACCEPTED for plan "Gold (Single Trip)" and for plan "Gold".
+  - "Single Trip (Gold)" is ACCEPTED for plan "Platinum". The tier goes, the column becomes neutral, and Gold limits can be shown for a Platinum holder.
+  - Fix: drop a bracket only when its content is currency or unit words, such as "(S$)", "(SGD)" or "(per visit)". Otherwise keep its words.
+- R88-2 (Low, hiding): the tier-word test now makes ordinary headings plan columns. "Max Limit", "Max Limit (S$)" and "Core Benefits" are refused for every cover, including covers with no plan, so those sections are hidden. Consider matching "max" or "core" as a tier only when the whole heading is tier words, or when it equals a held plan.
+
+## R89 — PR #94 delta 76cf9d2 → 8d1c7fc (one rule for plan columns)
+
+**Verdict: READY** (no wrong-plan path found; one Low left open to track).
+
+Probed `columnProblem` on 8d1c7fc locally (22 cases, tsx), no DB and no paid calls.
+
+- R88-1 is fixed. "Gold (Annual)" is refused for the plans "Gold (Single Trip)" and "Gold", and "Single Trip (Gold)" is refused for "Platinum". For a cover that prints a plan, only an exact-words column passes. "Plan A (S$)", "Plan A Per Visit", "Gold (SGD)", "Gold US$", "Gold HK$" and "Gold RM" all still match.
+- R88-2 is moot under the new rule. "Max Limit" is refused for a plan holder and neutral for a no-plan cover. The coordinator accepts over-refusal, and it is not widespread.
+- No-plan covers: a column that is in the document's plan list or says "Plan"/"Option" is refused, and a lone column is neutral. That is fine.
+- R89-1 (Low, person scope, not plan): `UNIT_TOKENS` drops adult/child and `PER` drops "per person"/"per family". So "Gold Child" and "Gold Per Family" pass for any Gold holder, and child or family limits can attach to an adult. Rows show the column label ("(Gold Child)", `components/benefit-table-coverage.tsx:130`), so the figure is labelled, not silent. Bare "Adult"/"Child" columns were already neutral before this delta. Revisit before chat reads amounts from table rows. Either keep adult/child and person/family in the heading words, or carry them as a row qualifier the chat must state.
+
+## R90 — PR #95 at c719256 (chat amounts only from benefit-table rows, behind the switches)
+
+**Verdict: NOT READY** (two blockers).
+
+Probed with the PR's own chat-test fixture (tsx, model replies scripted, no DB, no network, no paid calls).
+
+What holds:
+- An amount with no row, a made-up row, or another person's row is dropped.
+- The model's own amount, quote and document are ignored.
+- A percentage is worked out on the row person's own base, and a corrected base becomes a fact.
+- Model-typed money in prose is still stripped by verify.ts.
+- With the switch off, the library, schema and flow are unchanged (`withRows` is false and `liveTable` returns null).
+
+- **R90-1 (blocker, R89-1 qualifier lost)** `lib/benefit-table/chat.ts:72` (`said`): "For child:" and "Projected, not guaranteed:" are glued onto the model's first sentence. When that sentence states money, verify.ts drops the whole sentence and the label goes with it, but the amount stays.
+  - Probe P1: row "Hospital cash (Child)" on the adult Lim, with text "Hospital cash pays S$50 a day.", shows S$50 with the text "Scheme terms prints: “Hospital cash S$50 per day”". No "child" appears anywhere.
+  - Probe P2b, with two sentences, loses the label the same way.
+  - The projected label is lost the same way (P3). There it survived only because the excerpt happened to print "Non-Guaranteed".
+  - Fix: make the qualifier and projection their own sentence, added after the money filter or kept by it (for example "This figure is for a child only."). Alternatively, refuse the statement if the label does not survive. Add a test whose model text contains money.
+- **R90-2 (blocker, wrong product or benefit label)** `chat.ts:72`: the server writes the row's figure, person and page, but the words that say what the amount is for remain the model's. Probe P4: row "Ambulance Cost" with the text "Death benefit pays this." shows "Death benefit pays this. Up to S$500". That reads as a wrong claimable amount for death. Fix: start the text with the row's own benefit and cover ("Ambulance Cost, Group Personal Accident:"), or refuse when the text names a different benefit.
+- R90-3 (Medium, hiding, decide before switching on) `lib/simple-chat/hook.ts:84,88`: `rows` is `[]` (truthy) for a household whose table has no rows yet. `renderTable` then returns "" (no instructions), but `withRows` is true, so every amount is dropped with no explanation. Documents not yet read into the table lose their amounts the same way. Either fall back to today's path when there are no rows, or say plainly that amounts are not ready yet.
+- R90-4 (Low) The row's unit is not carried. A per-day row shows "S$50" and relies on the model's text to say "a day" (P2). `statementFromRow` knows `f.unit`, so it could add "a day" or set `perDay`. The cash-value as-of date is also dropped. Pre-existing in verify.ts, but now cheap to fix.
+- Note (by design, from R89-1): an adult holder gets child-column rows. That is acceptable only while R90-1 keeps the label.
+
+## R91 — PR #95 delta c719256 → 3d49e09 (server-only amount labels)
+
+**Verdict: READY** (Lows only).
+
+Probed with the PR's chat-test fixture (scripted model replies, tsx, no DB, no network, no paid calls).
+
+- R90-1 is fixed. The qualifier is part of the server's label ("Hospital cash (Group Scheme, Group Personal Accident), for child only: paid per day."). The model's sentence is never used, so a money sentence can no longer strip it. `keepLabelledAmounts` refuses any amount whose text is not exactly a server label.
+- R90-2 is fixed. With the model text "Death benefit pays S$1,000,000." for each of Hip, Ankle, Ambulance Cost, Hospital cash and Surrender value, every card shows only the row's own benefit and cover, with the row's figure. The person is taken from the row, after the model's person must match it. Model `conditions` and `ofBill` did not attach to the card.
+- R90-3 is fixed. An empty table plus a dropped amount gives the "Amounts are not shown yet" note, and any dropped or refused amount adds the left-out-amount note.
+- R90-4 is fixed. Per-day, per-period, up-to, value as-of and projected are all in the label.
+- Correct amounts survive: Hip S$450,000, Ankle S$2,500, Ambulance Up to S$500, Hospital cash S$50 (for child only), Surrender value S$12,400 (projected, not guaranteed). Alternatives still get the "not a total" note.
+- R91-1 (Low, wording) `lib/benefit-table/chat.ts` `rowLabel`: a percentage of the sum insured reads "75% of the amount printed, worked out". The test is `/sum insured/` against `f.how`, which prints the figure, not those words. Use `row.percentOf`/`baseSource` (sum_insured vs fixed_amount) instead.
+- R91-2 (Low, hiding) A plan or benefit name with a number of 100 or more ("plan Plan 300", "plan 1000") makes `statesMoney` true for the label. verify.ts then drops the label and the correct amount is refused, though it is noted as left out. Consider passing the label through verify.ts as trusted text, or quoting plan names so the money check ignores them.
+- R91-3 (Low, cosmetic): the same row named twice gives two identical cards. Consider de-duplicating by row id.
+
+## R92 — PR #95 delta 3d49e09 → 233669e (full-width digit shield, percentOf wording, one card per row)
+
+**Verdict: NOT READY** (one High, which already existed but is now load-bearing, and one Medium introduced by this delta).
+
+Probed with the chat-test fixture (scripted model replies, tsx, no DB, no network, no paid calls).
+
+- R91-1 is fixed: a sum-insured row now reads "75% of the sum insured, worked out" (`percentOf`).
+- R91-3 is fixed: a row named twice is given once.
+- The unshield step itself is narrow. Only a statement whose text exactly equals a server label gets its digits back, so the model cannot borrow it.
+- **R92-1 (High; already in `lib/simple-chat/verify.ts` `statesMoney`, not introduced here)**: full-width digits are not read as money. `statesMoney("Death pays S$１,０００,０００.")` returns false.
+  - End to end, a model reply with bottom line "Your death cover pays S$１,０００,０００.", next step "Claim S$１,０００,０００ now." and fact text "Death cover pays S$１,０００,０００." reaches the household unchanged.
+  - This is a hole in "the model's sentences carry no money". It also affects the live simple chat with the table switched off.
+  - The shield in this delta works only because this hole exists. Fixing `statesMoney` (NFKC-normalise before reading, and the same in `moneyFiguresIn`) would bring R91-2 back.
+  - Fix both together: normalise in verify.ts, and exempt a server label from the money check by identity (an allow-set of exact label texts passed to `verifyAnswer`), not by changing its digits.
+- **R92-2 (Medium, introduced)** `lib/benefit-table/chat.ts` `shield`: the shield also hides money inside a row's own names, which come from the document reading. A row whose benefit reads "Accidental Death S$1,000,000" shows "Accidental Death S$1,000,000 (Group Scheme, Group Personal Accident): up to this limit." next to "Up to S$500".
+  - Before this delta the money check dropped that label and refused the amount.
+  - Fix: before building the label, refuse (or strip money from) a benefit, cover or product name that states money. Allow only plan names, which may be bare numbers.
+
+## R93 — PR #95 delta 233669e → f63cd60 (NFKC money checks, server labels exempt by identity)
+
+**Verdict: READY.**
+
+Probed with the chat-test fixture (tsx, no DB, no network, no paid calls). benefit-table chat-test passed 28/28 and benefit-table test passed 38/38 locally. I could not run simple:offline-test here, because the scratch deps lack @anthropic-ai/sdk, so that rests on the Test engineer's run.
+
+- R92-1 fixed. In the bottom line "Your death cover pays S$１,０００,０００.", the next step "Claim S$１,０００,０００ now." and fact text with the same figure, the money is now caught. The bottom line falls back, the next step is dropped, and the fact shows only its quoted words. `figuresIn`/`moneyFiguresIn` NFKC-normalise, and callers find `raw` by content rather than offset, so the shared change does not shift positions.
+- R92-2 fixed. A row whose benefit reads "Accidental Death S$1,000,000" or "Death S$１,０００,０００" is dropped ("name states money") and noted as left out.
+- R91-2 still fixed. "plan Plan 300" survives through the exact `serverWords` allow-set.
+- Exemption is by identity only. A statement keeps unfiltered words only when its text exactly equals a server label, and labels can no longer carry money (names pre-checked; a plan may be a bare number only). So a model sentence that copies a label gains nothing.
+- Correct amounts still survive: Hip S$450,000 (now worded "75% of the sum insured"), Ankle S$2,500, Ambulance Up to S$500, Hospital cash S$50 (for child only), and Surrender value S$12,400 (projected, not guaranteed). In each case the model's own text carried full-width money.
+- No open findings on #95.
+
+## R94 — PR #96 at b4ed730 (row names with policy numbers; `nameStatesMoney`)
+
+**Verdict: NOT READY** (one Medium; small fix).
+
+Probed `nameStatesMoney` on 23 names (tsx, no DB, no paid calls).
+
+- The fix works for its own case. "GROUP POLICY NO. G007500", "POLICY NO.3037850" and "Plan 300" now pass.
+- Real money is still caught when it has a currency sign, thousands commas, a size word, or a dollar/SGD/USD word. Caught: "S$1,000,000", "Death 1,000,000", "1.5 million", "RM500", "HK$ 800", "Fracture 5k", "SGD 500", "500 dollars", "€500" and "£500".
+- **R94-1 (Medium, money in a label)** `lib/benefit-table/chat.ts` `nameStatesMoney`: a bare amount with money context gets through. These all PASS as names:
+  - "Accidental Death 1000000"
+  - "Death benefit of 600000"
+  - "Hospital cash 200 per day"
+  - "Hospital cash 200/day"
+  - "Benefit up to 5000"
+  - "Room & Board 300"
+  - "Death 1 000 000"
+
+  Once a row is labelled, its name skips the money filter (serverWords), so for example "Hospital cash 200 per day (…): paid per day." could show beside a different figure (another plan's S$300). Fix ideas, keeping policy and plan numbers allowed:
+  - In benefit, cover and product names (not plan), count as money any number of 2 or more digits followed by "per"/"/" plus a period word (day, visit, year, …), or preceded by "up to", "limit", "max(imum)" or "of".
+  - Also count as money any standalone number of 4 or more digits (including "1 000 000") that is not glued to letters, not after "No."/"number"/"#", and not a year 19xx/20xx.
+  - Add those 7 names as test cases.
+- Low: "₹ 500" is not read as money (₹ is missing from the currency symbols). This is outside the SGD/USD/MYR/HKD scope, so it is a note only.
+- app-run `--table` is a script, not on the app path; reviewed for scope only.
+
+## R95 — PR #96 at 99b7a5c (capped percentages; stricter money-in-names rule)
+
+**Verdict: NOT READY** (two blockers, both in `lib/benefit-table/check.ts` `rowAndContinuation`).
+
+Probed `checkReading` and `nameStatesMoney` (tsx, no DB, no paid calls).
+
+- R94-1 is fixed. All seven names are now refused ("Accidental Death 1000000", "Death benefit of 600000", "Hospital cash 200 per day", "Hospital cash 200/day", "Benefit up to 5000", "Room & Board 300", "Death 1 000 000"). Identifiers still pass: "G007500", "POLICY NO.3037850", "Plan 300", "Ward Class B1", "Covid-19 Benefit", "24-hour Assistance", "Group Term Life 2026", "Clause 12.1 Death". A plan of "1000 per year" is refused.
+- "whichever is greater" correctly yields no amount (N8). Readings are re-checked from raw on load (`service.ts:55`), so old readings also get `capUnread`.
+- **R95-1 (blocker, an uncapped figure still shows)** `check.ts` `rowAndContinuation`:
+  - `source.excerpt` is whitespace-normalised ("Hip 75% of Sum Insured"), but the page prints a tab ("Hip\t75% of Sum Insured"). So `pageText.indexOf(excerpt)` and `indexOf(last)` both miss, and only the excerpt is returned; the continuation line is never read.
+  - N5: page "Hip\t75% of Sum Insured\nor up to S$50,000, whichever is lesser", with no cap read, gives `capUnread=false`. The table works out 75% of the sum insured uncapped (S$450,000 on S$600,000) when the row pays at most S$50,000.
+  - N4: the same row with the cap read correctly is refused ("not printed in the row") and shows no amount, so the feature's own example fails.
+  - Fix: anchor on the located quote's page offset (the `Found` from `locateQuote`), not on `indexOf` of the normalised excerpt.
+- **R95-2 (blocker, a cap from a neighbouring row)**:
+  - N1: page "Hip 75%\nWrist 20% up to S$5,000\nAnkle 10%" (rows separated by spaces, no tabs). The Hip claim `cap 5000, capQuote "up to S$5,000"` is ACCEPTED. `rowWithContinuation` treats the next table row as a continuation, so Hip shows S$5,000 (Wrist's limit).
+  - N3: a row quote that spans two rows ("Hip 75% Wrist 20% up to S$5,000") is also accepted.
+  - Fix: a continuation line must not start a new row (a label followed by its own %/figure). The cap words must sit on the row's own line, or on a continuation that begins with or/and/up to/subject/whichever (lower-case or a connective). Refuse a row quote that holds two percentages or two row labels.
+  - Add N1, N3, N4 and N5 as tests (tab and space layouts).
+- Low (not new): a cap printed once for a section ("All benefits subject to a maximum of S$100,000 per policy year") is not read, so rows under it are worked out uncapped (N7). Worth a follow-up.
+- Low: `nameStatesMoney` now refuses "Benefit 365 days" and "ICU 500". That hides amounts but is safe.
+
+## R96 — PR #96 delta 99b7a5c → 2eeccc5 (row anchored on quote offset; continuation rule; names by role)
+
+**Verdict: NOT READY** (one blocker left in the continuation rule).
+
+Probed `checkReading` on 11 page layouts and `nameStatesMoney` on 11 names (tsx, no DB, no paid calls).
+
+- R95-1 is fixed. With a tab row, N4 (cap read) gives cap 50,000. N5 (cap not read) gives `capUnread=true`, so no uncapped amount.
+- R95-2 is fixed for capitalised rows: N1 (space layout), N2 (tabs) and B5 (two rows on one line) refuse the neighbour's cap. N3 (a two-row quote) is dropped.
+- **R96-1 (blocker, a cap from a neighbouring row)** `lib/benefit-table/check.ts` `continues`: a line that starts lower-case or with "(" counts as a continuation. So the next row is read as part of this one when items are lettered or numbered, which is common in policy wordings. Hip takes Wrist's S$5,000 cap in all of these:
+  - B1 "(a) Hip 75%\n(b) Wrist 20% up to S$5,000" gives cap 5000.
+  - B2 "a) Hip 75%\nb) Wrist 20% up to S$5,000" gives cap 5000.
+  - B3 "(i) Hip 75%\n(ii) Wrist 20% up to S$5,000" gives cap 5000.
+  - B4 lower-case rows "hip fracture 75%\nwrist fracture 20% up to S$5,000" gives cap 5000.
+
+  Fix: a line is never a continuation when it starts with an item marker (`^\s*\(?([a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s`) or holds its own percentage, figure-with-label or tab-separated cells. Add B1 to B4 as tests. With the cap left unread (B6), `capUnread` is already true, so only the claimed-cap path is open.
+- Names by role are fine for the R94-1 shapes. "Death 1000000", "Accident 50000" and "Accidental Death 200000" in product or cover names are refused. "Shield 360", "MER 1500" and "Smart Life 100" pass. Benefit names keep the strict rule ("Room & Board 300" is refused) and allow counts ("Benefit 365 days").
+- Low: a 4-digit amount in a product or cover name passes ("Accidental Death 5000"). This is accepted as the cost of product numbers.
+
+## R97 — PR #96 delta 2eeccc5 → db6b313 (`startsRow`)
+
+**Verdict: NOT READY** (the new rule now drops a row's own cap line in two shapes, and the uncapped figure shows).
+
+Probed `checkReading` on 17 layouts (tsx, no DB, no paid calls).
+
+- R96-1 is fixed. B1 "(a)/(b)", B2 "a)/b)", B3 "(i)/(ii)", B5 "1./2." and B4 (lower-case rows) all refuse the neighbour's cap.
+- Still right: N4, N5, C4 ("subject to a maximum of"), C5/C6 ("(up to S$50,000)"), C7 ("up to … per accident") and C9 ("max S$50,000").
+- **R97-1 (blocker, uncapped figure)** `check.ts` `ITEM_MARKER`: `\(?[a-z]{1,3}[.)]\s` matches "max. " and "Max. ", so a cap line written "max. S$50,000" is treated as a new row.
+  - C1: "Hip\t75% of Sum Insured\nmax. S$50,000" with the cap not read gives `capUnread=false`, so 75% of the sum insured is shown uncapped.
+  - C8 does the same with "Max. S$50,000".
+  - C2: with the cap read, it is refused (not in the row), so no amount; that case is safe.
+- **R97-2 (blocker, uncapped figure)** `startsRow`'s own-percentage test runs before the connective check.
+  - C3b: "Death\t100% of Sum Insured\nor 200% of premiums paid, whichever is lower" ends the row at line 1, `capUnread=false`, and 100% of the sum insured is shown although the row pays the lower of the two.
+- Fix for both: when a line starts with a connective or cap word (add `max\.?`, `min\.?`, `maximum`, `limit` to `CONNECTIVE`), it always continues the row and `startsRow` is not consulted. Belt and braces: compute `capUnread` also from the next line when it starts with a connective or cap word, even if it was not joined. Add C1, C3b and C8 as tests.
+
+## R98 — PR #96 delta db6b313 → fa2044f (connective lines always continue; capUnread backstop)
+
+**Verdict: NOT READY, with a one-line fix.** Every other probed path fails safe.
+
+I re-ran all 19 earlier layouts plus 2 new ones (tsx, no DB, no paid calls).
+
+- R97-1 and R97-2 are fixed. "max. S$50,000" and "Max. S$50,000" (C1, C8) and "or 200% … whichever is lower" (C3b) now give `capUnread=true`, so no amount is shown.
+- All earlier cases still hold: the neighbour cap is refused in N1, N2, N3, B1 to B5 and D2. The row's own cap is read in N4, C2 and C6. The rest (N5, C4, C5, C7, C9) withhold an amount.
+- **R98-1 (wrong amount, narrow)** `check.ts` `startsRow`: `!CONNECTIVE.test(text)` now overrides every new-row signal, tab cells included. A next row whose label starts with a cap word joins this one.
+  - D1: "Hip\t75%\nMaximum Disablement\t20% up to S$5,000" takes cap 5000, so Hip shows S$5,000 (the neighbour's limit).
+  - One-line fix: keep the tab-cells test outside the connective override, i.e. `(!sameLine && /\S\t+\S/.test(text)) || (!CONNECTIVE.test(text) && (…rest…))`. C3b has no tab cells, so it still continues.
+  - Add D1 as a test.
+- Judged against the coordinator's fail-safe bar: with R98-1 fixed, every open path I found either reads the row's own cap or withholds the amount (`capUnread`). Neighbour rows that are lettered, numbered, lower-case, tabbed or on the same line are refused, and a quote spanning two rows is dropped.
+
+## R99 — PR #96 delta fa2044f → 72fa2c5 (strict join rule plus nearby-cap backstop)
+
+**Verdict: NOT READY.** Two paths still show a wrong amount; both fixes are small.
+
+Re-ran all 21 earlier layouts plus 8 new ones (tsx, no DB, no paid calls). The 21 earlier ones all pass, including D1 (tabbed "Maximum …" neighbour) and D2. New ones that pass: E3 (cap three lines down, withheld), E4, E5 ("(or up to … whichever is lesser)" read), E6 and E7.
+
+- **R99-1 (uncapped figure)** E1: page "Hip\t75% of Sum Insured\nwhich is payable up to S$50,000", cap not read.
+  - The lower-case line no longer joins, and the backstop skips it as "its own label plus a figure" (`which is payable up to S$50,000` matches the label+figure test). The result is `capUnread=false`, so 75% of the sum insured is shown uncapped.
+  - E2 (the same row with the cap read) is withheld, which is safe.
+  - Fix: in the backstop, skip a line as its own row only when it starts upper-case (or has an item marker, its own %, or tab cells). A lower-case line is never a new row's label.
+- **R99-2 (neighbour cap)** E8: page "Hip 75%\nMaximum Disablement 20% up to S$5,000" (no tabs).
+  - "Maximum" is a connective, so the next row joins and Hip takes cap 5000. D1 is safe only because it has tabs.
+  - Fix: never accept a cap from a joined line that has its own percentage. Still mark `capUnread` for such a row, so C3b ("or 200% … whichever is lower") keeps withholding.
+- Add E1 and E8 as tests. With both fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R100 — PR #96 delta 72fa2c5 → 1eaa9f8 (no join for lines with their own %, stricter backstop)
+
+**Verdict: NOT READY.** One path still shows an uncapped amount. The fix is one condition.
+
+Re-ran all 29 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
+- All 29 earlier layouts are safe. E1 and E8 are now withheld.
+- E2 (lower-case continuation with the cap read) is also withheld now. That is safe over-refusal.
+- New layouts that pass:
+  - F4: a same-line two-column neighbour "Hip 75% of Sum Insured   Wrist 20% up to S$5,000" is withheld.
+  - F5: a same-line own cap "… up to S$50,000" is read as 50,000.
+  - F6: a same-line lower-case ", payable up to S$50,000" is withheld.
+  - F8: a joined line with its own % is withheld.
+  - F7: the next row "Ambulance Cost S$500" (no cap words) is treated as another row, so Hip shows its amount. That is correct.
+
+- **R100-1 (uncapped figure)**: an upper-case continuation of the row's own cap still counts as "another row".
+  - Pages with the cap not read:
+    - F1: "Hip\t75% of Sum Insured\nPayable up to S$50,000 per accident"
+    - F2: "…\nWhich is payable up to S$50,000"
+    - F3: "…\nPer accident limit S$50,000"
+  - In all three the line passes the upper-case label+figure test, so the backstop drops it and the result is `capUnread=false`. 75% of the sum insured shows uncapped.
+  - My R99-1 suggestion ("only when it starts upper-case") was not enough on its own. Capitalisation doesn't tell a cap continuation from a new row.
+  - Fix (`check.ts` `otherRow`): the upper-case label+figure case counts as another row only when the line has no cap words (`CAP_WORDS`, plus a bare `\blimit\b` for F3).
+    - A neighbour row that has cap words and no % or marker ("Ambulance Cost up to S$500") then withholds Hip. That is safe over-refusal.
+    - Tab-cell and item-marker rows are unchanged.
+  - Add F1 to F3 as tests.
+
+With this fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R101 — PR #96 delta 1eaa9f8 → d3883e2 (fail-safe "cap word near the row" rule)
+
+**Verdict: NOT READY.** Two regressions show a wrong amount, and both are small fixes.
+
+I re-ran all 37 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
+- F1 to F3 (R100) are fixed.
+- All the neighbour-cap layouts still withhold the amount: N1, B1 to B5, D1, D2, E4, E6 to E8, F4, G3 and G5.
+
+- **R101-1 (uncapped figure, regression)** E3: the page reads "Hip\t75% of Sum Insured\nfor each fracture\nas certified by a doctor\nup to S$50,000", and the cap is not read.
+  - At 1eaa9f8 this was withheld. Now it gives `capUnread=false`, so 75% of the sum insured shows with no cap.
+  - Cause: the loop now stops after `below < LINES_BELOW` (2 lines). Before, the stop was `unjoined.length < LINES_BELOW + 1` (3 lines). The "up to" line is the third non-joined line, so nobody looks at it.
+  - Fix: restore the 3-line window.
+- **R101-2 (cap read while an alternative limit is printed, regression)** G1: the page reads "Hip 75% of Sum Insured up to S$50,000 or 10% of annual salary, whichever is lower", and the cap 50,000 is claimed.
+  - The new "next label with a %" split cuts the tail at " or 10% …". So "up to S$50,000" joins the row, the cap is accepted, and Hip shows min(75% SI, S$50,000). The lower "10% of annual salary" limit is ignored.
+  - At 1eaa9f8 the tail had its own %, so it was not joined and the row withheld.
+  - G2 is the same text on the next line ("…up to S$50,000\nor 10% of annual salary, whichever is lower"). It also accepts the cap. That was already the case at 1eaa9f8, so it is not a regression.
+  - Fix: when a claimed cap is accepted, still withhold if the rest of the row's line, or a connective line below, has a percentage of its own. That is a second limit the table can't work out. Then the split only needs to keep the neighbour's cap out of the row.
+- Add E3, G1 and G2 as tests.
+
+**Non-blocking (over-refusal):**
+- G4: in "Hip\t75% of Sum Insured\tup to S$50,000", the row withholds even with the cap read. `tail.split("\t")[0]` is empty when the tail starts with a tab, so the row's own cap cell is never joined.
+  - This will hit every tab table with a cap column. It is safe but likely common.
+  - Suggested fix: take the first non-empty cell.
+- G6: a lower neighbour "Transport up to S$300" within two lines withholds the amount. This is the accepted cost of the rule.
+
+**Fixture edit ("Ambulance Cost up to $500 per incident" changed to tab cells): fair.**
+- The real certificate's extracted quote in run-02 is "Ambulance Cost*\tUp to S$500 per incident", with tab cells.
+- So the edit makes the fixture match the real layout. It does not hide a real loss.
+- The cost (an untabbed neighbour with a cap withholds the row above it) is safe and logged in COVERAGE-PLAN line 79. I accept it.
+
+## R102 — PR #96 delta d3883e2 → dc62892 (R101 fixes)
+
+**Verdict: NOT READY.** Two narrow "whichever is lower" paths still accept a cap while a second limit is printed. Both fixes are one condition each.
+
+I re-ran all 44 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
+- Fixed: E3, G1 and G2 now withhold. G4 (a tab cap column) now reads cap 50,000, so the over-refusal is gone.
+- G6 and H4 now stop at the next row: "Knee\t10%\nup to S$50,000" belongs to Knee. That is correct.
+- H1 ("\nOr 10% of annual salary, whichever is lower" on the next line) withholds.
+- Also withheld: H5 (a blank line, then the cap), H6 (cap column with the cap unread) and H7 (a tab neighbour's cap).
+- H8 (cap on the 4th plain line) is outside the 3-line window. That is the same bound I accepted at R99.
+
+- **R102-1 (second limit printed as a figure)** H3: the line is "Hip 75% of Sum Insured up to S$50,000 or S$500 per day, whichever is lower", and cap 50,000 is claimed.
+  - The cap is accepted, so Hip shows min(75% SI, S$50,000). The lower S$500-per-day limit is ignored.
+  - This was already the case at 1eaa9f8; it is not new. But it is a realistic layout and it shows a wrong, too-high amount.
+  - Fix: a tied cap is accepted only when the row's joined text prints no money figure other than the claimed cap. `otherPercent` already does this for percentages; treat a second figure the same way. E5 ("(or up to S$50,000, whichever is lesser)") still reads, because it has only one figure.
+- **R102-2 (upper-case "Or")** H2: the line is "Hip 75% of Sum Insured up to S$50,000 Or 10% of annual salary, whichever is lower".
+  - The new next-row cut `/\s+[A-Z][^%\d]*\d+…%/` treats "Or 10%" as the next row's label. So `otherPercent` stays false and the cap is accepted.
+  - Fix: the next-row label must not start with a connective word (`CONNECTIVE` minus its leading-punctuation part). H1, the same text on the next line, already withholds because `CONNECTIVE` is case-insensitive.
+- Add H2 and H3 as tests.
+
+With these two fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R103 — PR #96 delta dc62892 → ee7d121 (otherMoney, connective-label skip)
+
+**Verdict: NOT READY. One condition is left, in the same "whichever is lower" class.**
+
+I re-ran all 52 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
+- H2 and H3 now withhold, and so do I1 (the second figure on a joined next line) and I3 (SGD).
+- I6 (the cap repeated at the same value) still reads 50,000.
+- I7 ("Orthopaedic 20% …" after Hip's cap on the same line) is cut correctly and reads Hip's own 50,000.
+- G7 ("subject to a maximum of S$100,000 per family" under the cap) and I5 (a base figure in the quote) now withhold. That is safe over-refusal.
+
+- **R103-1 (second limit missed outside the joined text)**: a tied cap is accepted while a "whichever is lower" second limit is printed where `otherMoney` doesn't look.
+  - I2: "Hip\t75% of Sum Insured up to S$50,000\nper accident, or S$500 per day, whichever is lower".
+    - The next line starts with "per", so it is not joined. It is in `near`, but `near` is only read when no cap is tied.
+    - The result is cap 50,000 accepted.
+  - I4: "… up to S$50,000 or 500 per day, whichever is lower". The second figure has no currency sign, so `otherMoney` misses it.
+  - Fix (one condition): when a cap is tied, withhold the amount if row + near contains "whichever" and any number other than the claimed cap and the row's own percentage(s).
+    - E5 ("(or up to S$50,000, whichever is lesser)") still reads.
+    - This also covers H3 regardless of the currency sign.
+  - Add I2 and I4 as tests.
+
+I found nothing else. If the next delta only adds this condition and its tests, I will mark it READY on that delta.
+
+## R104 — PR #96 delta ee7d121 → 7326b4f (R103-1 "whichever" condition)
+
+**Verdict: READY.** Every path I have found reads the row's own cap or withholds the amount.
+
+- The delta only adds `otherWhichever`. Like `otherPercent` and `otherMoney`, it can only withhold an amount, never show one. The exemption for a leading item marker only removes "1." from the numbers counted.
+- I re-ran all 59 layouts plus J1 ("1. Hip 75% … or up to S$50,000, whichever is lesser"), with tsx, no DB and no paid calls.
+  - I2 and I4 now withhold.
+  - The rows that still show an amount are the correct own-cap reads: N4, C2, C6, E5, F5, G4, I6, I7 and J1 (each 50,000). The others are the deliberate bounds already accepted:
+    - F7 and G6: the next row is "Ambulance Cost S$500".
+    - H4: the cap belongs to Knee.
+    - H8: the cap is on the 4th plain line, outside the 3-line window.
+- Known, accepted over-refusal (safe):
+  - an untabbed neighbour with cap words withholds the row above it (COVERAGE-PLAN line 79);
+  - a base figure in the quote with a tied cap (I5) withholds;
+  - a per-family maximum under the cap (G7) withholds.
+- Residual limits, not blockers:
+  - The 3-line window (H8).
+  - The detection is wording-based, so a cap phrase with no cap word at all would not be caught.
+
+## R105 — PR #96 delta 7326b4f → cce0e43 (tab next-row cells left out of `near`)
+
+**Verdict: READY with a one-token change: in the new condition, use `NEAR_CAP.test(label)` instead of `CONNECTIVE.test(label)`.** The swap only withholds more, so it doesn't need another review.
+
+- I re-ran all 60 earlier layouts, and none changed. G3 (a tab neighbour "Wrist\t20% up to S$5,000" with Wrist's cap claimed) still withholds, because the claimed cap isn't in Hip's row. With nothing claimed, Hip now correctly shows uncapped.
+- New layouts:
+  - K1: the Hip line is followed by its own "up to S$50,000" on the next line. It still withholds.
+  - K2: a "Maximum" label cell stays in `near`, so the row withholds.
+  - K3: a lower-case label never matches, so the row withholds.
+  - K4: a label cell followed by a cap cell with no % withholds.
+- **R105-1 (narrow)** K5: "Hip\t75% of Sum Insured\tPayable up to\t50% of S$100,000" shows Hip uncapped.
+  - The label cell has cap words, but it doesn't *start* with one, so `CONNECTIVE` misses it.
+  - Test the label with `NEAR_CAP` (cap words anywhere, including "limit"). A real next-row label rarely contains cap words, so this costs almost nothing.
+
+## R106 — PR #96 at c07aa11: READY holds
+
+- `CONNECTIVE || NEAR_CAP` is right. My R105 "swap" would have dropped the "Or\t10% …" case (TE layout 32), so keeping both was correct.
+- I re-ran all 65 layouts. Only K5 changed, and it now withholds. Everything else is identical.
+
+## R107 — PR #96 delta c07aa11 → 1f99963 (reading schema within the 16-union limit)
+
+**Verdict: READY.**
+
+- **Missing vs null is the same everywhere downstream.**
+  - Every stored reading (the whole document and its page re-reads) goes through `checkReading` (`service.ts:55-56`). That function reads each of the 11 fields through `str`, `num`, `int` or `day`, and all of these return null for `undefined` (`check.ts:141-143, 183-190, 258-262`).
+  - After that point the types are `T | null`. `assemble.ts`, `chat.ts`, `components/benefit-table-coverage.tsx` and `app/api/benefit-table` only see null.
+  - Document `insurer`, `periodFrom` and `periodTo` are not read by `checkReading` at all.
+  - `coverKeyOf` already guards `riderOf` with `?? null` / truthiness.
+- **No amount field lost its guarantee.**
+  - `value`, `percentOf`, `baseAmount`, `baseQuote`, `cap`, `capQuote`, `quote` and `page` stay required. So do cover `sumInsured` and `policyNumber`, and benefit `section`, `column`, `period` and `basis`. The new test pins the benefit set.
+  - `premium` is optional, but it is a cover attribute, never a claimable amount, and `check.ts:184` still drops one that is not printed.
+- **Qualifier check, the one field class that matters: `fromDay`/`maxDays`.** These are now optional, so a model could leave out "up to N days" on a per-day row.
+  - Before this change the field could already come back null, so the guarantee was always weak; the amount itself is unaffected.
+  - In run-03b, the one per-day row that was re-read under the new schema kept its `maxDays`.
+  - Not a blocker. Watch per-day rows in the next gold check.
+- The `object()` helper strips the `optional` marker from the emitted schema, and the test asserts that none remains.
+
+## R108 — draft PR #97 at fa89d96 (stay totals, cover rows, wrapped labels, schedule currency, premiumQuote)
+
+**Verdict: NOT READY.** One path can show a stay total that is too high. One path drops a premium's qualifier.
+
+- **R108-1 (overstated stay total, blocker)** `chat.ts` `keepLabelledAmounts` → `stayOf`.
+  - The stay figure comes from `verify.ts` `stayPays`. Before this PR the table path always refused it. Now it is kept whenever the table rows agree on max-days and first day.
+  - `stayPays` rejects other *day* rules (`OTHER_DAY_RULE`), but nothing rejects a *money* limit on the same row. `dailies` counts only figures followed by "per day", and every other figure is ignored.
+  - Example: "S$100 per day from the 1st day, up to a maximum of 30 days, subject to an overall limit of S$2,000". For a 25-day stay this gives S$2,500, above the S$2,000 limit.
+  - The real B3/H4 row (S$30 a day after the 10th day, max 30 days) has no such limit, so the replay is correct. But the guard is missing.
+  - Fix in `chat.ts` (verify.ts stays frozen): keep the stay only when the row as printed, with its continuation lines, prints no money figure other than the daily and no cap word (`NEAR_CAP`) other than the max-days phrase. Carry that as a flag in `report.days`. Add the example above as a test.
+- **R108-2 (premium qualifier stripped)** `check.ts` premiumQuote + `chat.ts` `coverRows`.
+  - D8 page 3 prints both "Instalment Premium : 470.85" and "First Year Instalment Premium * : 376.68". Both lines say "premium" and print a figure, so either one passes.
+  - Whichever one the model picks, the row is labelled "Premium, monthly". So S$376.68 would show with no "first year" qualifier.
+  - Also, nothing stops the same policy premium being attached to several cover lines (the basic plan and each rider), which double-counts it if the chat adds up premiums.
+  - Fix: when the premium comes from premiumQuote, take the label from that line's own words before the figure ("First Year Instalment Premium"), or refuse a line with a qualifier (first year, discount, health extra, basic, rider). Keep one premium source line per policy, not per cover.
+- **(3) Wrapped label: sound.**
+  - The quote minus one text-only cell must sit on a single line. The very next line must be exactly that cell with no figure, and only one cell can qualify.
+  - The figures checked (`printsNumber` on `source.excerpt`) are on the matched line. So the binding is to that line, and a mismatch only refuses.
+- **(4) Schedule currency: sound.**
+  - The fallback runs only when `DECLARED` finds nothing. `pageCurrency` returns null when the page names or prints any other currency, says "unless stated", or lists currency options.
+  - A sign printed in the excerpt still wins, and the chat path already uses `pageCurrency` on the same pages.
+- **(2) Cover rows: sound.**
+  - The sum insured comes from the person's own cover line, and a corrected sum insured shows no amount.
+  - The premium path is covered by R108-2.
+
+## R109 — PR #97 delta fa89d96 → a58235f (R108 fixes)
+
+**Verdict: READY.**
+
+- **R108-1 is fixed.** `dailyRateAlone` reads the row's line, its continuation lines and its quote. Any money figure other than the daily rate refuses the stay. So does any cap or limit word left once "max N days" is removed.
+  - I probed it with tsx:
+    - The real B3 line ("S$30 per day after the 10th day, up to a maximum of thirty (30) days") is still kept.
+    - "overall limit of S$2,000", "capped at 2,000", "payable up to 2,000" and "not exceeding twenty times the daily amount" are all refused.
+    - "per policy year" passes this check, but `verify.ts` `OTHER_DAY_RULE` already rejects it before a stay is worked out.
+  - Residual: a limit printed outside the row and its continuation lines (a footnote elsewhere on the page) cannot be seen. I accept this.
+- **R108-2 is fixed.** A premiumQuote is used only when the page has exactly one plain premium line, and that line is the premiumQuote's line.
+  - D8: "First Year Instalment Premium *" is not plain, so only "Instalment Premium : 470.85" can be used.
+  - The label is the line's own words. The frequency is kept only when it is printed on the page.
+  - The premium is de-duplicated per person, policy and source line.
+- `declaredCurrency` now defers "unless stated otherwise" to `pageCurrency`, which returns null for it.
+- `chat-test.ts` passes 41/41 locally with tsx.
+
+## R110 — PR #97 delta a58235f → 924c5a2 (premium refused when the page names another life)
+
+**Verdict: READY.**
+
+- `otherLife` is a new condition, and it can only refuse a premium. It cannot show a figure or change one.
+- Worst case, a page whose "Policy Owner" differs from the life assured drops a premium that was correct. That is safe over-refusal of a non-claimable figure.
+- `chat-test.ts` passes 42/42 locally.
+
+## R111 — PR #97 delta 924c5a2 → 70a5204 (premium rule uses household names)
+
+**Verdict: READY.**
+
+- **Household isolation.** `service.ts` `documents()` fills `people` from `family()`, which queries `family_members WHERE account_id=$1 AND lifecycle_state='active'`, with the same `accountId` as the documents.
+  - The names are only used in memory, in `otherLife`.
+  - They are not stored: the stored reading is the model's JSON.
+  - They are not sent to the model: `renderDocument` uses only `name` and `pages`.
+  - `app-run` takes them from the same snapshot household.
+- **Can only refuse.** `doc.people` is read in one place (`check.ts:241`), as a further `!otherLife(...)` condition before a premiumQuote is accepted. It can only make that condition false, which drops the premium.
+  - It never adds, changes or moves an amount.
+  - Benefit rows and sums insured are unaffected.
+- `chat-test.ts` passes locally.
+
+## Round 112: PR #98 at 8853ef4 (reading CLI passes household names)
+
+**Verdict: READY.** No findings.
+
+- `scripts/benefit-table/read.ts:35` `sourcesOf` now sets `people` from `familyOf(s)`, with the same "(self)"-style suffix stripping the table uses, which matches the app path (`lib/benefit-table/service.ts:45-50`). The CLI's premium check now agrees with production.
+- `people` is read only by `otherLife` (`lib/benefit-table/check.ts:34,241`), which can only refuse a premium. `renderDocument` does not include it, so the names are never sent to the model, and nothing is written to the database.
+- Replays of earlier runs can only lose a premium that the page ties to another member. They can never gain an amount.
+- `test.ts` importing `./read` is safe: `main()` runs only when `argv[1]` ends with `read.ts`.
+- Local results: `scripts/benefit-table/test.ts` 104/104, `chat-test.ts` 42/42.
+
+## Round 113: PR #98 at 4f604d4 (alpha switch-on)
+
+**Verdict: NOT READY.** One high finding, about the narrower page set. The allowlist and the backfill SQL are sound.
+
+### R113-1 (high): the narrower page set hides waiting periods and exclusions from the chat
+`lib/simple-chat/library.ts:110-113` and `lib/simple-chat/hook.ts:89`. With the table on, the model now sees only the pages its rows cite, which is 30 of the 229 pages in the snapshot library. I reproduced that 30/229 figure from run-03b `table.json` plus the snapshot.
+
+**What gets dropped.** Of the 199 pages not sent, 59 print "waiting period", "exclusions", "pre-existing", "will not pay", "does not cover" or "not covered". That is about 156k characters. Breakdown:
+
+| Document | Pages dropped |
+|---|---|
+| Benefit Summary | 6 |
+| Product Summary | 8 |
+| CI II wording | 5 |
+| Life wording | 5 |
+| Travel wording | 30 |
+
+**Concrete case.** Benefit Summary p11 states a 90-day waiting period for Living Care: no Living Care benefit is paid for a heart attack, major cancer and similar conditions diagnosed within 90 days of cover starting. The Living Care rows show "up to S$350,000" with no conditions, and they cite Product Summary p17 and p22, so p11 is not sent.
+
+Ask "I had a heart attack a month after joining, what can I claim?" The model now sees the S$350,000 row and nothing about the waiting period. Before this change, the whole library was sent and the model could raise it. The CI II rows say "The waiting period in Section 3.2", but the page that holds Section 3.2 isn't cited either.
+
+**Why the safeguards don't catch it.** `verifyAnswer` still checks quotes against every stored page, but it does not add waiting periods or exclusions. `PAGES_NOTE` only helps when the model thinks to look for an exclusion it cannot see. So a claimable amount can be shown without the rule that makes it unpayable. That breaks the "never strip a qualifier" rule.
+
+**Fix options, cheapest first:**
+- **(a) Free.** When `pagesSent` narrows the library, every amount statement carries a fixed server-side note: waiting periods and exclusions may be on pages not shown here, so check the full document before claiming.
+- **(b) Recommended.** Also send, for each document that has a cited page, its pages matching a waiting-period / exclusion / pre-existing / "will not pay" / "does not cover" pattern. On this library that adds 59 pages, roughly 62k tokens, taking the prefix from about 85k to about 150k tokens. That is still about half the full library.
+
+Either way, add a chat-test case: a Living Care row with an uncited waiting-period page must not produce a bare S$350,000.
+
+### Allowlist: sound
+- Every caller now passes an account. I checked by grepping all of them: the 3 API routes, `workflow.ts:308`, ledger extract and seed, ingest, and the hook's `liveTable`.
+- The account always comes from the server: `requireHouseholdContext().householdId`, or `request.accountId`. `jobs.ts:40` replays the stored request.
+- An unset or empty list, or a call that names no account, is off in any production build. That includes previews, because `VERCEL` is set there.
+- Comparison is exact after trimming and lower-casing, so neither a substring nor a wildcard matches.
+- No path turns the feature on for an unlisted account.
+
+### Backfill SQL: sound
+- **Readings.** Each reading insert has `WHERE EXISTS` on the policy, with the same `account_id`, active and not superseded, plus `ON CONFLICT (policy_id) DO NOTHING`. A wrong account or policy inserts nothing, and stored readings are never overwritten.
+- **Links.** Link inserts are scoped by `account_id` and use `DO NOTHING`, so the household's own links are kept.
+- **Quoting.** Every value is dollar-quoted with a random tag that is checked against the text, so no reading can end the quote.
+- **Transaction and RLS.** One transaction. No policy or RLS change, and the new rows carry `account_id`, so the existing RLS policies cover them.
+- **Account.** The account in the file matches the snapshot's `accountId`.
+
+Two minor notes:
+- The second undo line deletes every `chosen_by='model'` link for the account, including any the app makes after the import. The plan's "nothing else is touched" overstates it, but the app's own `relink` does the same delete (`service.ts:125`).
+- `links_stored` counts all of the account's links, not only the imported ones.
+
+### Checked locally
+- `scripts/benefit-table/test.ts`: 105/105.
+- `chat-test.ts`: 43/43.
+- `scripts/simple-answer/chat-test.ts` was not run, because `@anthropic-ai/sdk` is missing in my sandbox.
+
+## Round 114: PR #98 at d728de5 (delta review for R113-1)
+
+**Verdict: READY.** R113-1 is fixed, and I am adding one recommended one-line widening of the page pattern (R114-1).
+
+### R113-1: fixed
+- **Rule pages are now sent.** `pagesToSend` (`lib/benefit-table/chat.ts:89-95`) adds every `RULE_PAGE` page of each document that a row comes from.
+  - I reproduced the coordinator's figure on run-03b plus the snapshot: 84 of 229 pages are sent.
+  - Benefit Summary p11, which holds the 90-day Living Care waiting period, is now sent.
+- **Every amount now carries a warning.** `noteNarrowedPages` (`chat.ts:101-104`, called at `hook.ts:104`) adds `NARROWED_PAGES_NOTE` once to any answer that shows an amount.
+  - The note contains no figure.
+  - I checked the trigger: it fires on `s.amount`, the same field the saved answer carries, and the end-to-end test asserts exactly one note when there is an amount and none when there isn't.
+  - It only runs when there are rows, which is when pages are narrowed. The only harmless edge is a library whose cited and rule pages happen to be all of its pages.
+- **Prompt.** `PAGES_NOTE` now tells the model to check the rule pages for the event before giving an amount.
+- **Tests.** The Living Care waiting page is sent, and the claims page is not.
+
+### R114-1 (medium, recommended before merge): `RULE_PAGE` misses "survival period" and "not payable"
+The doc comment on `RULE_PAGE` (`chat.ts:84`) says it covers "a waiting or survival period", but the regex has no `survival`.
+
+On the snapshot, these rule pages are still not sent:
+- **5e58ea7d p65:** "9 SURVIVAL PERIOD The Life Assured must survive a period of seven (7) days after the date of diagnosis…". This affects every CI amount if death follows within 7 days.
+- **817d6e8b p27 and p51, 5e58ea7d p38 and p61:** "This benefit is not payable if … diagnosed before the Benefit Commencement Date".
+- **817d6e8b p29, 5e58ea7d p40:** "shall not be payable".
+- **5e58ea7d p16:** "We will not be liable for any claim made on or after the Policy ends".
+
+The server note (a) still warns on every amount, so this is not a bare wrong amount. That is why it is not blocking.
+
+Suggested fix: add `|survival\s+period|\bnot\s+(be\s+)?payable\b|\bnot\s+be\s+liable\b` to `RULE_PAGE`. On this library that sends about 12 more pages, roughly 10k tokens.
+
+### Residual (noted, not blocking)
+- A document with no rows sends no pages at all, for example a separate policy wording whose schedule holds every row. Its exclusions reach the user only through the fixed note. Here, the only document with no rows is a single-page one (output_…117).
+
+### Tests (run locally)
+- `scripts/benefit-table/test.ts`: 105/105
+- `chat-test.ts`: 44/44
+
+## Round 115: PR #98 at 8fd4003 (R114-1 delta)
+
+**Verdict: READY.** R114-1 is fixed.
+
+- **The pattern now catches the missed rules.** `RULE_PAGE` (`lib/benefit-table/chat.ts:86`) adds three patterns:
+  - `survival\s+period`
+  - `not (be) payable`
+  - `not be liable`
+
+  This matches the fix I suggested, and the regex now agrees with its doc comment.
+- **The page count matches.** 96 of 229 pages are sent, which is what I estimated: 84, plus 12 new rule pages.
+- **Test coverage.** The survival-period case is added inside the existing chat-test case.
+- **Local test results:** `scripts/benefit-table/test.ts` 105/105, `chat-test.ts` 44/44.
+
+## Round 116: PR #99 at 6d01bff (Coverage with nothing to confirm)
+
+**Verdict: NOT READY.** Two findings: R116-1 is high, R116-2 is medium. Amounts, caps, qualifiers and person binding are sound. The confirmations code is safe, and so is leaving out the multi-person picker.
+
+### R116-1 (high): the conditions of each row are no longer shown anywhere on Coverage
+In `components/benefit-table-coverage.tsx`, `benefitParts` builds its detail from `rowDetail` and the figure note. `rowDetail` (`lib/benefit-table/headline.ts:42-45`) only includes the qualifier, `fromDay` and `maxDays`. Its own comment says "Conditions are on the page the row links to". As a result, `r.conditions` is not rendered, either in the key rows or in the "All N benefits" table.
+
+On main, every row showed its days plus its first two conditions, with the full list under "Conditions and source" (old lines 133-135).
+
+On run-03b, 154 of the 348 rows carry conditions. Examples:
+- "Only 1 claim is allowed under this benefit"
+- "The waiting period in Section 3.2"
+- "Each condition can only be paid once and a maximum of 6 claims"
+- the "survives at least … days" rules
+
+The amount itself is unchanged. But "S$300,000" or "Up to S$500" is now shown without the rule that limits it, and a page link is not the same as showing the rule. This breaks the "never strip a qualifier" rule, and it contradicts the PR's claim that no qualifier is lost.
+
+**Suggested fix:**
+- In "All N benefits", show each row's conditions in the name cell's `<small>`, or add a fourth cell that wraps.
+- On key rows, show the first condition and a "+N more" that points to the full list.
+- Add a test that a row's conditions text appears in the rendered table.
+
+### R116-2 (medium): unplaced parts of documents are now hidden without a word
+`assemble.ts:54` documents `unlinkedSections` as "shown to the household, never silently dropped". The new page drops that field from `BenefitTableData` and renders nothing for it. On run-03b there are 22 such parts.
+
+Leaving them out of the table and the chat is fail-safe, because no wrong amount can appear. But nothing tells the household that parts of their documents are not summarised, and hiding a documented benefit counts as a failure.
+
+**Suggested fix (no picker needed):** one line under "Also in your documents", for example: "N parts of your documents couldn't be placed under a cover, so they aren't in this summary or the chat", followed by one page link per part. Leaving auto-linking out of this PR is fine once the household is told.
+
+### Checked and sound
+- **Amounts.** `shortFigure` only re-words the figure the row already has. It uses the same unit and period wording as `assemble.figureText`.
+  - A capped worked-out amount says "Up to", and the note keeps "N% of S$base, capped".
+  - Projections are labelled "not an amount held or payable".
+  - A row with no currency says "(currency not stated)".
+  - `money` matches `assemble.ts`.
+- **Key-benefit selection.** It only orders and limits rows, and never shows a figure the row doesn't carry.
+  - It never chooses a projected row, a not-covered row, a row with no amount that isn't "as charged", or a second row with the same name.
+  - The qualifier ("for child") stays in the detail line.
+  - Every row is still in "All N benefits".
+  - Rows are filtered by `coverKey` as on main, and no row is left without a cover on run-03b (0 of 348).
+- **Person binding.** It is unchanged: rows stay under `person.rows`, and the table never reads `policy_members` or `linkedPeople`. So leaving out the multi-person upload picker changes no binding.
+- **Confirmations.** The confirm and link routes and `benefit_confirmations` are untouched, and no longer called from the page.
+  - The table still applies any stored correction. With 0 in production, that changes nothing.
+  - One consequence: a stored correction can no longer be undone from the page.
+- **The new report route.** It requires a household member, is off unless the table is live for the account, takes at most 1,000 characters, writes one log line, and changes nothing.
+
+### Tests (run locally)
+- `headline-test`: 12/12
+- `test.ts`: 105/105
+- `chat-test`: 44/44
+
+## Round 117: PR #99 at 42ac13d (R116 fixes, short cover names, temperature retry)
+
+**Verdict: READY.** R116-1 and R116-2 are fixed. I found no new blocking issue; one low note is at the end.
+
+### R116-1: fixed
+`rowDetail(r, brief)` (`lib/benefit-table/headline.ts:39-43`) now includes the row's conditions:
+- In the full list, every condition is shown.
+- On a key row, the first condition is shown with "(+N more)".
+
+The component passes `brief` only for key rows, and the headline test covers both cases.
+
+### R116-2: fixed
+- `assembleTable` now records a `source` for each unplaced part: the first benefit of that section.
+- The GET route already sends `unlinkedSections`.
+- The page lists the parts under "Also in your documents", in a collapsed line: "N parts … couldn't be placed under a cover, so they aren't in this summary or in the chat". Each part has its document and a page link.
+
+### Stored corrections
+`tableFor` (`service.ts:108-110`) no longer passes confirmations, so:
+- every amount is the printed or worked-out figure;
+- the chat path that depended on a corrected base (`coverRows`/`baseCorrected`) gets nothing;
+- `staleConfirmations` is empty.
+
+This is consistent with the page having no undo.
+
+### Short cover names: no two covers merge
+`coverLabels` (`chat.ts:57-76`) is keyed by the full printed name, and it decides uniqueness across all the household's covers, not just the ones in one answer:
+- **Unique short name:** the cover is labelled with its short name, which is its own words without the printed policy number, plus the plan.
+- **Shared short name:** the product is added.
+- **Still shared:** the full printed name is kept, policy numbers included.
+
+Checks:
+- **Real table (run-03b):** 7 covers give 7 distinct labels.
+- **Adversarial case:** "A / GTL(POLICY NO. 1)", "A / GTL(POLICY NO. 2)" and "B / GTL" stay distinct, as "A, GTL(POLICY NO. 1)", "A, GTL(POLICY NO. 2)" and "GTL, B".
+- **Checks that compare labels:** `report.labels` and `keepLabelledAmounts` use the same `said` text, so they still match.
+- **Covers that already shared a full name:** two covers whose full printed names were identical already shared a label before this change. For example, two CI II policies with no policy number in their names. That is not new.
+
+### Temperature retry: no loop and no double charge
+`anthropicPost` (`lib/ai/providers.ts:357-364`) sends the request at most twice:
+- It retries only on a 400 whose body mentions temperature, and only while `temperature` is still in the request.
+- The retry drops `temperature`, so a second retry cannot happen.
+- A 400 is not billed.
+- `withRetries` retries only 429 and 5xx errors. So any repeat paid call can only come from those, exactly as before this change.
+
+Other details:
+- The model is remembered for the rest of the process, so later calls skip the 400.
+- Each caller builds a fresh request, so deleting `temperature` from it affects nothing else.
+- The rag2 hosted-model path uses the same helper.
+- Tests: `anthropic-post-test` 4/4.
+
+### R117-1 (low, not blocking): a short name can drop the kind of cover
+On run-03b, "Travel insurance summary, Single Trip, plan Business" becomes "Single Trip, plan Business". The card's citation names the document, so the reader can still tell what it is.
+
+Optional fix: keep the product whenever the short name has no cover-type word in it (life, accident, travel, health, critical, hospital and so on).
+
+### Tests (run locally)
+- headline-test 13/13
+- test.ts 105/105
+- chat-test 45/45
+- anthropic-post-test 4/4
+
+## Round 118: PR #99 at cc6e495 (delta from 42ac13d)
+
+**Verdict: READY.** No findings.
+
+- **R117-1 is fixed.** A short cover name keeps its product unless it contains a cover-type word (`COVER_KIND`, `chat.ts:60`).
+  - On run-03b the travel cover now reads "Single Trip, plan Business, Travel insurance summary".
+  - The other 6 labels are unchanged, and all 7 are still distinct.
+- **No two covers can share a label.** If any picked label is used by more than one cover, every cover with that label gets its full printed name. Full names are the keys, so they are distinct.
+  - The only way left to collide is contrived: one cover's picked short label would have to equal another cover's full printed name, word for word.
+  - My earlier adversarial case (GTL with policy no. 1, GTL with policy no. 2, and GTL from product B) still gives three distinct labels.
+- **Key rows now show every condition.** `rowDetail` takes no `brief` argument any more, so a key row's detail line is the same as the full list's. That is stricter than R116-1 asked for, and nothing is shortened.
+- **Tests (run locally):** headline-test 13/13, test.ts 105/105, chat-test 46/46.
+
+## Round 119: PR #100 at 3b87b9d (MODEL_PRESET=anthropic ignores non-Anthropic per-job settings)
+
+**Verdict: READY on code.** One cost point needs DC's decision before merge (R119-1).
+
+### The four checks
+1. **The alpha chat and the benefit-table reading are untouched.** Neither path calls `modelFor`:
+   - The benefit table uses `benefitTableModel`, which reads `DEARPOLICY_BENEFIT_TABLE_MODEL` and accepts only `anthropic:` values (default Sonnet 5.5).
+   - The simple chat uses `simpleChatModel` and `DEARPOLICY_SIMPLE_CHAT_MODEL`.
+   - Nothing outside `providers.ts` reads `READING_MODEL`, `JUDGEMENT_MODEL`, `NARRATION_MODEL`, `CHAT_MODEL` or `JUDGEMENT_FALLBACK_MODEL` directly.
+2. **Anthropic per-job settings still win.** `allowedByPreset` (`lib/ai/providers.ts:73-75`) drops a setting only when the preset is anthropic and the setting's provider is not anthropic. So `CHAT_MODEL=anthropic:claude-haiku-4-5` is kept.
+   - When a setting is dropped, the job falls back to the preset's model: Haiku 4.5 for reading and narration, Sonnet 5 for judgement and chat.
+   - Every other preset, and no preset, behaves exactly as before. The tests cover all five cases.
+3. **Fallback.** Under the anthropic preset, `fallbackModelFor` returns null unless `JUDGEMENT_FALLBACK_MODEL` is itself an Anthropic model.
+   - A leftover `gemini:flash-lite` fallback is now ignored, so a rate-limited judgement retries nothing rather than switching to Google.
+   - No fallback can end on a non-Claude model.
+   - Scanned-page reading (`documentReaderFor`) now gets a Claude reading model. Anthropic is in `HOSTED_DOCUMENT_PROVIDERS`, so that model is used for scanned pages.
+4. **Spend accounting.** Every model these paths can now resolve to is in `PRICES`: `claude-haiku-4-5`, `claude-sonnet-5` and `claude-sonnet-5-5`.
+   - An Anthropic model typed into a per-job setting that is not in the table is still priced at zero and flagged. That was already true.
+
+One edge case: with the preset set but no `ANTHROPIC_API_KEY`, the preset choice parses to null. The OpenAI setting is now ignored too, so the job falls back to the Gemini default. The preset implies the key, so this only matters if the key is removed.
+
+### R119-1 (decision for DC, not a defect): merging moves every household's older jobs to Claude prices
+The test comment says production already has `MODEL_PRESET=anthropic` set, with the `openai:gpt-6-luna` per-job settings left over. If so, then from merge and deploy onward, these jobs move for every household, not just the alpha account:
+
+| Job | Today | After merge |
+|---|---|---|
+| Reading (old ledger) | `gpt-6-luna` | Haiku 4.5 |
+| Narration | `gpt-6-luna` | Haiku 4.5 |
+| Judgement | `gpt-6-luna` | Sonnet 5 |
+
+By `PRICES`, Haiku 4.5 costs US$1 in / US$5 out per million tokens, and Sonnet 5 costs US$2 / US$10. `gpt-6-luna` costs US$0.10 / US$0.50. That is about 10x for reading and narration, and about 20x for judgement.
+
+This is the intended behaviour, but it changes cost and model quality in production, against a US$100/month budget. DC should say yes knowing that.
+
+The alternative is to unset `MODEL_PRESET`, or keep the OpenAI settings with no preset, until the alpha's own spend is known.
+
+### Tests
+`model-preset-test`: 5/5, run locally.
+
+## Round 120: PR #100 at 9d22898 (delta from 3b87b9d)
+
+**Verdict: READY.** No findings. R119-1 (the cost switch) is accepted under DC's Anthropic-only rule.
+
+- **Preset check.** `allowedByPreset(choice, env)` is now exported and reads `MODEL_PRESET` from the env it is given. "anthropic" is a known preset, so this behaves the same as `modelPreset()`.
+- **Alpha chat model.** `simpleChatModel` (`lib/simple-chat/flag.ts:45`) runs the parsed value through `allowedByPreset`. Under the preset, a leftover `openai:` value falls back to `DEFAULT_SIMPLE_MODEL` (Sonnet 5.5). An `anthropic:` value still wins, and the format check still throws on a malformed value.
+- **Canaries.** `canaryConfigFor` (`lib/ai/rollout.ts:116`) returns null for a canary that names another provider. With no canary configured, the stable model applies, and under the preset that model is Claude. So no Google or OpenAI call can come in through the canary path.
+- **Imports.** `simple-chat/flag.ts` now imports a value from `providers.ts`; before, it imported only types. `providers.ts` imports only zod and `deterministic-model`, so there is no import cycle. Neither module is imported by a client component; only server modules (`lib/chat/workflow.ts`, `lib/ai/llm.ts`) import them.
+- **Tests (run locally):** model-preset-test 7/7, benefit-table chat-test 46/46.
+
+## Round 121: PR #101 at aef0cbd (answer style guide, label clean-up, sin1 region)
+
+**Verdict: NOT READY.** One finding is high, two are medium and one is low. The region change is safe, and the PR has no per-question patches.
+
+### R121-1 (high): any model note containing "differ", "either" or "alternative" now removes the server's "not a total" warning
+In `lib/simple-chat/verify.ts:1063-1066`, `saidApart` skips every not-a-total note whenever any uncertainty statement in the answer matches `not a total|alternatives?|either|differ(ent|s)?`.
+
+The style guide asks for exactly such a note: "When documents print different figures, say so once, in the note after the amounts". That note says the figures differ, not that they must not be added. It is also not tied to the amounts in the group: one such note anywhere drops the warning for every group.
+
+I probed this with the PR's own style-test fixture (two cross-row amounts, S$500 and S$250):
+
+| Model's note | not-a-total notes kept |
+|---|---|
+| "The two documents print different figures." | 0 |
+| "Either document can be used to claim." | 0 |
+| no note | 1 |
+
+In each case both amounts are still shown. This is the wrist case in plain form: S$1,250 or S$120,000 shown with only "the documents differ", and nothing saying they cannot be added. A wrong total is our worst kind of bug, and this removes the server-side guard against it on the model's wording alone.
+
+**Fix:** always keep the server's note. To say it once, drop the model's own uncertainty sentence when it only restates the difference. If you do want to skip the server's note, require the model's sentence to say "not a total" or "cannot be added" and to name every amount in the group.
+
+### R121-2 (medium): the chat goes down if the style file is missing at run time
+`SIMPLE_SYSTEM_PROMPT` is a module-level template that calls `answerStyle()`, which does `readFileSync(.../answer-style.md)`. If the file is not traced into a route, the prompt module throws when it is imported, and every chat request fails. That can happen through a future `outputFileTracingIncludes` edit, a bundling change or a route that is not covered.
+
+The `"/**"` include in `next.config.ts` covers today's routes, and the test asserts that config line. But a style file should never be able to stop the chat.
+
+**Fix:** wrap the read in try/catch, return "" on failure and log once. Or import the text at build time, for example as a `.ts` string export.
+
+### R121-3 (medium): cards for printed policy terms lost their only text label
+`components/answer-cards.tsx:96`. Cards of kind `benefit_terms` used to say "as printed in the policy, not worked out for this case". Now only the CSS class `printed` (a quieter style) tells them apart from an amount worked out for the event. A style is not a qualifier: a screen reader or a quick reader sees "Up to S$5,000" just as they see a calculated figure.
+
+Removing "illustration", "printed amount" and the "currency not stated" line is fine:
+- the footer still says "Illustrations/Amounts from your documents, not a payment or an insurer's decision";
+- a bare "$" is still explained under "Where this comes from" (`answer-cards.tsx:125-126`).
+
+But the per-case qualifier on printed terms should stay. A short label such as "Policy terms, not worked out for this case" is enough.
+
+Also checked:
+- Removing "To confirm" (no amount, only uncertainties) leaves no amount, so it cannot mislead.
+- Removing "worked out from the document's terms" from `basisOf` and the stay basis keeps "N% of …" and "(n × amount)", so how each figure was reached is still shown.
+
+### R121-4 (low): a real household name is in a prompt sent to every household
+`lib/chat/answer-style.md:31` uses "sorry, it was Desmond" and "For Desmond, …". The guide goes into every household's system prompt. It is DC's real family member's name, from the live test.
+
+**Fix:** use a made-up name, as the tests do ("Lim Ah Kow").
+
+Separately, and outside this PR: `app/family/page.tsx:115` already shows DC's full legal name as the placeholder to every user. It should be replaced the same way.
+
+### Can the style guide override the accuracy rules? Mostly no.
+- The guide is placed after the rules, with "The rules above always win over it".
+- It tells the model only how to write. The server's checks (`verifyAnswer`, `amountsFromRows`, `keepLabelledAmounts`) do not read it, so it cannot add an amount or remove a qualifier. R121-1 is the exception, because a server check now depends on wording the guide encourages.
+
+Two wording points, neither blocking:
+- The prompt's "could fall under" became "falls under", and "Leave out benefits … the question didn't ask about" was added. Read with the new "a separate benefit … one short fact, no amount" line, this narrows answers to the event as described. That matches "missing information is not an exclusion": the benefit is still named.
+- "Never show … 'as printed'" conflicts with keeping the printed-terms qualifier (R121-3). Apply that line to the model's prose only.
+
+### Region (sin1) on Hobby: safe
+- `vercel.json` sets one region, `["sin1"]`. To my knowledge Vercel's Hobby plan allows one region of your choice for functions; only multiple regions need Pro. I have not checked this against the live dashboard.
+- No route sets `preferredRegion` or the edge runtime, so nothing conflicts.
+- The daily cron runs in sin1 too.
+- The only effect is lower latency to the Singapore database.
+- `/api/health` now reports `VERCEL_REGION` and splits the "Chat model" and "Checking model" labels. `simpleChatModel()` can throw, and that is caught.
+
+### No per-question patches
+- The prompt and guide lines are general rules (corrections, unmentioned separate benefits, list questions, follow-ups). The ambulance and hospital-stay examples illustrate a general rule.
+- `benefitName` strips any leading row letter or number from every benefit. It is tested on 8 shapes, including ones it must leave alone ("A Death benefit", "X-ray").
+- Loading the library, conversation and table in parallel is general. The spend-cap check runs in that same `Promise.all`, so going over the cap still rejects before the model is called.
+
+### Tests (run locally)
+- style-test: 6/6
+- benefit-table chat-test: 46/46
+
+## Round 122: PR #101 at 58a225f (R121 fixes)
+
+**Verdict: READY.** R121-1 to R121-4 are fixed. One low note follows.
+
+- **R121-1 is fixed.** `verify.ts:1063-1075` now always adds the server's not-a-total note, which names the amounts. It then drops the model's own uncertainty statements that say "not a/the total". I re-ran my R121 probe with the PR's fixture. "The documents print different figures", "Either document…" and no note each now keep exactly 1 server note, and both amounts stay.
+- **R121-2 is fixed.** `answerStyle()` catches a read failure, logs one line and returns "". The prompt then leaves out the style block entirely, so the accuracy rules are unchanged. The style test covers a missing path.
+- **R121-3 is fixed.** `benefit_terms` cards show "Policy terms, not worked out for this case" again.
+- **R121-4 is fixed.** The guide uses "Wei Ming", and a test asserts that neither household name appears in it. The full name in `app/family/page.tsx` is still there, outside this PR's scope.
+
+### R122-1 (low, not blocking)
+A model sentence is dropped whole when it contains "not a total", even if it also says something else. My probe: "These are not a total; the recuperation benefit needs a 24-hour stay" is removed. The condition still sits on the recuperation card, because cards carry the row's conditions, so nothing is hidden today.
+
+A tighter rule would drop the sentence only when, once "not a total" and the amounts are removed, nothing else is left.
+
+### Tests (run locally)
+- style-test: 9/9
+- benefit-table chat-test: 46/46
+
+## Round 123: PR #101 at e8adffd (delta from 58a225f)
+
+**Verdict: READY.** No findings.
+
+- **"Currency not stated" is back.** An amount card shows it whenever the currency is not resolved, alone or after the policy-terms label (`answer-cards.tsx:99`).
+- **R122-1 is fixed.** `onlyNotATotal` (`verify.ts:893-900`) removes a sentence only if it says nothing but "not a total". A sentence with a digit, a time word, a condition word or any other content word stays. I probed four model notes:
+
+  | Model's note | What stays |
+  |---|---|
+  | "They are not a total." | removed |
+  | "…not a total. Claim within thirty days of the accident." | "Claim within thirty days of the accident." |
+  | "These are not a total; the recuperation benefit needs a 24-hour stay." | kept whole (it has a digit) |
+  | "Not a total, and the hip benefit is reduced by any earlier fracture payout." | kept whole |
+
+  The server's note, which names the amounts, is there in every case.
+- **benefitName regex fixed.** "D, E and F Benefit" is now treated as a list and left whole. `benefitNames` keeps the printed names whenever stripping the row letters would make two different benefits of one cover look the same ("A. Death" / "B. Death").
+  - Coverage and the chat label both use it, and the label checks compare the same text.
+  - Separately, the `benefitName` calls in `lib/claims/*` belong to a different, local function.
+- **Tests run locally:** benefit-table chat-test 46/46 and headline-test 13/13. `style-test` now imports React, which my sandbox lacks, so I did not run it. I ran the verify-level probes above directly instead.
+
+## Round 124: PR #102 at cdc9105 (second answer-quality round, diff vs main)
+
+**Verdict: NOT READY. Two blockers, both small fixes.** (b) and (c) hold. The amounts in the before-and-after are right.
+
+### R124-1 (blocker): the bare-$ rule does not catch every other currency
+`documentCurrency` (`lib/simple-chat/verify.ts:133-146`) decides that a document is Singapore-dollar only. It does so when the document names S$ and it finds no *listed* other currency. The list misses common spellings, so a foreign-currency document can pass, and its bare "$" is then shown as S$. My probes, each text with "S$" somewhere plus a bare "$100,000":
+
+| The document also says | Result |
+|---|---|
+| "Premiums are payable in S$ or U.S. dollars" | **SGD** (wrong: "U.S." is not matched) |
+| "Japanese yen" / "RMB 5,000" / "NT$5,000" / "Canadian dollars CAD 5,000" / "Rs 5,000 or ₹5,000" | **SGD** (all wrong) |
+| "Policy Currency: USD" / "USD100,000" | null (correct) |
+
+USD policies sold in Singapore are common, so "U.S. dollars" is a realistic path to a wrong currency on an amount. The coordinator's bar is that an open path must withhold, not show a wrong figure. This path shows a wrong one.
+
+**Fix: make the check fail-safe.** Treat any of these as "other":
+- any "dollar(s)" not directly preceded by "Singapore";
+- any three-letter capital code other than SGD next to a number (`\b(?!SGD)[A-Z]{3}\s?\d`);
+- any currency sign other than "S$" and a bare "$" (`[A-Z]{1,3}\$`, ₹, ฿, ₩, ₱, ¥, €, £);
+- the words yen, yuan, renminbi, rupee, baht, ringgit, peso, won, franc.
+
+The cost of a false "other" is only the existing "Currency not stated" label.
+
+On the real snapshot, the 17-page MINDEF benefit summary resolves 19 bare "$" figures to S$. That is correct, and it still works with the stricter check.
+
+Scope (challenge a) is right. The inference uses only the amount's own document (`found.docIndex`, the base document for a sum insured, `bdoc` in `basisOf`), with one cache entry per document object. It is never borrowed from another document or version. DC approved this rule in principle when they said go on round 2. It changes the frozen money rules, so the stricter detection is a precondition for that approval holding.
+
+### R124-2 (blocker): "each paid on its own terms" is a promise the documents don't support
+Challenge (d). `answer-style.md` states as a fact: "Separate covers each pay on their own terms unless a document says one replaces or reduces another." The default sentence in `prompt.ts` tells the model to say "separate covers, each paid on its own terms" whenever the pages it was sent print no such rule. DC's own documents contain several such rules:
+
+| Document and page | Rule printed there | Sent under narrowed pages (RULE_PAGE)? |
+|---|---|---|
+| MINDEF Voluntary Scheme, 55 rows in the table | "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." Hospital cash, Compassionate Death Allowance, Child Education Fund, recuperation, home modification. | Only some pages: D2 p9 yes (it says "exclusions"), D1 p7 no |
+| D2 p4, Advance Payment | Pays only "provided no other Benefit has been paid", and "the balance of the Sum Insured … shall be paid" at death. An advance payment reduces the death benefit. | Yes |
+| D2 p3 | Cover "terminated upon payment of full Sum Insured under GTL or GPA". | **No** |
+
+Mitigation: the table rows already carry the Core-or-Voluntary sentence as a condition, so those cards show it. The model's uncertainty line can still contradict a condition printed on the card next to it. Where the rule sits on an unsent page (D1 p7, D2 p3), "each paid on its own terms" fills the gap with an entitlement nobody checked.
+
+**Fix (two lines):**
+- Default sentence, in both the prompt and the style guide: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." Drop "each paid on its own terms" everywhere.
+- Add coordination words to `RULE_PAGE`: `can only be claimed|either under|no other benefit (has been )?paid|balance of the sum|terminated upon payment|instead of|in lieu|reduce[sd]?\b|deducted`. Pages that print these rules are then always sent.
+
+Keep the existing "fact with its quote" path for printed rules. In the before-and-after, the TPD answer already quotes the cover-ends rule, which is the right behaviour.
+
+### R124-3 (medium, should fix in this round): "not shown to be covered" also drops the claim deadline
+Challenge (e). The new rule (`prompt.ts`) removes how-and-when-to-claim steps when the bottom line is "not covered", "**not shown to be covered**" or "cover ended". The first and third are fine. "Not shown to be covered" means information is missing. Missing information is not an exclusion, so the cover may still pay.
+
+Dropping the printed notice deadline there can cost a valid claim. Example: the knee-ligament answer is "not shown covered", yet it lists ambulance (up to S$500) and recuperation (S$250) under the same accident cover. In the flight answer, the trip dates are uncertain and the user is told to confirm them with FWD.
+
+**Fix:** for "not shown to be covered" only, keep the printed deadline as a conditional fact, for example: "If FWD confirms cover, the policy says to claim within 30 days." Suppress claim steps only for "not covered" and "cover ended".
+
+### R124-4 (low, not blocking): a dropped point is now silent
+The LEFT_OUT_FACT notice is removed. A left-out amount still shows LEFT_OUT_AMOUNT. An unverified fact or exclusion the model wanted to state now disappears without a trace. Exclusion pages are sent (RULE_PAGE) and the cards carry the rows' own conditions, so I accept this as DC's style choice ("never say you left something out"). Keep `report.dropped` logged so the Test engineer can count dropped exclusion-type facts.
+
+### Checked and holding
+- **(b) The not-a-total note survives.** The R121 and R122 probes re-run on cdc9105. The model note "The two documents print different figures. The insurer decides which applies." is removed, and the server's not-a-total note stays (1 note, 2 amounts). The same holds for "X and the summary print different figures; the insurer decides which", "Either document…" and no note at all. A note with a condition is kept beside the server's note.
+- **(c) The card still shows base and percentage.** Every percent-of amount is an illustration (`verify.ts:407,413`), and `basis` is attached for every illustration with `percentOf` (`verify.ts:1087`, `basisOf` at 943). The card shows basis unless the text already says it (`answer-cards.tsx:60`). A capped row keeps its percentage in the label. A base the household corrected now states the percentage in the fact. A failed percent-of amount that is kept as a fact gains "N% of …". I found no path where a worked-out amount shows without its percentage and base.
+- **Row letters:** the `benefitNames` change keeps distinct letters ("A. Death" / "B. Death"). headline-test passes 13/13.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 46/46
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+simple-answer chat-test, style-test and offline-test need `@anthropic-ai/sdk` or React, which this sandbox lacks, so I did not run them. I ran the verify-level probes above instead.
+
+## Round 125: PR #102 at 501fe7c (delta from cdc9105)
+
+**Verdict: READY.** All four R124 findings are fixed. One low note, not blocking.
+
+- **R124-1 is fixed.** `documentCurrency` (`verify.ts:131-154`) now treats as "other" all of the following:
+  - any "dollar(s)" not after "Singapore";
+  - a listed foreign code next to a number, in capitals;
+  - any letters-then-"$" sign other than S$/SG$/SGD$;
+  - any other currency sign, "Rs";
+  - currency names, and foreign-currency or exchange-rate clauses.
+
+  All my R124 probes now return null: U.S. dollars, yen, RMB, NT$, Canadian dollars, Rs/₹, USD100,000 and "Policy Currency: USD". "GPA 600 / GTL" (scheme codes) still resolves to SGD. On the real snapshot, the 17-page MINDEF benefit summary still resolves its 19 bare "$" to S$. The scope is still the amount's own document.
+- **R124-2 is fixed.** Both `prompt.ts` and `answer-style.md` now use the neutral line: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." "Each paid on its own terms" appears nowhere in either, and style-test asserts its absence. Printed rules are named for the model to quote: one scheme only, instead of / reduces, balance of the sum insured, cover ends after a full payment. `RULE_PAGE` now also matches coordination wording. On the snapshot it sends 93 rule pages instead of 81, adding 12, including D1 p7 (Core-or-Voluntary note) and D2 p3 (terminated upon payment of the full sum insured).
+- **R124-3 is fixed.** Claim steps are suppressed only for "not covered" and "cover ended". For "not shown to be covered", a printed deadline is given as a condition ("If FWD confirms cover, claim within 30 days …"), and the prompt adds "Missing wording is not an exclusion".
+- **R124-4:** accepted as DC's style choice. No change needed.
+- **TE fixes checked.**
+  - The "different figures" sentence is removed only when the server's notes cover every amount shown (`differOk`).
+  - `onlyNotATotal` now keeps any sentence with a condition or time word (if, when, after, only, dated…).
+  - Re-running my R121 and R122 probes: 1 server not-a-total note and 2 amounts in every case.
+  - `docLabel` tells apart documents that would read the same by upload date, then by "file N of M".
+  - `personalFileName` hides WhatsApp, Screenshot, PXL and "document (3)" names.
+
+### R125-1 (low, not blocking)
+`\bwon\b` also matches "won't", so a Singapore document that says "we won't pay" falls back to "Currency not stated" for its bare "$". This errs on the safe side (it withholds, never mislabels). It only costs the improvement in such documents. A later fix is `\bwon\b(?!['’]t)`.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 46/46
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+style-test (which now covers R124-1/2/3) needs React, which this sandbox lacks, so I did not run it. I re-ran the verify-level probes directly instead.
+
+## Round 126: PR #103 at 57e33b4 (round 3, diff vs main)
+
+**Verdict: NOT READY. Two blockers, both of which can show a wrong or unqualified amount.** Premium rows (2), short files (3) and the prompt-only changes (5) hold.
+
+### R126-1 (blocker): the "100% of the sum insured" fallback accepts another policy's, another person's, or a contradicted sum
+The new fallback (`verify.ts` ~1009-1023) runs when `checkAmount` refuses for one of two reasons:
+- "the percentage is not the quoted row's own figure";
+- "the sum is not the one this row's table is a percentage of".
+
+It then shows the model's base quote as the amount if three things hold: the base line is printed, the base's *page* contains the person's name tokens, and the wording has no limit words. It skips every check `sumInsuredBase` makes. It does not check that the base line names the person, that the base is the same cover or policy as the wording, or that the base agrees with the row's own printed base.
+
+Probes (`scratchpad/r126/w.ts`) use a certificate page with "GROUP TERM LIFE / Lim Ah Kow S$500,000 / Tan Mei S$1,000,000 / GROUP PERSONAL ACCIDENT / Lim Ah Kow S$600,000":
+
+| Model statement | Shown |
+|---|---|
+| CI policy wording "100% of the Sum Assured will be payable in one lump sum", base = Lim's **GTL** line | **S$500,000** as the CI death benefit (another policy's sum) |
+| Same wording for Lim, base = **Tan Mei's** line | **S$1,000,000** (spouse's sum, for Lim) |
+| A table that prints its own base "Accidental Medical Expenses (Sum Insured S$5,000) / Medical expenses 100%", base = Lim's S$600,000 | **S$600,000** (overrides the base the table prints) |
+
+Each of these is a wrong claimable amount.
+
+**Fix:**
+- Drop "the sum is not the one this row's table is a percentage of" from `WHOLE_FALLBACK`. A table that prints its own base has settled the base.
+- For the other reason, require the base to come from the **same document as the wording, or a document with the same policy number**.
+- Require the base **line** to name the person (as `sumInsuredBase` does at R50-3) and the page to name no other household member (`otherLife`).
+
+A3 (policy wording and its own schedule, one policy) still passes under these rules.
+
+### R126-2 (blocker): a companion row is shown without its own conditions
+`amountsFromRows` (`chat.ts` ~179-196) builds each companion with `statementFromRow(r, { ...raw, alternativeGroup })`. `raw` is the model's statement for the *primary* row, so the companion:
+- inherits the primary's conditions (verify then drops them, because their quote is not on the companion's page);
+- never gets its own row's conditions, because the model never wrote a statement for it.
+
+Probe: I added the condition "Payable only if surgery is performed." to the benefit-summary Hip row, R3 in the test. The card reads **S$1,500 with conditions []**. Its qualifier is stripped, which the standing rule forbids.
+
+Borrowing (challenge 4) is blocked today, but only by the page-quote check, not by design.
+
+**Fix:** build each companion with `conditions: r.conditions.map((t) => ({ text: t, quote: t }))` and none of `raw.conditions`. Add a test asserting that the companion card carries its own row's condition.
+
+Holding:
+- Companions require the same person, `coverKey` (product, cover and plan), qualifier and core name, from a different document and with a different figure.
+- No combination across people or schedules was found.
+- The not-a-total note is added.
+
+### Checked and holding
+- **(2) Premium rows.**
+  - Only a page with exactly one plain premium line is used ("First Year Instalment Premium *" fails `PLAIN_PREMIUM`), and only when the page names no other life (`otherLife`), on the first cover of that page and person.
+  - Currency: the snapshot's 470.85 (D8 p3) prints no sign, but the page declares "Currency : Singapore Dollar", so it is S$ by the page's own declaration. A different stated currency on the line skips it.
+  - With no declaration, the premium takes the cover's own currency from the same document and cover. I accept that, because one policy has one currency; it is noted below.
+  - "Monthly" comes only from a single "Payment Frequency" on the page.
+  - The first-year note is part of the row's label (`premiumName`), so it cannot come apart from the figure.
+- **(3) Short files.**
+  - Only readable documents of 3 pages or fewer that no row comes from are sent whole, and only from this household's `documents`, so isolation holds.
+  - On the snapshot that is 3 one-page files, a negligible cost.
+  - `PAGES_LEFT_OUT` replaces the misleading "not sent" so the model stops saying a file "could not be read".
+- **(5) Prompt and style.** These rules carry no amount risk:
+  - count documents from linked_people;
+  - give the number under the label asked;
+  - say what is settled before asking who is meant;
+  - no self-correction;
+  - a file with no reading_status was read.
+
+### Low (not blocking)
+- **R126-3.** There is no total cap on short files sent whole. A household with dozens of 3-page receipts sends them all. A page budget, say 15 pages for this rule, would bound the cost.
+- **R126-4.** A bare premium with no page declaration borrows the cover's currency, which comes from the same document. It would be safer to require the premium's own page to settle the currency, otherwise "Currency not stated".
+
+### Tests (run locally, free)
+- benefit-table chat-test: 49/49
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+style-test needs React, which this sandbox lacks, so I did not run it.
+
+## Round 127: PR #103 at 9aefff9 (delta from 57e33b4)
+
+**Verdict: NOT READY. One blocker left (R127-1), and it is a small fix.** R126-1 to R126-4 are fixed.
+
+### R127-1 (blocker): within one policy's schedule, the fallback can take another benefit's sum
+`wholeSumInsured` (`verify.ts` ~399-421) accepts a base line only when the page has exactly one line with an amount of 10,000 or more. A schedule can print one large sum and one small sum on the same page. In that case the large line passes the "exactly one" test even when the wording is about the other benefit.
+
+Probe: `scratchpad/r127/w.ts` uses the chat-test schedule (Comprehensive Critical Illness 300,000.00 and Death Benefit 5,000.00, Currency: Singapore Dollar). Its policy wording has the same policy number and says "2. Death Benefit … 100% of the Sum Assured will be payable in one lump sum".
+
+| Base quote the model gives | Shown as the death benefit |
+|---|---|
+| "Death Benefit 5,000.00" | S$5,000 (right) |
+| "Comprehensive Critical 300,000.00" | **S$300,000 (wrong: another benefit's sum)** |
+
+This is the shape of DC's own CI II schedule (D8 p3), which has a S$5,000 death benefit beside the CI sum assured. It would be a wrong claimable amount.
+
+**Fix (pick one):**
+- Count every line on the page that prints a benefit amount, of any size, skipping premium lines. Require exactly one.
+- Or require the base line to share the benefit's name with the wording's own heading ("Death Benefit").
+
+Both cases stay correct under either fix. A3 keeps its 5,000 only if the wording names that benefit.
+
+### Fixed and checked
+- **R126-1.** My three R126 probes are now all refused ("the row prints no sum it is a percentage of"):
+  - the base is another policy's certificate;
+  - the base is the spouse's line;
+  - the table prints its own base (S$5,000).
+
+  The fallback now needs all of these:
+  - same document or same policy number;
+  - no other life on the base page (`otherLife`, now shared in `lives.ts`);
+  - the base line names the person, or names nobody on a page about them alone;
+  - wording with no limit or base words, including a base printed on a line above.
+
+  "The sum is not the one this row's table is a percentage of" is no longer a fallback reason.
+- **TE's A1 positive control.** Its base is a certificate in another document that names both spouses, so it is now refused. **I agree that refusing it is correct.** The bar is to withhold rather than risk another person's or another policy's sum. The S$1,000,000 figure was right in that case, but nothing on that page ties it to this one life and this policy. The percentage is still given as a fact.
+- **R126-2.** A companion now carries only its own row's conditions. My R126 probe now shows S$1,500 with "Payable only if surgery is performed." and the primary keeps its own condition. `sameBenefit` keeps "Simple Fracture: Wrist" and "Compound Fracture: Wrist" apart (TE C4).
+- **R126-3.** Short files sent whole are capped at 15 pages in total.
+- **R126-4.** A premium's currency now comes only from its own line or page (`premiumCurrency`). With neither, it shows "Currency not stated".
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+The 44-question replay (40 right, 4 partly right, 0 wrong) is the TE's. I did not re-run it.
+
+## Round 128: PR #103 at 153d9e7 (delta from 9aefff9)
+
+**Verdict: READY.** R127-1 is fixed. No new findings.
+
+The fallback now needs two things:
+- **Exactly one benefit-amount line on the base page, of any size.** Premium, instalment, total, discount, GST, tax and fee lines don't count.
+- **A base whose own or neighbouring lines name the benefit heading the wording** (`headingWords`). With no heading, it refuses.
+
+All my probes, re-run in `scratchpad/r128/w.ts`, now come back as expected:
+
+| Case | Result |
+|---|---|
+| CI 300,000 + Death 5,000 schedule, base = CI line | refused (R127-1) |
+| Same schedule, base = Death line | refused: two benefit amounts, so it is fail-safe and only the percentage is given |
+| Base is another policy's certificate, the spouse's line, or a table that prints its own base | refused (R126-1) |
+| One-benefit schedule ("Death Benefit 50,000.00", premium line ignored), wording headed "2. Death Benefit" | S$50,000 with the basis "100% of the sum insured, which is the amount shown" |
+
+The second row means DC's CI II death benefit (D8 p3) now shows as a percentage rather than S$5,000. That gives up a correct amount but never shows a wrong one, which meets the bar.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 129: PR #103 at 43515c3 (delta from 153d9e7)
+
+**Verdict: READY.** No findings.
+
+The TE's A10b fix adds two more conditions on the base for the "100% of the sum insured" fallback:
+- **The base's own lines must not be a limit, an expense or a per-event amount.** Lines containing limit, up to, maximum, expense(s) or per claim/day/event/visit/trip/accident/incident are refused.
+- **"Sum insured" or "sum assured" must appear** on the base's lines or within the ten lines above them.
+
+Both conditions only refuse more cases, so they are fail-safe.
+
+My probes (`scratchpad/r129/w.ts`):
+
+| Case | Result |
+|---|---|
+| All earlier R126 and R127 cases | still refused |
+| One-benefit schedule under a "Sum Assured" table heading | S$50,000, with its basis |
+| The same schedule without that heading | refused (fail-safe) |
+| A "… Medical Expenses limit 50,000.00" base under a "Sum Assured" heading | refused |
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 130: PR #103 at bcb3e25 (delta from 43515c3)
+
+**Verdict: READY.** No findings.
+
+This round adds the TE's A10c rule. The base line is taken as the sum insured only if nothing is left on it after removing:
+- the heading's benefit words,
+- "sum insured" or "sum assured",
+- the amount and its currency.
+
+The rule only adds refusals, so it is fail-safe.
+
+My probes (`scratchpad/r130/w.ts`):
+- Every earlier R126–R129 case is still refused.
+- The one-benefit positive case ("Death Benefit 50,000.00 ---" under a "Sum Assured" heading) still resolves to S$50,000.
+
+Trade-off: DC's real CI II base is now refused, so A3 is back to partly right. The answer shows the percentage instead of the amount. That withholds a correct figure and never shows a wrong one, so I accept it.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 131: PR #104 at d21672e (round 4, diff vs main)
+
+**Verdict: NOT READY. One blocker (R131-1).** No path I found shows a wrong amount. The blocker is a check that removes true limits and refusals from the answer.
+
+### R131-1 (blocker): `dropPeopleShutOut` removes true conditions and refusals, not only ownership claims
+`chat.ts` `shutOut` treats any "<person> does not / cannot / is not / has no …" as shutting the person out. It removes the sentence whenever that person has a card in the answer, or a row for the same benefit. My probe (`scratchpad/r131/scripts/benefit-table/probe.ts`) uses Tan's hip card plus one uncertainty sentence:
+
+| Sentence | Result |
+|---|---|
+| "Tan Mei Ling does not get the ambulance benefit, because no ambulance was used." | **dropped** |
+| "Tan Mei Ling is not covered for this event, because a hairline crack is not a listed fracture." | **dropped** |
+| "Tan Mei Ling cannot claim the recuperation benefit unless she stays in hospital for 24 hours." | **dropped** |
+| "Tan Mei Ling has no cover under the travel policy." | kept |
+| "…paid only for Lim, not Tan Mei Ling, because it is paid on the insured member's death." | kept |
+
+So the answer becomes more generous than the documents. It loses a refusal, or a condition such as the 24-hour stay. That fails open, and it breaks the rule never to remove a qualifier.
+
+**Fix:** match only ownership or exclusivity wording:
+- "belongs to", "is X's (alone)", "X's, not Y's";
+- "only X has", "not for Y" with no reason after it;
+- "held by X".
+
+Keep every sentence that carries a reason or condition (because, unless, if, until, since, as, only if, without, no … was), or that names a benefit Y has no card for in this answer. The generic negations ("does not", "cannot", "is not", "has no") should never trigger a drop on their own.
+
+### R131-2 (medium, fix in this round): a swapped twin drops the named row's own conditions (from reading the code)
+`checkedRow` swaps a refused named row for a twin with the same figure, benefit and cover from another document. The twin is built with only its own `o.conditions`. Conditions the named row's document prints, from `named.conditions` and the model's conditions quoting that document, are not carried over. When only the refused document prints a condition (a stay length, or proof needed), the card shows the amount without it. This is the same kind of hole as R126-2, in the other direction.
+
+**Fix:** give the twin both rows' conditions, each kept against its own document's page. Alternatively, refuse the swap when `named.conditions` holds anything the twin's do not.
+
+### Checked and holding
+- **(1)/(a) The plan-table Sum Assured read.** It cannot take another row's or another person's cell:
+  - It takes only the **first row** under a header with exactly one Sum Assured column. Any amount line between the header and the row refuses it, so a rider or "Death Benefit 5,000.00" second row is never read.
+  - The row name must hold every word of the wording's heading, and no other word but the product's own name (or a server label).
+  - The page must name the person and no other life (`otherLife`).
+  - Searching is limited to the wording's document, or the base's document when the policy number matches.
+  - Every matching row must print the same sum, and it must equal the model's base.
+  - The card stays on the wording's page, so its conditions are read there, and the basis line names the person, the sum, the document and the page.
+  - All my R126–R130 probes are still refused. Tests 59/59.
+- **(3)/(c) Per child.** `perUnit` only appends the printed words ("per child (up to 2 children)") to the server's label. Nothing multiplies or adds it: the amount stays the printed figure, one card.
+- **(5) First-year premium.**
+  - It is taken only when the premium's page prints exactly one first-year line, ending in a figure with two decimals, with no other life on the page.
+  - It uses the premium's own currency (`premiumCurrency`, so it can show "Currency not stated").
+  - It is labelled "(first policy year only)" and shown after the premium, never as an alternative and never added to it.
+- **(4) Library claims.** Counts are held to the number of documents linked to the person; "uploaded for" / "linked to" claims are held to the record. These are prose-only changes with no amount risk.
+- **H8 policy-number prose.** A number is skipped by the money filter only when the sentence calls it by the label the documents print it under. That is narrow enough.
+
+### Low (not blocking)
+- **R131-3.** `PREMIUM_DECIDES` drops any statement mentioning a premium together with decides / determines / "to rely on". A true fact such as "the premium is waived if the insurer determines you are disabled" (the Premium Waiver, D1 p30) would vanish whole, hiding a documented benefit. Narrow it to "decides which premium" or a premium amount that "applies".
+- **R131-4.** A count sentence with a qualifier ("Desmond has 2 travel documents") is replaced with his total linked count ("Desmond has 5 documents linked"), which changes what was said. Skip sentences with a word between the number and "documents" that is not a count word.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 132: PR #104 at c9ae1f8 (delta from d21672e)
+
+**Verdict: READY.** R131-1 to R131-4 are fixed. No new findings.
+
+### R131-1: fixed
+A sentence is now dropped only when it uses ownership or exclusivity wording ("belongs/held by/owns", "X's alone/cover/policy … not Y", "only X has/is covered", "belongs only to X"). Any sentence with a reason or condition word is never dropped.
+
+My R131 probe, re-run in `scratchpad/r132/scripts/benefit-table/probe.ts`:
+
+| Sentence | Result |
+|---|---|
+| "…because no ambulance was used" | kept |
+| "…because a hairline crack is not a listed fracture" | kept |
+| "…unless she stays in hospital for 24 hours" | kept |
+| "…no cover under the travel policy" | kept |
+| "…only for Lim, not Tan, because …" | kept |
+| "They belong to Lim, not Tan Mei Ling." | dropped |
+| "Only Lim has this cover." | dropped |
+| "This is Lim's alone." | dropped |
+| "Tan has no hip benefit; it is Lim's cover, not Tan's." (Tan's own hip card is shown) | dropped |
+
+All the drops are false claims about who holds a cover, which is what this check is for. Nothing that limits or refuses a benefit is removed.
+
+### R131-2: fixed
+When `checkedRow` swaps in a twin, the named row's table conditions that are not printed on the twin's page are carried over. Each becomes its own point ("<benefit> also depends on this: …") quoting the named row's document. A carried condition that states money blocks the swap, so the refusal stands.
+
+### R131-3: fixed
+`PREMIUM_DECIDES` now needs "decides which/what", "decides if they differ or apply", "which premium applies" or "to rely on". A test shows a Premium Waiver statement is kept.
+
+### R131-4: fixed
+`DOC_COUNT` matches only a plain count ("four documents", "3 uploaded files"). "Two travel documents" is left alone.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 133: PR #104 at 202b8f1 (delta from c9ae1f8)
+
+**Verdict: READY.** No findings. Every change in this delta makes the code refuse or drop less often than before, or refuse where it used to accept.
+
+- **Plan Sum Assured read.** Two new cases are refused:
+  - Any line with no tab between the header and the row (for example, a rider's name printed above its cells).
+  - A row name or product name that carries a rider word.
+
+  Both only add refusals.
+- **Ownership filter.** It is now held to the cover or policy the sentence names, so it drops fewer sentences. My R131/R132 probe is unchanged: the 5 sentences with a reason or condition are kept, and the 4 ownership claims are dropped.
+- **Claim questions.** "File a claim" questions are no longer treated as library questions. An unquoted point in such an answer is now dropped as unquoted, instead of being replaced with a library-record line.
+- **Earlier probes.** All my R126–R130 cases for the "100% of the sum insured" fallback are still refused. The one-benefit positive case still shows S$50,000, now with the fuller basis line.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 134: PR #105 at 086b123 (round 5, diff vs main)
+
+**Verdict: NOT READY. One blocker (R134-1).**
+
+### R134-1 (blocker): `pointedRows` turns "this amount is not payable" into a card
+`pointedRows` (`chat.ts`) turns any non-amount statement that matches `AMOUNT_POINTER` into an extra amount card. It does this whenever the statement's quote is one row's own line, whatever the sentence says about that amount. It never checks whether the pointer is positive.
+
+My probe used the test's own `run` helper and the ambulance line "Ambulance Cost Up to S$500 per incident" (D2), with the bottom line "Not covered.":
+
+| The model's fact | Result |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | **card: Lim, Up to S$500** |
+| "This amount does not apply, because the policy ended before the accident." | **card: Lim, Up to S$500** |
+| "That limit is for Tan Mei Ling's policy only." (person: Lim) | **card: Lim, Up to S$500** |
+
+The answer says "Not covered" and then shows a payable-looking card. That breaks the prompt's own rule ("Give no amount for a cover whose terms … this event does not meet"). The card is labelled, but a card for an amount the answer itself says does not apply amounts to a wrong claimable amount.
+
+**Fix:** give a pointed row only when both of these hold:
+- The pointing clause is positive: "shows / gives / is / pays this amount", "the amount below".
+- The statement has no negation or refusal word: not, no, never, n't, does not apply, not payable, excluded, ended, expired, only for, instead.
+
+Also skip it when the bottom line says the event is not covered or not shown to be covered. Otherwise drop the pointing words as `dropAmountPointers` already does. Add these three sentences as tests.
+
+### Checked and holding
+- **awayConditions.** The model's condition becomes a separate point quoting the sibling's document only when all of these hold:
+  - it is not printed on the row's own page;
+  - it applies at the sibling row (`conditionApplies` checks the section and footnote mark, as tested since R62-1);
+  - its first place in that document is the sibling's own page;
+  - its text states no money.
+
+  The sibling must have the same person, cover, qualifier and benefit, in another document. The point is extra wording, never moved onto a card, so it cannot raise an amount. Shown once with no person when carried for two people: fine.
+
+  Low note: only the condition's *text* is checked for money, not its quote. That is harmless, because the point shows the model's text through the money filter, and the quote is only located.
+- **lesserOf.** It only adds wording that narrows the payout ("the cost, up to this limit, whichever is less") to an up_to row whose own line, or a same-figure sibling's line, says so. It never changes an amount.
+- **dropAmountPointers.** It runs only when no card is shown, and removes only the pointing clause. The tests cover "these sums insured" staying, and a pointer whose first clause is the whole sentence being dropped.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 135: PR #105 at 003a4fc (delta from 086b123)
+
+**Verdict: READY.** R134-1 is fixed.
+
+`pointedRows` now gives a card from a point only when all three hold:
+- the point says the amount is shown (`POSITIVE_POINTER`);
+- the point has no word saying it is not paid, does not apply or is someone else's (`NOT_PAID`);
+- the point names no household member other than the person it is about.
+
+Any other pointing point loses its pointing words.
+
+I re-ran the probe (`scratchpad/r135/scripts/benefit-table/probe.ts`) with the bottom line "Not covered.":
+
+| Point | Result |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | no card; "No ambulance was used." |
+| "This amount does not apply, because the policy ended…" | no card; dropped |
+| "That limit is for Tan Mei Ling's policy only." | no card; dropped |
+| "The policy has ended. The scheme terms show this amount." | no card; "The policy has ended." |
+| "Tan Mei Ling's terms show this amount." (person Lim) | no card; dropped |
+| "If it was an emergency, the scheme terms show this amount." | card Up to S$500, with the point kept beside it |
+
+**Bottom-line rule: not needed.** I accept the reasoning. The B7 card is the printed term, shown with its "if" condition, under a "not shown to be covered" bottom line. Each of my probes is now stopped by the refusal inside its own sentence.
+
+### R135-1 (low, not blocking)
+On a converted point, the "if" clause stays in the point's own text. It goes onto the card only when the model also listed it as a condition. To keep it attached to the figure, consider copying a leading "if …" clause into the card's conditions.
+
+A refused point whose refusal and pointer sit in one clause is dropped whole, for example "the terms show this amount, payable only if an ambulance was needed". The condition goes with it, but so does any card, so nothing is overstated.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 136: PR #105 at 66bd9cc (delta from 003a4fc)
+
+**Verdict: READY.**
+
+### Y13
+A point that says something about "this amount" without saying it is shown is now kept, reworded to be about the benefit. The rewording happens only on paths that make no card (`withoutPointer`), so it cannot add an amount.
+
+I re-ran my R134 and R135 probe:
+
+| Point | Now reads |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | "…so this benefit is not payable." |
+| "This amount does not apply, because the policy ended…" | "This benefit does not apply, because…" |
+
+Both refusals now survive instead of being dropped, which is better than R135. The conditional B7-style card is unchanged. No refusal or other-person point makes a card.
+
+### W3
+A footnote mark must now match exactly: a "*" condition no longer attaches to a "**" row. This only tightens matching.
+
+### R136-1 (low, not blocking)
+"That limit is for Tan Mei Ling's policy only." in Lim's answer is now kept as "That benefit is for Tan Mei Ling's policy only." It used to be dropped.
+
+No card goes with it, but it is the ownership kind of claim from C5. `dropPeopleShutOut` misses it because "<Y>'s policy only" with no "not <X>" is not one of its patterns. One fix is to add "<X>'s (cover|policy) only" / "for <X>'s … only" to the exclusivity patterns.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 137: PR #105 at 6a46183 (delta from 66bd9cc)
+
+**Verdict: NOT READY. One small blocker (R137-1), a one-line fix.**
+
+### R137-1 (blocker, same class as R131-1): the new "X's … only" pattern drops a true payee rule
+The R136-1 fix adds `X's (up to two words) only` to the exclusivity patterns. Because any two words may come between "X's" and "only", it also matches true rules that are not about who owns a cover.
+
+I re-ran the shut-out probe with Tan's hip card shown:
+
+| Sentence | Result |
+|---|---|
+| "It is paid to Tan Mei Ling's estate only." | **dropped** |
+| "Tan Mei Ling can claim this only once." | kept |
+| The 5 reason or condition sentences from R131 | kept |
+| The 4 ownership claims | dropped |
+
+Whom a claim is paid to is a printed rule; the H10 payee pages are sent for exactly this. Dropping it hides a documented condition.
+
+**Fix:** limit the words in between to cover words only: `X's (?:[a-z]+\s+)?(?:cover|policy|policies|plan|benefit)s?\s+only`. "That benefit is for Lim's policy only" is still dropped, and "Tan's estate only" is kept. Add the estate sentence as a test.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+
+## Round 138: PR #105 at 9b1e0f6 (delta from 6a46183)
+
+**Verdict: READY.** R137-1 is fixed. The pattern is now limited to cover words (`X's [word] cover/policy/plan/benefit only`).
+
+I re-ran the shut-out probe:
+- "It is paid to Tan Mei Ling's estate only" is kept.
+- "Can claim this only once" is kept.
+- The 5 sentences that give a reason or condition are kept.
+- The 4 ownership claims are dropped.
+- The chat-test case "That benefit is for Lim's policy only" is still dropped.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## Round 139: PR #105 at 8c19160 (delta from 9b1e0f6)
+
+**Verdict: READY.** For TE O2, "X's … cover/policy/plan/benefit only" now needs "only" to end its clause. That only tightens what is dropped.
+
+My probe results are unchanged:
+- The 5 sentences that give a reason or condition are kept, along with "estate only" and "only once".
+- The 4 ownership claims and "That cover is Lim's policy only." are dropped.
+
+### Low (pre-existing, not from this delta)
+"It is Lim's policy only, so Tan Mei Ling cannot use it." is kept. The exclusivity branch skips any sentence that also names the shut-out person. It carries no amount, so it does not block.
+
+### Tests
+- benefit-table chat-test: 61/61
+
+## Round 140: PR #107 at 6aca18b (round 6, diff vs main 3364af3)
+
+**Verdict: NOT READY. One blocker (R140-1) and one medium finding (R140-2).** Both remove information the documents support. Neither shows a wrong amount.
+
+### R140-1 (blocker): rule 1 drops cards the answer says may still pay
+`NOT_FIT` includes "not shown to be covered/paid/payable". That is the phrase for missing information, which is not an exclusion. `saysNotFit` drops a row whenever the not-fit *sentence* uses any of the row's distinctive words anywhere in it. That covers the "could still pay" clause and the "if it turns out" clause too.
+
+Probe: `scratchpad/r140/scripts/benefit-table/probe.ts`, using the test's own `run` helper.
+
+| Bottom line or point | Card |
+|---|---|
+| "A ligament tear is not shown to be covered by the fracture benefits, but **the ambulance cost could still be paid** if an ambulance was needed." | **Ambulance dropped** |
+| "The ambulance cost is not shown to be covered **unless** an ambulance took her to hospital." | **dropped** |
+| "The ankle benefit is not shown to be payable **yet because the X-ray result is pending**." | **dropped** |
+| B7 wording: "Not shown to be covered as a claim for a back strain; **if it turns out to be a full break of the spine**, the Product Summary shows this amount." (Neck, Skull or Spine row) | **dropped**. This undoes R134/R135, where this card was agreed as correct. |
+| "…the hip benefit is not shown to be payable…" | kept, but only because "hip" has fewer than 4 letters |
+
+Each dropped card is a documented benefit hidden by the answer's own hedge. The prompt itself asks for these "could still pay" facts after a "Not shown to be covered" bottom line.
+
+**Fix:**
+1. Take the "not shown to be covered/paid/payable" phrases out of `NOT_FIT`. Keep only list-membership wording: "not on/among/one of its list", "not named among", "may not fall under", "would not necessarily meet".
+2. Match the row's words only inside the same **clause** as the not-fit phrase, not anywhere in the sentence.
+3. Never drop when that clause or sentence carries a positive or conditional for the row: could/may/would still, if, unless, until, pending, yet, but.
+
+The H2 test ("Living Care Plus … so a heart attack may not fall under it") and the diabetes and list tests still pass under all three.
+
+### R140-2 (medium, fix in this round): `withoutOrphans` drops a real condition sentence with its money sentence
+Probe: `probe2.ts`, uncertainty text "The ambulance limit is S$500 per incident. It is paid only if the ambulance takes her to a hospital within 24 hours of the accident."
+
+Both sentences go: the first because it states money, the second as an "orphan". The second is a printed condition. It is lost unless the model also put it on the card.
+
+**Fix:** never drop as an orphan a sentence that carries a condition word (only if, unless, provided, within, subject to, must, after, before, until, waiting, exclu…). Alternatively, keep it and replace the leading pronoun with the benefit's name.
+
+### Checked and holding
+- **Rule 2:** `PERIOD_ROW` rows are never put in an alternative group. Only the grouping changes; the amounts do not.
+- **Rule 3:** `LINKED_COUNT` checks "N are linked to X (and Y) (only)" against the library record. If it is wrong, it replaces the sentence with the server's own breakdown. This is prose only.
+- **Rule 4b:** with no amount shown, "different figures / not a total" sentences are dropped. Nothing they refer to is shown, so this is correct.
+- **No left-out-amount note** for a not-fit refusal: correct, once R140-1 narrows what counts as not-fit.
+- **Rule 1 does miss** "X is not covered by <cover>" (plain "not covered"). That is the same behaviour as before this PR, so not a regression.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 63/63
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+## R141: PR #107 re-review at db703c8 (diff 6aca18b..db703c8)
+
+**Verdict: NOT READY, one fix.** R140-1 and R140-2 are fixed. But the sentence-wide "but" door now lets the H2 failure type through again, with the most natural wording. That fault is partly mine: R140 fix item 3 listed "but" as a door word. That was too broad.
+
+### R141-1 (high, blocking): a sentence-wide "but" keeps the Living Care Plus S$300,000 card for a heart attack
+`lib/benefit-table/chat.ts` `saidNotToFit`: `if (!m || STILL_OPEN.test(x)) return;` checks door words against the **whole sentence**, and `STILL_OPEN` includes `but`. So any contrast with another cover keeps the refused cover's card.
+
+| Model text (R901 Living Care + R902 Living Care Plus named) | db703c8 | right |
+|---|---|---|
+| "A heart attack is not one of the 10 early illnesses on the Living Care Plus list, but Living Care covers it." (bottom line) | LC **and LCP** | LC only |
+| "Heart attack is not on the Living Care Plus list, but Living Care pays its sum insured." | LC **and LCP** | LC only |
+| "Stroke is not on the Living Care Plus list, but it is on the Living Care list." | LC **and LCP** | LC only |
+| "Heart attack is not on the Living Care Plus list; Living Care pays it." | LC | LC |
+
+The answer says the cover does not fit, yet shows its S$300,000 card. That is a wrong claimable amount, the worst bug. (At 6aca18b these sentences dropped **both** cards, so neither commit is right yet.)
+
+**Fix (tested in a scratch copy):** check door words only inside the not-fit **clause**, and leave "but" out of the list:
+```ts
+const STILL_OPEN_CLAUSE = /\b(?:still|unless|until|pending|yet)\b/i;
+// in saidNotToFit: drop the sentence-wide STILL_OPEN test, then
+if (/\bif\b/i.test(clause) || STILL_OPEN_CLAUSE.test(clause)) return;
+```
+"but" is not a clause splitter, so "not on the list but could still be covered if …" stays one clause and is still kept (it has "still" and "if").
+
+With this patch:
+- chat-test passes 63/63, headline-test 13/13 and table 105/105.
+- All five R140 cases keep their cards, and so does the B7 spine card.
+- The H2, diabetes and "not one of its 10 early illnesses" cases still refuse.
+- All four rows in the table above give LC only.
+
+Please add the first two rows as tests.
+
+### R140-1: fixed
+`NOT_FIT` now uses list wording only. The row is matched in the not-fit clause, and the sentence is read whole only when the clause uses a pronoun. Probes (`r141/scripts/benefit-table/probe.ts`) keep these cards:
+- the "could still be paid" ambulance card;
+- the "unless" card;
+- the two X-ray-pending cards;
+- the "if it turns out to be a broken hip" card;
+- the "knee is not on its list" ankle card;
+- the B7 spine card.
+
+"Living Care Plus will not pay, because a heart attack is not one of its 10 early illnesses" refuses LCP and keeps LC, which is correct.
+
+### R140-2: fixed
+"It is paid only if the ambulance takes her to a hospital within 24 hours of the accident." is now kept after its money sentence is dropped.
+
+Low, note only: `STATES_CONDITION` also matches "not covered", "after" and "before". So a sentence like "It is not covered." can stay after the sentence it points to is dropped. It reads oddly but shows no amount. No change needed this round.
+
+### Tests (run locally, free)
+- At db703c8: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R142: PR #107 re-review at d8f0181 (diff db703c8..d8f0181)
+
+**Verdict: NOT READY, two small fixes in the same function (patch tested below).** R141-1 is fixed: "not on the LCP list, but Living Care pays" now shows Living Care only. But "but" as a clause splitter opens two new holes.
+
+### R142-1 (high, blocking): a pronoun clause still reads the whole sentence, including the "but Living Care …" part
+`saidNotToFit`: when the not-fit clause uses a pronoun, `context` is the **whole sentence**. That includes the contrast clause after "but", which names the other cover. Probes (`r142/scripts/benefit-table/probe.ts`):
+
+| Model fact (LC R901 + LCP R902 named) | d8f0181 | right |
+|---|---|---|
+| "Living Care Plus only pays for 10 early illnesses, so a heart attack may not fall under it, but Living Care covers it." | **no cards** | LC |
+| "Living Care Plus covers 10 early illnesses. A heart attack is not on its list, but Living Care pays." | **LCP only** | LC |
+| "Living Care Plus covers 10 early illnesses. It is not on its list, but Living Care pays." | **no cards** | LC |
+
+- The first row is the existing H2 test wording plus a natural ", but Living Care covers it": the right cover is hidden.
+- The second row is inverted. The right card is hidden and the S$300,000 LCP card is shown: a wrong claimable amount.
+
+**Fix:** for a pronoun clause, read the sentence only **up to the end of the not-fit clause** (plus the sentence before it when it leans back), never the clauses after it.
+
+### R142-2 (medium): a hedge about the same cover after "but" is now refused
+| Model fact | d8f0181 | right |
+|---|---|---|
+| "Heart attack is not on the Living Care Plus list, but it may still be covered if it is diagnosed at an early stage." | LC only | LC + LCP |
+| "A mild heart attack is not on the Living Care Plus list as worded, but the insurer may still accept it." | LC only | LC + LCP |
+| "Heart attack is not named among the Living Care Plus illnesses, but it could be paid if it meets the early-stage definition." | LC only | LC + LCP |
+
+The answer itself says Living Care Plus could still pay, so dropping its card hides a documented benefit. Before d8f0181, "but" did not split, so the door words kept these cards.
+
+**Fix:** also keep the card when a "but" clause right after the not-fit clause starts with it/this/that/they/the insurer **and** has "if" or a door word. "Stroke is not on the LCP list, but it is on the LC list" still refuses LCP, because it has no door word.
+
+### Patch for both (tested in a scratch copy of d8f0181)
+```diff
+       if (/\bif\b/i.test(clause) || STILL_OPEN.test(clause)) return;
+-      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${x}` : x;
++      // "…, but it may still be covered if …": a "but" clause about the same thing (a pronoun, the insurer) that keeps a door open.
++      const after = x.slice(pos + clause.length).match(/^[\s,;]*but\b([^,;:]*)/i)?.[1] ?? "";
++      if (/^\s*(?:it|this|that|they|the\s+insurer)\b/i.test(after) && (/\bif\b/i.test(after) || STILL_OPEN.test(after))) return;
++      const upTo = x.slice(0, pos + clause.length);
++      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${upTo}` : upTo;
+```
+
+With it:
+- chat 63/63, headline 13/13 and table 105/105 pass.
+- The three R141 "but" sentences, "but Living Care pays" with no comma, and the two-sentence version all give LC only.
+- The H2 wording plus ", but Living Care covers it" gives LC only.
+- All three hedges above keep both cards.
+- The R140 ambulance case, the X-ray case and the B7 spine card keep their cards.
+
+**Left open (low):** "Living Care Plus covers 10 early illnesses. A heart attack is not on its list, but Living Care pays." keeps both cards with the patch. The clause does not lean back, so "its" is not resolved. This fails open. That is no worse than before #107, and the prompt is still the main guard. Please add the R142-1 rows and the first R142-2 row as tests.
+
+### Tests (run locally, free)
+- At d8f0181: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R143: PR #107 at 3ba746b (new rule 1: per-card eventFit)
+
+**Verdict: no blocker. The design is right. Two small fixes are recommended this round.** R140 to R142 are superseded. Moving the list decision out of prose matching and onto a per-card flag removes the whole class of wording bugs from R140 to R142.
+
+### What I checked
+- **The drop is placed correctly.** `amountsFromRows` drops a `not_on_list` card after `checkedRow`, so a twin swap cannot dodge it. The drop also comes before companions are built, so the other document's twin of that row is never added.
+- **The schema** (`TABLE_ANSWER_SCHEMA`) requires `eventFit` on every statement. The value can be null or one of 4 enum values. This is fine for the Anthropic `json_schema` format in `model.ts`.
+- **The prompt line** sits in `renderTable`, next to the rows it governs. It also tells the model to say in a fact that the event is not on the list.
+- **The free tests at 3ba746b pass:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+### On "should a missing or unknown flag fail open?" — yes, keep it failing open
+- **Live answers always carry the key**, because the schema requires it. Only null can still occur.
+- **Failing closed on null** would hide every card for a row that is not a list cover whenever the model leaves the flag empty. That hides documented benefits, which is a failure under the project rules.
+- **Failing open is also the floor before #107.** It is no worse than main, and old recordings replay unchanged.
+- **Suggestion (no fix needed):** record in `report` when a card comes with a null `eventFit`, so the next paid sweep can count how often it happens.
+
+### R143-1 (medium, fix this round): a card made from a pointer bypasses the gate
+`pointedRows` turns a fact such as "the Product Summary shows this amount" into an amount card, copying the fact's fields. The prompt asks for `eventFit` only "for every amount statement", so a fact will usually carry `eventFit: null`. A Living Care Plus card made this way would then pass for a heart attack, which is the H2 shape by another route.
+
+**Fix:** change the prompt line to "for every statement that gives a row's amount **or points at one** ('this amount')". `pointedRows` already copies the fact's `eventFit` onto the card, so no code change is needed. Please add one test: a pointer fact carrying `not_on_list` gives no card.
+
+### R143-2 (medium, fix this round): a wrong `not_on_list` hides a cover without a trace
+The server trusts the flag and adds no left-out note (`noteLeftOutAmounts` skips `notFit` drops). If the model sets `not_on_list` on a row that is not a list cover, or on the wrong row, that benefit disappears, and nothing tells the user the cover exists.
+
+**Fix:** skip the left-out note for a `notFit` drop only when the kept answer text (the bottom line or a statement) names that cover. Otherwise let the usual left-out-amount line show. In the right case (H2, where the fact says Living Care Plus does not list a heart attack), nothing changes. In the wrong case, the user at least sees that an amount was left out.
+
+### Known limit (not a regression)
+U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The gate depends on the model's call, and a missed `not_on_list` fails open, as on main. This is a prompt or unseen-set matter for the next sweep, not a server fix.
+
+## R144: PR #107 re-review at 4e4b43e (diff 3ba746b..4e4b43e)
+
+**Verdict: READY.** R143-1 and R143-2 are fixed. No new blocker.
+
+- **R143-1 fixed.** The prompt now asks for `eventFit` on every statement that gives a row's amount or points at one. `pointedRows` copies the flag onto the card it makes. The new test, a pointer fact marked `not_on_list`, gives no card.
+- **R143-2 fixed.** A `not_on_list` drop is marked `notFit`, and so skips the left-out note, only when `namesRow(said, row)` is true. `said` is the bottom line plus the text of non-amount statements, so a dropped card's own text is excluded.
+  - `noNumbers` strips "(POLICY NO. 1)" and the code strips the leading "GROUP", so "Living Care Plus" matches the printed cover name.
+  - There is a test for the unnamed case, which gets the note.
+- **Low, note only.** `namesRow` matches substrings, so "Living Care" is found inside "Living Care Plus". Suppose the model wrongly flagged Living Care `not_on_list` while its text named only Living Care Plus. Living Care would then be hidden with no note. This needs a wrong flag and an unlucky overlap of names. Not worth more code now. If it ever matters, match on whole names (for example, not followed by " plus").
+- **Free tests at 4e4b43e:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R145: PR #107 at 46cd590 (diff 4e4b43e..46cd590, Test Engineer fixes E7, E8b, E8c, L4)
+
+**Verdict: READY still holds.**
+
+- **`ruledOut` is right.** It holds a `not_on_list` row plus its twins: same person, same cover, same qualifier, and `sameBenefit`. It is checked against both the named row and the row `checkedRow` swaps to, and it is excluded from companions. So a ruled-out row can no longer come back as a twin swap, a companion or a repeat name.
+- **`namesRow` is right.** It blanks out longer cover names first ("Living Care Plus") before looking for a shorter one ("Living Care"). That closes my R144 low note.
+- **Free tests at 46cd590:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+### Low, note only
+- **Conflicting flags hide the row for the whole answer.** In a two-event question ("heart attack or stroke"), suppose the model gives Living Care Plus `not_on_list` for one event and `on_list` for the other. Its card is then hidden for both events. That errs toward withholding, which meets the project bar, and the answer text still says what it covers. No change needed now. Worth one item in the next unseen sweep.
+- **A pointer fact with `not_on_list` but `row: null` is not collected up front.** The card made from it is still dropped by its own flag, so only that row's twins could come back, as a companion of another card for the same benefit. That needs the model to contradict itself. No change needed.
+
+## R146: PR #107 at b4bffaa (diff 46cd590..b4bffaa, Test Engineer E8d)
+
+**Verdict: READY still holds.**
+
+- **`pointedRows` now runs once**, and `ruledOut` is built from its output. A pointer card marked `not_on_list` now rules out its row and that row's twins. This closes my R145 note 2.
+- **The loop is unchanged.** It iterates over the same `pointed` array. `pointedRows` builds a new array without changing its input, so reading it twice is safe.
+- **`said` is still built from the original statements.** That is still right: a pointer fact's own text stays in `said`.
+- **Free tests at b4bffaa:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R147: PR #108 chat round 7 at 5e84b6a (on main 28f2ca1)
+
+**Verdict: NOT READY. One blocker and one medium, both with a small patch tested below.** You asked whether the figure fallback can put a wrong amount on a card. It can: see R147-1.
+
+### R147-1 (high, blocking): the figure fallback in `rowOfQuote` gives a row's full amount for a quote that works a different amount out from it
+The fallback checks only three things: the quote prints one money figure, exactly one of the person's printed rows has that figure, and the two share one non-filler word. A percentage or a multiplier of that figure passes all three. Probes (`r147/scripts/benefit-table/probe.ts`, Lim Ah Kow, no row id):
+
+| Quote | Card at 5e84b6a | Right |
+|---|---|---|
+| "Overseas ambulance evacuation: 50% of the Ambulance Cost limit of S$500" | **Up to S$500** | S$250, or no card |
+| "Hospital cash for ICU: 200% of S$50 per day" | **S$50** | S$100, or no card |
+| "Hospital cash for ICU is doubled (2 x S$50 per day)" | **S$50** | S$100, or no card |
+
+These are wrong claimable amounts. The fallback also ignores the quote's document: the same quote marked D3, a document that does not exist, still matched.
+
+On DC's real documents, the same shape is "Terminal illness: 50% of the Death benefit of S$200,000", which would give the Death row's full amount. (In the test fixture, the accident base "Sum insured" row cannot match because its name is all filler words. That is luck, not a guard.)
+
+**Fix (tested):** take the figure path only when the quote prints exactly one number and has no `%` or multiplier word:
+```ts
+if (figures.length !== 1 || numbersIn(String(raw.quote)).length !== 1 || /%|\b(?:x|times|twice|double[ds]?|half|triple[ds]?|percent)\b/i.test(String(raw.quote))) return undefined;
+```
+`numbersIn` comes from `./check`, already imported for `CAP_WORDS`.
+
+With the fix:
+- All three probes give no card.
+- The A6 tests ("Ambulance claims S$500", "Total premium S$73.17" in its shape) still pass.
+- chat 66/66, headline 13/13 and table 106/106 pass.
+
+Please add the three rows above as tests.
+
+Low, no change needed: "Ambulance excess S$500 per claim" still gives the ambulance card. The card is the real row with its real amount, so this is not a wrong amount.
+
+### R147-2 (medium, fix this round): with cards shown, `dropAmountPointers` deletes coordination rules about the amount shown
+The new cut fires on any clause with AMOUNT_POINTER and DENIES_AMOUNT and no CONDITIONAL word. Real rules about the card match that test:
+
+| Statement next to a shown card | At 5e84b6a |
+|---|---|
+| "The Advance Payment amount below is not paid in addition to the death benefit." | **deleted** |
+| "The amount below is not payable on top of the Advance Payment already paid." | **deleted** |
+| "The amounts below don't count towards the yearly limit." | **deleted** |
+| "The amounts below for Living Care Plus don't apply." (the U8 target) | deleted, correctly |
+
+Those are the R124-2 coordination rules (Advance Payment balance, not paid on top). Deleting them strips a qualifier, and a household could then add the amounts together.
+
+**Fix (tested):** cut only when the denial **ends its clause**, optionally followed by "here", "to it/this/them/this event" or "for it/this/that/them":
+```ts
+const DENIES_END = new RegExp(`(?:${DENIES_AMOUNT.source})(?:\\s+(?:here|to\\s+(?:it|this|them|this\\s+event)|for\\s+(?:it|this|that|them)))?\\s*[.!?]?\\s*$`, "i");
+const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_END.test(c) && !CONDITIONAL.test(c));
+```
+With this:
+- The U8 test still passes, and the Living Care Plus row above is still cut.
+- The three rule sentences are kept.
+- All suites pass.
+
+Please add the first two rows as tests. The full patch for R147-1 and R147-2 is in the Critic scratchpad as `r147-fix.diff`. It is quoted in the relay too.
+
+### Checked and holding
+- **Rule 1, first branch** (the quote is the row's own line, for the same person and document, and only one row matches): same shape as the R134 pointer match. Fine.
+- **Rule 2, `firstDay`:** "after the 10th day" gives fromDay 11, and `renderTable` now shows from-day and at-most-days.
+  - Low: "Hospital cash from day 1 if hospitalised for more than 2 days" would also let a model's fromDay 3 through.
+  - It needs a misread plus that wording, and fromDay does not change a shown amount. Note only.
+- **Spend limit:**
+  - `overSpendCap` runs before `enqueueChat` and returns 429 with SPEND_LIMIT_TEXT.
+  - A failed query counts as zero, so it fails open, as before.
+  - `customerMessage` lets the text through: it is short and has no system words.
+  - `SpendCapReached` is now 429 with the same text. Correct.
+- **Prompt "same meaning in different words":** prose only. It only narrows when "they differ" may be said, when figures, days and conditions are the same.
+- **The percentage-cap inference left out:** agreed. It is safer than breaking the R95/R96/L22/L23 guards.
+
+### Tests (run locally, free)
+- At 5e84b6a: chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
+
+## R148: PR #108 re-review at 58cf8cc (diff 5e84b6a..58cf8cc)
+
+**Verdict: READY.**
+
+- **R147-1 and R147-2 are fixed exactly as patched.** The figure path in `rowOfQuote` now needs a quote with exactly one number and no `%` or multiplier word. `dropAmountPointers` uses `DENIES_END`. `numbersIn` is now imported from `./check`, alongside `CAP_WORDS`.
+- **The five probes are now tests.**
+- **Free tests at 58cf8cc:** chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
+- **The R147 low notes stand, with no change needed:** an excess quote can still give the real row's card, and the `firstDay` edge case remains.
+
+## R149: PR #108 at ee44388 (structural: bind by row id only; startDay; condition pointers kept)
+
+**Verdict: no blocker. Two small fixes are recommended this round (patch tested).** Removing `rowOfQuote` is the right call: cards now bind only by the row id the model names, so the whole R147-1 class is gone. The A6 trade-off (a premium without its id is left out, with a note) is the safe direction.
+
+### R149-1 (medium, fix this round): `startDay` reads a waiting period as the first paid day
+`startDay` treats any "after N days" in a per-day row's quote as day N+1. It runs for every `per_day` row, even when the reading gave no fromDay. So "Hospital cash S$50 per day, payable after 30 days of continuous cover." gets **"from day 31"** on the row.
+
+The model reads that row, so it can tell the household the benefit starts on day 31 of the stay. That understates the benefit. The stay card itself is safe: `keepLabelledAmounts` refuses it when the days disagree, and `stayPays` parses the days on its own.
+
+**Fix (tested):** count "after" only as "after the Nth day" (an ordinal and a singular "day"), or as "after N days of hospital/hospitalisation/confinement/stay/admission" or "in hospital":
+```ts
+for (const m of text.matchAll(/\b(?:after|beyond)\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) days.add(Number(m[1] ?? m[2]) + 1);
+```
+With this:
+- The B3 quotes still give day 11: "after the 10th day of Hospital stay" and "after 10 days in hospital".
+- "after 30 days of continuous cover" gives no day.
+- All suites pass.
+
+Low, note only: "payable after 3 days of hospitalisation, backdated to the first day" gives day 4. That understates, and it is rare wording.
+
+### R149-2 (low-medium, fix this round): `ofBenefit` garbles a pointer that has a noun before it
+With no card shown, "The Advance Payment amount below is not paid in addition to the death benefit." becomes **"The Advance Payment this benefit is not paid in addition to the death benefit."** The coordination rule survives, but the sentence is broken.
+
+**Fix (tested):** use "this benefit" or "these benefits" only when the match starts with a determiner (the/this/that/these/those). Otherwise use a bare "benefit" or "benefits". The example then reads "The Advance Payment benefit is not paid in addition to the death benefit."
+
+### Checked and holding
+- **Binding by row id only.** The `renderTable` line asks for the id even when the figure comes from another document. A missing or unknown id is dropped with the left-out note.
+- **`startDay` is used safely.** Two different days give null, and a null day can never lengthen a stay card, because `stayPays` needs exactly one start. A quote with no day keeps the reading's day only when that day is printed.
+- **`CONDITION_OF_AMOUNT` behaves as intended:**
+  - With cards shown, conditions and coordination rules stay word for word.
+  - A bare "The amounts below for Living Care Plus don't apply." is still cut.
+  - "This amount is not payable." still reads "This benefit is not payable.", the same as before.
+- **Free tests at ee44388:** chat-test 65/65 (the rowOfQuote tests are gone), headline-test 13/13, benefit-table test 106/106. The same counts pass with the patch.
+
+## R150: PR #108 at 21d1f3f (diff ee44388..21d1f3f)
+
+**Verdict: READY.**
+
+- **R149-1 and R149-2 are in, exactly as patched.** Each has a new test: a waiting-period quote gives fromDay null, and the no-card Advance Payment sentence now reads "The Advance Payment benefit …".
+- **Free tests at 21d1f3f:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+- **The R149 low note stands, with no change needed:** "backdated to the first day" still gives day 4.
+
+## R151: PR #108 at 46f5a10 (diff 21d1f3f..46f5a10, Test Engineer B6 and D8)
+
+**Verdict: READY still holds.**
+
+- **B6:** `startDay` no longer counts "beyond". That only narrows it: a quote that loses its day keeps the reading's printed day, or none, and the stay card still parses on its own.
+- **D8:** "cannot" was missing from the negation list in `CONDITION_OF_AMOUNT`, because `n't` does not match "cannot". Adding it is correct.
+- **Free tests at 46f5a10:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+
+## R152: PR #108 at a596032 (diff 46f5a10..a596032, Test Engineer: negated "after")
+
+**Verdict: READY still holds.**
+
+- **The change works as described.** A from/after day whose own clause has not/no/never/cannot/n't is skipped. A quote with only such a limit gives null. Probes:
+
+  | Quote | Day |
+  |---|---|
+  | "Not payable after the 30th day" | null |
+  | "S$50 per day from day 1, not payable after the 30th day" | 1 |
+  | "No benefit for the first 10 days; payable from the 11th day" | 11 |
+  | "S$30 per day from the 11th day onwards. Max: 30 days" | 11 |
+
+- **Low, note only.** A negation in the same clause that is not about the day also blanks the day. "There is no waiting period and payment starts from the 11th day" gives null, and so does "…isn't reduced and is paid from the 4th day". The result is null, which never lengthens a stay card and only drops the row's "from day" text. That is the safe direction.
+- **Free tests at a596032:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+
+## R153: PR #109 round 8 at f82ba06 (on main 1032612)
+
+**Verdict: NOT READY. Two blockers and one medium.** Patches for both blockers are tested in a scratch copy (`r153-fix.diff` in the Critic scratchpad, quoted in the relay). Free tests at f82ba06 pass: chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+### R153-1 (high, blocking): the waiting-period backstop hides fracture cards for a whole year
+`chatRows` sets `coverSince = c.startDate ?? c.asOf`. `insideWaiting` then hides any `on_list` card whose cover started less than 365 days ago when `waiting` is null. But null is exactly what the prompt asks for when "the cover prints no waiting period".
+
+An accident certificate printed "As of 01/01/2026" is a print date, and a group renewal start is not a first entry. Probe on the test household (Lim Ah Kow, GPA certificate "As of 01/01/2026", today 23/10/2026):
+
+| Card | waiting | Result |
+|---|---|---|
+| Hip (listed injury), `on_list` | null | **hidden**: "its cover started less than a year ago and no waiting period was checked" |
+| Hip, `on_list` | key missing (old recording) | **hidden** |
+| Hip, `any_event` | null | shown |
+
+On DC's GPA, this hides the wrist, hip and ankle fracture cards until next January. That hides documented benefits in the core accident questions.
+
+**Fix (tested):** take the backstop only when a page of the row's own document prints "waiting period" **and names the row's cover**:
+```ts
+const cover = noNumbers(row.cover).replace(/^group\s+/i, "").toLowerCase();
+const prints = household.documents[row.docIndex]?.pages.some((p) => /\bwaiting\s+period/i.test(p.text) && p.text.toLowerCase().includes(cover)) ?? false;
+if (raw.eventFit === "on_list" && prints && since != null && today - since < LONGEST_WAIT_DAYS) return "…";
+```
+`insideWaiting` also needs `household` passed in.
+
+With this, all three Hip probes show the card. One test needs its fixture changed: `shown(fresh, null)` in the S023 test uses a "CRITICAL ILLNESS PLAN" row whose document never prints that name next to "Waiting Period". Give it a page that does, or use the "LIVING CARE" cover. I would also drop `?? c.asOf` from `since`, because a print date is not a start date.
+
+### R153-2 (high, blocking): `dailyRateOf` makes per-day cards from rates that belong to something else
+The derived row takes **any** single "S$X per/a day" on a limit's line that is below the limit. Probes (the function copied verbatim):
+
+| A limit row's own line | Derived daily card |
+|---|---|
+| "Hospital Room & Board S$8,000 per policy year; ICU S$200 per day" | **S$200 per day for Room & Board** (the rate is ICU only) |
+| "Medical expenses up to S$5,000, subject to an excess of S$100 per day" | **S$100 per day** (that is an excess, not a benefit) |
+| "Overseas medical up to S$200,000; hospital allowance S$100 a day" | **S$100 per day for overseas medical** |
+| "Up to S$1,000 per trip, S$50 per day for a travel companion" | **S$50 per day** |
+
+Each is a wrong claimable amount under the limit row's name.
+
+**Fix (tested):** count a rate only when a cap word comes right before it (capped at, up to, maximum (of), max, limited to, not exceeding). Return null when the line names ICU, intensive, excess, deductible, co-pay, companion or allowance.
+
+With this:
+- The S016 test ("Capped at S$200 per day") still derives S$200.
+- "maximum S$300 per day" and "up to S$300 per day, up to S$8,000 per year" still derive S$300.
+- All four rows above derive nothing.
+
+Please add the four rows as tests.
+
+### R153-3 (medium, fix this round): a bare day count is taken from any turn once any turn mentions a stay
+`stayDaysWritten` now accepts any "N days" in **any** user turn when any turn has stay words. For example: "I was hospitalised. Does the 30 days waiting period matter?" If the model sets `perDay.stayDays` 30, the stay card is worked out for a 30-day stay the household never described.
+
+**Suggested guard:** do not count a bare count followed by waiting, period, ago, since, notice, of cover, to claim or to notify. For example:
+```ts
+new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s+(?:waiting|period|ago|since|notice|of\s+cover|to\s+(?:claim|notify)))`, "gi")
+```
+
+### Checked and holding
+- **`not_described`** rules out the row and its twins like `not_on_list`. The left-out note uses the same `namesRow` rule.
+- **Waiting with dates:** `applies` "no" is shown. yes/unsure with a period still running is hidden, and so is one with no usable date. The date is Singapore's. `printedDay` reads day first and only real dates.
+- **The daily label** (`rowLabel`) now says the start day and the most days. These come from `startDay`, with the R149 to R152 guards.
+- **A stay too short** gives a fact with no money in it, never a S$0 card.
+- **`libraryList`** is the library's own record (linked people, superseded documents left out). It only replaces a point that cites no document, in a question about documents.
+- **`NOTHING_SHOWN`:** correct.
+- **`spouseMeant`**, low, note only. It counts a title before at least 2 words of a member's name, so "Mrs Tan Yi Chuen" (a wife printed under her husband's name) would count for the husband. That would point "my wife" at Desmond if Charmaine is never printed with Mrs/Ms. It is rare in insurance documents. A stricter version would also require the other spouse to be printed with the opposite title.
+
+## R154: PR #109 re-review at 3aea7bc (diff f82ba06..3aea7bc)
+
+**Verdict: READY.**
+
+- **R153-1 fixed.** The backstop fires only when the row's own document has a page that prints "waiting period" and names the cover. My Hip probes are now shown in all four forms (on_list with waiting null, a missing key, any_event, and applies "no"). Keeping `asOf` as the stand-in date is acceptable now: the page-and-cover check is what limits the backstop, and live readings carry no startDate.
+- **R153-2 fixed.** A rate counts only when a cap word comes just before it, and a line naming ICU, an excess, a companion or an allowance gives no rate. The four rows are now tests, and S016 still gives 200.
+- **R153-3 fixed.** A bare day count followed by waiting, period, ago, since, notice, of cover/the policy, or to claim/notify/tell/inform is not counted.
+- **Low note fixed.** A member also printed with the other kind of title settles nothing.
+- **Free tests at 3aea7bc:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+## R155: PR #109 at c2621b6 (diff 3aea7bc..c2621b6, Test Engineer findings)
+
+**Verdict: READY still holds.** Every change narrows a path or fixes wording.
+
+- **`dailyRateOf`:** a line with its own day rule (from/after/beyond/starting/commencing … day, or "day N") gives no derived row. That only narrows it. "Capped at S$200 per day" (S016) still derives.
+- **`stayDaysWritten`:** a turn that names a day rule (within, claim, notify, waiting, period, deadline, submit) gives no bare count. That only narrows it.
+- **`spouseMeant`:** a title now needs every one of the member's own name words, and the latest "my husband" or "my wife" decides, because history is newest first.
+  - Low, note only: if a document prints only part of a member's name (for example "Mr Tan Yi Chuen" for a member recorded as "Tan Yi Chuen, Desmond"), the spouse note is no longer given and the model asks whose cover is meant. That is the safe direction. It is worth checking against DC's real documents for S048.
+- **`aDay`:** gives "An 8-day", "an 11-day" and "an 18-day", and "A" otherwise. Correct for the stay lengths the checks allow (up to 366).
+- **Free tests at c2621b6:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+## R156: PR #110 chat round 9 at 476516c (on main c098eb7)
+
+**Verdict: NOT READY. One fix (patch tested).** No path in this PR shows a wrong amount or a wrong person. The blocker is a documented benefit hidden on missing information. Free tests at 476516c pass: chat-test 76/76, headline-test 13/13, benefit-table test 106/106.
+
+### R156-1 (high, blocking): an event with no date is taken as today, so a trip card is hidden whenever the trip has ended
+`outsidePeriod` uses `printedDay(p.eventOn) ?? today`. The prompt tells the model to give "" when the household did not say a date. So any travel question asked after the trip hides the trip's card with "its cover period ended on …". Two examples:
+- S048 itself: "my husband was hospitalised for 15 days with pneumonia". No date was given, and the trip ran 29/09 to 04/10, so the stay may have been during the trip.
+- The ordinary travel claim: "I got food poisoning on my trip, how much can I claim?"
+
+Claims are usually asked after the trip, so this hides the travel cover in its most common question. That breaks the standing rule that missing information is not an exclusion.
+
+**Fix (tested):**
+1. With no event date, `outsidePeriod` returns null.
+2. The card stays and says "Its cover period ended on 04/10/2026, so it pays only for an event on or before that day." This uses the same `periodEnded` note, now also for undated event cards.
+3. The prompt's `eventOn` asks for today's date when the household says the event is happening now. An explicit date outside the period (including today's) still hides the card.
+
+The test changes:
+- `any_event` with eventOn "" is now shown with that note.
+- `any_event` with eventOn "23/10/2026" is hidden.
+
+All suites pass (76/13/106). The patch is in the Critic scratchpad as `r156-fix.diff` and quoted in the relay.
+
+### Checked and holding
+- **`asksFor`** (`not_described` shown when the question names the benefit, through `namesRow` or a name head of 2 or more words): it only reverses a model refusal for a row the household named. It changes no amount or person.
+- **`NOTHING_SHOWN`** only after an introducing bottom line: fine. Money is stripped from any bottom line anyway.
+- **`dropAgreeingDayRules`** acts only when every daily card has the same non-null start and most days, and the sentence states that start at least twice, with every most-days figure the same. A stay length ("for 12 days") breaks the match, so the sentence is kept. Labels are untouched.
+  - Low: a sentence that also says something else ("…so 2 days are paid") is dropped whole. The stay card carries that.
+- **`periodsNote`** is descriptive only: up to 3 date ranges per document, with ended/running/not started by Singapore date. Low: a range could be a premium or claims window rather than the cover period. The note only says what is printed.
+- **The no-event "ended" note:** it is added to the label before the label is recorded, so `keepLabelledAmounts` keeps the card.
+- **Schema:** `period` is three plain strings, keeping the API within 16 union parameters (a test guards this).
+- **Known gap S088** (the model gives the wrong row id): agreed, out of scope. A word-against-name guard dropping right cards on the 44 is the worse trade.
+
+## R157: PR #110 at e29365d (diff 476516c..e29365d, wrong-row check)
+
+**Verdict: NOT READY.** R156-1 is still open: line 266 is unchanged, `on = printedDay(p.eventOn) ?? today`, so undated trip events are still hidden. My tested patch from R156 still applies. The new wrong-row check is a good idea, with one hole. Free tests at e29365d pass: chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+### R156-1 (high, blocking): still open
+Apply the R156 patch:
+- `outsidePeriod` returns null with no event date.
+- Undated event cards carry "Its cover period ended on X, so it pays only for an event on or before that day."
+- The prompt's `eventOn` says "today's date when they say it is happening now".
+- The test changes as listed in R156.
+
+### R157-1 (medium, fix this round): `copiedName`'s "one name inside the other" lets a slip between nested names through
+Containment of at least two words accepts "Hospital Cash" for an "ICU Hospital Cash" row, and the reverse. Probe (added to the S088 test in a scratch copy):
+
+| row id given | rowBenefit copied | e29365d | right |
+|---|---|---|---|
+| ICU Hospital Cash | "Hospital Cash" | **shown** (the ICU rate on a hospital-cash answer) | left out |
+| Hospital Cash | "ICU Hospital Cash" | **shown** | left out |
+| ICU Hospital Cash | "ICU Hospital Cash" | shown | shown |
+
+The same applies to "Accidental Death" against "Accidental Death and Dismemberment", or a base benefit against its "Enhanced …" variant. These are exactly the slips this check exists to stop, and each shows another row's amount.
+
+**Fix (tested):** in place of containment, allow only generic words to differ:
+```ts
+const core = (t: string) => ` ${t} `.replace(/\s(?:the|benefits?|cover(?:age)?|amount|limit|plan|payment)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
+return !!core(a) && core(a) === core(b);
+```
+With this:
+- The existing S088 test still passes, including "child education fund" for "K. Child Education Fund Benefit".
+- All three probe rows give the right result.
+- chat-test 77/77.
+
+Please add the ICU/Hospital Cash pair as tests.
+
+### Low, note only
+Two rows with **identical** benefit names (for example "Hospital cash" on two covers of the same person) still pass a slip between them, because the copied name is the same. A later `rowCover` copy would close it. That is not needed this round.
+
+### Checked and holding
+- Cards bound by pointer have `rowBenefit` unset, so they are not checked. That is correct: they are bound by quote.
+- An empty `rowBenefit` on an amount drops the card. That is the safe direction, and the prompt says to copy the name exactly.
+- A recording with no field (undefined) is not checked, so replays are unchanged.
+- The check runs before `checkedRow`, so it judges the row the model named.
+- `rowBenefit` is a plain string, so the 16-union limit holds.
+
+## R158: PR #110 at 9a03b85 (diff e29365d..9a03b85)
+
+**Verdict: NOT READY, one fix left.**
+
+- **R156-1 is fixed, exactly as patched.** An undated event is no longer taken as today. Its card says when the period ended. The prompt now asks for today's date for an event happening now. There is a test for an event dated today that falls outside the period.
+- **R157-1 is still open.** `copiedName` still accepts one name inside the other when the shorter name has at least 2 words (chat.ts:635). So a slip between "Hospital Cash" and "ICU Hospital Cash" still shows the other row's amount. Apply the R157 `core()` patch and add the ICU/Hospital Cash pair as tests.
+- **Free tests at 9a03b85:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R159: PR #110 at 4ddcd71 (diff 9a03b85..4ddcd71)
+
+**Verdict: READY.**
+
+- **R156-1 is fixed** (in 9a03b85, confirmed in R158).
+- **R157-1 is fixed, exactly as patched.** `copiedName` now needs the two names to be equal once generic words are taken out. A slip between ICU Hospital Cash and Hospital Cash is dropped in both directions. The exact name and "Hospital Cash Benefit" are still shown. All four cases are tests.
+- **Free tests at 4ddcd71:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+- **Low note from R157 stands, with no change needed:** a slip between rows with identical names on different covers still passes.
+
+## R160: PR #110 at f6855ca (diff 4ddcd71..f6855ca, Test Engineer findings)
+
+**Verdict: READY still holds.**
+
+- **K8, `copiedName`:** the `sameBenefit` acceptance is gone, so the section is part of the name. That is stricter, and the failure it adds is a card left out, never a wrong one.
+- **A3, `asksFor`:** matches the benefit's own name or name head only, never the cover. That narrows it.
+- **N3/N4, `INTRODUCES`:** now matches only wording that points forward. `NOTHING_SHOWN` appears less often, and that line has no money in it.
+- **D8/D9, `dayRulesIn`:** it now reads "after 10 days", and a date such as "on 11th October" no longer counts as a day. It only feeds `dropAgreeingDayRules`, which still requires every start and most-days figure to match the cards' one rule.
+- **Free tests at f6855ca:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R161: PR #110 at d223ff2 (diff f6855ca..d223ff2, Test Engineer D11, N5)
+
+**Verdict: READY still holds.** All three changes narrow a check.
+
+- **D11:** "from day 11 to day 60" is read as a range ending on day 60. This only feeds `dropAgreeingDayRules`, which still needs an exact match with the cards' one rule.
+- **N5:** `INTRODUCES` matches "below" only at the end of a sentence, and "these are" only when "not" does not follow.
+- **`asksFor`:** needs a whole name of at least two words, so "hip" alone no longer counts.
+- **Free tests at d223ff2:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R162 — PR #111 (round 10, head 877dcbd) vs main 762bd83
+
+Free tests on 877dcbd: chat 82/82, headline 13/13, table 106/106.
+
+**Verdict: no blocker. One medium fix (R162-1), three low notes.**
+
+- **R162-1 (medium) `lib/benefit-table/chat.ts:465`** `PREMIUM_ROW = /\bpremiums?\b/i` also matches "Waiver of Premium", "Premium Waiver" and "Return/Refund of Premium". Those are event-paid benefits that can carry a waiting period or cover period, and line 324 now skips both checks for them, so a card could show inside a waiting period or after cover ended. Fix (checked on 7 labels: plain premium rows still exempt, waiver/return/refund not):
+  `const PREMIUM_ROW = /^(?!.*\b(?:waiver|waive[sd]?|return|refund)\b).*\bpremiums?\b/i;`
+  Suggest one chat-test case: a "Waiver of Premium" row with a waiting period is still held back.
+- **Q1 looser copiedName / LIST_MARKS: no wrong-row or wrong-amount path found.** A shortened copy binds only when no other row of that person has the same short name; the only exception is a same-cover, same-qualifier sameBenefit twin, which shows as a companion anyway. A copy that adds a note ("(per child)") is still rejected; premium first-year vs later-year rows stay apart.
+  - Low: sameBenefit now equates rows that differ only by a list mark ("1. X" vs "2. X"). ruledOut has no document check, so two such rows in one document could be ruled out together. That withholds, it never shows a wrong amount. Single-letter brackets like "(s)" are also stripped; harmless.
+- **Q2 dedupe: cannot hide a different figure.** The skip needs same person, cover, qualifier, sameBenefit, a different document, and sameFigure (same amount and unit). Low: the skipped twin's own carried points/conditions are dropped with it; if the two documents print different conditions, only the first card's show.
+- **Low `lib/simple-chat/hook.ts` datesSaidNote:** "24/7", "1/2", "3/4" are read as dd/mm dates (24 Jul, 1 Feb, 3 Apr), adding a wrong "days before today" line. Suggest requiring a year in the slash form, or a lead word (on, since, from, by, dated, until).
+- Holds: AMOUNT_POINTER widening (end-of-clause only), points after the card, deadline prompt rule.
+
+## R163 — PR #111 re-check (head 4ea465b)
+
+**Verdict: READY.**
+
+- R162-1 fixed with the suggested PREMIUM_ROW (chat.ts:466) plus a test for waiver/return/refund rows inside a waiting period.
+- datesSaidNote: slash dates now need a 4-digit year or a lead word. Probed: "24/7", "3/4 of the bill" give no note; "on 3/4", "on 29/9/2026", "since 1/10/2026" are read right. "on 3/4/26" (2-digit year) gives no note, which is a miss, not a wrong date.
+- The two low notes left as is are accepted (both only withhold).
+- Free tests on 4ea465b: chat 82/82, headline 13/13, table 106/106.
+
+## R164 — PR #111 re-check (4ea465b..a3e0eba)
+
+**Verdict: READY.** Free tests on a3e0eba: chat 82/82, headline 13/13, table 106/106.
+
+- T5 (chat.ts:352-370): a skipped twin's conditions become fact points quoting the skipped row's own document; money-stating conditions are dropped, and near-repeats (80% of words) of a shown condition are skipped. No amount can come from this path. It only runs once the kept twin was given (same person, cover, qualifier, figure).
+- C5 (chat.ts:684-686): a frequency in the copy must equal the row's. Low: synonyms ("annual" vs "yearly", "half-yearly" vs "semi-annual") and a copy with a frequency on a row without one are now rejected. That only withholds.
+- M4 (chat.ts:484): stems waiv*/return*/refund* are excluded; plain premium rows still exempt.
+
+## R165 — PR #112 (round 11, head 3f2547b) vs main af79682
+
+Free tests on 3f2547b: chat 86/86, headline 13/13, table 106/106.
+
+**Verdict: NOT READY. Two wrong-row binds (R165-1, R165-2), both reproduced and fixed in a tested patch.**
+
+- **R165-1 (high) one-sided note in `sameBenefit` (chat.ts ~747) opens the copiedName guard.** `others` in copiedName (chat.ts ~701) excludes every sameBenefit row of the same cover and qualifier, *in any document*. With the new rule, "Accidental Death" and "Accidental Death (Public Transport)" are now the same benefit, so a copy "Accidental Death" on the Public Transport row's id passes (the short path strips the note, and the plain row is no longer a rival). Probe on 3f2547b: same document → binds (true); main → false. Same for "Hospital Cash" on the "Hospital Cash (ICU)" row, and across documents. The card then shows the doubled or ICU amount for the plain benefit asked about.
+  Fix: the rival exclusion keeps the old strict meaning, and only for another document, as its comment says:
+  `&& o.source.documentId !== row.source.documentId && nameParts(o.benefit).core === nameParts(row.benefit).core && sameBenefit(...)`.
+- **R165-2 (medium) `quotesRow` accepts a quote that merely contains a short excerpt (chat.ts ~752).** `q.includes(e)` with a bare-amount excerpt ("S$50,000", a table cell) means a long quote about another benefit ("Comatose ... up to S$50,000") binds a Natural Catastrophe row's id when the Comatose row's excerpt is a different line. Probe: true.
+  Fix: the longer-quote direction holds only when the excerpt prints one of the row's own name words. The A6 premium quote still binds.
+- Patch (both): scratchpad r165-fix.diff. With it: chat 86/86, headline 13/13, table 106/106; all four probes false; A6-style quote true.
+- Low: the one-sided note still pairs AD and AD (Public Transport) as cross-document twins (companions, ruledOut). Companions show their own labels and amounts, and dedupe needs the same figure, so this shows an extra card or withholds; it never puts a wrong amount on a label.
+- Low: withoutPointer's ", listed below" cut can leave a stray comma ("The amounts, apply only if ..."). Cosmetic.
+- Holds: the fit fallback (ties and better rivals reject; "Hospital Cash" vs "ICU Hospital Cash" rejects), the condition merge (same row only, money conditions dropped, quote from the row's own document), the dropped-list filter, and amountLeftOut.
+
+## R166 — PR #112 re-check (3f2547b..6de7b2f)
+
+**Verdict: READY.** R165-1 and R165-2 applied as patched, with a test that fails on 3f2547b. My four probes are false and the A6 quote still binds. Low (b) fixed (", shown below," eats its following comma). Low (a) accepted. Free tests on 6de7b2f: chat 87/87, headline 13/13, table 106/106.
+
+## R167 — PR #112 re-check (6de7b2f..b1e0669)
+
+**Verdict: READY.** Free tests on b1e0669: chat 87/87, headline 13/13, table 106/106. The R165 probes still hold.
+- B4 (copy equal to another cover's name rejected): only rejects, and only in the fit fallback. That can withhold, never mis-bind.
+- N4 (PERIOD_NOTE turns off the one-sided-note rule): this only narrows pairing. Core-equal names still match as before.
+- M1b (away point for a condition only the other document prints): reuses awayConditions (money dropped, quote located in the sibling's document) and the same `away` key dedupe as carried points. It adds no amount.
+
+## R168 — PR #112 re-check (b1e0669..07d14e6)
+
+**Verdict: READY.** B4b only adds rejects in copiedName's fit fallback: policy-type words are dropped before the cover compare, and an empty name is rejected. It can withhold, never mis-bind. Free tests on 07d14e6: chat 87/87, headline 13/13, table 106/106.
+
+## R169 — PR #113 (round 12, head 431c4b6) vs main a02c1da
+
+Free tests on 431c4b6: chat 91/91, headline 13/13, table 106/106.
+
+**Verdict: NOT READY. Four ways to show a wrong amount (R169-1 to R169-4) and one hidden true fact (R169-5), all reproduced. A tested patch fixes all five (scratchpad r169-fix.diff). With it: chat 91, headline 13, table 106, and every probe is fixed.**
+
+- **R169-1 (high) check.ts capInRow takes a cap meant for some insured persons only.** "Accidental Death 100% of Sum Insured (Child: limited to S$50,000)" now gives every adult S$50,000 (probe: worked_out 50000 on S$200,000). "maximum S$200,000 for insured persons above age 70" is also taken as everyone's cap. Fix: no cap from the row when it names a group (child, adult, age/aged, spouse, dependant, above/below/over/under).
+  Q1 answer: the changed test expectations (Advance Payment S$400,000, Burns S$5,000, ICU S$25,000 on the continuing line, Hip S$50,000 next line) are sound, and they still pass with the fix.
+- **R169-2 (high) chat.ts planTableRows reads every table on the document's pages that has the same plan headings.** A second table "for insured persons aged 70 years and above" (or an annual plan's table) gives "Overseas medical expenses" S$100,000 next to the real S$500,000, plus a 70+ "Personal accident" figure (probe). Name dedupe only checks the reading's own rows. Fix: read only the header block that holds one of this plan's reading rows (its excerpt's first line).
+- **R169-3 (high) planTableRows takes a money first cell as the line's name.** "S$500\tS$1,000\tS$1,500\tS$2,000" under three plans becomes "Trip cancellation: S$500", and the Business plan gets S$1,500, shifted one column (probe). Fix: an extra first cell must not be a PLAN_CELL.
+- **R169-4 (medium-high) verify.ts stayDaysSaid reads when, not how long.** "admitted 10 days after the accident" gives 10, "admitted 3 days ago" gives 3, and "hospitalised 2 days before the trip ended" gives 2. Now that the server works out a stay when the model gave none, these become worked-out stay totals. Fix: a negative lookahead for ago, after, before, later, earlier, prior, since, from and into.
+- **R169-5 (medium) hook.ts dropLateClaims deletes a true "window has passed" fact** whenever any sentence has "until/by/before + a future date". Example: "Your cover runs until 31/12/2026" removes the statement "The 30-day claim window has passed: it ended on 01/09/2026." (probe). Fix: openSaid needs claim/notice/deadline words and no OTHER_PERIOD.
+- Process: verify.ts money rules are frozen. The stayPays change (and the R169-4 fix) is a money path in verify.ts, so please confirm DC has said yes to it.
+- Low: the capInRow capSource is the row's quote, which may not print the cap when the cap is on the continuing line. At worst verify withholds.
+- Holds: stayPays stays limited to rows with one per-day figure equal to the card, one start rule and one max (lump sums cannot pass). claimWindows and datesSaidNote "yesterday / N days ago" hold, NRIC masking holds, and the prompt rules hold.
+
+## R170 — PR #113 re-check (431c4b6..0c5c151)
+
+**Verdict: READY.** check.ts, verify.ts and hook.ts match the R169 patch byte for byte. chat.ts matches too, except the header test is pulled into a `heading()` helper, which behaves the same. Tests were added for all five items. Free tests on 0c5c151: chat 91/91, headline 13/13, table 107/107. Process: accepted. DC's 06:47Z "ok" on fix-list group 3d covers the per-day stay change.
+
+## R171 — PR #113 re-check (0c5c151..489d55a)
+
+Free tests on 489d55a: chat 93/93, headline 13/13, table 107/107.
+
+**Verdict: NOT READY. One wrong-amount path (R171-1), reproduced. A tested patch is in scratchpad r171-fix.diff.**
+
+- **R171-1 (high) chat.ts planTableRows: PLAN_CELL now accepts footnote marks ("S$2,000*") but drops what the footnote says.** A page with "Personal accident / S$50,000^ S$100,000^ S$150,000^" and "^ Limited to S$25,000 for children." gives a child S$100,000. "* Reduced to 50% for insured persons aged 70 years and above." under medical gives a 70+ person S$500,000 (probe). Each row has conditions [], so the qualifier is stripped.
+  Fix: a marked cell gives a row only when the page prints that footnote and the footnote names no group, limit or share (no digits; no child/adult/age/senior/family/spouse/reduced/limited/sub-limit/max/per/each). The footnote then goes with the row as its condition. With the patch, both probes give no row, a benign footnote ("* Pre-existing conditions are excluded.") gives the row with that condition, and the existing P7 case ("S$2,000*" with no footnote on the page) now gives none. That one expectation needs to change to [] (or the test can add a benign footnote line). A missing card is acceptable; a wrong one is not.
+- Holds: capInRow (excess, per-day, NEAR_CAP all only withhold); the plan-table end on a foreign heading or optional line; adult/child inline lines skipped; the cell's own currency (a bare "$" keeps the template's currency, as before); the label-below rule; stayDaysSaid (my R169 probes still null; "for 12 days after the fall" = 12; a second "for N days" makes it unclear); claimWindows exclusions; dropLateClaims whose-claim check (only keeps more); the yesterday skip removal (the alternation already consumes "day before yesterday").
+
+## R172 — PR #113 re-check (489d55a..3ffce25)
+
+**Verdict: READY.** chat.ts is byte-identical to the R171 patch. Tests cover no footnote, the child footnote and the 70+ footnote; P7 now has a benign footnote. Free tests on 3ffce25: chat 93/93, headline 13/13, table 107/107.
+
+## R173 — PR #113 re-check (3ffce25..76a25e4)
+
+Free tests on 76a25e4: chat 94/94, headline 13/13, table 107/107.
+
+**Verdict: NOT READY. One fix (R173-1): a label drops the plan name. A tested patch is in scratchpad r173-fix.diff.**
+
+- **R173-1 (medium) coverLabels `repeats` uses a substring test in both directions, so the plan is dropped whenever it *contains* the cover name.** Probes: cover "Travel Insurance", plan "Travel Insurance Premier" → "Travel Insurance". Cover "Hospital & Surgical", plan "Hospital & Surgical (Plan 2)" → "Hospital & Surgical" (noNumbers also removes the 2). The amount is still the plan's, but the card no longer names the plan, which breaks "never strip a qualifier".
+  Fix: a plan or product is left out only when all of its words are already shown, except one word that is the product's first word (the insurer, as in "AIA"). With the patch: AIA → "PRO LIFETIME PROTECTOR - MAX" (test still passes); Travel/Plan 2 keep their plan; chat 94, headline 13.
+- Holds: the group-name and plan-footnote skips in planTableRows (they only skip); "for each day" per-unit in capInRow (only withholds); claimWindows (sentence scope, starts/diagnosed excluded; note only); the dropLateClaims "deadline for X" (only keeps more); the stayDaysSaid second length (only withholds; "within 30 days" and "3 days ago" are not counted).
+
+## R174 — PR #113 re-check (76a25e4..c3c110b)
+
+**Verdict: READY.** chat.ts is byte-identical to the R173 patch, with tests for Travel Premier and Plan 2. H1 (stayDaysSaid ignores "N days to claim" and a waiting period as a second length) only narrows. My R169 probes still give null; "stayed 4 days" gives 4. Free tests on c3c110b: chat 94/94, headline 13/13, table 107/107.
+
+## R175 — Upload check, early review (patch series 14c0507 + f89e0ac on a02c1da)
+
+Probes ran with tsx against the applied series. v11-ingestion-regressions needs the DB stack, so I could not run it here; I relied on the author's run.
+
+**Verdict: NOT READY. One high fix (R175-1, tested) and one design gap (R175-2).**
+
+- **R175-1 (high) layout-check.ts `FIGURE` only counts two-decimal or comma-grouped numbers.** "S$300", "S$500", "25%" are ignored, so readingsAgree passes a suspect page whose text pairs them differently from the image. Probe: text "Ambulance S$300 / Hospital cash S$500 per day / Coma 25%", image "Ambulance S$500 / Hospital cash S$300 / Coma 50%" gives agree:true, and the text (wrong pairing) is kept. This is exactly the wrong-label case the gate exists for.
+  Fix: FIGURE = every number, /\d[\d,]*(?:\.\d+)?/g. With it, the swap is refused ("the image reading does not print 300 beside ambulance") and an agreeing glued page still agrees. A stricter check can only leave more pages unchecked.
+- **R175-2 (medium, design) the second reading starts only on visible signs (glued figures, or labels before values).** A layout that pairs a label with the next row's figure, with no glue and no label run, is never checked, which was the second trigger in the plan ("a schedule where most amounts fail the source check"). Suggest also checking a personal document's pages that hold coverages with evidenceVerified=false, or benefit-table rows dropped for "quote not found", once per document.
+- Low: numbersIn now skips any figure with three or more decimals ("1.375" matches /\.\d{2}\d/), which withholds such rates. Better to require a comma group or a currency before it.
+- Low: lineFrom splits "01.01" from "2024" when a date's items touch. That's harmless for amounts.
+- Low: an unchecked page gives the chat a placeholder, so the policy name, number and in-force status printed there are hidden too. That's acceptable as a withhold, but the household may see the policy as missing. Consider keeping lines that hold no figure.
+- Holds: the label:value merge (≥3 colon labels, ≥60% of the left band, ≥80% of values beside them); bare-figure value columns merged only when every line sits beside a label; the text is kept and only confirmed (never replaced); unchecked pages are left out of the table reading (service.ts) and the fact check; needs_review plus the "Read in part" message, including unverified coverages; clean pages make no paid call.
+
+## R176 — PR #114 upload check (head 5ef852d on main 2435418)
+
+Probes ran with tsx against 5ef852d. I could not run v11-ingestion here (DB stack).
+
+**Verdict: NOT READY. Unchecked pages still feed three writers (R176-1), and the chat still sees bare amounts on them (R176-2, patch tested).**
+
+- **R176-1 (high) lib/rag/ingest.ts: only the fact check, the benefit table (service.ts) and the chat library skip unchecked pages.** These still read them:
+  - `evidencePages` (line 570) → `catalogueDocument` (policy_benefits, the Benefits page) and `annotateCoverageEvidence`;
+  - `printedText` (738) → `premiumPrinted` and `printedPremiumTable`, which stores rider premiums read from the scrambled page;
+  - `paymentSplitNote`, `fullText` (634), the `applyMemberTiers` text and `catalogueConditions`;
+  - `chunkPages(pages)` (815) → the search index, with every amount.
+
+  `evidencePages` is also built before the second cross-check pass (613), so pages marked unchecked there are missed even if it is filtered.
+  Fix: after the second pass, set `const usable = pages.filter((p) => !p.unchecked)` and build evidencePages, printedText, the payment split, fullText, the tiers text and the conditions pages from it. Chunk unchecked pages as `uncheckedText(p.text)`. Add a regression test: an unchecked page that prints a rider premium and a benefit amount stores neither.
+- **R176-2 (medium-high) library.ts uncheckedText keeps bare whole numbers.** "Sum Assured 13500" and "Crisis Cover 100000" survive AMOUNT_LINE (probe), so the chat can quote an amount whose pairing was never checked, and verify finds it in the text. Fix (tested): keep only lines with no digit, or a number or date beside its own label (policy/certificate/contract/member/account number; date/commencement/expiry/issue). The probe then keeps "Basic Plan: PruLink Enhanced Protector" and "Policy Number: 63639755" only. Patch: scratchpad r176-fix.diff.
+- Low: numbersIn skips the glued head but then reads the tail as its own number ("181.44181.44" gives [44], so printsNumber(…, 44) is true). Suggest also skipping the match straight after a skipped glued token.
+- Holds: FIGURE widened (the R175 swap probe is refused); the second trigger on unverified coverage pages (capped at 6, extraction recomputed, DB flag updated); rates like 1.375 kept whole; the needs_review and "Read in part" messages.
+
+## R177 — PR #114 upload check re-review (head 2fd0c58)
+
+Probes ran with tsx against 2fd0c58. I could not run v11-ingestion here (DB stack).
+
+**Verdict: NOT READY. One small fix left (R177-1), plus R176-2 still open.**
+
+- **R177-1 (high) lib/rag/ingest.ts:563: `evidencePages` is built before the second cross-check pass (line ~604).** crossCheckPages now swaps an unchecked page's text for uncheckedText in memory, so first-pass pages are safe everywhere: printedText, fullText, the payment split, chunks and evidencePages. A page marked unchecked in the second pass is safe in the DB, the fact check, printedText and chunks, but not in `evidencePages`. That array still holds its full text and feeds `catalogueDocument` (policy_benefits, the Benefits page, line 888) and `annotateCoverageEvidence` (728). The catalogue's quote check reads the same text, so a scrambled pairing on that page can still be stored. This is the case the gate exists for.
+  Fix: move the `const evidencePages = …` line to just after the second-pass block. Nothing between uses it, and only lines 728 and 888 read it.
+- **R176-2 (medium-high) still open: uncheckedText keeps bare whole numbers.** A probe at 2fd0c58 keeps "Sum Assured 13500" and "Crisis Cover 100000" on an unchecked page, now in the DB, search and chat alike. Use the tested patch from R176:
+  ```ts
+  const NUMBER_LABEL = /\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\b|\b(?:date|dated|commencement|expiry|issued?)\b/i;
+  export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
+    : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && (!/\d/.test(l) || (NUMBER_LABEL.test(l) && !AMOUNT_LINE.test(l))))].join("\n");
+  ```
+- Low (observe): readingsAgree is strict about line breaks and OCR spelling. If the image reading puts a label on its own line, the page becomes unchecked. That is safe because it withholds amounts rather than showing wrong ones. Measure how many suspect pages pass on one real document before relying on the "Read in part" rate.
+- Low (carried over): numbersIn reads the tail of a glued pair as its own number.
+- Holds:
+  - The R175 and TE U-F1 swaps are refused: pairs swapped across lines, and "Plan A/B" swapped within a line. Different currency marks still agree.
+  - GLUED skips rates and dates (1.375, 01.10.2026).
+  - The labels-before-values check fires on the Prudential shape.
+  - crossCheckPages is pure. A failed image read makes the page unchecked, and a matching read keeps the page's own words.
+  - uncheckedText is idempotent.
+  - library.ts re-exports the single copy.
+
+## R178 — PR #114 upload check (head d679b94)
+
+Probes ran with tsx against d679b94. The free suites pass: chat 94/0, headline 13/0, benefit-table 107/0. I could not run v11-ingestion here (DB stack).
+
+**Verdict: READY.**
+
+- R177-1 / R176-1 fixed: evidencePages is rebuilt after the second pass, from the same `pages` array whose unchecked pages carry uncheckedText. Every reader now works from that text.
+- R176-2 fixed: the probe keeps "Basic Plan", "Policy Number: 63639755" and "Commencement Date: 01/02/2020", and drops "Sum Assured 13500" and "Date 50,000.00".
+- numbersIn: "13,500.00100,000.00" and "181.44181.44" give []. "1.375", "S$600,000" and "1 million" are read as before.
+- Low (observe, no change needed): the glued-tail skip also drops a number one character after a glued token ("13,500.00100,000.00 5 days" gives []). That only withholds, and only on a line that is already broken.
+
+## R179 — PR #114 upload check, TE UC delta (head 4c58b2f)
+
+Probes ran with tsx against 4c58b2f. The free suites pass: 94/0, 13/0, 107/0.
+
+**Verdict: NOT READY. One fix left (R179-1, tested patch).**
+
+- **R179-1 (high) lib/documents/layout-check.ts DATE:** the "d Month yyyy" forms match any word, `[A-Za-z]{3,9}`. LABELLED then strips "start/end/expiry/issue" plus a fake date and the line is kept with its amount: "Expiry 30 days 1500" and "Start 12 months 2000" both survive on an unchecked page.
+  Fix (tested; it also drops those two lines and keeps "Issue Date 12 March 2024" and "Issued on March 3, 2024"):
+  ```ts
+  const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
+  const DATE = String.raw`(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+${MONTH}\s+\d{4}|${MONTH}\s+\d{1,2},?\s+\d{4})`;
+  const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`, "i");
+  ```
+- Holds:
+  - UC-1: "Policy number TE-1 Annual limit 150000" is dropped. "Date of issue 1 Jan 2020 Premium 1500" is dropped too.
+  - UC-2: the header skip needs a non-amount key cell.
+  - UC-3: a lone page number is ignored. A lone value still fails, because the image line "TPD 3" has no match in the text.
+- Low (accepted): "Policy no. 5000" is kept. Its label says it is a policy number.
+
+## R180 — PR #114 upload check (head 9e57e8e)
+
+**Verdict: READY.** R179-1 is fixed exactly as patched. The R179 probe now keeps the policy number and the real dates. It drops "Expiry 30 days 1500", "Start 12 months 2000", "End 90 days 25000" and "Sum Assured 13500". The free suites pass: 94/0, 13/0, 107/0. I could not run v11-ingestion here (DB stack).
+
+## R181 — PR #115 Prudential plan steps 3–4 (head f99e66f)
+
+The free suites pass: 94/0, 13/0, 107/0. simple-answer chat-test can't run here (@anthropic-ai/sdk is missing locally), and neither can v11 (DB stack).
+
+**Verdict: READY for steps 3–4.** Step 2, a tolerant parse of the image-reading reply, is still to be added to this PR.
+
+- **Step 3:** uncheckedWhy is set in every branch. The probe gives:
+  - "could not be read" when there is no reading;
+  - "gave no text" when the page is missing or unreadable;
+  - readingsAgree's reason otherwise.
+
+  It goes only to processing_failure_diagnostics, the service-only table, as "page N: why", and never into the page text. The second-pass crossCheck logs as well.
+- **Step 4:** uncheckedPages comes from extraction_method. reading_status "read in part …" is printed whatever pages are sent. libraryFact says "was read in part". unreadable() is unchanged.
+- Low: prompt.ts:24 only explains the case where a document has no reading_status. It could add one line: "read in part" means saying which pages couldn't be checked, and never that the file couldn't be read. The attribute already reads plainly, so this is optional.
+- Low: a page the image reader dropped (PartialTranscription) and a reply that could not be parsed both give "gave no text". Step 2's OCR_REPLY_UNPARSED row will tell them apart.
+
+## R182 — PR #115 step 2: tolerant image-reading parse (head b756874)
+
+Probes ran against the extracted parseTranscription, since ocr-hosted.ts needs @anthropic-ai/sdk, which is missing locally. The free suites pass: 94/0, 13/0, 107/0.
+
+**Verdict: READY.**
+
+- These now parse: a raw TAB or newline in the page text, a sentence plus fences before the JSON, an escaped quote with a TAB, and a "}" inside the text with a trailing sentence. Escaping is lossless.
+- OCR_REPLY_UNPARSED keeps only the page numbers and the reply length. Parsed readings are now cached as usual.
+- Low (optional): other control characters, such as a form feed, still give null. A one-line generalisation escapes any character below U+0020 inside strings:
+  `else if (ch < " ") { out += "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"); continue; }`
+- Low: when the parse fails, the dropped-page retry resends the same pages at temperature 0, so it gets the same reply. That costs one wasted call; it is not a correctness problem.
+- No integration test is needed for the failure row. The unit cases cover the parser, and the row write is one guarded call.
+
+## R183 — PR #116 OCR page numbers (head bdfe1e3)
+
+The probe ran against the extracted acceptTranscribedPages.
+
+**Verdict: READY.**
+
+- Probe results:
+
+  | Requested | Reply | Result |
+  |---|---|---|
+  | [3,4] | 1,2 | mapped to 3,4 |
+  | [3,4] | 2,1 | mapped by number, 2 to 4 and 1 to 3 |
+  | [3] | page_number 1, text as a list | mapped to 3, list joined |
+  | [3,4] | 1,5 | nothing mapped |
+  | [3,4] | 4,5 | 4 only (no positional map) |
+  | [3,4] | 3,4 plus an injected page 1 | 3 and 4 only |
+  | [3,4] | "1","2" | mapped to 3,4 |
+  | [1,3] | 1,2 | 1 only (no positional map) |
+
+- A wrong mapping can only end as an unchecked page, because the upload check compares it with the text reading.
+- Low (optional): OCR_PAGES_ABSENT logs `returned` as the raw value of pageNumber/page_number/page. If a reader put text in `page`, that text would be stored. Use `Number(...)`, falling back to its typeof, to keep only a number.
+
+## R184 — PR #117 bare "husband"/"wife" (head 9928ad5)
+
+**Verdict: NOT READY. The deny-list resolves other people's spouses to the user's own (a wrong-person answer).**
+
+- **R184-1 (high) library.ts spouseSaid / NOT_MINE:** each phrase below resolves to the household's spouse.
+
+  | Kind | Phrases |
+  |---|---|
+  | Another relative's or someone else's spouse | "my sis husband got cancer", "my bro wife pregnant", "my sister-in-law husband" (the hyphen splits the word), "kakak husband kena accident", "jie jie husband", "my client wife", "my bf wife", "my gf husband" |
+  | About someone else entirely | "husband of my colleague died", "husband mother warded", "my husband's mum got stroke" (that last one was already the case on main), "husband-and-wife plan" |
+
+- **Fix (tested; file /mnt/project-files/critic/spouse-said-r184.ts):** an allow-list instead of a deny-list.
+  - Resolve only when the word opens the message or a clause, or follows my/me/if/when/and/but/so/cos/because/then/lah/ah/eh/wah/hi/pls.
+  - Never when it is followed by "'s", a hyphen, "of", or a family or other-person noun (mother/mum/dad/brother/sis/side/family/parents/boss/friend/colleague/cousin/ex).
+  - Words before it may contain hyphens, so "sister-in-law husband" is caught.
+  - Every phrase above gives null. "husband kena fracture leg", "hubby got cancer", "my wife kena dengue", "if wife hospitalised can claim", "husband and I both covered?", "Husband warded at SGH" and "my hubby, he fell" still resolve.
+
+## R185 — PR #118 app-help fixed answers (head fa556d4); #117 recheck (a694384)
+
+**Verdict on #118: NOT READY (two findings; patch tested).**
+
+- **R185-1 (high): cover questions get a canned reply instead of their amount.** ABOUT_COVER misses most cover words, and "plan" means the insurance plan to most people. Caught today:
+  - usage: "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan has been used up for physio sessions";
+  - cost: "do I pay anything to use it at a panel clinic", "how much does it cost to use this for an MRI scan? will it pay";
+  - who-sees: "who can access the policy documents if I die" (an estate question);
+  - rename: "change my name on the policy", "update my son's name on the rider";
+  - safe: "is my data safe to share with the agent".
+
+  **Fix (tested; file /mnt/project-files/critic/app-help-r185.ts):**
+  - Widen ABOUT_COVER with: policy/policies, rider, insured/assured, pay(s)/paid, reimburs*, outpatient, inpatient, dental, physio, clinic, panel, doctor, specialist, scan, mri, x-ray, surgery, operation, ward(ed), treatment, therapy, accident, illness, cancer, critical, disability, tpd, death/die/dies/died, medisave, shield, deductible, co-insurance, left, remaining, balance, estate, agent.
+  - Usage fires only on "plan usage", or on usage/used/use/left together with "this month", "questions", "documents read" or the app's name. "How much of my plan have I used this year" then goes to the model.
+  - All the phrases above go to the model. "what is dearpolicy", "who can see my documents", "delete my account", "update my wife's name", "is dearpolicy free" and "plan usage" keep their fixed answers.
+- **R185-2 (medium) who-sees / safe: the answers say more than the pages do.**
+  - "Your household's documents are shown to the members of your household", given as the answer to "who can see" or "is it safe", implies they are the only ones.
+  - But the app's own copy says "A DearPolicy reviewer will check this" (app/chat/page.tsx:45), and pages are sent to the reading model.
+  - No page states any security property.
+  - Suggested wording: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that."
+- Checked as true against the pages:
+  - Delete this household: owner only, the exact name is typed, and it cannot be undone.
+  - A member who isn't the owner can Leave.
+  - Revoke an invitation.
+  - Family > Edit details > Full name / Preferred name.
+  - Plan usage is linked from Household.
+  - No price is shown (the usage page says so).
+- **#117 at a694384 is still NOT READY.** The added deny-list words (sis, bro, frens, grandma, grandpa) don't close R184-1. "my client wife", "my bf wife", "my gf husband", "kakak husband", "jie jie husband", "my sister-in-law husband", "husband of my colleague", "husband mother warded" and "husband-and-wife plan" still resolve to the household spouse. The allow-list in /mnt/project-files/critic/spouse-said-r184.ts is still the fix.
+
+## R186 — PR #119 file labels (1b50f45) and PR #120 per-block travel delay (67e86e0)
+
+**#119: READY.**
+- labelFor follows the intended precedence: (product || (not a personal name and readable)) ? docLabel : name.
+- Unreadable files keep their bare name, and the file name stays in brackets.
+- Low: docLabel uses documentRole, which is the app's guess (for example, the Manulife schedule filed as an endorsement). The file name in brackets keeps it findable, and prompt.ts already says roles are guesses. No change needed.
+
+**#120: NOT READY.**
+- **R186-1 (medium-high) chat.ts perBlock currency:** BLOCK_FIGURE accepts a bare "$" and then takes `template.figure.currency` from another row. "A bare $ does not establish currency." Fix: `const currency = /^us\$/i.test(sign) ? "USD" : /^(?:s\$|sgd)/i.test(sign) ? "SGD" : null;`. figureText then says "currency not stated".
+- **R186-2 (medium) perBlock drops a limit printed on the next line.** The doc comment says "a third wrapped line gives none", but only lines i-1 to i+1 are checked. With "S$100 for every / six-hour delay" followed by "up to S$1,000\tup to S$500\tup to S$500" (or "maximum …"), the card shows "S$100 for every six-hour delay" without its limit. That strips a qualifier.
+  Fix: pass `lines[i + 2]` and return null when it starts lowercase, or when it starts with (up to|max(imum)?|subject|capped|limit|overall|per (trip|journey|period)), or when it holds `columns` cells of figures.
+- Low: headline.ts:33 still renders per_period as `a ${period}`, giving "S$50 a three-hour delay". Use periodWords there too.
+- Holds:
+  - column k always exists, because the heading must include template.column;
+  - a merged cell or a missing plan cell changes the count, so no row is made;
+  - the label can't be a block length;
+  - block rows are appended after the others, so existing row numbers don't change.
+
+## R187 — PR #121 library file names exempt from the output guard (head 5a44640)
+
+**Verdict: READY.**
+
+- libraryNames is built only from `household.documents[].name`, which is the signed-in household's own library. A name gets in only when the answer's text includes it. The model can't add a name: readModelAnswer doesn't carry the field, and verifyAnswer builds the answer object.
+- protectableNames still filters on the guard side: slashes, key-like values, bare UUIDs, record ids, and names under 3 or over 160 characters.
+- Low (observe): answer-verification.ts:1304 `unnamed` removes library names from a sentence with no whole-word check before reading money figures. Only a file name that is itself part of an amount (for example "000.pdf") could hide a figure. Real names carry an extension, so this is acceptable.
+
+## Round 188: re-review of #116 (9571c14), #117 (f9e56f7), #118 (cef1202), #120 (0069169)
+
+Free probes only: the three benefit-table suites on #117 and #120, plus extracted-function probes for #116, #117 and #118.
+
+- **#116: READY.** Probed acceptTranscribedPages with 11 reply shapes. These are mapped:
+  - 1..n for [3,4];
+  - page_number/page keys and a text array;
+  - a single [1] for [3];
+  - [1,2] for [2,3] (TE P116-1).
+
+  These give nothing: a shifted [4,5], a duplicated [1,1] and a partial [1]. An extra page beside the asked ones is only dropped. OCR_PAGES_ABSENT stores coerced numbers and letter-only keys (R183 met).
+  - Low, comments only: line ~177 says "none is a page that was asked for", but [3,4,5] answered as [3,1,2] is mapped by position (3 to 5), which is correct. Line ~185 says a shifted page "is asked for on its own", but the retry asks for all absent pages together. The upload check still guards both cases.
+- **#117: READY.** The R184 allow-list is verbatim, and its 18 probe phrases behave as intended. Unresolved stays safe: "pls check wife" and "my wife's policy" ask who is meant. Suites: 94/0, 13/0, 107/0.
+- **#120: READY.** R186-1 is fixed: a bare "$" gives a null currency, and "SGD " gives SGD. R186-2 is fixed: a third-line limit, a lowercase wrap or a figures line gives no row. periodWords is used in figureText, rowLabel and shortFigure. Suites: 95/0, 13/0, 107/0.
+- **#118: NOT READY** (R185-1 and R185-2 are met; the who-sees and safe wording is now honest).
+  - **R188-1 (medium, my own R185 pattern):** "How do I use DearPolicy?", "can I use this app on my phone" and "can I use the app for my parents" get the Plan usage answer. A how-to question gets a wrong canned reply. "left" in the same pattern can never fire either, because ABOUT_COVER has "left". Fix: `\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b|\bhow\s+(?:much|many)\b[^?.!]*\buse\b[^?.!]*\b(?:this\s+month|questions?|documents?)\b`
+  - **R188-2 (low-medium):** "remove the data for my son" gets "delete the whole household". Fix: delete test noun followed by `(?!\s+(?:for|of|on|about)\b)`.
+  - **R188-3 (low):** "How much does DearPolicy cost?" goes to the model, because cost words are matched only before the app name. Add `|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b` to the cost test.
+  - Probed with the patch: the how-to questions go to the model; "how much did I use this month" and "how much have I used dearpolicy" still get usage; "How much does DearPolicy cost?" and "...this app cost per month" get cost; "delete my account" and "delete everything" still get delete.
+
+## Round 189: #122 (6e824ef), lone page number in readingsAgree (TE N8)
+
+**NOT READY.** It is the right direction: a lone value in the middle of a page no longer passes. But it refuses ordinary page-number layouts, and it still passes a lone value on the last line. Probed main against #122 with the same readings on both sides (`true` means the readings agree):
+
+| Layout | main | #122 |
+|---|---|---|
+| body, "3", disclaimer line (footer then disclaimer) | true | **false** |
+| "PRUDENTIAL", "3", body (header then number) | true | **false** |
+| text has "3" before a footer word; image has it last | true | **false** |
+| N8: value alone in the middle of the page | true | false (fixed) |
+| "Hospital Cash per day" then "150" as the **last** line | true | **true** (still passes) |
+| "Page 3 of 4" in the middle | true | true |
+
+- **R189-1 (medium):** the edge rule refuses real pages whose page number sits next to a header or footer line. The PDF text layer often extracts the page number before the footer text, so whole benefit pages would become unchecked and their amounts hidden.
+- **R189-2 (medium):** a lone value printed on the last line ("150" under its label) is still taken for the page number, so its pairing is never checked.
+- **Fix** (diff at /mnt/project-files/critic/readings-agree-r189.diff):
+  - pass the page's own number: `readingsAgree(text, image, pageNumber?)`, and `crossCheckPages` passes `p.pageNumber`;
+  - treat a bare number as the page number when any of these holds:
+    - it is the "page N" or "N of M" form;
+    - it equals the page's own number, wherever it sits;
+    - it is the first or last filled line and has at most 2 digits.
+
+  All six layouts above then behave as wanted (the first three agree; N8 and the last-line 150 are refused). A printed "1" on PDF page 5 at the edge still passes.
+- Residual risk (low, accepted): a lone value equal to the page number ("3" days on page 3) is still stripped. Its figure is still counted on both sides.
+
+## Round 190: re-review of #122 (b8d372f), #118 (36cb215), #117 (e73dc4e)
+
+- **#122: READY.** The R189 diff and TE P122-1 are applied. I probed nine layouts: the footer then disclaimer, the header then number, the trailing blank and a page number beside a footer label all agree. N8 mid-page and a 2-digit value first or last under a label-only line are refused.
+  - The trade-off is accepted: a bundle page (printed "1" on PDF page 5) next to a label-only footer line is refused. That fails safe, and only pages already sent for a second reading are affected.
+- **#118: NOT READY** (R188-1/2/3 are met, and TE P118 is fine).
+  - **R190-1 (medium):** the new `is (?:APP|this|it) free` sends "is it free" and "is this free?" to the price answer. Only the message is read, so a follow-up about a treatment ("…GP visit." then "is this free?") gets "The app doesn't show a price". Fix: in the cost test, use `\bis\s+${APP}\s+free\b|\bfree\s+to\s+use\b` instead of `\bis\s+(?:${APP}|this|it)\s+free\b`.
+  - Probed with the fix: "is it free", "is this free?" and "is this treatment free" go to the model; "is it free to use" and "is dearpolicy free" get cost.
+- **#117: NOT READY.**
+  - **R190-2 (high, wrong person):** the possessive now resolves the household's spouse whenever the next word is not on NOT_THEM_AFTER. That is the R184 deny-list problem again. These all resolve to the spouse, so the question is answered about the wrong person: "my husband's niece", "my wife's nephew", "my husband's uncle", "my wife's aunt", "my husband's maid", "my wife's helper", "my wife's kids", "my husband's children", "my wife's brother-in-law", "my husband's friend's car", "my wife's stepdaughter", "my husband's goddaughter".
+  - **R190-3 (medium):** the trailing capture consumes the next word, so "my husband's first wife" resolves "wife".
+  - **Fix** (tested):
+    ```ts
+    const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(['’]s)?(?![\w'’-])(?=(?:\s+([\w'’-]+))?)/gi;
+    // After a possessive, only the spouse's own cover counts: an allow-list (Critic R190-2).
+    const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|aia|pru\w*|manulife|ge|great|income|singlife|fwd|aviva|tokio|hsbc|own)$/i;
+    // in the loop:
+    if (x[1] && !MINE_BEFORE.test(x[1])) continue;
+    if (x[3] ? x[4] && !HIS_OR_HERS.test(x[4]) : x[4] && NOT_THEM_AFTER.test(x[4])) continue;
+    const word = x[2].toLowerCase();
+    ```
+  - Probed with the fix: all 12 relatives above and "my husband's first wife" give null. These still resolve: "my husband's policy", "my wife's hospital plan", "husband's claim how", "hubby's AIA", "is this my husband's?", "my wife's Prudential plan" and "my husband kena fracture".
+
+## Round 191: #120 at af5c2eb (TE P120-1/2)
+
+**READY, re-confirmed.** The change only refuses more often:
+- the "after" line is now the next non-blank line;
+- "total" and "aggregate" join the limit words;
+- money figures are counted across the whole line.
+
+A block can now only be refused more often, never given a new amount. Suites: 95/0, 13/0, 107/0. The R190 verdicts stand: #122 READY; #118 and #117 NOT READY.
+
+## Round 192: #117 (6b6411a), #118 (6e9dfdd)
+
+- **#117: READY.** The R190-2/3 patch is applied as given, plus "bill|bills" in HIS_OR_HERS ("my hubby's hospital bill"). That is still the spouse's own, and it is fine. Chat suite: 94/0.
+- **#118: READY.** The R190-1 cost test is applied as given. The other help tests are unchanged since R190, so the R190 probe still holds.
+
+## Round 193: #118 at 9e27270 (TE P118-4)
+
+**READY.** I probed 18 phrases:
+- Dialysis and chemo "how many … this month" questions, and "how many times can I use this month", go to the model.
+- The app's own counts still get usage: questions, messages, documents left, plan usage, and "how much have I used dearpolicy".
+- Cost, who-sees and delete are unchanged.
+
+Two low points, no change needed:
+- "usage this month?" now goes to the model. That is safe.
+- "how much have I used this month" with no cover word gets the Plan usage reply, even though a user might mean an outpatient limit. The reply only points to a page and states no amount.
+
+#117 6b6411a was confirmed READY in R192.
+
+## Round 194: #121 at 7508309 (fix 8b4042e, TE P121-1/2)
+
+**READY.** In `guardInPlace`:
+- next steps now get the server-set `libraryNames` exemption, as details do;
+- a string `bottomLine` is guarded like the summary, and falls back to the guarded summary (or GUARD_FALLBACK_SUMMARY) when the summary is emptied or the bottom line is stripped. A removed internal name can no longer sit beside the fallback.
+- The guard strips model, provider and table names, not amounts or people, so the exemption cannot reopen an amount path.
+
+Two low follow-ups, not blocking:
+- Answers stored before this keep their raw bottomLine on reopen, because sanitizeStoredAnswer is unchanged.
+- `statements[]` are not guarded, as on main. Their text comes from checked rows, but a model-written `conditions` or `basis` string could carry a provider word. A later small PR could run guardText over those fields.
+
+The r9-redteam and r6 failures are reported as the same on main 4050804; I did not re-run them (DB suites).
+
+## Round 195: #123 (5222e20, stacked on #121), statements guarded and the stored bottom line
+
+**NOT READY, one small change.**
+
+- **Calculation children are safe.** The guard runs at save (`lib/chat/store.ts:94`), after `keepLabelledAmounts` (`lib/simple-chat/hook.ts:279`), so dropping a point at save cannot change which amounts that step kept.
+  - "-stay" and "-bill" children are built only under a parent that has an amount (`verify.ts:1468-1490`, `c.amount!`), and an amount point is never dropped. So no child loses its parent.
+  - A "-stay" child with payable 0 and the not_found "-bill" carry server-built text with no leak pattern, so they stay.
+- **No import cycle.** output-guard imports only types. Monetary-boundary now pulls output-guard into the chat page's client bundle through app/chat/page.tsx, which is a few regexes and harmless.
+- **R195-1 (medium, qualifier):** on an AMOUNT point, `conditions` and `basis` go through guardText, which drops a whole sentence when any leak pattern matches. The amount would then show without its qualifier, which breaks "never strip a qualifier". Wordings that would trigger it:
+  - "…becomes null." (the debug-token pattern);
+  - a pasted snake_case code or form id;
+  - a 32+ character mixed reference string.
+
+  They are rare, but the result is an amount without its condition. Fix: on amount points, scrub the leaked token instead of dropping the sentence.
+  ```ts
+  const keepWords = (c: string) => guardText(c, names) || scrub(c);   // amount points: never lose a qualifier
+  const conditions = (st.conditions ?? []).map((c) => (st.amount ? keepWords(c) : guardText(c, names))).filter((c): c is string => !!c && !!c.trim());
+  const basis = typeof st.basis === "string" ? (st.amount ? keepWords(st.basis) : guardText(st.basis, names)) || null : st.basis;
+  ```
+- **R195-2 (low):** when a no-amount point's `text` is unchanged, `fullText` is kept unguarded, and the fullText of an amount point is never guarded. If the cards show fullText (the expand), guard it on its own: `fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText`. For amount points, fullText is the server label in verify.ts, so it is fine as is.
+- **The `sanitizeStoredAnswer` bottomLine fallback is correct.** It only replaces the bottom line when the stored summary is exactly GUARD_FALLBACK_SUMMARY.
+
+## Round 196: #123 at 08b33de
+
+**READY.** R195-1 and R195-2 are applied as given, and the "becomes null." test bites (guardText alone returns null for it). Reported suites: simple chat 83, benefit-table chat 94, tsc clean.
+
+Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still stays beside the amount, which is the point. The guard should almost never fire on real document wording.
+
+## Round 197: #123 at 96ed299 (TE P123-2: an amount card with a leak in a condition or basis is dropped)
+
+**NOT READY, one addition.** Dropping the amount is the right call: it is better than an amount with altered qualifiers. The bottom line can't carry the dropped figure, because `withoutMoney` strips money from it (`verify.ts:1527`), and the summary is the bottom line. Children go by id prefix ("s1-" does not catch "s10-").
+
+- **R197-1 (medium, your open question): yes, say it.** A documented amount that disappears with no word is the "hiding a benefit" failure. The household must hear that an amount was left out.
+  - LEFT_OUT_AMOUNT is the wrong wording here ("couldn't find printed").
+  - Importing anything from verify or benefit-table into output-guard would also pull them into the chat page's client bundle through monetary-boundary.
+
+  So add a local note when `gone.size` is non-zero:
+  ```ts
+  const LEFT_OUT_UNSHOWABLE = "I left out an amount I couldn’t show with all of its conditions. The full wording is in the document.";
+  if (gone.size && !cards.statements.some((s) => s.id === "left-out-guarded"))
+    cards.statements.push({ id: "left-out-guarded", kind: "uncertainty", text: LEFT_OUT_UNSHOWABLE, fullText: LEFT_OUT_UNSHOWABLE, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null } as never);
+  ```
+  Add a test: one amount card with "pre_existing" in a condition gives no amount card and this note.
+- **R197-2 (low):** `st.text.includes(t)` over-matches: a dropped "S$50" also removes a note that names "S$500". Match on a boundary instead: `new RegExp(`(?<![\\d.,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d,]*\\d)`).test(st.text)`. The harm is only an extra note dropped, so it is low.
+
+## Round 198: #123 at 6aa2e1d
+
+**READY.** R197-1 (the "left-out-guarded" note) and R197-2 (boundary match, plus `\.\d` so "S$50" doesn't match "S$50.50") are applied, with tests. Reported suites: simple chat 83, benefit-table chat 94, TE pr121 9 and pr123 13, tsc clean. #123 merges after #121.
+
+## Round 199: #124 (c1ac28d), Family "Covered for" from the benefit table
+
+**NOT READY.** The direction is right: a live household's ledger is stale.
+
+- **`people[].id` is the family member id.** `assemble.ts:207` builds people from `family.map((m) => ({ id: m.id, … }))`, and `/api/ledger` keys `kinds` by the same id.
+- **R199-1 (medium, hidden cover):** `/\bpremium/` drops "Waiver of premium" and "Premium waiver on TPD" rows, which are cover. A person whose only rider is a waiver loses it. Skip only a row that IS the premium ("Annual premium", "Premium payable").
+- **R199-2 (medium, false statement):** a person with covers on the table but no countable rows gets an empty list, so the page says "Nothing found in your uploaded documents for them yet" (`app/family/page.tsx:143`). That happens when sections are not linked yet, or the only rows are waivers or values. `people[].covers` is in the same response: count each cover that has no counted row by its cover name.
+- **R199-3 (low-medium):** a failed `/api/benefit-table` request (`!r.ok` or a network error) gives null, which falls through to `/api/ledger`. A live household then sees the stale kinds again, which is the bug this PR fixes. Fall back only on `enabled === false`, and show nothing on an error.
+- **R199-4 (low):** `/travel|trip/` has no word boundaries. Use `\b(?:travel|trip)\b`.
+- Not fixed, noted: a life plan named only by its sum ("Sum Assured" under "Basic plan") shows "Other". I tried the product name as a fallback, and it made "CPF LIFE" annuity rows "Death" (`\blife\b`), which is worse. So keep [benefit, cover] only.
+- **Fix**, tested: /mnt/project-files/critic/cover-kinds-r199.ts. The page change is `kindsOfTable(p.rows ?? [], p.covers ?? [])`, and `if (!table) return;` before the ledger fallback.
+  - The waiver and "Premium waiver on TPD" rows now count (Other and Disability), while "Annual premium" is skipped.
+  - Covers with no rows give their kinds, and annuity stays Other.
+
+## Round 200: #125 (7a8b5c2), ledger rows printed as not applying
+
+**NOT READY (false drops of real rows).** I probed `printedNotApplying` with 15 lines. `NOT_APPLYING_CELL` matches a not-applying cell **anywhere** on the benefit's own line, so these real rows are dropped:
+
+| Line | Row | #125 |
+|---|---|---|
+| `Hospital cash  S$100 per day  Waiting period: Nil` | Hospital cash | **dropped** |
+| `Accidental death\tS$100,000\tDeductible: Nil` | Accidental death | **dropped** |
+| `Outpatient\tS$1,000\tCo-payment: Nil` | Outpatient | **dropped** |
+| `Emergency dental  S$500  Excess: Nil  Sub-limit: -` | Emergency dental | **dropped** |
+| `Medical expenses overseas  S$200,000  -` | Medical expenses overseas | **dropped** |
+| `Terrorism  Covered  Hijack  Nil` | Terrorism | **dropped** (it's Hijack's cell) |
+
+- **R200-1 (high, hidden benefit):** a "Nil" deductible, waiting period or co-payment, or another benefit's cell on the same line, removes a real benefit.
+- **Fix** (tested, /mnt/project-files/critic/not-applying-r200.ts): only the cell printed **right after the benefit's own name** counts. With no findable name, the first line counts only when it prints no figure.
+  - All six rows above are kept.
+  - These are still dropped: "Home Guard  Not Applicable", "Pet care  -", "Golf equipment: N/A", "Hijack  Nil" (as Hijack), "Loss of income  NA", and "Golf  N.A." with a paraphrased name.
+  - "Pet care - boarding  S$50 per day" and "Section 3  Golf  N.A.  S$250" (no name) are kept.
+- Noted (low, a miss and not a false drop): a wrapped "Home Guard" / "Not Applicable" on the next line is still kept. "Home Guard\tNot Applicable\tS$500" (plan columns) is dropped. That withholds rather than guesses the plan, which is consistent with `rowFiguresDependOnPlan`.
+
+## Round 201: #124 at 82ff6ce
+
+**NOT READY, one regex.** R199-1 to R199-4 and TE P124-1 are in. I probed 29 cases: waiver riders, travel, Shield, PA under motor, covers with no rows, CPF LIFE as Other, "Wealth", "Carefree" and "PRUActive" all behave as intended.
+
+- **R201-1 (medium, the same wrong-kind class this PR fixes):** `\bhome(?:shield|guard|protect)?\b` makes HDB **HomeProtect** (mortgage-reducing term: death/TPD on the borrower) show "Home and vehicle", alongside "Death". A mortgage reducing term named "HomeProtect" gives ["Death", "Home and vehicle"].
+- **Fix** (tested): drop "protect" from the property alternation, and put a mortgage line before property:
+  ```ts
+  // A mortgage plan ("HomeProtect", "Mortgage Reducing Term") is death cover on the borrower, not home insurance.
+  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect\b/i, "death"],
+  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
+  ```
+  With it, HomeProtect gives ["Death"], a mortgage reducing term gives ["Death"], and real home and motor covers keep "Home and vehicle".
+
+## Round 202: #125 at 4c908e4
+
+**NOT READY, one line.** R200-1 is in. The split-out dash is right ("Accidental Death  -  S$100,000" is kept), and so are the TE P125-2 additions.
+
+- **R202-1 (medium, hidden benefit):** `lastIndexOf(last)` finds the LAST printing of the name's last word. On a side-by-side travel table, a later benefit sharing that word supplies the cell:
+  - "Flight delay  S$100 per 6 hours  Baggage delay  Nil" drops Flight delay;
+  - "Travel delay\tS$100\tTrip delay\tNot Applicable" drops Travel delay.
+- **Fix** (tested): take the name's first printing, meaning its first word, then its last word after it.
+  ```ts
+  const low=l.toLowerCase(),last=words[words.length-1],at=low.indexOf(last,Math.max(0,low.indexOf(words[0])));
+  ```
+  With it, both rows are kept, and so are "Loss of baggage … Baggage delay  Nil", the R200 keeps and "No cover for war". "Hijack Nil", "Home Guard  Not Applicable*" and "Golf: ✗" are still dropped.
+
+## Round 203: design PRs #126 (b1922be), #127 (494d756), #128 (07bce21), #129 (699b6ea), for the UI/UX designer thread
+
+**All four READY.** None changes answer logic or data, and they are independent off main 4050804.
+
+- **#126 colour tokens: READY.**
+  - I computed the contrast of every text pair, and all clear AA: muted on bg 5.8; brand-ink on surface 5.74, on bg 5.25, on brand-tint 5.07; warn-text on its tint 6.65; critical on its tint 5.23; good-text 5.76. In dark mode: white on brand 4.7, muted 6.87, brand-ink 7.53. Input lines are 3.18 (light) and 3.36 (dark), and the UI minimum is 3.
+  - Low points:
+    1. The logo PNG is still terracotta (#884938, transparent) on the new cool grey and blue. The brand and the UI no longer match, which is for DC to decide.
+    2. Dark mode still paints a cream patch (#f9f5e4) behind the logo (globals.css, `.brand-logo` dark rule).
+    3. `--money` is now ink, so amounts no longer stand out from the text. That is a design choice; flagging it only because amounts are the product's main figure.
+    4. On the Portfolio "Not found" cards the dot is now link blue, which reads as "tap me" rather than "missing".
+- **#127 page titles as nouns: READY.**
+  - No test or script asserts any removed eyebrow or old title. The only hit, "cover at a glance" in scripts/v11-ingestion-regressions.ts, is document text and unrelated.
+  - The #118 app-help answers still match the new names: the Documents page, the Family page, Household, then Plan usage.
+  - Low: a first-time visitor now sees "Portfolio" instead of a sentence saying what the app does; the lead line still says it.
+- **#128 sentence-case labels: READY.**
+  - Labels now show their source text as written. The only lowercase source is the either-or divider "or" (answer-cards.tsx:182), which reads fine.
+- **#129 quieter sidebar footer and phone top bar: READY.**
+  - On phones the theme button keeps its accessible name, because the visually hidden span is clipped rather than `display:none`.
+  - Low, pre-existing and not this PR's: the footer still says "Your documents and questions are kept private to your household." Pages are also read by the reading model, and a DearPolicy reviewer can check answers. That is the same overclaim as R185-2, worth softening in a later PR.
+
+## Round 204 (24 Oct): #124 1bc0910, #125 e5ccbe8
+
+**#125 e5ccbe8: READY.** R202-1 applied verbatim; both side-by-side delay lines are keep tests.
+
+**#124 1bc0910: NOT READY (one fix).** R201-1 and F12 are right (HomeProtect gives Death and Disability, Mortgage Reducing Term gives Death, Public Vehicle Accident Plan gives Accidents).
+
+- **R204-1 (high, hides a plan): components/cover-kinds.ts:64.** P124-2 counts the cover before *every* skip, so a cover whose only rows are a value or the premium now counts as no cover. Probe: an ILP with only "Fund value" + "Annual premium" rows gave `["Other"]` on 82ff6ce and `[]` on 1bc0910; "Critical Illness II" with only an "Annual premium" row went from `["Critical illness"]` to `[]`. With no other plan, Family shows "Nothing found in your uploaded documents" (app/family/page.tsx:145) for a person who has a plan, against R199-2. Fix: skip value/premium rows before counting; only a not-covered row counts the cover and then skips:
+  ```ts
+  // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1).
+  if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+  counted.add(`${r.product}\u0000${r.cover}`);
+  if (r.pays === "not_covered") continue;
+  ```
+  With it: ILP gives Other, CI premium-only gives Critical illness, all-not-covered HomeShield still gives nothing; headline 15/0.
+
+## Round 205 (24 Oct): #124 38d1090
+
+**#124 38d1090: READY.** R204-1 applied verbatim, with the ILP and CI-premium-only tests; F15 `home\s?protect(?:ion)?` is right. headline 15/0 on 38d1090.
+
+- Low (not blocking): a home-contents product sold under a name like "Home Protection Plan" would now show as Death (its home rows add no kind). Only the Family label changes, never an amount. Watch for it on real schedules.
+
+## Round 206 (24 Oct): #124 a1aeea4
+
+**#124 a1aeea4: READY.** 9aa5a61 (`\bHPS\b`, TE P124-3) and a1aeea4 (only "Home Protection Scheme" is a mortgage plan; "Home Protection Plan" for contents stays Home and vehicle) close the R205 low note, both tested. headline 15/0 on a1aeea4.
+
+## Round 207 (25 Oct): any-household / any-market re-review (#117 0aec6d7, #118 a2d5060, #119 c63a5e3) and sweep of #116-#125
+
+**#117 0aec6d7: NOT READY (one fix).**
+- **R207-1 (medium, wrong-person class): lib/simple-chat/library.ts `ownCoverWords`.** Every word of the household's insurer and product names counts after a possessive, including relation words. Probe with product words "family care plan": "my wife's family has cancer history, covered?" now resolves to the wife (null before); so does "my husband's family". Fix: drop words that NOT_THEM_AFTER already says are someone else:
+  ```ts
+  .flatMap((n) => n.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 2 && !NOT_THEM_AFTER.test(w)));
+  ```
+  With it: "my wife's family ..." gives null again, "my wife's care plan" still resolves.
+
+**#118 a2d5060: READY**, but **its PR #118 was merged at 8524386, so this commit is in no open PR**: it needs a new PR from main. Low: generic product words ("safe", "secure", "family") now send an app question to the model. That costs a model call, not a wrong answer.
+
+**#119 c63a5e3: READY**, with the same problem: **PR #119 was merged at 32e365d**, so this needs a new PR. Until then, main still carries the "Desmond travel.pdf", "charmaine's name to Charmaine Ong" and FWD/AIA test strings, which #118/#119 follow-ups remove.
+
+**#123 6aa2e1d is neither open nor merged** (closed). FYI in case that was not intended.
+
+**Sweep of #116-#125 (main 999048d) for one-household / one-market code:**
+- **R207-2 (medium, market): lib/benefit-table/chat.ts:198 BLOCK_FIGURE, :112 and :140 (#120).** Per-block delay cells match only S$/US$/SGD/$, and currency maps only to SGD/USD. An RM, HK$, A$, € or £ delay table gives no row (missing, not wrong). lib/chat/assertions.ts:224 already has a full sign table. Fix: one shared sign list:
+  ```ts
+  const SIGN_RE = String.raw`S\$|SG\$|SGD|US\$|USD|RM|MYR|HK\$|HKD|A\$|AU\$|AUD|€|EUR|£|GBP|₱|PHP|\$`;
+  const SIGNS: [RegExp, string][] = [[/^(?:S\$|SG\$|SGD)$/i, "SGD"], [/^(?:US\$|USD)$/i, "USD"], [/^(?:RM|MYR)$/i, "MYR"], [/^(?:HK\$|HKD)$/i, "HKD"],
+    [/^(?:A\$|AU\$|AUD)$/i, "AUD"], [/^(?:€|EUR)$/i, "EUR"], [/^(?:£|GBP)$/i, "GBP"], [/^(?:₱|PHP)$/i, "PHP"]];
+  // A bare "$" names no currency (Critic R186-1).
+  const currencyOfSign = (sign: string) => SIGNS.find(([re]) => re.test(sign.trim()))?.[1] ?? null;
+  const BLOCK_FIGURE = new RegExp(String.raw`^(${SIGN_RE})\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$`, "i");
+  // :112  (after.match(new RegExp(String.raw`(?:${SIGN_RE})\s?\d`, "g")) ?? []).length >= columns
+  // :140  const currency = currencyOfSign(sign);
+  ```
+- Low (pre-existing, round 12): chat.ts:172-175 plan-table cells take S$/US$/SGD only, and a bare "$" takes `template.figure.currency`. That conflicts with R186-1; a follow-up should use the same `currencyOfSign`.
+- Additive SG vocabulary is acceptable (it recognises more; it hides nothing elsewhere): CareShield/ElderShield, HomeProtect/HPS (#124), MediSave in ABOUT_COVER, Singlish particles in MINE_BEFORE. One label risk outside SG: cover-name `shield` means Hospital and medical (the SG Integrated Shield convention), so an "XYZ Shield" life plan elsewhere would show as Hospital and medical on Family. That is a label only, never an amount.
+- **R207-3 (repo-wide, pre-existing; not from #116-#125): real household names in code.** "Desmond", "Charmaine" and "Tan Yi Chuen" appear in 686 lines across 71 files in lib/app/components/scripts (comments and tests, e.g. chat.ts:1058-1092, layout-check.ts:1, claims/evidence/identity.ts:19). Against "keep private records out of Git" and any-household. Needs one sweep PR replacing them with made-up names (no logic change). #116-#125 themselves add none beyond the two test lines above.
+
+## Round 208 (25 Oct): #135 6e86ebb (build fix)
+
+**#135 6e86ebb: READY (urgent, merge first).** Root cause confirmed: headline.ts (imported by the client component components/benefit-table-coverage.tsx) value-imported `periodWords` from assemble.ts, which imports lib/policies/linking (database). Now headline.ts imports only types; assemble.ts value-imports headline.ts with no cycle, and chat.ts keeps getting `periodWords` through the re-export. Function body unchanged. No `"use client"` file value-imports assemble or db. On 6e86ebb: headline 16/0, benefit-table 107/0, chat 95/0. I did not run `next build` (free-work rule); the builder reports it passes.
+- Low: the guard test reads one line per import, so a value import split across lines (`import {\n periodWords,\n} from "./assemble"`) or an `export … from "./assemble"` would get past it. Optional: match with `/^(?:import|export)\s+([\s\S]*?)\s+from\s+["']([^"']+)["']/gm`.
+
+## Round 209 (25 Oct): #136 f057339 (de-household follow-ups to #118/#119)
+
+**#136 f057339: NOT READY (one small fix, same class as the PR).** The code is right: ABOUT_COVER names no insurer; appHelp takes the household's own insurer and product words; hook.ts passes them. Probe on f057339 with own = Zurich/CareFirst: "is my data safe with Zurich" and "... with CareFirst" both give null (model); "is my data safe" gives safe; what/delete/cost/rename/usage are unchanged. I could not run the simple-answer chat-test locally (missing SDK dep in my scratch install).
+- **R209-1 (privacy / any-household): the same real file names #136 removes elsewhere are still in the code.**
+  - lib/simple-chat/verify.ts:1112 has "817d6e8b-....pdf" and "output_202609281146053.pdf".
+  - lib/simple-chat/verify.ts:1563 (from #121) has "5e58ea7d-….pdf" and "output_202609281146053.pdf".
+  - scripts/simple-answer/style-test.ts:100-106 has "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf" and insurer "Singlife".
+
+  Fix: use made-up names, as #136 already does in chat-test ("0a1b2c3d-0000-4000-8000-00000000abcd.pdf", "output_202601010900001.pdf", "Example Insurance"), and change the `/817d6e8b/` assertion to match the new name.
+- Not blocking: ABOUT_COVER keeps medisave/polyclinic/tcm/shield. These only add recognition and hide nothing in other markets. The repo-wide real-name sweep (R207-3) stays a separate PR.
+
+## Round 210 (25 Oct): #137 62cd137 (benefit-table prompt cache, cache-token booking, Sonnet 5.5 cache price)
+
+**#137 62cd137: READY.**
+- **Price, verified against the live source.** platform.claude.com prompt-caching page (fetched 25 Oct): Sonnet 5.5 is $2 input, $2.50 5m write, **$0.10 cache hit**, $10 output; footnote: "Cache hits and refreshes on Claude Opus 5.5 and Claude Sonnet 5.5 are priced at 0.05x the base input price." So `cachedInput: 0.1` is right; 0.2 was the old 0.1x figure. (The bundled claude-api reference, cached 6 Oct, still says $0.20 for Sonnet 5.5; the live page wins.)
+- **Does the cap now let through spend it should block? No.** The ledger now books what Anthropic bills. Before, Sonnet 5.5 cache reads were booked at 2x, so the cap was stricter than it needed to be; it now meets the true cost exactly. benefit-table calls book `input = uncached + reads + ceil(1.25 × writes)` and `cached = reads`, so `costUsd` = uncached×p + 1.25×writes×p + reads×0.05p. That matches the 5m write price ($2.50 = 1.25×$2). Before this PR the table had no caching, so input_tokens was already the whole prompt; without the new booking, cached tokens would have gone unbooked. The PR books them.
+- **Model-visible change? None.** `system` goes from a string to one text block holding the same `c.system` string. `cache_control` changes billing and latency, not what the model reads. user content, schema, effort and max_tokens are all unchanged. Only the shared prompt (READING_PROMPT / LINKING_PROMPT) sits in the cached prefix; the household's document stays in the user turn (tested), so nothing from one household is cached ahead of another's.
+- **Build fix:** 62cd137 is byte-identical to #135's 6e86ebb (the patches diff empty), so whichever merges second applies cleanly.
+- **Local checks:** service-test 22/0 (includes the new cache test), headline 16/0.
+- Low: a document read with no page re-read inside 5 minutes pays the 1.25x write on the prompt once, a little more than today. That is cents-of-a-cent per document, and it is repaid by the second call that shares the prompt.
+- Low (pre-existing, not this PR): `claude-haiku-5-5` has no PRICES entry (#93 adds one). If any route is set to Haiku 5.5, its calls book US$0 ("unpriced") and the household cap cannot see them.
+
+## R211 — #139 4401e68 (page check line by line): NOT READY
+
+Free review: code read and pure `checkLines` probes only. The PR's own layout assertions (v11-ingestion-regressions E1 blocks, layout-check part) pass before and after the patch below.
+
+- **R211-1 (high, new in this PR) — a row's own figure masked, its continuation kept.** `layout-check.ts` checkLines masks only the unconfirmed line. Text `Hospital cash S$150 per day` / `or up to S$50,000, whichever is lesser`, image misreads 150: the page is stored as `Hospital cash [amount not checked] per day` / `or up to S$50,000, whichever is lesser`. `lib/benefit-table/check.ts` rowSegment joins a connective line into the row, so the row can show "up to S$50,000" as its whole limit while the binding daily limit is hidden. Before #139 the whole page was unchecked. Wrong claimable amount.
+- **R211-2 (high, new in this PR) — column header masked, rows under it kept.** Text `Benefit\tPlan 1\tPlan 2\tPlan 3` over value rows, image misreads one plan number: the header becomes `Plan [amount not checked]` x3 and every value row stays, so no figure can be tied to its plan (or age/year). Wrong plan's amount.
+- **R211-3 (high, pre-existing since the line-multiset check) — a line confirmed under a different heading.** Text `Plan A / Death benefit 100,000 / Plan B / Death benefit 200,000`, image `Plan A / Death benefit 200,000 / Plan B / Death benefit 100,000`: checkLines agrees (kind null) and the page is stored whole. Headings carry no figures, so they are never compared. A two-column page whose text layer interleaves columns gives exactly this.
+- Fix for all three (one function, patch at /mnt/project-files/critic/r211-layout-check.patch): match a line only under the same heading in both readings (the nearest label-only line above it that both readings print; headings only one reading has are passed over), and spread masking to the masked row's continuation lines (lower-case or connective start, both directions) and, when the masked line has 3+ tab cells, to the run of rows below with the same cell count. Probes: R211-1 masks the cap too; R211-2 and R211-3 leave nothing confirmed, so the page is unchecked. PW9 shapes (footer code, OCR missing a heading, glued age) are unchanged.
+- **R211-4 (medium) — chat calls a part-checked document fully read.** `lib/simple-chat/verify.ts:1170` libraryFact checks only `uncheckedPages`; a document with only part-checked pages says "X was read." Fix: add a branch for `d.partCheckedPages?.length`: "`${named}` was read in part: some amounts on `${pageList(d.partCheckedPages)}` couldn't be checked against the page image, so they are not used."
+- Downstream checked and fine: benefit-table `service.ts:47` sends part-checked text, and `check.ts` drops any figure not printed in the quote, so an amount invented for `[amount not checked]` is dropped (but see R211-1). simple-chat `library.ts` readInPart covers both kinds. ingest second pass re-verifies against masked text and skips part-checked pages. checkLog holds shapes and positions only; uncheckedWhy stays a fixed phrase (TE P115-1 holds).
+- Low, pre-existing: lines with no figure, zero amounts and amounts in words are never compared; ANY_FIGURE eats a trailing comma ("S$50,000," becomes "[amount not checked]").
+
+## R212 — #138 861b71b (any-household cleanup): READY
+
+Free review: diff read, `canonicalInsurer` probed against the old alias rule.
+
+- Product code (lib, app, components) now has no real household names: 21 files and 42 lines before, 0 after. The other code changes are comments, two form placeholders and two example names in prompts (simple-chat prompt.ts, rag2 loop prompt.ts), all harmless.
+- `lib/policies/insurer-name.ts` canonicalInsurer: every old Singlife alias still maps to "singlife", and "Aviva Ltd" stays apart. Two names that differ only by legal-form words now match ("The Great Eastern Life Assurance Company Limited" = "Great Eastern Life Assurance Co Ltd"). Disability and travel move from the raw name to this rule. Every caller I checked (currentness matchPremiumEvidence, inventory, claims wording) also needs a policy number, group number or product match, so the wider insurer match can't attach another contract's evidence.
+- Low: LEGAL_FORM misses "private", "pvt", "sdn", "pty", "gmbh" and "se", so "AIA Singapore Private Limited" and "AIA Singapore Pte Ltd" still differ, as they did before. No regression; add them for other markets.
+- Medium, still open (R207-3): scripts and e2e still hold 738 lines with the owner household's first names, including a full name at scripts/claim-evidence-regressions.ts:134, :506 and :599. DC's rule says tests use made-up names. Needs its own PR if it isn't planned already.
+- G007500 hard-coding (ci-evidence.ts:214, death-evidence.ts:192, dashboard route:97) is left for its own plan, as stated.
+
+## R213 — #140 9657d16 (reading starts at once, Try again): NOT READY (one small fix)
+
+Free review: code read only. I did not run the DB suite.
+
+- **Double runs: none found.** startJobNow uses the same claimNextJob CAS (`FOR UPDATE SKIP LOCKED`, queued/failed_retryable only, `available_at <= now()`, not cancel_requested), now filtered by idempotency key. The drain, the daily run and start-now can race on one row, but only one claims it; the losers get "empty" (shown as not_claimable). Lease, heartbeat, retries and dead-lettering are unchanged.
+- **Lease clash with the drain: none.** A leased row is never claimable, and only recoverExpiredLeases (run by runJobBatch) touches an expired lease.
+- **Try again on a leased job: 409, as intended.** livePolicyJob is true for `processing` with a live lease, so the reprocess route throws AlreadyProcessing (route.ts:123, 409). The same is true for failed_retryable inside its backoff.
+- **R213-1 (medium): Try again on an expired lease does not start anything.** This is the likely stall: a run killed at 300 s, or a crashed instance. The row stays `processing` with `lease_expires_at < now()`, so livePolicyJob is false and the page offers Try again. Then:
+  - enqueuePolicyProcessing does nothing (the row is neither terminal nor conflict-free);
+  - startJobNow returns not_claimable (the status is processing);
+  - the drain scheduled at the top of the route moves the row to failed_retryable with a backoff, so the page goes back to "Reading this document…" until a later poll-driven drain claims it.
+  The button says it starts reading and it doesn't. Fix in the reprocess route, stalled path, after the policies UPDATE:
+  ```ts
+  await recoverExpiredLeases(pool); // expired lease -> failed_retryable, or dead_letter at max attempts (which enqueue then revives)
+  await enqueuePolicyProcessing({...});
+  // Try again means now: a retry delay the person is asking to skip is skipped.
+  await query(`UPDATE background_jobs SET available_at=now(), updated_at=now()
+    WHERE job_type=$1 AND idempotency_key=$2 AND status='failed_retryable' AND NOT cancel_requested`, [POLICY_PROCESSING_JOB_TYPE, body.policyId]);
+  await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId });
+  ```
+  Add a test: a processing row with an expired lease, then Try again, gives "succeeded" and runs once.
+- **R213-2 (low-medium): a 150 s claim budget against 300 s maxDuration.** A job claimed at 149 s has 151 s before Vercel kills it. PW9 already ran past 60 s, so a second long document can be killed mid-read, paying again for the calls it already made. Checkpoints and the hosted_ocr cache soften this. Now that start-now gives every document its own start, keep the runner budget at about maxDuration minus the longest expected reading (100-120 s).
+- Low: up to 3 start-now runs plus 1 drain per instance read side by side. The household cap is checked per call, so parallel reads can overshoot it by a few calls' worth, and DC's household has about US$12 left.
+- Low: Try again on an existing queued row keeps that row's payload, so a PDF password typed with Try again is ignored. Pass it through in an UPDATE of payload for a queued row.
+- Low: when start-now is "busy" (3 in flight), Try again shows "Starting…" while nothing starts. The page then shows stalled again after 10 minutes, which is honest.
+
+## R214 — re-review of #139 f0faa3b, #140 6b6f16d, #117 7401aa7, #136 3887506, #138 99696b5: all READY
+
+- **#139 f0faa3b READY.** The R211 patch is in as written. My three probes now give: the continuation masked with the row ("or up to [amount not checked], whichever is lesser", comma kept), and the header and heading cases fully unchecked. The PW9 shapes are unchanged. P139-1 (skipped lone date or value masked when an image figure line is left over) is right: the confirmed count excludes skipped lines, and a page with only skipped lines masked is part-checked with kind non-null. R211-4: libraryFact now says "read in part" for part-checked pages. The branch also carries #135/#137 (build fix, cache pricing), already reviewed in R208/R210.
+- **#140 6b6f16d READY.** On a stalled Try again: recoverExpiredLeases, then enqueue (revives dead_letter), then makePolicyJobDueNow (failed_retryable and not cancel_requested only; never a leased or cancelling job), then startJobNow. R213-1 is closed. The budget is 110 s, leaving about 190 s for the last job claimed. Lows in R213 stand (parallel reads against the household cap, the payload password on an existing queued row).
+- **#117 7401aa7 READY.** ownCoverWords drops NOT_THEM_AFTER words (family, side, parents, ...) and PERSON_WORD (husband, wife, first, former, late, kids, ...), so a "Family Care Plan" or "Family First" product no longer makes "my wife's family" her cover. R207-1 is closed.
+- **#136 3887506 READY.** style-test uses made-up file, person and insurer names. The verify.ts real file names (R209-1 lines 1112, 1563) are fixed in #138, so merge #138 with or before #136.
+- **#138 99696b5 READY.** Sdn, Pty, Pvt, Private and GmbH are legal forms, with a test. SE is left out on purpose.
+- Merge order I'd suggest: #138, #136, #117, #139, #140 (#139 and #140 both carry #135/#137, so whichever merges second may need a main merge).
+
+## R215 — #139 46e389f (lone dates and numbers compared in order): NOT READY (one small fix)
+
+- The new rule is sound for dates and stray values: the lone figures of both readings must match in printed order, or every skipped figure line is masked and kind becomes non-null, so the page can't count as agreeing. A print date only the text layer has (`Schedule / Sum Assured 100,000.00 / 01/10/2026`, image without the date) masks the date and keeps the rest. That is right.
+- **R215-1 (medium): a page number only the text layer prints now costs the page.** Text `… / Premium 181.44 / 3` (page 3), image without the footer: agree false, kind "figures differ", text ends `[amount not checked]`, and the document says "Read in part". Image readers often drop footers, so this brings back the R189-1 / TE UC-3 failure (a footer refusing the page) as "read in part" noise on many pages. Fix: leave the page's own number out of the comparison:
+  ```ts
+  const pageNo = (l: string) => /page|of/i.test(l) || (pageNumber != null && Number(l.trim()) === pageNumber);
+  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) && !pageNo(l) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
+  ```
+  A skipped lone number that isn't the page's own number is still compared, so TE's A29-A31 / N8 values stay covered. Test: the page number only in the text reading still gives agree true and the text unchanged.
+
+## R216 — #139 5417562: READY
+
+- R215-1 is closed. A page number printed only by the text layer ("3" or "Page 3 of 12") gives agree true with the text unchanged.
+- The builder's exception holds. A lone value equal to the page number under a label-only line ("Hospital cash per day" over "3" on page 3) is kept only when the image prints the same label over the same number. Probes:
+  - the image prints the same: agree, kept;
+  - the image prints 5: masked, "figures differ";
+  - the image prints "Hospital cash per day 3" on one line: masked, "pairing differs" (fail safe).
+  The exception runs before the kind check, so the page never counts as agreeing.
+- My R211 probes are unchanged: the continuation is masked, and the header and heading cases are unchecked. Accepted cost: a label-only header over a lone page number that the image drops masks just that number (part checked).
+
+## R217 — #139 e74d449: READY (one low cost noted)
+
+- P139-2 is closed safely. A lone page-number value under a line ending in words is kept only when the image prints the same line over it. My R215-1, R211 and label probes give the same results as R216.
+- **R217-1 (low, fails safe): a footer after a prose line counts as a value again.** Text `… / Please read the policy wording for full terms / 3` on page 3, image dropping the footer: the "3" is masked, kind "figures differ", and the page shows "read in part". Many pages end with a prose line over the page number, so some R215-1 noise comes back. Nothing wrong gets stored. To cut most of it, treat a line above that reads as a sentence as prose, not a label:
+  ```ts
+  const prose = (l: string) => /[.!?]\s*$/.test(l.trim()) || l.trim().length > 60;
+  // in valueUnder: return typeof last === "string" && !isDate(last) && !prose(above(ls, i));
+  ```
+  TE's labels ("Hospital cash per day (max 30 days)", "Persons covered (age 0-17)") are short and don't end in a full stop, so they stay values.
+
+## R218 — #117 0612632 (allow-list after a possessive): READY
+
+- coverAfter reads what follows the possessive: SPOUSE_WORD takes the next word only as a lookahead, so `rest` starts right after "'s", up to the first punctuation mark. It needs either a whole insurer or product name, or the insurer's first word alone or before a cover word.
+  - "my wife's domestic helper" with Domestic Helper Insurance: no match, as wanted.
+  - "my wife's Domestic Helper Insurance claim": match.
+  - "my wife's great aunt" with Great Eastern: no match.
+- Accepted cost: part of a product name gives no match, so the chat asks who is meant. This fails safe (it asks rather than picking a person).
+- Low, harmless: an insurer whose first word is ordinary English counts when that word stands alone ("my wife's income." with Income Insurance). It still resolves to the spouse, who is the subject anyway.
+- On #139 R217-1: the builder is right that my prose rule misses the probe line (no full stop, under 60 characters). Leaving it for later is fine, since it fails safe.
+
+## R219 — #139 e1852f6: READY
+
+- P139-3 (TE A40) is closed. A lone page number at the edge is left out only when nothing is printed above it, or the row above ends in a comma-grouped or two-decimal amount. Anything else is compared, which fails safe.
+- My probes are unchanged:
+  - R215-1 ("Premium 181.44" over "3", the image dropping it) agrees with the text unchanged;
+  - the label exception works for all three image variants;
+  - the R211 continuation, header and heading cases still mask or leave the page unchecked.
+- Accepted cost: footers under prose, or under a row ending in a small whole number, add R217-1 noise ("read in part"). Nothing wrong is stored.
+
+## R220 — #138 1554411: READY
+
+- "Private" is dropped only before Limited or Ltd. Probes: "AIA Singapore Private Limited" = "AIA Singapore Pte Ltd" = aiasingapore, "Private Health Mutual" stays privatehealthmutual, a bare "Private" stays private, the Singlife aliases are unchanged, and "Aviva Ltd" gives aviva.
+
+## R221 — #117 38e605b: READY
+
+- A whole name now counts only before a cover word or the end of the clause, and an insurer first word that is a relative's word (NOT_THEM_AFTER) never counts. So "my husband's business partner died" with a "Business Partner" product, and "my wife's family medical history" with Family Life Insurance, both give no match.
+- Low, rare: HIS_OR_HERS holds ordinary words (health, medical, life, hospital, bill), so a product named with plain English followed by one of them still matches ("my husband's business partner's hospital bill" if the name is "Business Partner"). The wrong case only resolves to the spouse, who is named in the message anyway. Leave it.
+
+## R222 — #117 47c011a (insurer by its core name only): READY
+
+- insurerCore works as described:
+  - "Friends Provident International" becomes "friends provident", so "my husband's friends medical bills" gives no match;
+  - "Family Life Insurance" becomes "family life", so "my wife's family life is busy" gives no match (then() fails), while "my wife's family life insurance" matches;
+  - "Prudential Assurance Company Singapore" becomes "prudential", "AXA Insurance" becomes "axa", and "Great Eastern Life" becomes "great eastern".
+- Low, fails safe (the chat asks who is meant):
+  - When every word is generic, the full name is kept ("Singapore Life Ltd"), so "my wife's Singlife" doesn't match unless a product carries the brand.
+  - Splitting market words cuts brands that contain them ("Hong Leong Assurance" becomes "leong", "NTUC Income" stays "ntuc income", so "my wife's Income policy" doesn't match).
+  - A single plain-word core ("Income Insurance" becomes "income") matches "my wife's income." and resolves to the spouse, which is harmless.
+
+## R223 — #117 32791a2: READY
+
+- A person word right after the possessive (including plurals, and partner or partners) now gives false before any name is matched. This catches products and insurers whose names start with a relative's word. Accepted cost: those names ask who is meant, which fails safe.
+
+## R224 — #141 c1c5e59 (one shape for document questions): READY
+
+Free review: code read only.
+
+- Mixed answers (a per-person point plus per-file points) are handled right:
+  - A file is skipped from the groups only when every person it is linked to already has a libraryList line. libraryList lists every current file linked to that person, so nothing listed is lost.
+  - Files read in part, unreadable, unlinked, or uploaded for someone else still get their own sentence even when the person was listed. That repeats the file, but it carries news the list doesn't.
+- The splice keeps every non-file point in order and puts the grouped lines where the first file point stood. fromRecord skips only the library-claim check, so server text built from the record isn't held to that record again.
+- Low:
+  - (a) The group key is linkedPeople in stored order, so files linked to A and B and to B and A make two groups. Sort the names before joining.
+  - (b) A joint file (A and B) with only A listed is listed again under "Linked to A and B". It's a repeat, not wrong.
+  - (c) Grouped lines still pass through withoutMoney. FILE_NAME protects names ending in .pdf etc., but a product label carrying a figure would now drop the whole group sentence instead of one file's line. Treat fromRecord like serverWords for `said` too: `const said = serverWords.has(t) || fromRecord.has(t) ? t : …`.
+  - (d) Each grouped entry copies filePoints[0].s, including its `document` id. If any renderer links a card from s.document when found is null, every group would point at the first file. I saw no such use, but it is worth a glance.
+
+## R225 — #142 fe0bf2b, #144 69e8070, #143 405874c (G007500 removal, name cleanup)
+
+Free review: code read and git grep only.
+
+### #142 (table figures label tiles): READY after one medium fix
+
+- Medium: `categoryRows` drops only projected and not_covered rows. A `pays === "value"` row (fund, surrender or account value) whose name carries "death" can label the Death tile with a fund value. Add `r.pays !== "value"` (and the R204 premium-only test) to the filter.
+- Low: the tile currency falls back to SGD when the figure has none (`normalizeCurrencyCode(..., "SGD")`). A bare $ does not establish currency; show no currency instead.
+- Low: `wordingDescribes` compares insurers by plain lowercase; use `canonicalInsurer` (#138) so "AIA Singapore Private Limited" and "AIA Singapore" agree.
+- Low: a combined "Death or TPD" row goes to TPD only. Low, fails safe: word-for-word product names may drop a derived wording category.
+
+### #144 (claim items from the benefit table): NOT READY (one high, two medium)
+
+- High, wrong amount: `purposeOf` matches the body part with `some` over part words, and positional words are not in SIDE. "upper arm" matches an "Upper jaw" fracture row, "lower leg" matches "Lower jaw". Fix:
+  ```ts
+  const SIDE = new Set([...existing, "upper", "lower", "front", "back", "inner", "outer", "top", "bottom", "middle", "base"]);
+  // in purposeOf:
+  words.length > 0 && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit))
+  ```
+- Medium, double count: the death dedupe only looks at `i.id === "gtl-death"`. death-evidence.ts:241 also builds `gpa-accidental-death`, and travel-rules.ts:177 builds `travel-accidental-death`. A GPA death row for a cover that already has a checked `gpa-accidental-death` item adds a second death item with an amount. With `item.coverageId` null there is no dedupe at all. Fix:
+  ```ts
+  const DEATH_IDS = new Set(["gtl-death", "gpa-accidental-death", "travel-accidental-death"]);
+  if (g.purpose === "death") {
+    if (!item.coverageId) continue; // no verified cover: leave death to the evidence path
+    const same = items.filter((i) => i.coverageId === item.coverageId && DEATH_IDS.has(i.id));
+    if (same.some((i) => i.status !== "needs_document")) continue;
+    items = items.filter((i) => !same.includes(i));
+  }
+  ```
+- Medium, wrong cover: `coverageFor`'s second fallback takes any coverage on the same document. On a multi-cover schedule (GTL + GPA) a GPA row with an unmatched name maps to the GTL coverage, passes the money gate with GTL's effective date, and (with the death dedupe) can replace GTL's own item. Fix: use the same-document fallback only when that document holds exactly one coverage:
+  ```ts
+  const onDoc = doc == null ? [] : coverages.filter((c) => c.policyId === doc);
+  return onDoc.find(named) ?? (onDoc.length === 1 ? onDoc[0] : undefined) ?? coverages.find(named) ?? null;
+  ```
+- Low-medium, hides a benefit: `covered()` for fracture, ambulance and recuperation tests titles across all items, not per cover. An evidence item for cover A hides cover B's table item. Compare `i.coverageId` with the group's cover once coverageFor is fixed.
+- Good: CI and TPD never get an amount; a lump sum needs a currency; several figures give "cannot"; hospital cash uses only the printed fromDay and maxDays.
+
+### #143 (made-up names in fixtures and records): NOT READY (one high)
+
+- High, private record: only the English first name was swapped. The real surname and given name remain: "Tan Yi Chuen Raymond" (was "Tan Yi Chuen Desmond") in 20 files under scripts/ (claim-*-regressions, evidence-*, v11-*, fixtures/reviewer-benefit-wording.ts, system-database-regressions.ts and others). Replace the whole name with a made-up one, e.g. "Lim Wei Jie Raymond" / "Raymond Lim Wei Jie", and keep the swapped-order variant in claim-evidence-regressions.ts:156 consistent.
+- Checked clean: no Desmond or Charmaine left (case-insensitive); the change is a pure rename (5,870 lines each way); no PDF or extracted-text fixture changed, so no fixture text disagrees with its test; NRIC-shaped strings left (S1234567A/D, T1234567J, S7712345J, S9100227Z) are synthetic test values.
+- Note: the docs/rag-migration/live run records now show names the live model never printed. Fine for privacy; the old names stay in git history (DC's open item).
+
+## R226 — #145 999f8d3 (one money sign for every market): NOT READY (one high)
+
+Free review: code read plus tsx probes of MONEY_SIGN, statedCurrencyCode, moneyFiguresIn, parseAmount and otherLife (pg stubbed). No next build here (no node_modules; heavy builds are out of my scope), so the builder's own next build stands.
+
+- High, hides a cap (Q1): MONEY_SIGN itself is safe ("FORM 2", "TERM 5", "Room 2" give no sign). But check.ts now counts money with `moneyIn`, which calls `moneyFiguresIn`, and its FIGURE in lib/chat/answer-verification.ts reads `(RM)\s?` with no guard before it. Probe output:
+  - "Up to S$50,000 (submit claim FORM 2)" gives S$50,000 and RM 2.
+  - "Up to S$50,000 within TERM 1 of cover" gives S$50,000 and RM 1.
+  - "PLATFORM 3: up to S$500" gives RM 3.
+  So capInRow sees two values and returns null, and otherMoneyThan / otherMoney turn true, so a real printed cap is refused. Before this PR, MONEY_IN only knew s$/us$/sgd/$, so these rows kept their cap. Fix at the shared boundary (it also stops the chat verifier reading "CLAIM FORM 2" as RM 2):
+  ```ts
+  // lib/chat/answer-verification.ts FIGURE
+  ...|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱])\s?)...
+  ```
+  Add "Up to S$50,000 (claim FORM 2)" and "TERM 5" rows to parity-test.ts.
+- Medium, wrong currency (Q2): MONEY_SIGN accepts "NZ$", but `statedCurrencyCode("NZ$")` returns null, so an NZ$ plan cell falls back to the template's currency (SGD on a mixed table). Add `"NZ$": "NZD"` to the aliases in normalizeCurrencyCode. Otherwise Q2 is right: RM, £, €, A$, AU$, HK$, SG$, S$, US$ and the codes map correctly; a bare "$" gives null, so block cells stay without a currency and table cells take the template's, as before.
+- Low (Q3): inferProductName takes any of the first 15 lines that ends in "group insurance (scheme)", so "Certificate of Group Insurance", "Important notice about your Group Insurance" or an insurer's line ("<Insurer> Group Insurance") becomes the product name. It runs only on the code-only fallback and generic reference documents, and a wrong name mostly fails safe (wording and spouse-word matches need the exact name). Refuse lines that start with a generic word: `/^(?:certificate|summary|notice|important|about|your|welcome|claims?|guide|the|of)\b/i`, or that contain "of group insurance" / "your group insurance".
+- Q4 lives.ts is fine: the cut only removes a sign followed by digits, and names have no digits. "Life Assured: Jane Doe RM 250,000" still finds another life, "Insured\tJANE DOE\tS$250,000" too, and "Sum Insured\tRM 250,000" no longer reads "rm" as a name.
+- Low: compiled with "i", MONEY_SIGN reads "Rm 2" / "rm 12" (a room) as ringgit, and "Plan RM2" or "GBP3" as money. Only facts.ts (targetedMoney, moneyNear) could take one as a bill amount, and only when the person types it. Node 22 has no `(?-i:)`, so if it matters, build those two regexes without "i".
+- Low: parseAmount now drops "RM" / "£" / "EUR" from a typed sum insured and keeps the number, so a typed currency that differs from the policy's is lost. It is used only by scripts/benefit-table/service-test.ts today; refuse a non-matching sign before it gets a caller.
+- Racing texts: they no longer name the scheme and now quote the wording's own exception. Good.
+
+## R227 — re-check: #141 28d62b5, #142 c2bf547, #143 c2e5b15, #144 dd3f15b: READY; #145 ca5bef3: still NOT READY (R226 open)
+
+Free review: delta read only. The builder's next build and 15-set replay (0 changed lines) stand.
+
+- #141: (a) the group key is now the sorted, de-duplicated names, with "A, B and C" for three or more; (c) fromRecord lines skip withoutMoney; (d) grouped entries carry found:null and document:null; superseded files are skipped, as libraryList skips them. (b) was left as is, which I accept. READY.
+- #142: categoryRows drops value figures, pays:"value" rows and premium rows; wordingDescribes uses canonicalInsurer. Accident-only death, TPD and dismemberment rows go to Personal Accident, and any-cause or illness rows stay as Death or TPD. READY.
+  - Low: a Death row that only mentions the accident uplift ("Death benefit; doubled for accidental death", "Death (additional 100% if accidental)") has no any-cause word, so it moves to Personal Accident and the Death tile loses it. Add `doubl\w*|additional|extra|plus|uplift` to anyCause, or test whether the row starts with "death".
+  - SGD default on the tile: accepted, since the tile text is the row's own figure.
+- #143: no "Yi Chuen" anywhere. Names are now "Tan Jia Ming Raymond" and "Raymond Tan Jia Ming" (the reversed order is kept). READY.
+- #144: every part word must match, and SIDE has the positional words; coverageFor uses only the row's own cover document (a name match, or its only coverage); covered() compares coverageId; DEATH_IDS covers all three death items; an unmatched death row is skipped when any death item exists. READY.
+  - Low, fails safe (hides): "neck of femur" needs both words, so it misses a plain "Femur" or "Thigh (femur)" row. A cash, allowance or income item with no coverageId still hides hospital-cash rows on every cover.
+- #145 ca5bef3 only merged B in. R226 is still open: FIGURE in answer-verification.ts still has an unguarded `(RM)\s?`, so "FORM 2" and "TERM 1" read as RM figures and refuse caps; normalizeCurrencyCode still has no "NZ$" alias.
+
+## R228 — #143 eaa9a05: READY
+
+- The delta is 6 run-record files (s47 live-1, live-2 and live-4, conv and run JSON, 48 lines each way). Only calculation ids change: kc85c31c5d6 becomes k46fc3b9ba9, and k7c2fc04d5c becomes k1283bcfe55. Each map key, calcId and result_id changes together, and neither old id is left anywhere in the tree.
+- No Yi Chuen, Desmond or Charmaine is left. The builder reports scenario-replay 22/22, matching main.
+
+## R229 — #142 bef4fba, #144 3d52bc1, #145 f578e12
+
+Free review: delta read plus tsx probes of categoryOfBenefit, anyMoneyFigures and moneyFiguresIn (pg stubbed).
+
+### #142: one medium, caused by my R227 suggestion
+
+- Medium: the builder's reason for leaving out "additional" applies to "double" as well. Probe results:
+  - "Double Indemnity Accidental Death Benefit" goes to Death.
+  - "Accidental Death (double for public transport)" goes to Death.
+  Both are accident-only riders, now on the Death tile. Count the uplift words only when the name opens with a plain death benefit:
+  ```ts
+  const uplift = /^\s*death(?:\s+benefit)?\b/i.test(paid) && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const anyCause = (/\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid) || uplift) && !/\bpersonal\s+accident\b/i.test(benefit);
+  ```
+  With this, "Death benefit; doubled for accidental death" still goes to Death, and the two riders go to Personal Accident.
+- Low: "Death from causes other than accident" goes to Personal Accident. The "other than" strip removes the words that make it not accident-only, but the PA regex still tests the full name. Test the PA regex on `paid`, or treat `other\s+than\s+accident` as any-cause.
+- Low: "Death (including death due to injury)" goes to Personal Accident. Rare.
+- Checked: "Additional Accidental Death Benefit" goes to PA, "Accidental Death (death from illness is not covered)" to PA, and "Death due to illness or accident" to Death.
+
+### #144: READY
+
+- otherSide stops "lower jaw" matching the "Upper jaw" row, and a row that prints both side words still matches. The only-coverage fallback now also needs the table to show one cover on that document.
+
+### #145: READY (one low)
+
+- FIGURE now has `(?<![A-Za-z])(RM)`. Probe: "claim FORM 2", "TERM 1" and "PLATFORM 3" give no money in either moneyFiguresIn or anyMoneyFigures. The NZ$ alias is in. The title filter refuses heading lines. ₹, USD-after-figure and RM caps are seen.
+- Low, fails safe (hides): ANY_SIGN's bare `R` reads "Rider R1: up to S$50,000" as [1, 50000] and "Class R 2 up to S$500" as [2, 500], so a cap is refused. Require a thousands group for a bare R (rand), e.g. `R\s?\d{1,3}(?:[ ,]\d{3})+`, or drop it.
+
+## R230 — #142 d71b7b9, #144 2eebb62, #145 f9d040e
+
+Free review: delta read only.
+
+- #145: READY. A bare R now counts only before a figure with a thousands group, and the third capture group is read in anyMoneyFigures. FIGURE_IN_CELL and LABEL_FIGURE never index groups, so the extra group is safe.
+- #144: READY. A merged in; no change to table-benefits.ts.
+- #142: one medium, the same kind as R229. The new "including … accident/injury" clause has no plain-death guard. "Accidental Death Benefit (including injury on public transport)" or "Accidental Death (including accidents abroad)" counts as any cause and lands on the Death tile, though it is an accident-only rider. Give it the uplift's guard:
+  ```ts
+  const plainDeath = /^\s*death(?:\s+benefit)?\b/i.test(paid);
+  const uplift = plainDeath && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const including = plainDeath && /\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid);
+  const anyCause = (uplift || including || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid)) && !/\bpersonal\s+accident\b/i.test(benefit);
+  ```
+  "Death (including death due to injury)" still goes to Death. Testing the PA regex on `paid` is right: "Death from causes other than accident" goes to Death. Otherwise READY.
+
+## R231 — #142 09eef59, #144 ca6eb02: READY
+
+- #142: plainDeath now guards both uplift and including, exactly as R230 wrote. A regression covers "Accidental Death Benefit (including injury on public transport)", which goes to PA, and "Death (including death due to injury)" still goes to Death. READY.
+- #144: only merges in the A commit; table-benefits.ts is unchanged. READY.
+- #145 f9d040e was READY at R230. The coming A merge needs only a delta glance.
+
+## R232 — #142 cff9102, #144 8efb7a8, #145 a14a15e: READY (lows on #142)
+
+Free review: delta read plus a tsx probe of categoryOfBenefit on 20 names.
+
+- #142: causeOf is an allow-list that defaults to accident only, so an accident-only rider never lands on the Death or TPD tile. That is the right direction. These go right:
+  - to PA: "Double Indemnity Accidental Death Benefit", "Accidental Death (including injury abroad)", "Accidental death or dismemberment";
+  - to Death: "Death (including death due to injury)", "Death benefit, doubled for accidental death", "Non-accidental death", "Death from causes other than accident", "Death (accident or illness)";
+  - to TPD: "TPD due to sickness or injury".
+  - Low, any-cause rows mislabelled as PA (shown on the PA tile, missing from Death):
+    - (a) ACCIDENT_ONLY wins over ANY_CAUSE, and its "only" can sit anywhere on the line. So "Death due to illness or accident, payable only once" and "Death benefit (any cause); accidental death benefit payable only to age 70" go to PA. Tie "only/solely/exclusively" to the accident word, e.g. `\b(?:only|solely|exclusively)\s+(?:\w+\s+){0,3}?(?:by\s+|from\s+|due\s+to\s+)?(?:an?\s+)?${ACC}|\b${ACC}\s+(?:\w+\s+){0,1}(?:only|solely|exclusively)\b`.
+    - (b) Phrasings the allow-list doesn't know: "natural causes or accident", "accidental or otherwise", "2x for accidental death", "200% if accidental".
+- #144: merge only. READY.
+- #145: a bare R after or/and/to/max, plus a second pass once any rand figure is found, catches "up to R100,000 or R900" (two values, so the cap is refused). An extra "R1" label in such a text only withholds an amount. Superscripts are stripped the same way in moneyIn and capInRow, so the indexes still line up. READY.
+
+## R233 — #142 ed43151: READY (#144 bd2c3d0, #145 d979758 are merges only)
+
+- I re-ran the 20-name probe from R232 plus 7 new ones. Both R232 (a) names and all four (b) phrasings now go to Death or TPD. Every accident-only rider stays Personal Accident: "Double Indemnity…", "(including injury abroad)", "(2x on public transport)", "(pays 200% if on public transport)", "unless death is due to illness", "illness excluded", "natural causes excluded" and "other causes not covered". READY.
+
+## R234 — #142 56c9434: NOT READY (one high; #144 e0d0ab7, #145 725af0f merges only, READY)
+
+Free review: tsx probe of categoryOfBenefit on 48 names (R232/R233 set plus round-4 cases).
+
+- High, the round-4 defect without brackets: the head check runs ILLNESS_ONLY before it tests for an accident word, and the head only ends at a bracket, dash, comma, semicolon or colon. So an exclusion clause with no punctuation still makes an accident rider "illness only" and puts it on the Death tile. Probe:
+  - "Accidental Death excluding injury from war" goes to Death.
+  - "Accidental Death other than injury from war" goes to Death.
+  - "Accidental death except injury from riots" goes to Death.
+  - "Accidental Death Benefit excluding injuries sustained while racing" goes to Death.
+  Fix: decide on the words before any exclusion word, before ILLNESS_ONLY runs:
+  ```ts
+  const lead = head.split(/\b(?:excluding|except|other\s+than|unless|but\s+not)\b/i)[0];
+  if (/\bnon-?\s?accident/i.test(lead)) return "illness";
+  if (new RegExp(String.raw`\b${ACC}`, "i").test(lead) && !ANY_CAUSE.test(lead)) return "accident";
+  // then the existing ILLNESS_ONLY / ANY_CAUSE / ACC tests on head
+  ```
+  Results with this: "Death other than by accident" has no accident word in its lead, so ILLNESS_ONLY makes it Death. "Non-accidental death" goes to illness. "Accidental and Sickness Death Benefit" has ANY_CAUSE in the lead, so it goes to Death.
+- Low (fails toward PA, so an any-cause row is missing from the Death tile): "Death and Accidental Death Benefit" (a combined row), "Death by accident, illness or otherwise" (the comma cuts the head) and "Death benefit (100%) accidental death 200%".
+- Every R232/R233 name, plus the round-4 bracket and dash cases, gives the expected tile.
+
+## R235 — #142 b113b93: READY (#144 3b18e52, #145 298c402 merges only, READY)
+
+- The R234 lead check went in word for word. Re-ran the 48-name probe plus 6 exclusion cases with no brackets. All four R234 probes now go to Personal Accident. "Non-accidental death", "Death, other than by accident" and "Accidental and Sickness Death Benefit" go to Death, and every R232/R233/round-4 name gives the same tile as before. The three lows are left as is; they fail toward PA, and I accept that.
+
+## R236 — #142 5f354fb: READY (#144 8871cf3, #145 d4007e7 merges only, READY)
+
+- The 42 names from R232 to R235 give identical output (diffed). Both round-5 cases ("…not payable for illness or injury caused by war", "…; sickness or injury from war excluded") and all six no-bracket exclusions go to PA. Pairs at the start ("Injury or illness death benefit", "Sickness and Accident Death Benefit") and pairs right after the death words go to Death.
+- Low, fails toward PA (an any-cause row is missing from Death or TPD): PAIR_AFTER_DEATH misses:
+  - "Death benefit for illness or accident" ("for" is not in the preposition list);
+  - "Total Permanent Disability due to illness or accident" (it needs "total and permanent");
+  - "Death or TPD by illness or accident" (a compound head).
+  Suggest adding `for`, `total\s+(?:(?:and|&)\s+)?permanent`, and an optional `(?:death|tpd)\s+(?:or|and|&|/)\s+` before the death words.
+
+## R238 — #147 0330ab1 (Home tile figures on 31357e4): NOT READY (one medium)
+
+Ran here: npm ci and `next build` (pass), coverage:table-test 22/0, plus a tsx probe with a made-up household (Harbour Staff Scheme). The prod rows file was read only for its shape and is not quoted here.
+
+- Expected results reproduce. S$30 a day (from day 11, up to 30 days) plus the same figure with a bare $ on the same cover, plus a travel "while overseas" row, gives "S$30 a day · from day 11 · up to 30 days". Travel-only cover still shows its own figure.
+- Bare $ (Q1): restatedWithCurrency drops a bare-$ row only for the same coverKey, kind, amount, unit, period, fromDay, maxDays, qualifier and pays. A bare row on another cover gives null (Covered), and a bare row with a different fromDay gives null. Correct.
+- Medium, a limit is lost (Q4). Days and qualifier are compared, but conditions are not, so a limit printed only as a condition disappears from the tile. Probe:
+  - The S$ row plus a bare-$ restatement carrying "Max 6 claims per policy year": the restatement is dropped, so the tile reads "S$30 a day · from day 11 · up to 30 days" with no claim limit.
+  - Two covers, both S$30 from day 11, one with "Max 6 claims per policy year": the conditions differ, so they are dropped, giving the same text with no limit.
+  Fix: compare the limiting conditions and ignore only wording such as exclusions:
+  ```ts
+  const LIMIT = /\d|\b(?:max(?:imum)?|up\s+to|limit\w*|only|once|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life))\b/i;
+  const limits = (r: SummaryRow) => r.conditions.filter((c) => LIMIT.test(c)).sort().join(" · ");
+  // restatedWithCurrency: also require limits(s) === limits(r)
+  // tableDisplay: if (new Set(rows.map(limits)).size > 1) return null;  // Covered; the Coverage page lists each row
+  ```
+  The expected strings are unchanged by this. The bare row's extra condition is a self-inflicted-injury/maternity exclusion, with no digit or limit word, so it still drops. Add the two probes above as regressions.
+- Waivers, trip-only and clause rows (Q2): left out only when another row remains; the Coverage page keeps them. Correct.
+- Accident sections (Q3): "TPD" under "Personal accident" goes to PA; under "Accident and Sickness Benefits" it stays TPD; "Death" under "Death and Accidental Death" stays Death. Low: an explicit any-cause row under an accident section ("Death benefit (any cause)" under "Accident Benefits") goes to PA. Skip the section rule when the row's own name matches ANY_CAUSE.
+
+## R239 — #147 069e483: one small fix left
+
+- LIMIT is now compared in both restatedWithCurrency and tableDisplay, and an ANY_CAUSE name keeps its category under an accident section. Both R238 findings are fixed. I accept that a numeric non-limit condition now blocks an otherwise matching figure: it fails safe and is tested.
+- Medium, the same class of bug, one step on: the limits must agree, but the display still shows conditions only when the whole condition lists are identical. Two rows that both print "Max 6 claims per policy year", where one also prints an exclusion, pass the limits check. Their condition lists differ, so the tile shows the figure without "Max 6 claims". Fix: when the lists differ, show the agreed limits:
+  ```ts
+  const shown = conditions.size === 1 ? [...conditions][0] : limits(rows[0]);
+  return [[...texts][0], shown].filter(Boolean).join(" · ");
+  ```
+  The expected live strings are unchanged: Desmond's kept S$ row has no conditions, and the dropped bare row's extra condition is an exclusion. Add a regression for this case. With that, READY.
+
+## R240 — #147 d942627: READY
+
+- The R239 change went in as written: when the condition wording differs, the tile shows the shared limits. A regression covers two rows that both print "Max 6" where one also has an exclusion. With R238 and R239, a tile figure can no longer lose a fromDay, maxDays, qualifier or limiting condition, and it never takes another cover's terms (a bare $ restatement counts only on the same cover). I ran next build on 0330ab1. The delta since then touches only lib/coverage/table-figures.ts, plain TS with no new imports.
+
+## R241 — #147 9d62193 (every condition is a limit unless plainly eligibility): NOT READY (one high)
+
+Free review: I ran ELIGIBILITY, CHANGES_AMOUNT, TRIP_ONLY and ALSO_ABROAD, extracted from the head, on made-up conditions. I accept that my R238 keyword LIMIT rule was the wrong design (TE P147-5). The inverted rule is the right shape, but its eligibility side is still too broad.
+
+- High, the full amount shows (the same class as P147-5). The `excluding/excludes` and `no/not … payable/covered` alternatives accept any clause, and CHANGES_AMOUNT is still a deny-list. These amount-changing conditions are IGNORED, so the tile keeps the full figure:
+  - "Excluding amounts paid under the early critical illness benefit" (an accelerated deduction)
+  - "Not payable in excess of the actual charges incurred"
+  - "No benefit is payable for the portion exceeding reasonable charges"
+  - "Excluding any amount reimbursed by other insurers"
+  - "No benefit payable to the extent covered by another policy"
+  - "Admitted as an inpatient; the benefit is net of any government subsidy"
+  - "Continuous confinement; payable as a proportion of the sum insured"
+  - "Confined continuously; payable at the ward-class rate"
+  - "Not payable where another benefit under this policy has been paid"
+  - "Excludes any bonus"
+  Fix: an eligibility condition may not mention money or another benefit at all. Add to CHANGES_AMOUNT:
+  ```ts
+  |\b(?:amounts?|sums?|portion|proportion\w*|exceed\w*|excess|net\s+of|reimburs\w*|subsid\w*|already\s+paid|paid\s+under|in\s+addition|rates?|bonus\w*|values?|charges?|costs?|expenses?|pro[\s-]?rat\w*|shared?|aggregate|combined|offset|balance|remaining|salary|income|earnings)\b|\b(?:other|another)\s+(?:insurer\w*|insurance|polic\w*|benefits?|plans?)\b
+  ```
+  Better still, narrow the two broad alternatives to cause clauses, e.g. `^\s*(?:no|not)\b[^.]*\b(?:payable|covered)\s+(?:for|if|when|where\s+the\s+(?:insured|life)|due\s+to|arising|caused|resulting|in\s+respect\s+of\s+(?!amounts?))`. With both, the fixes stay on the safe side: anything unplaced gives Covered. "No benefit for self-inflicted injuries", "Excluding pregnancy", "Hospitalised as an inpatient" and "Not payable if the insured is outside Singapore" stay harmless, so the live J1 case keeps its figure.
+- Low (Q3): ALSO_ABROAD's bare `and` turns trip rows into standing cover. "Daily hospital cash while overseas and travelling" and "Hospital cash when you travel and are admitted abroad" become STANDING. Accept and/or only after a home word: `(?:at\s+home|locally|in\s+[A-Z]\w+)\s+(?:and|or)\s+(?:overseas|abroad)`, plus the including/also/as-well-as forms.
+- CLAUSE now needs threshold wording, so "Daily Hospital Cash S$80 per day" stays a benefit. Correct.
+
+## R242: #147 Home tiles at ad30d58 (strict eligibility allow-list): NOT READY, one High
+
+Checked for free: tsx probes of the new `isEligibility`/`tripOnly` on 46 condition and 15 benefit-name phrasings; `coverage-table-figures-regressions.ts` 25/0; `tsc` clean; `next build` passes (npm ci in a scratch worktree).
+
+Fixed and confirmed:
+- All 10 R241 phrasings and all 3 TE P147-5 phrasings ("reduced by half after age sixty-five", "less any amount already paid", "the higher of this amount or the account value") are now limits, so the tile gives no figure unless every row prints it.
+- The stay/standing shape is a true allow-list (`STANDING_WORDS`, every word must be in the set). It holds no amount words, so nothing amount-changing can be built from it. Correct design.
+- "while overseas and travelling" is trip-only again. "in Singapore and overseas", "at home and abroad", "including while overseas" stay standing cover.
+- Harmless controls keep the figure: "No benefit for self-inflicted injuries", "Excluding pregnancy", "Hospitalised as an inpatient", "Inpatient only", "Admitted on the advice of a registered medical practitioner", "Excluding war and terrorism", "No benefit if the illness is pre-existing".
+
+- **High (Q1): the cause shape is still a deny-list.** `NOT_A_CAUSE` lists amount words to refuse, so any amount change worded outside the list passes as harmless and the full figure shows. This was my own R241 suggestion; it repeats the R238 mistake. Each of these is ELIGIBILITY at ad30d58 (the tile would print the full figure when another row lacks it):
+  - "Excluding outstanding loans and interest", "Excluding indebtedness to the company", "Excluding unpaid premiums", "Excluding outstanding premium arrears", "Not payable for interest accrued" (life death benefits are paid net of these)
+  - "Excluding copayment", "Excluding coinsurance" (no word boundary before `pay`/`insur`)
+  - "Excluding the balance", "Excluding the shortfall", "Excluding the remainder", "No benefit for the top-up"
+  - "Excluding fifty dollars of each claim", "Excluding one hundred ringgit" (spelled-out figure and currency word)
+  - "Excluding the surrender value", "Excluding partial surrenders", "Excluding withdrawals made"
+  - "No benefit for subsequent claims", "No benefit for the second and further disabilities" (a count limit, like "once")
+  - Fix: give the cause the same design as the stay shape. Every word of the cause must be in a fixed set of risk words plus function words. Anything else is a limit:
+  ```ts
+  const CAUSE_WORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "by", "from", "in", "on", "under", "with", "while", "is", "are", "was", "be", "being", "any", "if", "its", "their", "his", "her",
+    "self", "inflicted", "self-inflicted", "intentional", "intentionally", "deliberate", "injury", "injuries", "suicide", "attempted",
+    "war", "terrorism", "riot", "riots", "strike", "strikes", "civil", "commotion", "invasion", "hostilities", "rebellion", "nuclear", "radiation", "radioactive", "contamination",
+    "pregnancy", "childbirth", "miscarriage", "abortion", "infertility", "sterilisation", "sterilization", "contraception",
+    "pre-existing", "preexisting", "existing", "condition", "conditions", "illness", "illnesses", "disease", "diseases", "disorder", "disorders", "congenital", "hereditary",
+    "cosmetic", "plastic", "surgery", "dental", "treatment", "treatments", "outpatient", "experimental", "elective", "mental", "psychiatric", "nervous",
+    "alcohol", "alcoholism", "drugs", "drug", "narcotics", "intoxication", "influence", "abuse", "hiv", "aids", "sexually", "transmitted",
+    "hazardous", "dangerous", "sports", "sport", "activities", "activity", "aviation", "flying", "racing", "diving", "mountaineering", "professional",
+    "criminal", "unlawful", "illegal", "act", "acts", "participation", "provoked", "assault"]);
+  function isCause(cause: string): boolean {
+    const words = cause.toLowerCase().replace(/[.,;:()]/g, " ").split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.every((w) => CAUSE_WORDS.has(w));
+  }
+  // in isEligibility: if (head) return isCause(c.slice(head[0].length));
+  ```
+  The safe side holds: an unlisted risk word ("Excluding skydiving") only drops the figure when rows differ, never shows a wrong one. Gate it with the list above as limits and the controls above as eligibility.
+- Low (Q2, over-block): "Not payable if the insured is outside Singapore" is now a limit (`insur\w*`). With the word set above it stays a limit too. That is acceptable: it only drops the figure when rows differ. The live J1 regression case still passes.
+- Medium (Q3, pre-existing gap now visible): `TRIP_ONLY` only knows "while/when (you are) overseas/abroad/travel…". So "Hospital cash when you travel", "Hospital cash whilst on holiday abroad", "Hospital cash overseas" and "Hospital cash abroad" count as standing cover, and a trip-only row can decide the Home tile. Fix: `\b(?:while|whilst|when)\s+(?:you\s+(?:are\s+)?)?(?:\w+\s+){0,2}?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey|holiday)\b|\boverseas\s+(?:only|travel)\b|^[^,;(]*\b(?:overseas|abroad)\s*$`, keeping ALSO_ABROAD/HOME_AND_ABROAD as the overrides.
+- Low: "Hospital cash while abroad or at home" stays trip-only (home word after). This hides the row; it never shows a wrong figure. Optional: also accept `(?:overseas|abroad)\s+(?:and|or)\s+(?:at\s+home|locally)`.
+
+Verdict: NOT READY. Fix Q1 (word allow-list for the cause) and Q3; Q2 and the last Low are optional.
+
+## R243: #147 Home tiles at 34f5a8a (rows dropped per cover; travel known by cover name): NOT READY, one High
+
+Checked for free:
+- tsx probes of the real `tileRows`/`tableDisplay` with made-up two-cover households;
+- node probes of the new cause and stay rules, rerun on all R241/R242 phrasings;
+- `coverage-table-figures-regressions.ts` 25/0, `te-pr147b-test.ts` 51/0, `te-pr147c-test.ts` 39/0;
+- `tsc` clean, `next build` passes.
+
+Fixed and confirmed:
+- All 20 R242 adversarial causes are now limits: loans, unpaid premiums, indebtedness, copayment, coinsurance, balance, shortfall, "fifty dollars", "one hundred ringgit", subsequent/second claims, surrender value, withdrawals. The R241 ten and the TE P147-5 three stay limits.
+- `CAUSE_WORDS` and `STANDING_WORDS` are both word allow-lists, and the count words are a closed class. Correct design.
+- A row is dropped by its wording only within its own cover. Another cover is dropped only as a whole (travel, or waiver-only). A phrasing no rule knows now gives "Covered", not a wrong figure. Good structure. The trip-wording regexes and their R242 Q3 gaps are gone.
+
+- **High (Q1): `TRAVEL_COVER` misfires on employer and product names, and a whole standing cover then drops out of the tile.** It tests `product + cover + plan` for a bare `travel*|trips?|journeys?|holidays?`. A group scheme's product name usually carries the employer's name, so these count as travel: "Holiday Inn Group Insurance / Group Term Life", "Trip.com Group Employee Benefits / Group Hospital & Surgical", "Sunrise Travel & Tours Staff Scheme / Group Personal Accident". Personal products count too: "Life Journey Protector", "Premium Holiday Saver", "Journey Critical Illness Plan".
+  - Real outcome (made-up household): GTL Death S$500,000 under "Holiday Inn Group Insurance" plus whole life Death S$200,000. The Death tile shows **S$200,000**; the control with a plain employer name shows no single figure. The tile hides S$500,000 of documented cover and reads as the person's whole death cover. "Sunrise Travel & Tours Staff Scheme" gives the same result. "Life Journey Protector" 200k + GTL 500k gives S$500,000.
+  - Fix: decide travel on the cover's own name and plan first, and on the product only when it is not a scheme name. Drop the bare trip/journey/holiday words:
+  ```ts
+  const TRAVEL_COVER = /\btravel\w*|\b(?:single|annual|multi)[\s-]?trips?\b|\b(?:holiday|journey|trip)\s+(?:insurance|cover|plan|policy)\b/i;
+  const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|members?|corporate|company|benefits?\s+(?:programme|program|plan))\b/i;
+  const isTravelCover = (r: CoverRow) => TRAVEL_COVER.test(r.cover ?? "") || TRAVEL_COVER.test(r.plan ?? "")
+    || (TRAVEL_COVER.test(r.product ?? "") && !SCHEME_NAME.test(r.product ?? ""));
+  ```
+  Probed: the 6 misfires above become standing cover. These stay travel: "TravelEasy", "Single Trip Plan", "Annual Multi-Trip Plan", "Holiday Insurance", "Overseas Travel Insurance", and a scheme's own "Group Business Travel Accident" or "Business Travel Cover" line. Gate it with the employer-name household above (expected: no single Death figure) in SG/MY/UK.
+- Low (Q2, missed travel, safe side): "SmartTraveller", "Overseas Guard Plan", "Takaful Perjalanan" and "Assurance Voyage" are not travel. With other cover that gives "Covered", never a wrong figure. Optional for other markets: add `perjalanan|voyage|viaje|reise\w*`.
+- Low (Q3, over-block, safe side): these are now limits, so the figure drops when rows differ:
+  - "No benefit if the illness is pre-existing" (`is`)
+  - "Excluding outpatient treatment" (`outpatient`)
+  - "Excluding pregnancy, childbirth and miscarriage" (comma rule)
+  - "No benefit for death due to suicide (including attempted suicide)" (`death`)
+  - "Not payable if the insured is outside Singapore"
+  Optional: add `is`, `are`, `outpatient`, `death`, `deaths`, and allow a comma list made only of cause words. The live J1 case still passes.
+
+Verdict: NOT READY on Q1 alone; Q2 and Q3 are optional.
+
+## R244: #147 Home tiles at ee1e2f9 (travel = travel name AND an abroad row): NOT READY, one High
+
+Checked for free:
+- tsx probes of the real `tileRows`/`tableDisplay`, with a standing group hospital cash S$30 a day beside a second cover paying S$100 a day;
+- regressions 25/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 51/0;
+- `tsc` clean, `next build` passes.
+
+Fixed and confirmed:
+- Employer-name schemes stay in: "Holiday Inn Group Insurance", "Sunny Holidays Group Insurance" and "Trip.com Group …" give no single figure.
+- The two-signal design is right: when unsure, the cover stays in and the tile gives "Covered".
+- The new `plainCondition` only ignores case, spacing and a closing stop. The display still prints the first row's own wording. Fine.
+
+- **High (Q1): the abroad signal is any mention of "overseas", so a standing cover that also pays overseas can still drop out.** `ABROAD_ROW` matches bare `overseas|abroad`, so "Hospital cash in Singapore and overseas" and "Hospital cash including overseas" count as rows that pay only abroad. `TRAVEL_NAME` also accepts "journey/holiday/trip" + plan|protection|assurance|guard, and `SCHEME_NAME` lacks "corporate". Probed outcomes beside the S$30 group cover:
+  - "Life Journey Plan / Basic", row "Hospital cash in Singapore and overseas" S$100 a day: tile shows **S$30 a day** (hides S$100 of standing cover)
+  - "Travel Guard Corporate Medical / Hospital", row "Hospital cash including overseas" S$100: tile shows **S$30 a day**
+  - Control "Travel insurance / Single Trip", row "Daily hospital cash while overseas": S$30 a day, which is correct.
+  - Fix: make the row signal mean "pays only abroad", and the name signal a travel product. Both are probed:
+  ```ts
+  const TRAVEL_NAME = /\btravel\w*|\b(?:single|annual|multi)[\s-]*trips?\b|\b(?:holiday|trip)\s+(?:insurance|cover)\b/i;
+  const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|corporate|company|members?)\b/i;
+  const ONLY_ABROAD = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\bduring\s+(?:the|your|a)\s+(?:trip|journey)\b/i;
+  const ALSO_HOME = /\b(?:including|incl\.?|also|even|as\s+well\s+as)\b|\b(?:or|and|&)\s+(?:at\s+home|locally|in\s+[A-Z])|\b(?:at\s+home|locally|in\s+[A-Z][\w-]*)\s+(?:and|or|&)\b/;
+  const abroadOnly = (b: string) => ONLY_ABROAD.test(b) && !ALSO_HOME.test(b);
+  ```
+  Probed: Life Journey Plan, Travel Guard Corporate Medical, Life Journey Saver ("while overseas or at home") and "while overseas, including at home" stay in. Travel insurance/Single Trip, TravelEasy, Travel Guard/Annual Multi-Trip and "during the trip" count as travel. With the stricter row signal, `\btravel\w*` can safely take one-word brands ("TravelEasy"), which the ee1e2f9 name rule misses, giving "Covered".
+- Verify before merge (I could not check this; the auto-mode safety check refused my read of the private live rows): the live travel cover's product/cover/plan must match the travel name rule. Otherwise the live J1 Hospital Cash tile gives "Covered" instead of "S$30 a day · from day 11 · up to 30 days". The regression fixture uses the friendly name "Travel insurance / Single Trip". The builder or the Live site tester should confirm against the live names.
+- Low, safe side: "SmartTraveller" and "Overseas Protection" are not travel. Beside other cover that gives "Covered".
+
+Verdict: NOT READY on Q1. After the Q1 fix, plus the live-name check, I expect READY.
+
+## R245: #147 Home tiles at 724ba9d (every row abroad-only + strict travel name): READY
+
+Checked for free:
+- Suites: regressions 25/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 69/0 with 3 notes;
+- `tsc` clean, `next build` passes;
+- tsx probes of the real `tileRows`/`tableDisplay` with a standing S$30 a day group cover beside a second cover paying S$100.
+
+Probe results:
+- Live-shaped travel cover ("Travel insurance summary / Single Trip / Business", "Daily hospital cash while overseas"): S$30 a day. This matches the builder's live check: Hospital Cash S$30 a day, TPD S$1,000,000 (the travel TPD sits under personal accident).
+- The R244 misfires now stay in and give no single figure: "Life Journey Plan" + "in Singapore and overseas", and "Travel Guard Corporate Medical" + "including overseas".
+- These also stay in and give no single figure: employer "Holiday Inn Group Insurance" + "while overseas", "In Malaysia or while overseas", "while overseas or at home".
+- The cause and stay rules are unchanged since R243; all R241/R242 limits stay gated.
+
+Remaining, all on the safe side (the tile shows "Covered", never a wrong figure):
+- One-word travel brands ("TravelEasy", "SmartTraveller") are not travel.
+- The TE notes V3 (SG/MY/UK): a group scheme's business travel line beside standing cover gives no figure.
+- The R243 Q3 cause over-blocks.
+None of these blocks merge.
+
+Verdict: READY at 724ba9d.
+
+## R246: #148 Home tiles, a confirmed total shows only when every cover is accounted for (e1ea28c): NOT READY, one High
+
+Checked for free:
+- regressions 49/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known safe-side travel notes);
+- `tsc` clean, `next build` passes;
+- tsx probes of `confirmedTotalComplete` with made-up households.
+
+I did not open the live rows file (private household data). Before/after claims are taken from the builder's note.
+
+The direction is right. The old tile summed confirmed lines and ignored a cover only the benefit table knows, so a part sum read as the whole (live: S$100,000 shown against S$1,100,000). This PR only ever turns a figure into "Covered", so it adds no new wrong amount except through Q1. A confirmed line with no amount now also gives "Covered" instead of a part sum. Good. `source.documentId` and `policies.id` are the same id space, so the document match is sound.
+
+- **High (Q1): the amount fallback can still pass a part sum as the whole, by coincidence of equal round sums.** A table cover with no row from a confirmed line's document is "accounted for" by any unused confirmed line, from any insurer, whose amount and currency equal one of its figures. Probes (`confirmedTotalComplete` → true, so the old total shows):
+  - A: confirmed term S$500,000 (its document gives no TPD row) plus group TPD S$500,000, printed only in a scheme summary. The tile shows S$500,000; the real cover is S$1,000,000. This is the same defect the PR fixes, surviving on a coincidence.
+  - E: two confirmed S$200,000 lines plus one group S$200,000 cover shows S$400,000; the real cover is S$600,000.
+  - Fix:
+    1. Match a cover first by its own document: `person.covers[].source.documentId`, the page that names the person with that cover. Today the match uses the benefit rows' source, which is often the wording or a summary, not the schedule.
+    2. Allow the amount fallback only when the line and the cover are the same product. Product words must be equal, as in `wordingDescribes`; insurer or group number must not differ.
+    Sketch:
+  ```ts
+  export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string; productName?: string | null };
+  export function confirmedTotalComplete(rows: TileRow[], lines: ConfirmedLine[], coverDocs = new Map<string, string>()): boolean {
+    // docs of a cover = its rows' sources + its own cover document
+    const docsOf = (list: TileRow[]) => new Set([...list.map(doc), coverDocs.get(list[0].coverKey ?? "")].filter(Boolean) as string[]);
+    // inTable = union of docsOf over all covers
+    // own = lines.filter((l) => l.documentIds.some((d) => docsOf(list).has(d)))
+    // free match additionally: productWords(l.productName).join(" ") === productWords(list[0].product).join(" ") (both non-empty)
+  }
+  // route: coverDocs = new Map(person.covers.map((c) => [c.coverKey, c.source.documentId])); lines carry productName: x.productName
+  ```
+  Probe D shows the same change also fixes an over-hide. A personal policy whose TPD row comes from its wording as "100% of sum assured" with no worked figure gives "Covered" today, though its schedule is the confirmed line; by cover document it is accounted for. Gate A, D and E, plus the Charmaine shape (AIA S$100,000 confirmed + group S$1,000,000 → Covered), in SG/MY/UK.
+- Medium (Q2, live check): with Q1 the Charmaine PA S$600,000 must still match through the group cover's own document or same product name. If the live cover document is the scheme summary under a different product name, PA turns to "Covered" too. That is the safe side, but it adds a seventh hidden figure. The builder should confirm on the live covers' `source.documentId`.
+- Low (Q3): Desmond's PA turns to "Covered" because of a single-trip travel cover whose rows are not all abroad-only. That is consistent with #147 (when unsure, the cover stays in). Dropping ended single-trip policies at intake, as the builder notes, is the right place.
+
+On "at least S$X, more cover on Coverage": I recommend against it as the tile headline. The confirmed part is often the small part: Charmaine TPD would read "at least S$100,000" against S$1,100,000. A number on a tile is read as the amount, whatever qualifier sits beside it. The rules say a wrong claimable amount is the worst bug, and an 11× understatement shown as a floor is close to one. "Covered" plus the per-cover figures on Coverage is honest.
+The useful next step is a **sum rule** for lump-sum categories only (Death, TPD, CI, early CI, PA), which pay out independently. Show the total only when every paying cover gives exactly one plain lump-sum figure: its confirmed line, or one SUM row on its own document with no limits, all in one currency. Otherwise show "Covered". That gives Charmaine TPD S$1,100,000 and Desmond Death S$1,005,000, and never sums hospital or indemnity figures. That is DC's call on the decision card; it is not a blocker for #148.
+
+Verdict: NOT READY on Q1.
+
+## R247: #148 sum rule for lump-sum tiles (2d9d127): NOT READY, two High
+
+Checked for free (no paid calls):
+- regressions 73/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known safe-side notes);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`/`categoryOfBenefit` with made-up households;
+- the builder's before/after note. I did not open the private live rows.
+
+Fixed and confirmed: the R246 cases. Equal amounts no longer join covers: a confirmed term S$500,000 plus a group S$500,000 now totals S$1,000,000, and two S$200,000 lines plus a group S$200,000 total S$600,000. Hospital and per-day categories are never added. A cover with no single plain sum is named with no amount, and then there is no total.
+
+- **High (Q1, live): an accident-only confirmed line is added to any-cause cover.** Confirmed schedule lines are added by their stored category, without the benefit-name classifier the table rows go through. The before/after gives Charmaine's TPD as **S$1,100,000** = "Total Disability Acc - Max S$100,000" + Group Term Life S$1,000,000. "Acc" is accident, so a TPD from illness pays S$1,000,000, not S$1,100,000. That overstates the claimable amount, the worst bug class.
+  - `categoryOfBenefit` returns null for "Total Disability Acc - Max S$100,000", "Total Disability Acc" and "AD&D": `ACC` knows only `accident\w*|injur…`.
+  - Probe: `lumpSumParts` with that line plus a GTL S$1,000,000 cover gives total 1,100,000.
+  - The same risk sits in Charmaine's Death S$1,149,000: the AIA S$100,000 part is on the same AIA policy as the "Acc" line. The builder should list the stored line names for both tiles.
+  - Fix:
+    - (a) Add the abbreviations to `ACC`: `\bacc\b\.?|\bad&d\b|\baccidental\b`.
+    - (b) Classify each confirmed line's own name in the dashboard: `const placed = categoryOfBenefit(x.productName ?? "")`. A line placed in another category (PA) is not added to Death/TPD/CI; it is added in the category it is placed in, when that is a lump sum. A line whose name carries an accident word but cannot be placed is a part with no amount, so there is no total.
+    - A line whose name is a plain product name (no benefit words) keeps its stored category. Refusing those would hide almost every confirmed sum.
+    - Gate: "Total Disability Acc - Max S$100,000", "Accidental Death", "Death (Accident)", "AD&D", "Accidental TPD" as lines beside a GTL cover must never raise the Death/TPD total, in SG/MY/UK.
+- **High (Q2): two covers on one policy document get one line, and the result depends on cover order.** `selected` keeps one line per policy and category, and `lumpSumParts` gives that line to the first cover whose document matches, whatever its amount. Probe: one certificate with GTL S$1,000,000 and a top-up S$500,000; the selected line is GTL 1,000,000.
+  - With the top-up first: total **S$2,000,000** (the line is counted, then GTL is added again as its own part).
+  - With GTL first: S$1,500,000, which is correct.
+  - Fix: when several covers share the line's document, give the line only to the cover whose sum insured (`held.sumInsured`) or single plain figure equals the line's amount. If none or more than one match, those covers and the line become parts with no amount, so there is no total.
+- Medium (Q3): one cover read under two names is added twice. The certificate's "Group Term Life" and another person-naming page's "GTL" (two cover keys, same S$1,000,000) give **S$2,000,000**, with or without a confirmed line. I have not seen this live; covers are only read from pages that name the person. Guard: two parts with the same amount and currency whose product words agree (`productWords`, which already expands GTL/GPA/GHS) give no total, with both still named. This never joins different products, so it does not bring back the R246 equal-amount problem.
+- Low: the hand-applied before/after lacks cover keys. After the fixes, the builder should re-derive Charmaine's Death, TPD and PA and Desmond's Death and CI from the stored covers, not by hand, before DC sees numbers.
+
+Verdict: NOT READY on Q1 and Q2. Q3 is recommended.
+
+## R248: #148 at 450969f (c446c2b + match by the cover's sum insured): READY, with two Mediums
+
+Checked for free:
+- regressions 82/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0 (6 known notes), te-pr148b 87/0 (3 notes, see Q4);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`.
+
+Fixed and confirmed:
+- R247 Q2: one certificate with GTL S$1,000,000 and a top-up S$500,000 now gives S$1,500,000 in either cover order.
+- R247 Q3: "Group Term Life" and "GTL" with the same sum give no total, both named, with or without a line.
+- R246 A (term S$500,000 + group S$500,000 only in the table): no total, both named. That is the safe side.
+- 450969f: a group PA certificate line of S$600,000 matches its cover by sum insured even though the cover prints several sums, so the total is S$600,000. If the sum insured differs from the line: no total, both named.
+
+- **Q1 (R247), settled: I withdraw the High for the live tile.** I could not read the stored page text: the auto-mode safety check refused my narrow search of the private live files, and I did not work around it.
+  - The builder's reading is specific: "TOTAL DISABILITY ACC - MAX" = AIA's "Total Disability Accelerator – Max", page 27, Ref 2213S, matching the schedule code on page 1.
+  - An accelerator is any-cause TPD that pays the base sum early, so Charmaine's TPD S$1,100,000 = S$100,000 + S$1,000,000 is right. An accelerator means the AIA S$100,000 is paid once, for TPD or death, not both. Each tile on its own is still right.
+  - My R247 suggestion to treat "acc" as an accident word was wrong and must not be applied: it would class this accelerator as accident-only and hide the S$100,000.
+  - A free check by the Evidence Reviewer of the page 27 wording would close it.
+- Medium (Q1b, generic, not live): a confirmed line whose own name says accident still adds into Death/TPD. Probe: line "Accidental Total Disability" S$100,000 + GTL S$1,000,000 gives a TPD total of S$1,100,000. Fix: pass each line's name through `categoryOfBenefit`. A line it places in another category ("Accidental Total Disability", "Accidental Death" → Personal Accident) is not added here. Names it cannot place keep their stored category. This uses the existing classifier and adds no new abbreviation list.
+- Medium (Q4, TE note P3, pre-existing): two separate policies of the same product and the same sum collapse into one. `coverKeyOf` is product|cover|plan with no policy number, and `assemble` skips a second cover with the same key and sum. So the tile shows S$100,000 as the total of two S$100,000 policies, a part sum shown as the whole. The fix belongs in `coverKeyOf`/`assemble` (add the policy number when printed), not in the tile rule. Track it as a separate PR.
+- Low: when the sum insured matches the line but the cover's single printed sum differs, the line wins. Probe: SI S$200,000, death row S$300,000 → S$200,000. Optional: `sums.size === 1 && !fits` after an SI match gives no total. That keeps the multi-sum PA case working.
+- Low: a line and its matched cover are not compared on currency. The line's stored currency defaults to SGD when none is stored.
+
+Verdict: READY at 450969f. Q1b and Q4 are recommended follow-ups, and a live check after the merge stays required (the builder's before/after is a prediction).
+
+## R249: #149 sums insured on lump-sum tiles (c252ed5): NOT READY, one High and one gate failure
+
+Checked for free:
+- regressions 94/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0;
+- **te-pr148b 84 passed / 3 failed** (S5 in SG/MY/UK);
+- `tsc` clean, `next build` passes;
+- tsx probes of `lumpSumParts`/`categoryOfBenefit`.
+
+- **Gate (blocking): the registered TE gate `coverage:te148b-test` fails 3/87 on this head.** S5 ("no row prints an amount: the sum insured with its currency", expects 90,000) now gives no amount, because (2) requires a row that pays a share of the sum insured. The change is deliberate, so the test engineer must re-state S5 in their own gate. The builder must not edit the assertion, and the PR must not merge red.
+- **High (Q1, the loosening asked about): any condition now shows the full sum, with nothing on the tile saying so.** A lump-sum row equal to the cover's sum insured counts whatever its conditions. Probes on a CI cover with sum insured S$300,000 and one printed row of S$300,000 all give **S$300,000**:
+  - "reduced by half after age sixty-five"
+  - "less any amounts already paid under the early critical illness benefit"
+  - "subject to a co-payment of 10%"
+  - "payable only if death occurs after age 65; otherwise return of premiums"
+  - "7-day survival period" (the intended case)
+  - The figure never exceeds the sum insured, and the parts line now begins "Sum insured:", so the number is true *as a sum insured*. But the explanatory "What is paid depends on each policy's own terms" shows only when there are 2+ parts. A one-policy tile shows a bare S$300,000 for a death that, before 65, pays back premiums only. That reads as a claimable amount.
+  - TE N7 ("a sum with a limit: no amount") still passes only because its fixture has no held sum insured. With one it would show the full figure. This reverses the lesson the R238–R242 rounds settled, so it must at least be visible.
+  - Fix (free, small): carry `conditional: true` on a part counted through `asInsured` when the row has limits (`limits(r)` non-empty, i.e. not a cause/stay allow-listed condition). Show "(conditions apply)" after that part's amount. Show the "What is paid depends on each policy's own terms" line whenever any part is conditional, even with one part.
+  - The 7-day survival period is a condition on *when*, not *how much*. Optionally add "survival period"/"waiting period" wording to `STANDING_WORDS` or the cause allow-list so the live Singlife CI gets no marker. Do not widen it further.
+  - Gate it: the five phrasings above with a held sum insured must show the amount **with** the marker. A condition-free row shows no marker.
+- Fine as built (2): a cover with no printed amount gives its sum insured only when a row pays a share of it. ReadyBuilder's notional S$49,000 drops out, and Charmaine's Death has no total. That is the safe side.
+- Low (3, R247 Q1b as folded in): `categoryOfBenefit` on line names only hides amounts, never adds them. "Accidental Death" stored as Death → no amount here. Plain product names ("Group Term Life", "Group Living Care", "Total Disability Accelerator") place nowhere and keep their category. Over-hides seen: "Group Critical Illness" stored as Early CI and "Early Critical Illness Benefit" stored as CI each lose their amount on the stored tile. That is the safe side; the classifier decides by the benefit word.
+- Low: `accelerates` keys off any "accelerat…" word in the cover's benefit, section or cover names. The label is cosmetic and adds nothing to the total. Fine.
+- Pre-existing (R248 Q4, TE note P3): two policies of one product and sum still collapse into one. That needs a separate `coverKeyOf` fix.
+
+Verdict: NOT READY. Get the te148b gate green through the TE, and add the conditional marker.
+
+## R250: #149 at 618ca6a (conditional marker, timing allow-list, negation, currency): READY, with one recommended follow-up
+
+Checked for free:
+- regressions 97/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0, te-pr148b 90/0, te-pr148c 81/0, te-pr149 84/0;
+- `tsc` clean, `next build` passes;
+- tsx probes.
+
+Confirmed:
+- The R249 gate: te-pr148b S5 is now graded "no amount", with an S5b positive case, under a "Grader correction (TE …)" comment that keeps the original grade on record. It arrived inside the builder's commit 618ca6a. **The coordinator should confirm the test engineer wrote this correction**, since registered graders are never edited by the builder.
+- The R249 High: a single row carrying "reduced by half after age sixty-five" now shows "S$300,000 (conditions apply)". The terms line now shows even with one part.
+- "The life assured survives at least 7 days after the date of diagnosis" carries no marker. `TIMING_WORDS` is a word allow-list; "%" and number words are not in it, so a payout fraction cannot pass as timing.
+- Negated "accelerat…" ("Non-accelerated", "does not accelerate") gives no mark.
+- The same number in another currency is not the sum insured.
+
+Recommended follow-up (Medium, marker gaps; no new wrong figure, since each amount is the stated sum insured): the marker reads only the first row equal to the sum insured, and only on the `asInsured` path. These show the sum insured with no marker:
+- (3) two rows equal to the sum insured, the first with only eligibility/timing conditions and the second "reduced by half after age sixty-five";
+- (5) a confirmed schedule line matched to a cover whose row says "reduced by half after age sixty-five" (`lineCover` copies `accelerates` but not `conditional`). This is the usual path for a personal policy with a confirmed schedule;
+- (6) a plain S$200,000 death row plus a "return of premiums only before age 65" row on the same cover (the `sums.size === 1` path; pre-existing since #148).
+- Fix: `conditional = list.some((r) => r.conditions.some((c) => isLimit(c) && !timingOnly(c)))` for every part that shows an amount, including the line part through `lineCover`. Gate cases 3, 5 and 6.
+
+Verdict: READY at 618ca6a once the TE confirms the S5 correction. The marker follow-up is recommended next.
+
+## R251: #150 intake, combined limits and ended short-term covers (c593995): NOT READY, two High
+
+Checked for free:
+- `intake-limits-test.ts` 29/0, regressions 25/0, te-pr147d 78/0;
+- `tsc` clean, `next build` passes;
+- `git merge-tree` with main (b1fa3d1, after #148) is clean;
+- tsx probes of `combinedLimit` and `coverEnded`.
+
+Both rules *hide* rows: from tiles, the Coverage page (ended rows), chat amounts and claim purposes. A false positive therefore hides a documented benefit. That direction needs the allow-list mindset as much as amounts do.
+
+- **High (Q1): `combinedLimit` hides real benefits that carry an aggregate clause, and anything under a "limits of compensation" heading.** It tests the row's quote and section, not just its name, so a benefit row whose printed line adds a per-life or all-policies cap counts as no cover at all. Each of these is LIMIT at c593995:
+  - "Total Permanent Disability" | "TPD benefit: 100% of sum assured, up to a maximum of S$5,000,000 for all policies on the same life"
+  - "Critical Illness" | "…; the maximum we pay across all policies on the same life is S$3,000,000"
+  - "Daily Hospital Cash" | "S$100 a day, up to 30 days a year in total for all plans"
+  - "Accidental Death" | "S$200,000; in aggregate across all your policies with us the most we pay is S$1,000,000"
+  - "Death Benefit" | "Sum assured S$500,000", section "Benefits and limits of compensation"
+  - "Death Benefit" | "Sum assured S$500,000 (see limits of compensation)"
+  - Per-life aggregate caps like these are common on TPD and CI, so the rule would remove those categories from the tiles and from claims.
+  - Fix (structural, like the #142 name head): a row is a combined limit only when the **head of its own name** (text before the first ":", "–", "-", "(" or ",") is limit wording: `^\s*(?:limits?\s+of\s+compensation|(?:overall|aggregate|combined|maximum|total)\s+(?:limit|benefit\s+limit|amount\s+payable)|maximum\s+(?:amount|sum)\s+payable)\b`, and the scope (same life / all policies / all benefits) is in the name or quote.
+  - A row whose head is a benefit ("TPD benefit", "Critical Illness", "Daily Hospital Cash") stays a benefit. Its aggregate clause becomes a limit condition, so `limits()` blocks a tile figure unless every row prints it.
+  - The section alone never makes a row a limit.
+  - The live ReadyBuilder row ("Limits of compensation: most paid for TI and CI claims…") still qualifies by its head.
+  - Gate the six phrasings above as BENEFIT and the live row plus "Overall limit: the most we pay for all benefits combined…" as LIMIT.
+- **High (Q2): `coverEnded` can hide a renewed or recurring policy.** "≤ 183 days with both ends printed and passed" is not the same as "single trip". Probes (today 27/10/2026), each ENDED:
+  - a group-scheme certificate for an employee who joined mid-year, 01/10/2025–31/12/2025 (renewed each 1 January; the new certificate simply not uploaded yet);
+  - a monthly renewable PA policy whose schedule prints the current month, 01/09/2026–30/09/2026;
+  - a rider attached mid-term, co-terminous with the annual base, 01/06/2026–31/08/2026;
+  - a document whose only period is short (a group certificate printing 01/07/2026–30/09/2026), which ends **every** cover on it through the `periodFrom/periodTo` fallback.
+  - The docstring itself says "missing renewal papers are not an ended cover". The first case contradicts it.
+  - Fix: end a cover only when it is **travel** by #147's own two-signal rule (a travel name on its cover/plan or non-scheme product, `TRAVEL_NAME`/`SCHEME_NAME`) **and** its term is short and over. Use the document period only when the document is that travel cover's own. Never end a cover whose product or cover name is a group scheme's.
+  - Gate the four cases above as current and "Single Trip 01/08/2026–15/08/2026" as ended.
+- Fine: the ended rows stay in the chat for an event inside the trip. `printedDay` moved unchanged into `dates.ts`. Claims and chat both skip combined limits.
+
+Verdict: NOT READY on Q1 and Q2. Both fixes narrow the rules to their stated targets (the live limits-of-compensation row and the single-trip plan).
+
+## R252: #149 at f3f8ff1 (marker reads every row; trigger allow-list): READY
+
+Checked for free:
+- regressions 103/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 78/0, te-pr148b 90/0, te-pr148c 81/0, te-pr149 84/0, te-pr149b 105/0;
+- `tsc` clean, `next build` passes.
+
+R250 marker gaps closed: the marker now reads every row of the cover, and a schedule line matched to a cover with "reduced by half after age sixty-five" shows "(conditions apply)".
+
+Probe of the new trigger and timing allow-lists (Death SI S$200,000):
+- Unmarked (plain trigger or timing):
+  - "If the Life Assured dies while the Policy is in force and We receive satisfactory proof of claim"
+  - "… while this rider is in force"
+  - "the life assured survives 30 days after the date of diagnosis"
+  - "waiting period of 90 days"
+  - "subject to the policy survival of 2 months"
+- Marked (a reducer never passes as a trigger):
+  - "…, less any TPD benefit paid"
+  - "If the life assured dies before age 65"
+  - "If death is in the first policy year"
+  - "… and the death benefit is the total premiums"
+  - "waiting period of 12 months; 50 percent in the first year"
+  - "survival period 30 days or 0.5 of the benefit"
+  - "reduced by half after age sixty-five"
+  - "no benefit for suicide in the first year"
+- `TRIGGER_WORDS` holds no amount, age, time or premium word. A number in a timing clause counts only before days/months or after section/clause.
+
+Verdict: READY at f3f8ff1.
+
+## R253: #150 at bd94663 (name-head limits; only single-trip travel ends): READY, two Lows
+
+Checked for free:
+- intake 30/0, regressions 82/0, te-pr147d 78/0, te-pr148b 87/0;
+- `tsc` clean, `next build` passes;
+- clean `git merge-tree` with main;
+- tsx probes of `combinedLimit` and `coverEnded`.
+
+R251 Q1 fixed. All six benefit rows with aggregate clauses are now BENEFIT: TPD "…up to a maximum of S$5,000,000 for all policies on the same life", CI "…across all policies on the same life", Daily Hospital Cash "…in total for all plans", Accidental Death "…across all your policies", Death Benefit under a "limits of compensation" heading, and "(see limits of compensation)". The live ReadyBuilder row is LIMIT, written either way ("Limits of compensation" + quote, or the full name). "Overall limit…" and "Maximum amount payable under all policies on the same life" are LIMIT.
+
+R251 Q2 fixed. These are current: the mid-year group certificate 01/10/2025–31/12/2025, the monthly PA, the co-terminous rider, a group certificate with only a short document period, a group business travel line on a short scheme period, and the annual multi-trip plan. "Travel insurance summary / Single Trip / Business" 01/08–15/08/2026 is ENDED.
+
+- Low (L1): a limit-worded head with a single benefit after it is a limit, so the row is hidden. "Total amount payable for death | S$500,000 for all plans" and "Maximum sum payable for hospital cash | S$100 per day across all policies" are LIMIT. Each is arguably a per-benefit cap across policies, but if it is the only row for that benefit, the category loses its cover. Optional: when the name after the head places in exactly one category (`categoryOfBenefit`), keep it as that benefit with the cap as a limit condition.
+- Low (L2): a rider whose own name is travel ends by its printed dates. "HealthPlan / Overseas Travel Cover" 01/06–31/08/2026 (co-terminous with an annual base) is ENDED. Optional: `if (c.riderOf) return null` in `coverEnded`, since riders end with their base.
+- The live "Limits of compensation" row needs a scope ("the same life", "all policies") in its name or quote. A bare "Limits of compensation | TI and CI S$2,000,000" stays a benefit, the old behaviour, which is safe for the tile because CI then has no total. The builder's stored-row run should confirm the live row qualifies.
+
+Verdict: READY at bd94663. L1 and L2 are optional.
+
+## R254 — #150 at d186935 (limits heading middle way, L1, L2): one High, then READY
+
+**H1 (High, hides documented cover): `lib/benefit-table/assemble.ts` `printsSumInsured`.** Under any heading containing "limits of compensation", every row whose figure is not exactly the cover's sum insured becomes `combinedLimit`, so it drops out of tiles, chat and claims. Many accident and travel schedules print the whole benefit list under "Schedule of benefits and limits of compensation". Made-up probe (Shield PA, sum insured S$200,000, all rows under that heading):
+
+| Row | Figure | d186935 |
+|---|---|---|
+| Accidental Death 100% of Sum Insured | 200,000 | benefit |
+| Fracture of hip 15% of Sum Insured | 30,000 | **limit (hidden)** |
+| Medical Expenses up to S$2,000 | 2,000 | **limit (hidden)** |
+| Hospital Cash S$100 per day | 100 | **limit (hidden)** |
+
+The same happens to capped-percent and as-charged rows (figure kind `none`), and to every row when no sum insured is held. Patch: a row under the heading is a limit only when it is a printed lump sum or "up to" figure that is **more** than the cover's sum insured in the same currency, or any such figure when no sum insured is held. Per-day, per-period, percentage and figure-less rows are never limits.
+
+```ts
+function headingLimit(f: Figure, c: PersonCover): boolean {
+  if (f.kind !== "printed" || (f.unit !== "lump_sum" && f.unit !== "up_to")) return false;
+  if (c.sumInsured == null) return true;
+  return f.amount > c.sumInsured && (!f.currency || !c.currency || f.currency === c.currency);
+}
+// …combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && headingLimit(figure, c))
+```
+
+With that patch the probe keeps all four rows, and intake stays 36/0 (TE P150-2 "Critical Illness up to S$2,000,000" with or without a sum insured is still a limit). Residual Low: with no sum insured held, "Medical Expenses up to S$2,000" under such a heading is still hidden. That is the cautious side, so I'm accepting it.
+
+**L1 (fixed):** "Total amount payable for death … for all plans" is now a Death benefit, with the line kept as a condition; "Limits of compensation: …" stays combined. **L2 (fixed):** `riderOf` returns null before the travel test, and the caller passes the CheckedCover, which carries riderOf.
+
+Checks on d186935:
+- intake 36/0, benefit-table 107/0, chat 96/0, parity 10/0, te-pr147d 78/0;
+- te-pr148b 87/3: S5 ×3 fails the same way on main b1fa3d1 (the #149 grader correction), so it is not this PR's;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: READY once H1 is patched as above. Everything else is in order.
+
+## R255 — #151 at 90ee276 (Home re-fetches while documents are read): two Mediums, one Low
+
+Checks:
+- new `coverage:dashboard-dynamic-test` 19/0 on a throwaway local Postgres 16 + pgvector (setup-db list, then benefit-table, policy-member-exclusions and detected-name-dismissals);
+- intake 39/0, benefit-table 107/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+Isolation holds: the count is scoped by `account_id`, and the suite's other-household case passes. Nothing is hard-coded to a household, insurer or market. Polling stops: the client caps it at 10 minutes, the server stops counting a ready document after 10 minutes and an in-progress one after 30, and an error payload has no `reading`, so polling ends there too.
+
+**M1 (Medium, a picked person can be overwritten by a late poll): `app/page.tsx` load/timer.** The 8 s timer and the visibility handler capture `activeId` from the render that set them. The timer's effect depends only on `[data]`, so choosing another person (`choose(B)`) does not clear a pending poll for A. If that poll fires while B's request is in flight and its reply lands after B's, `setData` shows A again, with the pill, heading and tiles all on A. The user's choice is silently undone. Every label stays consistent with the shown person, so this is not a mislabelled person. Fix: only the newest request may set the page, and polls ask for the person last chosen.
+
+```tsx
+const latest=useRef(0),want=useRef("");
+async function load(memberId?:string,quiet=false){const mine=++latest.current; …fetch…
+  if(mine!==latest.current)return;               // a newer request owns the page
+  if(!want.current&&payload.activeMember?.id)want.current=payload.activeMember.id;
+  setData(payload); … }
+async function choose(id:string){want.current=id;setActiveId(id);await load(id);}
+// timer and visibility: void load(want.current||undefined,true)
+```
+
+**M2 (Medium, a 10-minute false "still being read" banner plus about 75 polls): `app/api/dashboard/route.ts` reading count.** A ready document with no benefit reading counts as being read. Ingest never reads payment documents (premium_receipt, renewal_statement, annual_statement) or `NON_COVER_ROLES` documents into the benefit table (`lib/rag/ingest.ts:1000`). So every uploaded receipt or letter shows "A document is still being read" and polls for 10 minutes. I confirmed it with a probe added to the suite: setting the pending row's `document_role='premium_receipt'` still counts 1 on 90ee276. With the patch below the probe gives 0 and the suite stays 19/0.
+
+```ts
+const NO_READING_ROLES=[...NON_COVER_ROLES,"premium_receipt","renewal_statement","annual_statement"];
+// ready branch: … AND NOT (coalesce(p.document_role,'')=ANY($2::text[])) AND NOT EXISTS(…)
+// params: benefitLive?[accountId,NO_READING_ROLES]:[accountId]
+```
+
+Better still: share one list with ingest, so the two can't drift apart.
+
+**L1 (Low, cost for accounts without the benefit table, which is every sign-up except the alpha): `route.ts:28` runAfterResponse.** Every dashboard GET kicks `readPendingDocuments`, which makes paid ledger reads. Its dedupe lives in memory per instance, and `ledger_read_at` is set only after a read finishes (`lib/ledger/extract.ts:310`). Ingest runs its own ledger read straight after marking a document ready (`ingest.ts:1000`), so a poll landing on another instance in that window can start a second paid read of the same document. This already happens on a manual reload, but polling every 8 s makes it routine. This is inferred from the code; it was not run, because it needs a model. Fix: send `&poll=1` on quiet loads and skip the background ledger kick when it is set.
+
+Verdict: READY once M1 and M2 are fixed. L1 is optional, but cheap.
+
+## R256 — #151 at 6af3b7b (R255 fixes): READY
+
+**M1 (fixed), read line by line.** `load` takes `n=++seq.current`, and only `n===seq.current` may setData or clear loading. `choose` sets `want` before it calls `load`, so any later poll or visibility re-fetch asks for the newly chosen person. If a poll supersedes a full load, it asks for the same person and clears the spinner itself. Before the first reply, `want` is undefined and a re-fetch asks for the default person, same as the first load. The visibility handler's closure keeps the first render's `activeId=""`, so it re-sets `activeId` to the returned person, which is the person `want` asked for; harmless. Claim-a-document re-fetches with `want` too. I found no path where the page shows a person other than the newest choice.
+
+**M2 (fixed):** one shared list, `NO_COVER_READING_ROLES` (payment roles plus NON_COVER_ROLES) in `lib/documents/messy.ts`, used by both ingest and the dashboard count. The suite now covers a receipt, a letter and a schedule.
+
+**L1 (fixed):** `poll=1` skips the background ledger kick. Only quiet loads send it, so a full Home load still kicks, as before. The suite has a poll case and asserts that nothing tried to leave the machine.
+
+Checks, all run network-blocked (no key in env, proxy pointed at a dead port):
+- dashboard-dynamic 22/0 on a throwaway Postgres 16 + pgvector;
+- intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+## R257 — #151 at 01323b3 (Home waits for links after the reading, TE F1): READY, two Lows
+
+The new clause counts a recent ready document until it has a reading, and then either a `benefit_links` row with `updated_at >= read_at` exists or no reading in the household has benefits. It is right on the main path. `readDocument` stores `{document: <model json>, pages}`, so `reading->'document'->'benefits'` is the correct path. `relink` deletes and re-inserts every model link with `now()`, so any re-link after the reading ends the wait, a covers-only document included, as long as some other section is model-linked. Everything is scoped by account.
+
+Known edge (accepted): when relink writes no row, Home polls for the full 10 minutes. That happens when every section is household-linked, when there are no cover types, or when the link call fails or returns nothing. It is bounded, and the banner stays truthful enough.
+
+**L1 (Low, the dashboard can 500):** `jsonb_array_length(coalesce(…,'[]'))` raises "cannot get array length of a non-array" if a stored reading's `benefits` is an object or scalar (checked on Postgres 16). The JS side guards this with `Array.isArray` (`check.ts:373`), and the SQL should match. **L2 (Low, Home stops early):** a document whose whole-document reading has no benefits, but whose page re-reads do (`stored.pages[].json.benefits`), counts as covers-only, so Home can stop before relink writes its links. One expression fixes both. I checked it on Postgres 16: object → no, `[]` → no, `[1]` → yes, page benefits → yes, scalars → no, with no error.
+
+```sql
+coalesce(jsonb_path_exists(b2.reading,'strict $.document.benefits[0]','{}',true)
+      OR jsonb_path_exists(b2.reading,'strict $.pages[*].json.benefits[0]','{}',true), false)
+```
+
+Checks, all network-blocked:
+- dashboard-dynamic 25/0, including both TE F1 cases;
+- intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0;
+- tsc clean, next build passes, merge-tree with main 3efb382 clean.
+
+## R258 — #152 at 85841ce (cover holdings by policy number; accident-worded lines): NOT READY, two Highs
+
+Probe (made-up SG household, "Alder Term", run on the PR's own assembleTable → tileRows → lumpSumParts path, network-blocked; main 44fb9ec vs PR):
+
+| Case | main | 85841ce |
+|---|---|---|
+| R1 one policy renewed: 2025 and 2026 schedules, new number each year (GT-2025-77 / GT-2026-77), S$100,000, periods 1 Jan–31 Dec 2025 and 2026 | **100,000** | **200,000** (two parts) |
+| R2 one policy: product summary prints group no. G-55000 (benefit table), member certificate prints C-000123 (no rows) | 100,000 | 100,000, but 2 covers |
+| R3 two real policies: A's contract prints the benefit table (AT-1001, 100k); B has only its certificate (AT-2002, 250k) | no total (`?`) | **total 100,000, B's part missing** |
+
+**H1 (High, wrong amount): `assemble.ts` coversOf holdings.** A different printed number is not enough to prove a second policy. Annual renewals (group schemes and many term/PA plans re-number every year), a summary's group number against a certificate number, and endorsement or renewal notices all print different numbers for one policy. R1 doubles a renewed policy. Main merged it because the sums were equal.
+
+**H2 (High, hides a policy and shows a part total as complete): `ownCovers` + `lumpSumParts`.** A section on one holding's own document is given only to that holding. A holding with no rows and no line then produces no part at all, so the tile adds up only the policies that have rows. In R3, B's S$250,000 disappears and Home shows S$100,000. Main showed no total there. R2 also shows how the H2 fix exposes H1: once every held holding becomes a part, the summary and certificate of ONE policy would add to 200,000.
+
+Proposed fix (one rule, unsure → no figure):
+1. Keep the split. Each holding is its own part, with its own sum when its own document prints one, else no amount. Add a part for every held holding that has no rows and no line, so nothing disappears.
+2. Give a total across holdings of one cover type only when every holding's own document prints both a start and an end date, the periods overlap, and none has ended. Otherwise `unsure` → no total, and the parts still list each one.
+3. Where the periods do not overlap (R1), the earlier holding is a past year of the same cover, not a second policy. Show the current one only, or no total.
+
+**M1 (Medium, pre-existing but now in conflict with holdings): chat groups by coverKey.**
+- `chat.ts:77` keys `coverSince` by `person|coverKey`, so the last holding's start date wins for both. A new policy's start date applied to an older one (or the reverse) gets the waiting-period answer wrong, which means a wrong claimable answer.
+- `chat.ts:464` (ruledOut siblings), `:531/538` (companions, first-year), and `:647/796` (twins) also treat two holdings as one cover. An exclusion on X's document rules out Y's same benefit, and a twin collapse can give one policy's figure for both.
+
+Fix: key on `holding ?? coverKey` in those places, in this PR or straight after. (A confirmation keyed by coverKey also applies to both holdings. Low, since households do not confirm amounts.)
+
+**Q1b remainder: fine.** ACCIDENT_WORD only removes an amount from non-PA tiles, a name that places elsewhere keeps the R247 rule, and bare `acc` is rightly not added.
+
+Checks:
+- cover-holdings-test 57/0, intake 39/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R259 — #152 at df4c84b (R258 fixes): READY, one Medium (pre-existing) and one Low
+
+I re-ran my probes on the PR path, network-blocked:
+
+| Case | 85841ce | df4c84b |
+|---|---|---|
+| R1 renewal, two numbers, 100k each | 200,000 | no total; parts 100,000 + 100,000 |
+| R2 summary (G no.) + certificate (C no.), one policy | 100,000 (one part) | no total; parts 100,000 + `?` |
+| R3 A's contract has the table; B has a certificate only (250k) | 100,000, B missing | no total; parts 100,000 + `?` |
+
+H1 is closed: no total whenever a cover type is split. That is the right call; date overlap would not separate R2. H2 is closed: every held holding of a split type is a part. Chat (M1): coverSince, the plan-table group, siblings, ruledOut, companions, firstYear, twins and copiedName all key on `holding ?? coverKey`. For an event this year, the ended 2025 holding is still ruled out by its own dates, so a renewal never answers with two current policies.
+
+**M1 (Medium, pre-existing on main; the PR now has what it needs to close it): a split that shows only through schedule lines is still added up.** `split` is built only from row groups. A tile with no table rows, made only of confirmed lines whose documents are two holdings, adds them. Probe R4: lines 100,000 (polA) and 250,000 (polB), with held holdings k#a and k#b → **total 350,000**. A renewal whose sum changed (2025 100k, 2026 120k) gives 220,000 the same way. Equal sums are already caught by the same-name rule. Fix: also add a held holding's `coverKey` to `split` when its `documentId` is in any line's `documentIds`.
+
+**L1 (Low): an added holding hides its own printed sum.** In R3, B's certificate prints 250,000, but its added part shows `?`. R1 shows both amounts, and the product rule is "each person's sum assured per policy", so use `amount: h.sumInsured, currency: h.currency` when present. There is no total in either case.
+
+Checks:
+- cover-holdings 72/0, intake 39/0, benefit-table 107/0, chat 96/0, headline 16/0, parity 10/0, te-pr149b 105/0, te-pr149 84/0, te-pr148c 81/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R260 — #152 at a1db9a1 (via 9b3dd5a and 90797b1): READY, two nits
+
+Probes on a1db9a1, network-blocked:
+- R1 renewal: no total, parts 100k + 100k.
+- R2 summary + certificate: no total, one part.
+- R3 certificate-only B: no total, A's part only.
+- R4 lines-only over two holdings: no total (R259 M1 closed).
+- P1 "1001"/"10011": two policies, no total (it was merged on 9b3dd5a and 90797b1).
+- P2 "MT-104455"/"MT104455": one cover, 100,000 (same as main).
+- P3 un-numbered copy + A + B, all at the same sum: no total.
+- P5 "1001" 100k / "10011" 250k: no total, both sums.
+
+**On dropping the row-less holding (TE P152 N1): I agree.** A policy whose own document gives the tile no row may not hold that benefit, and its sum insured may be another benefit's sum. The harm I raised in R258 H2, a part total shown as complete, stays closed because any tile touching a split cover type has no total. So I withdraw R259 L1.
+
+Nits, optional:
+- `ADD-ONS` still reads as AD&D, because `(?![\s-]*ON\b)` misses the plural. Use `ONS?\b`.
+- P4 (an un-numbered copy at A's sum, plus B at another sum): the un-numbered copy absorbs A because the dedupe groups by sum, so the tile shows one `?` part and no holdings. That matches main and gives no wrong figure. Counting numbers per person + cover type, not per sum group, would keep both policies visible.
+
+Checks:
+- cover-holdings 144/0, benefit-table 107/0, chat 96/0, te-pr149b 105/0, te-pr148c 81/0;
+- on 90797b1 also intake 39/0, headline 16/0, parity 10/0, te-pr149 84/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R262 — #153 at 89da910 (identity numbers masked in chat answers): one High, then READY
+
+All probes use made-up numbers and the network was blocked. No real ID appears below.
+
+**H1 (High, corrupts answer text and amounts): `identity-numbers.ts` maskIdentityText.** After a label, the value may run on as words. When its first word has no digit, `value.match(...)?.[0] ?? value` falls back to the WHOLE value and masks every word before the last 4 characters:
+- "Identity theft cover up to 50000 per trip" → "Identity ***** ***** ** ** *0000 per trip"
+- "Identity Theft Expenses 10 000" → "Identity ***** ******** *0 000"
+- "Passport replacement costs 25000" → "Passport *********** ***** *5000"
+- "the NRIC holder may claim 10000 per year" → "the NRIC ****** *** ***** *0000 per year"
+
+Identity-theft and passport-loss benefits are ordinary travel benefits, so a bare or space-grouped amount after such a word gets garbled. Fix: the masked part must be a number that starts the value, an optional 1–2 letter prefix allowed. Otherwise leave the text alone:
+
+```ts
+const number = value.match(/^(?:[A-Z]{1,2}\s+)?[A-Z0-9-]*\d[A-Z0-9-]*(?:\s+[A-Z0-9-]*\d[A-Z0-9-]*)*(?:\s+[A-Z](?![A-Z0-9]))?/i)?.[0];
+if (!number) return all;
+```
+
+With it, all four sentences are unchanged. The spaced forms stay masked: "NI number QQ ## ## ## C", "NRIC: S #### ### Z", "Passport No. K #### ####", and "ID No. … and plan A" keeps its words. identity:mask-test stays 5/0. A plain `?? value → return all` is not enough, because it would unmask those spaced IDs.
+
+**M1 (Medium, useful references hidden): unlabelled dashed shapes.** The SSN shape (3-2-4) and the MyKad shape (6-2-4) mask any reference that happens to match: "Claim reference 123-45-6789" → "***-**-6789", "Group policy 202501-01-0001" → "******-**-0001". Fix: mask the SSN shape only with an SSN or Social Security label (US is not a launch market). Accept the MyKad shape only when its first 6 digits are a real date (YYMMDD, month 01–12, day 01–31). "202501…" then fails, since month 25 is not valid.
+
+**L1 (Low, missing labels for Malaysia):** "No. K/P", "Kad Pengenalan", "MyKid" and "Birth Certificate No." are not labels, so 12-digit MyKad numbers without dashes (and birth-certificate numbers) after them stay visible. Add `K\/P|Kad\s+Pengenalan|MyKid|Birth\s+Cert(?:ificate)?`.
+
+**L2 (Low, accepted trade-offs, no change needed):**
+- An NRIC-shaped policy or certificate number ("Policy No. T1234567X") is masked. Keep this: group certificates often use the NRIC as the member number.
+- "<word> ID No." is masked for Customer, Agent, Transaction, Document, Policyholder, and possessives ("Member's ID No."), because the not-a-person lookbehind only sees a bare preceding word. Only the last 4 stay visible, and erring towards privacy is acceptable. If you change it, allow `'s` in the lookbehind rather than growing the word list.
+
+**Re-render and gates: fine.** sanitizeStoredAnswer masks a deep copy before the calculation recompute and sentence matching. Both sides are masked the same way, and ids, UUIDs and hashes do not fit any shape. The stored row is untouched. User messages are deliberately left unmasked. Note that a household's own typed NRIC still shows in history, and still goes back to the model through recentMessages; say whether that is intended.
+
+Checks:
+- identity:mask-test 5/0, security:live-chat-monetary-boundary 32 cases, rag2:scenario-replay 22/22, dj-live-3 replay 48/48;
+- simple offline 17, simple chat 84, simple style 22/0, benefit-table chat 96/0;
+- tsc clean, next build passes, merge-tree with main 44fb9ec clean.
+
+## R263 — #153 at ed6295a: masking READY; one-off premiums (657ede2) one High
+
+**Masking (R262 fixes): READY.** All of these stay unchanged now: the identity-theft, passport-replacement and NRIC-holder sentences, "Claim reference 123-45-6789", "Group policy 202501-01-0001", and "ID card replacement 30000". These are masked: spaced NINO, NRIC and passport forms; No. K/P, Kad Pengenalan and MyKid 12-digit numbers; a birth certificate; dashed MyKad; a bare NRIC; mid-sentence "ID no is …"; and SSN when labelled. Leaving the household's own typed words unmasked is accepted as a project rule.
+
+**H1 (High, the Home cost total drops a recurring premium and still says it is complete): `premium-summary.ts` isOneOffPremium.** It treats any record with no recurring frequency word and a `period_end` as a one-off. Ingest stores renewal_statement and annual_statement payments with the model's `frequency` (often null) and the printed period end (`lib/rag/ingest.ts:753`). A yearly renewal notice ("Premium S$300, period 1 Jan–31 Dec 2026") is therefore a one-off. It drops out of `items` and the annual total. Because `missing` is now computed over `all`, its policy is not listed as missing either, so `complete` can be true while the total leaves it out.
+
+The RECURRING word list also misses common frequencies. Probe results (isOneOffPremium, with period_end set):
+
+| frequency | result |
+|---|---|
+| null (single trip, 6-day period) | one-off ✓ |
+| null (annual statement to 31 Dec) | **one-off ✗** |
+| "per annum", "p.a.", "Fortnightly", "Tahunan", "Bulanan", "12" | **one-off ✗** |
+| "Yearly" | recurring ✓ |
+
+Fix (structural, unsure → recurring as before):
+1. One-off when the frequency says single, one-off or "for the period".
+2. Otherwise one-off only when there is no recurring frequency AND the record prints both `period_start` and `period_end` AND the span is ≤ 183 days (a short-term cover, the same bound as SHORT_TERM_DAYS). A year-long period stays recurring.
+3. Add `annum|p\.?\s*a\.?|fortnight|bulanan|tahunan` to RECURRING. Pre-existing: `annualisePremium` treats "Bulanan" (monthly) and "Fortnightly" as annual, which undercounts 12× and 26×. Teach it the same words.
+
+Checks on 657ede2 and ed6295a:
+- r5:answer-test 19/19, identity:mask-test 5/0, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+## R264 — #153 re-check at 8615065 (one-off premium fix for R263)
+
+R263 H1 is fixed. An annual statement with no frequency word and a one-year printed period now stays yearly. An end date with no start date stays recurring. "per annum", "p.a.", "Fortnightly", "Bulanan" and "Tahunan" are all read as recurring. annualisePremium gives Bulanan 10 → 120 and Fortnightly 10 → 260. A trip premium with no frequency and 6 printed days is still one-off, and so is "Single premium" with no dates.
+
+**M1 (Medium, lib/policies/premium-summary.ts isOneOffPremium).** A monthly plan's statement can print no frequency word and a one-month period (2026-10-01 to 2026-10-31). That row is ≤ SHORT_TERM_DAYS, so it is classed one-off. Two things follow:
+- it drops out of the Home yearly total;
+- `missing` is worked out over `all`, so that policy is not flagged either. The total quietly goes down, with nothing on screen to say so.
+
+Premium rows carry no cover name or document role, so a travel-name check can't be done here. Suggested fix, in line with "the unsure case shows no figure":
+- treat a row as one-off only when the frequency word says so (single, one-off, "for the period");
+- treat a row with no frequency word and a short printed period as **unsure**: keep it out of the total and count it in `missing`, so Home shows the total as incomplete rather than quietly smaller;
+- add a P4 case for a monthly statement with no frequency and a one-month period, expecting it in `missing` and not in `oneOff`.
+
+If the builder judges this rare, it can be a follow-up. It is still a quietly wrong total, not a wrong claim amount.
+
+Minor: premium-summary imports SHORT_TERM_DAYS from lib/benefit-table/assemble. There is no import cycle, but it pulls a heavy module into the premium path. A shared constants file would avoid that.
+
+Checks on 8615065, run network-blocked with model keys stripped:
+- r5:answer-test 19/19, identity:mask-test passing, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main clean.
+
+Verdict: READY once M1 is fixed (or accepted as a follow-up). The masking side stays READY from R262/R263.
+
+## R265 — #154 at 7c4ee65 (intensive-care daily rate row, N119)
+
+**H1 (High, lib/benefit-table/chat.ts intensiveCareRateOf): the base rate becomes the ICU rate.** The allow-list holds both the multiplier words (doubled, double, twice, this) and the cap words. Nothing checks where the figure sits relative to them, so a clause that prints the *base* rate and then says it doubles passes. The figure is then given as the intensive-care rate, which understates the ICU day by half. That is a wrong claimable amount. Probe results:
+- "Daily hospital cash S$200 per day, doubled in ICU" gives 200 (should be 400 or no row);
+- "Hospital cash benefit S$100 per day doubled if hospitalised in intensive care" gives 100;
+- "S$150 per day, double if in ICU" gives 150;
+- "S$200 per day, twice this amount in ICU" gives 200;
+- "S$400 per day in ICU or the daily amount" gives 400. "or" plus an unpriced alternative leaves it unsure which applies.
+
+Commas don't split clauses, so in the row path each of these is one clause. It is printed in the row's own document, and the only dedupe is against existing ICU rows.
+
+Fix (structural, allow-list):
+- when the clause holds a multiplier word, give a row only if the multiplier comes before the figure and a cap word (capped, up to, maximum, max, limited) sits between them. Otherwise return null;
+- drop "or" from the words unless both sides are priced (the existing two-figure check already refuses those);
+- add the four cases above to the negative controls.
+
+**M1 (Medium): "doubled, capped at S$400" is a cap, but the table line reads as a flat rate.** The card renders "Up to S$400", which is fine. The model-visible table line is "… in intensive care | S$400 a day" with `conditions: []`, so the doubling is lost. With a base of S$150, an ICU day pays min(2×150, 400) = S$300, not S$400. Fix, either of:
+- keep the clause as the row's condition when a multiplier is present, so the line reads "doubled, at most S$400 a day";
+- when the same row prints one base per-day figure, give min(multiplier × base, cap) and quote both. The first is simpler and default-safe.
+
+**M2 (Medium): dropping the base row's overall limit.** The ICU row is cloned from the limit row (S$8,000 up_to in the test), and its limit is cleared. ICU days count against that overall limit. With nothing on the ICU card, 25 ICU days read as 25 × S$400 = S$10,000 against an S$8,000 limit, which overstates. Day-count limits are already refused (rows with maxDays give no row). A money overall limit should not be silently dropped either. Fix, either of:
+- carry it as a condition ("counts toward the S$8,000 overall limit"), keeping capSource;
+- give no ICU row when the base has an overall money limit. That hides the rate, so the first is better.
+
+Model-visible change: one more table line, added last, so ids are stable. The replay gate is 22/22 and unchanged, so I see no other risk there once H1/M1 are fixed.
+
+Checks on 7c4ee65, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: NOT READY. H1 must be fixed; M1 and M2 before merge if cheap.
+
+## R266: #153 re-check at 3a5fff0 (short-period premiums)
+
+R264 M1 is fixed. One-off now means only that the frequency word says so (single, one-off, "for the period"). A row with no frequency word and a printed period of 183 days or less is `shortPeriod`. It is never totalled and sets `complete=false`, and the note names it with its amount and period. Both the chat and the dashboard (`app/api/dashboard/route.ts:156`, through `complete` and `note`) carry this, so the Home total says it is incomplete instead of quietly shrinking. The new import of longDate from lib/chat/policy-status adds no cycle.
+
+Optional Lows:
+- **L1.** A trip that ended long ago keeps Home marked incomplete for good. That is the safe direction, because an ended short-period row could also be an old monthly statement. If it gets noisy, a later follow-up could drop ended short-period rows only when a newer record for the same policy exists.
+- **L2.** shortNote has no "and N more" past four, unlike missingNote. It also says "so it may be a one-off premium" when it names several premiums.
+- **L3.** The mutant gap the builder already named: the P4 fixture already has a missing policy, so dropping shortPeriod from `complete` survives. A P4 case with no missing policy would close it.
+
+Checks on 3a5fff0, run network-blocked with model keys stripped:
+- r5 19/19, identity mask passing, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
+
+## R267: #154 re-check at b842a74
+
+H1 is fixed. With "doubled", "double" or "twice" in the clause, a figure counts only when it comes after the multiplier with a cap word between them. My probes:
+- "S$200 per day, doubled in ICU": null.
+- "S$200 per day, twice this amount in ICU": null.
+- "S$400 per day in ICU or the daily amount": null.
+- "doubled ... capped at / up to a maximum of / max / limited to S$400 per day": 400.
+- "doubled to S$400 per day": null. This is conservative, and the base row still carries the doubling text.
+- "subject to S$400": null, because "subject" is not an allowed word.
+
+M1 is fixed. The clause is now the ICU row's condition, so the table line shows "doubled …, capped at".
+
+M2 is accepted as answered. The ICU row never gets a stay total (stayPays refuses intensive-care wording), and the model cannot put money in prose. A money condition on the card would be dropped by verify, so carrying the overall limit would buy nothing.
+
+Checks on b842a74, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
+
+## R268: #154 at 78065b8 (Test engineer F1 and F2)
+
+Still READY. A "doubled …, capped at X" clause now gives a row only when the benefit has one known daily rate and twice that rate reaches X, so the card's X is exactly what an ICU day pays. Place words count only when the benefit's own name holds them: "while overseas" passes with a name such as "Daily hospital cash while overseas" and is refused with no name.
+
+Optional Low: `dailies` does not check that the daily rate's currency matches the cap's. A cross-currency pair on one benefit is unlikely, and the row is refused unless 2 × rate ≥ cap anyway.
+
+Checks on 78065b8, run network-blocked with model keys stripped:
+- benefit-table chat 99/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+## R269: #153 at db91c15 (Test engineer F1: an ID inside a file name)
+
+Still READY. Shapes are now bounded by non-alphanumerics: "Certificate_S1234567D.pdf" gives S****567D, and "x_850101-14-5678.pdf" is masked. "National Insurance at 12500 a year" is left unchanged. "ID No. S1234567D and plan A" and the HKID shape are masked. "S1234567Dx" is not masked, which is correct because it is not the NRIC shape.
+
+Optional Low: dropping the `i` flag means a lowercase spaced NINO after its label ("NINO qq 12 34 56 c") is now not masked at all. Before, it was masked. Unspaced lowercase after a label ("NRIC: s1234567d") is still masked. A fix: allow `[A-Za-z]{1,2}\s+` as the prefix only when a digit group follows.
+
+Checks on db91c15, run network-blocked: identity mask passing, r5 19/19, simple chat 84, tsc clean.
+
+## R270: #155 at a3fd531 (premium parts, and a clause's total limit)
+
+premiumPartsOf is sound:
+- it reads one cover line holding the sum;
+- extras are lines that open with a dash, with no sum and one cell with cents;
+- the parts must add up to the premium to the cent;
+- it refuses when another life is on the page.
+I found no wrong-cover path.
+
+**H1 (High, lib/benefit-table/chat.ts totalLimitRows): another benefit's limit is attached to this benefit.** The heading must name the row's benefit, but the sentence itself never has to. The clause also runs on past any heading that has no number. My probes, using the PR's own LIMIT_WORDING and CI row:
+- inside 2.2, "The most We will pay in total for all Accidental Death claims under all Policies covering the same Life Assured shall not exceed S$300,000." gives **"Limit in total on Critical Illness Benefit claims: S$300,000"**;
+- with no limit in 2.2 and an unnumbered "GENERAL PROVISIONS" section after it holding the same sentence, it gives the same CI card. The scope reads "GENERAL PROVISIONS The most We will pay …";
+- "Appendix B\nThe maximum total amount payable under all policies for the same life shall not exceed S$300,000." gives a CI card. That limit names no benefit at all.
+
+The card's name and figure point at the wrong benefit (or at none), which is the wrong-attachment case you asked about. Fix (allow-list):
+- the scope (the sentence up to its limit words) must name the row's benefit: every word of benefitName, allowing a plural ("Illnesses");
+- it must name no other benefit heading on the page;
+- end the clause at any line that looks like a heading (no sentence punctuation, Title or ALL CAPS, or "Appendix" / "Section" / "Schedule"), not only at numbered ones.
+
+**M1 (Medium): words after the figure are dropped from the card.** The scope is cut at the limit words, and the tail after the figure is never checked. Probes, each giving "up to S$800,000" with nothing about the tail:
+- "S$800,000 less any amount already paid under the Death Benefit";
+- "S$800,000, or the Sum Assured if that is lower";
+- "S$800,000, reduced by any Early Stage payment made before the Life Assured reaches sixty-five".
+
+"Up to" stays an upper bound, but the lessons log (#147) says condition text that is not provably harmless must block the figure. Fix: the tail after the figure, up to the sentence end, must be empty or an allow-listed phrase such as "(or equivalent currency)". Anything else gives no row.
+
+Checks on a3fd531, run network-blocked with model keys stripped:
+- benefit-table chat 103/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H1). Add the six probes above as negative controls.
+
+## R271: #156 at ebd7ed4 (per-child amounts, N023)
+
+The core is sound:
+- countPays reads the row's own printed words: one figure, then per child, then at most one most-children figure;
+- any other limit word refuses;
+- `-count` cards are kept only beside their labelled parent, with the same most and the exact multiple;
+- the not_described override needs the previous message to have asked for the benefit by name.
+
+**H1 (High, lib/simple-chat/verify.ts childrenSaid): counts are deduplicated with a Set, so groups of children with the same number collapse.**
+- "we have 2 sons and 2 daughters, how much in total" gives 2, though there are 4 children;
+- "I have 3 children from my first marriage and 3 children with my wife" gives 3, though there are 6.
+With no printed most, the card understates the total (2 × instead of 4 ×). That is a wrong claimable amount. Fix: take the number only when there is exactly one count match (`counted.length === 1`), and otherwise give none. "my two kids, both kids …" has one match, so it still works.
+
+**H2 (High): a per-child benefit paid on one child's own event is multiplied by every child.** "if one of my 2 kids gets cancer how much do we get" gives 2. countPays runs for every amount statement, whatever its event, so a "Juvenile critical illness S$10,000 per child" row would get a "For 2 children … S$20,000" card when only one child is ill. Fix (allow-list): give a count only when the message asks for a total ("in total", "altogether", "total", "combined", "both", "all") and holds no single-child words ("one of", "either", "a child", "my son", "my daughter", "one kid"). Optionally also limit it to rows whose event is the insured's own (death, disability), which is the N023 shape.
+
+**M1 (Medium): only the row and its continuation are checked for a cap.** An overall limit printed in the next sentence, or as the row's condition ("The total payable under this benefit shall not exceed S$8,000"), is outside `rule`. With "S$5,000 per child (up to 2 children)" that gives S$10,000 against an S$8,000 limit. Fix: refuse a count when any condition the statement carries states money (statesMoney) or names a total or limit word.
+
+Low: an age-bounded benefit ("my 2 kids are 23 and 26") still gets a card. The card's "if this benefit's conditions are met for each child" covers it.
+
+Checks on ebd7ed4, run network-blocked with model keys stripped:
+- per-child 13/0, benefit-table chat 96/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H1, H2). Add the probes above as negative controls.
+
+## R272: #154 at 3679205 (currency of the doubled cap)
+
+Still READY. The daily rate's currency is now read from its own printed words, and the cap must print the same stated currency. A bare "$" cap gives no row, and the US$-versus-S$ negative control is added.
+
+The builder flagged a pre-existing issue in dailyRateOf: a limit's derived daily row borrows the limit's currency, so "US$300 per day" under an S$ limit shows as S$300. That is a wrong-currency amount. It deserves its own small fix (use ownCurrency, and give no row when the currencies differ), as a separate PR rather than widening #154.
+
+## R273: #155 at 9e92988 (Test engineer F1 and F2)
+
+R270 M1 is fixed. With every word after the limit words on an allow-list, "less any amount already paid …" and "…, or the Sum Assured if that is lower" now give no row. The N087 control still gives S$800,000 with its scope.
+
+R270 H1 is still open at this head. All three wrong-benefit probes still give "Limit in total on Critical Illness Benefit claims: S$300,000":
+- an Accidental Death sentence inside 2.2;
+- the same sentence under an unnumbered "GENERAL PROVISIONS" heading;
+- "Appendix B …", which names no benefit.
+The fix is as in R270. Still NOT READY.
+
+## R274: #155 at cd93f9e
+
+R270 H1 is fixed. The total's scope must now name the row's benefit (or say "this benefit") and name no other heading's benefit, and the clause ends at an unnumbered heading-like line. My probes:
+- these now give no row:
+  - an Accidental Death limit inside 2.2;
+  - the same limit under an unnumbered "GENERAL PROVISIONS";
+  - "Appendix B …";
+  - "Critical Illness and Death claims";
+  - a CI limit printed inside the Death clause;
+  - a "Waiting Period" sub-heading before the limit (conservative);
+- these give the right CI row:
+  - the "this benefit" scope gives S$300,000;
+  - the N087 control and the "Illnesses" plural each give S$800,000.
+
+R270 M1 stays fixed by the tail allow-list from 9e92988.
+
+Checks on cd93f9e, run network-blocked with model keys stripped:
+- benefit-table chat 103/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
+
+## R275: #156 at 8d5a6c7
+
+H1 is fixed: the count is taken only when exactly one count match is found.
+
+**H2 is still open (High). The single-child check is a deny-list, and plain single-child events get past it.** childrenSaid gives 2 for each of these:
+- "we have 2 kids; if one gets cancer how much in total";
+- "we have 2 kids, if Jamie is diagnosed how much in total";
+- "in total, what if the elder of our 2 kids is hospitalised";
+- "we have 2 kids, if he gets dengue how much in total";
+- "total payout for our 2 kids if the younger gets cancer".
+
+A per-child benefit paid on that one child's event is then shown doubled, which is a wrong claimable amount. This is the R241/R242 lesson again: a deny-list of phrasings leaks. Fix (allow-list): take the count only when every word of the message, after removing the count phrase, is on a small known set:
+- question and total words: how, much, what, in, total, altogether, all, both, for, would, will, does, do, it, pay, get, we, our, my, the, have, has, if;
+- the insured's own events in first person: I, me, die, dies, pass, passes, away, death, am, disabled, diagnosed (with "I").
+Any other word (a name, he, she, one, elder, younger, hospitalised…) gives no count. These still pass:
+- "how much in total if we have two kids";
+- "how much altogether for our 3 children if I die";
+- "if I pass away how much would the 2 kids get in total".
+
+**M1 is partly open (Medium).** countPays reads only `st.conditions`, which are the model's own conditions for the row it named (chat.ts:567 keeps them for the named row). If the model leaves out the row's printed cap ("total payable under this benefit shall not exceed S$8,000"), nothing sees it. Fix: also refuse when the named ChatRow's own conditions state money or a limit word. amountsFromRows can attach them, for example as a server-only field on the statement. The word check here (money, limit, total, exceed…) refuses any such wording, so it is the safe direction for a refusal and is fine as it is.
+
+Checks on 8d5a6c7, run network-blocked with model keys stripped:
+- per-child 15/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+Verdict: NOT READY (H2).
+
+## R276: #155 at 08619a7
+
+Still READY. TOTAL_QUALIFIER now allows up to four words between each/every/any one/per and claim/event/accident/admission, so "for any one Critical Illness claim" is read as a per-claim cap, not a total. The N087 sentence ("for all … claims") has none of those words, so its control still gives its row. Checks: benefit-table chat, simple chat and scenario-replay pass; tsc clean; next build passes.
+
+## R277: #156 at 0e7f60e
+
+H2 is fixed with a word allow-list. All five R275 probes now give null. The positives all give the right count:
+- "how much in total if we have two kids": 2;
+- "how much altogether for our 3 children if I die": 3;
+- "if I pass away how much would the 2 kids get in total": 2;
+- "what's the total for both of my 2 kids if I'm killed in an accident": 2.
+
+M1 is fixed. amountsFromRows attaches each row's own printed conditions as server-only `rowConditions`. They are only ever used to refuse. If the model sends the field, it can only refuse more, and the row step overwrites it anyway.
+
+Optional Low: "how much in total from the child education fund for our two children" gives null because "from" is not in the set. That is conservative. Adding "from" would be harmless.
+
+Checks on 0e7f60e, run network-blocked with model keys stripped:
+- per-child 16/0, benefit-table chat 96/0, benefit-table 107/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+Verdict: READY.
+
+## R278: #156 at 8a8dfcf (Test engineer F1 and F2; delta since 6ee2b18)
+
+Still READY. These are now on allow-lists:
+- the words of every condition (the model's and the row's own) must be in HARMLESS_CONDITION_WORDS, and a % refuses;
+- the printed line's words before and after the figure must be the benefit's name, NAME_WORDS or harmless words;
+- a leftover digit or number word in the question gives no count: "2 kids and 1 from my wife" gives null, and so does "if I die within one year", which is conservative.
+The positives still count 2: "two kids", and "from the child education fund for our two children".
+
+Optional Lows:
+- **L1.** countPays takes the name words from `st.text`. In the row path that is the server's own label, which is fine. In a path with no benefit table, it would be the model's text, so the model's words could widen the allow-list. Taking the name from the matched row's benefitName (or only from labelled text) would close this.
+- **L2.** HARMLESS_CONDITION_WORDS holds "not", "no" and "only". So a condition such as "This benefit is not payable under the voluntary plan" still lets the total show. The per-child card carries the same condition and the total card says "if this benefit's conditions are met for each child", so this is acceptable. It is noted because "not" and "only" can narrow a total.
+
+Checks on 8a8dfcf, run network-blocked with model keys stripped:
+- per-child 17/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with origin/main (44fb9ec) clean.
+
+## R279: #157 at e159247 (a limit's daily rate keeps its own currency; follow-up to R272)
+
+A limit's derived daily row now takes the rate's own printed currency:
+- a different stated currency gives no row;
+- a bare "$" leaves the currency null, where before it borrowed the limit's.
+That fixes "US$300 per day" under an S$ limit showing as S$300. The ICU path is unaffected: its `dailies` read ownCurrency first, and a null currency never matches a stated cap, so no row.
+
+Optional Low: ownCurrency takes the first figure with the same value anywhere in the excerpt. In a line such as "Capped at $200 per day … RM200 transport", it would give the bare-$ rate MYR. This is rare. Taking the currency at the rate's own position (the figure dailyRateOf matched) would be exact.
+
+Checks on e159247, run network-blocked with model keys stripped:
+- benefit-table chat 100/0, benefit-table 107/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- the per-child suite is not on main yet (#156);
+- tsc clean, next build passes, merge-tree with origin/main (fb1a769) clean.
+
+Verdict: READY.
+
+## R280: #156 at 11ef8cd (R278 L1, Test engineer F3)
+
+The content is READY:
+- the statement's own text no longer widens the word lists (R278 L1 is closed);
+- "either", "only", "older", "younger" and "than" are off the harmless list, allowed only in age-limit shapes, "only if/when/where", and "can only be claimed either under … Scheme".
+Checks: per-child 17/0, benefit-table chat 96/0, simple chat 84, r5 18/18, monetary-boundary 32, scenario-replay 22/22; tsc clean; next build passes.
+
+**Blocker: it no longer merges cleanly.** merge-tree against the new origin/main (fb1a769, after #154) gives a CONFLICT in package.json, where both add a test script. chat.ts and hook.ts merge on their own. Merge main into the branch, keep both script lines, and re-run the suites.
+
+## R281: #157 at afcce98 (Test engineer F1–F3; delta from e159247)
+
+READY.
+- dailyRateOf now returns the rate figure's own currency. A bare "$" gives null, and different printings give "mixed", which gives no row. ownCurrency is removed, so the R279 Low is closed. chatRows is the only caller of dailyRateOf.
+- In check.ts, figureCurrency reads the currency at each same-value figure's own position (benefit-rows statedCurrencyCode on the figure slice, which I checked: S$8,000 gives SGD, RM 8,000 MYR, £8,000 GBP, US$200 USD, $8,000 null). If that is none, it takes the page's declared currency. If a figure is printed in two ways, it gets none. The excerpt fallback is gone. Under the old code, "Up to $8,000, capped at US$200 per day" gave the 8,000 USD, because statedCurrencyCode on the whole excerpt returned USD. That is now fixed.
+- On the builder's question: a same-value figure in another currency elsewhere on the line now gives null (mixed), not a borrowed currency, which is the safe direction.
+
+Checks on afcce98, run network-blocked with model keys stripped:
+- benefit-table chat 100/0, benefit-table 107/0, parity 10/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main clean.
+
+## R282: #156 at 3d2650c (Test engineer F4, and main merged)
+
+READY.
+- 9c50dba: once the known shapes are taken out (age limits including "under the age of 21", and "within 30 days"), any digit left in a condition or in the printed line becomes a word no list holds, so there is no total. "single" is off the harmless list. Both changes only refuse more.
+- 3d2650c merges main fb1a769, which closes my R280 blocker. package.json keeps both per-child-test and the #154 test script, and merge-tree with main is now clean.
+
+Checks on 3d2650c, run network-blocked with model keys stripped:
+- per-child 17/0, benefit-table chat 99/0 (includes #154's ICU tests), benefit-table 107/0, simple chat 84, r5 19/19, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes.
+
+## R283: #156 at d39c3c3 (prompt only)
+
+READY. This one-line change to lib/simple-chat/prompt.ts follows the builder's paid check (US$0.11). The model is now told never to state, promise or describe a total for the children itself, in bottomLine or in any statement, and it keeps "never say it cannot be worked out". That closes a real gap: when the server shows no total card (for example on a single-child event), prose saying "the app works out the total" would promise a figure that never appears. The old clause "the app works out what that number of children could pay" is removed, so the model has nothing to echo. The code is unchanged since R282, so the R282 checks stand.
+
+## R284: #158 at 85ea61c (Home cost from a policy's printed premium)
+
+NOT READY, because of H1 and H2. I checked by running tablePremiumItems over made-up covers and records in a scratch script outside git.
+
+- **H1 (High) double counting.** A premium record for the same policy that is linked to another document, has different product wording and has no policy number does not stop the table item. The record and the printed premium are then both counted (probe: a record of S$470.85 with other wording still gave a table item of S$470.85). Fix: when a record of the same member has the same amount as c.premium or c.firstYearPremium, or the same insurer and no policy number to tell them apart, treat the cover as unsure and skip it (name it in the note). Unsure means no figure.
+- **H2 (High) lapsed or ended policies counted as current.** A lapse or termination letter that prints a premium and a frequency is counted as a current cost (probe: a lapse letter gave S$120 per month). Only the short-term `c.ended` is checked. Fix: skip documents whose status is lapsed or ended (reuse the status test in lib/chat/premium-answer.ts), and skip covers whose printed expiry or cessation date is before today.
+- **M1 (Medium) stale premium.** A renewable plan's schedule from 2019 counts its 2019 premium in 2026 (probe confirmed), and those plans reprice. Count a printed premium only when the document is current (its printed period covers today, or it is dated within about 13 months). Otherwise list the policy in the note and give no figure.
+- **M2 (Medium) one premium line counted twice.** The dedupe key includes productKey(product), so two covers from one document with different product names, both citing the same premium line, are counted twice (probe: two items of S$470.85). Dedupe on documentId plus the premium source excerpt only.
+- **M3 (Medium) wrong anniversary.** documentPeriodFrom can be an endorsement or letter date rather than the start of cover, so the first-year to later-year switch moves. Use the cover's startDate. Use documentPeriodFrom only when the document is a schedule or new-business document. Otherwise, when the first-year premium differs from the later premium, give no figure.
+- Low: a 29 February start gives an anniversary of 1 March, which is acceptable. A payer record held under another member is not seen by the guard. Raise it only if payer records are added.
+- Point 4, "unsure means no figure": it holds for a missing currency, a non-recurring frequency, two documents disagreeing, and a missing first-year start date. It does not hold for H1, H2, M1 or M3 above.
+
+Checks on 85ea61c, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main fb1a769 clean.
+
+## R285: #159 at 74c1b47 (document names in sentences)
+
+NOT READY, because of H1. I checked by running isMachineFilename, insurerShortName and documentName over made-up file and insurer names in a scratch script outside git.
+
+- **H1 (High) two documents get the same name, and code keys on the name.** Every document with no product name, a made-up file name and the same insurer and role gets one name ("AIA Singapore policy schedule"). With no insurer, every such schedule is "Policy schedule". Before, the made-up file names at least differed. Three places compare or key on the name:
+  - lib/chat/household-status.ts:120 whoIsCovered groups people by `d.name`. Two separate schedules, one for each of two people, become "AIA Singapore policy schedule covers Ann and Ben", which reads as one policy covering both. That is the wrong-person class.
+  - lib/chat/workflow.ts:980 resolves a card's contract by `text.includes(c.name)` only when exactly one contract matches. Two contracts with the same name give null, so the card loses its contract.
+  - lib/chat/workflow.ts:2253 drops a premium receipt when `c.name===d.name`.
+  Fix: key those three on the document or contract id, not the name. Also make fallback names unique within a household. Add a distinguishing detail: the policy number's last 4 characters ("ending 4821"; never the full number), or else the effective date. If two names are still equal, keep the readable file name.
+- **M1 (Medium) file names in other scripts are treated as made up.** The split is on [^A-Za-z0-9], so "保单 2024.pdf" and "生命保険証券.pdf" leave no word, and the person's own name is replaced by "AIA Singapore policy schedule". This matters for a SaaS used worldwide. Fix: split on /[^\p{L}\p{N}]+/u and count letters with \p{L}. Treat one or more letters from a script that is written without spaces (Han, Hiragana, Katakana, Thai) as a word. Low: two-letter names such as "GE.pdf", "CI.pdf" and "HL 2024.pdf" are also lost. That falls back safely, so it is acceptable.
+- **M2 (Medium) the insurer short name cuts into the last word.** The company-form pattern has no word boundary, and "co" is in the list, so "MetLife Mexico" gives "MetLife Mexi", "Allianz Monaco" gives "Allianz Mona", "Mapfre Puerto Rico" gives "Mapfre Puerto Ri" and "Tesco" gives "Tes". Fix: require a space, comma or "(" before the form word, i.e. `(?:^|[\s,]+)\(?(?:pte|private|…|company)\.?\)?\.?$`, and keep the existing fallback when nothing is left. These come out correctly today: "Prudential Assurance Company Singapore (Pte) Limited", "Great Eastern … (Malaysia) Berhad", "HSBC Life (Singapore) Pte. Ltd.", "NTUC Income Insurance Co-operative Limited", "Swiss Re Life & Health Asia Pte Ltd". Low: "Pty" is not removed ("Discovery Vitality Pty").
+- **M3 (Medium) common device file names still pass as chosen.** These still show raw in the note:
+  - a UUID with an all-letter segment ("817d6e8b-874f-4527-beef-…" gives "817d6e8b 874f 4527 Beef 05e03adaf14c"; about 1 in 16 UUIDs has one);
+  - "CamScanner 10-11-2024 14.32" gives "Cam Scanner 10 11 2024 14.32";
+  - "WhatsApp Image 2024-10-11 at 14.32.11";
+  - "PXL_20241011_…", "DSC_0001" and "Screenshot_…_Chrome".
+  Fix: match the UUID shape first. Treat as made up a file name whose only words are device or app words (camscanner, whatsapp, pxl, dsc, dcim, screenshot, chrome, adobe, lens, at, …) next to a run of 6 or more digits. This only affects how a name reads, never an amount.
+- Low: the app-screenshot line now reads "“IMG_2041.jpg” is a screenshot of the insurer’s app showing AIA Singapore app screenshot". Skip the "showing" part when the name came from the fallback.
+- Low: whoIsCovered byName now matches kind words of 5 or more letters ("schedule", "letter", "wording", "receipt") that are in every fallback name. "Who is covered under my schedule" matches every fallback-named schedule. That is arguably right, but it is new.
+
+Checks on 74c1b47, run network-blocked with model keys stripped:
+- r5 20/20 (P5 included), simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22;
+- all other rag2 suites match main: adversarial (U1), conv, fix, live-budget, live-ledger and tools (F4) fail the same way on main 5000e99, because they need a DB or the import rule;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R286: #159 at 6bbdea9 (re-review after R285 and the TE's F1–F3)
+
+NOT READY, because of M1. It is a small fix. H1 from R285 works when the whole set of documents is named together. The R285 M1–M3 points are fixed, and I checked each with a probe:
+- "保单 2024", "生命保険証券", "GE" and "My CI" are now names a person chose;
+- the UUID with "beef", CamScanner, WhatsApp, PXL, DSC and Adobe Scan names are now made up;
+- "MetLife Mexico", "Allianz Monaco" and "Tesco" keep their letters, and the Singapore forms are still removed;
+- two fallback names with different policy numbers get "(ending 4821)" and "(ending 7777)".
+
+- **M1 (Medium) the same document can get two names, because each call site names a different set.**
+  - buildContracts names the whole inventory.
+  - documentsByPerson names only the people passed in.
+  - retrieveContractSources (lib/policies/inventory.ts:312) names only the ready documents of the contracts selected for this question.
+  So when two colliding schedules exist but only one contract is selected, that contract is "AIA Singapore policy schedule (ending 4821)" while its citations say "AIA Singapore policy schedule". Two effects:
+  - lib/claims/answer-shape.ts:57 compares `c.policyName === label`, which fails, so the card loses its page.
+  - The bare name is a substring of both suffixed names, so `item.title.includes(c.policyName)` can match the other policy's card.
+  Fix: name once over the account's documents, for example a `display_name` set in loadPolicyInventory with documentNames over every document, and reuse it everywhere. Give documentsByPerson and rag2's unlinked list the same account-wide set (one extra id/name query, or name the linked and unlinked rows together).
+- **M2 (Low–Medium) a fallback name that matches a chosen name is not told apart.** Only fallback names are grouped. So a made-up file name with no insurer ("Policy schedule") next to a person's own "Policy schedule.pdf", or a fallback "AIA Singapore policy schedule" next to a product named exactly that, keep the same name (probe). Fix: group by every final name, and rename only the fallback members.
+- Low: when two fallback names can't be told apart (one number missing, or the same last 4), the readable file name comes back. For two UUID files that is "817d6e8b 874f 4527 A45d 05e03adaf14c", the very text this PR set out to remove. Consider the upload date ("uploaded 3 Oct 2026") or the effective date before falling back to the file name.
+- Low: the app-screenshot check `/\bapp screenshot$/` misses the suffixed form ("… app screenshot (ending 4821)"), so "showing …" comes back. Low: "Screenshot_20241011-143211_Chrome" still counts as chosen ("Chrome"). Low: "Pty" is still not removed.
+- I agree with leaving whoIsCovered's token matching as it is.
+
+Checks on 6bbdea9, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, monetary-boundary 32, scenario-replay 22/22, roster 10/10, release 23/23, scenario 16/16, presentation passes;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R287: #159 at ab58477 (per-document names)
+
+READY, with one Medium I recommend fixing before merge.
+- R286 M1 is closed. documentName depends only on its own document: the product name, else a chosen file name, else the insurer short name plus kind plus "(ending NNNN)" from its own policy number. Every site now passes policy_number: buildContracts, citations, documentsByPerson, rag2 unlinked, and policy-answer (its docRows already selects policy_number). So a contract and its citations carry the same name. The Home premium note takes contract names (premium-summary.ts:114), so it is covered.
+- The R286 Lows are closed: the screenshot line allows "(ending …)", Chrome/Gmail/Safari/iOS/Android/Edited are device words, and Pty is removed.
+- I accept leaving M2 as is.
+- **M1 (Medium, recommended) two no-number fallback names still merge people.** Two documents with no product name, a made-up file name, no policy number and the same insurer and role get one name. On main they had different (ugly) file names. lib/chat/household-status.ts:120 whoIsCovered groups by `d.name`, so two such schedules for two people read as "AIA Singapore policy schedule covers Ann and Ben". Fix in one line: group plans by `d.id` and print `d.name`. Likewise compare ids at lib/chat/workflow.ts:2253 (premium receipt vs contract). This is independent of naming, so equal product names on main stop merging too.
+- Low: a placeholder number prints as an ending: "N/A" gives "(ending NA)" and "TBA" gives "(ending TBA)". Consider requiring a digit in the last 4.
+
+Checks on ab58477, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- on ef57002 also monetary-boundary 32, roster 10/10, release 23/23, scenario 16/16;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R288: #159 at a3e93b7
+
+READY.
+- R287 M1 is fixed. whoIsCovered groups by document id and prints the name. So two equally named schedules for two people give two sentences, one family document that lists both still gives "covers Ann and Ben", and a repeat of the same sentence (one person's schedule and its renewal) is said once.
+- I accept leaving workflow.ts:2253 as is: a receipt's fallback kind differs from a schedule's, so a fallback name can't make them equal.
+- An ending now needs a digit in the number, so "N/A" and "TBA" give no ending.
+- Low, no change needed: a family document covering Ann and Ben next to a renewal that names only Ann gives two true sentences ("covers Ann and Ben. … covers Ann.").
+
+Checks on a3e93b7, run network-blocked with model keys stripped:
+- r5 20/20, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22, scenario 16/16, monetary-boundary 32;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R289: #160 at fa8a95e (documents filed as the wrong type)
+
+NOT READY, because of H1. I checked by running schedulePage and deterministicDocumentRole over made-up pages, on the PR and on main 5000e99, in a scratch script outside git.
+
+- **H1 (High) wordings, specimens and product summaries become personal schedules.** schedulePage's "named person" test accepts any two words after a label, and its number test accepts the label "Policy number" with no number after it. So all of these now return personal_schedule, which is a personal-authority role, so their figures count as the person's own cover:
+  - a policy wording whose "Schedule of Benefits" page has "Policy No.: as shown in your certificate" and the header row "Insured Person  Plan A  Plan B";
+  - a "SPECIMEN" "Schedule Page" with "Policy Number  XXXXXXXX" and "Life Assured  Date of Birth  Gender";
+  - a page with a blank "Policy number:" and "Policy owner signature date";
+  - a product summary whose "Schedule of Benefits" says "Policy number to be issued" and "Insured person aged 1 to 65".
+  On main all four are policy_wording. Fix, so the rule matches the shape you described:
+  - the number label must be followed on the same line by an actual number (at least 6 letters or digits, at least 4 of them digits, not all X);
+  - the name must be checked on the original-case line: the label, then ":" or a tab or 2 or more spaces, then 2–4 words that each start with a capital, none of them from a field-word set (date, birth, gender, age, aged, plan, signature, sum, assured, insured, member, class, occupation, nric, …);
+  - give no match when the document prints "specimen", "sample" or "illustration".
+  Add these four as role-test cases.
+- **M1 (Medium) an endorsement that reissues the schedule page is now filed as the schedule.** Example: a cover letter, then "SCHEDULE PAGE" with the policy number, the life insured and "Endorsement No. 3 effective 1 Oct 2026". Main says endorsement. If line 115's real-endorsement markers ("endorsement no. N" or "this endorsement") appear, keep endorsement, so that the Manulife pack's generic "Endorsement: any change to this policy" still files as the schedule.
+- What is right: the pack (letter, SCHEDULE PAGE, wording) now gives personal_schedule where main said insurer_letter, because "schedule page" is now a TITLE, so correspondenceRole steps aside. Placing the rule after the opening-endorsement rule and before the endorsement-anywhere rule is right. The sample weights (endorsement 8→3, +20 for a schedule title in the first 4 lines) are sound. Note that line 108 already files any document that prints "policy schedule" anywhere, so the new rule only adds the "schedule page" and "schedule of benefits" titles, and "schedule of benefits" is the risky one.
+
+Checks on fa8a95e, run network-blocked with model keys stripped:
+- documents:role-test 18 cases, r10 messy docs, benefit-table intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R290: #160 at d3099bd (TE F1–F3)
+
+NOT READY, because R289 M1 is still open. H1 is fixed: the four R289 shapes (wording "Schedule of Benefits" with a header row, SPECIMEN, a blank number with a signature line, product summary) are all policy_wording again. The real packs still pass: the colon form, the lone number under "POLICY NUMBER", the all-capitals name, and "binti". A "Proposal Number" page with "Policy Number: To be advised" is refused.
+
+- **M1 (Medium, from R289, still open) an endorsement that reissues the schedule page is filed as the schedule.** Example: a cover letter, then SCHEDULE PAGE with the number, the life insured and "Endorsement No. 3 effective 1 Oct 2026". This PR gives personal_schedule; main gives endorsement. Fix: skip schedulePage when the document prints a real endorsement marker ("endorsement no. N" or "this endorsement"). The Manulife pack's generic "Endorsement: any change to this policy" is unaffected.
+- **On the coordinator's question (the NOT_A_NAME deny-list):** a miss can upgrade a role only on a page that already has "SCHEDULE PAGE", "Policy Schedule" or "Schedule of Insurance" in its first 4 lines, a policy number with a digit beside its label, and no specimen, sample or group words. Line 108 on main already files any document that prints "policy schedule" anywhere as personal_schedule, so the only newly reachable title is "SCHEDULE PAGE". I found two misses that upgrade a page; both are Low, given that bound:
+  - header rows pass as names: "Life Assured  Age Next Birthday  Gender", and "Life Assured  Main Life" / "Second Life Assured  Not Applicable". Add age, next, birthday, date, birth, gender, main, joint, second, life, not, applicable, confirmed, self, nric, occupation, class and relationship;
+  - an illustrative brochure page ("For illustrative purposes", "Life Insured  John Doe") passes, because only "illustration only" is refused. Refuse illustrative|illustration|example|dummy|quotation|proposal anywhere on the page.
+  Neither can change an amount on its own, but a personal-authority role on a brochure would count its figures as the person's own cover. So treat the brochure one as needing a fix, not optional.
+- Low, safe direction: a non-Latin name ("Life Insured  陈美玲") gives no match and falls back to main's behaviour.
+
+Checks on d3099bd, run network-blocked with model keys stripped:
+- role-test 21, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R291: #160 at fbd0bea (supersedes R290, which was written for d3099bd and not sent)
+
+NOT READY, because of H1.
+- R289 M1 and the R290 header row are fixed: the reissued schedule page with "Endorsement No. 3" is an endorsement again, and "Life Assured  Age Next Birthday  Gender" is no longer a name.
+- **H1 (High) the new endorsement guard brings back the bug this PR fixes.** The marker check runs on every page. A policy pack issued with a rider endorsement page (cover letter, then SCHEDULE PAGE with the number and the life insured, then the wording, then "ENDORSEMENT NO. 1 / Waiver of Premium Rider / This endorsement forms part of the policy") now gives schedulePage null and falls through to line 115, so it is filed as an endorsement. Packs commonly carry riders like this. Check whether the stored Manulife or CI II packs print such a page. Fix: look for the marker only on the schedule page itself and on the pages before it (cover letter, opening). A rider endorsement printed after the wording must not count.
+- **M1 (Medium) an illustrative page still passes.** `\billustration\b` does not match "illustrative", so "For illustrative purposes" with "Life Insured  John Doe" gives personal_schedule, a personal-authority role on a brochure. Use `illustrat(?:ion|ive)|example|dummy|quotation|proposal`.
+- Low: "Life Assured  Main Life" and "Second Life Assured  Not Applicable" still read as names. Add main, joint, second, life, not, applicable, confirmed and self. Low, safe direction: a non-Latin name gives no match.
+
+Checks on fbd0bea, run network-blocked with model keys stripped:
+- role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R292: #160 at dbc8881
+
+READY.
+- R291 H1 is fixed (ca3ef58). The endorsement marker counts only on or before the schedule page. A pack with a rider "ENDORSEMENT NO. 1 … This endorsement forms part of the policy" page after the wording is personal_schedule again. The reissued schedule page carrying "Endorsement No. 3" stays an endorsement.
+- R291 M1 is fixed: illustrative, dummy and quotation pages are refused, and the "For illustrative purposes / John Doe" page is policy_wording. I accept leaving out "example" and "proposal": real schedules say "issued on the basis of your proposal", and a page that says "Proposal Number" with "Policy Number: To be advised" is already refused by the 4-digit number rule.
+- The Low is fixed: "Main Life" and "Not Applicable" are not names. A word added there can only refuse more.
+- All R289–R291 probes give the intended role. The four real-pack shapes (colon form, lone number, all-capitals name, "binti") still give personal_schedule. A non-Latin name gives no match, which is the safe direction.
+
+Checks on dbc8881, run network-blocked with model keys stripped:
+- role-test 22, r10 messy docs, intake 39/0, r5 19/19, simple chat 84, benefit-table chat 106/0, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R293: #158 at f3767c0 (re-review of R284)
+
+NOT READY, because of H1 and the merge conflict. I checked by running tablePremiumItems and printedStatus over made-up covers, records and pages in a scratch script outside git.
+
+Fixed (probe):
+- R284 H1: a same-policy record from another document, with other wording and no number, now stops the table premium. Records for another insurer or with a different number still let it count.
+- R284 M1: a 2019 schedule with no end date is left out and named. A level term with a printed end in 2060 counts.
+- R284 M2: two covers on one document give one premium.
+- R284 M3: with only the document's periodFrom there is no figure. The cover's start date or the page's labelled policy start gives the first-year switch on 19 Oct 2027.
+- Two documents for one policy give no figure. "6-monthly" gives none.
+
+- **H1 (High, rest of R284 H2) a terminated, cancelled or surrendered policy still counts.** printedStatus finds a lapse only in "lapsed on DATE". These all give "unknown":
+  - "terminated with effect from 1 October 2026";
+  - "cancelled your policy on 1 October 2026";
+  - "surrendered on 1 October 2026";
+  - "void from inception";
+  - "has lapsed" with no date.
+  So a letter that prints its premium, a frequency and a start date within 396 days is counted as current cost. coversOf builds covers from every reading kind except illustration, letters included. Fix with an allow-list: pass the reading's document kind into PersonCover, and take a table premium only from kind "personal_proof" (a schedule or certificate). As a second guard, treat terminat*, cancel*, surrender*, void, "no longer in force" and an undated "has lapsed" as ended.
+- **Merge conflict:** lib/benefit-table/check.ts conflicts with main 5000e99. Merge main and re-run the suites on the merge.
+- **M1 (Medium) a cover with no product name prints an empty name in the note.** The leftOut list holds null, so the note reads "leaves out , …" or "leaves out : the premium …". Name it as insurer + "policy", else "one policy".
+
+Checks on f3767c0, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 96/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes;
+- merge-tree with main 5000e99 has a CONFLICT in lib/benefit-table/check.ts.
+
+## R294: #158 at efeb797 (re-review of R293, main merged)
+
+NOT READY, because of H1. It is a small fix.
+
+Fixed (probe):
+- R293 H1: a premium from a "letter" reading is left out and named, and so is a premium printed on a page that says the policy ended.
+- R293 M1: a cover with no product name is named "Example Life Ltd policy".
+- The main merge is clean, and #155's premiumParts are kept.
+- Every earlier probe still holds. The same-policy record is now named as "maybe counted", and two documents for one policy are named.
+
+- **H1 (High) a premium record under another number for the same policy now double-counts.** Since 3a5a2e2 (TE O1/O4), two numbers that differ mean "different" before the amount or insurer is looked at. A premium record whose number is a receipt or contract number ("C98765"), for the same insurer and the same S$470.85, gives the table item S$470.85 on top of the record (probe). That is double counting, the worst-amount direction. Fix: when the numbers differ but the amount (or first-year amount) is equal and the insurer is the same, return "maybe", so the item is left out and named. Two children's identical plans then also become "maybe counted", which is the safe direction and is named in the note.
+- Low: a premium with an unknown frequency ("6-monthly") or no stated currency is dropped without a leftOut entry. If the policy has no premium record, the missing note already names it, so this is acceptable.
+
+Checks on efeb797, run network-blocked with model keys stripped:
+- premium:table-test passes, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R295: #158 at b342309
+
+READY.
+- R294 H1 is fixed. A record under another number, for the same insurer and the same S$470.85, is now "maybe counted": left out and named, never added (probe). A record with a different number and a different amount still lets the item count.
+- The R294 Low is fixed: an unknown frequency ("6-monthly") or currency is named as "unclear".
+- Every probe from R284–R294 gives the intended result:
+  - letters, ended pages, lapsed documents and stale documents are left out and named;
+  - one premium per document;
+  - the first-year switch only from the cover's start date or the page's labelled policy start;
+  - two documents for one policy are named;
+  - a cover with no name falls back to the insurer.
+  Each unsure drop is named in the note and makes `complete` false.
+
+Checks on b342309, run network-blocked with model keys stripped:
+- premium:table-test 13/0, r5 20/20, simple chat 84, benefit-table chat 106/0, benefit-table 107/0, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 5000e99 clean.
+
+## R296: #161 at 197d191 (premium figure set over or under its label)
+
+NOT READY, because of H1. I checked by running stackedPremiumLines over made-up page text in a scratch script outside git.
+
+- **H1 (High) in a label-over-value layout, the value of the label above is paired with PREMIUM.** When the premium's own value line has words after the figure ("S$399.24 per month", "S$470.85 monthly from 2nd year", "See premium table"), it is not a STACKED_FIGURE. So the figure above the PREMIUM label, which belongs to the label above it, pairs downward and is read as the plain premium:
+  - "RIDER PREMIUM / S$50.00 / PREMIUM / S$399.24 per month" gives 50;
+  - "FIRST YEAR PREMIUM / S$376.68 / PREMIUM / S$470.85 monthly from 2nd year" gives 376.68;
+  - "SUM ASSURED / S$100,000.00 / PREMIUM / See premium table" gives 100,000;
+  - "Waiver of Premium Rider / S$12.50 / PREMIUM / …" gives 12.5;
+  - "S$200.00 / PREMIUM / DEPOSIT PAID" gives 200.
+  The page-only path (filling c.premium when the reading gave none) then sets the premium, because the same-line count sees no other plain line. With "Payment frequency : Monthly" elsewhere on the page, Home (#158) would count S$100,000 a month. Fix with an orientation allow-list. Accept a figure over its label only when both hold:
+  - the line above the figure is the start of the page, or a no-digit line that already has its own figure directly above it (the value-over-label chain, as in "S$100,000.00 / SUM ASSURED / S$399.24 (MONTHLY) / PREMIUM");
+  - the line below the label holds no money figure.
+  Mirror this for a figure under its label. Anything else gives none. Add the five cases above as premium:table-test cases.
+- Correct as it stands: the ReadyBuilder value-over-label shape gives 399.24 monthly, and the two-label label-over-value shape ("SUM ASSURED / S$100,000.00 / PREMIUM / S$399.24") gives none.
+- Low: a stacked "(SINGLE)" premium is read with frequency "single". #158's premiumsPerYear has no "single", so it is named "unclear", which is safe.
+
+Checks on 197d191, run network-blocked with model keys stripped:
+- premium:table-test 15/0, benefit-table 107/0, benefit-table chat 107/0, r5 20/20, simple chat 84, monetary-boundary 32, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main 17074d4 clean.
+
+## R297: #162 at 6e77c3f (replaces #161; stacked premium with harmless neighbours)
+
+NOT READY, because of H1 and H2. I checked by running stackedPremiumLines over made-up page text in a scratch script outside git. All five R296 cases now give none, and ReadyBuilder's shape with a "CURRENCY\tSINGAPORE DOLLARS" row gives 399.24 monthly.
+
+- **H1 (High) a blank line counts as harmless, and PDF text is full of blank lines.** In a label-over-value schedule that separates rows with a blank line, the figure above PREMIUM belongs to the label above it:
+  - "RIDER PREMIUM / (blank) / S$50.00 / PREMIUM / (blank) / S$399.24 (MONTHLY)" gives 50;
+  - "FIRST YEAR PREMIUM / (blank) / S$376.68 / PREMIUM / (blank) / S$470.85 per month" gives 376.68.
+  Fix: make a blank line transparent, not harmless. Skip blank lines and judge the next non-blank line. Pairing should also look past blank lines, so that in the first case PREMIUM sits between two figures and the page gives none.
+- **H2 (High, your question) a multi-cell row with no digit can be the header that owns the lone figure below it.** Examples:
+  - "RIDER\tSUM ASSURED / S$50,000.00 / PREMIUM / (blank) / S$399.24 per month" gives 50,000;
+  - "SUM ASSURED\tTERM / S$100,000.00 / PREMIUM / (blank) / 20 years" gives 100,000.
+  The sum-insured guard catches the second only when the reading's sumInsured equals the figure, and never a rider's or a total's sum assured. Fix with an allow-list: accept a several-cell row only as a key–value pair whose value is not a field name. Simplest is to allow just the shapes stored data needs: "CURRENCY" followed by a currency name or code, and any other exact key–value pair seen on stored schedules, with each key listed. A header row of field names must give none.
+- Correct as it stands: value-over-label with blank lines ("(blank) / S$399.24 (MONTHLY) / PREMIUM / (blank) / S$100,000.00 / SUM ASSURED") gives 399.24 monthly. R1 (a premium equal to the sum insured needs its own premium line) is right. But note that a stacked line counts as that line, so H2 also feeds the reading path.
+- Low: a stacked "(SINGLE)" premium gives frequency "single", which #158 names "unclear" (safe).
+
+Checks on 6e77c3f, run network-blocked with model keys stripped:
+- premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R298 — #162 stacked premium lines, re-review of c3da070: READY
+
+Both R297 Highs are fixed.
+- H1 (blank lines): blank lines are filtered before pairing, so a blank-separated header row or rider row is now seen as a neighbour and refuses the figure. Probed: gives [].
+- H2 (figure-side neighbour): only the page's currency row is harmless on the figure's other side. A cover-table header, a sum assured, a fee or any other row there gives none.
+
+Builder's question, "is a row of 3+ field names with no figure safe below the label?": yes.
+- The figure's other side admits only the currency row, which is a complete key and value, so it cannot own the figure. The only label left that can own the figure is PREMIUM.
+- A row with no digit cannot be PREMIUM's own money value, so it cannot take PREMIUM away from the figure either.
+
+Probes (made-up schedules):
+- every earlier bad case gives []: riders, first year, sum assured, blank-separated rows, header-owned figures, Waived, 2-cell header, currency row with extra words, rider chain, label over value;
+- 399.24 MONTHLY is read for: a currency row above the figure with a 4-cell header below PREMIUM, the earlier ReadyBuilder shape, and "CURRENCY : SGD" with PREMIUM at the page edge.
+
+Known cost, accepted: the bare value-over-label layout without a currency row, with a cover-table header under the figure, now gives none (unsure case shows no figure).
+
+Checks on c3da070, run network-blocked with model keys stripped:
+- premium:table-test pass, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R299 — #162 at 8c5e69b (on top of c3da070): READY
+
+- check.ts:419: the reading path now refuses a stacked figure equal to the sum insured (TE S1). With the stacked match refused, a bare figure line carries no premium word, so premiumLineLabel gives no label and the premium is dropped. This matches the page-only path.
+- Five new made-up regressions (stacked sum insured quoted by the reading, a figure in a 3-cell row under the label, "Waived" and a 2-cell value under the label, a currency key with no currency) all give none. R298's verdict on c3da070 carries over.
+
+Checks on 8c5e69b, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium:table-test 16/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- tsc clean, next build passes, merge-tree with main dc4210a clean.
+
+## R300 — #163 unread premium covers, 4bc052f: NOT READY (2 High, 1 Medium, 3 Low)
+
+**H1 — next build fails.** scripts/table-premium-regressions.ts:294:113 gives TS2322 "Type 'null' is not assignable to type 'string | undefined'" (the new test passes `product: null` to the `cover` helper). `tsc --noEmit` exits 2, and `next build` stops at "Failed to type check", so production would not deploy. Fix: widen the helper's product type, or pass `undefined`.
+
+**H2 — a second policy on one document is still left out silently** (premium-summary.ts unreadPremiumCovers: `done` and `withPremium` are keyed by document only). Made-up probes:
+- A: a combined schedule with Harbour Protector HL-1001 and Harbour Health Saver HL-2002, neither premium read. Only "Harbour Protector" is named, and Health Saver is silent.
+- B: the same schedule with HL-1001's premium read and HL-2002's not. Nothing is named. tablePremiumItems counts HL-1001, so the note looks complete without HL-2002.
+This is the defect the PR fixes, on a combined schedule, which is the layout plainPremiumLineCount already expects ("one per life, or per policy on a combined schedule"). Fix: key both sets by document plus policy (the cover's policy number, else the product key). Riders share their base plan's product and number, so they stay one entry.
+
+**M1 — "maybe" on the same insurer alone softens a real omission.** For an unread cover the hint has no amounts, so samePolicy gives "maybe" whenever neither side prints a number and the insurers match. Probe C: an unread Harbour Protector beside a counted record for Harbour Travel Basic (same insurer, other product, no numbers) gives maybe_counted. The note then says "it may be the policy of a premium already counted, so it is not added again", but there is no premium to add, and it reads as if the policy is counted. Fix: give maybe_counted only when maySameProduct links the names, and otherwise "unread". If the maybe wording stays, say "no premium could be read from its documents, and it may be the policy of a premium already counted". complete is false either way, so no figure is wrong.
+
+Low:
+- L1: when the same policy appears in the inventory under another document (say, the inventory lists a policy summary and the table shows an unconfirmed schedule of it), it can be named twice, under `missing` and as unread, with two different names. Suggest a samePolicy check against the inventory's missing contracts (their numbers and names).
+- L2: when the inventory cannot be read, the unread step is skipped silently, and complete can still be true. Suggest complete=false when `inventoryRead` is false and some table document had no premium.
+- L3: the policy_pages text query now runs for every table document on each Home load, not only for documents with a premium. That is fine for now but worth watching on large libraries.
+
+What checks out:
+- No wrong person: the covers come from this person's own benefit-table rows (dashboard route, tableFor → person.covers), and the records come from this member only.
+- No double naming against tablePremiumItems: every cover it handles has premium>0 and is not ended, and those documents are in withPremium.
+- Deleted and superseded documents are skipped, because they are not in `documents` (activePredicate, superseded_at).
+- An old schedule with no end date (probe D, start 2019) is named "unread". That is acceptable, since it may be a whole-life policy that is still held.
+
+Checks on 4bc052f, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium:table-test 18/0, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, simple chat 84, scenario-replay 22/22;
+- **tsc exits 2 and next build fails (H1)**; merge-tree with main b865388 is clean.
+
+## R301 — #163 at 31fe4c3: NOT READY (R300 H2 and M1 still open, plus a new High)
+
+- R300 H1 is fixed (68cbf94). tsc is clean and next build passes.
+- R300 H2 is still open. Probe A: a combined schedule with two policies, neither read, names only the first. Probe B: one read and one not names nothing.
+- R300 M1 is still open. Probe C: same insurer, other product, no numbers still gives maybe_counted.
+
+**H3 (new) — the ended tests now drop held policies silently.** A cover is skipped with no note when its page is in endedPages, its printed period has ended, or it started more than 396 days ago with no end. In tablePremiumItems, each of these is *named* "not_current". Here none is named. Made-up probes, with today = 28 Oct 2026:
+- E: a whole-life schedule started 2019-01-05 with no end printed gives [], so a policy that is still held is left out silently. Old schedules with no end printed are the normal case for whole life and endowment policies.
+- F: a schedule page reading "This policy will be terminated if the premium is not paid within the grace period." matches ENDED_WORDS (bare "terminated") and gives [].
+- G: a yearly term schedule whose period ran to 2026-03-31 gives []. A renewal that was not uploaded is still a held policy.
+Fix: skip only what is proven ended (c.ended, or doc.lapsedOrEnded from printedStatus). Name every other ended-test hit as "not_current", the same as tablePremiumItems. The unsure case is named, never dropped.
+
+Checks on 31fe4c3, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 18/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R302 — #163 at 4114756 (via bb3d83c): READY
+
+All R300 and R301 findings are closed. Made-up probes:
+- H2: A (two policies on one schedule, neither read) names both. B (one read, one not) names Harbour Health Saver.
+- M1: C (same insurer, other product, no numbers) now gives "unread", not maybe_counted.
+- H3: D, E, F and G (an old schedule; a 2019 whole-life with no end; "will be terminated if unpaid"; a yearly term whose period has run out) are each named "unread_old". The note says the documents may not show the policy as it is now.
+- Proven ends are still dropped: a lapsed document (I) and an ended cover (J) give [].
+- L1 and L2 are fixed: a policy the inventory names as missing is not named twice, and when the inventory fails, every unread policy is named. L3 is kept, which is acceptable.
+
+Low, accepted (safe direction, the total is marked incomplete): a cover with no policy number beside a numbered cover of the same policy on one schedule is keyed apart. So, for example, an unnumbered rider row next to a numbered base plan whose premium is counted names the plan as "unread" (probe H). This is extra naming, never a silent omission or a wrong figure.
+
+Checks on 4114756, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R303 — #163 at 9bc3927: NOT READY (1 High, 2 Medium)
+
+R302's probes A to D still pass. The new grouping falls back to the *document's* filed policy number, which is not per-policy evidence. Made-up probes on one schedule with Harbour Protector and Harbour Health Saver. The covers print no number, and the document is filed under HL-1001:
+
+**H1 — L: Protector's premium read, Saver's not → [] (silent).** premiumRead treats any cover whose numberOf() is set as tied to a read premium with the same key. Here numberOf falls back to the document number, so Saver is hidden by Protector's premium. This is R300 H2-B again, through the document-number fallback. Fix: tie by number only when the covers' *own* printed policyNumber matches. With only the document's number, use the product rule (r === c or oneProduct), as for no number.
+
+**M1 — K and M: neither read → only "Harbour Protector" is named** (both with only the document number and with no numbers). The group takes its name from its first cover, so a second plan on the document is silent. Fix: within a group, name each distinct product that oneProduct does not link to another. If TE R1b's case is riders that carry their own product names, naming them as well errs toward extra names, which is the safe direction.
+
+**M2 — N: a combined schedule with HL-1001 and HL-2002 printed per cover, plus one premium record from that document that has no number and no product → [] (both silent).** link() returns "same" for every group of the document whenever hint.number is set and the record has no number. Fix: when the document has more than one numbered group, a record from it that has no number and no product links "maybe", not "same", so each policy is named maybe_counted.
+
+Checks on 9bc3927, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R304 — #163 at ba629c8: NOT READY (2 High)
+
+R303 H1, M1 and M2 are fixed. Probes L, K and M now name Health Saver, and N gives maybe_counted for both policies. Two more silent paths remain. Made-up schedules: one document holding Harbour Protector and a second plan, with no policy number of their own on the covers.
+
+**H1 — P: Protector (end 2040) + Harbour Whole Life (start 2019, no end) → only "Harbour Protector".** The R5 rule `live = products.filter(p => p.some(g => !g.old))` drops every product whose covers are all "old" whenever another product is current. But "old" includes the whole-life shape (old start, no end) and an ending word on the page. R301 H3 decided those are held policies to name. So a whole-life plan beside a term plan on one schedule is left out silently. Fix: apply R5 only to covers of the *same* product (a rider row whose term ran out). Never drop a different product. It may be named with the unread_old wording, or joined into the name.
+
+**H2 — Q: the document is filed under HL-1001, a counted record from it prints HL-1001 and "Harbour Protector", and Health Saver is unread → [] (silent).** In link(), hint.number falls back to doc.policyNumber, so the record's number matches the *document's* filed number and returns "same" for Health Saver too. This is R303 H1 again, on the record side. Fix: tie a same-document record by number only against the cover's own printed policyNumber. Otherwise use the product rule: the same product gives "same", a record naming another product gives "maybe", and no product gives "same" only when numbersOn ≤ 1.
+
+Low: when one product in an entry is maybe_counted and another unread, the whole entry is labelled maybe_counted. complete stays false.
+
+Lesson for this PR: every `continue` or filter in unreadPremiumCovers is a place where a policy can drop silently. Before the next push, list them all and give each one a made-up probe: a held policy beside it on the same document, with no own number.
+
+Checks on ba629c8, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 19/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R305 — #163 at d6c83cd: NOT READY (1 High)
+
+R304 H1 and H2 are fixed:
+- P names "Harbour Protector and Harbour Whole Life".
+- Q from the same document gives maybe_counted. Q from another document gives unread.
+- Earlier probes A–D, K, L and N are unchanged and correct.
+- T (one plan plus a rider, record printing the filed number) is skipped as "same", which is correct.
+- S (record from another document printing the filed number, no product) names both. That leans toward extra names, which is safe.
+
+**H1 — R: a schedule with two products and no numbers of their own on the covers (filed under HL-1001), plus a counted record from that document that has no number and no product → [] (both silent).** In link(), with hint.number null (productsOn = 2), the else branch returns "same" when `!i.product_name && numbersOn(documentId) <= 1`. numbersOn counts only the covers' own numbers, which is 0 here, so one bare record ties every product on the document. This is R303 M2 again, with products in place of numbers. Fix: require `numbersOn(documentId) <= 1 && productsOn(documentId) <= 1` for a bare record to be "same". Otherwise give "maybe", so each plan is named maybe_counted.
+
+Low, kept from R304: an entry that mixes an old product with a current one is worded "unread", without the "may not show the policy as it is now" clause.
+
+Checks on d6c83cd, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R306 — #163 at 7750bd3: READY
+
+R305 H1 is fixed. A bare record from the same document is "same" only when the document holds at most one number of its own and one product. Made-up probes:
+- R (two products, filed number, bare record) and R0 (no filed number) each name both plans as maybe_counted.
+- T (one plan plus a rider, bare record) is still "same", so nothing is named.
+- U (a plan plus a row with no product, bare record) names the plan as maybe_counted. This is the safe direction: an extra name, never a drop.
+- A–D, K, L, N, P and Q are unchanged from R305 and correct.
+- Every drop left has a probe beside a held plan: a proven end or lapse, not a personal proof, a premium read on the same product or own number, the inventory naming the document, and a "same" link.
+
+Low, accepted: a mixed entry carries one reason, as TE S10 grades it. complete stays false, so no figure is wrong and no policy is hidden.
+
+Checks on 7750bd3, fresh worktree with npm ci, network-blocked with model keys stripped:
+- premium 20/0, benefit-table 107/0, chat 107/0, r5 21/21, simple 84, replay 22/22;
+- tsc clean, next build passes, merge-tree with main b865388 clean.
+
+## R307 — overnight batch on main b865388: #164 NOT READY, #165 NOT READY, #166 READY
+
+### #164 Documents card drops plan-type guesses (537d0ca): NOT READY (1 Medium, 2 Low)
+- The boundary is right. isToConfirm rows are the schedule seeds (lib/ledger/store.ts scheduleSeeds): PRODUCT_DEFAULTS events for a plan of that kind, all "proposed". They are guesses from the plan type, so removing them from the card follows the owner rule. "Found" (confirmed, wording or person rows) is unchanged.
+- On R32-1: changing the expectation is justified. The old assertion required the guess line that the rule now forbids.
+- **M1 — the new R32-1 assertions are vacuous.** `found` is filled only after the async /api/ledger fetch, so on first render no card has a `document-found` line. Both `not.toContainText(...)` and `toHaveCount(0)` therefore pass before the data loads, and they would still pass if the guess line came back. This is the same trap as the 27 Oct toHaveCount(0) lesson. Fix: wait for the load first (page.waitForResponse on /api/ledger, or wait for another document's found line), then assert. Assert only that the guess text is absent, so a later line stating the schedule's own cover doesn't break the test.
+- L1: tsconfig.tsbuildinfo is in the diff (about 800 KB of build churn). Drop it from the PR, because every PR that touches it conflicts.
+- L2 (suggestion): a schedule-only document now shows no found line at all. Its schedule does state a cover and sum (for example Personal Accident S$100,000). Showing that line ("Your schedule shows …") would keep a documented cover visible without guessing its benefits.
+
+### #165 Home cost caption names its source (2d2f8df): NOT READY (1 High)
+- **H1 — "payment record" is a default, not a proven kind.** premiumSourceKind gives payment_record to every item that is not fromTable. But premium_records also come from the policy schedule itself:
+  - lib/rag/ingest.ts inserts "Extracted current premium from personalised policy document" (no payment date);
+  - it inserts "Rider premium printed on the schedule of …";
+  - linking.ts inserts rows from a schedule's payment table.
+  So a household whose premiums all come from its policy schedules is told "from your payment records". That is a wrong source, against the PR's own "never a wrong source" rule. Fix (allow-list): only a record with a payment date or period from a premium_receipt, renewal_statement or annual_statement document is a payment_record. A record that the schedule itself printed is policy_schedule. Anything else gives the neutral "from your documents". Add a made-up test for each.
+- Low: test fixtures use person-shaped product names ("Lim Ah Kow Critical Shield"). They are made up, but plain product names would be clearer.
+
+### #166 Family drops an ended single trip (e260c08): READY
+- coverEnded (lib/benefit-table/assemble.ts:154) is narrow. It applies only to travel cover that is not a scheme or a rider, has both ends printed, and lasts 183 days or less, so annual plans and renewable covers never end by date. Family now matches Home's tiles (table-figures.ts:97), and a missing date never ends a cover.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- every PR: tsc clean, next build passes, merge-tree with main is clean, pairwise merge-trees (164×165, 164×166, 165×166) are clean, simple chat 84, replay 22/22.
+- #164: own test 8/0, r5:ux 14.
+- #165: own test 5/0, premium:table 16/0.
+- #166: own test 8, benefit-table 107/0, parity 10/0.
+- v11:customer-screens fails "chat: one direct answer…" on #164, and fails identically on main (not this PR's). The browser e2e was not run (no database in this container).
+
+## R308 — overnight batch 2 on main b865388, plus re-checks of #164 and #166
+
+| PR | head | verdict |
+|---|---|---|
+| #164 Documents drops guesses | ba61adf | READY. R307 M1 is fixed: the test waits for Family Shield's found line before checking that the guess is absent. L1 is fixed: no tsbuildinfo in the diff. L2 stays a suggestion. |
+| #166 Family drops an ended trip | 2b4dbee | READY. Ended rows are skipped before they are counted (TE E9), so a renewed trip with the same name still lists. Own test 10. |
+| #167 chat "still being read" | 8443134 | NOT READY (M1) |
+| #168 hide plan question | 8ad7e01 | READY |
+| #169 Found line from the table | 98386a4 (via 5d5f229, 606bd3f) | READY |
+| #170 Coverage unread notice | bf98c0b | NOT READY (M1, same cause as #167; M2) |
+| #171 no claim note on premium-only answers | 77b69b5 | READY |
+| #172 condition said once | 172fe23 | READY (conflicts with #171 on RowReport, as the lead said; re-run both tests on the stacked head) |
+| #173 failed-document advice | ed87556 | READY |
+
+**#167 M1 and #170 M1 — a stalled intake is "still being read" forever.** Both PRs treat processing_status in {uploaded, queued, extracting, indexing} as reading now, with no time limit. Intake can stall: app/api/policies/reprocess/route.ts already treats a document as stalled once no live job has run it for UNCLAIMED_STALL_MINUTES, or after 2 minutes with no update.
+- With #167, the chat would tell the household "still being read; ask again in a minute" every time they ask, for good.
+- With #170, Coverage now says "still being read … show here when DearPolicy has finished" and drops the Read again pointer. That pointer was the only way out of a stall.
+- Fix: count a document as still being read only while it is fresh, meaning updated_at is within the stall window (or a live job exists, as the reprocess route checks). A stale one keeps the earlier wording (could not be read / Read again).
+
+**#170 M2 (not blocking; owner call)** — a ready personal schedule or certificate with pages, but no stored table reading after 10 minutes, becomes "no_table": "isn't shown on this page; ask in chat". This is most likely a table reading that failed. The household's own proof of cover then stays off Coverage and the Home tiles with no way to get it read. The PR deliberately removes Read again because it re-reads and re-links every section at a model cost. Suggest that for personal-proof roles the note says plainly that the cover isn't on this page yet, and gives a way to recover.
+
+Notes from probing:
+- #168: no benefit-table or simple-chat path reads policy_members.benefit_tier. The only tier use is in member-tier.ts and the older ledger and chat paths, so hiding the picker only when both flags are on changes nothing the household sees. Stored tiers are kept.
+- #169: a cover takes rows of the same person by coverKey, or by product plus cover when both sides lack a key, so there is no cross-person bleed. If /api/benefit-table fails, no Found line is shown; nothing falls back to stale ledger rows.
+- #171: only rows that coverRows made are premium rows (WeakSet identity). A label also given for a benefit row is not counted as a premium. A table that has lost object identity keeps the note, which is the safe direction.
+- #172: a point is dropped only when every card it was said for shows the same words. If any card is missing, it is kept.
+- #173: the API passes only USER_ACTIONABLE_PROCESSING_ERRORS through verbatim, so exact matching covers every value the page can see; "Analysis stopped" maps to unknown. DOCUMENT_READING_SERVICE_MESSAGE is stored as processing_error only when no deferred read is scheduled (lib/rag/ingest.ts:1079), so dropping "will try again automatically" is correct. Password detection by exact string loses nothing, since the old regex only ever saw the same two strings.
+- No real names, insurers or ID numbers appear in any diff.
+
+Checks, each PR in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- every PR: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107/0, chat 107/0, r5 21/21.
+- own tests: still-reading 8, plan-choice pass, found-line 11, no-guessed 8, unread-notice 12, claim-note 9, conditions-twice 8, failed-advice 6.
+- pairwise merge-trees across #164 to #173 are clean except #171 × #172 (expected).
+
+## R309 — #165 rework (19b0b5b) and #174 (387a546, stacked on #173): both READY
+
+**#165 19b0b5b: READY. R307 H1 is fixed.**
+- The source is decided from the source document's role, using an allow-list.
+- Role names match what intake stores (lib/ai/extract-policy.ts documentRole enum):
+  - "personal_schedule" and "certificate" give "policy schedule";
+  - PAYMENT_ROLES (premium_receipt, renewal_statement, annual_statement) with a payment date or period give "payment record";
+  - anything else gives the neutral caption.
+- Endorsement → neutral is right. An endorsement may change a premium, but it is neither the schedule nor a payment, so neutral never names a wrong source.
+- The ingest "Extracted current premium from personalised policy document" rows sit on a schedule document, so they now say "policy schedule". The linking.ts rows carry their certificate or schedule as the source document.
+- The LEFT JOIN goes through activePredicate("sd"), so a deleted source document makes the item neutral.
+- Low: older rows may carry the legacy role "schedule" (inventory.ts:48 still maps it), and these read neutral. That is the safe direction; add it if wanted.
+
+**#174 387a546: READY.**
+- Each chat step now matches the button the Documents page shows (#173 failedDocumentAdvice):
+  - a locked PDF says "Enter its password on the Documents page", and LockedPdf takes it in place;
+  - "service" and "unknown" with no pages say "Press 'Try reading it again'";
+  - "unknown" with pages says upload a clearer copy, which is the page's upload_another;
+  - no_text, photo, incomplete and unopenable keep their upload steps.
+- No stored text is ever printed.
+- The dropped /password/i fallback: current ingest stores only fixed strings (USER_ACTIONABLE_PROCESSING_ERRORS or POLICY_PROCESSING_FAILED_MESSAGE). An old raw row that mentions a password now gets the same generic advice the Documents page gives it (the API maps it to "Analysis stopped"). The two surfaces agree, which is better than the old "upload it again with its password", since that re-upload is refused as a duplicate.
+- read-failures.ts now says "Use Read again", which matches the ready document's button.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped:
+- both: tsc clean, next build passes, merge-tree with main clean; premium:table, simple chat 84, replay 22/22, r5 21/21 and v11:claims 5 pass.
+- own tests: source-caption pass, failed-advice 6, chat failed-document 6.
+- cross-merges of #165b and #174 with #164b, #166b, #167, #168, #169b, #170, #171, #172 and #173 are all clean.
+
+## R310 — #167 (c41180a), #170 (9cc62e1), #172 stacked on #171 (221e5b3): all READY
+
+**#167 c41180a and #170 9cc62e1: READY. R308 M1 is fixed.**
+- "Being read" now needs a live intake job: `policyJobLive` (lib/rag/live-job.ts) is the same SQL the Documents page uses (livePolicyJob with the 10-minute unclaimed limit). It is an EXISTS subquery over the unique (job_type, idempotency_key) index.
+- Both callers run on the service `query`, so background_jobs (service-only) is readable. No new `FROM policies`.
+- #167: still being read only with in-progress status, a scan that can go on, and a live job. A stalled document keeps "could not be read (queued)", and adds "It can be tried again on the Documents page" only for queued, extracting and indexing (the page's inFlightIds).
+- #170: in intake with a live job → waiting; in intake with no live job → stalled; scan-rejected → not_readable; a ready document with a live re-read → waiting. live-job.ts is identical on both PRs, and #167 × #170 merges clean.
+- Real-database checks: I set up a local scratch database (db:setup plus sql/benefit-table.sql). still-reading gives 9/9, including the live, lapsed-lease, 9- and 11-minute, dead_letter, succeeded, other-type and other-key cases. unread-notice gives 15/15.
+- Low L1, a deliberate trade-off: Coverage and chat drop the Documents page's 2-minute updated_at grace. Right after a person is linked to a stalled document, Coverage and chat say "try again", but for up to 2 minutes the page shows "Reading this document…" with no button. This fails safe. The longer-term fix is to key the page's grace on the job row, not on updated_at.
+- Low L2, also on the Documents page today: with malware scanning on, a document whose job went unclaimed while its scan is still pending shows as stalled, but Try again answers 409 "not passed malware scanning".
+- Low L3, also on main today: scripts/setup-db.ts does not apply sql/benefit-table.sql, so unread-notice's database check fails on a fresh db:setup database.
+- On the builder's question, keep the link to the Documents page and don't add a Read again or Try again button on Coverage. The reprocess route's checks (scan cleared, already processing) and the card's errors live on the page. An optional nicety for a single stalled document is to link to `/policies#doc-<id>`, since cards carry `id="doc-…"`.
+
+**#172 221e5b3, stacked on #171: READY.**
+- The RowReport merge keeps conditionPoints, cards and premiumLabels.
+- #172's base is main and it contains #171 (77b69b5). So merge #171 first, or merging #172 alone lands both.
+
+Checks, network-blocked with model keys stripped:
+- every check below ran in a fresh worktree with npm ci, and next build ran in a worktree with real node_modules;
+- all three heads: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: still-reading 9, unread-notice 15, claim-note 9, conditions-twice 8;
+- cross-merges with #164b, #165b, #166b, #168, #169b, #171, #173 and #174 are all clean, and #172b with #167b and #170b is clean too.
+
+## R311 — #175 (98a3dc1) NOT READY (one Medium); #176 (c8757f2, stacked on #170) READY
+
+**#175: NOT READY.**
+
+**M1 — cancelling a waiting re-read does not stop one a worker has already claimed, so two paid reads can run at once.**
+- In app/api/policies/reprocess/route.ts:98-104, the SELECT picks only queued and failed_retryable `:retry-read` jobs, and the cancel runs after the policy UPDATE.
+  - If a drain claims the re-read between that SELECT and `cancelJob`, `cancelJob` takes its cooperative branch (lib/jobs/queue.ts:417): it sets `cancel_requested` and nothing else.
+  - Policy processing never reads `cancel_requested`. heartbeatJob's WHERE clause has no such check (queue.ts:281-288), processors.ts:80 throws its returned row away, and ingest.ts never checks it.
+  - So the claimed re-read runs to the end alongside the new read.
+- The same thing happens without any race when a document has been read in part. Its status is "ready" and its `:retry-read` is running.
+  - Re-analyse skips the in-flight branch, so it never asks whether a job is live, and the SELECT ignores 'processing'.
+  - A second read starts next to the running one. That is double spend, and whichever finishes last writes the status.
+  - A deferred run that hits a service failure cannot reschedule (deferredRetry), so it writes 'failed'. That can land after the new read has set 'ready'.
+- Fix: in one transaction, before the policy UPDATE:
+  1. `UPDATE background_jobs SET status='cancelled', cancel_requested=true WHERE job_type=$1 AND idempotency_key=$2||':retry-read' AND status IN ('queued','failed_retryable')`, which is the same check-and-set as cancelJob;
+  2. if any policy_processing job for the id or `id:retry-read` is 'processing' with a live lease, whatever the document's status, roll back and return 409;
+  3. run the policy UPDATE; if no row changes, roll back and return 409;
+  4. commit, then write the audit and event rows.
+- Why this closes it: the claim is a check-and-set on status. After step 1 a re-read is either cancelled, and can no longer be claimed, or already processing, and step 2 catches it. Because the cancel commits only together with the requeue, a refused request can never cancel the only reader.
+- Add test cases for a claimed re-read (processing with a live lease) on both an in-flight and a ready document: expect 409 and the re-read untouched.
+
+**The builder's other questions:**
+- Does any path leave a document with no reader? Not a dead end today:
+  - if the after-response enqueue fails, or `cancelJob` throws (a 500 after the UPDATE), the document sits queued with no live job;
+  - after 2 minutes it is stalled, and Try again is offered.
+  - Keep that property when restructuring for M1.
+- The 409 "This document is already being analysed." is acceptable. The page hides Try again in that state, so only a stale page reaches it.
+  - Optional: when only a waiting re-read backs the document, say "DearPolicy will try reading it again shortly."
+- The IN rule matches #167 and #170 (979e228 and df5a8ee). The stalled rule on the page and the guard agree.
+
+**#176: READY.**
+- **A, scan hold:**
+  - `isPolicyQuarantineHeld` (uploaded, quarantined, scan_pending) with a live intake or scan-retry job gives waiting; with neither it gives held. It is never stalled, and no Try again is offered (the reprocess route refuses it).
+  - The held reason uses the page's fixed labels, never the scanner's text, and is null in prototype mode.
+  - The scan-retry key matches `scanRetryKey("policy_document", id, N)` (lib/scanning/retry.ts:61, store.ts:200), and the type is tested against retry.ts.
+  - The LIKE is safe: a UUID has no `%` or `_`.
+- **B, table_unread:**
+  - The allow-list `personal_schedule` and `certificate` matches what intake stores. The legacy role "schedule" stays no_table, which is the safe direction.
+  - It applies only when reprocess would accept the scan state.
+  - Read again is the right step. Intake's readIntoBenefitTable (ingest.ts:1000) is the only writer of benefit_readings, and nothing retries a failed table read.
+- **The 5 changed expectations are not weaker.**
+  - Each still asserts "not waiting" for the time-based cases (legacy, touched, future, ready-done); only the label for a schedule moved from no_table to table_unread.
+  - The receipt, letter and summary controls are unchanged, and "Read again" is asserted exactly once and only beside the schedules.
+  - The new negative controls in coverage-recovery cover NO_COVER roles, a quarantine of uploaded, pages 0, failed, and a scan job on a cleared document.
+- L1: live-job.ts is an add/add conflict with #167 (merge-tree #176 × #167 979e228 = 1). Put the same file, including scanJobLive, on #167, or merge main into #176 after #167 lands.
+- L2: if a table read fails the same way every time (the "reading did not finish" stop), every paid Read again leaves the banner unchanged, because nothing records a failed table read. The 20-an-hour limit bounds it. Consider recording the failed attempt and, after one failed Read again, showing neutral wording.
+- L3, minor: `scanJobLive` cannot use the idempotency index under a non-C collation, but the scan for each document is small at today's volume.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database built with db:setup plus benefit-table.sql:
+- both: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: retry-read 8/8, unread-notice 15/15;
+- cross-merges: #175 is clean with #167, #170, #171, #172 and #176; #176 is clean with #170, #171 and #172, and conflicts with #167 (L1).
+
+## R312 — #167 (9434ae1), #170 (8b01f74), #176 (032e543): all READY; R311 L1 is fixed
+
+**#167 9434ae1, the scan-hold rule in chat: READY.**
+- **The rule:**
+  - A held upload (the page's HOLD_STATUSES) counts as still being read only while a scan-retry job is live.
+  - Otherwise `onHold` applies. It is never stalled and never "could not be read", and it offers no Try again: `offersTryAgain` needs `stalledReading`, which now excludes onHold.
+  - A cleared upload with only a scan job is still stalled (tested).
+- **No scanner text reaches the model:** `holdLabel` maps the stored scan text onto policyQuarantineLabel's fixed strings, and is null in prototype mode. The prompt gets only "on hold for its scan, so it is not being read yet (<fixed label>)".
+- **The prompt sentence is safe:**
+  - It adds no route by which the document's text could come in (the document still sends `<no_readable_text/>`).
+  - It forbids both "could not be read" and "still being read".
+  - It tells the model to follow reading_status, which the server writes.
+- **The count wording is correct for 1, 2 and 3 groups:** " and A"; ", A and B"; ", A, B and C". The test pins the three-group sentence (line 282).
+  - The test's mixed-mode file reads "for their scan", which cannot happen in one deployment.
+- Note, not this PR's (R310 L2 on the page): after 2 minutes the Documents page's stalled rule still offers Try again for a held upload with no live intake job, and the reprocess route then refuses it with a 409. Chat and Coverage now say "on hold", which is the truthful side. The page could reuse the same hold check.
+
+**#170 8b01f74 and #176 032e543: READY.**
+- live-job.ts is now byte-identical across #167, #170 and #176, so R311 L1 is fixed.
+- R311 L2 and L3 on #176 stand as Lows.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+- all three: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- own tests: still-reading 17/17, unread-notice 15/15 on both #170 and #176, coverage-recovery 11/11;
+- merges: main + #167 + #176 merges clean; #167 and #176 are each clean with #170, #171, #172 and #175.
+
+## R313 — #175 (5e4716a): READY; R311 M1 is fixed
+
+- In one transaction, in this order:
+  1. cancel waiting re-reads with a conditional UPDATE;
+  2. refuse with 409 if a job for the id or `:retry-read` is 'processing' with a live lease;
+  3. requeue the policy, refusing with 409 if no row changes;
+  4. write the audit rows, then COMMIT.
+- Telemetry is sent only after the commit, and a rollback cancels nothing.
+- The race is closed under READ COMMITTED:
+  - If a claim committed first, the cancel UPDATE finds 'processing' and changes nothing, and the next statement sees the claim and returns 409.
+  - If a claim is in flight, the cancel waits on the row lock, re-checks the row, and step 2 sees the claim.
+  - If the cancel locks the row first, the claim's `FOR UPDATE SKIP LOCKED` (queue.ts:257) skips it. After a commit the row is cancelled, and claims need `NOT cancel_requested`. After a rollback the row is claimable again, so the reader is never lost.
+- New behaviour on a ready document: Re-analyse now gets 409 while its intake job is still reading it into the table (ingest.ts:1000 runs after 'ready'). That is right: it is still being read, and Coverage shows it as waiting by the same live-job rule.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+  - tsc clean, next build passes, merge-tree with main clean;
+  - retry-read 10/10, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
+  - clean with #167 9434ae1, #170 8b01f74, #176 032e543, #171 and #172.
+
+## R314 — #175 (16fc058) READY; #177 (a580a2b, stacked on #174) READY
+
+**#175 7538b1f, the R312 note:** the page's stalled rule now needs `quarantine_status IN ('scan_clean','not_scanned_prototype')`, which is exactly the set the reprocess UPDATE accepts. A held upload is never offered a Try again that the route would refuse; a rejected one keeps its banner.
+
+**#175 16fc058, TE R3:**
+- The transaction's cancel step also retires a `:retry-read` that is 'processing' with `lease_expires_at <= now()`, and clears its lease.
+- recoverExpiredLeases therefore cannot bring it back beside the new read.
+- A job with a live lease still returns 409 (the next statement), so a worker that is alive is never pre-empted.
+- A worker whose lease lapsed but which is still running cannot complete the job (completeJob checks lease_owner). Its direct writes to the policy row are the same as on main today.
+
+**#177: READY.**
+- The reason is chosen by the error's class name only: `this.name` is set on SpendCapReached (lib/ai/ledger.ts:91) and on ProviderQuotaExhausted (providers.ts:212), so it survives minification.
+  - The stored text is a fixed string. SpendCapReached's own message carries the plan's dollar amount and never reaches the household.
+  - A provider quota stop maps to the service reason.
+- **The size check going from 8 to 9 is deliberate, not weaker.** It follows the same one-line-per-addition pattern as Round 5 and Round 10. The new string has no amount, plan or owner in it, and the exact size pin still catches any unplanned addition.
+- **Offering Try reading it again before the reset is right.**
+  - The cap is checked before every hosted call (ocr-hosted.ts:55, llm.ts:147, usage-meter.ts:173), so an early press stops at the first call without spending anything and stores the same "limit" reason. The reprocess rate limit bounds repeats.
+  - The step says when to press.
+  - "At the start of next month" matches `date_trunc('month', now())`, which runs on the database clock. For a Singapore household that is 08:00 on the 1st, close enough for the wording.
+- Chat (household-status, inventory, document-questions), the Documents page and rag2 inventory all use the same "nothing is wrong with the file" wording, and none asks for another copy.
+
+Checks, each in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+- both: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, and r5 21/21 all pass;
+- #175: retry-read 12/12;
+- #177: failed-advice 8, chat failed-document 7, processing-failure-storage 7, premium table and v11 claims 5 all pass;
+- cross-merges: #177 is clean with #164 to #176 (the current heads), and #175 is clean with #167, #170, #171, #172 and #176.
+
+## R315 — #178 (592ea6a): READY
+
+- **No stored text or digits reach the household or the model.**
+  - `failedDocumentChatAdvice` decides the kind with the exact-string allow-list in failedDocumentAdvice. `why` and `step` are fixed strings looked up by kind, plus the page's fixed button label and READING_LIMIT_RESETS, none of which has digits.
+  - library.ts keeps only the advice: processing_error is mapped and goes no further.
+  - In document-questions, the raw `d.error` is gone from uploadsAnswer, and so is the `/password/i` substring guess. A stored reason it does not recognise gets the generic advice.
+- **No-repeat between the fact and count lines works.**
+  - `told` uses the same household.documents indices as `libraryDoc`, so a failed file whose own point is in the answer has its reason only there.
+  - libraryGroups still gives a failed file its full libraryFact (it is never readInFull), so grouping never drops the reason.
+  - Files that fail the same way share one "for each" line.
+- **The two changed expectations are stronger, not weaker.**
+  - Both are still exact deepEqual checks with text added after the old wording.
+  - APP-5 now also pins that the count line does not repeat the fact's reason.
+  - The still-reading control pins the reason given in the count when no file point is present.
+- **The prompt rule is safe:** it only tells the model to repeat two server-written attributes and to add no other reason or step.
+  - Low L1: the parenthetical "never suggest a clearer scan unless its why_not_read says no readable text was found" pulls against the generic next_step, which itself says "upload a clearer copy or the original file" for reading_failed and unknown. A model could drop half of a step written by the server. Suggested wording: "never add a reason or step that the why_not_read and next_step do not say".
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped; the database checks ran on a local scratch database:
+  - tsc clean, next build passes, merge-tree with main (1912d73) clean;
+  - chat failed-document 11, failed-advice 9, still-reading 21/21, offline 17, processing-failure-storage 7, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R316 — #179 (4e77a19) READY; #178 f59ae63 fixes R315 L1
+
+**#178 f59ae63:** the prompt rule now reads "never add a reason or step that its why_not_read and next_step do not say", and the clearer-scan parenthetical is gone. Only the prompt line changed (1 file, 1 line), so R315 stands: READY.
+
+**#179: READY.**
+- **The move is byte-identical.** prettifyFilename, MACHINE_WORD, UUID, isMachineFilename, insurerShortName, documentKind, documentName and normalizedIdentifier, cut out of main's inventory.ts and out of document-name.ts and compared with diff, are identical. inventory.ts re-exports them, so every sentence caller is unchanged: te159 106/106 with 0 fetches, and r5 21/21.
+- **Client components import only the pure module.** document-name.ts has no imports at all. No "use client" file imports lib/policies/inventory.
+- **The same name on the page and in sentences:** `documentCardTitle` is `documentName` with a null file name turned into "". The Documents card, the Preview label and the notices, Coverage's confirmed-cover title, and the benefit-table route (documentName(d.file)) all use the one rule. /api/policies already selects insurer, document_role and policy_number for it.
+- Low L1: the chat page's own library note (app/chat/page.tsx, `failed: … name: p.product_name || p.original_filename`) still shows a raw file name, so a failed document can carry a different name there than on its Documents card. documentCardTitle is client-safe and would fit there.
+- Not this PR's: v11:customer-screens-test fails the same check, "chat: one direct answer…", as on main (seen since #164; this PR doesn't touch app/chat). I didn't run the r8-document-preview e2e (no browser or app stack in the gate); its expectation change ("Benefits table.docx" titled "Benefits table") is what prettifyFilename gives.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main clean;
+  - doc-card-title 39, te159 106, premium table, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21;
+  - #178 × #179 merges clean.
+
+## R317 — #179 65b74d4: READY; R316 L1 is fixed
+
+- app/chat/page.tsx's library note now names a failed document with `documentCardTitle`, fed the insurer, role and policy number that /api/policies already returns. It imports the pure module only.
+- The new static check in doc-card-title fails without the change; it now passes 40/40.
+- v11:customer-screens still fails only the check it fails on main (`/nextSteps\[0\]/` on the chat page, 10 others pass); this change doesn't affect it.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R318 — #180 (359f670) NOT READY; #181 (ab8f1de) one fix needed
+
+**#180: NOT READY. One High: it hides real per-policy benefits.**
+- **H1. A per-policy row named "… limit" becomes "combined" from a neighbouring table line or an unrelated clause.**
+  - Cause: `quoteSentence` (lib/benefit-table/check.ts) ends a sentence only at ". ", ";" or a blank line, and reaches up to 600 characters each side. A schedule table has none of those between its rows, so the "sentence" is most of the page. `limitKind` then tests COMBINED_SCOPE / OTHER_POLICIES against that whole span.
+  - Effect: a combined row is skipped from event cards (chat.ts:257) and described as "the most paid for several benefits together, not what this event pays" (chat.ts:726). The household loses a documented amount.
+  - Made-up page probe, run through the PR's own `checkReading`:
+
+    | Row | Text elsewhere on the page | PR result | Right answer |
+    |---|---|---|---|
+    | Overseas medical expenses limit | "Benefits below apply to all plans" (table heading) | combined | per policy |
+    | Annual limit | "These benefits are the same across all plans" | combined | per policy |
+    | Personal accident limit | other-insurance clause "any other policies covering the same loss" | combined | per policy |
+    | Hospital cash limit | free-look text "This policy and any other plans you hold with us …" | combined | per policy |
+    | TI/CI limit | "this policy and other policies we issue on the life insured" | combined | combined ✓ |
+    | CI limit | "… under all policies" | combined | combined ✓ |
+
+  - Fix: bound the sentence to the quote's own line, plus continuation lines only when the line plainly runs on mid-sentence (no figure, lower-case start). Never cross a line that holds another figure or another row name. Require the scope phrase in the same sentence as the figure or the limit name. Add the four rows above as negative tests and keep "Of this amount" as the only way to pull in the sentence before.
+- Low L1, phrasings it still misses (the row stays per policy, so no hidden benefit, but the TI/CI cap still shows as one policy's amount):
+  - "under this policy and every other policy on the life insured is S$2,000,000" then a "TI/CI limit S$2,000,000" row gives null in the probe. "every other policy" is not in the list.
+  - "on the life insured/assured" without "same"; "in respect of the life insured"; "aggregate of all policies".
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main (1912d73) clean; benefit-table intake 48/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181: one Medium to fix; masking is otherwise correct.**
+- **M1. Saving an amount writes the masked benefit name over the stored one.**
+  - app/schedule/page.tsx:199 (UnreadableAmount save) always sends `benefitName: benefit.benefitName`, and app/operator/benefits/page.tsx:167 sends `draft.benefitName` (filled from the shown row). Both now come from the masked GET. app/api/benefits/route.ts:249 stores it with `benefit_name=coalesce($3,benefit_name)`.
+  - So any benefit or product code in the shape of an ID (the NRIC/FIN shape matches a code like "G1234567A", and a labelled "ID No. …" in a name) is stored as "G****567A" the first time the household saves an amount. That permanently changes their stored row.
+  - Fix: schedule page omits benefitName (the coalesce keeps the stored one); the operator page sends benefitName only when the person changed the field. Add a test that a PATCH built from a masked GET row leaves benefit_name unchanged.
+- **Nothing else sent back or compared is changed.**
+  - Row ids, coverKey, section.key, factKey, personId and policy/document ids all match IDENTIFIER_FIELD and are left as stored.
+  - formulaKind and currency are enum words with no ID shape.
+  - The Coverage report POST sends only {personId, message}.
+  - The browser never rebuilds a cover key from product/cover/plan. The ledger page groups /api/benefits owners by name only for its own display.
+- **M2. Other routes still return stored text unmasked** (decide whether they are "the document viewer" the module comment exempts, and write that in the PR so the next audit does not re-flag them):
+  - app/api/policies/[id]/route.ts GET: `coverages[].evidence_text` is the same evidence quote /api/coverage now masks. Also `extracted.documentNotes`, `detectedPeople` and `policyNumber`.
+  - app/api/dashboard/route.ts (Home): document names in the premium note, missing list and unclaimed list come from documentName/prettifyFilename. A file named "Certificate_S1234567D.pdf" shows as "Certificate S1234567D" on Home, while chat masks the same file name (TE pr153 F1).
+  - Not checked in depth: the claims evidence routes (bill text the household uploaded for a claim).
+- Probe on the PR code: `maskShownText({benefitName:"Plan G1234567A hospital benefit", factKey:"S1234567D"})` gives "Plan G****567A hospital benefit" and leaves factKey as is.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R319 — #179 5efb99d (Coverage document names, TE P179 F1): READY
+
+- All four places on the Coverage page now use `documentCardTitle`: the plan-proof sentence, the wording sentence, the Supporting wording card title and the table's "Source ·" line. The page has no raw `original_filename` left in its output; it appears only in types, and the confirmed card already used documentName.
+- The table line looks the document up in the `documents` that tableFor already returns, so there is no new query. Its `file` carries insurer, role and policy number. A row whose document is missing falls back to its stored name through the same rule, so a machine-made name still reads as a kind of document.
+- The reference and owned queries add only `p.policy_number` / `p.document_role` columns of the same joined row; no filter changed.
+- The new static checks in doc-card-title fail on 65b74d4's page and route, and pass now (42/42).
+- **Merge note:** this conflicts with #181 (ab8f1de) in app/api/coverage/route.ts, on the `return NextResponse.json(...)` line and the payload. Whichever merges second must keep both: the new names inside the payload, and `maskShownText(payload)` around it. Combined, the new names are masked too, which is what #181 wants. #180 merges cleanly with it.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R320 — #180 3556689: R318 H1 fixed, one narrower High left; #181 31a40e5: READY
+
+**#180 3556689: NOT READY yet.**
+- R318 H1 is fixed. All four layouts give no "combined" now, and they are checkReading tests. quoteSentence stays on the quote's own lines and crosses only figure-free, tab-free lines that carry on in lower case or "(". R318 L1 is fixed too: "every other policy" now counts.
+- **H1. A plan-tier note on the row's own line makes a per-policy limit "combined".**
+  - In a one-policy schedule, "all plans" means each plan column prints the same figure. It does not mean a cap shared across policies. COMBINED_SCOPE's `(all|across) plans` still counts it as scope on the NAMED_LIMIT path.
+  - Made-up probe through the PR's quoteSentence + limitKind (space-aligned rows, no tabs):
+
+    | Page | Result | Right answer |
+    |---|---|---|
+    | "Annual limit       S$150,000" then "(same for all plans)" | combined | per policy |
+    | "Overseas medical limit    S$500,000" then "(applies to all plans shown)" | combined | per policy |
+    | "Annual limit (all plans) S$150,000" in a Plan A / Plan B table | combined | per policy |
+
+  - The row then leaves the event cards (chat.ts:257), so a documented amount is hidden.
+  - Fix: on the NAMED_LIMIT path, plan wording alone is not scope. Count it only when it names other holdings ("plans you hold", "plans with us", "plans we issue", "this plan and …") or uses policies/contracts or "same life". Add the three rows as negative tests.
+- Low L1: "Accident medical limit S$5,000" then "per accident, reduced by any amount paid under other policies" gives combined. No amount is shown, which is the safe side. But chat.ts:726 then says it is "the most paid for several benefits together", which is not what the page says. Consider the OWN_LIMIT-style allow-list for "reduced by … other policies".
+- Kept: "not payable for any policy year" stays null, and the TI/CI and CI positive controls stay combined.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 57/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 31a40e5: READY.**
+- **M1 fixed on both sides.**
+  - The schedule page no longer sends benefitName.
+  - The PATCH keeps the stored name when the sent name equals the stored name's masked copy (`sentName`). That also covers the operator page, which sends its draft. A name the person actually typed is stored as sent.
+- **M2 fixed.**
+  - /api/dashboard and /api/policies/[id] GET are wrapped in maskShownText.
+  - Home sends back only {policyId, familyMemberId, declared} (link-person). The document review panels only display the data.
+  - The correction form starts empty and sends the field the person types, so nothing masked is sent back. policy_key and other *_id/*_key fields are left as stored.
+- Merge note from R319 stands: #179 conflicts with this PR in app/api/coverage/route.ts. Keep maskShownText around the new payload.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R321 — #180 e291470: R320 H1 still open; #181 254374d: READY
+
+**#180 e291470: NOT READY, for R320 H1 only.**
+- The new CONTINUES joins a line whose line above ends on a lower-case function word. It does not reopen R318 H1: the four layouts stay null, and rows, figures and tabs are still never crossed.
+- R320 H1 is unchanged on this head. "Annual limit       S$150,000" then "(same for all plans)", "… (applies to all plans shown)" and "Annual limit (all plans) S$150,000" still give combined.
+- New probes:
+  - A heading "… under all policies issued by" just above a "TI/CI limit S$2,000,000" row joins and gives combined. That is correct for that wording, and rare.
+  - "The figures below are the same for all" above "Annual limit S$150,000" joins and gives null.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 60/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 254374d: READY.**
+- sentName now evens out spacing before comparing. A trimmed masked copy keeps the stored name. A name that differs from the stored one only in spacing, with no ID in it, is stored as sent, which is harmless.
+- Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R322 — #180 2baec1b and #181 53294a2 (both merged with main 44a815e): READY
+
+**#180 2baec1b (fix 4329932): READY.**
+- R320 H1 is fixed. On the NAMED_LIMIT path, plans now count only as other holdings ("this plan and any other plans", "plans you hold / we issued", "plans with us", "all your plans"). COMBINED_SCOPE no longer applies there.
+- My probe gives no combined for all three plan-tier layouts, nor for R318's four layouts. The positive controls stay combined: TI/CI "other policies we issue on the life insured", CI "under all policies", and "every other policy on the life insured".
+- R320 L1 is accepted as declined. Hiding the figure follows the #147 rule. The chat.ts:726 caption is a separate, smaller issue.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; intake 60/0, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+**#181 53294a2: READY.**
+- In the merge with #179, app/api/coverage/route.ts keeps `maskShownText(payload)` around the new document_name, ownership_name, reference_name and the table's documentCardTitle names.
+- Checks, same gate: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- #180 × #181 merge clean.
+
+## R323 — #181 46c1a88 (TE F2, file-name IDs): READY; #180 2baec1b unchanged, R322 READY stands
+
+- documentName masks the raw file name before prettifyFilename splits it. identity-numbers.ts has no imports itself, so document-name.ts stays safe to use in client code, and next build passes.
+- Probe through the PR's documentName:
+  - "Certificate_S7712345D.pdf" gives "Certificate S****345 D".
+  - "Cert-S7712345D-2026.pdf" gives "Cert S****345 D 2026".
+  - "MyKad 800101-14-5678 card.pdf" gives "My Kad ****** ** 5678 card".
+  - No full number is left. The split "345 D" reads a little oddly but shows nothing more.
+- Low L1 (not a regression): the Documents card (app/policies/page.tsx:448) still prints the raw `original_filename` under the title whenever the two differ, from the unmasked /api/policies. The full ID in a file name stays visible there, as before this PR. That fits the "document viewer is the household's own" exemption only if it is meant; otherwise mask that line too.
+- Low L2: two different IDs that share their last four characters ("S7712345D" and "T9912345D") mask to names that differ only in the first letter. If the letter matches too, the names are identical, and documentName names are used to group and match documents. This is rare (it needs the same last 3 digits and check letter); noting it only.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; identity mask test, service 22, doc-card-title 42, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21. #180 × #181 merge clean.
+
+## R324 — #182 (47b94465) grace_passed: NOT READY (two Highs, one Medium)
+
+- **H1. A stale reminder now overrides a later renewal or schedule of the same policy on "is it still in force?" questions.**
+  - lib/chat/policy-answer.ts:1241-1246: when any candidate's document is lapsed / ended / grace / **grace_passed** / reinstated, the candidate list is cut to those documents only.
+  - Before this PR, a reminder whose date had passed was "unknown" and never triggered that cut. Now an old reminder triggers it.
+  - Effect: a household with an old reminder ("grace period ends 20 October 2026") and the renewed schedule ("Period of insurance 1 November 2026 to 31 October 2027", state in_force) asks "Is my Example Shield still in force?". The schedule's lines are dropped. The answer shows only the reminder, plus the grace_passed sentence "the insurer can confirm whether it is still in force", while the document proving it is in force is on file.
+  - The same happens at statusDocs (L1680): the grace_passed sentence is added under any answer that shows the reminder, even when a later receipt or renewal of the same policy (sameContract) is shown too.
+  - Fix: a grace_passed document joins the keep-list and statusDocs only when no other document of the same contract (sameContract) is dated after its grace date, or has a premium record or period start on or after it. Otherwise treat it as superseded (state unknown, as before). Add a test with reminder + later schedule, and one with reminder + later receipt.
+- **H2. A policy wording's worked example now reads as a passed reminder.**
+  - printedStatus applies the grace regexes to every document. Probe through the PR's printedStatus: a wording page "We allow a grace period of 30 days. For example, if your premium is due on 1 March 2025, the grace period ends on 31 March 2025." gives grace_passed, and statusSentence gives "Doc (page 1): an unpaid premium had to be paid by 31 March 2025. That date has passed … the insurer can confirm whether it is still in force."
+  - Before this PR it was "unknown" and silent. Now that warning attaches to answers citing the wording. It also triggers H1's cut, and outdated() (L1555) treats the wording as never outdated.
+  - Fix: take a grace date only from a line that is not an example or hypothetical ("for example", "e.g.", "if your premium is due", "illustration"), only from a premium notice / reminder role, and only when the page also prints a due date or an amount due. Add the example as a negative test.
+- **M1. workflow.ts:1460 picks the first grace date found, not the latest reminder's.**
+  - `graceEnd = from.map(...).find(Boolean)` takes whichever page comes first. With an old reminder (grace passed) and a newer one (grace 5 November), "if I pay on 3 Nov" can be answered from the old date as "after the grace period, which ended on 20 October".
+  - The same regex also takes H2's worked example.
+  - Fix: take the latest date among reminder lines only, and say which document it comes from.
+- Low L1: outdated() now returns false for grace_passed forever. A reminder from 2024 is never marked "not confirmed current"; before this PR its age (over 15 months) did that.
+- Fine:
+  - The status line, the days count ("ended on …, N days ago") and the sentence never say "lapsed" or "in force" for grace_passed (the PR's test pins it).
+  - The suffix pass needs the same docName prefix, the printed date and "grace period" on the same detail line. A different document only picks it up if it has the same name and quotes the same grace date, which is unlikely; noting it only.
+  - The deterministic-model change is test-only (deterministicModelEnabled refuses NODE_ENV=production, Vercel and runs without E2E_RUN_ID). Chaos OCR modes still change the content after the text layer is used. v11-ingestion's mismatch checks call the comparison directly. So real cross-check failures stay testable, but an e2e that expects "unchecked" on a plain text PDF now needs a scripted page or a chaos seed.
+  - r8 markdown detector: "**Total**" at line start or after a space is still caught. Only stars inside or after an ID mask are skipped. "-**x**" with no space is missed, which is rare.
+  - r10 policyFirst 62 applies only to first (non-steady) policy turns. Steady stays 60.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main (9c03ee3) clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R325 — #182 2e2bf942: READY (R324 H1, H2, M1, L1 fixed)
+
+- **H1 fixed.** `supersedePassedGrace` runs right after applyReinstatements, before the keep-list, statusDocs and the suffix pass read statusOf. A passed reminder becomes "unknown" in either case:
+  - another document of the same policy (same number, or same product for the same people) is dated after the grace date;
+  - a payment or period start after the grace date is on the reminder or on another document of the policy.
+
+  The extra premium query runs only when some document is grace_passed, and r10 still holds.
+- **H2 fixed.** Probe through the PR's printedStatus:
+  - My worked-example wording page, and "If the premium of S$100 is not paid, the grace period ends on 31 March 2025", both give unknown.
+  - A real reminder gives grace_passed in all three forms: with a due date and amount; with only "was due on"; and with an unrelated "Example: pay by GIRO" line.
+- **M1 fixed.** The workflow takes the latest grace date outside worked-example sentences.
+- **L1 fixed.** outdated() returns false only for "grace" again.
+- Low L1 (accepted direction): two policies of the same product for the same person with different policy numbers count as "the same policy". A later document of one hides the other's passed-grace warning (probe: P-111 and P-222 "Term Plus" gives unknown). That matches the #152 lesson that renewals can re-number one policy, and the cost is a missing warning, not a wrong state. Noting it only.
+- Low L2: the workflow's latest date is taken across every page in `from`. When the question names no plan, that can be another policy's reminder. This is unchanged in kind from before.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R326 — #182 b7fdaf29: READY
+
+- Probe through the PR's printedStatus:
+  - A notice's "If your premium is not paid, your grace period ends on 20 October 2026" (with "Amount due: S$86.40") gives grace_passed.
+  - The worked examples give unknown.
+  - "Grace period: 20/09/2026 - 20/10/2026" ends at 20 October 2026 and keeps "20/10/2026" as printed, for the suffix pass.
+  - "Your grace period started on 20/09/2026" gives no date.
+  - A "Premium waiver benefit S$50,000" line is not taken as the amount due.
+- supersedePassedGrace now treats two different policy numbers as two policies, and the reminder's own premium rows never count. My R325 L1 probe now keeps the warning (grace_passed). I accept the reasoning: the cost is one honest "cannot show whether it was paid" line.
+- Low L1: numeric dates are read day first only. A US-printed "05/06/2026" (6 May) reads as 5 June, and "10/20/2026" gives no date, which is safe. This matters only for markets that print month first.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; chat:policy-status-test, r8 chaos, r10 perf, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R327 — #183 (891805a5) misfiled policy pack: NOT READY (one High)
+
+- **H1. Almost any stored letter, bill, note or screenshot that mentions "policy schedule" is flagged as misfiled.**
+  - `filedBeforeRoleRules` takes any personal-proof result from `deterministicDocumentRole(pages, null)`. That includes the late keyword fallback `/policy schedule|schedule of insurance/` plus policy number/premium/insured.
+  - correspondenceRole does not stop these:
+    - TITLE matches "policy schedule" anywhere in the first 12 lines, so a letter that only mentions it counts as "titled".
+    - Status notices (lapsed, grace period, reinstate, certificate) are kept out of insurer_letter on purpose.
+  - Made-up probe through the PR's filedBeforeRoleRules, each stored as its NON_COVER role. All nine give `personal_schedule`, misfiled = true:
+
+    | Stored as | Page text (made up) |
+    |---|---|
+    | insurer_letter | lapse notice: "Policy number L1234567 … has lapsed … refer to your policy schedule" |
+    | insurer_letter | address change: "Your policy schedule and certificate are unchanged" |
+    | insurer_letter | premium reminder: "grace period ends … Your policy schedule remains valid" |
+    | insurer_letter | reinstatement letter: "keep this letter with your policy schedule" |
+    | claim_decision | claim documents request: "Your policy schedule shows the insured is covered" |
+    | personal_notes | typed notes: "AIA policy schedule - policy number L1234567, premium S$100" |
+    | app_screenshot | "My Policies / View policy schedule / Policy number …" |
+    | medical_bill | "TAX INVOICE / Patient … / As per policy schedule, deductible applies" |
+    | insurer_letter | the real case: cover letter, then a "POLICY SCHEDULE" page (correct) |
+
+  - Effect: each shows on Coverage as table_unread with Read again. A paid re-read runs the same rules, so it re-files the letter as a personal schedule, which is personal proof of cover. From then on chat and the table treat a lapse notice, claim letter, bill or notes as the policy, and their premium or claim figures can be read in as benefits. That is the wrong-amount / wrong-proof class, plus a paid read.
+  - Fix: flag misfiled only by the rule this PR is about, a later page that is the enclosed document. Use `schedulePage(pages) != null`, or a page after the first whose own opening line is a TITLE_LINE (schedule or certificate) and which prints its own policy number. Never use the keyword fallback. Add the eight letters above as negative tests and keep the pack as the positive.
+- documentState branches are correct as written. misfiled + no pages gives no_table, live gives waiting, a scan state that cannot be read again gives no_table, otherwise table_unread. A document with a stored reading stays "read" (misfiled is computed only when there is none).
+- Cost is fine: filedBeforeRoleRules on a 70-page pack takes about 1 ms (20 runs in 19 ms). It runs only for NON_COVER documents without a reading, on pages load() already holds.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, benefit-table service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R328 — #183 c58261ef: R327 H1 fixed; one Medium (paid Read again that changes nothing)
+
+- R327 H1 is fixed. filedBeforeRoleRules now uses only schedulePage. The lapse-notice probe gives misfiled false, and the real pack (cover letter, then POLICY SCHEDULE on page 3) gives true.
+- **M1. Some flagged documents are re-filed as the same letter by the re-read, so Read again stays offered and each click is another paid read.**
+  - schedulePage scans every page. correspondenceRole, which the re-read runs first through deterministicDocumentRole, looks past a cover letter only for an enclosed title on pages 2-6 (`pages.slice(1, 6)`). Its claim_decision, medical_bill, screenshot and notes branches return before that check.
+  - Made-up probe through the PR's filedBeforeRoleRules plus today's deterministicDocumentRole:
+
+    | Document | misfiled | role after re-read |
+    |---|---|---|
+    | pack, schedule on page 3 | true | personal_schedule ✓ |
+    | pack, long cover letter, schedule on page 8 | true | insurer_letter (stays table_unread) |
+    | claim decision letter with an enclosed schedule page | true | claim_decision (stays table_unread) |
+
+  - Fix: flag misfiled only when today's rules would re-file it: `schedulePage(pages) != null && correspondenceRole(pages) == null`. Equivalently, `deterministicDocumentRole(pages, null) === "personal_schedule"` together with schedulePage. Add the two rows above as negatives.
+- Not this PR's (noting for later): a fresh lapse notice that says "refer to your policy schedule" plus a policy number is filed as personal_schedule by deterministicDocumentRole. correspondenceRole keeps status notices out of insurer_letter, and the keyword fallback then fires. Worth a separate look.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R329 — #183 d02efee3: READY
+
+- R328 M1 is fixed. filedBeforeRoleRules needs a schedule page after page 1, and `correspondenceRole(sorted pages) == null`, so Read again is offered only where today's rules file the pack as something else. Screenshots never count, and payment roles stay no_table.
+- Probe through the PR's code:
+  - The page-3 pack gives true, and the re-read files it as personal_schedule.
+  - The page-8 pack and the claim decision enclosing a schedule both give false, so no paid loop.
+  - All eight R327 letters, bills, notes and screenshots give false.
+- Cost is unchanged: about 0.5 ms per 70-page pack.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; misfiled-letter test, service 22, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R330 — #184 658f71c8: CHANGES (1 High, 2 Medium, 1 Low)
+
+Probe: 27 made-up documents through deterministicDocumentRole on main 9c03ee3 and on the PR, with the model role null and with "personal_schedule".
+
+- **H1. Real packs with a cover letter and a schedule whose title is not an exact title line now lose their cover.** The PR's only guard for a pack is a line that is exactly a title (TITLE_LINE, or a title plus "- plan"), or a schedule page (title in its first 4 lines plus number plus name). Anything else, plus a letter with a status word in its first 12 lines, is a notice. The model's personal_schedule is then overridden to "other", and fact-check drops personalCoverageConfirmed. On main all of these were personal_schedule:
+
+  | Document (made-up) | PR role, model null / model schedule |
+  |---|---|
+  | reinstatement letter, page 2 "REVISED POLICY SCHEDULE" | null / other |
+  | reinstatement letter, page 2 "Policy Schedule (Revised)" | null / other |
+  | reinstatement letter, page 2 "POLICY SCHEDULE Page 1 of 1" | null / other |
+  | reinstatement letter, page 2 "Example Life Assurance Policy Schedule" | null / other |
+  | reinstatement letter, page 2 "POLICY SCHEDULE:" | null / other |
+  | letter, then page 2 with "Policy Schedule No. 2" at line 6 | null / other |
+  | welcome letter mentioning the 30-day grace period, "Your Policy Schedule" below it on page 1 | null / other |
+
+  Reinstatement packs are exactly where a revised schedule comes with the letter.
+  - Fix: use an allow-list, not a title-shape deny-list. A document is a notice only if **every** TITLE occurrence (policy schedule, certificate of insurance, renewal certificate, and so on) is inside a known reference phrase. Examples: "refer to your policy schedule", "keep this with your policy schedule / certificate of insurance", "as shown in your policy schedule", "see your policy schedule", "your policy schedule is unchanged / remains valid", "policy schedule: no change". Any other occurrence (a heading, "revised policy schedule", "is enclosed", "serves as your certificate", "Certificate of Insurance No.") means it is not a notice, and the old rules decide.
+  - Add the seven rows above as negatives.
+
+- **M1. A renewal notice that is also the renewal certificate becomes renewal_statement.** That is a payment role, so its cover is never read (NO_COVER_READING_ROLES). On main both were certificate.
+  - "RENEWAL NOTICE" with "RENEWAL CERTIFICATE NO. 2027-0099", insured and sum insured.
+  - "RENEWAL NOTICE … This notice serves as your certificate of insurance upon payment", with insured person, plan and period.
+  - The H1 allow-list fixes both: neither title occurrence is a reference phrase.
+  - Also, an endorsement titled "Notice of Reinstatement - Endorsement" that revises the sum assured becomes other. Main's personal_schedule was wrong too, but endorsement is the right role. A line with "endorsement" in it should block the notice path.
+
+- **M2. Whole-text keywords pick the notice's kind.** `renewal premium` anywhere sends a lapse notice to renewal_statement: "NOTICE OF LAPSE … The renewal premium was not received and your policy lapsed" gives renewal_statement. A renewal_statement is "Current account record" (authority 80) and links to the policy, so a lapse notice reads as renewal evidence.
+  - Fix: decide the kind from the notice's own title line or head. Lapse, reminder and reinstatement titles go to other; renewal notice goes to renewal_statement; receipt goes to premium_receipt. Use whole-text words only when no title line matched.
+
+- **L1. Notices still missed (no regression; they stay personal_schedule as on main):**
+  - Titles not on the list: "LAPSE NOTIFICATION", "NOTICE OF POLICY LAPSE", "Reminder: Premium Overdue", "Overdue Premium Notice", "PAYMENT ACKNOWLEDGEMENT".
+  - A termination letter ("terminated as premiums are overdue"); "terminated" and "overdue" are not status words.
+  - A letter whose lapse sentence sits below line 12.
+  - A computer-generated notice with no sign-off ("No signature is required") fails isLetter, and the model's schedule role stands.
+  - Fix: extend NOTICE_TITLE_LINE with these titles, add terminat\w*, overdue and outstanding premium to STATUS_NOTICE, and accept "computer-generated … no signature is required" as a sign-off. All of this is safe only once H1's allow-list guards real schedules.
+  - Also: a pack topped by "OFFICIAL RECEIPT" with a schedule titled just "SCHEDULE" (number, life assured, sum assured) becomes premium_receipt. A bare "SCHEDULE" title is uncommon, so this is low.
+
+- What already holds: an exact "POLICY SCHEDULE" page 2 stays personal_schedule; "Policy Schedule – Plan (Revised 2026)" stays personal_schedule; a combined schedule and receipt titled "POLICY SCHEDULE AND RECEIPT" stays personal_schedule; "Dear Policyowner / Policy Owner" letters are caught; and a 4-page pack never counts as a notice.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice 3/3, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R331 — #184 fb1a776e: CHANGES (1 High, 1 Medium, 1 Low)
+
+The same 27 R330 probes plus 5 new ones, through deterministicDocumentRole on main 9c03ee3 and on the PR, with the model role null and with "personal_schedule".
+
+- Fixed from R330:
+  - The reinstatement packs with "REVISED POLICY SCHEDULE", "(Revised)", "Page 1 of 1", "Example Life Assurance Policy Schedule" and "POLICY SCHEDULE:" on page 2 are personal_schedule again.
+  - A lapse notice with "renewal premium" wording now gives other (M2).
+  - N1, N2, N4, N7, N8 and N9 are now caught.
+- **H1 (narrower, still open). A schedule whose title is not an exact line, and not in a later page's first 4 lines, still loses its cover.** Status words now count anywhere in a letter of 3 pages or fewer ("grace period", "overdue", "reinstate…"), and a sign-off may be just "Thank you". Schedules print exactly these words as terms, so this path got wider. Each of these was personal_schedule on main (with the model's role) and is other on the PR:
+
+  | Document (made-up) | Main | PR |
+  |---|---|---|
+  | 1 page: "Dear Mr Kumar, we are pleased to enclose your policy details below", then "Your Policy Schedule", number, life assured, sum assured, "Grace period : 30 days", "Thank you" | personal_schedule | other |
+  | 2 pages: cover letter, then page 2 with a 4-line letterhead (name, address, phone, registration number) before "Policy Schedule (Page 1)", with a grace period row | personal_schedule | other |
+  | 2 pages: same, "Policy Schedule No. 2" at line 6 of page 2 | personal_schedule | other |
+  | 1 page: "Dear Policyholder / EXAMPLE TERM - YOUR SCHEDULE / number / life assured / sum assured / Reinstatement: a lapsed policy may be reinstated within 2 years / Thank you for choosing Example Life" | model role kept | other |
+  | welcome letter mentioning the grace period, "Your Policy Schedule" below it on page 1 | personal_schedule | other |
+
+  - A letterhead of four or more lines is normal, so the fixed `slice(0, 4)` window on later pages is the weak point.
+  - Fix (R330's allow-list): a document is a notice only if every TITLE / ENCLOSED_TITLE occurrence on every page, at any line, sits inside a known reference phrase ("refer to / see / keep this with / as shown in your policy schedule|certificate…", "… is unchanged / remains valid", "policy schedule: no change"). Any other occurrence means it is not a notice.
+  - Second guard worth adding: a page with a policy-number cell AND a person cell (PERSON_CELL, name-shaped) AND a sum assured / sum insured figure row is a schedule page. In that case only an explicit notice title on page 1 (NOTICE_TITLE_LINE) may still make it a notice. A bare letter plus a status word may not.
+  - Add the five rows above as negatives.
+- **M1 (open from R330). A renewal certificate or a certificate on page 1 becomes renewal_statement or other, so its cover is never read.**
+  - "RENEWAL NOTICE / RENEWAL CERTIFICATE NO. 2027-0099 / insured / sum insured" gives renewal_statement. Main gave certificate.
+  - "RENEWAL NOTICE … this notice serves as your certificate of insurance upon payment" gives renewal_statement. Main gave certificate.
+  - "Premium Notice / Certificate of Insurance No. 55667788 / insured person / sum insured" gives other. Main gave certificate.
+  - "Notice of Reinstatement - Endorsement" with a revised sum assured gives other. Main gave personal_schedule; the right role is endorsement.
+  - ENCLOSED_TITLE is checked only on later pages. The H1 allow-list, applied to page 1 too, fixes all of these. A title line containing "endorsement" should also block.
+- **L1 (still missed, no regression):**
+  - "NOTICE OF POLICY LAPSE" (NOTICE_TITLE_LINE has "notice of lapse", not "notice of policy lapse");
+  - "Reminder: Premium Overdue";
+  - "PAYMENT ACKNOWLEDGEMENT";
+  - a computer-generated letter with no sign-off ("No signature is required");
+  - "OFFICIAL RECEIPT" with a bare "SCHEDULE" pack, which gives premium_receipt.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R332 — #184 bfc1f41f: CHANGES (1 High, 1 Medium)
+
+Probe: 38 made-up documents (R330 + R331 + 6 new) through deterministicDocumentRole on main and on the PR.
+
+- What is fixed:
+  - All 15 R330 schedule and pack cases now keep their main role.
+  - B1–B3 now keep their main role.
+  - Both renewal certificates, "Certificate of Insurance No." and the receipt with a bare SCHEDULE give certificate or personal_schedule.
+  - The reinstatement endorsement now gives personal_schedule, the same as main (still not endorsement; low priority).
+  - All the R330/R331 missed notices are caught except "PAYMENT ACKNOWLEDGEMENT … keep with your policy schedule". That one stays personal_schedule, which is acceptable because "keep with" lacks "this".
+- **H1. The reference-phrase allow-list strips phrases that point at an enclosed schedule.** After stripping, nothing blocks, so a pack carrying its own schedule becomes "other". Main gave personal_schedule for all three:
+  - "Your policy has been reinstated. Please **see the policy schedule attached**." with page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured" gives other.
+  - "Please **refer to the policy schedule enclosed**." with the same page 2 gives other.
+  - 1 page: "Following reinstatement, the changes **in your policy schedule** are as follows: Sum Assured : S$150,000 …" gives other.
+  - Fix:
+    - (a) A reference phrase counts only when its sentence ends there, or goes on with an allow-listed tail ("for details", "for more information", "for your cover", "for full details").
+    - Anything after it such as attached, enclosed, below, overleaf, herewith, as follows, following or "is/are … issued/updated/revised/amended" means it is not a reference.
+    - (b) Drop "in" and "under" from the verbs. "in your policy schedule" introduces changes as often as it refers.
+    - Add the three rows above as negatives.
+- **M1. With no notice title, a status word used as a term row makes a schedule-like page a notice.** "Grace period : 30 days" or "Reinstatement: a lapsed policy may be reinstated within 2 years" counts as a status word, and "Dear …" plus "Thank you" counts as a letter. Main kept the model's personal_schedule for both:
+  - "Dear Policyholder / EXAMPLE TERM - YOUR SCHEDULE / number / life assured / sum assured / Reinstatement: … / Thank you for choosing …" gives other.
+  - "Dear Mr Kumar / Thank you for buying … / POLICY DETAILS / number / life assured / sum assured / Grace period : 30 days / Thank you" gives other.
+  - Fix: on the letter path, count only status sentences, never label/value rows. Examples: "has lapsed", "lapsed on", "is overdue", "was not received", "has been reinstated|terminated", "grace period ends|will end|expires". Also block "schedule" outside the reference phrases unless it is in "payment schedule" / "premium schedule". Today only a bare SCHEDULE line blocks, and "YOUR SCHEDULE" passes.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R333 — #184 ed94eacd: CHANGES (1 High, carried from R332)
+
+I re-ran all 38 probes.
+- R332 M1 is fixed. The "YOUR SCHEDULE" page with a reinstatement clause and the "POLICY DETAILS" page with "Grace period : 30 days" now keep the model's role.
+- R332 H1 part (b) is fixed. "changes in your policy schedule are as follows" gives personal_schedule.
+- A premium reminder that says "as per your payment schedule" is still a notice.
+- Every R330 and R331 case holds.
+- **H1 (R332 (a), still open):** two cases still become "other". Main gave personal_schedule for both:
+  - "Your policy has been reinstated. Please **see the policy schedule attached**." with page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured".
+  - "Please **refer to the policy schedule enclosed**." with the same page 2.
+  - Fix: a reference phrase must end its sentence, or go on only with an allow-listed tail ("for details", "for more information"). Followed by attached, enclosed, below, overleaf, herewith, as follows, following or "is/are … issued/updated/revised", it does not count.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R334 — #184 e7aa70be: CHANGES (1 High, structural)
+
+All 38 earlier probes now hold. R332 H1 (attached/enclosed) and M1 are fixed. I added 5 new probes. Main gave personal_schedule, or kept the model's role, for all five; the PR gives "other" for all five:
+
+| Made-up pack: reinstatement letter, then page 2 "YOUR POLICY DETAILS / number / life assured / plan / sum assured" | PR |
+|---|---|
+| "Please see the policy schedule, which is attached." | other |
+| "Please refer to the policy schedule; it is enclosed with this letter." | other |
+| "Please refer to your policy schedule" with "(attached)." on the next line | other |
+| "We enclose your updated details overleaf. Please refer to your policy schedule." | other |
+| "Your policy has been reinstated with effect from 1 Nov 2026." with no schedule mention at all | other (main kept the model's role) |
+
+- **H1. Phrase-level rules keep leaking. This is round 4 of wording fixes.** The last row shows the root cause: the decision reads the wording and ignores what the pages carry. A page with a schedule's content (number, person, sum assured) and no schedule word passes. Per the lessons log (#142/#144, #147), settle this structurally:
+  - (a) **Content guard.** A page after page 1 that holds a policy-number cell, a name-shaped person cell (PERSON_CELL / nameShaped) and a sum assured / sum insured / benefit figure row is an enclosed schedule, so the document is not a notice. On page 1, the same block lets the notice path stand only with an explicit NOTICE_TITLE_LINE in the head, never on the letter-plus-status-event path.
+  - (b) **Enclosure guard.** Without a notice title, any enclosure word (enclose\w*, attached, overleaf, herewith, "follows", "below") blocks the letter path.
+  - Keep the reference-phrase allow-list. With (a) and (b) in place, it no longer has to catch every way of saying "enclosed".
+  - The PR's own notices still hold: the titled lapse notice that prints life assured and sum assured has a NOTICE_TITLE_LINE, and the reinstated letter has no sum row.
+  - Add the five rows above as negatives.
+- Checks: I did not re-run the full gate on this head (the change is limited to the messy.ts wording). The ed94eacd gate was green; I will run the gate on the next head.
+
+## R335 — #184 11e25b21: CHANGES (1 High, narrow)
+
+- R334 is fixed. All five R334 rows (attached/enclosed variants, and no schedule mention) are personal_schedule again. All 38 earlier probes hold.
+  - N9 (an untitled lapse letter printing its own particulars) keeps today's role. That is the accepted default-safe limit.
+- **H1. The content guard only recognises one layout.** policyParticulars needs a `PERSON_CELL` label, the value beside it, and a sum line with one of a few words. I used a reinstatement letter ("… Please refer to your policy schedule.") followed by a page 2 with the policy's particulars in another common layout. Main gave personal_schedule for all four of these; the PR gives "other":
+
+  | Page 2 (made-up) | Why the guard misses it |
+  |---|---|
+  | "Policy No : 77001234 / Insured Name : Ravi Kumar / Basic Sum Assured : S$200,000" | "Insured Name" is not a PERSON_CELL label |
+  | "Policy Number⇥77001234 / Life Assured⇥Ravi Kumar / Coverage⇥S$200,000" | "Coverage" is not a sum word |
+  | header row "Policy Number⇥Life Assured⇥Sum Assured", then a values row | values sit under the labels, not beside them |
+  | "Benefit⇥Amount / Death⇥S$200,000 / TPD⇥S$200,000" | a benefit table, not a sum line |
+
+  - Fix (structural, default-safe): **a later page may not add a new money figure or a new policy number.** A notice's later pages (payment slip, terms, a translation) repeat page 1's premium and number. A schedule adds its sum assured and benefit amounts.
+    - Compute the set of money figures (currency or a number of 1,000 or more with separators) and policy numbers on page 1.
+    - If any later page prints one that is not in that set, the document is not a notice.
+    - This replaces the shape recognition for later pages. Keep policyParticulars for page 1.
+  - Add the four rows above as negatives.
+- Low (not blocking): on page 1, an untitled reinstatement letter that embeds its particulars in a layout the guard misses ("Insured Name", a column table) becomes other. Main filed it as personal_schedule by keyword. The real schedule usually comes separately, so this rarely loses cover.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R336 — #184 009827c7: READY
+
+- R335 H1 is fixed. The four layouts now give personal_schedule, the same as main:
+  - "Insured Name" with "Basic Sum Assured";
+  - "Coverage⇥S$200,000";
+  - a header row with the values on the next row;
+  - a Death/TPD benefit table.
+- The figure rule works as designed:
+  - A later page that prints a money figure or long number missing from page 1 means the document is not a notice.
+  - A lapse notice whose page 2 is a payment slip, repeating S$99.00 and the policy number, stays a notice ("other"). Main filed it as personal_schedule.
+- The full probe set, 53 made-up documents (R330–R336), run on main and on the PR:
+  - Every schedule, pack and certificate keeps main's role.
+  - Every titled or event-stated notice is "other", "renewal_statement" or "premium_receipt" as intended.
+  - Accepted default-safe limits, unchanged from main: N9 (an untitled letter printing its own particulars) and N10 ("keep with" without "this").
+- Low, not blocking: thousands separated by a space ("Sum Assured : 200 000") are not read as a figure, so that one page-2 layout still becomes "other". SG, MY and UK print commas, so this is rare. It can be added to figuresOf later.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R337 — #184 c74df928: CHANGES (1 High, regression from 009827c7)
+
+The rule from R336 has been narrowed: a later page now counts as adding something only if it prints a new money figure of 1,000 or more, or a new labelled policy/certificate/contract number. That narrowing reopens lost cover. Each row is a reinstatement letter ("Your policy 77001234 has been reinstated… refer to your policy schedule") followed by a page 2. All rows were personal_schedule on main and on 009827c7; the "c74df928" column is this head:
+
+| Page 2 (made-up) | c74df928 |
+|---|---|
+| "Insured Name : Ravi Kumar / Benefit⇥Amount / Hospital cash⇥S$200 / ICU⇥S$400" | other |
+| "Insured Name / Plan : Example Hospital Income / Units : 5 / Benefit per unit per day : S$50" | other |
+| "Insured Name / Sum Assured (SGD) : 200000" (no separator) | other |
+| "Insured Name / Coverage : SGD 200K" | other |
+
+Hospital-cash, travel and per-day plans are exactly the schedules whose figures are under 1,000. The 1,000 floor is a deny-list built from the shape of a payment slip.
+
+- Fix (allow-list the harmless page, not the harmless figure):
+  - A later page is part of the notice only if (i) it is a payment page, with a title line such as "PAYMENT SLIP", "REMITTANCE ADVICE", "HOW TO PAY", "PAYMENT INSTRUCTIONS", "GIRO" or "PayNow" in its first 4 lines and no PERSON_CELL / name line; or (ii) it prints no money figure and no person cell at all.
+  - Any other later page with a money figure or a number that page 1 lacks blocks the notice, at any size. That brings back the 009827c7 figure rule for non-slip pages, including bare 5+ digit numbers and "K" amounts.
+  - TE's payment-slip mirrors then pass under (i).
+  - Add the four rows above as negatives, and keep TE's slip mirrors as positives.
+- No other change: the other 49 probes are as on 009827c7.
+- I did not run the full gate on this head, because the fix will change messy.ts again. The 009827c7 gate was green.
+
+## R338 — #184 13486209: CHANGES (1 Medium, small)
+
+- R337 is fixed. All four small-sum rows (hospital-cash table, units per day, "200000", "SGD 200K") are personal_schedule again.
+- A lapse notice with a slip carrying "Biller code 123456" and the same S$99 stays "other".
+- All 60 earlier probes match 009827c7. The only exception is F4 ("200 000", a space separator), the Low accepted in R336.
+- **M1. A "notes" or "terms" title lets a later page add new cover figures.** Clause (i) exempts a page whose first 4 lines carry a notes or terms title, as long as it has no person label and no cover word. "Hospital cash" and "Rider" are not cover words, so these two pages hide new benefit figures. Each starts with a reinstatement letter. Main gave personal_schedule for both (with the model role):
+  - page 2: "IMPORTANT NOTES / Hospital cash⇥S$200 / ICU⇥S$400" gives other;
+  - page 2: "TERMS AND CONDITIONS / Rider⇥Amount / Critical Illness Rider⇥S$50,000" gives other.
+  - Fix:
+    - Under (i), a notes or terms page may add **no** money figure that page 1 lacks. Biller codes, account numbers and form numbers are not money, so TE's slips still pass.
+    - A payment page may add a money figure only on a line with a payment word ("amount due/payable", "total", "fee", "charge", "outstanding", "minimum").
+    - Add the two rows above as negatives.
+- Checks, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R339 — #184 0ca0f549: CHANGES (R338 M1 still open, plus one Medium missed in R338)
+
+- All 65 earlier probes match 13486209.
+- **R338 M1 is still open.**
+  - page 2 "IMPORTANT NOTES / Hospital cash⇥S$200 / ICU⇥S$400" still gives other.
+  - page 2 "TERMS AND CONDITIONS / … Critical Illness Rider⇥S$50,000" still gives other.
+  - Main gave personal_schedule for both.
+  - Same fix as R338: a notes or terms page may add no money figure that page 1 lacks.
+- **M2 (already in 13486209; I missed it in R338). A schedule page with no money figures is exempted.**
+  - This comes through clause (ii) and the new payment-mark path. Schedules print "Payment Mode : GIRO" as a field, and "Policy Owner" does not count as a person label.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Payment Mode : GIRO / Plan : Example Hospital Income / Units : 5" gives other. Main kept the model's role. 13486209 gave other too.
+  - Fix: count PAYMENT_MARK only on a payment-instruction line (detach, "how/ways to pay", "cheques payable to", "bank account no.", "biller code", "pay via PayNow/AXS"), never on a "Payment Mode/Method/Frequency : …" field row.
+  - Also, a page with a Plan, Units, Rider or Benefit row is never a payment page.
+  - Add this row as a negative.
+- What holds: "Payment Mode: GIRO" with Hospital cash S$200 gives the model's personal_schedule. GIRO with a rider sum assured S$50,000 gives personal_schedule.
+- Checks: I did not re-run the gate on this delta; 13486209 was green. I will run it on the head that closes M1/M2.
+
+## R340 — #184 6b43e47c (gate green) and 24a40097: CHANGES (1 Medium; part of it came from my R338 wording)
+
+- On 6b43e47c, R339 M2 is fixed and all 71 probes keep their roles. The full gate passed: tsc clean, next build passes, merge-tree clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- 24a40097 also keeps all 71 probes.
+- **M1. The payment-line words let benefit amounts through on a notes page.** My R338 suggestion ("amount due/payable", "total") was too loose, and 24a40097 widened it further with "paid" and "payable". Each row is a reinstatement letter, then page 2 titled "IMPORTANT NOTES". Main gave personal_schedule for all three (with the model role):
+
+  | Page 2 line | 6b43e47c | 24a40097 |
+  |---|---|---|
+  | "Amount payable on death : S$200,000" (and TPD) | other | other |
+  | "Total payable on death⇥S$250,000" | other | other |
+  | "Paid on diagnosis of a critical illness : S$50,000" | personal_schedule | other |
+
+  - Fix: make PAYMENT_LINE an allow-list of what the household pays. A line counts only if it names a premium, fee, charge, interest, arrears, "amount due" or "outstanding" (with "minimum payment" and "total amount due/payable" allowed only alongside one of those).
+  - Bare "Amount", "total", "payable" and "paid" never count on their own.
+  - Add to NOT_PAYMENT_LINE: death, diagnosis, illness, TPD, disab\w*, hospital\w*, accident, claim, surgery, maturity.
+  - Add the three rows above as negatives. Keep TE's "Your premium will be S$95.00", "Interest of S$3.20 is charged…" and "Total amount payable: S$176.40" (on a slip) as positives.
+- I will run the gate again on the head that closes M1.
+
+## R341 — #184 9a90d242: CHANGES (R340 M1 open; M2 regression from the TE round 14 narrowing)
+
+All 71 earlier probes hold.
+- **R340 M1 is still open.** A notes page with "Amount payable on death : S$200,000", "Total payable on death⇥S$250,000" or "Paid on diagnosis of a critical illness : S$50,000" gives other. Main gave personal_schedule for all three. The fix is the same as R340.
+- **M2 (regression vs 6b43e47c).** A plan, rider or coverage row now blocks only when its value prints a digit, so digit-free schedule pages pass as notice pages. Both rows below gave the model's personal_schedule on main and on 6b43e47c; on this head both give other:
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Payment Mode : GIRO / Plan : Example Hospital Income Plan B / Rider : Example Critical Illness Rider" gives other.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Plan : Example Shield Plan A / Ward class : B1 / Coverage : As charged" gives other. Hospital shield plans print "as charged", not a figure.
+  - Fix:
+    - Allow-list the exceptions, not the blocks. On a page with a payment title (clause i), one bare "Plan : <name>" row may pass, which keeps TE's slip.
+    - On any other later page, a plan, rider, benefit, coverage or ward row with a value blocks, digit or not.
+    - A label followed only by a reference sentence ("Benefits: please refer to your policy schedule.") may pass on any page.
+    - Add both rows above as negatives.
+- Checks: 6b43e47c had a green gate (R340). I will gate the head that closes M1 and M2.
+
+## R342 — #184 ce5a757b: READY · eef6d354: CHANGES (exemption 1)
+
+- **ce5a757b is READY.**
+  - R341 M2 is fixed: both digit-free plan pages (Plan + Rider names; Shield plan "As charged") give personal_schedule.
+  - All 81 made-up probes (R330–R342) give main's role for every schedule, pack and certificate, and the intended notice role for every notice. N9, N10 and F4 are the accepted default-safe limits.
+  - Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped: tsc clean, next build passes, merge-tree with main 9c03ee3 clean; status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+- **eef6d354, M1. Exemption (1), "a full sentence of 4+ words ending in . or ! with no digit", re-opens a plan row.** Schedules do print rider and benefit descriptions as sentences.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Rider : Early critical illness rider for the insured. / Benefit : Lump sum on diagnosis of a covered illness." gives other on eef6d354. It gives personal_schedule on ce5a757b and on main.
+  - "Coverage : All reasonable hospital expenses as charged." still keeps the model's role.
+  - Fix: drop exemption (1). Alternatively, exempt a sentence value only when it starts with a ROW_SENTENCE word (please, see, refer, will, as shown, …), which ce5a757b already has. Add the row above as a negative.
+  - Exemptions (2) and (3) hold in my probes: no regression.
+- Recommendation: merge ce5a757b, or eef6d354 once exemption (1) is dropped or limited.
+
+## R343 — #184 d8f441d3: CHANGES (narrowed exemption still reopens a rider row); ce5a757b remains READY
+
+- All 83 earlier probes hold on d8f441d3, including R342's rider/benefit sentence row.
+- **M1.** The SENTENCE_WORD exemption (a pronoun or verb in the first three words) still lets a schedule row through.
+  - page 2 "POLICY DETAILS / Policy Owner : Ravi Kumar / Rider : Covers you for early critical illness." gives other on d8f441d3. It keeps the model's personal_schedule on ce5a757b and on main.
+  - "Benefit : We pay a lump sum…" and "Coverage : It covers your hospital bills as charged." still keep the model's role.
+  - This is the third wording-based exemption on this row (eef6d354, d8f441d3). Each one leaks a rider or benefit description.
+  - Fix: keep only ce5a757b's ROW_SENTENCE starters (please, see, refer, will, as shown, …). Those are reference or instruction phrasings, not descriptions of cover. Add Q3 as a negative.
+- Recommendation unchanged: **ship ce5a757b**, which is gated green with 81 probes. Alternatively, ship a later head that removes the SENTENCE_WORD exemption; I will re-gate it.
+
+## R344 — #184 1fc8651a: READY
+
+- R343 is fixed. SENTENCE_WORD is gone, and ROW_SENTENCE now keeps only addressing words. Q3 ("Rider : Covers you for early critical illness.") gives personal_schedule again.
+- All 86 made-up probes (R330–R344) were run on main and on the PR:
+  - Every schedule, pack and certificate keeps main's role.
+  - Every titled or event-stated notice gets its intended role.
+  - Accepted default-safe limits (main's rules apply): N9, N10, F4, and the builder's MP18/MP24/MP25.
+- Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main 9c03ee3 clean;
+  - status-notice test passes, simple chat 84, replay 22/22, benefit-table 107 and chat 107, r5 21/21.
+
+## R345: PR #185 head 7b458317 (documents not fully read on Home and Coverage), CHANGES
+
+- Full gate, in a fresh worktree with npm ci, network-blocked with model keys stripped:
+  - tsc clean, next build passes, merge-tree with main 5110764a clean;
+  - policies:not-fully-read-test passes, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- Checks out:
+  - Ownership: policy_members links decide first; family_member_id is used only when a document has no links. Every subquery is scoped to the account.
+  - Deleted copies (activePredicate) and superseded copies (superseded_at IS NULL) are left out.
+  - Wording never suggests cover exists ("may be missing here", "Not found in what DearPolicy could read"). Document names go through maskShownText.
+- M1 (Medium, lost-cover direction), lib/policies/not-fully-read.ts query: only `failed`, "Read in part" and a stopped cover reading count. Documents that never finish reading without being `failed` still let "Not found" read as no cover:
+  - scan-held or blocked documents (intake status with a quarantine state outside SCAN_GOES_ON), which documentState in lib/benefit-table/service.ts shows as held, not_readable or stalled;
+  - documents stuck in intake past the dashboard `reading` window (30 minutes, app/api/dashboard/route.ts:113), which drop out of "still being read" and are counted nowhere;
+  - ready documents with no pages (not_readable);
+  - personal proof (personal_schedule or certificate) whose benefit table was never read in (table_unread) and has no BENEFIT_READ_FAILURE_KEY;
+  - misfiled packs: insurer_letter or another no-cover role with filedBeforeRoleRules true (#183). The role exclusion drops exactly the packs for which Documents offers Read again.
+  - Fix: count a document when its documentState is held, stalled, not_readable or table_unread, or when filedBeforeRoleRules is true. Reuse the service's own functions, so Home and Documents cannot disagree. Add test rows for each case.
+- Low: the `failed` and "Read in part" branches also count roles that never carry cover (receipts, letters). This over-warns, which is the safe direction. Optionally exclude NO_COVER_READING_ROLES there too, except where filedBeforeRoleRules applies.
+
+## R346: PR #185 head 6d40c652 (reminder wording, named once), CHANGES (R345 M1 still open)
+
+- Full gate is green: tsc, next build, merge-tree with main 5110764a, own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- The delta is fine:
+  - The new reminder uses the Documents page's own words (app/policies/page.tsx:470), so it claims nothing Documents does not already say.
+  - Its count is per person, which matches the quality count it replaces (q, dashboard/route.ts:143).
+  - A document already named as not fully read is not named twice; ids are distinct (tested).
+- R345 M1 is unchanged and still blocks: held, stalled, not_readable and table_unread documents, and misfiled packs (filedBeforeRoleRules), are still not counted, so "Not found" can still read as no cover.
+- Low (new, existing pattern): the unconfirmed query, like q, has two gaps:
+  - it joins policy_members only, so a document owned by family_member_id with no links is never counted, which differs from notFullyRead's ownership rule;
+  - it has no `superseded_at IS NULL`.
+  Optional: reuse the same owner and superseded predicate as notFullyRead.
+
+## R347: PR #186 head dd6e7393 (namesNoBenefit drops nameless benefit rows), CHANGES
+
+- Full gate is green:
+  - tsc, next build, and merge-tree with main 5110764a pass.
+  - The PR's own nameless-benefit test passes.
+  - Other suites: simple chat 84, replay 22/22, benefit-table 107/107 and chat 107, r5 21/21.
+- The rule runs at intake (replaceBenefitCatalog). A row it drops is never stored, so a false hit is lost cover that only a paid re-read could bring back. Real names it hides, run through the PR's own function:
+  - H1 (High, any market): names written in a non-Latin script or with accents. Examples: "危疾保障", "身故", "死亡保険金", "입원", "ประกัน", "Décès". The "word of three letters" test is `[A-Za-z]{3}`, so a Chinese, Japanese, Korean or Thai schedule loses every benefit row.
+  - H2 (High, common Singapore, Malaysia and UK shapes): two-letter and symbol acronyms. Examples: "CI", "TI", "PA", "GP", "ER", "CT", "DB", "A&E", "TI/CI", "CI 1". Each of these is printed as a cover name with its own sum.
+  - M1: a lower-case name that starts with a joining word joined by a hyphen. Examples: "in-hospital doctor's visit", "up-front cash", "per day hospital cash". The `\b` after the word matches at the hyphen.
+- These pass correctly: ICU, Hip, eShield, "Death Benefit:", TPD, ECI, LTC, X-ray, "Haemophilia A", "Plan A", "Stage 1", "Day surgery (a)", "Option A or B". The PR's own examples are all dropped as intended.
+- None of the 730 benefit names in the repo's fixtures and tests is wrongly hidden. Only fragments are ("2.", "...", "A", "X", "1:").
+- Fix, default-safe:
+  - Test for any letter in any script (`\p{L}`, with the u flag), not `[A-Za-z]{3}`.
+  - Keep any name that holds an all-capitals token of two or more letters, including tokens joined by & or /.
+  - The start and end word rules should fire only when a space follows the joining word (or comes before it, for the end rule), never a hyphen.
+  - For the unsure case, keep the row (it shows as a heading), because dropping it at intake cannot be undone.
+  - Add every name above to the test as names that must stay.
+- Low: a "2027" row from a payout-by-year table is a real dated amount (a scheduled payout), not noise. Hiding it is acceptable only because its name cannot tell a reader which benefit it belongs to. Better would be to hold it under its table's benefit, as a follow-up.
+- Amounts: none of the dropped fragments carries a limit that another row reads by name, so hiding them does not lift another benefit's figure. That is the safe direction for amounts. The risk is lost rows (H1, H2), not a wrong figure.
+
+## R348: PR #187 head 31ef2bba (ledger plan name never a file name), CHANGES
+
+- Full gate is green: tsc, next build, merge-tree with main 5110764a, own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+**(1) Callers that compare planName.** The rename does not stay on screen. lib/ledger/answer.ts:224 builds each claim item's key with `coverKey({insurer, productName: row.planName, ...})`, and lib/insurance/cover-composition.ts:55 groups items by `coverKey|event|shape` as alternatives of one cover.
+
+- H1 (High: a wrong claimable total, cover lost).
+  - Setup: two separate policies from the same insurer, both machine-named, with no product name and no policy number (for example "Output 202609281146157" and "Output 202609281157000").
+  - Both now become "Example Life certificate". That gives one key, `product:example life|example life certificate`.
+  - resolveCoverOverlaps then supersedes the second S$100,000 death row, so the total halves.
+  - Proven by running the PR's own readablePlanName and resolveCoverOverlaps: superseded is `[null, "Ada · x — Death"]`. With the stored names it is `[null, null]`.
+  - Fix: rename for display only. Either add a display field, or keep coverKey (and every other comparison) on the stored plan_name or the contract id. Add a test with two such documents.
+- M1: lib/chat/workflow.ts:2622 keeps travel rows only where `/travel/i.test(row.planName)`.
+  - A row seeded with the plan "TravelInsurance" (from TravelInsurance.pdf, product "Example Journey") now reads "Example Journey", so its travel_medical rows drop out of the travel answer.
+  - The same display-only fix covers this. Otherwise match on the stored name.
+- Display only, fine: app/ledger/page.tsx:191 and app/operator/coverage/page.tsx:82 group by planName. contractOfItem (workflow.ts:983) may now match a contract by its readable name, which is the more correct result.
+- Note: the operator edit form pre-fills the shown name, so saving any edit writes the readable name into plan_name. That is acceptable.
+
+**(2) Cost.** The subquery looks up `policies.id`, the primary key, once per row. That is an index probe per row, the same shape as ACTIVE_POLICY_GUARD. It is fine on a large ledger. Optional: a LEFT JOIN reads more simply.
+
+**(3) A real plan judged to be "from the file name".** Yes, when the file is named after the plan.
+- "eShield" from eShield.pdf becomes "e Shield", because prettifyFilename splits the camel case. The printed name gets worse.
+- "Travel Care", "Group Term Life", "ICU", "Home" and "PRUShield" stay as they are, and a plan a person typed is kept.
+- Low: when the base name matches the file name but documentName would only re-prettify the same words, keep the stored plan. That is, replace only when the name is a machine file name, or when the document has a product name.
+
+## R349: PR #188 head ef2841f6 (printedCap: a stored cap bites only where its sentence prints it), CHANGES
+
+- Gate (fresh worktree, npm ci, network-blocked, model keys stripped):
+  - Own test passes. Simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+  - tsc clean, next build passes, merge-tree with main 5110764a clean.
+- On main, every stored cap bites, which cuts too much. With this PR, a cap that fails the check stops biting, so the full figure shows. That is a claimable amount set too high, which is the worst-bug class. The unsure case must not show the uncapped figure.
+- All results below come from running the PR's printedCap and applyCoverConditions.
+
+### H1 (High): real printed caps that no longer bite, so the figure shows uncapped
+- No currency printed on the figure: "Maximum per policy year 50,000" and "Benefit limit: 5,000 per disability". Table-style schedules often put the currency in a column header.
+- Cap words that are missing:
+  - "50% of the sum insured or S$5,000, whichever is lower"
+  - "The lower of S$5,000 or actual expenses"
+  - "Restricted to S$5,000 per policy year"
+  - "Had maksimum RM10,000 setahun" (Malay "maksimum")
+  - "最高赔偿 S$10,000"
+- Currencies missing: ¥, ₹, PHP, Rp.
+- Fractions written in words: "up to fifty percent of the sum insured" and "limited to half of the Sum Assured".
+- A per-day figure with a day cap: "S$500 per day, up to 30 days", stored as S$15,000.
+- These still bite: S$1.5 million, SGD 1,500,000.00, NT$, $20k, 33.33%, "25 %", "Sub-limit S$5,000", "Annual Limit S$5000", "S$ 5,000".
+
+### H2 (High): a sub-limit that names its benefit in the quote stops biting
+- namesTheBenefit compares only condition.productName (the cover the condition governs, per the CoverCondition doc) with the item title. It never reads the quote.
+- Example: "Hospital Cash is limited to S$5,000 per policy year." with productName "Example Shield" (the cover), or with null (document-wide).
+  - The Hospital Cash item stays at S$20,000.
+  - The caveat says it "is shown as printed", but the shown figure is above the printed cap.
+- With productName null, every sub_limit now becomes a caveat.
+- Fix:
+  - Treat the cap as naming the benefit when the quote names the item's benefit (the words after " · ").
+  - When it is unclear which benefit is capped and the figure is above the cap, show no figure for that item ("limited by the policy; see page N"), never the full amount.
+
+### H3 (High): a minimum, threshold, excess or sum insured still bites
+- "subject to" and "exceeding" are cap words, and the stored figure only has to appear somewhere in the sentence. These all bite as caps:
+  - "subject to a minimum withdrawal amount of S$1,000". This is the PR's own motivating case, reworded, and it still cuts S$100,000 to S$1,000.
+  - "subject to a minimum of S$1,000"
+  - "minimum S$1,000, maximum S$100,000" (the stored S$1,000 bites)
+  - "Claims exceeding S$1,000 require original receipts"
+  - "For bills exceeding S$2,000 we pay 80%"
+  - "An excess of S$100 applies, subject to the terms below"
+  - "The deductible of S$500 is subject to change"
+  - "Sum Assured S$50,000, subject to the terms of this policy"
+  - "Co-payment of S$200 up to the limit"
+  - "premium of S$3,000 per year, payable up to age 65"
+- Fix:
+  - Bind the cap word to the stored figure, in the same clause and next to it ("maximum of S$X", "up to S$X", "S$X maximum", "limit: S$X").
+  - Drop bare "subject to" and "exceeding" as cap words.
+  - Any of these words in that clause blocks the cap: minimum, at least, exceed(ing)/above/over/more than as a threshold, excess, deductible, co-payment, premium, sum insured/assured.
+  - Use an allow-list of cap phrasings next to the figure, not a sentence-wide cap word.
+
+### Fixture change (cover-conditions-stress.ts)
+- It only adds printed quotes that state the stored cap ("The most we will pay under Living Care is S$350,000 / S$1,000 in total."). The assertions are unchanged.
+- This is legitimate: under the new rule the fixture needs a sentence that prints the cap, and the asserted totals are the same.
+
+## R350: PR #189 head dcac9c7f (Benefits page uses readable document names), CHANGES (one Medium)
+
+- The full gate is green:
+  - tsc, next build and merge-tree with main 5110764a pass;
+  - the PR's own test passes;
+  - simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- These check out:
+  - Masking: the GET is still wrapped in maskShownText. documentName masks an ID in the file name before making it readable, and shows only the last 4 digits of a policy number.
+  - The PATCH round-trip uses sentName for the benefit name only. documentName is never sent back, so nothing is matched on it server-side.
+  - Search on /schedule now matches the readable name, which is what the person sees.
+  - The /schedule groups are keyed by `doc:<policyId>` when there is no plan name, so two "Insurer policy wording" documents stay separate.
+- M1: app/operator/benefits/page.tsx:217 still groups by `benefit.productName ?? benefit.documentName`.
+  - On main, that key was the unique file name.
+  - Now two documents with the same readable name and no number (for example "Example policy wording") merge into one heading on the operator page, mixing their benefits.
+  - Fix: use the same `doc:<policyId>` key there, and show productName ?? documentName as the heading.
+- Low: amount-alternatives options from two same-named documents carry identical documentName labels. They are told apart only by page, and are sorted by name then page.
+  - This is display only, and the options keep policyId.
+  - Optional: add the page or the policy number ending.
+
+## R351: PR #190 head 01e92a53 (plan-table rows give no figure), CHANGES
+
+- Full gate is green:
+  - tsc, next build, merge-tree with main 5110764a;
+  - the PR's own test;
+  - simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+### H1 (High): a held row comes back as an uncapped percentage
+- repairStoredRules (benefit-catalog.ts:737) runs ruleFromQuote after resolveStoredRules. A row the new hold has set to `none` is then read again from its quote.
+- Results from the PR's own repairStoredRules:
+  - "Medical expenses up to 10% of sum insured, max S$5,000 S$10,000". Main gives fixed 5000. The PR gives **sum_insured 0.1, with no cap**, and the plan note still attached. With a S$500,000 sum insured, chat would show S$50,000 against a printed maximum of S$5,000 or S$10,000.
+  - "Accidental death 100% of the sum insured S$50,000 S$100,000 S$200,000" now gives sum_insured 1.
+- In every one of these cases the Benefits page says "no amount is used", while chat uses the percentage.
+- Fix:
+  - skip ruleFromQuote for rows carrying PLAN_COLUMNS_NOTE, or apply the hold after ruleFromQuote;
+  - add both quotes above to the test.
+
+### Low: single-plan rows held (default-safe, but the wording is wrong)
+- These all trip the check:
+  - "Hospital Cash (per day / maximum) S$100 S$5,000"
+  - "Per life / per family S$50,000 S$100,000"
+  - "S$1,000,000 US$750,000" (two currencies)
+  - "Deductible S$500 S$1,000 (ward A / B1)"
+- Holding them is the safe direction, but the page says "a different amount for each plan", which is untrue for per-day/maximum or two currencies.
+- Optional:
+  - do not count cells in different currencies as plan columns;
+  - phrase the note as "prints more than one figure".
+
+### Low: plan tables it misses (no regression; main does the same)
+- It misses bare figures with the currency in the header ("5,000 10,000 15,000"), percentage columns ("25% 50% 100%"), and currencies outside the list (¥, ₹).
+
+### Checks out
+- Tier interplay: tiered and reviewed rows are skipped.
+- Stored data is unchanged, because this runs only on read.
+- Callers handle `none` as no figure.
+- The ledger behaves the same way.
+
+## R352: re-review of #185 a5d76e2b, #186 754ff5b1, #187 ff37a7d4, #189 9697b16b
+
+Each head went through the full gate: fresh worktree, npm ci, network blocked, model keys stripped. On all four, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21, tsc, next build and merge-tree with main passed.
+
+### #185 a5d76e2b: READY
+- R345 M1 is fixed:
+  - intake stuck for more than 30 minutes, or with a scan state outside SCAN_GOES_ON, now counts (the same rule as documentState, where a null quarantine counts as not_readable);
+  - ready documents with no pages now count;
+  - the table states stalled, held, not_readable and table_unread now count, and table_unread bypasses the role rule, so misfiled packs count.
+- The R345 Low is fixed: receipts and letters are excluded on every branch.
+- The R346 Low is fixed: the unconfirmed reminder now uses OWNED_BY_MEMBER and `superseded_at IS NULL`.
+- Ids from the table are still filtered by account, owner and active state in SQL, so the change has no effect on any other household.
+- The own test passes.
+
+### #186 754ff5b1: READY (one Low)
+- R347 H1, H2 and M1 are fixed. All 50 names in my keep list survive, and every fragment in my drop list is dropped.
+- The filter now runs on read only, so a wrongly hidden row stays stored and comes back once the rule is corrected.
+- Low: a single-character CJK name such as "癌" (cancer) is still hidden. Fix: treat any one `\p{Script=Han}` character as a word.
+- "Cash for" and "Benefit for" are dropped as fragments, which is acceptable.
+- The own test passes.
+
+### #187 ff37a7d4: CHANGES (one Medium)
+- R348 H1 and M1 are fixed for answers. Stored planName drives coverKey and the travel filter, and shownPlanName is used only in the /api/ledger shape. The eShield case is kept as typed.
+- M1: app/operator/coverage/page.tsx:105 pre-fills its edit draft with the shown planName and always sends `planName` in the PATCH.
+  - Any amount or status edit therefore writes the readable name into plan_name.
+  - After an operator edits both of two machine-named policies from the same insurer, both store "Example Life certificate", and H1 comes back from stored data.
+  - Fix: send planName only when the operator changed it, or have PATCH keep the stored plan when the sent name equals readablePlanName of the stored row (the sentName pattern).
+- The own test passes.
+
+### #189 9697b16b: CHANGES (own test red)
+- `policies:benefits-document-name-test` fails at scripts/policies/benefits-document-name-test.ts:23. It still expects `<h2>{rows[0].productName??rows[0].documentName}</h2>`, but the page now renders `groupHeading(groups,product)`.
+- The code delta is fine:
+  - the operator page groups by doc:policyId;
+  - "(n of m)" tells same-named headings apart on both pages.
+- Update the assertion. A behavioural check of groupHeading would be better than a source regex.
+
+## R353: PR #188 head 70526495 (capReading cap / not_cap / unsure), CHANGES (one High)
+
+- Gate is green: tsc, next build and merge-tree with main all pass, plus the own test, simple chat 84, replay 22/22, benefit-table 107/107 and r5 21/21.
+- The R349 fixes hold:
+  - H1: bare figures, missing cap words, and ¥, ₹, PHP and word fractions now read as cap.
+  - H2: a quote that names the benefit now caps it.
+  - H3: every minimum, threshold, excess, deductible, sum insured, premium and count case now reads as not_cap.
+  - "unsure" now withholds the figure, which is safe.
+- **H1 (new): `not_cap` wins over a cap phrase that sits right before the figure.** NOT_CAP_BEFORE is tested before CAP_BEFORE and looks 25 characters back. A not-cap word earlier in the sentence therefore turns a real cap into not_cap, and evaluateCondition returns clear: the cap is ignored and the full figure shows, which overstates the claim. Run through the PR's own capReading:
+  - "Pays 50% of the sum insured or S$5,000, whichever is lower" gives not_cap.
+  - "Pays 90% after the deductible and co-insurance, up to S$150,000 per policy year" gives not_cap.
+  - "minimum S$1,000, maximum S$100,000": the S$100,000 maximum gives not_cap.
+  - "Maximum sum insured for this benefit is S$50,000" and "Maximum Sum Assured for Accidental Death: S$500,000" give not_cap.
+  - "maximum over a policy year S$5,000" gives not_cap.
+  - "After the excess, we pay up to S$5,000" gives not_cap.
+  - "Premium waiver benefit up to S$3,000" gives not_cap.
+  - Fix:
+    - If CAP_BEFORE matches, meaning a cap phrase plus at most the listed filler words ends right at the figure, read it as cap.
+    - Read not_cap only when the not-cap word is nearer to the figure than any cap phrase.
+    - "whichever is lower" after the figure should also beat a "sum insured" earlier in the sentence.
+    - Add the eight quotes above to the test.
+- Low: "maksimum Rp100.000.000" reads as unsure (the dot used as a thousands separator), which withholds the figure. Safe.
+- Low: "Sub-limit for outpatient cancer treatment: S$25,000" reads as unsure, because "for outpatient cancer treatment" is not filler. This also withholds, so it is safe.
+
+## R354: PR #191 head 9e2f5bd2 (simple chat reads a bare "$" from the quote page's declared currency), READY
+
+- The full gate is green:
+  - tsc clean, next build passes, merge-tree with main 5110764a is clean;
+  - simple chat 85 (one new case), replay 22/22, benefit-table 107/107, r5 21/21.
+- A page declaring one currency while its "$" is another: the PR reuses the existing pageCurrency, which is already strict.
+  - It returns null when the page:
+    - names two currencies;
+    - lists currency options;
+    - says "unless stated otherwise";
+    - prints any other currency figure or name (US$, HK$, A$, RM, €, £, ¥, or S$ on a non-SGD page).
+  - The new branch also runs only when the quoted words themselves print no other currency.
+  - The benefit table makes the same call, from the same page declaration (check.ts:187).
+  - What is left is a page that declares one currency for every figure and prints a figure in another currency with no sign. That page misstates itself, and DearPolicy reads it as printed.
+- Callers: all four new call sites pass the page of the quoted words:
+  - `found.page` (plainAmount);
+  - `b.base.found.page` (percentAmount sum insured, and basisOf);
+  - `page.page` (the page object whose text is the evidence).
+  - None passes another page.
+- Order: the new branch comes after the SGD document rule, so a Singapore-dollar pack resolves exactly as on main.
+
+## R355: PR #192 head 96588d0c (liability rows are not the person's own cover), CHANGES (one High)
+
+- The full gate is green: tsc, next build, merge-tree with main, coverage:table-test 104/104, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+
+### H1: the bare word "liability" in a section heading drops the person's own cover (lost cover)
+- The LIABILITY test runs on the section as well as the benefit name. Schedules often head their own-benefit tables with the insurer's limit of liability. Run through the PR's own categoryOfBenefit:
+  - ("Accidental death", "Maximum Liability per Insured Person") gives null.
+  - ("Accidental death", "Schedule of Benefits and Limits of Liability") gives null.
+  - ("Death", "Our liability") gives null.
+  - ("Hospital cash", "Limit of Liability (S$)") gives null.
+  - ("Medical expenses", "Company's maximum liability") gives null.
+  - ("Total and permanent disability", "Benefits and liabilities") gives null.
+  - "Accidental death - maximum liability" as a benefit name gives null.
+- Every one of these is the person's own cover, and each would leave its Home tile and claim match empty.
+- Fix: use an allow-list of liability-cover phrases, not the bare word:
+  - match "personal liability", "public liability", "third party liability", "legal liability", "liability to others / third parties", "liable for ... to other people", and the existing damage/injury/death to others or third parties;
+  - never match "limit(s) of liability", "maximum / total / overall liability", "our / the company's / insurer's liability", or "benefits and liabilities";
+  - add the seven rows above to the test as own cover that must keep its category.
+
+### Checks out
+- Assault and third-party cases stay own cover: "Accidental death (third party assault)" stays Personal Accident and "Death caused by a third party" stays Death.
+- "Personal Liability", "Injury caused to others" and "Section 3: Liability to others" correctly give null.
+- (2) limitKind (check.ts:313): LIMIT_HEAD never contains a liability word, so a head reaches the changed branch only when it names liability itself. It then reads "combined", which keeps a third party's figure off the person's own tiles. That is the right direction. On my probes the results are the same as main.
+- (3) Claims (table-benefits.ts): liability rows no longer match death, hospital, critical illness or disability claims. That is correct: they pay the third party. The H1 fix is needed here too, because a section heading of "Maximum liability" currently drops own-cover death rows from claims as well.
+
+## R356: PR #193 head 7a402893 (ID masking: any case, Documents cards, index route, duplicate error), CHANGES (one Medium); #189 head 245d7933 READY
+
+**#193**
+- Gate is green:
+  - tsc, next build, merge-tree with main all pass.
+  - identity:mask-test passes. Main also passes it.
+  - Simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21.
+- Values sent back are safe:
+  - app/policies/page.tsx only displays original_filename, product_name, processing_message and review_reason. No fetch body carries them.
+  - The other /api/policies consumers only display these fields:
+    - chat/page.tsx (the SourceList file map);
+    - operator/documents/page.tsx (labels);
+    - home-attention.tsx (docName).
+  - Detected names stay unmasked, which is correct because the page posts them back to link a person.
+- M1: routes that still return a shown name unmasked. Every app/api route that returns a product, plan or file name without maskShownText or maskIdentityText was swept.
+  - /api/ledger (app/api/ledger/route.ts) returns plan_name, quote and note raw.
+    - plan_name is often the document's file name: rows seeded before #179, which is the #187 premise. "Certificate_S1234567D" therefore shows in full on the Coverage ledger.
+    - Masking it needs the sentName pattern on PATCH, because the operator page posts planName back (see R352 #187 M1).
+  - /api/premiums (app/api/premiums/route.ts) returns product_name and notes raw.
+  - Fix: wrap both GETs in maskShownText. On ledger PATCH, keep the stored plan_name when the value sent equals the masked stored name.
+- Low: three routes put the raw file name in a Content-Disposition header:
+  - policies/[id]/file;
+  - claims/evidence/[id]/file;
+  - reviewer documents.
+  The household (or an assigned reviewer) is downloading the file itself, which contains the number, so this is optional. Masking the header name would keep browser download lists clean.
+- The case-insensitive NRIC shape is fine. A lower-case "s1234567d" in a file name is now masked, and the mask still requires the 7-digit body with non-alphanumeric bounds.
+
+**#189 245d7933: READY**
+- The R352 finding is fixed: groupHeading moved to lib/policies/group-heading.ts and now has a behavioural test.
+- policies:benefits-document-name-test passes.
+- Suites, tsc, next build and merge-tree are green.
+
+## R357: re-review #192 f7c8c4c7, #187 5cb8522e, #186 b5f45439, #190 021cf00b: all READY
+
+All four heads passed the full gate: fresh worktree, npm ci, network blocked, model keys stripped. On every head the own test, simple chat 84, replay 22/22, benefit-table 107/107, r5 21/21, tsc, next build and merge-tree with main all passed.
+
+### #192 f7c8c4c7: READY (one Low)
+- coverage:table-test passes 106/106.
+- The seven R355 rows now keep their own category: "Maximum Liability per Insured Person", "Limits of Liability", "Our liability", "Limit of Liability (S$)", "Benefits and liabilities", and "Accidental death - maximum liability" (medical expenses gives null, the same as main).
+- The liability rows still give null: Personal Liability, liability to third parties, third-party property damage, death of a third party, claims made against you, Liabiliti peribadi, 第三方责任, Responsabilité civile.
+- Low: three own-cover shapes now give null where main gives a category:
+  - "Accidental death including third party cover": the third-party branch accepts "cover".
+  - A section phrased as a sentence: "We are not liable for any loss of others" (loss of others).
+  - "(we are liable to you, not to others)": the bracket is not an exclusion word.
+  - These are rare wordings. Optional fix: drop "cover" from the third-party branch, and apply EXCLUDED_ASIDE-style handling to "not liable" sentences.
+
+### #187 5cb8522e: READY
+- The R352 M1 fix is in place:
+  - The operator page sends planName only when it changed.
+  - sentPlanName keeps the stored plan when the sent name is the one shown or its masked form, so keys and answers stay on the stored plan.
+- /api/ledger rows now go through maskShownText (this also closes the ledger half of R356 #193 M1).
+
+### #186 b5f45439: READY
+- A single Han character now counts as a word ("癌" is kept).
+- "As charged" counts as an empty cell, and "sahaja" counts as a joining word.
+- The same filter now also runs at read time in group-cover.ts and fact-finding-chat.ts.
+
+### #190 021cf00b: READY
+- The R351 H1 fix is in place: repairStoredRules skips ruleFromQuote for held rows and for unheld plan-column quotes. Both of my quotes are in the test.
+- The R351 Low is fixed: two currencies, or a whole sum paired with a cents figure, are not plan columns.
+- The new rule that three or more bare thousands figures are plan columns can only hold a figure back, which is the safe direction.
+
+## R358: #188 b41f14a9, CHANGES
+
+The R353 H1 fix is in place. All 8 R353 quotes and every R349 cap now read as cap, and thresholds, ages, excesses and counts read as not_cap. "maksimum Rp100.000.000" and "subject to S$5,000 per policy year" read as unsure, so the figure is withheld (safe). Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+### H1: a sub-limit worded differently from the benefit's name is ignored, and the uncapped figure is shown
+- Where: lib/insurance/cover-conditions.ts:240, in limitIsFor (`return subject.every(w=>own.has(w))?"this":"other"`). Its "other" result makes the sub_limit case return clear.
+- What happens: "other" is the fallback whenever any content word in the sentence is missing from the benefit's title. The test is a deny-list by omission, so any synonym, plural or partial wording drops a real cap.
+- Probe: evaluateCondition, sub_limit, with no productName and an item at S$200,000. Main 9c03ee3 reduces all of these. This PR returns clear, so S$200,000 is shown:
+  - "Hospital stay is limited to S$5,000 per policy year" for "Hospitalisation"
+  - "Hospital stays are limited to S$5,000" for "Hospitalisation"
+  - "Intensive care is limited to S$25,000" for "ICU Benefit"
+  - "ICU stays: up to S$25,000" for "Intensive Care Unit Benefit"
+  - "Hospital income is limited to S$5,000" for "Daily Hospital Cash"
+  - "Medical reimbursement is limited to S$5,000" for "Medical Expenses"
+  - "Medical expenses are limited to S$5,000" for "Accidental Medical Reimbursement"
+  - "Cancer drug treatment is limited to S$25,000" for "Outpatient Cancer Treatment"
+  - "Room and board is limited to S$500 per day" for "Hospitalisation"
+  - "Pre-hospital treatment is limited to S$5,000" for "Hospitalisation"
+- Only "Funeral expenses benefit is limited to S$5,000" for "Accidental Death" is a correct clear.
+- Severity: this is a wrong claimable amount (overstated by up to 40 times), and it regresses main.
+- Fix: return "other" only on positive proof. One option is that the subject maps through one closed category lexicon (e.g. categoryOfBenefit in lib/coverage/table-figures.ts) to a known category different from the item's category, and the item's own category is known. Every other case returns "unknown", which withholds the figure. Keep the funeral case and add the 10 wordings above to printed-cap-test: the first 8 should reduce or withhold, and "Room and board" and "Pre-hospital" should withhold, never clear.
+
+## R359: #191 01ea0975, CHANGES
+
+Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass. Your asked-for risk is real: the new sign alternatives are used in both the field test and the other-currency scan.
+
+### M1: a bare "RM" anywhere on the page now cancels a declared SGD or USD currency
+- Where: lib/simple-chat/verify.ts:169 (MYR name `(?<![A-Za-z])RM(?![A-Za-z])`). The problem is how line 189 uses it: the other-currency scan runs `new RegExp(name,"i")` over the whole page.
+- What happens: on a page whose field declares SGD or USD, any stand-alone "RM" or "rm" in prose now returns null. Examples are "Relationship Manager (RM)", "your RM will call you", "Form RM-2" and "1 rm". Main returns the declared code.
+- Probe (main vs PR):
+  - "Currency : Singapore Dollar / Please contact your RM for help": SGD vs null
+  - "Relationship Manager (RM): Ada Tan" under the same field: SGD vs null
+  - "Policy Currency	SGD / Form RM-2 Claim form": SGD vs null
+  - "Currency : US Dollar / Premiums may be paid by RM bank transfer": USD vs null
+  - "Currency: USD / PERMANENT DISABILITY FORM RM-12": USD vs null
+- tableCurrency (line 196) goes through the same scan, so "(S$)" tables on such pages lose their currency too.
+- Effect: currencyOf falls back to an unresolved "$", so bare-figure amounts on SGD pages lose their confirmed currency. A documented amount is held back. It is not a wrong figure, but it is a regression on the main market. "RM" is very common in Singapore bank and insurer letters ("Relationship Manager").
+- Fix: split the list. Signs (S$, US$, bare RM) belong only in the field/value patterns. The other-currency scan should keep using names and codes only. The line 189 regex already catches other-currency figures (`RM\s?\d`, `US\$`, and S$ for non-SGD pages). Add the five probes above to chat-test as declared.
+
+### Low (old, unchanged): "Currency : US$" alone gives null
+- `/US\$/` at line 189 rejects a page whose own declared currency is USD written as US$. The same happens on main, and it fails safe. The fix is to skip the sign of the declared code in that scan.
+
+The rest is fine: "Mata wang: Ringgit Malaysia (MYR)" and "Mata Wang	: RM" give MYR; "Singapore Dollar (S$)" gives SGD; "Currency : RM / S$", "Currency : FORM" and "Currency: S$ 5,000" give null.
+
+## R360: #193 1d271892 CHANGES; #192 52689bbc CHANGES; #190 1f2f0a06 READY
+Gate on all three heads: own tests, five suites, tsc, next build and merge with main all pass.
+
+### #193 H1: a full MyKad number is printed when a role word sits up to 12 characters before it (regression)
+- Where: lib/chat/identity-numbers.ts, the MYKAD replace. It exempts a number whose preceding 30 characters match `\b(policy|member|group|plan|certificate|account|claim|receipt|...)\b[^\d\n]{0,12}$`.
+- That test is about nearby words, not about a label for this number, so a person's MyKad after a name or a role word is shown in full. Main 9c03ee3 masks every one of these; the PR prints all digits:
+  - "Member: Ada Tan 850101-14-5678"
+  - "Member	ADA TAN	850101-14-5678" (a group-schedule row)
+  - "Policy owner 850101-14-5678"
+  - "Certificate holder: 850101-14-5678"
+  - "Claim for Ada 850101-14-5678"
+  - "Plan A insured 850101-14-5678"
+  - "Account holder Ada 850101-14-5678"
+  - "Member ID 850101-14-5678"
+- "Policy owner IC: ..." is still masked, but only because LABELLED catches the IC label.
+- Fix: drop the exemption. Masking a MyKad-shaped policy number costs nothing; printing an ID number breaks a standing rule. If it must stay, exempt only when a number label is directly before the number (`(?:policy|group\s+policy|certificate)\s+(?:no\.?|number|#)\s*[:.]?\s*$`), and add the 8 probes above as masked.
+- Other checks look right: HK IDs in any case; "_" labels ("member_" gives a masked number, "hkid_a***456(7)"); "pan_"/"id_" stay unmasked through BARE_SHORT. A Low over-mask: "Policy_ID_No_12345678" gives ****5678, because NOT_A_PERSON looks behind for spaces, not "_". It is harmless.
+
+### #192 M1: "any person" counts as someone else, so own cover is hidden (lost cover, regression)
+- Where: lib/coverage/table-figures.ts, OTHERS, the `any\s+(?:other\s+)?persons?(?!\s+(?:insured|covered|named|listed|who\s+is\s+...))` part. It is used by "death/TPD/hospital ... of OTHERS".
+- The negative lookahead is a deny-list of the wordings that mean the insured. Every other wording becomes liability and gets null. Main vs PR:
+  - "Death of any person in your family": Death vs null
+  - "Death of any person who is a Life Assured": Death vs null
+  - "Death of any person aged 18 to 65": Death vs null
+  - "Accidental death of any person travelling with you": PA vs null
+  - "Death of any person to whom this certificate applies": Death vs null
+  - "Accidental death of any person on the plan": PA vs null
+  - "Total and permanent disability of any person under 65": TPD vs null
+- Fix: "any (other) person" names someone else only in a liability frame: "liable/liability/compensation ... any person", or "injury/damage/death ... to any person" (TE's "Death of or bodily injury to any person" uses "to"). Drop it from the generic "of OTHERS" path. Add the 7 rows above as their own categories.
+- The rest of r3 checks out: EXCLUDED_TAIL, the [ ] asides, LIABILITY_SECTION only for a bare "Liability" heading, and the Malay, Indonesian and Vietnamese terms.
+
+### #190 READY
+- The `daily`/`each` units and the `Excluded`/`Not available` cells can only hold a figure back.
+- The sum-and-premium pair (a second figure under 5% of the first, two cells only) is narrow.
+- Low: a two-plan row whose columns really are 20 or more times apart ("Accidental death S$500,000 S$20,000", adult vs child) would now be read as one figure. This needs adjacent cells with no labels, so it is rare.
+
+### #191 1f1ad895: see R361
+
+## R361: #191 1f1ad895, READY
+- The R359 M1 fix is in place. A sign now counts only as a declared value. On SGD and USD pages, all five RM-in-prose probes plus "1 rm" and "Your RM will call you" give the declared code.
+- The R359 Low is fixed: "Currency : US$" gives USD.
+- Still null, as they should be: "RM / S$", "FORM", "S$ 5,000", and a US$ field above an S$ figure.
+- Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass.
+- Low (old, same on main): "Currency: USD" above "Currency of rider: RM" gives USD. A bare RM with no figure after it is no longer a signal, and the rider line is not a field. One option is to treat any further "currency ... : <sign or name>" line as a second declaration.
+
+## R362: #188 336527b2, CHANGES
+- All 10 R358 quotes now reduce or withhold, and Funeral vs Accidental Death stays clear.
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+### H1: "a different family" is treated as proof of separate money, but the medical family contains hospital, outpatient, surgery and the others
+- Where: lib/insurance/cover-conditions.ts, KINDS/limitIsFor (`every(f=>!families.has(f))?"other"`).
+- The problem: a broad medical-expenses benefit is in family "medical", and its parts (hospital, in-patient, outpatient, clinic, surgery, ICU, ambulance, dental, maternity) are all in other families. So a sub-limit on a part is called "other" and the full figure is shown.
+- The reverse also happens: a "Medical expenses/bills are limited to" sentence is ignored for a Hospitalisation or Outpatient item.
+- Probe: evaluateCondition, sub_limit, productName null, item at S$200,000. All of these return clear:
+  - "Hospital charges are limited to S$5,000" for Accidental Medical Reimbursement
+  - "Hospitalisation is limited to S$5,000" for Medical Expenses
+  - "Outpatient treatment is limited to S$500" for Medical Expenses
+  - "Clinic visits are limited to S$500" for Medical Expenses
+  - "Surgery is limited to S$5,000" for Medical Expenses
+  - "ICU charges are limited to S$5,000" for Medical Expenses
+  - "In-patient treatment is limited to S$50,000" for Overseas Medical Expenses
+  - "Ambulance charges are limited to S$5,000" for Overseas Medical Expenses
+  - "Dental treatment is limited to S$500" for Accidental Medical Reimbursement
+  - "Medical expenses are limited to S$5,000" for Hospitalisation
+  - "Medical bills are limited to S$500" for Outpatient
+  - "Maternity complications are limited to S$5,000" for Hospitalisation
+- Main reduces every one of these (R358 baseline). The PR shows S$200,000, so this is a wrong claimable amount.
+- Fix: deciding "other" from family difference is still a deny-list. Use a closed allow-list of family pairs known to pay separate money, for example funeral|death, cash|hospital (TE U10/U19), and ci|death|tpd with each other. Every other pair, and anything involving medical, gives "unknown", which withholds. Apply the same pair list on the unplaced-aggregate path, and add the 12 rows above to printed-cap-test as withhold.
+- These look right: "Hospital cash" vs "Room and board" gives clear (TE U10), and "Death" vs "Critical illness" and "TPD" vs "Death" give clear.
+
+## R363: #193 fc8111fb READY; #192 45812e15 CHANGES
+Gate on both heads: own tests, five suites, tsc, next build and merge with main all pass.
+
+### #193 READY
+- All 8 R360 leads are masked again, and so are "Ada Tan", "member_" and "Receipt for Ada Tan,".
+- Kept as written, which is correct: "Group policy no. 851231-00-1234" and "Policy No: 850101-14-5678".
+
+### #192 M1: the "any person" hole moved to "injury TO any person" (own cover hidden, regression)
+- Where: lib/coverage/table-figures.ts. TO_ANYONE adds a bare `any\s+persons?` to the "harm TO" and "compensation" paths. Those paths previously used OTHERS, and the r3 lookahead for insured/covered/named was removed.
+- All of these are own PA cover. Main returns Personal Accident or Death; the PR returns null:
+  - "Death or bodily injury to any person covered under this policy" (main PA)
+  - "Death or injury to any person in your family" (main PA)
+  - "Compensation for death of any person insured" (main Death)
+- Correctly null on both: "Death of or bodily injury to any person" (a classic liability row) and "Death of a person other than the insured".
+- Fix: in TO_ANYONE, keep "any person" as someone else unless an own-cover marker follows directly. Use a closed list of markers (insured, insured person, covered, named, listed, in your family, on the plan, under this policy, who is insured/covered). The default stays liability, so the markers are affirmative proof of own cover and this is not a deny-list. Add the 3 rows above as own categories.
+- Low (old, same on main): "Accidental injury to any person insured" and "Loss of limbs or injury to any person named in the schedule" are null on main too.
+
+## R364: #188 a407258b, READY
+- The R362 H1 fix is in place. "other" now comes only from the closed separate-money pairs (life family beside any other family; cash beside hospital).
+- All 12 R362 rows withhold, and so do bonesetter and maternity.
+- All R358 rows reduce or withhold. Funeral vs Death, CI vs Death, TPD vs Death and Hospital cash vs Room and board stay clear. Physiotherapy vs Hospitalisation and ICU cash vs Daily Hospital Cash withhold.
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- The WeakMap memos are keyed by the condition object, and I found no code that changes a condition's quote or amount after reading it.
+- Low (old, same on main; the figure is understated, never overstated):
+  - "Early critical illness benefit is limited to S$50,000" reduces a "Critical Illness" item to S$50,000, because the benefit-name substring check comes first.
+  - "Death benefit for children under 5 is limited to S$50,000" reduces an adult's Death item.
+  - A possible follow-up: run the substring check only when the sentence has no extra kind words (early or intermediate) and no person scope (children, juvenile, under age N).
+
+## R365: #192 d5a3c4cb READY; #188 92552e9f READY
+- #192: the R363 M1 fix is in place. "any person" followed by a closed list of insured markers is own cover again, as in all 3 R363 rows and all 7 R360 rows. "Death of or bodily injury to any person" and "Death of a person other than the insured" stay null. Gate: coverage:table-test 106/0, five suites, tsc, next build and merge with main all pass. Low (old, same on main): "Accidental injury to any person insured" and "injury to any person named in the schedule" give null.
+- #188 92552e9f: one line moves cancer treatment from family ci to family medical. An inpatient or medical bill beside a cancer-drug limit now withholds, and CI and Death items still clear. Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+## R366: #194 256e40d8, READY
+Gate: chat-test 85/85, four suites, tsc, next build and merge with main all pass.
+
+I compared 22 probes against main f58a289d.
+
+Now null, as intended:
+- "Currency of rider : RM" under a US Dollar field
+- "Rider currency	RM" under SGD
+- a lowercase "us$20" on an SGD page
+
+No false voids:
+- The primary field's own sign gives the declared code: "Currency : S$", "Currency	: RM", "Currency : US$".
+- So do second fields in the same currency: "Currency of rider : S$" and "Currency of premium payment : S$" (SGD), "Payment currency: US$" (USD), and "Currency of payment: RM" under a Malay MYR field.
+- A "Currency	Sum Insured	Premium" header row stays SGD.
+- "costs$5" on a USD page stays USD.
+
+Low (misses, same as main, fail-open only where a second currency appears with no figure):
+- The qualified field needs ":" or a tab, so "Currency of rider RM", "Rider currency - RM" and a sign on the next line ("Currency of rider:" with "RM" below) still give SGD.
+- "Currency : Malaysian Ringgit" is not read as a declaration (it gives null, so it is safe).
+
+## R367: #195 af668241, CHANGES
+Gate: own test, five suites, tsc, next build and merge with main all pass. I compared 19 probes against main f58a289d, using evaluateCondition with a sub_limit and an item at S$200,000.
+
+Fixed (withhold now, where main reduced):
+- early CI vs CI
+- "children under 5", "juvenile", "minors"
+- "(child under age 5)"
+- accidental death stored under "Death"
+
+Kept (reduce, which is correct):
+- "Death benefit is limited to" under Life Plan or Death
+- Death vs Accidental Death
+- "Death Benefit for Children" vs a children limit
+
+No row withholds where main showed a correct figure. Every case below is old (main reduces too) and understates rather than overstates. They are still wrong amounts, and they are the lows this PR is meant to close.
+
+### M1: the narrowing check misses common age and person wordings, and anything after the figure
+These all still reduce an adult's Death figure to S$50,000:
+- "If death occurs before the insured attains age 16, the death benefit is limited to S$50,000" (the words between "before" and "age" are not allowed for)
+- "Death benefit for insured persons aged 70 and above is limited to S$50,000"
+- "Death benefit after age 65 is limited to S$50,000"
+- "For a life insured over age 75, the death benefit is limited to S$50,000"
+- "Death benefit for a stillborn baby is limited to S$5,000"
+- "Death benefit is limited to S$50,000 for children under 5" (NARROWED reads only the head before the figure)
+
+Fix: make it structural. Any age figure ("age(s)? \d+", "\d+ years? (old|of age)") or person word (child, juvenile, minor, infant, baby, stillborn, newborn, kid, elderly, senior) anywhere in the quote, when the benefit name lacks it, gives unknown. This is the R349 rule again: a qualifier that is not provably harmless blocks the figure.
+
+### M2: a limit on one part of a combined benefit caps the whole benefit
+- These reduce the whole figure:
+  - "Death or TPD" with "TPD benefit is limited to S$50,000"
+  - "Hospitalisation and Surgery" with "Surgery is limited to S$5,000"
+  - "Accidental Death and Disablement" with "Accidental death is limited to S$50,000"
+- Cause: otherKind looks only at kinds the benefit lacks, and the subject-subset step (`subject.every(w=>own.has(w))`) returns "this" when the sentence names a strict subset of the benefit's kinds.
+- Fix: when the sentence's kinds are a strict subset of the benefit's kinds (said ⊂ mine, said ≠ mine), return unknown before the subset and productName steps.
+- Add all 9 rows above to printed-cap-test as withhold.
+
+## R368: #196 0f08671d, READY
+- Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+- The change can only move a row from "sum and premium" (figure taken) to "plan columns" (figure held). So it can hide a figure, never show a wrong one.
+- On the question asked: a run that prints the premium before the sum ("S$1,234.56 S$100,000", from an "Annual Premium | Sum Assured" column order) is now held as plan columns, where before it was taken as a pair. Main also had a risk on such a row: it could take the first figure, the premium, as the amount. Holding it is the safer side.
+- Low: a premium-first schedule loses that row's sum assured, with the plan-columns note shown. I did not check stored rows for that order (no DB access). Labels between the cells break the run anyway.
+
+## R369: #195 e184745a, READY
+Gate: own test, five suites, tsc, next build and merge with main all pass.
+
+R367 fixes:
+- All 9 R367 rows withhold. That covers the age and person wordings anywhere in the quote, the figure-then-"for children under 5" order, and every combined-benefit part.
+- The correct "this" cases still reduce: Death under Life Plan or Death, Death vs Accidental Death, "Death Benefit for Children", and "Hospitalisation benefit, including surgery and ICU" (TE F1).
+
+The two questions:
+- Disablement: it shares family tpd with TPD, so the two are never "separate". "Partial disability ..." for TPD withholds. "Accidental death and permanent disablement ..." for Permanent Disablement withholds. "Permanent disability ..." for Accidental Medical Expenses clears (life vs medical), which is correct.
+- Ordering: strict-subset runs before productName. So "TPD benefit is limited to S$50,000" stored under "Death or TPD" withholds. A sentence that names no kind still takes the productName "this". The ordering is right.
+
+Lows (the figure is understated or hidden, never overstated):
+- With firstKind (F1), "Death benefit for accidental death is limited to S$50,000" now reduces an any-cause Death item. r1 withheld it; main reduces it too. "Death benefit arising from an accident ..." also reduces, as on main. A possible follow-up: an accident word in the sentence, when the benefit name has none, gives unknown.
+- Strict-subset hides the figure when the item's own name carries an extra kind in brackets: "Accidental Death Benefit (including Funeral)" with "Accidental death benefit is limited to S$100,000" withholds.
+- NARROWED's "over/above N" clause catches figures with no currency sign ("Hospital bills over 500 are limited to S$5,000" withholds), and "disabled insured" is not a person narrowing.
+
+## R370: #197 52697b54, CHANGES
+Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+
+- No paid read: tableFor (lib/benefit-table/service.ts:196) is load plus assembleTable, which is database only. relink, the model call, is not reached, and the work runs only when a row is held and benefitTableLive is true.
+- Column: person.rows come from assembleTable, and columnProblem already refuses any column that is not the person's own cover plan. So r.column is that person's plan, not the model's guess.
+
+### M1: in the household view (no member), one person's plan is shown as "your plan" for every owner of the document
+- Where: app/api/benefits/route.ts. `for(const person of table.people)if(!member||person.id===member)`, with no member, pools every person's readings, and planColumnFigure then takes a single pick.
+- Failure: a family certificate where the employee holds Plan A and the spouse holds Plan B. Only the employee's section is linked, so only Plan A readings exist. The household Benefits page shows that row, whose owners include the spouse, as "For your Plan A plan: S$X". The spouse's figure is wrong, so this is the wrong-person case.
+- Fix: in the household view, take a pick only when every owner of the row's document has a reading with the same pick. Otherwise give null. Better still, name the person ("For Ada's Business plan").
+
+### Lows
+- The match checks only that the reading's excerpt contains the row's cell run and that its figure is one of the cells. It does not check the benefit name or the cell position. A probe with a 2-cell row "Ward S$100 S$200" and a reading of another row "Ward upgrade S$100 S$200 S$300" (Business, S$200) gives Business S$200. Suggest also requiring the reading's excerpt line to carry the row's own words before the run.
+- Currency is not compared. An RM row ("Cash RM100 RM200") with a reading whose currency is SGD shows "S$200". Require the reading's currency to match the cells' sign.
+
+## R371: #195 0cc25029, READY
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- All R367/R369 rows behave as before. "below the age of 16" and "an insured child" withhold. "cover ends at age 85" and "Under the Senior Protect Plan" no longer narrow (TE G1/G2). The "over 500" low is gone.
+- Low (old, same on main; the figure is understated): these age wordings still reduce an adult's Death figure:
+  - "aged 70 or more"
+  - "If the insured is 70 or older"
+  - "For ages 70 and above"
+  - "younger than 16"
+  - "if death occurs before age 16" (left out on purpose, per G1 W2)
+- If a later round wants them, add "or more", "older/younger than N", "ages N and above" and "is N or older". I accept the accident-word low as it stands.
+
+## R372: #197 38e07bdd, READY
+- Gate: plan-columns-test, five suites, tsc, next build and merge with main all pass.
+- The R370 M1 fix is in place. In the household view, every active holder of the document (policy_members joined to active family_members) must get the same pick from their own readings. A document with no holders gives null, and a member param that is not in the table gives null.
+- Lows fixed: the row's last words must come right before the cell run, and the excerpt must hold exactly one run. Probes: "Ward upgrade" superset → null; the same run under another benefit → null; a currency mismatch → null; two readings that disagree → null; bare "$" cells → null (no code, so the row stays held).
+- Remaining Low: the cell position is not checked against the column. A checked reading that says Economy is S$200 is trusted as long as S$200 is one of the cells. This is acceptable because the reading itself is the checked figure.
+
+## R373: #195 32260eca, CHANGES
+- Gate: own test, five suites, tsc, next build and merge with main all pass.
+- Default-safe AGE_SIGNAL works: "aged 70 or more" and "For ages 70 and above" now withhold, and every earlier row holds.
+- "cover ends at age 85", "(entry age 18 to 65)" and "per life" still reduce, which is correct.
+
+### M1: the WHOLE_COVER_AGES "until / up to / to / before / starts from age N" frames remove the classic juvenile and elderly limit wordings
+The frames are not tied to the cover's own duration, so these rows have their only age signal removed. Each one reduces an adult's Death figure from S$900,000 to S$50,000:
+- "Until the insured attains age 16, the death benefit is limited to S$50,000"
+- "Till the life assured reaches age 17, death benefit is limited to S$50,000"
+- "Death benefit for insured persons up to age 16 is limited to S$50,000"
+- "Death benefit is limited to S$50,000 to age 16, then the full sum assured"
+- "Death benefit is limited to S$50,000 if death occurs before age 16"
+- "Reduced death benefit starts from age 70: limited to S$50,000"
+
+Fix:
+- Keep only frames that are anchored to the cover's own duration. A cover word (cover, policy, plan, protection, benefit term, premiums) must come with a duration verb (ends, expires, terminates, ceases, matures, lapses, is renewable, runs, continues, is payable) before the "at / until / up to age N".
+- Drop the bare "until / till / to / up to age N", "before age N" and "starts from age N" frames.
+- With default-safe narrowing, an unanchored age now withholds, which is the safe side. TE G1's "before age 65" cover-end case then withholds instead of reducing.
+- Add the 6 rows above to printed-cap-test as withhold.
+
+## R374: #198 head 7b26a951 (Coverage premium currency): READY
+
+Gate (base f58a289d, network blocked, model keys stripped): coverage-premium-test 4/4, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+What was asked:
+- No other premium display on Coverage uses cover.currency. `components/benefit-table-coverage.tsx:43` is the only premium money line in the card (other premium uses: type at lines 12-15, render at 49). `app/coverage/page.tsx` and `app/api/benefit-table` print no premium.
+- The payload carries the field. `/api/benefit-table` sends the people's covers as built by check.ts (the field set at `lib/benefit-table/check.ts:533`), so a premium with its own currency reaches the card. The fallback (`=== undefined`) matches chat.ts:551-559 and premium-summary.ts:200.
+
+Low (not blocking):
+- L1 `components/benefit-table-coverage.tsx:43`: when the premium line and its page state no currency, check.ts sets premiumCurrency to null, and `money(x, null)` (`lib/benefit-table/headline.ts:109`) prints a bare "$". The test calls this "no currency is claimed" (`coverage-premium-test.ts:27`), but "$" reads as a dollar currency. It also changes a cover whose sum line says S$: main printed "S$73.17", this head prints "$73.17". Home leaves such a premium out as unclear. Fix: when the resolved currency is null, print the figure with "(currency not stated)", as `app/coverage/page.tsx:12` does, and assert that in the test.
+
+## R375: #195 head 1ad2f3be (round 5, cover-anchored age frames): CHANGES
+
+Gate (base f58a289d, network blocked, model keys stripped): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R373 M1 is fixed. My six juvenile rows withhold, and the bare until/up to/before/starts-from frames are gone. Probe (adult Death, item S$900,000; scratch script, outside git) at this head and on main f58a289d:
+
+| Wording | This head | Main |
+|---|---|---|
+| "Death benefit for insured persons aged 65 to 99 is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit for lives assured aged 70 to 100 is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is limited to S$50,000 for those aged 66-99" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is payable up to age 65 in full; thereafter it is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit continues to age 70 and is then limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Entry age 60 to 70: death benefit is limited to S$50,000" | reduce 50,000 | reduce 50,000 |
+| "Death benefit is payable in full until age 70, after which it is limited to S$50,000" | withhold | reduce |
+| "Death benefit is limited to S$500,000; cover ends at age 85" / "(entry age 18 to 65)" / "payable until the insured attains age 85" | reduce 500,000 (correct) | same |
+
+None of these is a regression against main. They are, however, the cases this PR's narrowing is meant to catch, and each one cuts an adult's S$900,000 Death figure to S$50,000 (wrong claimable amount).
+
+- M1 `lib/insurance/cover-conditions.ts` WHOLE_COVER_AGES, the `aged ADULT to 60+` and `entry age N to 60+` frames: an elderly band ("aged 65 to 99", "aged 70 to 100", "aged 66-99", "Entry age 60 to 70") is a group, not everyone. Fix: strip a range only when it starts at a usual joining age (lower bound 0-21, say) AND is introduced by entry/issue/joining wording ("entry age", "issue age", "eligible ... aged", "may join"). A bare "aged X to Y" after a person word narrows.
+- M2 same regex, the COVER_RUNS frames: a duration frame followed by a sequence word ("thereafter", "then", "after which", "afterwards", "from then on", "beyond", "past") means the limit applies only after that age. Today the frame is stripped and the cap applies to everyone. Fix: do not strip a COVER_RUNS frame when the sentence also has one of those words (withhold), and include "If the policy continues until the insured turns 70" (a conditional "if ... continues/runs") in the same rule.
+- Add all 7 reduce rows above to printed-cap-test as withhold, keeping the three S$500,000 rows as reduce.
+
+## R376: #198 head 254fbac3 (R374 L1 applied): READY
+
+Gate (base f58a289d): coverage-premium-test 6/6, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. L1 is fixed: a null premium currency prints "73.17 (currency not stated)" and the test asserts there is no "Premium $".
+
+Low (not blocking):
+- L2 `components/benefit-table-coverage.tsx:45`: `Number(cover.premium).toLocaleString()` uses the viewer's locale. This is a client component, so a German browser shows "73,17" and the server render may differ (hydration warning), while `money()` pins "en-US" with 2 decimals. Fix: `toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2})`, the same as `headline.ts:109`.
+
+## R377: #195 head 44ea5277 (cover-subject frames, TE K1): CHANGES (R375 M1 open, M2 partly)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe (adult Death, item S$900,000; scratch script, outside git):
+- Now withhold (fixed): "payable up to age 65 in full; thereafter ...", "continues to age 70 and is then limited ...", "Where the plan runs to age 99, death benefit after age 70 ...", "When the cover continues past age 70 ...", "... if the policy is renewed until age 80".
+- Still kept, correctly: "cover ends at age 85" and "(entry age 18 to 65)" reduce to S$500,000. "... and is payable until the insured attains age 85" now withholds, which is the safe side.
+- Still cut to S$50,000:
+  - M1 (R375, unchanged): "insured persons aged 65 to 99", "lives assured aged 70 to 100", "those aged 66-99", "Entry age 60 to 70", and also "insured persons aged 18 to 60" (a 65-year-old would be cut). Fix as R375 M1: strip a range only when entry/issue/joining wording introduces it AND it starts at a joining age (0-21). A bare "aged X to Y" narrows.
+  - M2 (R375, cover-subject form): "The policy continues to age 70; thereafter the death benefit is limited to S$50,000", "Cover is renewable to age 85, after which the death benefit is limited to S$50,000", "If the policy continues until the insured turns 70, the death benefit is limited to S$50,000". Fix: a COVER_ENDS frame is not stripped when the sentence has a sequence word (thereafter, then, after which, afterwards, from then on, beyond, past) or opens with "if/where/when/once ... ". Withhold instead.
+- Add these 8 rows to printed-cap-test as withhold.
+
+## R378: #195 heads a0f47cf3 and 2d56ca9e (R375/R377 fixes): CHANGES (one Medium)
+
+Gate on both heads (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. (R377 reviewed 44ea5277, which crossed with a0f47cf3.)
+
+All R375 and R377 rows now withhold. The S$500,000 rows still reduce: "cover ends at age 85", "(entry age 18 to 65)", "(issue age 0 to 65)", "Cover ends when the insured reaches age 85. Death benefit ...", "The policy matures at age 85 and ...". Elderly issue/entry bands withhold.
+
+- M1 `lib/insurance/cover-conditions.ts` condition-word check before WHOLE_COVER_AGES: it is a deny-list of sequence words, and other wordings still pass it. Adult Death, S$900,000, at 2d56ca9e:
+  - "The policy continues to age 70. Subsequently the death benefit is limited to S$50,000": reduce 50,000
+  - "Cover runs to age 85, with the death benefit limited to S$50,000 later on": reduce 50,000
+  Other wordings would pass the same way ("in later years", "in the final years", "afterward", "from that point"). Fix (structural, not more words): set a cover-end frame aside only when it comes AFTER the limit's amount in the quote ("limited to S$500,000; cover ends at age 85") or sits in parentheses. A frame before the limit leaves its age in, so the limit withholds. That gives up a few figures such as "Cover ends when ... 85. Death benefit is limited to S$500,000", which is the safe side. Keep the condition words as an extra guard.
+- Add the two rows above to printed-cap-test as withhold.
+
+## R379: #198 head 970c626e (R376 L2 applied): READY
+
+Gate (base f58a289d): coverage-premium-test 7/7, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean. The bare figure now goes through `plainFigure` (en-US, 2 decimals), and the test checks that 1234.5 prints as 1,234.50.
+
+## R380: #195 head 7465b239 (frame after the figure): CHANGES (one Medium, one Low)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R378 rows withhold. Still correct: "limited to S$500,000; cover ends at age 85", "limited to S$500,000 (the policy expires on the 85th birthday)" and "(issue age 0 to 65)" reduce to S$500,000. A frame before the limit ("Cover ends at age 85. Death benefit ...") now withholds, which is the safe side.
+
+Adult Death, item S$900,000, limit amount S$50,000 (scratch probe, outside git):
+- M1 `lib/insurance/cover-conditions.ts`, the "after the first figure / inside brackets" test: it anchors to the wrong thing.
+  - "The sum assured is S$900,000 and the policy continues to age 70. Subsequently the death benefit is limited to S$50,000": reduce 50,000. The first figure is the sum assured, not the limit.
+  - "Minimum premium S$100 applies; cover runs to age 85, with the death benefit limited to S$50,000 later on": reduce 50,000. The first figure is a premium.
+  - "(The policy continues to age 70.) Subsequently the death benefit is limited to S$50,000": reduce 50,000. A bracket before the limit.
+  - "Death benefit (cover runs to age 85; reduced in later years) is limited to S$50,000": reduce 50,000.
+  Fix: anchor to the limit's own amount (the condition's `amount` as printed in the quote), not the first currency figure. Set a frame aside only when it starts after that figure, in brackets or not. A frame before it, bracketed or not, stays in and withholds.
+- L1 (accept or close): "Death benefit is limited to S$50,000 in the final years, as the policy continues to age 85": reduce 50,000. The frame does come after the figure, but the time phrase sits in the limit's clause. A closed rule would set the frame aside only when the words between the figure and the frame are an allow-listed join (";", ".", ",", "and", "and the", "while the", or a closing bracket). With anything else in between, the frame stays in.
+- Add these 5 rows to printed-cap-test as withhold.
+
+## R381: #195 head 12a8f902 (frames anchored to the limit's own amount): CHANGES (one Medium)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R380 M1 and L1 are fixed. All 45 earlier probe rows (R373-R380) give the expected result: every narrowing row withholds, and "limited to S$500,000; cover ends at age 85", "(the policy expires on the 85th birthday)", ", and cover ends at age 85", "(entry age 18 to 65)" and "(issue age 0 to 65)" reduce to S$500,000.
+
+- M1 `lib/insurance/cover-conditions.ts` AGE_SIGNAL, `${PEOPLE}\s+(?:under|below|over|above)\s+${AGE_N}`: PEOPLE is a closed list of nouns, so a group named with any other noun does not narrow. Adult Death, S$900,000, limit S$50,000, all reduce to 50,000:
+  - "Death benefit for lives over 70 is limited to S$50,000" (bare "lives")
+  - "Death benefit for policyholders over 70 is limited to S$50,000"
+  - "Death benefit for anyone over 70 is limited to S$50,000"
+  - "Death benefit is limited to S$50,000 for customers above 70"
+  - and, the same way, "Death benefit is limited to S$50,000, the policy is renewable to age 85 for lives over 70"
+  Fix (default-safe): make any "under|below|over|above|aged" + bare number (no currency sign before it) an age signal, whatever noun precedes it. Set it aside only when an allow-listed unit follows (days, weeks, months, hours, km, %, times, claims, visits), so "over 30 days" and "above 50%" still pass.
+- Add these 5 rows to printed-cap-test as withhold, plus one "hospital stays over 30 days" row as reduce.
+
+## R382: #195 head 8dd81f75 (any noun + comparator + bare number is an age): READY
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R381 M1 is fixed. "lives / policyholders / anyone / customers over|above 70" withhold, and so do "aged over 70 years", "above 70 days old" and "over 70 times the premium" (safe side). "Hospital stays over 30 days" still reduces. All 44 earlier probe rows (R373-R381) give the expected result: 38 withhold, and the 6 cover-end or entry/issue rows reduce to S$500,000.
+
+Low (not blocking, no change against main):
+- L1 HELD_FOR sets aside "in force under 2 years", so "Death benefit is limited to S$50,000 if the policy has been in force under 2 years" applies the cap to every policy (main does the same). That is a policy-duration condition, not an age group, so it belongs with the duration/waiting-period handling rather than in this PR. Worth a follow-up: a cap tied to "in force under/less than N years" should withhold unless the policy's start date proves it is past N years.
+
+## R383: #195 head 93f6a1fd (comparator signal needs a clause-ending word): CHANGES (one Medium)
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+All 55 earlier probe rows give the same result as at 8dd81f75. "Hospital bills over 1000" now reduces, as TE r11 wanted.
+
+- M1 `lib/insurance/cover-conditions.ts`, the comparator signal: it now fires only when the number is followed by an allow-listed joining word, so an unknown next word makes the age invisible. That is the unsafe default. Adult Death, S$900,000, all reduce to 50,000:
+  - "Lives over 70 have their death benefit limited to S$50,000"
+  - "Policyholders over 70 get a death benefit limited to S$50,000"
+  - "Death benefit for anyone over 70 when they die is limited to S$50,000"
+  - "Death benefit for persons over seventy is limited to S$50,000" (AGE_N spells out words only up to eighteen)
+  Fix: keep the ≤120 cap (that fixes "bills over 1000"), and go back to setting the signal aside only when an allow-listed NON-AGE noun follows. Add TE's people, persons, operations, procedures, surgeries, items and members to the R381 unit list. Any other next word counts as an age. Also spell out number words to 120 in AGE_N for the comparator ("seventy", "sixty-five", "sixty five").
+- Add these 4 rows to printed-cap-test as withhold, and TE's "over 10 people" and "above 3 operations" as reduce.
+
+## R384: #195 head cb4cb982 (confirm pass): CHANGES (R383 M1 still open)
+
+cb4cb982 adds only "the over-70s" (1 line) on top of 93f6a1fd, so the R383 gate stands. The R383 probe rows give the same results at cb4cb982: "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ..." still cut an adult's S$900,000 Death figure to S$50,000. R383 M1 and its fix are unchanged: a non-age noun allow-list after the number, ≤120, and number words to 120.
+
+## R385: #195 head 301a28cf (non-age noun allow-list, number words to 120): READY
+
+Gate (base f58a289d): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R383 M1 is fixed. All 9 R383 age rows withhold, including "Lives over 70 have ...", "Policyholders over 70 get ...", "anyone over 70 when they die ..." and "persons over seventy ...". "Hospital bills over 1000" and "Hospital stays over 30 days" reduce. The 55 earlier probe rows (R373-R382) are unchanged: 45 withhold, the 6 cover-end and entry/issue rows reduce to S$500,000, and the R382 L1 tenure rows reduce as on main (follow-up already noted).
+
+## R386: #199 head 39707bc9 (tenure-limited sub-limits, R382 L1): CHANGES (one Medium, one Low)
+
+Gate (base 28693c90, network blocked, model keys stripped): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The rule is right where it applies. The held start can only prove that a span has passed, so a while-limit clears and an after-limit cuts only once start + N ≤ the claim date, and anything else withholds. The `addPeriod` month-end clamp is correct.
+
+Probe (adult Death, item S$900,000, limit S$50,000; coverStart 2025-06-01, 2010-01-01 and none; today 2026-10-30; scratch script, outside git). Only the two exact forms are read: "in force under 2 years" and "in force for more than 10 years". Every other common tenure wording is not recognised, so it cuts every policy to S$50,000 whatever the start date, as on main:
+- "if death occurs within 2 years of the commencement date"
+- "if death occurs within 24 months from the date of issue"
+- "during the first two policy years" (number word)
+- "in the first 2 years"
+- "before the second policy anniversary"
+- "during the first policy year"
+- "if death occurs within one year of the risk commencement date"
+- "if the policy has been in force for less than two years" (number word)
+- "within 2 years of reinstatement"
+- "from the 10th policy anniversary"
+
+- M1 `lib/insurance/cover-conditions.ts` TENURE_WHILE / TENURE_AFTER: these recognise only a few exact phrasings, and anything else falls through to "applies to everyone". Fix (default-safe):
+  - Add a broad TENURE_SIGNAL: "policy year(s)", "policy anniversary", "in force", "within/during/in the first ...", or "(of|from) the (date of) issue/commencement/inception/risk commencement/reinstatement/start". It withholds whenever tenureOf cannot parse the quote exactly.
+  - Widen the parser: number words (reuse AGE_N); "within N years|months of|from the <start word>" as while; "first N policy year(s)" and "first policy year" as while N=1; "before the Nth policy anniversary" as while N; "from|after|on or after the Nth policy anniversary" as after N.
+  - Reinstatement and revival: always withhold, because the held start is not the reinstatement date.
+  - Add the 10 rows above to printed-cap-test as withhold when start is unknown or recent. Add the parsed ones as clear (while) or reduce (after) with start 2010-01-01.
+- L1 `lib/chat/workflow.ts:997`: coverStart is the EARLIEST `effective_date` across the contract's documents. If that set ever holds a replaced or lapsed-and-reinstated policy's older document, the "can only prove a span has passed" premise breaks: a while-limit clears and the full figure shows. That is an inference from the code; I did not check stored rows. Fix: for the tenure clear/cut, use the latest effective_date (a renewal or reinstatement only makes it later, and a later date stays safe), or withhold when the contract's documents give different effective dates.
+
+## R387: #199 head 84f38fd4 (TENURE_SIGNAL, exact forms, agreed start): CHANGES (one Medium)
+
+Gate (base 28693c90): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The 10 R386 rows behave as asked. With a 2010 start: while-limits clear, after-limits cut, and reinstatement withholds. With a recent start or none they withhold, except where the span has truly passed (the first policy year against a 2025-06-01 start clears, correctly). L1 is fixed: tenureStart is set only when every document's effective_date agrees.
+
+- M1 `lib/insurance/cover-conditions.ts` TENURE_SIGNAL is still a list of start phrases, so other tenure wordings fall through to "applies to everyone". Adult Death S$900,000, limit S$50,000, cut to 50,000 with any start (2025-06-01, 2010-01-01 or none):
+  - "during the first 730 days"
+  - "if the insured dies within two years after the policy starts"
+  - "if the insured dies within two years of the policy date"
+  - "within 2 years from the date the policy was issued"
+  - "in the policy's first year"
+  - "until the policy has run for two years"
+  - "during the contestability period"
+  Fix (default-safe, structural): treat any duration in a limit's quote (a number or number word + days|months|years, "first year", "contestab", "incontestab") as a tenure signal. Set it aside only when an allow-listed event anchor follows ("of|after|from|following the accident|injury|diagnosis|discharge|admission|event|treatment|surgery|loss|death"), or when it is the existing frequency wording ("per/any one policy year"). So "expenses incurred within 90 days of the accident" still cuts, and anything else withholds unless an exact form reads it.
+- Add the 7 rows above to printed-cap-test as withhold, and one "within 90 days of the accident" row as reduce.
+
+## R388: #199 head 7d3fa1d3 (loose durations withhold unless event-, period- or stay-anchored): READY
+
+Gate (base 28693c90): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R387 M1 is fixed. I probed 37 tenure wordings (adult Death S$900,000, limit S$50,000; start 2025-06-01, 2010-01-01 and none; scratch script, outside git):
+- With no start, every tenure wording withholds.
+- With a 2010 start, the exact while-forms clear and the after-forms cut. Loose spans with a policy anchor ("after the policy starts", "of the policy date", "from the date the policy was issued", "policy's first year", contestability, "until the policy has run for two years") withhold. Reinstatement withholds.
+- New bypass attempts withhold: "for each of the first 2 years", "in any of the first 2 policy years", "up to 2 years after inception", "maximum during the first 2 years", "within 2 years, per policy", "of the accident or of the policy start".
+- Frequency wording ("per policy year", "in any one policy year") and a plain limit still reduce, as before.
+
+Low (accepted gap, no change against main):
+- L1: "Death benefit is limited to S$50,000 for up to 2 years" reduces. This is the builder's noted gap ("payable for N years" read as a benefit-payment period), and the "up to" prefix sets it aside the same way. A contrived "within 2 years of the trip start of the policy" also reduces, because "trip" is an event anchor. Neither is a regression.
+
+## R389: #200 head ff0e2c63 (plan column from a cells-only reading): READY (one Low)
+
+Gate (base 4103e103): plan-columns-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `planColumnFigure` (scratch, outside git), row "Personal liability while on your trip S$500,000 S$750,000 S$1,000,000":
+- A cells-only reading with column Business and figure S$750,000 gives Business S$750,000.
+- None is given when two cells-only readings name different benefits, when the run is not unique, when the figure is not one of the cells, when another reading prints the same run with words, or when the currency differs.
+
+The questions asked:
+- Could a cells-only reading belong to a different row whose stored row is missing? Yes, and the code does not prevent it (see L1). It cannot change the figure, though: the reading must print exactly the same run and its figure must be one of those cells, so any row it belongs to has the same cells, and the same column gives the same amount.
+- Could the column position differ? The figure is checked against the cell values, not against a position. A run with two equal cells ("S$750,000 S$750,000 S$1,000,000") would accept either plan name for S$750,000, but the amount is the same. The plan column name comes from the checked reading, as on main.
+
+- L1 `lib/insurance/scale-limit.ts` cells-only branch: the reading's `benefit` is required to be one name, but it is never compared with the stored row's own words. A reading named "Legal expenses" is accepted for "Personal liability ..." (probe). The amount cannot differ, as explained above, but for clarity require the reading's benefit name to contain the row's last words (the `words` the worded branch already uses). Also `runIsUnique` compares `planCellRun(r.quote)===run`, so a stored row whose quote prints two runs (one of them the same) does not block. Count rows whose spaced quote includes the run instead.
+
+## R390: #201 head 62d993d1 (hide a benefit named only by an empty plan cell): READY (one Low)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `namesNoBenefit(name, quote)`:
+- Newly hidden: "Not covered" / "Not Covered" / "Not covered." / "Excluded" / "Tiada" when the quote is exactly one cell run that starts with that name.
+- Kept: a quote with any other words ("Pre-existing conditions: Not covered S$500 S$1,000"), a quote that is the name alone, "Nil excess", and a real name over a "Not covered" run.
+- "N/A", "Nil" and "Not applicable" are hidden on main already (EMPTY_CELL), whatever the quote.
+I found no name + quote shape that hides a row with its own benefit name.
+
+- L1 (lost-cover direction): the hidden row is still a documented plan-table row whose name the reader lost. The Business column may hold S$500 for the household's own plan. Hiding it at read time is better than showing "Not covered S$500", but the household is not told that a row could not be named. Suggest a follow-up that counts such rows into the document's "could not read every row" note (or offers Read again), instead of dropping them silently.
+
+## R391: #202 head f91fe508 (policy date and "years old" tenure forms): CHANGES (one High)
+
+Gate (base 4103e103): printed-cap-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe (adult Death S$900,000, limit S$50,000; start 2010-01-01; scratch, outside git). These withhold on main 4103e103 and now CLEAR, so the full S$900,000 shows where the limit may apply (a wrong claimable amount, and a regression):
+- "within 2 years of the date of the policy alteration"
+- "within 2 years of the date of the policy endorsement increasing the sum assured"
+- "within 2 years of the date of the policy change"
+- "within 2 years of the policy date of the latest increase"
+- "if the cover is less than 2 years old following any increase"
+- "if the policy is less than 2 years old or the rider is less than 2 years old"
+
+Correct: "of the policy date", "of the date of the policy", "while the policy is less than 2 years old" and "the plan is under two years old" clear with a 2010 start. Reinstatement and revival, "the insured is less than 2 years old" and the after-form withhold. With no start, all withhold.
+
+- H1 `lib/insurance/cover-conditions.ts` START and AGED: "date of the policy" + `\b` matches inside "date of the policy alteration / endorsement / change", and "policy date" matches inside "policy date of the latest increase". The AGED forms ignore a following "following any increase", and an "or" clause naming another item. An alteration, an endorsement or an increase restarts the clock for that part, so the held start proves nothing about it. Fix:
+  - End START with a closed set of followers: end of quote, punctuation, or a joining word (and, or, the, is, ...). Then "date of the policy <noun>" does not match.
+  - Withhold any tenure quote that also names increase, alteration, endorsement, change, addition, rider, reinstat or reviv (extend the existing reinstatement rule to these words).
+  - Add the 6 rows to printed-cap-test as withhold with a 2010 start.
+
+## R392: #203 head 8a423d18 (no-particular-currency "dollar amount" wording): READY (one Low)
+
+Gate (base 4103e103): style-test 22/0, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `documentCurrency` on a page that also prints "S$100,000" and "$120" (scratch, outside git):
+- SGD: "impose limits on the dollar amount", "paid dollar for dollar", "the dollar-amount".
+- No currency (correct): "Amounts in Hong Kong dollars", "maximum dollar amount is A$5,000", "total dollar value is HK$ 500", "in NT dollars", "the US dollar amount", "(USD)".
+The exemption removes only the phrase itself, so any other mention of a currency elsewhere still counts.
+
+- L1 `lib/simple-chat/verify.ts` NO_PARTICULAR_DOLLAR: a foreign dollar named only by a country adjective beside the exempt phrase now passes as SGD, so a bare "$" in that document reads as S$. Examples: "the dollar amount, in Australian terms", "a dollar limit of 500 Canadian", "the same dollar amounts as the Brunei plan". These are unlikely in a real schedule. A cheap close: do not apply the exemption in a sentence that also names a dollar country (Australian, Canadian, Hong Kong, Brunei, US/American, New Zealand, Taiwan, Fiji, ...).
+
+## R393: #201 head bc66aa06 (fund charge, asset mix and footer rows hidden): CHANGES (one High)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Probe of `namesNoBenefit(name, quote)` (scratch, outside git). The four stored shapes are hidden as intended. These real benefits are hidden too, a documented benefit dropped (the lost-cover direction):
+- "Loyalty Bonus" / "Loyalty Bonus of 0.50% p.a. of the Net Asset Value of your policy, paid yearly from year 10"
+- "Welcome Bonus" / "A welcome bonus of 1% per annum of the fund's NAV for the first 5 years"
+- "Death Benefit" / "Death Benefit: higher of 105% of premiums paid or the Net Asset Value; a charge of 1% p.a. of the NAV applies"
+- "This rider pays 100% of the sum assured on diagnosis." / the same sentence + "Page 2 of 14"
+- "Please note the hospital cash benefit is S$200 per day." / the same sentence + "Page 3 of 10"
+- "Cash" / "Cash 10% 20%" (an asset-class name with two bare percentages: plausibly a cash-benefit row with plan percentages)
+
+- H1 `lib/policies/benefit-catalog.ts` readsAsNoBenefit:
+  - FUND_CHARGE hides any quote that mentions "p.a. of the NAV", whatever the name. ILP bonuses (loyalty, welcome, power-up) are worded exactly like this. Fix: hide only when the NAME is a fund (ends "Fund", or matches the fund-name shape) AND the quote is the name followed only by the charge figures and the NAV phrase (an anchored whole-quote shape, like the asset-mix rule). Never hide when the name or quote has a benefit word (bonus, benefit, payout, reward, pays, payable).
+  - FOOTER_SENTENCE hides any This/Please/Note sentence that is followed by a page count. Fix: also require that the name has no figure, money or %, and no benefit word. Better still, allow-list the footer sentences themselves ("valid when all pages are included", "read together with", "not a contract", "for illustration only").
+  - ASSET_CLASS: "Cash" and "Property" are also benefit words (cash benefit, property damage). Require the fund-mix context: 3 or more percentages that each look like an allocation (not 100%/200% style), or drop cash and property from the list.
+  - Add the 6 rows above to nameless-benefit-test as kept.
+
+## R394: #204 head ca99ae47 (strip a trailing empty plan cell from the shown name): CHANGES (two Medium)
+
+Gate (base 4103e103): plan-cell-name-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+The rule itself cannot eat a real word: it needs the quote to be exactly the name's words plus one plan-cell run that opens with the same empty-cell word.
+
+- M1 "Nothing keys on the route's benefitName" does not hold. `app/operator/benefits/page.tsx:66` seeds the edit draft from the shown `benefitName`, and `:169` PATCHes `benefitName: draft.benefitName.trim()||benefit.benefitName` on every save, including a save that only changes the amount. `app/api/benefits/route.ts:280` passes it through `sentName`, which only undoes ID masking, so the stripped name is written over the stored one. The display-only change becomes a stored change that rules and links key on. Fix: in the PATCH, treat a sent name equal to `nameWithoutPlanCell(stored, quote)` as unchanged (extend `sentName`, or compare there), and add a test. (`app/ledger/page.tsx:95` only classifies by name; dropping "Not Applicable" doesn't change its kind.)
+- M2 `lib/insurance/scale-limit.ts` nameWithoutPlanCell: the cell is stripped whatever the household's plan is. When the household holds the first plan, the one whose cell is "Not Applicable", the row then reads as a benefit they have, and planColumnFigure gives no figure (the cell is not money). Before this PR the stray words happened to tell the truth. Fix: strip only when the row's plan figure for this household is a money cell (pass `planFigure != null` to the call, or strip in the same place the plan figure is resolved). Otherwise keep the stored name.
+
+## R395: #201 head 7be94408 (adds schedule cover lines): CHANGES (R393 H1 open, plus one High)
+
+Gate (base 4103e103): nameless-benefit-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+R393 H1 is unchanged at this head. All 6 R393 rows are still hidden (loyalty and welcome bonus, a Death Benefit quote with a NAV charge, the two benefit sentences with page footers, "Cash 10% 20%").
+
+- H2 `lib/policies/benefit-catalog.ts` COVER_LINE_TAIL: `namesNoBenefit` is applied inside `repairStoredRules`, which `loadBenefitCatalog` (line ~1113) uses. That catalog feeds claim answers (`lib/chat/workflow.ts:2323`, `lib/chat/policy-answer.ts:873`) and ledger seeding (`lib/ledger/store.ts:289`, `:476`). So "the ledger holds the sums" is not independent of this filter: the ledger is seeded from the same catalog. The shape hides any name + money + two dates, with or without a formula. Probe, all hidden:
+  - "Accidental Death Benefit S$200,000 01/01/2020 01/01/2060"
+  - "Hospital Cash S$200 01 Jan 2024 31 Dec 2024"
+  - "Death $500,000.00 21 Sep 2020 21 Sep 2092 $1,234.50 72"
+  A cover line stored with a fixed formula is what a claim pays (for example S$200,000 on accidental death), and it would drop out of claims and the ledger.
+  Fix: hide a cover line only when the stored row has no formula (formula_kind none / formulaValue null), and do it in the Benefits route's display filter, not in `repairStoredRules`/`loadBenefitCatalog`. Or show from the code (with a test) that the ledger and claims take the same sum from another source for these rows.
+
+## R396: #205 head 67499047 (benefit groups keyed by insurer + plan): READY (one Low)
+
+Gate (base 4103e103): benefits-document-name-test pass, simple:chat 85, scenario-replay 22/22, benefit-table 107/0, benefit-table chat 107/0, r5 21/21, tsc 0, next build 0, merge with main clean.
+
+Two insurers' rows with the same plan name no longer share a group, its insurer heading or its owners. Insurer-string variants of one plan ("Singlife" / "Singapore Life Ltd") split into two groups with distinct headings, which is the accepted safe side. Numbering applies only within the same name and insurer, and since each heading shows the insurer, unnumbered same-name groups can still be told apart.
+
+- L1 `lib/policies/group-heading.ts` benefitGroupKey: with the insurer unknown on both documents, `"" + "\0" + productName` still merges two documents' "Hospitalisation" rows into one group, the original bug, now only when the insurer is null. Fix: when `insurer` is null, key by `doc:` + policyId + productName.
+
+## R397 — #206 words-only unread line (head 5860b562) — CHANGES (Medium)
+
+Gate (free, network-blocked, keys stripped): own test 0, simple:chat 85/85, replay 22/22, benefit-table 107/107, benefit-table chat 107/107, r5 21/21, tsc 0, next build 0, merge-tree with main clean.
+
+- **M1 lib/policies/unread-amount-line.ts:8.** "No digit" is used as proof of "no amount in it". Made-up probes that all get "describes this in words, with no amount in it": "We will pay fifty thousand dollars on accidental death", "S$ five hundred per day of hospitalisation", "Up to RM ten thousand for funeral expenses", "Twice the sum insured is payable", "Half of the coverage amount", "Ten per cent of the Death Benefit, subject to a maximum of S$ twenty thousand". The page then states something false about a passage that prints an amount, and it reads as "this benefit has no amount" (the lost-cover direction). Fix: the words-only line only when the passage is provably amount-free. Tokenise into words, and keep "could not be read" if any word is a number word other than "one" (two to ninety, hundred, thousand, million, billion, lakh), a multiplier (twice, double, triple, half, quarter, times), "per cent"/"percent", or a currency sign, code or word (allow the default to fall to the old, honest line). Add these probes to the test.
+- **L1 same line.** "The coverage amount" / "the sum assured as shown in the Policy Schedule" passages do have an amount, printed elsewhere. Suggest that, when the passage names sum assured / sum insured / coverage amount / schedule, the line says the amount is the one printed elsewhere (for example on the policy schedule) and is not used here, rather than "with no amount in it".
+- **L2 lib/policies/catalog-builder.ts:272 (and condition-catalog.ts:119).** Stored quotes are cut at 260 characters, so a figure after the cut is not in `quote`. Keep the old line when the quote is 255+ characters long.
+
+## R398–R404 (30 Oct, re-reviews and #207)
+
+Every gate below was the free gate (network blocked, keys stripped): own test, simple:chat 85, replay 22/22, benefit-table 107/107, benefit-table chat 107/107, r5 21/21, tsc, next build, merge-tree clean. All of them passed.
+
+- **R398 #205 f31a9b8d: READY.** R396 L1 is fixed (with a blank or null insurer, the key is doc:policyId + product; insurers are compared trimmed).
+- **R399 #203 4ecad3ab: READY.** R392 L1 is fixed. The exemption runs per sentence, only in sentences that name no place, currency or funds. If it leaks, the result is null currency, the safe side.
+- **R400 #206 26c2aaa8: CHANGES (Medium).**
+  - Still called words-only: "a tenth of the sum assured" (ordinal fractions missing), amount-by-reference passages ("the Sum Assured as shown in the Policy Schedule", "the full Sum Insured", "the benefit amount stated in the schedule", "an amount equal to the annual premium"), and a 257-character cut quote.
+  - Fix: fall back to "could not be read" when the passage names amount, sum, premium, schedule, value or limit, has an ordinal fraction, or the quote is 255 characters or longer.
+- **R401 #200 c560c45a: READY.** R389 L1 is fixed (includes-count; 4-letter stem). A shared stem only matters when the cells are identical, which gives the same figure.
+- **R402 #201 020c43c6: READY.**
+  - R393 H1 is fixed: whole-row allow-lists (a fund name plus a NAV charge tail; a non-cash/property asset class plus 3 or more percentages; allow-listed footer sentence plus page count).
+  - R395 H2 is fixed: the cover line is hidden only when formula is none and there is no value, and only in the Benefits route filter. repairStoredRules is back to main plus namesOnlyAPlanCell. Claims and ledger callers use the 1-arg namesNoBenefit (unchanged).
+  - L1 (inference, not checked): a hidden ruleless cover line should still be on Coverage.
+- **R403 #204 823a3852: READY.**
+  - M2 is fixed: the trim happens only when planFigure != null, which needs a printed money amount in the household's column, and only when the run has a money cell.
+  - M1 is fixed: PATCH treats the shown trimmed name (or its masked copy) as unchanged.
+- **R404 #207 62e17992: CHANGES (Medium).** cutNameSuffix treats anything not starting with a letter, or a space plus a lowercase letter, as "whole". Made-up 90-character probes that show NO "…":
+  - mid-number cuts: "…up to age 7" (next "0 years"), "…limited to S$1,00" (next "0 per child"), "…limited to S$1" (next "0,000"). These show a wrong figure inside the name.
+  - Title Case labels cut before a capital ("…Of The Insured" + " Person").
+  - cuts before "," "-" "/" "'".
+  - ")" is added even when the label continues after the bracket (") and shoulder").
+  - Fix (allow-list, unsure = "…"): show whole only when the rest is "" or whitespace followed by a figure or currency. Add ")" only when the rest is ")" followed by "" or whitespace plus a figure. Everything else gets "…".
+  - L1: cleanBenefitName trims before slicing, but trims nothing after the slice, so a cut label is always exactly 90. OK as is. A reader-written name refused above 90 can legitimately be 90 and whole; under the fix it shows "…" only if its quote continues with words.
+- **R405 #202 b44203e0: READY.** The gate is green (printed-cap-test 0, plus all the standard suites, tsc, next build, merge-tree). R391 H1 is fixed. With a 2010 start, probes of the alteration, endorsement, change, reinstatement and latest-increase rows, "or the rider", "following any increase", the comma, parenthesis, "and" and "or" variants, and "policy date of any increase." all withhold. The plain policy date, date of the policy and "while the policy is less than 2 years old" clear.
+  - **M1 (old, on main 4103e10 too, not this PR's regression):** POLICY_START accepts "commencement" or "issue date" followed by anything. "within 2 years of the commencement of the increase", "within 2 years from the issue date of the increased sum assured" and "within 2 years of the start of the rider" clear with a 2010 start on main AND on this PR. That shows the full sum when the cap may still apply. Fix as a follow-up (or here): give POLICY_START the same CLAUSE_END, or a closed follower set (end, ".", ";", "of the/this/your policy").
+  - L1: "…after the policy date. This applies also to increases." clears, because the next sentence widens the clause. Accepted as an edge case.
+- **R406 #208 569e879c: READY.** The gate is green (benefit-order-test 0, plus all the standard suites, tsc, next build, merge-tree).
+  - The run key is (needs_review, product_name ?? original_filename), the same as the SQL's first two sort keys: b.product_name and p.original_filename are both selected, and '' is kept by both coalesce and ??. Rows therefore never cross runs, and the group order on the page is unchanged.
+  - Within a run the whole order is rebuilt (numeric collator, then page, then tier, then original index), so Postgres collation only decides where run boundaries fall. That stays identical.
+  - Downstream code does not depend on the order. Summary counts are filter().length. Alternatives and planFigure pick found[0] only when every candidate is equal. documentNames is a Map keyed by policy_id, and every row of a policy gives the same name. resolveStoredRules/repairStoredRules work row by row.
+  - L1 (cosmetic): numeric collation also orders figures inside names ("S$500 …" before "S$1,000 …"), which is fine.
+- **R407 #209 (d4461e80, then 87c5c216): CHANGES (High, money).** The gate on d4461e80 is green (prevailing-amount-test 0, plus all the standard suites, tsc, next build, merge-tree). The probes below were run on 87c5c216.
+  - **H1, benefit-catalog.ts CAP_WORDS:** this is still a deny-list. Every row below is "none" on main and becomes a sum_insured rule on 87c5c216, so the full share is shown where the wording bounds it:
+    - "10% of Prevailing Insured Amount, no more than 25,000 dollars"
+    - "…, not above MYR 25,000"
+    - "…, not more than 25,000 SGD"
+    - "…, to a total of twenty-five thousand"
+    - "10% of the Prevailing Insured Amount of the Basic Plan" (another policy's sum)
+    - "…, payable only if the insured is under age 65"
+    - "…for each insured child"
+    - "25% of current sum insured, and the remaining 75% on later diagnosis"
+  - **Fix (structural):** read prevailing/current only when the WHOLE quote has the shape `[label][:] N% of [the] (prevailing|current) <insured amount>[.]`, with nothing after the insured amount. The label is any text before the percentage that has no figure. Anything after the amount gives none. That answers all three of the builder's questions: "current" is fine inside that shape; "full" gets the same shape if it is ever added; and no cap phrasings need listing.
+  - **Q (please confirm):** does PREVAILING_NOTE reach every surface that shows the figure (Benefits pays line, chat answer, claim estimate)? A share of a possibly reduced amount shown without the note overstates it after an earlier claim.
+  - **Old (main 4103e10, inference, not checked downstream):** "10% of Sum Insured, up to S$25,000", "…subject to S$25,000" and "…not exceeding S$25,000" read as plain 10% on main. Check whether the printed-cap condition path applies the cap at claim time. If it does not, this is an open wrong-amount defect.
+- **R408 #209 aafa8985: CHANGES (Medium, money).** The whole-quote shape fixes every R407 row and the extra probes; all of them are now none. Two parts of the shape can still carry a bound:
+  - **M1, the label** `[^\d%$£€:]*` accepts words and brackets. "Angioplasty (subject to a maximum of twenty thousand dollars): 10% of Prevailing Insured Amount" gives 10% with no cap. Fix: the label may contain only letters, spaces, quotes, & / - and one leading list marker ("(a)", "(ii)", "a."). No other brackets and no commas. "For each insured child:" still passes, which is acceptable: it is a per-child amount, so it is right for each claim.
+  - **M2, `(see …)`**: "10% of Prevailing Insured Amount (see Maximum Limit below)" gives 10%, but the clause it points to can cap the share. Fix: drop the "(see …)" allowance; the unsure case gives no rule.
+  - Good: "pays the prevailing sum insured", which main's "full" path read as the full sum, is now none.
+  - Old main defect (R407) still stands: "10% of Sum Insured, up to S$25,000" reads as plain 10%.
+- **R409 #206 49179ed3: READY.** The gate is green (own test, plus all the standard suites, tsc, next build, merge-tree). R400 M1 is fixed: ordinal fractions, reference words (amount, sum, premium, schedule, value, limit, maximum, minimum, cap) and quotes of 255 or more characters all keep "could not be read".
+  - L1: "We pay the Death Benefit in full on death." and "reimburse the cost … in full" are still called words-only. They have no figure and no amount word, and "in full" points at the benefit's own amount. This is accepted as a low risk; consider adding "full" to the reference words later.
+- **R410 #207 a14a9e5b: READY.** The gate is green (cut-name-test 0, plus all the standard suites, tsc, next build, merge-tree). R404 M1 is fixed. All R404 probes plus a decimal mid-amount ("S$1" + ".50") and "age 7" + "0 S$5" get "…". ")" is added only when the bracket truly closes. A whole name followed by a figure or by a sentence end gets nothing.
+- **R411 #203 47b9ee31: READY.** The gate is green (style 22/22, plus all the standard suites, tsc, next build, merge-tree). The neighbour window (previous, own, next sentence) and the wider word list (money, country, states, national, territory, local) both move toward withholding the exemption, so the document currency becomes null and no SGD is assumed. That is the safe direction.
+  - L1: common words such as "money", "local" and "states" in a neighbouring sentence can now undo the AIA fix. Please confirm that the stored AIA p12 sentence and its two neighbours still resolve to S$ (the builder checked only the sentence itself in R399).
+  - The off-list place ("Guam") is an accepted, documented limit.
+- **R412 #209 d82ba8b9: READY.** The gate is green (prevailing-amount-test 0, plus all the standard suites, tsc, next build, merge-tree). R408 M1 and M2 are fixed: the bracketed-cap label, the comma label and both "(see …)" forms give no rule. Plain labels such as "(b) Other than … :", "Angioplasty -", "Angioplasty / Keyhole:" and "Per child:", and no label at all, read the share.
+  - L1 (chat path, read in code, not run): lib/chat/policy-answer.ts:1435 keeps only stored conditions whose text appears in the passage, so PREVAILING_NOTE never reaches the chat answer. The chat line there gives only "N% of the sum insured" with amount null (line 961), and computes no money figure, so it is low risk. To show the note in chat, let notes that DearPolicy wrote itself (PREVAILING_NOTE) bypass that filter.
+  - The R407 old main defect ("10% of Sum Insured, up to S$25,000" read as plain 10%) is logged by the builder as the next follow-up.
+- **R413 #209 6e55b9ba: READY.** The gate is green. The label must equal the row's own name, which is stricter. benefitName is read only by prevailingNotProved.
+- **R414 #210 7885bca3: CHANGES (High, money).** PRINTS_AN_AMOUNT is another deny-list on the side that shows a figure. Made-up stored rows (sum_insured 0.1) that still pass on 7885bca3 are below. Each is the R407 defect: the full share shown where the passage bounds it.
+  - "up to S$ 25 000" (space thousands) and "up to $ 500" (space after the sign)
+  - "up to five hundred dollars" ("hundred" is missing)
+  - "maximum 500 per claim" (3 digits, no currency)
+  - "subject to the limit shown in the Policy Schedule", "up to the Maximum Benefit Limit", "or the amount in the table below, whichever is lower" (a cap by reference, no figure). The read-time path does not re-run validateCatalogFormula's less/lower check.
+  - Withheld correctly: "S$25,000", "S$25k", "policy no. 12345678" (over-withholding, which is the safe side).
+  - **Fix (allow-list):** keep a stored or read share only when the passage, after the share phrase "N% of [the] <insured amount>", has no figure and only words from a small harmless set (payable/paid/on/upon/at/the/of/insured/life/assured/person/death/diagnosis/benefit/claim…, plus the row's own name words). Everything else is withheld with CAPPED_SHARE_NOTE. Run it over the 222 stored sum_insured rows first and report how many it would withhold. If that cost is too high, at minimum add bounding words with no figure (up to, max, maximum, limit, subject to, exceed, whichever, lower, lesser, ceiling, cap, at most, no more than, table, schedule), number words from hundred up, and spaced figures ("S$ 25 000", "$ 500", and a 3-digit figure after a bounding word).
+  - Note: "max. 1 claim per policy year" is a frequency, not an amount. It is fine for that row to stay a rule, but under the allow-list it would be withheld, which is acceptable.
+- **R415 #210 1498c4ff: READY, as a strict improvement on main with a stated deny-list limit.** The gate is green (capped-share-test 0, plus all the standard suites, tsc, next build, merge-tree). All R414 rows are withheld, plus "not be more than the amount shown in the table" and "500 per day". The change only ever withholds (the safe side), and only the same 6 stored rows change, so there is no regression. The builder measured that an allow-list would withhold about 200 of 222 rows that main shows today. That is DC's decision, and I accept it as such.
+  - **Remaining leaks (main shows the same full share; follow-up):**
+    - "restricted to the overall annual benefit" and "never above the lifetime aggregate": cheap to add restrict*, aggregate, above, overall.
+    - "and a further 15% on a second claim": a second share.
+    - "of the basic policy": another policy's sum.
+    - "reduced to 5% after age 65": write-time validation already refuses "reduced", so only stale rows can carry it.
+  - Not amount bounds: "payable once only" and "for each child". These are fine.
+
+## R416 #211 f8b9f4b9 (31 Oct): CHANGES (High, money)
+
+Probes call shareBound directly on made-up passages. "cap" means the share is paid up to that figure.
+
+- **H1 (overstatement): the rest of the passage is still checked with a deny-list.**
+  - "up to S$25,000 for adults; for children 50% of that" → cap 25,000. A child's claim is shown double.
+  - "up to S$25,000 in total for all early stage claims" and "up to S$25,000 per lifetime across all policies with us" → cap 25,000. These are aggregate caps, so the full cap is shown even after earlier claims used part of it (CAP_TAIL accepts "in total/aggregate/lifetime").
+- **H2: SHARE_PHRASE blanks every share phrase, not just one.** "…, up to S$25,000; the benefit is 20% of Sum Insured if diagnosed before age 18" → cap, because the second share disappears from `rest`.
+- **M1 (wrong amount): the cap can come from another benefit.**
+  - "10% of Sum Insured. Ambulance fees up to S$500." → cap 500, read from another benefit's sentence.
+  - "plus 5% for each year in force", "doubled if the event happens overseas" and "increased by 10% each year" → cap 25,000, although the passage changes the amount.
+- Correctly unsure: two caps, (S$10,000 for each child), minimum, "exceeds", "whichever is higher", a cap by reference, a second-currency figure, "overall limit … under this rider", and "with no limit on the number of claims". A US$ cap on an SGD cover gives no figure.
+- **Fix (allow-list, structural):**
+  - Exactly one share phrase.
+  - The cap must sit in the share's own sentence.
+  - After blanking the share and the cap, `rest` may hold only the row's own name words, punctuation, and a small harmless set: payable, paid, per/for each claim, life, insured person, policy year, event, only.
+  - Anything else is unsure. That includes any %, multiplier or change word, and any aggregate word (total, aggregate, all, across, lifetime, combined, overall).
+  - Add the probes above as tests.
+- **R417 #212 0c6c4460: READY.** The gate is green (system:test 0, plus all the standard suites, tsc, next build, merge-tree). The unread list and readWhateverIsStillUnread now skip NO_COVER_READING_ROLES, the same set that dashboard, not-fully-read and benefit-table documentState already use. The only other readers of benefits_indexed_at are the monthly ledger count, which is unaffected, and catalog-builder writes. A deliberate single-policy POST is unchanged.
+  - Misfiled pack: documentState still gives "table_unread" for a misfiled NON_COVER pack that has a schedule page. notFullyRead counts it through readAgain whatever its role, so it keeps its route (Read again on Documents).
+  - L1 (inferred, not checked): such a pack's benefits and conditions are now read ONLY if Read again re-files it under a cover role. If Read again keeps the stale letter or receipt role, nothing reads its benefits any more; before this PR, the Benefits page's "read the rest" did. Please confirm that the reprocess path re-runs role detection, for example on DC's Singapore Life pack (insurer_letter) after the 1 Nov reset.
+
+## R418 — #213 ded6011 (Portfolio kinds)
+Gate (network-blocked, no model keys): own test 67/0, simple-chat 85, replay 22/22, benefit-table 107, chat 107, r5 21/21, tsc 0, next build 0, merges clean into main 16be49a.
+
+## M1 PREMIUM now lets rider-price rows through as benefit rows (table-figures.ts:165, shared into chat.ts:927)
+The new exception "N% of (annual|basic) premium" is meant for benefits worked out from premiums PAID, but it also matches
+a premium priced as a share of another premium. Probe (categoryOfBenefit / PREMIUM.test):
+- "Critical illness rider premium: 12% of basic premium" -> category Critical Illness, NOT premium -> a CI tile row
+- "Hospital cash rider premium 10% of the basic premium" -> Hospital Cash row
+- "Total and permanent disability premium 3% of basic premium" -> TPD row
+These rows were premium rows on main. Now they count as covers: an extra "no fixed sum" policy blocks or splits a tile, and
+in chat (chat.ts:729) the premium no longer skips the waiting-period/out-of-period rule.
+Fix: the exception requires "premiums paid" (or a benefit head like death/surrender/payable/higher of): e.g. change both
+branches to `...premiums?\s+paid\b`. "105% of total premiums paid", "sum of all premiums paid" still pass; "12% of basic premium" stays a premium.
+
+## M2 A page-level plan type is given to every non-rider cover of the reading (assemble.ts:110 planTypeOf(c, r.planType))
+planTypeOfPages works per document, but a schedule or pack with two base covers (a term plan and an endowment plan, or a
+protection policy bundled with a companion product's summary saying "This plan is a savings plan") gives Savings to the term
+cover too. Home then lists the term plan under "Savings and investment" with a quote that is about another product. (This is
+inferred from code; planTypeOf returns fromPages for any cover whose name says nothing.)
+Fix: use the page type only when the reading has exactly one non-rider cover, or when the quote's page names that cover's
+product or plan. Otherwise it is unsure: null.
+
+## M3 A rider whose riderOf is left out takes the policy's name kind (plan-type.ts:62)
+riderOf is optional in the reading. planKindOfName joins product + cover + plan, so for a cover "Term Rider" or a
+"Critical Illness Rider" under product "XYZ Endowment Plan" with riderOf missing, the name gives savings
+(probe: "GREAT Endowment Term Rider" -> savings). Fix: also treat a cover name with rider/supplementary/add-on as a rider,
+and judge by the cover's own name (cover, plan) before the product.
+
+## Checked, OK
+- Known-sum label (app/page.tsx:87): shows the fixed-sum total only with "Not included: <names> (no fixed sum, see Coverage)".
+  It never presents a part sum as the whole. It is OK against DC 27 Oct. (Low: with one fixed-sum policy, "added up" reads oddly.)
+- SELF sentence: "long/medium/short term savings plan" -> savings; "is not a" no match; whole life + endowment-benefit -> null;
+  the savings + investment conflict -> null; a protection statement elsewhere -> null. Good allow-list shape.
+- Travel/ended: endedOn shows only when no current cover for the category; Coverage heading "Ended on <date>".
+
+## R419 — #214 2e410bf (menu / Account settings)
+Viewed as a new household on a phone and on a desktop. Code reading plus link grep at the PR head; gate: r5:ux-test 14, chat 85, replay 22/22, bt 107/107, r5 21, tsc 0, next build 0, merges clean into main.
+
+## H1 From Portfolio there is no way to reach Coverage (the per-person benefit table) or Benefits (each policy's benefits and exclusions)
+AppShell.tsx:36 says "Portfolio ... its cards, Family and Documents link to those pages". At the head:
+- app/page.tsx has no link to /ledger or /schedule. Each tile goes to /coverage?member&category, and that page links only back to Portfolio (app/coverage/page.tsx).
+- /ledger is reachable only from People cards ("See coverage", app/family/page.tsx:147) and from the Documents "Found" line (app/policies/page.tsx:486).
+- /schedule is reachable only from /ledger (ledger/page.tsx:162), two hops through pages that are no longer in the menu.
+So a household looking for "what does my policy pay and what does it exclude" from Portfolio hits a dead end. The corrections and
+"Something looks wrong? Tell us" on Coverage are hidden the same way. On main both were menu items.
+Fix: Portfolio gets a visible "See everything each of us is covered for →" (/ledger?member=<active>) under the tiles, and a
+"Each policy's benefits and exclusions →" (/schedule). The /coverage category page also links to /ledger?member=. Better still, fold
+them in as Portfolio tabs (Overview · By person · By policy), like Account settings, so they keep a visible place.
+
+## M1 Words that send people to a menu item that no longer exists (user-facing copy)
+- "add them on the Household page" in app/api/chat/route.ts:16 and lib/chat/workflow.ts:313, :1192, :1205, :1840. Adding a person is now on Account settings > People; the Household tab cannot add anyone.
+- "add them on the Family page" in app/api/policies/link-person/route.ts:207 and components/benefit-table-coverage.tsx:133 (the link works, but the label is gone).
+- "recorded on the Household page" in lib/chat/registry-answers.ts:201.
+- "see Coverage" / "amount on Coverage" on Portfolio tiles (app/page.tsx:19, :87), "See in Coverage" on Documents, and "the Benefits page" in lib/chat/workflow.ts:2918, :2925. None of these is a menu item any more.
+Fix: one wording, "Account settings > People" for people, and either link the Coverage/Benefits mentions or rename them to whatever Portfolio calls them after H1.
+(Some of the "Household page" lines were already stale on main. This PR is the right place to make them consistent.)
+
+## Low
+- Account settings opens on the Household tab (rename, export, delete). A non-owner sees only a disabled name box, the export
+  and delete sections are hidden, and the People tab, which is what they came for, is one tap away. Consider opening Account settings at People.
+- household-access.tsx:125 "delete the household on the Household tab": OK now. Re-check it if H1 adds more tabs.
+
+## Checked, OK
+- Add a person, invite, revoke, leave or remove: all on People (HouseholdAccess), same confirm-twice pattern, sole-owner guard kept.
+- Delete household: still on the Household tab for owners, with re-auth.
+- /invite and /household/deleted redirects still land on existing pages. Active-menu highlight for /family, /usage, /coverage,
+  /ledger and /schedule works through `also`. Browser tab titles are kept.
+- Phone bar: Portfolio, Documents, Ask, Claims. More: Payments, Account settings.
+
+R420 — #213 04cc7f2: diff does not touch R418 M1-M3; still NOT READY.
+
+## R421/R425 — #215 07e7f65, e6f2743
+NOT READY. The fix frees the burns rows, but it re-opens word-only caps that main withholds. Probe: repairStoredRules on stored
+sum_insured 0.1 rows (made-up wording), PR vs main 16be49a:
+
+| quote tail after "10% of Sum Insured," | main | #215 |
+|---|---|---|
+| but never greater than the amount in force | none | **0.1** |
+| but the payout cannot be higher than the outstanding loan | none | **0.1** |
+| or the outstanding loan if smaller than that | none | **0.1** |
+| reduced where this is greater than the hospital bill | none | **0.1** |
+| and it isn't greater than the overall benefit | none | **0.1** |
+| but at no time higher than the amount shown | none | **0.1** |
+| so long as this is lower than the remaining sum insured | none | **0.1** |
+| or the actual charges if lower than that | none | **0.1** |
+| but shall not in any event be greater than the amount shown | none | **0.1** |
+| but this may not be greater than the amount shown | none | **0.1** |
+| Burns: Equals to or greater than 15% but less than 25% 30% | none | 0.1 (intended) |
+| not larger than / no higher than / not greater than / cannot exceed | none | none (OK) |
+| never more than the remaining balance, but less than the amount shown | 0.1 | 0.1 (old leaks) |
+
+Answering your question: yes, "than" introduces a payout cap whenever the thing compared is an amount ("the outstanding loan",
+"the hospital bill", "the actual charges", "the amount shown", "the remaining sum insured"). A negation list (no/not) cannot
+cover never, cannot, isn't, at no time, may not, shall not in any event, if smaller, so long as.
+
+## H1 Fix: allow-list the event-threshold shape instead of deny-listing negations
+Free a comparative only when what follows "than" is a measure of the event: a percentage or plain number with no money sign
+(`(?:equals?\s+to\s+or\s+)?(?:greater|more|higher|less|lower|smaller)\s+than\s+\d+(?:\.\d+)?\s*%`, optionally
+"... but less than N%"). Every other comparative + than stays an amount, so the unsure case shows no figure.
+Burns-table rows pass, and every cap above stays withheld. "if the bill is greater than the deductible" stays withheld (safe side).
+Add the table above to stored-share-shapes-test as must-withhold cases.
+
+## Note
+validateCatalogFormula (benefit-catalog.ts:819) still refuses greater/lower/less at intake, so only read-time repair changes.
+That is consistent.
+
+## R425 — re-gate at e6f2743
+The 10 R421 rows are now withheld. That part is fixed. New regression vs main (repairStoredRules, stored share row):
+| quote | main | e6f2743 |
+|---|---|---|
+| Major burns: 50% of Sum Insured, but not higher than 25% for children | none | **share** |
+| Major burns: 50% of Sum Insured, but no more than 25% if under 18 | none | **share** |
+| Major burns: 50% of Sum Insured, never higher than 25% | none | **share** |
+| 10% of Sum Insured, but not higher than 25% | none | **share** |
+EVENT_THRESHOLD is removed before the cap words are tested, so a negated comparative followed by a bare % (a cap on the share itself)
+is eaten, and even "no more than", which main lists, stops matching. Fix: test the cap phrases (no|not|never|cannot|n't|at no time|
+may not|shall not ... more/greater/higher/larger than) on the full text before EVENT_THRESHOLD is removed, or make EVENT_THRESHOLD
+refuse to match after a negation. Add these 4 rows as must-withhold cases.
+OK: burns band, "greater than 15% of body surface", "loss greater than 80 dB", "longer than 3 consecutive days" are freed;
+"% of the annual premium / of Sum Insured / of total benefits" stay withheld.
+
+## R422 — #216 883ad6b: READY (gate green; Low: no-separator one-word brands still split, e.g. eShield → e Shield).
+
+## R423 — #217 67ac4eb: NOT READY. M1 page numbers lost when other notes follow uncheckedPagesNote (ingest.ts:969); M2 'Read again checks those pages once more' overstates (whole re-read, same copy may disagree again); M3 delete old copy only after new one reads; L1 duplicate 'Not fully confirmed'.
+
+## R424 — #213 a4193da: READY (R418 M1-M3 fixed, own 104/0, gate green).
+
+## R426 — #214 8e3de1b: READY (H1 Portfolio links to /ledger?member and /schedule; M1 copy now says Account settings > People/Household; tests copy-only; gate green).
+
+## R427/R429 — #219 d570331 -> 6797d87 (Home currency): R427 H1 r5 E1 empty household premiums null vs registered 0 (E2 cascade); fixed in route at 6797d87. READY. M1 conflicts with #213; known sum must refuse 2+ unstated-currency parts.
+
+## R428 — #211 40e93b6: READY. All R416 attacks unsure; follow-up over-withholding: "up to a maximum of", "per policy year", "payable only once", wrapped newline; Low "per additional claim" caps.
+
+"% of the annual premium / of Sum Insured / of total benefits" stay withheld.
+
+## R430 — re-gate at cab0e27
+Gate green (stored-share-shapes fail 0, chat 85, replay 22/22, bt 107/107, r5 21/21, tsc 0, build 0, merges clean into main).
+The R425 rows are withheld, and so are "at no time / at no point / in no event / no higher". Three regressions vs main remain (main: none, head: share):
+- "50% of Sum Insured, but the amount we pay will not under any circumstances be higher than 25%" (the negation is more than 3 words back)
+- "50% of Sum Insured, without being higher than 25%" ("without" is not on the list)
+- "50% of Sum Insured, reduced to 25% if the burn is smaller than 10%" (a conditional second share; the comparative was its only guard)
+Root cause: a negation window is still a deny-list. Structural fix:
+(a) Strip EVENT_THRESHOLD only in an event-band position: at the start of the passage or the benefit label ("Burns: greater than 15% ... 30%"),
+    or right after if/where/when/whose + a subject that is not it/this/the amount/benefit/payment/we.
+(b) Independently, a second percentage in the passage that is not the threshold's own number (here "reduced to 25%") means unsure.
+    This is the same rule as R416 H2 on #211.
+
+## R431 — #217 21aea6d
+- R423 M1 fixed: the page numbers are kept when other notes follow (probed: 5 of 5 note shapes keep "Page 3" / "Pages 3 and 5"; the old word-for-word variant falls back to the generic sentence).
+- R423 M2 mostly fixed: "with the same copy the result may not change" is honest. Low: Read again re-reads the whole document, not only "those pages". "Read again reads the document once more" is more exact.
+- R423 M3 OPEN (one-line wording): "upload it and delete this one". Say delete only once the new copy shows as read, e.g. "upload it, and once it shows as read, delete this one". Otherwise a household that deletes first and then gets a failed read has no copy of that cover on file.
+- R423 L1 OPEN (inferred from page.tsx): a doc with needs_review also shows "Not fully confirmed" right under the Read in part card, which says the same thing twice. Hide that card when the Read in part card shows.
+
+## R432 — #218 73334e3: READY (one upload place on Documents; labels display-only; cents 2 digits in no-currency path; gate green). Conflicts with #219 in app/page.tsx. Low: "Applies to" also on personal policies.
+
+## R433 — #214 3d796d7: READY (People list before add form; gate green).
+
+## R434 — #215 c96306e: one regression left: "Disability: loss greater than 50%, Sum Insured, reduced to one half if less than 10%" (main none, head share); threshold freed after a worded share. Fix: free only before first share mention of any kind (digit %, WORD_FRACTIONS, INSURED_AMOUNT). Gate green.
+
+## R435 — #217 2763edd: READY (M3, Read again wording, L1 done; gate green).
+
+## R436 — #215 397bc13: READY (all R421-R434 rows withheld; remaining share rows identical on main; follow-up: "less", "reduced to").
+
+## R437 — #213 e02128e: READY (undated single trip neither current nor ended; family-ended 10/0; own 106/0; gate green).
+
+Merge pairs needing rebase+re-gate: #211/#215, #213/#219, #218/#219.
+
+## R438 — #220 be502a3: READY (all-pages-failed benefits read throws, clears checkpoints; resumed/table/previous rows prevent throw; all 3 callers noteReadFailure; unread = benefits_indexed_at NULL). Low: add resumed-with-rows and table-plus-failed cases to the test.
+
+## R439 — #211 08be005 (merged main 5575198 incl #215): READY; probes unchanged; gate green.
+
+## R440 — #219 ee535fb (rebased 5575198): READY; known sum needs every priced part to state a currency; home-currency 14/0; gate green.
+
+## R441 — #214 12796fc (main merged): READY; gate green; no conflict with #219.
+
+## R442 — #221 314db67 (Documents filter): READY; M1 follow-up: linked wording/brochure (ai_name_match/upload_hint) goes to "Your policies" but badge says "General wording" (page.tsx:79); decide by role first.
+
+## R443 #222 ce55a99b (share follow-ups): not ready
+Gate green (share-cap 2/0, stored-share-shapes 1/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). M1 regression: "reduced to/by" before the share withholds standard loss-of-hearing/speech/sight rows that paid on main; count it only after the share. H1 (old, in scope): deny-list leaks the full share for "minus", "after deducting", "net of", "halved", "doubled", bare "half"/"a quarter"/"twice", a second share before the insured share, and all Malay second shares/deductions (INSURED_AMOUNT is English only). Fix: allow-list the words after the share, as the prevailing-amount rule does. Details: /mnt/project-files/critic/r443-pr222.md
+
+## R444 — #221 1001adf (role first, main e3aa6d3 merged): READY
+The gate is green: document-filter 9 passed with 0 fetches, r5:ux 14, r8:render 6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge all pass. R442 M1 is fixed: a linked brochure or wording stays under General, and the badge always matches the filter. One low note: an unconfirmed "rider" document is a generic rider contract, labelled "Contract wording" like policy_wording, but it is filed under Your policies with the badge "Linked to your cover" or "Your document". Consider treating an unconfirmed rider the same as policy_wording.
+
+## R445: #223 7d1b3d1 (Benefits load speed): READY, one recommended fix
+Gate green. speed-test passed (checkStored 373 ms on 360 pages). service 22/0, unread-notice 15/0, misfiled-letter, coverage-recovery 11/0, simple chat 85, replay 22/22, benefit-table 107/107, benefit-table chat 107/107, r5 21/21, tsc, build, merge.
+
+- No caller can mutate the cached value. squashPage is module-private, and locateQuote only reads sq.text and sq.at.
+- The cache cannot serve stale text. The key is the page text itself, and the value depends only on that text, so a hit can never belong to a different page or household.
+
+M1 (memory): text built with += is a rope, and at is a JS number array. A standalone probe at the 8M-char cap held about 294 MB of heap. The same probe with parts.join("") and an Int32Array (sliced to length) held about 16 MB heap plus 27 MB external. Recommendation: make this change (verify.ts:44-54), or lower the cap.
+
+Low: tableOnce also caches a rejected promise, so the second use does not retry. Both uses are inside try blocks, so this is harmless.
+
+## R446: #224 41ee626 (no verdict before data loads: cover detail and Payments): READY
+Gate green: r5:ux 15, r8:render 6, simple-chat 85, replay 22/22, benefit-table 107/107 and 107/107, r5:answer 21/21; tsc, next build and merge clean.
+
+M1 (old, small): in app/coverage/page.tsx the fetch has no r.ok check and no .catch.
+- A network failure, or a non-JSON 5xx (for example a function-timeout HTML page), leaves the page on "Loading…" forever.
+- A JSON error body without an `error` key would read as ready, which shows "Not found".
+- Fix: `.then(r=>r.ok?r.json():{error:true}).catch(()=>setData({error:true} as never))`. This matches what the PR already does for Payments.
+
+Note: the header and the ANSWER section still show "Ended on <date>". That breaks DC's ignore-expiry rule, and the Portfolio thread is reverting it. That revert changes the same line, so expect a conflict with whichever merges second.
+
+## R447 — #225 3c6d5d6 (cap in the pays line; ANY_COVERED_CONDITION): READY
+Gate green (share-cap, stored-share-shapes, capped-share 0 fail; 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). (2) held under 25 attack phrasings: every narrowing (for children, first policy year, under the Early Stage benefit, in total, only once, other than, by this rider, or juvenile conditions, and the life assured is a child, before age 18, excluding, a named condition, a trigger "for a child" before the share) gives unsure. Only harmless remainders keep the cap. Low: "any one of the 3 conditions covered" keeps the cap; that only narrows eligibility, not the amount. (1) All describeBenefitFormula callers (route, assessCatalogBenefit fallbacks, chat candidates) get the same cap, so pages agree. Low: a cap in another currency is described ("up to MYR 25,000") while assess withholds the figure; the condition note also repeats the cap. Conflict: #225 and #222 both edit CAP_PASSAGE_PHRASES/capPassageHarmless; whichever merges second needs a rebase.
+
+## R448: #224 29963f9 READY
+R446 M1 is fixed: the fetch now catches errors and checks r.ok. The gate is green: r5:ux 15, r8 6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge.
+
+## R449: #223 28ec467 READY
+R445 M1 is fixed: the text is joined once and `at` is an Int32Array slice. The gate is green: speed 372 ms, service 22/0, coverage-recovery 11/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge.
+
+## R450 — #222 915a313 (rework): not ready
+Gate green. M1 fixed; Malay fixed. H1 still leaks the full share (all old, in scope): condition-clause deny-list (pro-rata, offset, apportioned, rateable proportion, multiplied by two, three times, proportionately, shared equally, divided), deductions in a later sentence, and changers before the share ("after deducting", "less any", "twice", "half", "reduced to 25% for children, otherwise", "equal to 25%"). Structural fixes in /mnt/project-files/critic/r450-pr222.md. Low: "per eye" newly withheld.
+
+## R451 — #226 76fb43a (every policy in force): code READY, merge needs DC's word on graders
+Gate green (in-force 18/0, family-ended 12, intake 56/0, portfolio-kinds 143/0, policy-status, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). r7:answers, r7:claims, r11:blind, v11:answer, v11:claims all fail on PR and pass on main; every failing line expects a status from a printed end date (none from a lapse notice), so each contradicts DC's 05:38Z rule. Correction justified but grader edits are DC's call. Inference to confirm: start dates are ignored too (not_started removed). /mnt/project-files/critic/r451-pr226.md
+
+## R452: #227 78a8cc1 (Server-Timing, early table, checkedOnce): READY
+Gate is green: speed-test, service 22/0, coverage-recovery 11/0, unread-notice 15/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Staleness: checkReading and mergeReadings read only doc.id, name, pages, readable and people, plus the stored JSON, and every one of these is in the hash. check.ts and completeness.ts have no clock, env var or module state. Callers get a structuredClone. Keys include doc.id, so no data crosses households.
+- Early start: `tableOnce.catch(()=>undefined)` is attached to the promise that `.finally` chains, so a rejection is never unhandled. Both uses await it inside try blocks. When the table is off, the promise resolves to null and both uses skip it. The table was already built on every live request for documentKinds, so this does not change behaviour.
+- Low: a request that ends early (an invalid member, before the start) never starts the table. A route error after the start leaves the table work running in the background. That work is harmless.
+
+## R453 — #226 3b8d378 delta (start date kept; premium dates dropped)
+Gate green (in-force 18/0, premium:table, policy-status, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge); v11:claims and r7:claims fail on the same date-only lines as R451 (DC's grader decision). Start-date restore: fine. M1 (premium, regression): the same policy's last-year and this-year schedules (same number, both personal_proof) now both drop as "two_documents"; on main the old one dropped as not current and the new premium counted (probe $S/pp/p226.mts: main [doc-2026, 100], PR items []). Renewals are a common upload. Fix: when two documents give one policy, take the one whose printed period starts latest (choosing between versions is reading content, not an expiry status); "two_documents" only when starts tie or are missing.
+
+## R454 — #222 c790cdf: not ready
+Gate green. Regression vs 915a313: Malay "jika ... dibahagikan dua" / "dipotong" pay in full again ("jika" became a connector). All 24 new suffix attacks (pro-rata, offset, apportioned, rateable proportion, multiplied, three times, shared, divided, to the extent of the loan, taken off, subtracted, instalments, in place of the death benefit, balance after debt, Malay dibahagi/dipotong) and the R450 later-sentence and before-share rows still pay 0.5. Fix: allow-list the suffix after the connector (event/payee words, name words, durations), unsure otherwise. /mnt/project-files/critic/r454-pr222.md
+
+## R455: #226 5fa8454 (renewal pair): code READY
+R453 M1 is fixed. The probe gives [doc-2026, 100] with nothing left out, matching main. Gate is green: premium:table 0 fail, in-force 18/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build and merge all pass. The five registered graders still wait on DC's decision (R451).
+Low: the quiet drop also applies when samePolicy says only "maybe" (same product, no number). That can be two real policies, such as two single trips, and the older premium would vanish without a note. Consider keeping "two_documents" unless the match is "same".
+
+## R456: #228 778b627 (premiums on Records, shared counter): READY
+Gate green: document-filter 10/0 with 0 fetches, r5:ux 16, premium:table 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. The dashboard premiums response is unchanged apart from a new `oneOff` key; per-member covers match the dashboard. The reading_kind subquery is guarded by to_regclass and is safe because benefit_readings.policy_id is the primary key (at most one row). Low: the detail page says "Policy document" while the card badge says "Linked to your cover" / "Your document" for the same file.
+
+## R457: #222 83ec37c: not ready
+Gate green. All R450 English rows and most R454 suffix attacks are now withheld, and every keep (hearing/speech "reduced", burns bands, per eye, conditions, qualifying CI, estate) still pays. Still paying 0.5 on a share that is changed: "for the remaining balance of the sum insured after earlier claims", "once only, after which the sum insured is used up", "to the extent of the outstanding loan", "on each policy anniversary in five equal instalments", "to the policy owner, the balance after any debt owed to us", and Malay "kepada pemilik polisi, dibahagi sama rata", "apabila didiagnosis, setelah dipotong hutang", "jika berlaku di luar negara, dibahagikan dua", "jika tuntutan dibayar, dipotong" (the last two pay again since 915a313: regression). The changer list is still a deny-list and will keep missing wordings from other insurers and languages. Fix: allow-list the suffix after the connector (event, payee, name and duration words), unsure otherwise; at minimum add balance/remaining/used up/extent of/instalments and Malay dibahagi*/dipotong*/potong/baki.
+
+## R458: #226 21db76a ("maybe" match): R455 Low fixed, code READY
+Probe: same name, no numbers gives two_documents (named, not silently dropped); same number gives [doc-2026, 100]; one numbered and one not gives two_documents. premium:table-test 21/0, coverage-premium 7, tsc 0. The diff touches only tablePremiumItems (7 lines) plus its test. The five registered graders still wait on DC's decision (R451).
+
+## R459: #228 9ad4819 (reading path fixed, rule narrowed): READY
+R456 missed that 778b627 read `reading #>> '{document,kind}'`, which is always null for what readDocument stores (`{document: <Reading>, pages}`), so the rename never fired. The new READING_POLICY_SQL reads `{document,document,kind}` and `$.document.covers[*].sumInsured`, which match reading.ts (Reading.document.kind, Reading.covers[].sumInsured number|null). Only insurer_letter is renamed, and only when the reading printed a cover with a sum > 0. The query is scoped by account_id on both sides, and a reading of another shape gives false (strict path, silent errors). Gate green: pack-label-route 5/0 with 0 fetches (run on local scratch DB with real readDocument), document-filter 10/0, r5:ux 16, premium:table, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. The designer's answer on the R456 Low label is accepted (type line vs filing badge).
+
+## R460: #222 49c9a94 (condition allow-list): leaks closed, 9 new lost amounts
+Gate green: share-cap, stored-share-shapes, capped-share, printed-cap, prevailing, nameless (all fail 0), 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. All R443/R450/R454/R457 leak rows are withheld, and the R450/R454 keeps still pay.
+M1 (lost cover, regression against both main and 83ec37c): with 24 ordinary sentence wordings (probe /mnt/project-files/critic/p222d-keeps.mts), these now give no figure where main and 83ec37c paid 50%: "upon diagnosis of any one of the 27 conditions covered", "if the insured person suffers a heart attack", "payable to the beneficiary named in the policy", "when the insured is hospitalised for at least 3 consecutive days", "upon confirmation by a registered medical practitioner", "if the life assured suffers total and permanent disability before age 70", "provided the diagnosis is made after the waiting period of 90 days", "for angioplasty and other invasive treatment for coronary artery disease" (plus "as a lump sum", already withheld at 83ec37c). The allow-list is the right design, but its vocabulary only fits the test rows. Fix: widen CONDITION_WORDS to event and certification verbs (suffers, confirmation, registered, practitioner, named, beneficiary, waiting period, at least, treatment, lump sum), allow a figure that counts conditions or illnesses ("27 conditions"), and gate it on a keep corpus of normal sentence wordings from several insurers and languages, not only the attack rows.
+
+## R461: #222 ed4154b (open slots): not ready, illness slot leaks the full share
+Gate green: 6 share/cap tests fail 0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. All R454/R457 rows are still withheld. The payee and bracket slots withheld all 23 of my attacks (/mnt/project-files/critic/p222e-slots.mts).
+H1 (wrong amount): the illness slot after "diagnosis of" runs past the comma, so a changer that is missing from MONEY_OR_MANNER pays 50% in full: "upon diagnosis of cancer, lowered for smokers", "..., doubling for accidents", "..., quadrupled if overseas", "..., with earlier claims netted off", "..., diminished after age 65", "upon diagnosis of stroke, halving at 70", "..., x2 overseas", and Malay "apabila didiagnosis kanser, diturunkan selepas umur 65". Fix: end the open slot at the first comma, semicolon or "and/or/but", and send everything after it back through the CONDITION_WORDS allow-list. A deny-set inside an open slot can never list every changer, so keep the slot to the name itself.
+M1 (lost cover, still open from R460): "suffers a heart attack", "hospitalised for at least 3 consecutive days", "as a lump sum", "upon confirmation by a registered medical practitioner", "suffers total and permanent disability before age 70", "after the waiting period of 90 days", "for angioplasty and other invasive treatment for coronary artery disease". Low: "(Accidental Death)" withheld, and "en cas de décès accidentel" is withheld (main paid it).
+
+## R462: #222 2408c8f: R460 M1 fixed; R461 H1 open and wider
+Gate green (6 share/cap tests fail 0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). All 24 p222d keeps now pay 0.5, and the French and "Specified Illness listed in Schedule A" rows pay too. R443-R457 leak rows are unchanged (withheld).
+H1 (wrong amount, open since R461): every open slot still runs past the comma. All 8 R461 illness-slot rows pay 0.5, and the new suffers/sustains/for slots add more: "for juveniles, halving", "for smokers, lowered by a fifth", "for accidents overseas, quadrupled", "if the insured suffers a stroke, lowered for smokers", "if the insured sustains injuries, doubling overseas", "for angioplasty, lowered to a fifth thereafter" (/mnt/project-files/critic/p222f-slots2.mts). Fix (same as R461): each open slot ends at the first comma, semicolon or and/or/but/then/thereafter. The rest goes through the CONDITION_WORDS allow-list, which already withholds these words outside a slot (for example "when hospitalised overseas, quadrupled" is withheld).
+
+## R463: #229 4928d09 (grader flips for in-force rule): READY, merge soon
+This PR changes test files only (6 files). Each flipped line expected "ended/expired/ruled out" from a printed period alone. I checked the fixtures: Wanderlust (period to 14 Dec 2025), SafeGuard PA (period to 30 Jun 2026, schedule only), JetSure (expiry 2024-12-31) and Accident Guard 2019 (expiry 2020-01-01) have no lapse or end notice. The AssureTerm 65 lapse-notice expectations and the HerCare grace-period expectations are unchanged. "When did my Japan travel insurance end?" still expects the printed 14 December 2025, which is reading content, not a status. Nothing extra was flipped.
+Runs (network blocked, no keys): on #229, r7:answers, r7:claims, r11:blind, v11:answer 26/26, v11:claims and r9:redteam all pass. On main 265bb98 (with #226 merged), the five graders FAIL and redteam passes, so main stays red until #229 lands.
+Low: rh-32 now requires only /Wanderlust|travel/, and "travel" is already in the question, so the check is weak. Something like /Wanderlust/ would be tighter.
+
+## R464: #229 c5fd6be: READY
+This head adds only stricter notMentions on the r7 travel lines and on rh-32 (which must now name Wanderlust, closing the R463 Low), and v11 C1 now also rejects ended, lapsed and "no longer in force". No expectation was loosened. r7:answers, r7:claims, r11:blind, v11:answer 26/26 and v11:claims pass, run network blocked.
+
+## R465: #222 6874b74 (no open slots): READY on leaks
+Gate green: 6 share/cap tests fail 0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. Every probe row from R443-R462 (p222, b, c, e, f) gives no figure. Every R450/R454 keep still pays, and p222d keeps 18 of 24. The lost keeps are the slot keeps, a trade-off chosen by the coordinator to be won back in a separate PR.
+Medium (pre-existing, main pays all 15 rows): a duration that says the share is paid repeatedly is allowed as a harmless figure: "for 5 years after diagnosis", "to the policy owner for 10 years", "within 30 days, for 12 months", "upon death before age 18, to the policy owner, for 5 years", "upon diagnosis of a Critical Illness for life". The tile then shows one payment as if it were the whole benefit. Follow-up: treat "for N years/months" and "for life" after the share as a payment period and withhold, while keeping "within/before/after/until N". Probe: /mnt/project-files/critic/p222g-durations.mts.
+
+## R466: #230 44028cc (reason instead of "could not be read"): not ready
+Gate green (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). Main says "could not be read" for 38 of my 40 rows. On this head, 15 rows get a reason that misleads (probe /mnt/project-files/critic/p230-reasons.mts):
+H1 (tells the household a paying benefit pays nothing): "waives future premiums. This benefit pays no amount itself" is shown for "We will waive all future premiums and pay the sum insured", "On diagnosis we pay the sum insured and waive future premiums", "Premiums are waived and we also pay the sum assured in one lump sum", "We waive future premiums and refund the premiums paid", and both Malay rows ("... dan membayar jumlah diinsuranskan").
+M1 (advance line hides a second payment): "An advance of the death benefit is paid, and we also pay the sum insured on diagnosis", "... together with a lump sum of the sum insured", "... together with an extra payment", "... plus the funeral grant".
+M2 ("pays the whole sum insured" while the sum is changed or added to): "We pay the sum insured and the policy value", "... if death happens within 12 months; otherwise we refund the premiums paid", "... payable over 5 years" (HARMLESS_FIGURES removes the duration), "... adjusted for inflation", "... adjusted by any indebtedness".
+Cause: each reason strips only its own words and then checks the rest for figures. A second payout or a change has no figure, so it passes. Fix: give a reason only when the rest is made only of allowed filler words (an allow-list: the benefit's name, event and timing words, articles). Any pay/refund/return/plus/together/also/extra/otherwise/adjust/over word keeps "could not be read". Never strip a duration that follows "over" or "for".
+
+## R467: #230 a1394d5: R466 still open
+This head adds negation, Malay "semua premi" and policy-year durations. It does not touch the R466 cause, and all 15 misleading rows from p230-reasons.mts give the same line as on 44028cc (waiver "pays no amount itself" while also paying the sum insured, the advance line hiding a second payment, "pays the whole sum insured" with "and the policy value", "otherwise", "payable over 5 years", "adjusted ..."). Gate not re-run, since nothing it covers changed. Fix as in R466: give a reason only when the rest of the passage passes a filler-word allow-list.
+
+## R468: #230 796058a / 427f03f (filler allow-list): 2 misleading rows left
+Gate green on 427f03f (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). All 40 R466 rows now get no reason, and 22 of 24 new wordings (/mnt/project-files/critic/p230b-reasons2.mts, p230c-reasons3.mts) are fine.
+M1 (same shape as R466 H1, narrower): "We waive future premiums. CI benefit is paid within 30 days." still says "This benefit pays no amount itself". The filler "<abbreviation> benefit is paid within" lets a second payout through.
+M2: "We pay the death benefit in advance, or the TPD Benefit." gets the advance line. The new filler "or" joins an alternative payout.
+Fix: "is paid ..." is filler only when its subject is it/this benefit (never another named benefit), and "or" is filler only between two filler words (for example "payor or policyowner"). Neither may come before a word naming a benefit. With those two closed, READY.
+
+## R469: #230 ecc71f5: READY
+Gate green (unread-amount-line 0 fail, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). R468 M1 and M2 are fixed. Across p230/p230b/p230c, the only rows that still get a reason are accurate (higher of value or premiums, return of premiums or cash value, whole sum to the Policyowner, advance with the rest of the death benefit continuing).
+Low (contrived, follow-up only), probe /mnt/project-files/critic/p230d-reasons4.mts: "Premium waiver; it is paid as the TPD Benefit." still says "pays no amount itself", and "We pay the death benefit in advance, or (b) the ADB Benefit." still gets the advance line, because the single letter "(b)" is counted as filler before a benefit word. Fix by also refusing "is paid as <benefit>" and by counting "(b) the X Benefit" inside the 3-word benefit window.
+
+## R470: #231 2287c17 (lifecycle guard on the reading check): READY
+This is a one-line change. activePredicate("p") is `p.lifecycle_state='active'`, the deletion state, with no date in it. The detail route already returns 404 unless the policy row is active (line 172, same id and account), so a household sees nothing new and no ended or expired status comes back. security:lifecycle-query-guard-test fails on main 6b9e814 and passes here. Gate green: guard, document-filter 10/0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+Process gap (mine): R459 passed #228 without running the security:* guards. From now on my gate runs security:lifecycle-query-guard-test on every PR that touches SQL.
+
+## R471: #232 677c69c (share keeps, payment periods): READY
+Gate green at b1500f8 (6 share/cap tests fail 0, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). At 677c69c, which only adds words, share-cap-test is 9/0 and the probes match. Every attack row from R443-R462 is still withheld. p222g payment periods are all withheld except "after 2 years" (a waiting time, correct). The new closed payee and medical lists, stage/type stripping and "failing that" keep ordinary wordings and withhold changers ("failing that the policy value", "failing that half"). Probes: /mnt/project-files/critic/p232-keeps.mts, p232b-failing.mts.
+Low: "if diagnosed with cancer, lasting for 10 years" pays because "lasting" is in the PAYMENT_PERIOD exemption. It is ambiguous whether this is the illness or the payment period.
+
+## R472: #233 f002ea2 (whole sum per person): READY
+Gate green (whole-sum, unread-amount-line, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). The amount is shown only when the cover name is the benefit's own name letter for letter, the currency is verified, a person's copies agree, and every person in scope resolves. Otherwise nothing is shown. It is display only (the Benefits page) and uses the same paysWholeSum test as R469. security:lifecycle-query-guard-test fails only on the [id] route site inherited from main, which #231 fixes. This PR adds no SQL.
+
+## R473: #234 7268321 (wrapped cell): not ready, it eats the next row
+Gate green (wrapped-cell, share/cap tests, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). H1 (lost cover, possible wrong cap): when a row's amount ends on "up to / or / and / maximum", the dangling rule joins the next line even when that line is a separate benefit row. Probe /mnt/project-files/critic/p234b-wrapped.mts, where main keeps both rows:
+- "Hearing Loss | 15% …, up to" + "Child Benefit | S$5,000" gives one row "15% …, up to Child Benefit S$5,000", and Child Benefit is lost
+- "Loss of Sight | 50% … or" + "Loss of Speech | 50% …" loses Loss of Speech
+- "Fracture of Leg | … up to maximum" + "Fracture of Arm | S$5,000" loses Fracture of Arm
+- "Burns | … subject to a maximum" + "Coma | S$50,000" loses Coma
+- "Accidental Death | 100% … and" + "Permanent Disability | S$100,000" loses Permanent Disability
+- "Hearing Loss in | … up to" + "Both Ears | S$20,000" + "One Ear | S$10,000" joins Both Ears and leaves One Ear as an orphan row
+Fix: join a dangling amount only when the row's own name is unfinished (UNFINISHED, as all three test cases are), the next line's left cell does not itself name a benefit (namesABenefit), and the line after it is not another label | amount row of the same shape.
+
+## R474: #235 0ec09c7 (parallel Benefits queries): READY
+The same SQL, now started earlier. query() uses the shared pool and each statement filters by its own account_id, so running them in parallel crosses no household. The failure handling is unchanged: an inventory query failure still fails the route, conditions failures still give [], and `.catch(()=>undefined)` prevents unhandled rejections on early exits. Gate green (85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). The lifecycle guard fails only on the site inherited from main (#231).
+
+## R475: #234 ebda514 (wrapped cell): READY
+R473 H1 is fixed: 5 of the 6 p234b pages give the same rows as main (Child Benefit, Loss of Speech, Fracture of Arm, Coma and Permanent Disability are kept). Gate green (wrapped-cell, unread-amount-line, share-cap, capped-share, printed-cap, prevailing, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge).
+Low: on "Hearing Loss in | 15% …, up to" / "Both Ears | S$20,000" / "One Ear | S$10,000", Both Ears is still joined to the header row, and One Ear stays a row of its own. Main also misread this sub-table (an unfinished header plus two orphans), so it is not a regression.
+
+## R476: #236 0064e16 (premium caption test follows #228): READY
+This is a test-only change to a test that is not a registered grader. The old assertion on app/api/dashboard/route.ts is moved to lib/policies/counted-premiums.ts, where #228 put the same mapping (items, and now oneOff too, carry premiumSourceKind). The route is checked to call countedPremiums. Nothing is loosened. premium:source-caption-test and premium:table-test pass, the rest of the gate is green, and the test fails on main 6b9e814.
+
+## R477: #234 9321c81: READY (replaces R475)
+All 6 p234b pages now give one row per cover, the same as main, including the "Both Ears / One Ear" sub-table. The intended joins still work ("Keyhole Surgery for | … up to maximum" + "Blocked Arteries | of S$25,000", "Early Cancer upon | … subject to a maximum" + "diagnosis | of RM50,000"), and a following row stays its own row. Gate green (wrapped-cell, unread-amount-line, share/cap tests, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge). R476 note: premium:source-caption-test fails on main 6b9e814 (9 pass, 1 fail), as stated.
+Low (no regression, safe side): "Hearing Loss in | …, up to" + "One Ear | £10,000" joins only when no name | amount row follows. When "Burns | 50%…" comes next, it falls back to main's reading: an unfinished "up to" row plus a separate "One Ear £10,000" row (/mnt/project-files/critic/p234c-wrapped2.mts).
+
+## R478: #234 36c5c05 (merge of main #231-#235): READY
+The remerge diff shows the conflicts were resolved additively: STOPS_AT_ITS_CAP sits beside paysWholeSum, both package.json scripts are kept, and both unread-line tests are kept. Gate green: wrapped-cell, unread-amount-line, whole-sum, share-cap, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, main-merge.
+
+## R479: #237 fb61b7d (whole sum person by person): READY
+A declared contract with no covers is skipped. Each person still needs an evidenced contract that holds the cover, which matches the figure rules in policy-analysis.ts:443 and workflow.ts:798. Anything else is still null: a declared contract with any cover, an evidenced contract without the cover, two sums, only a declared document, or Plus/II/+. Gate green.
+Low (inferred): a declared second certificate whose reading failed also has 0 covers and is skipped. The first certificate's sum is shown with its source. That understates, but no wrong figure is shown.
+
+## R480: #239 c6325b8 (printedNumber): findings
+- H1 (regression, overpays): with a scale word, shareCapInPassage reads "up to US$1.250 million" as cap 1,250,000,000 (main: 1,250,000) and "S$0.500 million" as 500,000,000. Before million/m/k/thousand, a dot followed by 3 digits is a decimal.
+- M2 (pre-existing): typedValue and parseBenefitValue ignore a trailing scale word. "Up to S$1.250 million" gives 1250 (main: 1.25), and "US$1.5 million" gives 1.5.
+- M3: "S$0.500" gives 500 (main: 0.5). A leading 0 group is never thousands grouping.
+- M4 (pre-existing): space grouping is never captured. typedValue("€10 000") gives 10 on both main and #239.
+- L5: parseBenefitValue("CHF 10'000") gives currency null. L6: benefit-rows MONEY lacks Rs, though layout and typedValue have it.
+Fixed: €50.000, €2.500 per day, up to €25.000, Rp 1.500.000, ₹5,00,000, and S$5,000,00, which is now null (main read it as 500000). Probe: /mnt/project-files/critic/p239-locales.mts.
+Gate for #239 is green: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. The gate does not cover the cases above, so H1 stands.
+
+## R481: #238 5a8dc71 (benefit people once per person): READY
+oncePerPerson keys people by ownerId. The same sum and plan collapse to one entry, two sums are both kept, and an entry with no sum is shown only for someone with no sum at all. ?member= is now honoured. Gate green: benefit-people, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+Low: a person whose cover was found with no amount loses the plan name (plan null). Neither page shows the plan for an entry with no sum (operator: "no sum insured on file"; schedule filters on amount), so nothing visible changes.
+
+## R482: #237 d1e2d0e and #238 f47b342: READY (re-ack)
+Neither changes code. #237 adds one test assertion (a contract that is only declared shows nothing). #238 moves its package.json line so it merges cleanly with main, #234, #237 and #239 in either order.
+
+## R483: #239 997856e: READY (replaces R480)
+- H1 fixed. Before a scale word, only a dot or comma followed by 1-2 digits is a decimal point, so "US$1.25 MILLION" gives cap 1,250,000. "US$1.250 million", "€1.500 Mio." and "S$1,500 million" are unsure, never a billion.
+- Correct: "€1,5 Mio." 1.5M, "S$0.500 million" 500k, "S$2.25m", "₹1.5 lakh", "₹2 crore", "Rp 2 miliar".
+- M2 fixed: cells followed by a scale word read as null. M3 fixed: "S$0.500" is null. M4 fixed: "€10 000" is null, not 10. L5: CHF is now known. L6: leaving Rs out on purpose is accepted. Lakh grouping applies only beside a rupee or taka marker ("HK$1,50,000" is null; main read it as 150000).
+- Gate green: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Low (safe side): a money figure followed by a space and 3 digits now reads as unsure: capReading("Up to S$5,000 120 days per year") and typedValue("S$500 365 days"). "Up to Rs. 5,00,000" stays unsure on both main and #239, because the sentence splitter breaks at "Rs.".
+- Low: typedValue("S$1.5 million or S$2,000") gives 2000 (main: 1.5). Both are wrong, for a rare cell. "Md" is read as billion, so "S$2 Md" gives a cap of 2,000,000,000.
+Probes: /mnt/project-files/critic/p239b-locales2.mts, p239c-scale.mts.
+
+## R484: #239 9b50743: READY (replaces R483)
+Changes since 997856e: "mil" now gives nothing (it means a thousand in some markets and a million in others), so "RM5 mil" and "€5 mil" are unsure. "€50 Tsd." gives 50,000 and "US$2 mln" gives 2,000,000. typedValue returns null for any cell where a money figure carries a multiplier, which fixes R483's Low ("S$1.5 million or S$2,000" no longer stores 2000). All changes are on the safe side. The full gate is green at 1f7f561 and at 9b50743: printed-number, share-cap, capped-share, stored-share-shapes, conditions-twice, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge. Probe: /mnt/project-files/critic/p239c-scale.mts.
+
+## R485: #240 4d2d181 (benefit tables classified): READY
+I ran all 56 security:* suites on #240 and on main 63e0ad2:
+- infrastructure-tables and launch-check-verifier go from red on main to green (52 tables, 7 household read-only, 855 checks).
+- 53 suites are green on both.
+- launch-guard and tls fail identically on both because of this env (DATABASE_SSL=off), not #240.
+The inventory rows match sql/benefit-table.sql (RLS, SELECT-only is_household_member policy, REVOKE ALL + GRANT SELECT). Gate green.
+
+## R486: #241 9b65a8c (two out-of-date checks): READY
+- v11:customer-screens goes from 8 passing with failures on main to 11/11. rag2:tools goes from 36/38 to 37/38; C4 stays red, held for DC.
+- Mutants caught: a /usage href in the household menu fails the nav check, and a production file importing lib/rag2/search fails F4.
+- The only product file change is a reworded comment.
+- Neither is a registered grader. Gate green.
+
+## R487: #242 eb7906e (spend cap at both layers): READY
+- On main, rag2:conv crashes on the route's 429, adversarial is 46/47 (U1 fails) and fix crashes on the 429. On #242 they are 22/22, 47/47 and 35/35.
+- F6/U1 now assert the route's 429 spend_limit reply with zero model calls. F21 starts under the cap, writes an over-cap row during the first call, and asserts the loop makes no second call.
+- These suites are not registered graders. Gate green.
+
+## R488: #241 da7b215: READY (re-ack)
+Test-only change: href is now read in any quote style, in both the menu and account-tabs checks. customer-screens passes 11/11, a single-quoted /usage mutant fails the nav check, and tsc is clean.
+
+## R489: #243 917ecf0 (read spend-cap test): READY
+New scripted test with no network, no keys, and no product change. 4/4 pass. With llm.ts:147 (assertUnderSpendCap) removed, 3 checks fail (named household, runWithModelHousehold, exactly at the cap) and the control still passes. Gate green.
+
+## R490: #244 adbd292 (spend cap fails closed): READY
+- The spend check now throws SpendCheckUnavailable when the ledger cannot be read or the figure is not a number. Every hosted path still checks the cap before calling the provider: structuredCompletion :147, ocr-hosted :55, simple-chat :246 and the loop's usage-meter :173 (non-cap errors are re-thrown).
+- The route answers 503 spend_check_unavailable. The pipeline treats the error as transient, and its message avoids the quota, billing and spend-cap words, so it is not misread as non-retryable.
+- ai:spend-check-fails-closed-test passes 5/5. With fail-open restored (catch then return false), 3 checks fail.
+- Suites vs main 63e0ad2 have identical status:
+  - green on both: pipeline-worker, worker-runtime, dead-letter, scan-retry, live-chat-monetary-boundary, deterministic-model-guard, telemetry, background-jobs, processing-failure-storage, simple chat 85
+  - red on both: rag2:conv and rag2:fix (crash on the route's 429; #242 fixes them), adversarial U1 (#242 fixes it), and rag2:tools F4 and C4 (#241 fixes F4; C4 is held for DC)
+- Gate green.
+- Low: workflow.ts:1888 tells the household only about SpendCapReached. If interpretation fails with SpendCheckUnavailable, the turn falls back to rule interpretation instead of saying "try again shortly". Any later hosted call is still refused, so no money is spent. The route check runs first, so this needs the ledger to fail between the two checks.
+
+## R491: #245 af1cb1b (shared policy note in person view): one Medium
+- M1 (lib/policies/shared-policy.ts:19): ownSum is the first amount found for the person across all of the group's benefits. A person with base life S$100,000 and a CI rider S$50,000 gets "own sum insured on it is S$100,000" above the CI rows too. Fix: show ownSum only when the person's amounts agree, otherwise null (the safe sentence).
+- Low: since #238 strips ownerId, matching is by display name, so two members sharing a name would both match.
+- Gate green: shared-policy 6/6, 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+Probe: /mnt/project-files/critic/p245-shared.mts.
+
+## R492: #245 7198534: READY (replaces R491)
+M1 is fixed in both places. Benefits (shared-policy.ts) and the coverage route give ownSum only when the person's sums on the document form one distinct value, formatted with currency so S$ and RM never merge. Otherwise ownSum is null.
+- Tests: shared-policy passes 8/8. shared-policy-route-test passes with db:setup and benefit-table.sql, and asserts null ownSum for base plus rider. coverage:dashboard-dynamic passes on both #245 and main in my env.
+- Gate green: 85, 22/22, 107/107, 107/107, 21/21, tsc, build, merge.
+- Lows: a cover with no sum read is ignored, so base S$100k plus an unread rider still shows S$100k. Matching is by display name (accepted).
+
+## R493 — #244 5825ae6, #246 36b6493, #247 0128e03, #249 53d774c (READY)
+- #244: the only change since adbd292 is one fixture line (a UUID household id). rollout-staleness 19/19. READY re-confirmed.
+- #246: gate green. r9:ingest-chaos loses main's "wrong document role (policy_wording)" hit and adds nothing new.
+- #247: an own note must name exactly one figure, read by printedNumber and printed whole. This closes the €50.000 Low. own-notes 16. r9:ingest-chaos: 0 invented-note hits, against 15 on main.
+- #249: all-accounts 11/11 and env-contract green. DC's decision: non-alpha households would get the table pages with the old chat (inferred).
+- The 2 "Wei Jie life cover" r9 failures are on main as well, so they are not caused by these PRs.
+
+## R494 — #248 125ef5bf (NOT ready)
+- H1 and M2 are fixed: closed cap openers, and the phrase is taken whole or not at all. Verbatim whole phrases ("minus claims paid") are accepted.
+- M3: a condition printed before the % is dropped. "After 2 years, 10% of Sum Insured" gives an unconditional share, and unreadAmountLine says "Pays 10% of …". Fix: what comes before the % must be empty, or only the row's own benefit name, or a closed lead-in. Probe: critic/p248b-prefix.mts.
+
+## R495 — #250 04075c2f then 33d22027, #251 962fb04b
+- #250: personDocs = documentCount − unclaimed is correct, because quality is scoped to the person. Loading is correct. My earlier L1 is WITHDRAWN: main's family query already joins active policies. I had read a stale local checkout. 33d22027 adds `covered`, so a person covered only through a shared certificate is never "nothing on file". Gate pending.
+- #251: Documents takes "still being read" from the table's waiting state, and ledgerReadDocuments returns [] when the table owns reading. No findings so far. Gate pending.
+
+## R496 — #252 835e6d4, a181120, 0bc9f44 (NOT ready)
+- 835e6d4 H1: an English deny-list let death, waiver, cash, screening and other-person rows (in Malay, Chinese and French) onto the CI tile. A product name dragged base-plan rows in.
+- 0bc9f44: plan and product names are no longer read (fixed). Still open: an illness word anywhere in the name moves the row (25 probe rows, critic/p252b-ci.mts).
+- Wrong-amount path: a CI cover with no sum insured, "Major Cancer" (See the page) plus "Cancer Screening Benefit S$300", gives a tile of S$300. Fix: every word of the name must be on a closed list. The pays/sum-insured ask was dropped, as the builder's reasons hold.
+- R493 correction: #249 READY is WITHDRAWN. The TE found that with the switch on, existing non-alpha households, which have no table readings yet, drop to "No covers yet" until each document is read again (paid). I missed this: I tested the flag in isolation, not on households whose stored data predates the table. The next head must keep existing households' cover visible with no paid re-read.
+
+## R497 — READY: #248 f3cdb31e, #249 53c1b0fd, #250 33d22027, #251 962fb04b, #252 8366308, #254 0eef6ef, #255 f7cea147
+- #248: M4 is fixed. A condition on the line above the % now gives null, because all text before the % goes through the allow-list (critic/p248c-prefix2.mts).
+- #249: the fallback checks the table first. A household with a benefit reading stays on the table. A household with old documents or coverage_rules keeps its existing Coverage. An error affects only that one request. all-accounts 21, guard green.
+- #252: every word of the row name must be on a closed illness/stage list, and only the section and cover names are read. Probes: critic/p252-ci.mts, p252b-ci.mts.
+- #254: the link tie-break applies only between exact namesakes. Partial name matches go to ambiguousCovers (critic/p254-names.mts).
+- #251, #255: their DB suites skip without a schema, so I ran them by hand with db:setup and benefit-table.sql (5/5 and 4/4).
+
+## R498 — #253 a916c3e then cbc9f10 (NOT ready)
+- The store.ts DELETE of untouched old schedule rows has the right shape. The TPD line seeds its own sum.
+- lifecycle-query-guard was RED at a916c3e (the family_members join). Fixed at cbc9f10.
+- Still open, M1(a): "counted elsewhere" matches by policy number alone across insurers. (c) Assert that the owner's summary includes the record.
+- L1: home country comes from currencies. An expat with only GBP policies gets home = UK.
+- It conflicts with #257 in policy-answer.ts.
+
+## R499 — #256 bb954d7, b966f8e, 2c3c255, 9c3e18d
+- M1: a rejected row did not block the schedule line. Fixed. Then narrowed to "every event of the line's own category rejected" (TE F1), and seed events are used for categories outside the map (TE F2).
+- The predicate matches the dashboard. Gate on 9c3e18d pending.
+
+## R500 — #257 ebebe9a4 (NOT ready)
+- The "ended" state is removed. Only a printed lapse is reported.
+- M1: a passed end date is now "in_force", and the days-left branch prints "ends on <date> — -27 days from today".
+- M2: it conflicts with #253. Suggest also dropping the age-based "not confirmed current" line.
+
+## R501 — #260 c637f9df (READY)
+- H1 fixed: "2.500%", "Multiplier 1.250", "Section 1.500", "Version 3.100", "Rate 0.750", "Table 2.000", "Policy year 2.026", "3.5 times" no longer verify as thousands.
+- Currency-adjacent figures (S$1.250, €18.500,50, Rp4.250.000, CHF 1'250.00, 1 250,00 €) still verify. Probe: critic/p260-amount.mts.
+- Full gate green; security:* clean apart from the env-only tls/launch-guard.
+
+## R502 — #253 94d1f32, #256 9c3e18d, #257 f254c0d3, #258 a99fefe4 (READY)
+- Full gate green on each head. DB suites ran on a schema'd scratch DB (not "skipped"); lifecycle-query-guard passed on #253 and #256.
+- #253 and #257 conflict on one line at policy-answer.ts ~1591. Whichever merges second needs a refresh.
+
+## R503 — #261 a246bca7 (NOT ready, High)
+- The not-a-benefit-sum filter tests the whole label before the figure. Any premium, excess, deductible, GST or waiver word anywhere in a real cover's row drops that cover from Home, claims and chat, so the person reads as not covered.
+- 13 of 15 real-cover probes dropped, e.g. "Medical Expenses (Excess: S$100) S$500,000", "Deductible S$3,500, Annual Limit S$1,000,000", "101% of premiums paid or Sum Assured of S$200,000", "Krankheitskosten ohne Selbstbeteiligung 100.000 €". Travel benefits also dropped: "Rental Vehicle Excess", "Excess Waiver Benefit".
+- M1: when the stored figure isn't found, the label of the first figure decides.
+- Fix: judge only the label head next to the figure, with a closed keep-list for cover words. Probe: critic/p261-sumline.mts.
+
+## R504 — #261 da2e5ce → 6d38b82c (READY after 3 rounds)
+- Three outcomes now: sum, not a sum, or withhold (cover shown, no figure).
+- My L1 (strip full-width brackets) made "（保费豁免）HK$3,000" a death sum. The TE caught it and I withdrew READY. The final rule: any not-a-sum term inside a bracket withholds.
+- Probes: critic/p261c-brackets.mts, bad 0. Cost: some real covers ("(Excess: S$100) S$500,000") show no figure; that is the safe side.
+
+## R505 — #262 469037f → 45ddd31 (READY)
+- H1: a lone dot group was read as thousands ("€1.500 million" → 1500, "Section 1.500" → 1500). Fixed: only next to a dot-grouping currency, or with an unambiguous grouping.
+- Shared foreign scale words were added (milioni, triệu, milhões…).
+
+## R506 — #263 invite-only sign-up, 498385a → ab0accb2 (READY)
+- M1: proof of the address depended on the Confirm email setting. H1: an attacker who pre-registered an invited address could keep a password into the owner's household.
+- Fixed: only the emailed-link callback counts as proof. First proof rotates the password and signs out other sessions inside the household transaction, then sends the owner to /update-password.
+- Settings (inferred): Supabase "Secure password change" must be OFF. L1: a squatter's existing access token stays valid until it expires.
+
+## R507 — #264 privacy notice cf90aa82 (NOT ready)
+- H1: "a deleted document's file is removed from storage" is false. The file waits for storage:cleanup, which nothing schedules, and the soft-deleted text rows (ID numbers, health details) stay.
+- M1: Pinecone is not listed as a processor.
+
+## R508 — #265 0120507 → 84ec6ef (READY, merge after #262)
+- M1: short scale words scaled counts ("100 MD consultations" → 1e11). Fixed: short words count as scale only next to a currency.
+
+## R509 — #261 → d5b10e9 (READY)
+- Earlier READY was withdrawn after my own L1 (strip full-width brackets) turned a bracketed waiver into a sum. Final rule: a not-a-sum term inside a bracket withholds. 払込免除, 保费豁免 and 保費豁免 are added. Bracket probe gives bad 0, and the full gate is green.
+
+## R510 — #266 94127bb → 337963e (probe clean, gate pending)
+- H1: lump sums got periods ("Yearly Renewable Term" → year, "每日24小时" → day). Fixed: lump-sum categories never carry a period, and a lump sum printed with a period withholds its figure.
+- M1–M4: a period anywhere on the line, "/day" after a digit, the CJK premium boundary, and chat summing incomes. All fixed.
+
+## R511 — #269 e453ff5 → 2570400 (probe clean, gate pending)
+- H1: a non-ISO code fell back to SGD. Fixed: it now gives "" or null.
+- M1: an ISO code beside a rate ("IRR 4.25%", "IRR 1,250 bps"). Fixed with a money-shaped lookahead.
+- L: the NTD, NIS and YEN aliases apply to label fields only.
+
+## R512 — #270 ed453e2 → e140530 (probe clean, gate pending)
+- H1: death or accident lump sums printed with "24 hours a day" or 每日 were stored per_day. Fixed: only periodic events (disability income, daily cash, long-term care) take per_day or per_month. Any other event with a period is stored as "stated".
+- M1: add/add conflict with #266 in line-period.ts. Fixed (the file is now identical).
+
+## R513 — #265 → 119978d (probe clean, gate pending)
+- A scale word whose currency rule fails now prints nothing. There are no new wrong readings against main across 25 cases.
+
+## R514 — #268 → 7173ab7 (READY)
+- The local checker had 8 bypasses (long /Length, stream inside a string or comment, GoToR, TargetMode, DDEAUTO, aFChunk). Removed: an unknown or unjudged hash is now not_scanned and goes ahead unscanned. L1: malicious>0 with a missing suspicious field is treated as unknown.
+
+## R515 — #264 → bc473665 (READY, depends on #267/#271)
+- H1 (a false deletion claim) and M1 (Pinecone) are fixed, and ToConfirm marks are added. L1: claim calculation snapshots are not caveated.
+
+## R516 — #267 → 79eed23 (READY); #271 11333d0 (NOT READY)
+- #271 M1: an id or policy-number match misses answers that store neither. Proposed: redact unless the answer is provably from other active documents.
+- #271 M2: if a #271 pass fails and #267 then clears policy_number, the retry can match by id only.
+
+## R517 — final heads, 31 Oct ~21:20Z
+- READY: #251 bd359fb, #265 119978d, #266 337963e, #267 380b2d1, #268 f9e18ee, #269 2570400, #270 e207a59, #271 d128a77, #273 2ca756d.
+- #266: dashboard-dynamic fails one case ("an ended trip is not cover") identically on main. It is waiting on DC's ignore-end-dates grader decision.
+- #271: changed from an id/number match (a deny-list) to an allow-list (redact unless provably from active documents) plus a match on distinctive names. Open: claim snapshots (DC decision), and #267 waiting for #271's marker.
+- #272 5d050ff NOT READY: personName() reads family_members without activePredicate, so lifecycle-query-guard fails.
+- Conflicts: #272 with #266 (answer.ts); #273 with #256; #262 merges before #265.
+- Process: probe worktrees named w_<tag> collided with gate worktrees and wiped the shared node_modules. Probes now use x_*. Turbopack refuses a symlinked node_modules, so e2e runs need a real copy.
+
+## R518 — 1 Nov: #266 d314714, #274 896f04f, #281 857ac0c (READY); #272–#280 READY
+- #266 d314714 (main merge): full gate green, plus DB periodic-figures 74 and home-currency 14.
+- #274 896f04f: a bare CAD is a currency only beside a money figure; gate green.
+- #281 857ac0c: generic limits map to hospital expense only on single-kind hospital plans, CI-plan conditions stay CI; probe p281b 24 rows clean; gate green incl. lifecycle-query-guard.
+- Earlier READY on current heads: #272 a783596, #273 b39c76b, #275 7d67585, #276 e2c2672, #277 655b636, #278 d5bcb0a, #279 147f367, #280 a90691f.
+
+## R519 — #282 a987c90 (NOT READY)
+Coverage borrows the same person's same-product rows for a cover with none of its own; Documents drops "Found Other". Probe p282 (made-up): opposite direction clean (Accidental death, WOP on TPD, Early CI, other product, different base: none borrowed); NAME_KINDS for kemalangan/Unfall/décès/身故/意外 correct.
+- M1: bracket and " - " qualifiers are dropped before the exact-words compare, so "Death benefit (accidental only)" and "Critical illness (second and subsequent claims)" are borrowed into plain Death / CI cards. Fix: compare up to ":" only; drop a bracket part only when it is filler, short forms or the cover's own words.
+- M2: same-name rows from two covers of the product are both borrowed (two different daily amounts on one card). Fix: borrow only from a single coverKey.
+- L1: a percent row with no base is borrowed under a cover printing another sum. Fix: require base === cover.sumInsured.
+- #282 → ce2af8b READY: M1 (compare names up to ":" only), M2 (one coverKey only), L1/M3 (share or percent rows need base = line sum and same currency) fixed; probe p282 24 cases clean; gate + next build green (dashboard-dynamic ended-trip same as main).
+
+## R520 — 1–3 Nov: #283–#293 (made-up households only; probes in the shared critic folder)
+- #283 c196f39 READY: other-language "death due to cancer" wordings give Death like English; p283 0 mismatches; ci-by-cover 207/0; gate + next build green.
+- #284 efefb734, #285 2746a27, #287 f7f64b5, #288 ceafe1b READY (1 Nov). #288 still fixes ledger:schedule-lines and no-guessed-cover red on main.
+- #286: 11f4e56 M2 (a role sentence "Omar paid the bill, not Tia" moved the claim to the wrong person) → a9df00c READY: correction must be only a frame + the name; p286 60 rows, misses only on the safe side; 45 related suites identical to main.
+- #289: eac8346 H1 (wrapped label confirmed but stored text stayed split) → 01eaf70 READY: row rebuilt in the image's order, lent line emptied; p289 5/5; gate + next build green, 0 Edge warnings.
+- #290 d80d1dc → 4bbae9b8 READY (test-only, DC yes 1 Nov 06:08Z): every date-based "ended" expectation replaced by a stricter in-force check. Unmasked a pre-existing main failure: system-regressions.ts:739, validateCatalogFormula withholds a correctly quoted "25% of the Sum Insured"; plus rag2:tools F4. Sent as separate work on main.
+- #291 notional sum: e69a99e H1 (9 ordinary wordings, e.g. "Sum Assured does not represent the surrender value", "coverage amount does not equal the premiums paid", matched as notional and would withhold real sums), M2 slips, M3 Home vs stored-line pages, L4 riders → c546f22 READY: positive whole-clause patterns, riders keep sums; p291 22/22; 47/0 own test.
+- #292 waiver lines: e32189a H1 (prefix match dropped combined riders "Premium Waiver and Critical Illness Benefit") → 6168e7b READY: whole-label allow-list; p292 40/40; coverage suites identical to main.
+- #293 page currency: 8612f9e H1 (currency words "Ksh", "Rs", "francs", "baht" took the page's SGD), H2 (local-currency pages) → 0cc2d57 H1b (quote path checked only neighbours: "5,000 in Swiss francs") → 2697b60 READY: allow-list words beside figures, "in <word>" closed list, currency-word list; p293 clean; DB test 16/0.
+- Lesson: a suite in the 45-suite run stops local Postgres; check pg_lsclusters after long queues and treat ECONNREFUSED rows as not run.
+
+## R521 — 3 Nov: #294–#300 (made-up households only; probes in the shared critic folder)
+- #294 ledger events: H1 travel labels, H2 hospital sub-limits, M3 rate vs total, H4 per-day on hospital, M5 query failed open, R1 r10 perf 81 > 80 → c07ab41 READY (all fixed, guard fails closed).
+- #295 b7a8382 READY (blocks paid re-reads; full gate + next build, other insurers and layouts).
+- #296 walkthrough plan kinds: M2 withdrawn → 08676bc READY: closed type list, name and type must agree (p296).
+- #297 7d339da READY (claims:test fix for validateCatalogFormula); #298 fdae3ee READY (rag2:tools F4).
+- #299 9059d6d READY: one page's first-year premium line no longer counted once per plan (p299-case).
+- #300 words-then-figure shares → 965f41e READY: a share whose words and bracket disagree ("fifty percent (100%)") now gives no figure; matching shares and rider rows unchanged (p300). Gate: ci 0, benefit-table 107/0, replay 22/22, r5 21/21, tsc 0, build 0, 0 Edge warnings.
+
+## R522 — 3 Nov: #301–#305 (made-up households only; probes in the shared critic folder)
+- #301 live-run guard resolves the model from the env it checks → a88a0e4 (L1: trial-guard.ts had the same bug) → bae308b READY. Production callers all still resolve from process.env. live-ledger 3/10 → 9/10 (10/10 with #304).
+- #302 ocr:openai-test on a PGlite ledger, check 9 = spend cap fails closed → 9351f26 READY.
+- #303 Home CI: a cover named after the plan is joined with the schedule's benefit-named cover. 4f20480 H1: the dedup keeps the first copy, so a later contract's different number was lost (P3 300,000 vs P3r null). → 1b6aec5 copyNumbers → 8a280ab H2: `reference` was taken from the kept copy only, so a wording read first hid a number-less contract (P2 300,000 vs P2r null). L3: benefit_summary is not a role. → a8d730e READY: copyDocuments, and referenceCover only when every copy is a reference. p303-probe gives no total in every read order (SG/MY/UK). DB suites and build green.
+- #304 rebuilt fx-live-2 run.json (script-built, marked reconstructed, must equal the ledger, never overwrites) → f0fcab7 READY. A re-run of the script gives the identical file.
+- #305 claims scale check: conditions that never read the benefit are worked out once per answer → e168998 READY. List checked against every evaluateCondition branch. A mutant that adds payment_precondition is caught by 10b.
+- Lesson: when a dedup keeps one copy, every join guard must read ALL copies (numbers, documents, roles). Probe each guard in both read orders.
+
+## R523 — 3 Nov: #306–#309 (made-up households only; probes in the shared critic folder)
+- #306 additive schema importer + page fingerprint. M1: a "--" inside a string literal could hide the next statement → char-by-char scanner → ba2fe45 READY. p306-probe A1–A18, B1–B7 all right; PAGES_PRINT_SQL equals pagesPrint. 64 importer tests pass; system:test and all security:* match main.
+- #307 rider folding into the plan's death benefit. H1: an on-top rider was folded away. H2: term, family-income and Malay riders were folded on "pay the death benefit". M1: "death benefit of this rider" was folded. → 71f32ef READY: the folding sentence is now an allow-list. p307-probe: R0 folds; Q1 and every Q3 shape stay listed. Gate, build (0 Edge warnings) and security suites match main.
+- #308 plan kinds in chat: more health/travel/life type words, and "excess baggage/luggage/weight" no longer reads as a cost share → b9889aa READY. plan-kind 8/0, walkthrough-uk 10/0, r5 21/21, v11 26/26, chat-contract 29/29, simple:chat 85, system:test 91.
+- #309 deferred/waiting period answers at d7aa844: NOT READY. H1: an off-work claim message about a fracture is replaced by the waiting-period sentence (claimItems 0). H2: "his deferred period is 13 weeks" is read as 13 weeks off work. M1: "next 2 months" is answered as time already off. p309-probe on a made-up household. → 947a9e1 READY: closed list of income-protection questions, length only from the off-work phrase, future wording gives null. Probe right; chat, claims, rag2 and DB suites pass; build 0 Edge warnings.
+- Lesson: a question detector that runs before claim handling must not swallow messages that also describe a claim; probe with claim + period in one message.
+- #310 invite-only note on /signup + privacy draft passages. Sign-up split clean (no gate code in the client bundle; note for every non-open value; open unchanged). d8a4a67 M1: benefit_links (section_key "<docId>|heading|column" + the model's "why" sentence) survived every deletion scrub while the notice said everything read is deleted (p310-probe). L1: Anthropic retention omitted the legal exception. L2: "website runs in Singapore" → server. → b630b5b READY: derived scrub deletes the links per document plus a catch-up for earlier deletions; probe leaves none. Lifecycle/security suites, build 0 Edge warnings.
+- Lesson: before a privacy sentence says "everything read from it is deleted", list every table that holds document text keyed some other way (composite keys, no FK) and probe the scrub on stored rows.
+
+## R524 — 3 Nov: #311–#318 (made-up households only; probes in the shared critic folder)
+- #311 simple chat effort medium → low, 0a8ec51: NOT READY. On the TE's paid A/B the person rule passes (H1 cleared). But low left out the per-claim maximum on "just diagnosed, what can I claim" in 2/2 samples, so the overall limit read as the payout. The large library is untested. Asked for a diagnosis-only re-run (4 per setting x 2 households + 1 large library).
+- #312 combinedLimit for "most in total" questions. H1: 13 event phrasings showed the S$800,000 lifetime aggregate as the event's answer. M1: the event word list leaked ("has cancer", "fell and hurt"). → c02bebb READY: many-claims words only, a clause allow-list, and a limit card kept on an event only beside a per-claim card for the same person and policy. L: require the same cover key for that per-claim card. 32 suites pass.
+- #313 a stalled reading shows its real reason (coverReadingPending allow-list, read-in-part messages by prefix; the deferred read is scheduled before the status write) → 4ca44be READY.
+- #314 "Not sure" uploads: the note excludes unlinked noted documents from every person, with a household-level reminder → 23b8bbc READY. Conflicts with #313 in not-fully-read.ts; re-check whichever merges second.
+- #315 moving a matched printed name to another person. H1: the old person kept the moved name's covers. M1: the move was not atomic. H2: the subset "closeness" rule handed covers to the wrong person. → 57bff0a READY: covers rebuilt from remaining names, one transaction, a closed list of titles/role words. 51 suites pass and security matches main.
+- #316 DEARPOLICY_SIMPLE_CHAT_ALL_ACCOUNTS. M1: households without the benefit table got the less-guarded no-rows path. → 2c0a089 READY: simpleChatFor requires benefitTableLiveFor for "all" and fails closed. L: no platform-wide spend cap (documented).
+- #317 signed-out warm ping (exact GET/HEAD /api/benefits?warm=1, 204/503, no body, no-store, before any session) → fbf1b58 READY on code (draft). 21 near-miss probes refused; 7 security suites pass, build 0 Edge warnings. L: unauthenticated SELECT 1 could be hammered; 204 vs 503 shows whether the DB is up.
+- #318 a percentage row's own printed cap shown as "Up to" when the base isn't printed, 10c61be: NOT READY. H1: a next line starting lowercase, "(" or "and" ("burns: maximum S$50,000") is read as this row's cap, so another benefit's figure is shown. H2: "whichever is greater/higher" floors are shown as "Up to". L1: the call-site gate is a deny-list (anything but NOT_ROW_FIGURE); a percent <= 0 reaches it via plainAmount refusals. p318-probe P1–P13. A3/R52 changes agreed.
+- Lesson: "continuation line" detection must allow-list sentence words and reject any label; a cap word is only a cap when no whichever-greater wording turns it into a floor.
+- Update: #315 a5d8a4c (comment wording only, r7 fixture check) READY. #316 f368a6b (.env.example only) READY.
+- Update #314: 80a50ab (merge of #313; prefix matcher kept) NOT READY: security:lifecycle-query-guard red, because activePredicate had moved into a string constant the text guard can't see. It was already red at 23b8bbc and I missed it (did not run every security:* suite on a SQL PR). → 0d11587 inline predicate READY: 63 suites, build clean.
+- Update #318: 9ada56a fixed floors; a5929b9 allow-listed continuation starts with no ":" label, baseUnknown flag, percent > 0; febff05 "or" rows need a lesser rule plus a closed list of words after the cap → READY. Probe P1–P13: only P8 (a per-year aggregate maximum) keeps a figure.
+- #319 "most my plan pays" with no event described opens not_described cards. 02ce7ee H1: HAPPENED_WORDS deny-list let 21/25 event questions through (dengue, dog bite, stolen car, FR/ES/ZH). e469acd closed allow-list, H1: single product-name words let "my cancer"/"my dengue" through. a194ce6 whole product names only → 86bc31a dropped state words, cover words only inside phrases → READY (p319, p319b probes).
+- Lesson: an "allowed words" list must not borrow single words from household data (product names are often illness names); match the whole name as one phrase.
+
+## R525 — 3 Nov: #320–#326 (made-up households only; probes in the shared critic folder)
+- #320 the product a page belongs to (pageProductScopes; grounded() uses it). H1: a missed heading carried the previous product over. H2: a benefit listed like a product started a new section. M1: grounded() accepted unscoped pages that mention several products. H3/H4: brand prefixes (Dependants/Spouse/Pasangan) were read as the employee's product. → 1d3a777 READY on code (draft). p320/p320b probes B1–B12; 76 suites.
+- #321 limits on open endpoints. Eviction removes the oldest entry and is capped at 10k; IPv6 callers keyed by /64; a 429 message on the operator panel → b050845 READY on code (draft). security:test passes (my -test regex misses it, so run it by name); p321 probe.
+- #322 card names the person a document is used for when the printed name is someone else's. M1: the line named people who weren't linked. → acaf6e5 READY on code (draft); p322 probe, 81 suites.
+- #323 OCR service down says "try again", not "clearer scan". M1: with OCR off, pages got no notRead mark, so the page note couldn't name them. → f21ae1e READY. readInPart left unset on purpose (agreed).
+- #324 page notes kept on read-in-part failures (withPageNotes) → 62920c9 READY: 80 suites; r5 Part B 21/21 over TCP. L: the pending card doesn't show the notes (→ #326).
+- #325 reissued schedule with new amounts is not a copy: same-amount proof uses per-key sets (covers by family_member_id/category/tier), and the fuller document is kept → f0d242e READY, confirmed at 008eb64 (package.json line move). Over TCP: reissued-schedule 14/0, r10 messy, v11 37/37. Clean pairwise merge with #323 and #324.
+- #326 "Some pages couldn't be read" notice + advice. 0b8207c M1: "upload a clearer copy" blamed the file even when no reader looked at the pages or a service failure left them unread. L1: "Everything else in it is used" was false while cover reading was pending. → 84f86a2 (text only) READY (draft): Read again first, then a clearer copy. Gate green, build 0 Edge warnings.
+- Lesson: r5/v11 Part B and reissued-schedule SKIP silently on a socket DATABASE_URL. Run them over TCP localhost and grep the logs for "skip" before calling them green.
+- Lesson: advice about a failure must not name a cause the system hasn't established. "Clearer copy" only fits pages a reader looked at and couldn't read.
+
+## R526 — 3–4 Nov: #327–#335 (made-up households only; probes in the shared critic folder)
+- #327 simple chat leaves unreadable pages out and names them. 9ddd563 L1: pages_not_sent "of" left out unreadable pages. L2: a document with every page unreadable was called "read in part". L3: benefit-table CHECKED_PAGE was a deny-list (→ #328). → 3d774a6 READY.
+- #328 CHECKED_PAGE is now an allow-list ('', native, ocr, part_checked). Every page writer is in ingest.ts, so the set of values is closed. The fingerprint only keys a local cache, so there is no paid re-read path. → c9cf20a / 99b6777 READY: all 61 security:* suites, build 0 Edge warnings.
+- #329 scramble check by currency. L2: Swiss apostrophes were missed. L3: any 3 capitals were taken as a currency prefix ("MAX$"). → 990e348 READY.
+- #330 scramble amount rule. 49b3c0b: one decimal-only figure turned a euro run into rates, and the scramble was missed. Rates reading removed → 1851e64 READY (p330, p330b). L: two-character CJK labels still missed (main too).
+- #331 "read" needs at least one checked page → e0fd49d READY. #332 a note for scanned pages not read yet → 7156227 READY. M1 follow-up (pre-existing): not-fully-read ignores ready documents whose message carries a page note.
+- #333 space thousands in benefit-table numbersIn. e30aa4e/8f21d58 H1: "S$ 150 250 350", "RM 200 300", "S$ 100 365 days" were joined into one figure. → cf1ba39 READY: allow-list of space-grouping markets plus a unit-word stop (p333). M1 pre-existing: pieces of a run that can't be read whole still counted as printed (→ #335).
+- #334 illustration rows dropped. 5c4c332: the word test ran on the quote span only. 7e96bc7: wordless plan-value rows ("S$150 S$250 S$350") were dropped. → 13c776b READY: the row must start with a year/age key (p334, p334b).
+- #335 a space run is read whole or not at all. 53fbdea/310054e/d0fb171 H1: a run after a self-delimited figure leaked pieces ("RM 1,000 500 000" → 500). → 622dbd5 READY: rebuilt run splitter (p335, 57 lines vs main).
+- Correction: check.ts numbersIn only feeds benefit-table printsNumber/dateOnPage. simple-chat verify, rag2 and claim-record have their own local numbersIn. Lesson: grep the import, not the name.
+- Lesson: for figure parsing, probe both directions (joined columns lose correct amounts; left-over pieces pass wrong ones) and in both orders around self-delimited figures.
+
+## R527 (4 Nov, #336-#344; probes in /mnt/project-files/critic/p33x-probe.ts)
+- #336 page-not-read patterns, shared by JS and SQL. 054e383 READY. L1: NBSP is the only JS/PG difference; use `[ \t\n]`.
+- #337 1-hour library cache at 2x write rate. 57cefc6 READY.
+- #332 re-gated: 6cfe602b tree equals the gated merge onto d687296. READY. #333 and #335 closed (English-only).
+- #338 per-unit and ceiling rules. 936af84 H1: the trailer check read only its first word or clause ("in any one day", "payable per day", "per visit, per day" stayed one total). M2: periodic regex had no \b ("per weekday" was weekly). ea22064 R1: "per calendar year" broke eval:extraction. → 9993ec0 READY: whole-trailer scan, short-period tokens, no second figure in the trailer.
+- #339 safety-only numbersIn (replaces #335). 8e9fad5 M1: unambiguous English runs were dropped ("600000 1000000", "2025 600,000"). → 73bfc07 READY (join only 1-3 digits + an exact 3-digit group). L: "₹ 1 50,000" reads 50000, same as main.
+- #340 Home "being read" follows the job's liveness. 23e3950 READY. L1: a read longer than the 5-minute lease ends the notice early.
+- #341 upload_hint counts as the household's word. 65be970 H1 wrong person: a person added or renamed later lost their cover to the upload profile. → 39fd9d8 READY: counts only while the name matches no one.
+- #342 own-row split (MY Surgical). 4fb29c6 M1: an extra break dropped printed qualifier lines (sub-limits). → 5e1c629 READY.
+- #344 wrapped caps finish the row above. 9ae1dad READY. Drop scripts/zz342.ts. L: an r10 fixture "100% of sum assured, S$50,000" now gives null.
+- #343 English-only word removal. f105b81 H1 wrong person: KIN also guards self-resolve, so "My ibu fell…, do I have cover?" resolved to the speaker. M2: a Malay threshold exemption was kept while its "daripada" guard was removed. Pending fix.
+  → 1dcf0f3 NOT READY: bilingual set-aside made "Cancer / Elaun Harian" and similar rows Critical Illness. → 34e7595 restored main's illness words. → 8a8856c H1: the injury rule made all-cause death rows accident-only ("Death due to injury or natural causes"); M1: r7:chat-robustness red (non-English items now out of scope). → c2439d0 READY: injury rule moved out to its own PR, r7 floors and trap list updated with English-only comments, build 0 Edge warnings.
+- #344 d54bcbb READY (final).
+- #345 forNobody word allow-list. ef61baa READY. → 39379c1 M1: a spread card copies person-specific conditions ("Your husband's…", "AhKow's…") to the other holder. Pending.
+- #346 warm ping. 865e47b READY (57 security and warm suites).
+- #311 SIMPLE_EFFORT low. 14c0b18 READY on TE round 4. Separate bug on main: "25% of SA, max RM50,000" shown as "Up to RM50,000".
+- #347 summary-booklet table shapes. 3eae293 H1: any bulleted line ended a premium table, so premiums became cover. → 433f498 H1b: a premium table grouped under cover headings still leaked. → 88ec28b READY: ends only on a schedule-of-benefits heading whose first row is not an age band.
+- #348 model rows with no rule. 7a07b63 H1: real covers dropped (status cells, running text, bullets with words). → 621a04e H1: drop words "cost", "get" and clause words lose covers with amounts. Pending.
+- R529 (4 Nov 07:50Z) final heads READY: #338 946ed67 (bracket lift only for closed-list treatments; c/o 0fe67be H1: child/spouse/overseas sub-limits gave the whole ceiling), #344 d4d86a4 (share with cap stored and bounded by shareBound, same as main), #345 c5bf6af (spread cards keep only own printed conditions), #347 8589aa4 (contains #344), #348 203161e (drops only on price/clause/feature shapes; c17851e and a1889ff dropped hospital cash rows), #349 419c60e (capped percentage base only from the same policy).
+- #350 d005a1e NOT READY: H1 accident rows with any bracket/or/not/; become any-cause death, so accident sums count toward illness deaths.
+- #351 86d08c3 NOT READY: H1 "S$5,000, a month after the claim is admitted" said "a month"; M2 rule 2 trusts the "Monthly …" label for any figure (S$240,000 for 10 years).
+- R530 (4 Nov 08:15Z): #350 ef3b4d1 READY (c/o d005a1e and aa56ea6: accident rows with brackets or an excluded illness turned into any-cause death; now only explicit alternatives lift the accident). #351 44d2f5b READY (c/o 86d08c3, 368eca9: timing phrases and "Monthly …" labels said "a month"; now only the figure's own unit with a closed-list tail).
+- R531 (4 Nov 09:55Z): #343 1ebd069 and #350 f0d4612 READY. c/o 87ceca7 (household names read as Spanish), 727202f ("under a fifth English" refused terse English notes), 6ba8a3e (Singlish "la" and any accent counted as foreign). Final rule: names stripped, refuse only with a closed list of foreign function words or language-marking letters. r9 Malay rows expect English-only (DC option A).
