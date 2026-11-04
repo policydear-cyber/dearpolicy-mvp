@@ -6,7 +6,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { installDatabase } from "../r6/fixture";
-import { DOCUMENT_READ_IN_PART_MESSAGE } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, notReadPagesNote, unreadablePagesNote, withPageNotes } from "@/lib/documents/processing-errors";
+import { hasPagesNotRead } from "@/lib/documents/failure-advice";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -82,6 +83,31 @@ test("only a person's failed, partly read or cover-stopped documents count, and 
   assert.ok(ben.ids.includes(pack) && !ben.ids.includes(receipt));
   assert.equal((await notFullyRead(OTHER, ADA)).count, 0, "never another household's documents");
   assert.equal((await notFullyRead(ACCOUNT, ZOE)).count, 0);
+
+  // A ready document with a page that could not be read, or a scanned page not read yet, is not fully read: the same
+  // rule as its Documents card (lib/documents/failure-advice.ts PAGE_NOT_READ_PATTERNS), wherever the note sits in the
+  // stored message (Critic #332 M1). A look-alike sentence is not the note. The database and the card agree on each.
+  const CLEO = "70000000-0000-4000-8000-000000000004";
+  await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Cleo Okafor','child')", [CLEO, ACCOUNT]);
+  const messages: [string, boolean][] = [
+    ["Ready. " + unreadablePagesNote([3]), true],
+    ["Ready. " + unreadablePagesNote([2, 5, 9]), true],
+    [notReadPagesNote([4])!, true],
+    ["Ready. " + notReadPagesNote([1, 2]) + " Pages 6 and 7 were turned the right way up.", true],
+    [withPageNotes(DOCUMENT_READ_IN_PART_MESSAGE, [unreadablePagesNote([8])]), true],
+    ["Ready. Page 3 could not be read by an older reader, but was read again.", false],
+    ["Ready. Pages 2 and 3 are scanned pages that have now been read.", false],
+    ["Ready.", false],
+  ];
+  const cleoIds: string[] = [];
+  for (const [message, counted] of messages) {
+    cleoIds.push(await add({ member: CLEO, link: CLEO, status: "ready", message, role: "personal_schedule", product: "Example Page " + cleoIds.length }));
+    assert.equal(hasPagesNotRead(message), counted, message);
+  }
+  // A receipt's page note never counts: intake reads no cover from it.
+  await add({ member: CLEO, link: CLEO, status: "ready", message: "Ready. " + unreadablePagesNote([1]), role: "premium_receipt" });
+  const cleo = await notFullyRead(ACCOUNT, CLEO);
+  assert.deepEqual([...cleo.ids].sort(), cleoIds.filter((_, i) => messages[i][1]).sort(), JSON.stringify(cleo));
 
   assert.equal(notFullyReadNote({ count: 0 }, "Ada"), null);
   assert.equal(notFullyReadNote({ count: 1 }, "Ben", true), "One of Ben’s documents was not fully read.");
