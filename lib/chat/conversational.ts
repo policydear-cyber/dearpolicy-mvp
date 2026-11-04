@@ -34,10 +34,21 @@ const ENGLISH_WORDS = new Set(("a an the and or but if so than then not no yes o
   "year years month months day days night nights week weeks time today yesterday tomorrow now ago next last first new old total amount left used " +
   "mum mom mother dad father wife husband son daughter child children kid kids baby brother sister grandma grandpa family parents " +
   "lah leh lor ah meh sia hi hello thanks thank").split(" "));
+/** Function words of other Latin-script languages (closed list): Tagalog, Italian, Portuguese, Spanish, Dutch, French,
+ * German, Malay and Indonesian. Only a sign, never enough on its own: the message must also be mostly not English. */
+const OTHER_FUNCTION_WORDS = new Set(("ako ay ba ng ito sa ang mga aking ko niya namin " +
+  "il lo la gli mio mia miei è stato ieri della dello di che sono quanto " +
+  "o meu minha foi não está pelo pela do da dos das em " +
+  "mi mis el los las por para es está qué cuánto " +
+  "mijn het een ik niet voor van de wat hoeveel " +
+  "le les mon ma est pour du des je " +
+  "das der die ist mein meine für ich nicht wie " +
+  "apa saya anda yang untuk dengan tidak berapa bagaimana adakah ke tak nak").split(" "));
 /** DearPolicy answers in English only (owner's rule, 4 Nov 2026). Closed allow-list (TE #343: per-language word lists
  * missed Tagalog, Vietnamese, Italian, Dutch and Portuguese): a message is English only when its own words are, in fair
  * share, English or insurance words. It is not English when another script dominates, when another language's words
- * outnumber its English words two to one, or when fewer than a fifth of its words (at least five counted) are English.
+ * outnumber its English words two to one, or when fewer than a fifth of its words (at least five counted) are English AND
+ * it shows a positive sign of another language (two of OTHER_FUNCTION_WORDS, or letters English does not use).
  * Short notes of names and places ("Ang mo kio polyclinic") stay English, and a capitalised word after the first is taken as
  * a name ("physiotherapy at Raffles Medical Holland Village").
  * The household's own names and plan names are not counted either way, nor are strings that are no word at all
@@ -62,6 +73,11 @@ export function notEnglish(message: string, known: string[] = []): boolean {
   const english = (rest.match(ENGLISH) ?? []).length;
   const foreign = Math.max((rest.match(MALAY) ?? []).length, (rest.match(SPANISH_ETC) ?? []).length);
   if (foreign >= 2 && foreign > 2 * english) return true;
+  // The share rule refuses only on a positive sign of another language (Critic #343: "laptop stolen overseas police
+  // report filed" is terse English): two words from a closed list of other languages' function words, or written with
+  // letters English does not use ("bệnh", "für", "hôpital").
+  const signal = kept.filter((w) => OTHER_FUNCTION_WORDS.has(w) || /[^\x00-\x7f]/.test(w.replace(/['’]/g, ""))).length;
+  if (signal < 2) return false;
   let words = 0, englishWords = 0;
   for (const w of kept) {
     if (englishWord(w)) { words++; englishWords++; continue; }
