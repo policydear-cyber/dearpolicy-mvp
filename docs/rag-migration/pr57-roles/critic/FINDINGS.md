@@ -10632,3 +10632,15 @@ Coverage borrows the same person's same-product rows for a cover with none of it
 - #335 a space run is read whole or not at all. 53fbdea/310054e/d0fb171 H1: a run after a self-delimited figure leaked pieces ("RM 1,000 500 000" → 500). → 622dbd5 READY: rebuilt run splitter (p335, 57 lines vs main).
 - Correction: check.ts numbersIn only feeds benefit-table printsNumber/dateOnPage. simple-chat verify, rag2 and claim-record have their own local numbersIn. Lesson: grep the import, not the name.
 - Lesson: for figure parsing, probe both directions (joined columns lose correct amounts; left-over pieces pass wrong ones) and in both orders around self-delimited figures.
+
+## R527 (4 Nov, #336-#344; probes in /mnt/project-files/critic/p33x-probe.ts)
+- #336 page-not-read patterns, shared by JS and SQL. 054e383 READY. L1: NBSP is the only JS/PG difference; use `[ \t\n]`.
+- #337 1-hour library cache at 2x write rate. 57cefc6 READY.
+- #332 re-gated: 6cfe602b tree equals the gated merge onto d687296. READY. #333 and #335 closed (English-only).
+- #338 per-unit and ceiling rules. 936af84 H1: the trailer check read only its first word or clause ("in any one day", "payable per day", "per visit, per day" stayed one total). M2: periodic regex had no \b ("per weekday" was weekly). ea22064 R1: "per calendar year" broke eval:extraction. → 9993ec0 READY: whole-trailer scan, short-period tokens, no second figure in the trailer.
+- #339 safety-only numbersIn (replaces #335). 8e9fad5 M1: unambiguous English runs were dropped ("600000 1000000", "2025 600,000"). → 73bfc07 READY (join only 1-3 digits + an exact 3-digit group). L: "₹ 1 50,000" reads 50000, same as main.
+- #340 Home "being read" follows the job's liveness. 23e3950 READY. L1: a read longer than the 5-minute lease ends the notice early.
+- #341 upload_hint counts as the household's word. 65be970 H1 wrong person: a person added or renamed later lost their cover to the upload profile. → 39fd9d8 READY: counts only while the name matches no one.
+- #342 own-row split (MY Surgical). 4fb29c6 M1: an extra break dropped printed qualifier lines (sub-limits). → 5e1c629 READY.
+- #344 wrapped caps finish the row above. 9ae1dad READY. Drop scripts/zz342.ts. L: an r10 fixture "100% of sum assured, S$50,000" now gives null.
+- #343 English-only word removal. f105b81 H1 wrong person: KIN also guards self-resolve, so "My ibu fell…, do I have cover?" resolved to the speaker. M2: a Malay threshold exemption was kept while its "daripada" guard was removed. Pending fix.
