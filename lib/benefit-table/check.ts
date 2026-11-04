@@ -15,6 +15,7 @@ import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
+import { namesNoBenefit } from "@/lib/policies/benefit-catalog";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -267,6 +268,13 @@ export function startDay(text: string): number | null | undefined {
   // so it never counts (TE #108 B6).
   for (const m of text.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]) + 1);
   return days.size === 0 ? (limit ? null : undefined) : days.size === 1 ? [...days][0] : null;
+}
+/** Whether a printed line holds a word once figures, percentages, ordinals and currency marks or codes are taken out:
+ * two letters of any script in a row ("Age", "Décès", "入院"), or one letter of a script with no spaces between words. */
+export function printsAWord(text: string): boolean {
+  const bare = text.replace(/(?<![A-Za-z])(?:[A-Z]{1,3}\$|\p{Sc}|Rp\.?|RM|Rs\.?|kr|zł|Kč)/gu, " ").replace(/\b[A-Z]{3}\b/g, (code) => (isoCodes().has(code) ? " " : code))
+    .replace(/\d[\d,.'’ \u00a0\u202f]*(?:%|st|nd|rd|th)?/gu, " ");
+  return /\p{L}{2}/u.test(bare) || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(bare);
 }
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
@@ -666,6 +674,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!benefit || !quote || !pays) { out.dropped.push({ what: label, why: "incomplete row" }); continue; }
     const source = find(quote, int(b.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
+    // A row of an illustration or projection table ("15  48,437  101.10%  0.10%": a policy year, then values) is no
+    // benefit: its "name" is one of its own figures, or its printed line holds no word at all, so nothing in it says what
+    // is paid for. Shown, it is a line named "48,437" in Coverage and the chat's table (live check, 4 Nov). The same
+    // name rule as the Benefits page (lib/policies/benefit-catalog.ts namesNoBenefit); dropped when read, so nothing
+    // stored changes.
+    if (namesNoBenefit(benefit)) { out.dropped.push({ what: label, why: "its name names no benefit (a figure, a table cell or a piece of a sentence)" }); continue; }
+    if (!printsAWord(source.excerpt)) { out.dropped.push({ what: label, why: "its printed line holds only figures, as an illustration or projection table's row does" }); continue; }
     let value = num(b.value);
     if (value != null && !printsNumber(source.excerpt, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional

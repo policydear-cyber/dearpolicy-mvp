@@ -121,6 +121,7 @@
     "format:printed-number-test": "node --import tsx scripts/format/printed-number-test.ts",
     "benefit-table:dot-thousands-test": "node --import tsx scripts/benefit-table/dot-thousands-test.ts",
     "policies:unread-amount-line-test": "node --import tsx scripts/policies/unread-amount-line-test.ts",
+    "benefit-table:illustration-rows-test": "node --import tsx scripts/benefit-table/illustration-rows-test.ts",
     "documents:wrapped-cell-test": "node --import tsx scripts/documents/wrapped-cell-test.ts",
     "policies:whole-sum-test": "node --import tsx scripts/policies/whole-sum-test.ts",
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",
