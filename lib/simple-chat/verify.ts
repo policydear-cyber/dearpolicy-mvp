@@ -521,6 +521,136 @@ function rowCap(st: ModelStatement, at: Found, household: Household, person: str
   const plain = plainAmount({ ...st, percentOf: null, amount: fig.raw, quote: found.excerpt }, found, household);
   return plain.ok && /^Up to /.test(plain.amount.text) ? { found, raw: fig.raw, amount: plain.amount } : null;
 }
+/** The person's own sum a capped percentage row is a share of, so the card can show the lesser of the two (TE #311 round 4:
+ * "25% of Sum Assured per claim, maximum RM 50,000 per claim" on a certificate printing "Sum Assured: RM 150,000" pays at
+ * most RM 37,500 a claim, never RM 50,000). Found only when all of these hold, otherwise null and no figure is shown:
+ * - it is in the row's own document, which is linked to the person, on a page that names no other life;
+ * - its line's label is the benefit's own sum and nothing else (PCT_BASE: "Sum Assured:", "Sum Insured", "Amount of cover")
+ *   and the line prints exactly one figure, with a currency (not a bare "$") that is the cap's currency;
+ * - the document prints exactly one such sum (a basic plan and a rider's sums assured could be either);
+ * - the model's base, when it gives a figure, is that same sum. */
+function capBase(st: ModelStatement, row: Found, household: Household, person: string, capCurrency: string): { value: number; raw: string; base: Base } | null {
+  const doc = household.documents[row.docIndex];
+  if (!doc.linkedPeople.some((p) => baseName(p) === person)) return null;
+  const people = household.members.map((m) => baseName(m.name));
+  const sums: { value: number; raw: string; found: Found }[] = [];
+  const rowCover = coverOfPercent(rowWithContinuation(doc.pages.find((p) => p.page === row.page)?.text ?? "", row.offset));
+  for (const page of doc.pages) {
+    if (otherLife(page.text, person, people)) return null;
+    let offset = 0;
+    for (const line of page.text.split("\n")) {
+      const figures = moneyFiguresIn(line);
+      const at = figures.length ? line.indexOf(figures[0].raw) : -1;
+      const label = at >= 0 ? line.slice(0, at).replace(/[:\t]/g, " ").replace(/\s+/g, " ").trim() : "";
+      const m = PCT_BASE.exec(label);
+      // "Sum Assured (Critical Illness): S$300,000" is the sum too, when its bracket names the cover the row's percentage is
+      // of, or the row names none.
+      const tail = m ? label.slice(m[0].length).trim() : "";
+      const bracket = /^\(([A-Za-z ]+)\)$/.exec(tail);
+      const exact = !!m && (!tail || (!!bracket && (!rowCover.length || sameWords(tokens(bracket[1]).filter((w) => !COVER_FILLER.has(w)), rowCover))));
+      // Another sum named as a sum ("Rider Sum Assured", "Sum Insured for Accidental Death") could be the base too: a doubt.
+      if (!exact && SUM_WORDS.test(label) && !/%|per\s?cent/i.test(line)) return null;
+      if (exact && !/%|per\s?cent/i.test(line)) {
+        if (figures.length !== 1 || numbersIn(line).length !== 1) return null;
+        sums.push({ value: figures[0].value, raw: figures[0].raw, found: { docIndex: row.docIndex, page: page.page, excerpt: line.trim(), offset } });
+      }
+      offset += line.length + 1;
+    }
+  }
+  // A plan table's "Sum Assured" column, on the row named by the cover the percentage is of ("20% of the Critical Illness sum
+  // assured" -> "Critical Illness Cover\t200,000.00\t180.40"), on a page declaring one currency: one more place the sum is.
+  const cover = rowCover;
+  if (cover.length) for (const page of doc.pages) {
+    const lines = page.text.split("\n");
+    const declared = pageCurrency(page.text);
+    let start = 0;
+    lines.forEach((l, i) => {
+      const at = start; start += l.length + 1;
+      if (!/\t/.test(l)) return;
+      const r = planRow(lines, i);
+      if (!r) return;
+      const words = tokens(r.name).filter((w) => !COVER_FILLER.has(w));
+      if (!words.length || !words.every((w) => cover.includes(w)) || !cover.every((w) => words.includes(w))) return;
+      if (!declared || !SIGN[declared]) { sums.push({ value: NaN, raw: "", found: { docIndex: row.docIndex, page: page.page, excerpt: l.trim(), offset: at } }); return; }
+      sums.push({ value: r.value, raw: formatMoney(SIGN[declared], r.value), found: { docIndex: row.docIndex, page: page.page, excerpt: r.line.trim().replace(/[ \t]+/g, " "), offset: at } });
+    });
+  }
+  if (sums.some((x) => !Number.isFinite(x.value)) || new Set(sums.map((x) => x.value)).size !== 1) return null;
+  const sum = sums[0], cur = moneyFiguresIn(sum.raw)[0]?.currency;
+  if (!cur || cur === "$" || cur !== capCurrency) return null;
+  const said = moneyFiguresIn(st.percentOf?.baseAmount ?? "")[0]?.value ?? numbersIn(st.percentOf?.baseAmount ?? "")[0];
+  if (said != null && !sameValue(said, sum.value)) return null;
+  return { value: sum.value, raw: sum.raw, base: { found: sum.found, cover: "", asOf: null } };
+}
+/** Whether the cap is the most a claim pays whichever of the person's sums the percentage is of: the model's quoted base is
+ * printed in the household's documents on a line that names the person and prints one figure in the cap's currency, and
+ * every line of that document naming the person with one such figure (each of their sums there: a life cover's, an
+ * accident cover's) works out to at least the cap ("15% of Sum Insured or up to S$50,000, whichever is lesser" with
+ * sums of S$400,000 and S$1,000,000 pays S$50,000 on either). Any line that works out lower, or any doubt: false. */
+function capBindsForEverySum(st: ModelStatement, row: Found, household: Household, person: string, capValue: number, capCurrency: string): boolean {
+  const po = st.percentOf;
+  if (!po?.baseQuote || !(po.percent > 0)) return false;
+  const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
+  const bf = locateQuote(household, po.baseQuote, Number.isFinite(preferred) ? preferred : null);
+  if (!bf) return false;
+  const doc = household.documents[bf.docIndex];
+  if (!doc.linkedPeople.some((p) => baseName(p) === person)) return false;
+  // The sums must be this policy's: the base is in the row's own document, or in one printing the same policy number. A
+  // whole life plan's S$1,000,000 says nothing about an accident plan's own sum (Critic #349 H1).
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const rowDoc = household.documents[row.docIndex];
+  if (bf.docIndex !== row.docIndex && !(number(rowDoc) && number(rowDoc) === number(doc))) return false;
+  const who = tokens(person);
+  const sums: number[] = [];
+  let quotedIsOne = false;
+  for (const page of doc.pages) {
+    let start = 0;
+    for (const line of page.text.split("\n")) {
+      const end = start + line.length;
+      const have = new Set(tokens(line));
+      const figures = moneyFiguresIn(line);
+      if (who.every((w) => have.has(w)) && figures.length) {
+        if (figures.length !== 1 || figures[0].currency !== capCurrency) return false;
+        sums.push(figures[0].value);
+        if (page.page === bf.page && bf.offset >= start && bf.offset <= end) quotedIsOne = true;
+      }
+      start = end + 1;
+    }
+  }
+  return quotedIsOne && sums.length > 0 && sums.every((v) => Math.round(v * po.percent) / 100 >= capValue);
+}
+/** The lesser of a percentage row's worked-out amount and its own printed cap, or null when the row prints a figure that
+ * may limit the amount but is not a cap rowCap can read (fail closed: no figure). A row with no figure of its own (other than
+ * the sum it is a share of) keeps its amount. */
+function cappedAmount(st: ModelStatement, at: Found, household: Household, person: string | null, amount: NonNullable<Checked["amount"]>, baseValue: number | null):
+  { keep: true } | { keep: false; cap: NonNullable<ReturnType<typeof rowCap>> } | null {
+  const page = household.documents[at.docIndex].pages.find((p) => p.page === at.page);
+  if (!page) return null;
+  const text = rowWithContinuation(page.text, at.offset);
+  const others = moneyFiguresIn(text).filter((f) => baseValue == null || !sameValue(f.value, baseValue));
+  if (!others.length && !CAP_WORD.test(text)) return { keep: true };
+  const cap = rowCap(st, at, household, person);
+  if (!cap) return null;
+  return cap.amount.value < amount.value ? { keep: false, cap } : { keep: true };
+}
+/** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
+ * when the row says only "of (the) Sum Assured". */
+function coverOfPercent(rowText: string): string[] {
+  const m = /\d+(?:\.\d+)?\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?((?:[A-Za-z]+\s+){0,5}?)(?:sum\s+(?:assured|insured)|amount\s+of\s+cover)\b/i.exec(rowText);
+  return m ? tokens(m[1]).filter((w) => !COVER_FILLER.has(w)) : [];
+}
+const sameWords = (a: string[], b: string[]) => a.length === b.length && a.every((w) => b.includes(w));
+const COVER_FILLER = new Set(["cover", "benefit", "benefits", "plan", "basic", "the", "of", "and", "rider"]);
+/** A row that pays a percentage of a sum with a cap printed on the row ("25% of Sum Assured per claim, maximum RM 50,000 per
+ * claim"): its one percentage, or null. A plain amount card quoting that cap is held to the same lesser-of rule. */
+function percentOfRow(rowText: string): number | null {
+  const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
+  if (pcts.size !== 1) return null;
+  if (!/\d\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?(?:[A-Za-z]+\s+){0,5}?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i.test(rowText)) return null;
+  return [...pcts][0];
+}
+const SUM_WORDS = /\b(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i;
+const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\b/i;
 /** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
  * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
  * - it is in the same document as the wording, or in a document with the same policy number;
@@ -1602,7 +1732,7 @@ function basisOf(household: Household, c: Checked): string {
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
+  return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
@@ -1641,7 +1771,31 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // whatever the percentage works out to: it is shown as that cap, with the row's conditions, while the percentage
         // stays unworked (TE #311 round 3). Only when the percentage is this row's own figure, and rowCap's checks hold.
         // Allow-list (Critic #318 L1): only a refusal about the percentage's base, for a positive percentage, opens the cap.
-        const cap = st.percentOf && st.percentOf.percent > 0 && r.baseUnknown ? rowCap(st, r.found ?? found, household, person) : null;
+        const rowCapped = st.percentOf && st.percentOf.percent > 0 && r.baseUnknown && person ? rowCap(st, r.found ?? found, household, person) : null;
+        // The cap is the most a claim pays only when the percentage works out to at least the cap: the card shows the lesser
+        // of the percentage of the person's own printed sum (capBase) and the cap, and no figure when that sum cannot be
+        // found, since "Up to <cap>" would overstate a claim whose percentage is smaller (TE #311 round 4).
+        let own = rowCapped && person ? capBase(st, rowCapped.found, household, person, moneyFiguresIn(rowCapped.raw)[0]?.currency ?? "") : null;
+        // Or the person's whole sum insured for this policy as wholeSumInsured proves it (its own schedule's plan table).
+        if (rowCapped && person && !own) {
+          const bf = wholeSumInsured(st, r.found ?? found, household, person, serverWords);
+          const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf!.baseAmount, quote: bf.excerpt }, bf, household) : null;
+          const capSign = rowCapped.amount.text.replace(/^Up to\s+/, "").replace(/[\d,.\s]+$/, "");
+          if (bf && plain?.ok && plain.amount.text.replace(/[\d,.\s]+$/, "") === capSign) own = { value: plain.amount.value, raw: plain.amount.text, base: { found: bf, cover: "", asOf: null } };
+        }
+        const worked = own ? Math.round(own.value * st.percentOf!.percent) / 100 : null;
+        const capCurrency = moneyFiguresIn(rowCapped?.raw ?? "")[0]?.currency ?? "";
+        const cap = rowCapped && (worked != null ? worked >= rowCapped.amount.value : capBindsForEverySum(st, rowCapped.found, household, person!, rowCapped.amount.value, capCurrency)) ? rowCapped : null;
+        if (rowCapped && own && worked != null && worked < rowCapped.amount.value) {
+          // The model may also have written the cap as its own card, already turned into this figure: one card.
+          const twin = checked.findIndex((c) => c.person === person && c.amount && sameValue(c.amount.value, worked) && c.found?.docIndex === rowCapped.found.docIndex);
+          if (twin >= 0) checked.splice(twin, 1);
+          const cur = currencyOf(own.raw, own.base.found.excerpt, household.documents[own.base.found.docIndex], own.base.found.page);
+          report.keptAsFact!.push({ why: r.why, text: st.text });
+          checked.push({ s: { ...st, kind: "amount", percentOf: { ...st.percentOf!, baseAmount: own.raw }, alternativeGroup: null }, found: rowCapped.found, person, note: null, base: own.base,
+            amount: { value: worked, text: formatMoney(cur.sign, worked), currencyResolved: cur.resolved, illustration: true } });
+          continue;
+        }
         if (!r.asFact && !cap) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
         // A percentage that is not worked out is kept as the printed percentage, without an amount. A benefit table's label
@@ -1654,6 +1808,44 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
+      if (!st.percentOf && !whole && /^Up to /.test(r.amount.text)) {
+        // A plain card quoting the cap of a percentage row ("Up to RM50,000 - her per-claim maximum") is that row's cap: it
+        // stands only where the percentage of the person's own printed sum is at least the cap. Below it, the card shows the
+        // worked-out figure; with no sum found, no figure (TE #311 round 4).
+        const page = household.documents[at.docIndex].pages.find((p) => p.page === at.page);
+        const rowText = page ? rowWithContinuation(page.text, at.offset) : "";
+        const pct = percentOfRow(rowText);
+        if (pct != null) {
+          const capCur = moneyFiguresIn(r.amount.text.replace(/^Up to\s+/, ""))[0]?.currency ?? "";
+          const own = person ? capBase({ ...st, percentOf: null }, at, household, person, capCur) : null;
+          const worked = own ? Math.round(own.value * pct) / 100 : null;
+          if (worked == null) {
+            report.keptAsFact!.push({ why: "the cap's percentage is of a sum that is not printed for the person", text: st.text });
+            checked.push({ s: { ...st, kind: "fact", amount: null, alternativeGroup: null }, found: at, amount: null, person, note: null });
+            continue;
+          }
+          if (worked < r.amount.value) {
+            if (checked.some((c) => c.person === person && c.amount && sameValue(c.amount.value, worked) && c.found?.docIndex === at.docIndex)) continue;
+            const cur = currencyOf(own!.raw, own!.base.found.excerpt, household.documents[own!.base.found.docIndex], own!.base.found.page);
+            checked.push({ s: { ...st, amount: null, percentOf: { percent: pct, baseAmount: own!.raw, baseDocument: null, baseQuote: null }, alternativeGroup: null }, found: at, person, note: null, base: own!.base,
+              amount: { value: worked, text: formatMoney(cur.sign, worked), currencyResolved: cur.resolved, illustration: true } });
+            continue;
+          }
+        }
+      }
+      if (st.percentOf && st.percentOf.percent > 0 && !whole) {
+        const base = r.base ? moneyFiguresIn(st.percentOf.baseAmount)[0]?.value ?? null : moneyFiguresIn(st.percentOf.baseAmount)[0]?.value ?? numbersIn(st.percentOf.baseAmount)[0] ?? null;
+        const capped = cappedAmount(st, at, household, person, r.amount, base);
+        if (!capped) {
+          report.keptAsFact!.push({ why: "the row prints a limit that could not be read", text: st.text });
+          checked.push({ s: { ...st, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found: at, amount: null, person, note: null });
+          continue;
+        }
+        if (!capped.keep) {
+          checked.push({ s: { ...st, kind: "amount", amount: capped.cap.raw, percentOf: null, alternativeGroup: null }, found: capped.cap.found, amount: capped.cap.amount, person, note: null });
+          continue;
+        }
+      }
       checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, count: st.perDay || st.ofBill ? null : countPays(at, household, r.amount, written, st.conditions, st.rowConditions), bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {

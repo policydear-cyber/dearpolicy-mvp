@@ -144,6 +144,58 @@ export function basisForRow(bases:{index:number;basis:PercentageBasis}[],rowInde
   for(const entry of bases){if(entry.index<=rowIndex)found=entry.basis;else break;}
   return found;
 }
+/** The units after "per"/"each" that name an event, a person or the policy year, never a shorter period: a figure printed
+ * "per claim" or "each accident" is one fixed payment for that event, and a ceiling "per year" or "per policy year" is one
+ * total for the year. Closed list, whole unit only. */
+const PER_EVENT_BODY=String.raw`(?:(?:insured\s+)?(?:person|life|member|child|family)|insured|life\s+assured|policy(?:\s+(?:year|term))?|lifetime|(?:calendar\s+)?year|annum|`
+  +String.raw`(?:(?:any\s+)?one\s+)?(?:claim|incident|accident|event|occurrence|loss|disability|injury|illness|condition|admission|confinement|`
+  +String.raw`hospitali[sz]ation|surgery|operation|treatment|visit|trip|journey|item|article|bag)s?)`;
+const PER_EVENT_UNIT=new RegExp("^"+PER_EVENT_BODY+"$","i");
+const PER_EVENT_AFTER=new RegExp(String.raw`^\s*(?:and\s+every\s+)?`+PER_EVENT_BODY+String.raw`(?![\p{L}\p{N}])`,"iu");
+/** A period shorter than a year anywhere in a ceiling's trailer makes it a rate, never one total: "in any one day",
+ * "incurred per day", "as daily allowance", "during each 24 hours", "per visit, per day". */
+const SHORT_PERIOD=/(?<![\p{L}\p{N}])(?:days?|nights?|hours?|hrs?|weeks?|fortnights?|months?|quarters?|daily|nightly|hourly|weekly|fortnightly|monthly|quarterly|diem|\d+\s?h(?:rs?)?)(?![\p{L}\p{N}])/iu;
+/** What may follow a ceiling's figure and leave it one total. The whole trailer is checked:
+ * - no period shorter than a year anywhere (SHORT_PERIOD);
+ * - every "per", "each", "every" or "/" in it is followed by a closed-list unit (PER_EVENT_AFTER);
+ * - no second money figure (a sub-limit);
+ * - and then it is nothing, a "per"/"each" clause, punctuation alone, or an English connector from a closed list
+ *   ("for surgery", "in total", "subject to ...").
+ * Anything else, an unknown unit or a word in another language, is not, and the row stays as printed. */
+/** Treatments and services a schedule may give a sub-limit of their own inside a wider ceiling. Closed list, whole phrase. */
+const SUB_LIMIT_SERVICE=String.raw`(?:traditional\s+chinese\s+medicine|tcm|physiotherapy|chiropractic|chiropractor|acupuncture|osteopathy|`
+  +String.raw`dental|dentistry|optical|x-?rays?|diagnostic\s+(?:tests?|x-?rays?|imaging)|laboratory\s+tests?|ambulance|`
+  +String.raw`prescribed\s+medicines?|prescription\s+drugs?|homeopathy|speech\s+therapy|occupational\s+therapy)`
+  +String.raw`(?:\s+(?:treatments?|services?|charges|fees|costs|expenses))?`;
+/** The closed-list treatment sub-limit printed in brackets after a ceiling, so the card can show it as a condition. */
+export function treatmentSubLimit(cell:string){
+  const m=(cell??"").replace(/\s+/g," ").trim().match(new RegExp(String.raw`\(\s*((?:for\s+)?(?:${SUB_LIMIT_SERVICE})\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`)\s*\)$`,"i"));
+  return m?m[1]:null;
+}
+function capTrailerKnown(rest:string){
+  const t=rest.trim().replace(/\s+/g," ");
+  if(!t)return true;
+  if(SHORT_PERIOD.test(t))return false;
+  // A bracketed sub-limit for a named TREATMENT or SERVICE -- "Up to S$3,000 per accident (traditional Chinese medicine
+  // up to S$300)" -- leaves the ceiling of the whole as printed: the bracket limits only that treatment. Closed list,
+  // anchored as the whole phrase (Critic #338): a bracket for a person ("children up to S$25,000"), a place ("overseas"),
+  // a condition ("pre-existing conditions"), panel status or an "if" clause limits the very claim it names, so the row
+  // stays as printed. The bracket must be the last thing printed and hold one figure.
+  const part=t.match(new RegExp(String.raw`\(\s*(?:for\s+)?(?:${SUB_LIMIT_SERVICE})\s+(?:up\s+to|limited\s+to|capped\s+at|max(?:imum)?(?:\s+of)?)\s*`+MONEY+String.raw`\s*\)$`,"i"));
+  if(part&&part.index!=null){
+    const before=t.slice(0,part.index).trim();
+    if(!new RegExp(MONEY,"i").test(before))return capTrailerKnown(before);
+  }
+  // A second figure in the trailer is a sub-limit or another rule ("per policy year, S$100 per visit"): one total would
+  // show more than the sub-limit, so the row stays as printed.
+  if(new RegExp(MONEY,"i").test(t))return false;
+  for(const m of t.matchAll(/(?<![\p{L}\p{N}])(?:per|each|every)(?![\p{L}\p{N}])|\//giu))
+    if(!PER_EVENT_AFTER.test(t.slice((m.index??0)+m[0].length)))return false;
+  const opened=/^[,;(.:]/.test(t),clause=t.replace(/^[,;(.:\s]+/,"");
+  if(/^(?:(?:for\s+)?(?:per|each|every)\b|\/)/i.test(clause))return true;
+  if(opened&&!clause)return true;
+  return /^(?:for|in|under|on|during|within|subject|including|inclusive|excluding|overall|total|of|while|when|if|after|before|from|towards?|incurred|payable|paid|reimbursed|as|across|combined|aggregate|limit|maximum|max|see|refer|unless|except|provided|where|less)\b/i.test(clause);
+}
 export function parseBenefitValue(cell:string,options?:{percentageBasis?:PercentageBasis|null}):ParsedBenefitValue|null{
   const text=(cell??"").replace(/\s+/g," ").trim();
   if(!text||text.length>80)return null;
@@ -192,13 +244,17 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // "Up to S$500 per incident" — a reimbursement ceiling, never a payout.
   const cap=text.match(new RegExp(String.raw`^(?:(?:reimbursed\s+)?up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
   if(cap){
+    // A ceiling "per day" is a rate, not one total (finding 1, real-model run on d687296f): what follows
+    // the figure must be nothing, a clause the closed list knows, or "per"/"each" + a closed-list event. Anything else
+    // stays as printed.
+    if(!capTrailerKnown(text.slice((cap.index??0)+cap[0].length)))return null;
     const limit=amount(cap[1],text);
     if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};
   }
   // "S$30 per day" / "$689/month"
   // A rate printed with no currency at all ("150 per day") is still the rate
   // the schedule states; it is kept with currency null -- never given one.
-  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)`,"i"))
+  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(?:calendar\s+(?=year))?(day|night|week|month|year)\b`,"i"))
     ??text.match(new RegExp(String.raw`^(${NUMBER})\s*(?:per|/|a)\s*(day|night|week|month|year)\b`,"i"));
   if(periodic){
     const rate=amount(periodic[1],text);
@@ -210,8 +266,12 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // A bare figure in the limit column.
   // "S$50,000 payable on 2040-06-01" / "payable at maturity": the figure is
   // the benefit; when it is paid stays in the quoted row.
-  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20}|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
+  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+([a-z ]{3,20})|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
   if(flat){
+    // "per <unit>" keeps a figure fixed only when the unit is a closed-list event ("per claim", "each accident"). Any
+    // other unit -- a period in another language ("per hari", "per jour"), "per hour", "per km" -- is a rate this
+    // grammar does not know, and a rate stored as a lump sum is a wrong amount, so the row stays as printed.
+    if(flat[2]!=null&&(!PER_EVENT_UNIT.test(flat[2].trim().replace(/\s+/g," "))||/^(?:(?:calendar\s+)?year|annum)s?$/i.test(flat[2].trim().replace(/\s+/g," "))))return null;
     const value=amount(flat[1],text);
     if(value!=null)return {kind:"fixed",value,currency,basis:"the amount printed in the schedule"};
   }
