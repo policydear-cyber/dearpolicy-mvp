@@ -12,7 +12,10 @@ export function OperatorStatusPanel() {
     let cancelled = false;
     const check = async () => {
       try {
-        const payload = await (await fetch("/api/health", { cache: "no-store" })).json();
+        const response = await fetch("/api/health", { cache: "no-store" });
+        // Checked too often from this address (lib/http/open-endpoint-limit.ts): say so instead of "not answering".
+        if (response.status === 429) { if (!cancelled) setError("Checking too often. Try again shortly."); return; }
+        const payload = await response.json();
         if (!cancelled) { setServices(payload.services ?? []); setError(""); }
       } catch {
         if (!cancelled) setError("The app server is not answering.");

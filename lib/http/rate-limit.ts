@@ -25,7 +25,7 @@ type Bucket = { count: number; windowStart: number };
 // Bounds memory under a flood of distinct (e.g. spoofed X-Forwarded-For)
 // keys: once the tracked-key count passes this, the oldest expired buckets
 // are dropped before a new one is added.
-const MAX_TRACKED_KEYS = 10_000;
+export const MAX_TRACKED_KEYS = 10_000;
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -42,6 +42,13 @@ export function createRateLimiter(args: { windowMs: number; max: number }) {
     for (const [key, bucket] of buckets) {
       if (now - bucket.windowStart >= args.windowMs) buckets.delete(key);
       if (buckets.size < MAX_TRACKED_KEYS) return;
+    }
+    // Still full of live buckets (a flood of distinct keys inside one window): drop the oldest by insertion order, so
+    // memory stays bounded whatever the keys. A dropped key simply starts a fresh window if it comes back.
+    while (buckets.size >= MAX_TRACKED_KEYS) {
+      const oldest = buckets.keys().next();
+      if (oldest.done) return;
+      buckets.delete(oldest.value);
     }
   }
 
