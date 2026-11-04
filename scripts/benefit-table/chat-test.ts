@@ -618,8 +618,9 @@ const whole = (quote: string, person = "Lim Ah Kow", baseQuote = "Critical Illne
 const LUMP = "100% of the Sum Assured will be payable in one lump sum.";
 test("100% of the sum insured in a policy wording is the person's printed sum insured (release-set A3)", () => {
   assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
-  // Wording that limits it (a cap, any figure) is never read as the whole sum insured.
-  assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, []);
+  // Wording that limits it (a cap, any figure) is never read as the whole sum insured: only the row's own printed cap is
+  // shown, as a cap (TE #311 round 3), never S$300,000.
+  assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, [["Up to S$400,000", null]]);
   // A sum insured on a page that does not name the person is not theirs.
   assert.deepEqual(whole(LUMP, "Tan Mei Ling").amounts, []);
 });
