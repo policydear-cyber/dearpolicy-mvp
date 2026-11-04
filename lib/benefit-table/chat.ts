@@ -944,11 +944,6 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
       && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
       && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
-    // A spread card is the same benefit on the same page, so the model's conditions for it hold for every holder; one that
-    // names any member is said only for the person it was given for.
-    const memberWords = household.members.flatMap((m) => m.name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 2));
-    const sharedConditions = (Array.isArray(raw.conditions) ? raw.conditions as { text?: unknown }[] : [])
-      .filter((c) => typeof c?.text === "string" && !c.text.toLowerCase().split(/[^a-z]+/).some((w) => memberWords.includes(w)));
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -956,8 +951,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // A total limit's card always says what the limit is printed for (its sentence), whatever the model gave: its name
       // alone ("Limit in total on Critical Illness Benefit claims") would leave out a scope such as early stages only.
       const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
-      const spread = others.includes(r) ? [...own, ...sharedConditions.filter((c) => !own.some((k) => k.text.toLowerCase().replace(/\.$/, "") === String(c.text).trim().toLowerCase().replace(/\.$/, "")))] : null;
-      const conditions = spread ?? (r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined);
+      // A spread card (others) keeps only its own row's printed conditions: a model condition may be about the person it was
+      // given for ("she has been insured over 10 months") and is never copied to another person's card (TE #345).
+      const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
       const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || others.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
       // A printed cover period never changes what a card says: every policy on file is treated as in force (DC, 31 Oct).
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
