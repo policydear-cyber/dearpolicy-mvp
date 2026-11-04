@@ -70,6 +70,21 @@ check("a bullet that starts a new table section ends it whatever the bullet glyp
   assert.equal(find(text, "Accidental death")?.value, "100% of Sum Insured");
 });
 
+// Critic and TE #347: a bullet that is not a benefit heading never ends a premium table.
+const PREMIUM_BULLETS: [string, string[]][] = [
+  ["bulleted premium rows", ["Schedule of Premiums", "•\tAge 18 to 30\tS$250", "•\tAge 31 to 40\tS$310", "\u25aa\tAge 41 to 50\tS$480"]],
+  ["bulleted rider prices", ["Premium Table", "Basic plan\tS$1,200", "•\tWaiver of premium rider\tS$85", "•\tHospital cash rider\tS$140"]],
+  ["a bulleted note inside the table", ["Premium Rates (per S$1,000 sum insured)", "•\tRates are guaranteed for 5 years", "Age 30\tS$1.20", "Age 40\tS$2.10"]],
+  ["a bulleted rate heading", ["Schedule of Premiums", "•\tRates per S$1,000 sum assured", "Age 25\tS$1.20", "Age 35\tS$2.40"]],
+  ["a bulleted premium heading with a benefit word", ["Premium rate table", "•\tPremium for the Hospital Benefit", "Age 25\tS$1.20"]],
+];
+for (const [what, lines] of PREMIUM_BULLETS)
+  check(`a premium table keeps its rows out with ${what}`, () => assert.deepEqual(rows(lines.join("\n")), []));
+check("a benefit heading under a bulleted premium heading still starts the schedule", () => {
+  const text = ["Schedule of Premiums", "•\tRates per S$1,000 sum assured", "Age 25\tS$1.20", "•\tBenefit Schedule", "Accidental death\t100% of Sum Insured"].join("\n");
+  assert.deepEqual(rows(text).map((r) => r.value), ["100% of Sum Insured"]);
+});
+
 const WORDED: [string, number | null][] = [
   ["One twelfth of Sum Insured", 1 / 12], ["One half of the Sum Assured", 0.5], ["Two thirds of Sum Insured", 2 / 3],
   ["one quarter of the insured amount", 0.25], ["One twenty-fourth of Sum Insured", 1 / 24],
