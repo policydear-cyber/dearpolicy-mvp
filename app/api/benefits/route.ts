@@ -5,6 +5,7 @@ import { isUuid,query } from "@/lib/db/client";
 import { nameWithoutPlanCell } from "@/lib/insurance/scale-limit";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { isWarmPing } from "@/lib/http/warm-ping";
 import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,isRulelessCoverLine,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
 import { documentName,loadPolicyInventory } from "@/lib/policies/inventory";
@@ -21,6 +22,12 @@ import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 import { documentKinds,type DocumentKind } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
+
+async function warmPing(){
+  const headers={"Cache-Control":"private, no-store"};
+  try{await Promise.all([query("SELECT 1"),import("@/lib/benefit-table/app")]);return new NextResponse(null,{status:204,headers});}
+  catch{return new NextResponse(null,{status:503,headers});}
+}
 export const ROUTE_AUTH = "household-member" as const;
 
 /** The benefit schedule: every payout rule DearPolicy has read out of the
@@ -54,6 +61,9 @@ const CONDITIONS_SQL=`SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.
                    WHERE pm.policy_id=c.policy_id AND pm.account_id=c.account_id AND pm.family_member_id=$2::uuid))
           ORDER BY c.product_name NULLS FIRST,c.condition_kind,c.source_page`;
 export async function GET(request:NextRequest){
+  // The keep-awake ping (lib/http/warm-ping.ts), allowed signed out: load what a real load needs (the database pool,
+  // the benefit table's modules) and answer with no body. Nothing about any household is read or returned.
+  if(isWarmPing(request))return warmPing();
   try{
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
