@@ -217,15 +217,16 @@ function spaceGroupedFigures(text: string): { figures: number[]; spans: [number,
     const n = Number(raw.replace(/['’]/g, ""));
     if (Number.isFinite(n)) { figures.push(n); spans.push([at, at + raw.length]); }
   }
-  // Any other run of bare figures a single space apart ("EUR 1 250 2 500", "₹ 1 50 000", "kr 2 500 3 500") is read as
-  // nothing at all: which digits belong to which figure is not known, and a piece read alone ("EUR 250") passed as
-  // printed (Critic #333 M1). Tabs and wider gaps still part columns. Not before a percent sign, nor after a section,
-  // table, year or rate word, where the pieces are no money.
-  for (const m of text.matchAll(/(?<![\d.,'’]|\d[ \u00a0\u202f])\d+(?:[.,]\d+)?(?:[ \u00a0\u202f]\d+(?:[.,]\d+)?)+(?![\d]|[.,'’]\d)/g)) {
+  // Any other run of plain digit groups a single space apart ("EUR 1 250 2 500", "₹ 1 50 000", "kr 2 500 3 500") is read
+  // as nothing at all: which digits belong to which figure is not known, and a piece read alone ("EUR 250") passed as
+  // printed (Critic #333 M1). Nor is a run before a percent sign any clearer ("Co-insurance 10 20 %"). A figure that
+  // delimits itself, with comma or dot groups or decimals ("S$1,500 2,000 2,500", "RM 250.00 300.00"), is no piece of
+  // such a run and reads on its own (TE #335). Tabs and wider gaps still part columns. Not after a section, table, year
+  // or rate word, where the pieces are no money.
+  for (const m of text.matchAll(/(?<![\d.,'’]|\d[ \u00a0\u202f])\d+(?:[ \u00a0\u202f]\d+)+(?![\d]|[.,'’]\d|[ \u00a0\u202f]\d)/g)) {
     const at = m.index!, end = at + m[0].length;
     if (spans.some(([from, to]) => at < to && end > from)) continue;
-    const before = text.slice(Math.max(0, at - 24), at), after = text.slice(end, end + 12);
-    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    if (NOT_MONEY_BEFORE.test(text.slice(Math.max(0, at - 24), at))) continue;
     spans.push([at, end]);
   }
   return { figures, spans };
