@@ -57,3 +57,33 @@ test("a table's own column header still pairs its rows, in another currency too"
   // A contents list's page numbers are not amounts.
   assert.deepEqual(scrambleSigns(["Contents", "Definitions", "Benefits", "Exclusions", "3", "7", "12", "15"].join("\n")), []);
 });
+
+// TE #329 blind gate: what counts as an amount on a value line, in any market's way of writing numbers.
+test("space thousands are amounts: a kronor, złoty or euro table written '2 500' is seen as scrambled", () => {
+  for (const values of [
+    ["2 500 kr", "5 000 kr", "120 000 kr", "300 000 kr"],
+    ["2 500 kr", "5 000 kr", "120 000 kr", "300 000 kr"], // no-break space
+    ["2 500 zł", "5 000 zł", "120 000 zł", "300 000 zł"], // narrow no-break space
+    ["2 500 €", "5 000 €", "120 000 €", "300 000 €"],
+    ["SEK 2 500", "SEK 5 000", "SEK 120 000", "SEK 300 000"],
+    ["2 500", "5 000", "120 000", "300 000"],
+  ]) {
+    assert.ok(scrambleSigns(scrambled(values)).includes(SIGN), values[0]);
+    assert.ok(!scrambleSigns(paired(values)).includes(SIGN), values[0] + " paired");
+  }
+});
+
+test("a date is never an amount, and a run that prints a decimal-only figure is rates", () => {
+  for (const values of [
+    ["01.10.2026", "01.11.2026", "01.11.2027"],
+    ["01/10/2026", "01/11/2026", "01/11/2027"],
+    ["2026-10-01", "2026-11-01", "2027-11-01"],
+    ["1.235", "2.450", "3.875", "0.925"], // a rate card: 0.925 can only be a decimal
+    ["2019 2021", "2022 2024", "2025 2026"], // years side by side are not space thousands
+  ]) assert.deepEqual(scrambleSigns(scrambled(values)), [], values[0]);
+  // The safe reading stays: one dot group with nothing to say it is a rate is thousands, so it is checked.
+  assert.ok(scrambleSigns(scrambled(["250", "1.500", "12.000", "400"])).includes(SIGN));
+  assert.ok(scrambleSigns(scrambled(["Rp 250.000", "Rp 500.000", "Rp 750.000", "Rp 900.000"])).includes(SIGN));
+  // Dates among amounts do not hide the amounts.
+  assert.ok(scrambleSigns(scrambled(["01.10.2026", "12,000.00", "1,500.00", "400.00"])).includes(SIGN));
+});

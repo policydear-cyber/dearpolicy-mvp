@@ -12,9 +12,24 @@
  * decimals ("1.235", "4.125%", "01.10.2026") is not glued (TE U-F3). */
 const GLUED = /\d\.\d{2}\d[\d,]*\.\d{2}(?!\d)/;
 const UNGLUE = /(\d\.\d{2})(?=\d[\d,]*\.\d{2}(?!\d))/g;
-/** An amount: two decimals or thousands groups, written either way ("12,000.00", "12.000,00", "250,00"). A page number or
- * an age is not one. */
-const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d{1,3}(?:['’]\d{3})+/;
+/** An amount: two decimals or thousands groups, in any market's way of writing them ("12,000.00", "12.000,00", "250,00",
+ * "12'000", "2 500"). A page number or an age is not one.
+ *
+ * Space thousands ("2 500 kr", "120 000 zł", with a plain, no-break or narrow space) are amounts: before, a Swedish,
+ * Polish or French table whose labels came out before their values was never seen as scrambled, so its amounts were used
+ * without the image check (TE #329). One dot group ("1.500") is read as thousands, the safe reading (a scramble seen is
+ * checked against the image), unless its own run prints a figure that can only be a decimal ("0.925", "2.45"): then the
+ * run is rates (TE #329 rate card). */
+const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+|\d[\d.]*,\d{2}(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d{1,3}(?:['’]\d{3})+|(?<!\d)\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?!\d)/;
+// A dotted figure no thousands grouping prints: a leading 0 ("0.925") or a group not of three digits ("2.45", "1.2").
+const ONLY_DECIMAL = /(?<![\d.,])(?:0\.\d+|\d+\.(?:\d{1,2}|\d{4,}))(?![\d.,])/;
+const ONE_DOT_GROUP = /(?<![\d.,])\d{1,3}\.\d{3}(?![\d.,])/g;
+/** Whether a value line prints an amount. A date is never one ("01.10.2026" is a date, not "01.10"; TE #329), and in a
+ * run that is rates, one dot group is a rate. */
+function amountOn(line: string, rates: boolean): boolean {
+  const bare = line.replace(new RegExp(DATE, "gi"), " ");
+  return AMOUNT.test(rates ? bare.replace(ONE_DOT_GROUP, " ") : bare);
+}
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
@@ -48,14 +63,17 @@ export function scrambleSigns(text: string): string[] {
   for (let i = 0; i < lines.length; i++) {
     let labels = 0;
     while (i + labels < lines.length && LABEL_ONLY(lines[i + labels])) labels++;
-    let values = 0, amounts = 0;
-    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) amounts += Number(AMOUNT.test(lines[i + labels + values++]));
+    let values = 0;
+    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) values++;
+    const run = lines.slice(i + labels, i + labels + values);
+    const rates = run.some((l) => ONLY_DECIMAL.test(l.replace(new RegExp(DATE, "gi"), " ")));
+    const amounts = run.filter((l) => amountOn(l, rates)).length;
     // A table's own column header over its rows ("Age  Male  Female" over "35  120.50  110.20") is not scrambled, and
     // a contents list's page numbers are not amounts (TE U-F2).
     const cells = (line: string) => line.split("\t").length;
     // Only a header whose rows carry their own key in the first cell ("35" for an age) pairs each row; rows of amounts
     // alone under "Sum Assured  Premium" still leave the plan labels above unpaired (TE UC-2).
-    const rows = lines.slice(i + labels, i + labels + values);
+    const rows = run;
     const header = labels > 0 && cells(lines[i + labels - 1]) >= 2 && values > 0 && rows.every((r) => cells(r) === cells(lines[i + labels - 1]) && !AMOUNT.test(r.split("\t")[0]));
     if (labels >= 3 && values >= 3 && amounts >= 2 && !header) { signs.push("labels came out before their values"); break; }
     i += Math.max(0, labels - 1);
