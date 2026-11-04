@@ -829,10 +829,17 @@ async function partB() {
       if (stored && "extraction_method" in stored) assert.equal(stored.extraction_method, "unreadable");
     });
     await t("E5: a damaged file -> 'could not be opened' message; the parser's error only in diagnostics", async () => {
-      const doc = await insert(a, josephine, "damaged.pdf", Buffer.from("%PDF-1.7\n" + "garbage ".repeat(200)));
+      // Damaged but whole (it ends with %%EOF): a file that stops part-way gets the incomplete-PDF message instead (below).
+      const doc = await insert(a, josephine, "damaged.pdf", Buffer.from("%PDF-1.7\n" + "garbage ".repeat(200) + "\n%%EOF\n"));
       await assert.rejects(processPolicy({ accountId: a, familyMemberId: josephine, policyId: doc.policyId, storageKey: doc.storageKey, attempt: { number: 1, max: 5 } }));
       const [p] = await rows(`SELECT processing_error FROM policies WHERE id=$1`, [doc.policyId]);
       assert.equal(p.processing_error, errors.UNOPENABLE_DOCUMENT_MESSAGE);
+    });
+    await t("E5: a PDF that stops part-way (no end marker) -> the incomplete-PDF message: download it again", async () => {
+      const doc = await insert(a, josephine, "cut-off.pdf", Buffer.from("%PDF-1.7\n" + "garbage ".repeat(200)));
+      await assert.rejects(processPolicy({ accountId: a, familyMemberId: josephine, policyId: doc.policyId, storageKey: doc.storageKey, attempt: { number: 1, max: 5 } }));
+      const [p] = await rows(`SELECT processing_error FROM policies WHERE id=$1`, [doc.policyId]);
+      assert.equal(p.processing_error, errors.INCOMPLETE_PDF_MESSAGE);
     });
 
     // --- E6 injection fixture -------------------------------------------
