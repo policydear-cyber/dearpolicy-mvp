@@ -376,8 +376,9 @@ const LIMIT_FILLER=/^(?:the|your|basic|main|benefit|plan|policy|overall|amount|o
 const NARROW_HEALTH_PLAN=new RegExp(B+"(?:dental|dentist\\w*|teeth|orthodont\\w*|vision|optical|eye(?:care|wear)?|eyes|spectacles|maternity|pregnancy|"+
   "pergigian|gigi|mata|bersalin|kehamilan|dentale?s?|dentaire|odontol[oó]gic[oa]s?|zahn\\w*|visión|visão|vue|optique|maternidad|maternidade|maternité|mutterschaft|nha khoa|thai sản)"+E+"|牙|眼|產|产科|孕","iu");
 /** Words saying a benefit is a cash amount paid to the person, not a limit on a bill (Critic #285 M1): a closed list. */
-const CASH_WORDS="(?:cash(?![\\s-]*less)|allowances?|income|benefit per (?:day|night)|daily benefit|per diem|daily payments?|payments? per (?:day|night)|allocation)";
-const CASH_PAID=new RegExp(B+CASH_WORDS+E,"iu");
+const CASH_WORDS="(?:cash(?![\\s-]*less)|allowances?|income|benefit per (?:day|night)|daily benefit|elaun|tunai|pendapatan|santunan|tunjangan|uang harian|indemnit[ée]s? journali[èe]res?|forfait(?:aire)?|"+
+  "tagegeld|krankenhaustagegeld|diaria|di[áa]ria|subsidio diario|per diem|daily payments?|payments? per (?:day|night)|allocation|indennit[àa] giornaliera|tr[ợo] c[ấa]p|ti[ềe]n m[ặa]t)";
+const CASH_PAID=new RegExp(B+CASH_WORDS+E+"|津贴|津貼|现金|現金|补贴|補貼|日額|日额","iu");
 /** "Hospital and Surgical", "Hospital & Surgical", "Hospital dan Pembedahan" name one kind of plan, a hospital plan, not two
  * covers (cross-page check, 1 Nov). */
 const HOSPITAL_SURGICAL=new RegExp(B+"(?:hospital(?:i[sz]ation)?|in-?patient)\\s*(?:and|&|\\+)\\s*(?:surg(?:ical|ery))"+E+"(?!\\s+"+CASH_WORDS+")","giu");
@@ -431,7 +432,8 @@ export function eventForBenefitName(name:string,productName?:string|null):{event
   return event?{event,detail:null}:own;
 }
 const CI_TREATMENT=new RegExp(B+"(?:drugs?|medications?|medicines?|chemo(?:therap(?:y|ies))?|radio(?:therap(?:y|ies))?|radiation|immunotherap(?:y|ies)|targeted therap(?:y|ies)|"+
-  "outpatient|dialysis|treatments?|reimburse\\w*|expenses?|costs?)"+E,"iu");
+  "outpatient|dialysis|treatments?|reimburse\\w*|expenses?|costs?|ubat(?:an)?|rawatan|kemoterapi|radioterapi|dialisis|pengobatan|obat|tratamientos?|quimioterapia|radioterapia|"+
+  "tratamentos?|traitements?|chimioth[ée]rapie|radioth[ée]rapie|behandlung(?:en)?|chemotherapie|strahlentherapie|trattament[oi]|chemioterapia|điều trị|hóa trị|xạ trị)"+E+"|化疗|化療|放疗|放療|治疗|治療|药物|藥物|洗肾|洗腎|透析","iu");
 /** The plan's own kind settles a row whose name fits both an illness and its treatment (Critic #281 H, H1):
  * - on a hospital plan (exactly one plan kind, a hospital plan), an illness named with a treatment or drug word ("Annual
  *   limit for outpatient cancer drug", "Rawatan kemoterapi kanser") pays the treatment bills: a medical expense, never the

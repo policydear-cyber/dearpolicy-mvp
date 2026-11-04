@@ -762,8 +762,6 @@ const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(
  * C18, C19; Critic R425). */
 const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither|tidak|bukan)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
 const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
-  // The same comparative in Malay: "lebih daripada 15% permukaan badan".
-  +String.raw`|${NEGATED}\b(?:lebih|kurang)\s+(?:daripada|dari)\s+(?:\d+(?:\.\d+)?${EVENT_UNIT})`
   +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
 /** PRINTS_AN_AMOUNT, with event thresholds taken out first. Only a threshold that comes before any share is taken out:
  * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after

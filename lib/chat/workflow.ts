@@ -461,7 +461,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
     !/\b(?:my|our|his|her)\s+(?:mak|emak|ibu|mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband|grand\w+)\b/i.test(personMessage);
   let resolution:ClaimPersonResolution=chosen?{status:"resolved" as const,person:chosen,explicit:true}:claimant?{status:"resolved" as const,person:claimant,explicit:false}:
     ownQuestion?{status:"resolved" as const,person:ownQuestion,explicit:true}:pendingReply?{status:"resolved" as const,person:pendingReply,explicit:false}:
-    // "our helper", "my son" (bin) / "my daughter" (binte), "Aminah binti Ismail".
+    // "mak", "our helper", "my son" (bin) / "my daughter" (binte), "Aminah binti Ismail".
     // Mid-claim, "do i need a lawyer?" is the speaker asking about the claim in hand, not about their own cover.
     (midClaimSpeaker?null:householdPersonFromWords(tripReason??speakerWords,family,holdings.map(h=>h.product_name),context?"":request.familyMemberId??previous?.family_member_id??""))??
     // "and his wife?" is relative to the person this chat was about.
@@ -557,7 +557,7 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   // Round 9: "my son Irfan and my mum were both in the car and got injured": everyone named is acknowledged; the claim
   // goes one person at a time, starting with the person resolved.
   const alsoInEvent=people.length===1&&!chosen&&!tripReason&&!outside&&REPORTS_AN_EVENT.test(personMessage)&&!/\b(?:if|what if|suppose|in case)\b/i.test(personMessage)
-    ?[...explicitPeople(personMessage,family),...[...personMessage.matchAll(/\b(?:(?:my|our)\s+)?(mum|mom|mother|mama|dad|father|papa|son|daughter|wife|husband|brother|sister|helper|maid)\b(?!['’]s)/gi)]
+    ?[...explicitPeople(personMessage,family),...[...personMessage.matchAll(/\b(?:(?:my|our)\s+)?(mak|emak|ibu|mum|mom|mother|mama|amma|dad|father|papa|appa|ayah|abah|son|daughter|wife|husband|brother|sister|helper|maid)\b(?!['’]s)/gi)]
       .map(m=>{const r=householdPersonFromWords("my "+m[1],family);return r?.status==="resolved"?r.person:null;}).filter((p):p is ClaimPerson=>!!p)]
       .filter((p,i,all)=>p.id!==people[0].id&&all.findIndex(q=>q.id===p.id)===i)
     :[];
@@ -977,7 +977,7 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
     .replace(/^(?:and\s+)?(?:what|which|how\s+(?:much|long|many))\s+(?:is|are|was|were|does|do)\s+/i,"")
     .replace(/^(?:does|do|is|are|has|have)\s+(?:she|he|they|i|we|it|my|her|his|their|anyone|anybody|someone|any of us)\s+(?:have|has|get|got)\s+(?:an?\s+)?/i,"")
     .replace(/^(?:so\s+|and\s+)?(?:is|are|am)\s+(?:she|he|they|i|we|it|you)\s+(?:still\s+|also\s+)?(?:covered|insured)\s+(?:for|against)\s+/i,"")
-    .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|dad|father|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
+    .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|mak|emak|ibu|dad|father|bapa|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
   // What is left must read as a thing, not as the question handed back
   // ("When is the policy due for renewal", "can reduce or not").
   // Round 7 (port): chat words left in the topic ("GTL ah, the wife ask") hand the question back garbled.

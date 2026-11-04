@@ -166,7 +166,7 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
  * nowhere. Only these two categories are read from a section or cover name, the row's own name decides first, and a row
  * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
 const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|major\s+illness(?:es)?)\b`, "iu");
-const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b`, "iu");
+const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
 /** The words a covered illness is named with, and nothing else (Critic R on #252 H1a): every word of the row's name must be
  * one of them, so "Cancer Screening Benefit", "Child Cancer Benefit", "Kematian akibat Kanser", "癌症身故保险金" or "Liver
  * function test" (a word outside the list) never move. Illness, organ and procedure words, then severity and stage words,
@@ -190,8 +190,16 @@ const CONDITION_WORDS = new Set((
 ).split(" "));
 /** Whether the row's whole name is an illness: at least one illness word, and no word from outside the list. */
 function namesOnlyAnIllness(benefit: string): boolean {
-  // A name in a script other than Latin is not read (English only).
-  if (/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(benefit)) return false;
+  // English only, but a bilingual label keeps its English part ("癌症 Cancer", "Kanser / Cancer"): text in another script
+  // is set aside, and of a label split by "/" one side naming only an illness is enough, unless any side names another
+  // kind of payment ("Accident / Cancer" is not an illness row). Nothing in another language is read.
+  const latin = benefit.replace(/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]+/gu, " ").replace(/\s+/g, " ").trim();
+  const sides = latin.split(/\s*\/\s*/).map((s) => s.trim()).filter((s) => /\p{L}/u.test(s));
+  if (!sides.length) return false;
+  if (sides.length > 1) return !OTHER_PAYMENT.test(latin) && sides.some(namesOnlyAnEnglishIllness);
+  return namesOnlyAnEnglishIllness(sides[0]);
+}
+function namesOnlyAnEnglishIllness(benefit: string): boolean {
   const words = benefit.toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).map((w) => w.replace(/[’]/g, "'").replace(/^[-']+|[-']+$/g, "")).filter(Boolean)
     .filter((w) => !/^(?:\d+|[ivx]+|[a-z])$/.test(w));
   if (!words.every((w) => CONDITION_WORDS.has(w))) return false;
@@ -201,7 +209,7 @@ function namesOnlyAnIllness(benefit: string): boolean {
   const stage = new Set("major severe severity specified end end-stage stage benign early intermediate advanced late minor mild moderate chronic acute irreversible total permanent".split(" "));
   return words.some((w) => !joining.has(w) && !stage.has(w) && !generic.has(w));
 }
-const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b/iu;
+const EARLY_STAGE = /\b(?:early|intermediate|minor|mild|moderate)[\s-]+(?:stage|severity)\b|\b(?:carcinoma\s+in\s+situ|in[\s-]situ)\b|\bperingkat\s+awal\b|早期/iu;
 const OTHER_PAYMENT = /\b(?:waiv\w*|premiums?|refund\w*|return\s+of|surrender\w*|cash\s+values?|fund\s+values?|bonus\w*|dividends?|maturity|loyalty|no[\s-]claims?|terminal(?:ly)?\s+ill\w*|death|funeral|compassionate|disab\w*|tpd|accident\w*|injur\w*|fractur\w*|hospital\w*|ward|out-?\s?patient|in-?\s?patient|medical\s+expenses?|reimburse\w*|ambulance|income|allowance|daily|period)\b/i;
 export function categoryOfRow(r: { benefit: string; section?: string | null } & CoverNames): string | null {
   const own = categoryOfBenefit(r.benefit, r.section);

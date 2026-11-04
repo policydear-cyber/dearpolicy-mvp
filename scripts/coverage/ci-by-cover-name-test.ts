@@ -23,7 +23,7 @@ const plans: { market: string; key: string; names: { product?: string; cover?: s
   { market: "SG", key: "kestrel", names: { product: "Kestrel CritiCare Critical Illness Plan" }, rows: ["Major Cancer", "Heart Attack of Specified Severity", "Stroke with Permanent Neurological Deficit"], amount: 150000, currency: "SGD" },
   { market: "MY", key: "maju", names: { cover: "Maju Dread Disease Takaful" }, rows: ["Cancer", "Heart Attack", "Kidney Failure"], amount: 80000, currency: "MYR" },
   { market: "UK", key: "harbour", names: { product: "Harbour Protect", cover: "Harbour Protect" }, rows: ["Cancer - excluding less advanced cases", "Multiple sclerosis"], amount: 60000, currency: "GBP", section: "Critical Illness Cover" },
-  { market: "HK", key: "lotus", names: { product: "Lotus 守護 Critical Illness Protector" }, rows: ["Cancer", "Major Organ Transplant"], amount: 500000, currency: "HKD" },
+  { market: "HK", key: "lotus", names: { product: "Lotus 守護 Critical Illness Protector" }, rows: ["癌症 Cancer", "Major Organ Transplant"], amount: 500000, currency: "HKD" },
 ];
 for (const p of plans) {
   const rows = p.rows.map((b) => row(p.key, p.names, b, p.amount, p.currency, p.section ?? null));
@@ -35,8 +35,18 @@ for (const p of plans) {
 // English only (DC 4 Nov): an illness named in another language, or under a cover named in another language, is not read
 // as critical illness: the row stays uncategorised (no figure on the tile), never another category.
 for (const [names, benefit] of [[{ cover: "Maju Dread Disease Takaful" }, "Kanser"], [{ cover: "Maju Dread Disease Takaful" }, "Serangan Jantung"],
-  [{ product: "Lotus 守護 Critical Illness Protector" }, "癌症 Cancer"], [{ product: "Lotus 守護 Critical Illness Protector" }, "癌症"]] as const)
+  [{ product: "Lotus 守護 Critical Illness Protector" }, "癌症"]] as const)
   t(`"${benefit}" in another language is not read as critical illness`, categoryOfRow(row("ne", names, benefit, 80000, "MYR")) === null, categoryOfRow(row("ne", names, benefit, 80000, "MYR")));
+// A bilingual label keeps its English part (coordinator, 4 Nov): the English illness is read, the rest is set aside.
+for (const benefit of ["癌症 Cancer", "Cancer 癌症", "Kanser / Cancer", "Cancer / Kanser"]) {
+  const got = categoryOfRow(row("bi", { product: "Lotus Critical Illness Protector" }, benefit, 80000, "HKD"));
+  t(`"${benefit}" under a critical illness plan is critical illness`, got === "Critical Illness", got);
+}
+// ...but a label whose other side names another payment is not an illness row.
+for (const benefit of ["Accident / Cancer", "Kanser / Accidental Death"]) {
+  const got = categoryOfRow(row("bi", { product: "Lotus Critical Illness Protector" }, benefit, 80000, "HKD"));
+  t(`"${benefit}" is not read as critical illness`, got !== "Critical Illness", got);
+}
 
 // Early or intermediate stage, from the row or the cover.
 t("an early-stage row of a critical illness plan is early critical illness",
