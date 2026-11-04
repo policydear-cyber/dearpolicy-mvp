@@ -55,5 +55,17 @@ for (const n of ["Accidental Death Benefit (excluding war)", "Accidental Death B
 t(`"Accidental TPD (no waiting period)" stays accidental disablement`, () => assert.equal(eventForBenefitName("Accidental TPD (no waiting period)").event, "accidental_disablement"));
 for (const n of ["Death due to accident or illness", "Death by accident or natural causes", "Death from accident or any other cause"])
   t(`"${n}" is any-cause death`, () => assert.equal(eventForBenefitName(n).event, "death"));
+// Critic #350 round 3: a cause the name excludes, negates or only qualifies does not lift the accident.
+for (const n of ["Accidental Death (illness excluded)", "Accidental Death, excluding death from illness", "Personal Accident: Death from illness excluded",
+  "Accidental Death (not covered for sickness)", "Accidental Death other than by disease", "Accidental Death (natural disasters included)",
+  "Accidental Death (otherwise as per policy terms)", "Accidental Death, any cause of accident", "Accident Death (all causes of injury)",
+  "Accidental Death except death from sickness", "Accidental Death, but not death by illness", "Accidental Death (accident or illness excluded)"]) {
+  t(`"${n}" stays accidental death`, () => assert.equal(eventForBenefitName(n).event, "accidental_death"));
+  t(`"${n}" needs an accident`, () => assert.equal(causeForBenefit(n), "accident"));
+}
+for (const n of ["Death due to illness or accident", "Accident & Sickness Death", "Accident/Illness Death Benefit", "Accidental Death and death from all causes"])
+  t(`"${n}" is any-cause death`, () => assert.equal(eventForBenefitName(n).event, "death"));
+t(`"Death from illness" is illness-only`, () => assert.equal(causeForBenefit("Death from illness"), "illness"));
+t(`"Death (death from illness excluded)" is not illness-only`, () => assert.notEqual(causeForBenefit("Death (death from illness excluded)"), "illness"));
 console.log(`accident only: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
