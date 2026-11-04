@@ -465,12 +465,27 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
+/** A row whose ONLY cause is an accident or an injury: "Accidental Death", "Death due to Injury", "TPD resulting from
+ * bodily injury", "Injury Death Benefit". A closed rule (TE and Critic #343): any word that opens another cause or a
+ * second clause ("or", "otherwise", "any cause", "natural", "illness", "including", "excluding", "self-inflicted", "not",
+ * "no", ";") and the row is any cause. An injury counts only as the cause ("due to", "caused by", "resulting from",
+ * "following", "from" an injury, or "Injury Death"), never one the name just mentions ("Death or injury to any person",
+ * "Injury overseas"). Unsure is any cause: an accident-only sum is never counted toward a death from illness, and an
+ * any-cause row read as accident-only only loses a claim it could have made. */
+const ACCIDENT_WORD=/\baccident/;
+const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^(?:accidental\s+)?injury\s+death\b/;
+const ANOTHER_CAUSE=/\b(?:or|otherwise|any\s+(?:other\s+)?(?:cause|reason)s?|natural|illness(?:es)?|sickness(?:es)?|disease|diseases|including|includes|excluding|excludes|except|other than|not|no|non|self[- ]inflicted|whether|and illness|and sickness)\b|;/;
+export function namesOnlyAnAccidentCause(n:string){
+  const t=n.toLowerCase();
+  if(!ACCIDENT_WORD.test(t)&&!INJURY_CAUSE.test(t))return false;
+  return !ANOTHER_CAUSE.test(t.replace(/\(accident\)/g," "));
+}
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
   // An income paid while unable to work is its own benefit, not the total and permanent disability lump sum.
   if(/disability income|income (?:protection|replacement)|loss of income|salary continuance/.test(n))return {event:"disability_income",detail:name};
-  const accident=/\baccident/.test(n);
+  const accident=namesOnlyAnAccidentCause(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
   if(/\b(?:total (?:and|&) permanent|tpd|permanent (?:total )?disab)/.test(n))return {event:accident?"accidental_disablement":"tpd",detail:null};
@@ -503,7 +518,7 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
  * Recuperation" pays for a hospital stay, but only one an accident caused. */
 export function causeForBenefit(name:string,requires:string[]=[]):"accident"|"illness"|null{
   const n=withoutNegatedAccident(name).toLowerCase();
-  if(requires.includes("accident")||/\baccident/.test(n))return "accident";
+  if(requires.includes("accident")||namesOnlyAnAccidentCause(n))return "accident";
   if(requires.includes("illness")||/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n))return "illness";
   return null;
 }
