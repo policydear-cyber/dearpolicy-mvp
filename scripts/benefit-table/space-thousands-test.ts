@@ -65,9 +65,9 @@ for (const [text, never] of [
   ["Sum assured S$ 1 500 000", [500, 1, 1_500_000]], ["Zimmer EUR 1 250 2 500", [250, 2_500, 1_250]], ["Hospital ₹ 1 50 000", [50_000, 150_000, 50]],
   ["Sjukhus kr 2 500 3 500", [2_500, 3_500, 500]], ["Rawat inap Rp 1 500 000", [500, 1_500_000]], ["Room HK$ 500 800 1 000", [500, 800, 1_000]],
   ["Cover US$ 100 000 200 000", [100_000, 200_000, 100]], ] as [string, number[]][]) t(`${text}: no part of the run prints`, never.every((v) => !has(text, v)), numbersIn(text));
-for (const [text, never] of [["Room S$ 1 500.00", [1, 500, 1_500]], ["Room ₹ 1 50,000", [1, 50_000, 150_000]], ["Bilik RM 1 250,000", [1, 250_000, 1_250_000]], ["Room USD 2 500.50", [2, 500.5, 2_500.5]], ["Room S$ 1 250 500.00", [250, 500, 1]]] as [string, number[]][])
+for (const [text, never] of [["Room S$ 1 500.00", [1, 500, 1_500]], ["Room ₹ 1 50,000", [1, 50_000, 150_000]], ["Bilik RM 1 250,000", [1, 250_000, 1_250_000]], ["Room USD 2 500.50", [2, 500.5, 2_500.5]], ["Room S$ 1 250 500.00", [250, 500, 1]], ["Room RM 1,000 500 000", [500, 0, 500_000]], ["Room S$1,500 2 000", [2, 2_000]]] as [string, number[]][])
   t(`${text}: bare groups before a figure that delimits itself print nothing`, never.every((v) => !has(text, v)), numbersIn(text));
-t("figures that delimit themselves still print one by one", has("Room and board S$1,500 2,000 2,500", 1_500) && has("Room and board S$1,500 2,000 2,500", 2_000) && has("Bilik RM 250.00 300.00 400.00", 300) && !has("Room and board S$1,500 2,000 2,500", 1_500_002));
+t("figures that delimit themselves still print one by one", has("Room RM 1,000 500 000", 1_000) && has("Ward 4 1,200.00", 1_200) && has("Room and board 30 1,500.00", 1_500) && has("Room and board 30 1,500.00", 30) && has("Room and board S$1,500 2,000 2,500", 1_500) && has("Room and board S$1,500 2,000 2,500", 2_000) && has("Bilik RM 250.00 300.00 400.00", 300) && !has("Room and board S$1,500 2,000 2,500", 1_500_002));
 t("columns parted by tabs or wider gaps still print", has("Room\tS$150\tS$250", 150) && has("Room\tS$150\tS$250", 250) && has("Plan A   150   250", 250) && has("Daily room S$150 S$250 S$350", 250));
 t("a section number is no money run", has("Section 3 100", 100));
 t("a run before a percent sign prints no piece", !has("Co-insurance 10 20 %", 10) && !has("Co-insurance 10 20 %", 20));
@@ -110,6 +110,47 @@ for (const c of CASES) {
   // A figure the document does not print is still refused, in the same market.
   const wrong = checkReading({ id, name: "x.pdf", readable: true, pages: [{ page: 1, text: c.text }] }, { ...reading, covers: [{ ...reading.covers[0], sumInsured: c.sum * 10 }], benefits: [] } as never);
   t(`${c.market}: a sum ten times the printed one is refused`, wrong.covers.every((x) => x.sumInsured !== c.sum * 10), wrong.covers);
+}
+
+// Adversarial lines (coordinator, 4 Nov): figures in several currencies and groupings, joined by a single space, a tab, a
+// wider gap or a currency between them, in either order. Whatever the line, every figure read must be one of the figures
+// written: a piece of a run, or two figures joined, never prints.
+{
+  let seed = 335;
+  const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  const comma = (v: number) => v.toLocaleString("en-US");
+  const forms: ((v: number) => { text: string; value: number })[] = [
+    (v) => ({ text: comma(v), value: v }),
+    (v) => ({ text: comma(v) + ".00", value: v }),
+    (v) => ({ text: String(v), value: v }),
+    (v) => ({ text: "S$" + comma(v), value: v }),
+    (v) => ({ text: "RM " + comma(v) + ".50", value: v + 0.5 }),
+    (v) => ({ text: "EUR " + v.toLocaleString("fr-FR").replace(/ | /g, " "), value: v }),
+    (v) => ({ text: v.toLocaleString("fr-FR").replace(/ | /g, " ") + " kr", value: v }),
+    (v) => ({ text: "CHF " + v.toLocaleString("de-CH"), value: v }),
+    (v) => ({ text: "₹ " + v.toLocaleString("en-IN"), value: v }),
+    (v) => ({ text: "Rp " + v.toLocaleString("de-DE"), value: v }),
+    (v) => ({ text: v.toLocaleString("de-DE") + ",00 €", value: v }),
+  ];
+  const joins = [" ", " ", " ", "\t", "   ", " / ", " S$", " EUR ", " | "];
+  const values = [3, 30, 150, 250, 500, 1_000, 1_250, 1_500, 2_500, 12_000, 50_000, 150_000, 250_000, 1_500_000];
+  let leaks = 0; const shown: string[] = [];
+  for (let k = 0; k < 3000; k++) {
+    const count = 2 + rnd(3), written: number[] = [];
+    let line = ["Room ", "Plan A ", "Bilik ", "Zimmer ", ""][rnd(5)];
+    let prevSpaced = false;
+    for (let i = 0; i < count; i++) {
+      const form = rnd(forms.length), f = forms[form](values[rnd(values.length)]), spaced = [5, 6, 7, 10].includes(form);
+      // A figure of a market that groups with spaces (EUR, kr, CHF, "150,00 €") is never set one space from another figure:
+      // "CHF 3 500" and "3 500,00 €" are one figure there, and no reader can tell them from two.
+      let join = joins[rnd(joins.length)];
+      if ((spaced || prevSpaced) && join === " ") join = "\t";
+      written.push(f.value); line += (i ? join : "") + f.text; prevSpaced = spaced;
+    }
+    const bad = numbersIn(line).filter((n) => !written.some((w) => Math.abs(w - n) < 0.005));
+    if (bad.length) { leaks++; if (shown.length < 5) shown.push(`${line} -> ${bad.join(",")}`); }
+  }
+  t("adversarial lines: no piece or joined figure prints (3000 lines)", leaks === 0, { leaks, shown });
 }
 
 globalThis.fetch = realFetch;
