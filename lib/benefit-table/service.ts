@@ -59,7 +59,11 @@ async function withDocumentLinks(db: Db, accountId: string, people: FamilyMember
     db("SELECT to_regclass('public.policy_name_dismissals') IS NOT NULL AS ok", []).then((r) => r[0]?.ok === true
       ? db("SELECT policy_id, detected_name FROM policy_name_dismissals WHERE account_id=$1", [accountId]) : []).catch(() => []),
   ]);
-  const byHand = new Set(links.filter((l) => l.source === "user_declared").map((l) => `${l.policy_id}|${l.family_member_id}`));
+  // The household's word on who a printed name is: a name it matched by hand (user_declared), or the one printed name of a
+  // personal document that matched nobody, linked to the profile the household uploaded it to (upload_hint; lib/rag/ingest.ts
+  // writes it only then, flagged "Named in it: … Change"). Home and Family count that link (policy_members), so Coverage
+  // does too: one rule for both (TE real-model run, 4 Nov: Home said covered, Coverage "Not in your family").
+  const byHand = new Set(links.filter((l) => l.source === "user_declared" || l.source === "upload_hint").map((l) => `${l.policy_id}|${l.family_member_id}`));
   const notThem = dismissed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
   const namedOn = printed.map((d) => ({ documentId: String(d.policy_id), name: String(d.detected_name) }));
   return people.map((p) => ({ ...p,
