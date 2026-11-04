@@ -47,7 +47,10 @@ const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   ["Not covered", "No benefit is payable for a disability caused by war.", wording, "drop"],
   ["Rider premium", "The rider premium is S$4.20 a month", summary, "drop"],
   ["Annual premium", "Annual premium S$420", summary, "drop"],
-  ["Low price", "Cover of S$200,000 at only S$0.40 a day", summary, "drop"],
+  ["Low price", "Be covered for S$200,000 at only S$0.40 a day", summary, "drop"],
+  ["Low price", "Be protected for as low as S$1 a day", summary, "drop"],
+  ["Daily Cash", "Daily Cash: from S$50 a day, up to 365 days", summary, "keep"],
+  ["Recovery Benefit", "Recovery Benefit from S$200 a day after discharge", summary, "keep"],
   ["Plan Choice", "Choose cover from S$50,000 to S$500,000", summary, "drop"],
   ["Illness List", "• Enjoy cover for 37 critical illnesses", summary, "drop"],
   // Critic #348 H1: real covers with no figure are kept, whatever their shape on the page.
@@ -83,7 +86,7 @@ const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   ["Hospital Income", "Hospital income coverage of S$100 per day, up to S$10,000 at S$100 per day", summary, "keep"],
   ["Payor Rider", "Payor Rider: premiums of S$600 are paid by us on the payor's death", wording, "keep"],
   ["Death Benefit", "The death benefit is payable if the life assured dies; the life assured need not survive any period", wording, "named"],
-  ["Cover Price", "Protection from S$0.30 a day", summary, "drop"],
+  ["Cover Price", "Protection from S$0.30 a day", summary, "keep"],
   ["Survival", "A survival period of 14 days applies", wording, "drop"],
   // a named cover with no printed amount: kept, said to print no amount
   ["Premium Waiver", "We will waive premiums falling due while a benefit is payable under this policy.", wording, "named"],

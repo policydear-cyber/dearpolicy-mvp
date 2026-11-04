@@ -26,8 +26,8 @@ export function startsWithName(name:string,quote:string){
   const n=key(name),q=key(quote);
   return n.length>=4&&(q===n||q.startsWith(n+" "));
 }
-/** A price, not a benefit, by its shape only (Critic #348): a marketing line that opens "Be insured/covered/protected up
- * to MONEY at MONEY per day", or a figure with a price marker ("for only S$0.40 a day", "as low as", "from S$1 a day"), or
+/** A price, not a benefit, by its shape only (Critic #348): a marketing line that opens "Be insured/covered/protected" and
+ * prices a cover figure "at MONEY per day" or "for only / as low as MONEY a day", or
  * a premium word with a figure and no benefit verb ("Annual premium S$420"). A hospital cash benefit prints the same
  * cover-and-rate shape ("up to S$36,500 at S$100 per day"), so a passage that names a hospital stay is never a price, and
  * "we pay the premiums", "paid by us", a waiver or a refund is a benefit. "Cost" is a benefit word, never a price word. */
@@ -36,8 +36,11 @@ export function statesAPrice(quote:string|null|undefined){
   if(!new RegExp(MONEY,"i").test(q))return false;
   if(/\bhospital(?:i[sz]ation|i[sz]ed)?\b|\b(?:stay|confinement|ward)\b/i.test(q))return false;
   const PERIOD=String.raw`\s*(?:per|a|an|/|each)\s*(?:day|week|month|year|annum)\b`;
-  if(new RegExp(String.raw`^be\s+(?:insured|covered|protected)\b[^.;]*?${MONEY}[^.;]*?\bat\s+(?:only\s+|just\s+)?${MONEY}${PERIOD}`,"i").test(q))return true;
-  if(new RegExp(String.raw`\b(?:for\s+only|for\s+just|only|just|as\s+low\s+as|from)\s+${MONEY}${PERIOD}`,"i").test(q))return true;
+  // The per-day price is a marketing line only: it opens "Be insured/covered/protected", and either prices a cover figure
+  // "at MONEY a day" or says "for only / for just / as low as MONEY a day". A row naming a Benefit, Cash, Allowance or
+  // Income is never a price ("Daily Cash: from S$50 a day", Critic #348).
+  const marketing=/^be\s+(?:insured|covered|protected)\b/i.test(q)&&!/\b(?:benefit|cash|allowance|income)\b/i.test(q);
+  if(marketing&&new RegExp(String.raw`${MONEY}[^.;]*?\bat\s+(?:only\s+|just\s+)?${MONEY}${PERIOD}|\b(?:for\s+only|for\s+just|for\s+as\s+low\s+as|as\s+low\s+as)\s+${MONEY}${PERIOD}`,"i").test(q))return true;
   if(/\b(?:waive|waiver|refund|return|reimburs)\w*/i.test(q))return false;
   if(/\b(?:we|will|shall|company|insurer)\s+(?:will\s+|shall\s+)?pay\b|\bpaid\s+(?:by\s+us|for\s+you|on\s+your\s+behalf)\b|\b(?:are|is|will\s+be)\s+paid\b/i.test(q))return false;
   return /\bpremiums?\b/i.test(q);
