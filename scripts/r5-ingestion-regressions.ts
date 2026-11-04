@@ -330,12 +330,47 @@ async function partB() {
       assert.equal(job.status, "succeeded");
       [p] = await rows(`SELECT processing_status,processing_message,processing_error,needs_review FROM policies WHERE id=$1`, [doc.policyId]);
       assert.equal(p.processing_status, "ready"); assert.equal(p.processing_error, null);
-      assert.equal(p.processing_message, errors.DOCUMENT_READ_IN_PART_MESSAGE); assert.equal(p.needs_review, true);
+      // The message leads with the read-in-part note; later notes (here: this upload is a copy of the earlier one) follow it
+      // after a space, which is how every reader matches it (lib/documents/failure-advice.ts coverReadingPending).
+      assert.ok(p.processing_message === errors.DOCUMENT_READ_IN_PART_MESSAGE || p.processing_message.startsWith(errors.DOCUMENT_READ_IN_PART_MESSAGE + " "), p.processing_message);
+      assert.equal(p.needs_review, true);
       const kept = await rows(`SELECT count(*)::int n FROM policy_benefits WHERE policy_id=$1 AND row_kind='policy_year_limit'`, [doc.policyId]);
       assert.ok(kept[0].n >= 3, "the table rows code can read are kept");
       assert.ok((await linked(doc.policyId)).has(meiLing), "filed under the profile it was uploaded to");
       const deferred = await rows(`SELECT status,available_at > now() + interval '20 minutes' AS later,payload->>'deferredRetry' AS deferred FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`, [jobType, doc.policyId + ":retry-read"]);
       assert.deepEqual(deferred.map((r) => [r.status, r.later, r.deferred]), [["queued", true, "true"]], "exactly one later re-read");
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [jobType]);
+    });
+    await t("R5: a document read in part keeps its page notes after that message -- a scanned page that gave no text is still named (TE and Critic #323)", async () => {
+      const jobType = `r5_test_policy_processing_${randomUUID().slice(0, 8)}`;
+      // The same made-up schedule with one more page: a plain grey image, so no text comes from it.
+      const { PDFDocument } = await import("pdf-lib");
+      const { deflateSync } = await import("node:zlib");
+      const crc = (buf: Buffer) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+      const chunk = (type: string, data: Buffer) => { const tag = Buffer.from(type); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const c = Buffer.alloc(4); c.writeUInt32BE(crc(Buffer.concat([tag, data]))); return Buffer.concat([len, tag, data, c]); };
+      const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(16, 0); ihdr.writeUInt32BE(16, 4); ihdr[8] = 8; ihdr[9] = 0;
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr),
+        chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: 16 }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(16, 0x80)]))))), chunk("IEND", Buffer.alloc(0))]);
+      const pdf = await PDFDocument.load(fixture(SHIELD_PLAIN));
+      pdf.addPage([595, 842]).drawImage(await pdf.embedPng(png), { x: 0, y: 0, width: 595, height: 842 });
+      const scannedPage = pdf.getPageCount();
+      const bytes = Buffer.from(await pdf.save());
+      // The stand-in reader is told that the image is illegible: the reader runs and gives no text for that page.
+      const { pageImageFingerprints, SYNTHETIC_OCR_REGISTRY } = await import("@/lib/ai/deterministic-model");
+      const registry = ((globalThis as Record<string, unknown>)[SYNTHETIC_OCR_REGISTRY] ??= new Map()) as Map<string, { text: string; rotation: number; quality: string }>;
+      for (const hash of (await pageImageFingerprints(bytes))[scannedPage - 1]) registry.set(hash, { text: "", rotation: 0, quality: "unreadable" });
+      const doc = await insert(meiLing, "ShieldCare_Premier_Schedule_2026_with_scan.pdf", bytes);
+      await enqueueJob(pool, { jobType, idempotencyKey: doc.policyId, accountId: a, maxAttempts: 1,
+        payload: { policyId: doc.policyId, familyMemberId: meiLing, storageKey: doc.storageKey, pdfPassword: null, linkUploadMember: true } });
+      await claimAndProcessOne({ jobType, workerId: "r5-test-worker", process: processPolicyProcessingJob });
+      const [p] = await rows(`SELECT processing_status,processing_message FROM policies WHERE id=$1`, [doc.policyId]);
+      assert.equal(p.processing_status, "ready");
+      const message = String(p.processing_message);
+      assert.ok(errors.DOCUMENT_READ_IN_PART_MESSAGES.some((lead) => message.startsWith(lead + " ")), message);
+      assert.ok(message.includes(`Page ${scannedPage} could not be read`), message);
+      assert.doesNotMatch(message, /Read in part\./, "the lead already says it; a note's own 'Read in part.' is not repeated");
+      const { coverReadingPending } = await import("@/lib/documents/failure-advice");
+      assert.ok(coverReadingPending(message), "the card still shows the 'not fully read yet' state for it");
       await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [jobType]);
     });
   } finally {
