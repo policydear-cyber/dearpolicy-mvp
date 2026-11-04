@@ -1,7 +1,7 @@
 /** Whether a benefit's own printed figure is a monthly amount (TE #351: "monthly" anywhere in a row is not enough --
  * "within a month", "12 monthly instalments", "payable monthly over 10 years" or a total for a "Monthly Income" are not
  * a monthly figure). Closed allow-list, fails closed:
- *  1. the figure itself is followed by its monthly unit: "S$2,000 per month", "S$2,000 a month", "$1,500/month",
+ *  1. the row prints one figure, and it is followed by its monthly unit: "S$2,000 per month", "S$2,000 a month", "$1,500/month",
  *     "S$600 every month", "S$2,000 monthly", "one twelfth of the Sum Insured each month";
  *  2. or the whole row is a "Monthly ..." label and its one figure, optionally "for N months/years", and nothing else.
  * Any other period, a premium or a lump sum anywhere in the row gives no period. No database, no model. */
@@ -15,6 +15,10 @@ const ANOTHER_PERIOD=/\b(?:per|a|each|every)\s+(?:calendar\s+|policy\s+)?(?:day|
 export function paidMonthly(name:string|null|undefined,quote:string|null|undefined){
   const q=(quote??"").replace(/\s+/g," ").trim();
   if(!q||ANOTHER_PERIOD.test(q)||ANOTHER_PERIOD.test(name??""))return false;
+  // One figure only: with two ("S$2,000 per month, up to S$48,000 in total") the monthly unit may belong to the other
+  // figure than the one stored (TE #351), so no period is said.
+  const figures=(q.match(new RegExp(String.raw`${MONEY}|${SHARE}`,"gi"))??[]).length;
+  if(figures!==1)return false;
   for(const m of q.matchAll(new RegExp(String.raw`(?:${MONEY}|${SHARE})(${UNIT})`,"gi")))
     if(!NOT_A_RATE.test(q.slice((m.index??0)+m[0].length)))return true;
   // (2) The whole row is the "Monthly ..." label and its one figure, optionally "for N months/years", and nothing else

@@ -51,6 +51,8 @@ const NOT_MONTHLY: [string, string][] = [
   ["Monthly Income Plan", "Monthly Income Plan: Sum Assured S$300,000"],
   ["Monthly Income", "Monthly Income: S$50,000 cap on all payments"],
   ["Monthly Income", "Monthly Income S$3,000, benefit term 5 years"],
+  ["Disability Income", "Disability Income: S$2,000 per month, up to S$48,000 in total"],
+  ["Income Benefit", "Income Benefit S$2,000 per month or S$20,000 at once"],
 ];
 for (const [name, quote] of MONTHLY) check(`monthly: ${quote}`, () => assert.equal(paidMonthly(name, quote), true));
 for (const [name, quote] of NOT_MONTHLY) check(`no period: ${quote}`, () => assert.equal(paidMonthly(name, quote), false));
