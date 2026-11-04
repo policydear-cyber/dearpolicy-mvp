@@ -162,13 +162,40 @@ const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|I
 // lone dot group is read whole.
 const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
+/** Space-grouped figures read whole, and where they stand. A market that groups thousands with spaces ("EUR 80 000",
+ * "120 000 kr", "CHF 12 500,50", with a plain, no-break or narrow space) prints its figure whole, by the rule evidence.ts's
+ * printedFigures already uses: only with a currency printed right beside it, or space groups closed by a comma decimal
+ * ("1 250,00"). Before, such a quote printed only its pieces ("80" and "000"), so the cover was dropped from Coverage, and
+ * "EUR 80" passed as printed (TE #331). Never before a percent sign, "times" or a scale word, nor after a section, table,
+ * year, rate or factor word; "123 456 789" with no currency is no money, and its pieces read as before. */
+function spaceGroupedFigures(text: string): { figures: number[]; spans: [number, number][] } {
+  const figures: number[] = [], spans: [number, number][] = [];
+  for (const m of text.matchAll(new RegExp(String.raw`(?<![\d.,'’]|\d[ \u00a0\u202f])(\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:,\d{1,2})?)(?![\d]|[.,'’]\d|[ \u00a0\u202f]\d)`, "g"))) {
+    const raw = m[1], at = m.index!, before = text.slice(Math.max(0, at - 24), at), after = text.slice(at + raw.length, at + raw.length + 12);
+    if (/^\s*(?:%|per\s*cent|percent|pct|times\b|x\b|×)/i.test(after) || NOT_MONEY_BEFORE.test(before)) continue;
+    const sign = (s: RegExpMatchArray | null) => (!s ? false : s[1] ? DOT_CODES.test(s[1]) : true);
+    const signAfter = sign(after.match(SIGN_AFTER));
+    // A currency after the figure is no scale word ("1 500 000 Kč" is koruna, not thousands); any other scale word after
+    // it reads nothing whole.
+    if (!signAfter && !new RegExp("^" + NO_SCALE_AFTER).test(after)) continue;
+    if (!sign(before.match(SIGN_BEFORE)) && !signAfter && !/,\d{2}$/.test(raw)) continue;
+    const [whole, cents] = raw.split(",");
+    const n = Number(whole.replace(/[ \u00a0\u202f]/g, "") + (cents ? "." + cents : ""));
+    if (!Number.isFinite(n)) continue;
+    figures.push(n); spans.push([at, at + raw.length]);
+  }
+  return { figures, spans };
+}
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000), and a figure grouped
  * with dots read whole ("Rp 500.000.000" -> 500000000). */
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
   let gluedEnd = -2;
   const scaleAfter = new RegExp(String.raw`^\s*(${SCALE_WORD})(?![A-Za-z0-9])`);
+  const spaced = spaceGroupedFigures(text);
   for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)/g)) {
+    // A piece of a space-grouped figure read whole below is not a figure of its own ("EUR 80 000" prints no 80).
+    if (spaced.spans.some(([from, to]) => m.index! >= from && m.index! < to)) continue;
     // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
     // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
@@ -213,6 +240,7 @@ export function numbersIn(text: string): number[] {
     const n = printedNumber(raw, code);
     if (n != null && !out.includes(n)) out.push(n);
   }
+  out.push(...spaced.figures.filter((n) => !out.includes(n)));
   return out;
 }
 const ABBREVIATIONS: Record<string, number> = { jt: 1_000_000, rb: 1_000, cr: 10_000_000, tr: 1_000_000 };
