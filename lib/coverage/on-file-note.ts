@@ -23,9 +23,20 @@ const OWN_KINDS: { kind: string; note: string; type: RegExp; product: RegExp }[]
     product: /\b(?:home|household|contents|homeowners?|fire)\s+(?:insurance|policy|cover|protect\w*|plan)\b/i },
   { kind: "Motor", note: "motor cover", type: /\b(?:motor|car|vehicle|motorcycle)\b/i, product: /\b(?:motor|car|vehicle|motorcycle)\s+(?:insurance|policy|cover|plan)\b/i },
 ];
+const OTHER_COVER = /\b(?:health|medical|hospital\w*|surgical|life|term|accident\w*|PA|group|employee\w*|critical|illness|disability|care|carers?|shield\s+plan|integrated|loans?|mortgage|MRTA|assurance)\b/i;
+const LOAN = /\b(?:loans?|mortgage|MRTA)\b/i;
 export function documentKindNote(doc: { type: string | null; product: string | null }, category: string): string | null {
   const type = doc.type?.trim();
-  const kinds = type ? OWN_KINDS.filter((k) => k.type.test(type)) : OWN_KINDS.filter((k) => k.product.test(doc.product ?? ""));
+  const product = doc.product ?? "";
+  // Without a type, the product name counts only when it names one kind and no other, and no health, life, accident or
+  // group cover (TE #368: "Travel and Home Insurance", "Steadfast Life with Travel Accident Benefit").
+  // A type that also names another cover ("Personal Accident (incl. travel)", "Group Hospital and Surgical (business travel
+  // included)") or a loan ("Home Loan Protection", "Mortgage Reducing Term Assurance") gets no note either (TE #368 R2).
+  // A type that opens with its kind ("Travel Medical", "Home Contents") and names no other kind is that kind, unless it is a
+  // loan's.
+  const lead = type ? OWN_KINDS.filter((k) => k.type.test(type.split(/[\s(,/-]+/)[0] ?? "")) : [];
+  const kinds = type ? (LOAN.test(type) ? [] : lead.length === 1 && OWN_KINDS.filter((k) => k.type.test(type)).length === 1 ? lead : OTHER_COVER.test(type) ? [] : OWN_KINDS.filter((k) => k.type.test(type)))
+    : OTHER_COVER.test(product) || OWN_KINDS.filter((k) => k.type.test(product)).length > 1 ? [] : OWN_KINDS.filter((k) => k.product.test(product));
   // One kind only: a document that reads as two (a "travel and home" bundle) is left as it is named.
   if (kinds.length !== 1) return null;
   return kinds[0].kind === category ? null : kinds[0].note;

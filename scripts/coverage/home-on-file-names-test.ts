@@ -47,11 +47,15 @@ async function pure() {
     assert.equal(documentKindNote({ type: null, product: "Kestrel Travel Insurance" }, "Outpatient"), "travel cover, for trips");
     assert.equal(documentKindNote({ type: "travel", product: "Harbour Journey Plan" }, "Outpatient"), "travel cover, for trips");
     assert.equal(documentKindNote({ type: "Home insurance", product: "Nest Shield" }, "Personal Accident"), "home cover");
+    assert.equal(documentKindNote({ type: "Travel Medical", product: "Wayfarer Medical" }, "Hospitalisation"), "travel cover, for trips");
+    assert.equal(documentKindNote({ type: "home", product: null }, "Personal Accident"), "home cover");
+    assert.equal(documentKindNote({ type: "motor", product: null }, "Hospitalisation"), "motor cover");
     assert.equal(documentKindNote({ type: null, product: "Roadwise Motor Insurance" }, "Hospitalisation"), "motor cover");
     // The stored type decides alone; the file name and document name are never read (Critic #368).
     for (const [doc, category] of [[{ type: "health", product: "Kestrel Shield with Overseas Travel Benefit" }, "Hospitalisation"],
       [{ type: "accident", product: "Personal Accident Plus (travel extension)" }, "Personal Accident"],
-      [{ type: "life", product: null, name: "travel-docs-scan" }, "Death"], [{ type: "health", product: "Harbour Health trip claim form" }, "Hospitalisation"], [{ type: "health", product: "Kestrel Travel Shield" }, "Hospitalisation"],
+      [{ type: "life", product: null, name: "travel-docs-scan" }, "Death"], [{ type: "health", product: "Harbour Health trip claim form" }, "Hospitalisation"], [{ type: "health", product: "Kestrel Travel Shield" }, "Hospitalisation"], [{ type: null, product: "Wayfarer Travel and Home Insurance" }, "Hospitalisation"], [{ type: "Personal Accident (incl. travel)", product: "Ridesafe PA" }, "Personal Accident"], [{ type: "Home Loan Protection", product: "Keystone Home Protect" }, "Death"],
+      [{ type: "Mortgage Reducing Term Assurance (home loan)", product: "Keystone MRTA" }, "Death"], [{ type: "Group Hospital and Surgical (business travel included)", product: "Corvane GHS" }, "Hospitalisation"], [{ type: null, product: "Steadfast Life Travel Insurance" }, "Death"],
       [{ type: null, product: "Lotus Shield", name: "Lotus travel wording" }, "Hospitalisation"], [{ type: null, product: "Home Loan Protector" }, "Death"],
       [{ type: null, product: "Car Loan Shield" }, "Death"]] as const)
       { const name = "name" in doc ? doc.name : "Doc"; assert.equal(onFileDocumentName({ ...doc, name }, category), name, JSON.stringify(doc)); }
