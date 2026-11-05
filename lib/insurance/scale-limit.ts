@@ -446,8 +446,11 @@ const cellCount=(text:string)=>{
 const GROUP_TITLE=/^(?:section (?:\d+|[a-z])\s*[:.\-–]?\s+)?(?:medical(?: and health)?|travel inconvenience|travel delay|personal accident|baggage(?: and personal belongings)?|personal belongings|personal liability|emergency (?:medical )?assistance)(?: benefits)?:?$/i;
 /** Whether a plan row printed as its cells alone, with its explaining line below them ("S$500 S$1,000 S$1,500 / If you
  * have to postpone your trip"), binds to the household's plan. Off: only rows printing their name then their cells bind,
- * and a reading quoting the cells first never does. */
-export const CELLS_THEN_LINE_BINDING=true;
+ * and a reading quoting the cells first never does.
+ * OFF on purpose (#373): with it on, a group title captioning a second table whose header is lost binds another table's
+ * column (TE round 6, D1/D2: /mnt/project-files/test-engineer/te-pr373-plan-r6.ts). Turn it on only once that gate shows
+ * 0 wrong columns. */
+export const CELLS_THEN_LINE_BINDING=false;
 /** The place of the column in the plan header of the row's own table, and the cells of the row's own line (TE and Critic
  * r373):
  *  - the row's own line is the one line printing its cells after its last words (or, with CELLS_THEN_LINE_BINDING, its
