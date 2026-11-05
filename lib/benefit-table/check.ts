@@ -21,6 +21,20 @@ import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
+const MONEY_CELL = /(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d/g;
+const RATE_AFTER_FIGURE = /\d[\d,.]*\s*(?:\/|per\b|each\b|a (?:day|night|week|month)\b|daily\b|weekly\b)/i;
+/** Whether the excerpt's line that prints this figure is a row of plan figures: three or more money cells that differ, or
+ * two that differ with neither a rate (Critic R364). */
+function plansOnValueLine(excerpt: string, value: number): boolean {
+  const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
+  return (lines.length ? lines : [excerpt]).some((line) => {
+    if (!figuresDifferByPlan(line)) return false;
+    const cells = ((planCellRun(line) ?? line).match(MONEY_CELL) ?? []).length;
+    return cells >= 3 || (cells === 2 && !RATE_AFTER_FIGURE.test(line));
+  });
+}
+
+
 /** people: the household's member names, so a page naming another member is known (only the premium check uses it). */
 export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[]; people?: string[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
@@ -747,13 +761,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
-    // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000") gives a figure
-    // only with the plan column it was read under: without one, the figure may be any plan's (Critic R364 H1, the FWD
-    // plan-column regression). Fails closed whatever the reader did, including a table whose header is on another page.
-    // Three or more side-by-side cells only: two figures on a line are as often a rate and its limit ("RM200 per day
-    // RM8,000") or a sum and its premium as two plans.
-    if (value != null && !str(b.column) && figuresDifferByPlan(source.excerpt)
-      && ((planCellRun(source.excerpt) ?? "").match(/(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d/g) ?? []).length >= 3) {
+    // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
+    // cancellation S$5,000 S$10,000") gives a figure only with the plan column it was read under: without one, the figure
+    // may be any plan's (Critic R364 H1, the FWD plan-column regression). Fails closed whatever the reader did, including
+    // a table whose header is on another page. The line tested is the one that prints the value, so a quote of two plan
+    // lines is judged line by line. Two figures on a line are kept only when one is a rate ("RM200 per day RM8,000"); a
+    // sum and its premium are already set aside by figuresDifferByPlan.
+    if (value != null && !str(b.column) && plansOnValueLine(source.excerpt, value)) {
       out.dropped.push({ what: label, why: `figure ${value} is one of several plans' figures on its line, read with no plan column` }); continue;
     }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional

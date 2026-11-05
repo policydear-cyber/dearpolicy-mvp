@@ -265,6 +265,28 @@ async function main() {
     assert.ok(read.dropped.some((d) => /several plans' figures/.test(d.why)));
   });
 
+  await test("L12 two-plan rows and two-line quotes read with no plan column are dropped; a rate and its limit stay (Critic R364)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const text = ["Trip cancellation            S$5,000     S$10,000", "Baggage delay                S$200       S$500",
+      "Emergency evacuation         S$50,000    S$150,000    S$300,000", "Hospital cash per day        S$50        S$100        S$200",
+      "Hospital allowance           RM200 per day      RM8,000", "Lost passport                S$500"].join("\n");
+    const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text }] };
+    const row = (benefit: string, value: number, quote: string, column: string | null = null) => ({ section: null, column, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
+      row("Trip cancellation", 10_000, "Trip cancellation            S$5,000     S$10,000"),
+      row("Trip cancellation", 5_000, "Trip cancellation            S$5,000     S$10,000"),
+      row("Baggage delay", 500, "Baggage delay                S$200       S$500"),
+      row("Emergency evacuation", 300_000, "Emergency evacuation         S$50,000    S$150,000    S$300,000\nHospital cash per day        S$50        S$100        S$200"),
+      row("Trip cancellation", 10_000, "Trip cancellation            S$5,000     S$10,000", "Superior"),
+      row("Hospital allowance", 8_000, "Hospital allowance           RM200 per day      RM8,000"),
+      row("Lost passport", 500, "Lost passport                S$500"),
+    ] });
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.column, b.value]),
+      [["Trip cancellation", "Superior", 10_000], ["Hospital allowance", null, 8_000], ["Lost passport", null, 500]]);
+    assert.equal(read.dropped.filter((d) => /several plans' figures/.test(d.why)).length, 4);
+  });
+
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);
