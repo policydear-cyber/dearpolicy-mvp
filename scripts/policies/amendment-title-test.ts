@@ -1,7 +1,7 @@
 /**
  * Amendments (lib/policies/amendments.ts): main's wording is kept as it is; a first title line on the closed amendment
  * list can also amend, behind a switch that ships off; and the reader's "endorsement" type is set aside only when the document shows no amendment of its
- * own and prints an empty endorsement field ("Endorsements: Nil"); a title never sets it aside. And a contents entry never names the document: its
+ * own, its first title is a plain schedule or certificate, and it prints an empty endorsement field ("Endorsements: Nil"). And a contents entry never names the document: its
  * topmost title line does (lib/documents/fact-check.ts). Made-up English documents, no database, no network, no model.
  */
 import assert from "node:assert/strict";
@@ -100,7 +100,7 @@ test("an amending document is known by its own title or an amending sentence", a
   for (const [why, text] of [...amending, ...ordinary, ...asMain, ["a brochure page with a policy number", brochure] as [string, string]])
     assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why + " (as shipped)");
   // The reader's "endorsement" type still makes an amendment (a lost one leaves an old figure shown), unless the text
-  // prints an empty endorsement field and no amendment evidence of its own.
+  // is a plain schedule or certificate with an empty endorsement field, no change word and no amendment evidence.
   const { endorsementTypeVetoed } = await import("@/lib/policies/amendments");
   for (const t of ["Policy No. TL-1\nSum assured S$500,000", "POLICY SCHEDULE (ENDORSED)\nPolicy No. TL-1\nSum assured S$500,000", "Policy Alteration Notice\nPolicy No. TL-1",
     // Critic r375 p375b: the document's own amendment evidence keeps the type, whatever its title or form lines.
@@ -114,6 +114,14 @@ test("an amending document is known by its own title or an amending sentence", a
     "Policy No. HL-9\nPrevious endorsements: None\nNew sum assured S$400,000",
     // Critic r375 p375b V10: an endorsement title keeps the type over an empty "see attached" field.
     "Endorsement\nPolicy No. HL-9\nAlterations - see attached",
+    // Critic r375 p375e: only a plain schedule or certificate with no change word is set aside.
+    "AMENDED POLICY SCHEDULE\nPolicy No. TL-100245\nEndorsements: Nil\nSum assured: S$200,000\nIssued 1 March 2026",
+    "Policy Schedule - Amended\nPolicy No. TL-100245\nAlterations: None\nDeath benefit S$300,000",
+    "Supplementary Schedule\nPolicy No. TL-100245\nEndorsements: Nil\nHospital cash S$150 per day",
+    "Rider Attachment Notice\nPolicy No. TL-100245\nEndorsements: N/A\nRider: Critical Illness S$100,000 added to your policy",
+    "Policy Change Confirmation\nPolicy No. TL-100245\nEndorsements: Nil\nNew address: 12 Example Road",
+    "POLICY SCHEDULE\nPolicy No. TL-100245\nEndorsements: Nil\nRider: Critical Illness S$100,000 added",
+    "Policy No. TL-1\nEndorsements - see attached",
     // TE r375 round 3 V1: a typed endorsement titled "Benefit summary" with its own dated figure.
     "Benefit summary\nPolicy number LT-88123\nFrom 1 June 2026 your death benefit is S$250,000.",
     // TE r375 round 2 H6.
@@ -129,7 +137,9 @@ test("an amending document is known by its own title or an amending sentence", a
     "Terms and Conditions\nClause 5 now reads: the limit is S$5,000.",
     "Policy Wording\nWith effect from 1 March 2026 the sum assured becomes S$400,000."])
     assert.equal(endorsementTypeVetoed(t), false, t);
-  for (const t of ["POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil", "POLICY SCHEDULE\nPolicy No. HL-9\nEndorsements this year: Nil", "Policy No. TL-1\nEndorsements - see attached"])
+  for (const t of ["POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil", "POLICY SCHEDULE\nPolicy No. HL-9\nEndorsements this year: Nil", "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements - see attached",
+    // Critic r375 p375e W8: a reissued plain schedule with an empty endorsement field.
+    "POLICY SCHEDULE\nPolicy No. TL-100245\nDate of issue: 1 March 2026\nEndorsements: Nil\nSum assured: S$200,000"])
     assert.equal(endorsementTypeVetoed(t), true, t);
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../../lib/policies/amendments.ts", import.meta.url), "utf8");

@@ -103,15 +103,24 @@ function ownAmendmentEvidence(pages: string[]): boolean {
     return at >= 0 && lines.slice(at + 1).some((l) => (l.match(/(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) ?? []).length === 2);
   });
 }
-/** A document the reader typed "endorsement" whose own text says it is not one: it prints an empty endorsement field
- * ("Endorsements: Nil", "Endorsements this year: none", "Endorsements - see attached"; a fee, premium or charge field is
- * not one) and no amendment evidence of its own (ownAmendmentEvidence). Only then is the reader's type set aside;
- * otherwise it stands as on main (a lost amendment leaves an old figure shown). Titles never veto: a re-issued, updated
- * or replacement wording or summary is an amendment too. */
+/** A document the reader typed "endorsement" whose own text says it is not one. A closed allow-list, all of:
+ *  - its first title is a plain schedule or certificate with nothing added (PLAIN_KIND);
+ *  - it prints an empty endorsement field ("Endorsements: Nil", "Endorsements this year: none", "Endorsements - see
+ *    attached"; a fee, premium or charge field is not one);
+ *  - no other line says amend, alter, endorse, rider, supplement, added, removed or change, and it shows no amendment
+ *    evidence of its own (ownAmendmentEvidence).
+ * Otherwise the reader's type stands, as on main (a lost amendment leaves an old figure shown). */
+const PLAIN_KIND = /^(?:policy\s+schedule|schedule(?:\s+of\s+insurance)?|certificate(?:\s+of\s+insurance)?|policy\s+certificate)$/i;
+const EMPTY_FIELD = /^\s*(?:endorsements?|amendments?|alterations?)\b(?![^:\n]*\b(?:fees?|premiums?|charges?|costs?)\b)[^:\n\-–]{0,30}[:\-–]\s*(?:nil|none|n\/?a|not\s+applicable|-|see\s+attached)\s*$/i;
+const CHANGE_WORD = /\b(?:amend|alter|endors|rider|supplement|added\b|removed\b|change)/i;
 export function endorsementTypeVetoed(pagesText: string): boolean {
   const pages = String(pagesText ?? "").split("\f");
-  if (ownAmendmentEvidence(pages)) return false;
-  return pages.slice(0, 2).some((p) => p.split(/\r?\n/).some((l) => /^\s*(?:endorsements?|amendments?|alterations?)\b(?![^:\n]*\b(?:fees?|premiums?|charges?|costs?)\b)[^:\n\-–]{0,30}[:\-–]\s*(?:nil|none|n\/?a|not\s+applicable|-|see\s+attached)\s*$/i.test(l)));
+  const title = firstTitle(pages);
+  if (!title || !PLAIN_KIND.test(title.line)) return false;
+  const lines = pages.flatMap((p) => p.split(/\r?\n/));
+  if (!lines.slice(0, 200).some((l) => EMPTY_FIELD.test(l))) return false;
+  if (lines.some((l) => !EMPTY_FIELD.test(l) && CHANGE_WORD.test(l))) return false;
+  return !ownAmendmentEvidence(pages);
 }
 const MONEY = /(?:S\$|SGD\s?|US\$|USD\s?)\s?(\d[\d,]*(?:\.\d+)?)/g;
 
