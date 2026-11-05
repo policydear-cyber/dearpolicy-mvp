@@ -327,7 +327,9 @@ async function main() {
       "Accidental death S$100,000 under Silver; S$250,000 under Gold", "Accidental death S$100,000 for adults / S$25,000 for children",
       "Personal accident S$100,000 for each adult, S$25,000 for each child", "Hospital income S$100 per day and S$200 per day in ICU",
       "Trip cancellation S$5,000 | S$10,000 for any one trip", "Medical expenses S$150,000 S$400,000 for each insured person",
-      "Baggage S$1,000 / S$3,000 in total", "Travel delay S$100 / S$200 after every 6 hours of delay"];
+      "Baggage S$1,000 / S$3,000 in total", "Travel delay S$100 / S$200 after every 6 hours of delay",
+      "Medical expenses S$100,000 and S$200,000 for each insured person", "Overall limit S$200,000 or S$500,000 for any one trip",
+      "Personal liability S$250,000 and S$500,000 if legally liable to pay", "Hospital cash S$100 a day, S$200 a day if in ICU"];
     const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
@@ -337,8 +339,11 @@ async function main() {
       row("Hospital income", 100, lines[7]),
       // A qualifier after the last cell applies to the whole row (TE pr367 r2).
       row("Trip cancellation", 5_000, lines[8]), row("Medical expenses", 150_000, lines[9]), row("Baggage", 1_000, lines[10]), row("Travel delay", 100, lines[11]),
+      // Bare figures joined by "and"/"or" with a trailing qualifier stay held; a rate and a raised rate keep the first (TE pr367 r3).
+      row("Medical expenses", 100_000, lines[12]), row("Overall limit", 200_000, lines[13]), row("Personal liability", 250_000, lines[14]),
+      row("Hospital cash", 100, lines[15]),
     ] });
-    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100]]);
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100], ["Hospital cash", 100]]);
   });
 
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);

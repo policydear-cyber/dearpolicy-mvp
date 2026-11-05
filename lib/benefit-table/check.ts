@@ -59,11 +59,13 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // S$1,000 on Premier", "S$100,000 for adults / S$25,000 for children") are plans' or people's cells (Critic R367).
       if (here && here === next && /^(?:for|on|in|under)$/.test(here))
         return /^\s*,?\s*\w+\s+(?:[\w.'&-]+\s*){1,4}?[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between);
-      // A condition between two cells sets them apart. A condition after the last cell joined by "and"/"or" ("S$100 per
-      // day and S$200 per day in ICU") is that cell's own condition (TE pr367); after cells set side by side by spaces,
-      // "|", "/" or ";" it qualifies the whole row ("S$5,000 | S$10,000 for any one trip", TE pr367 r2).
+      // A condition between two cells sets them apart. A condition after the last cell qualifies the whole row ("S$5,000 |
+      // S$10,000 for any one trip", "S$200,000 or S$500,000 for any one trip"), except after a rate and a raised rate in
+      // the same unit ("S$100 per day and S$200 per day in ICU", "S$100 a day, S$200 a day if in ICU"): that is the
+      // raised rate's own condition (TE pr367 r3). Fails closed: bare figures with a trailing qualifier stay held.
       if (here) return false;
-      if (next && /\b(?:and|or|plus)\b/i.test(between)) return false;
+      const rates = cells[i].unit && cells[i].unit !== "cap" && cells[i].unit === cells[i + 1].unit;
+      if (next && rates && /^[\s|/;,\-–—]*(?:or\b|and\b|plus\b)?[\s|/;,\-–—]*$/i.test(between)) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
     };
