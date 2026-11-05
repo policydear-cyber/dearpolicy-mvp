@@ -250,7 +250,8 @@ const BARE_RATE=/^\d[\d,]*(?:\.\d{1,2})?\s*(?:per|\/|a)\s*(?:day|night|week|mont
 function isValueCell(cell:string){
   if(cell.length<=80&&BARE_RATE.test(cell))return true;
   if(!AMOUNT.test(cell)||cell.length>80)return false;
-  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
+  // "As charged, up to RM 30,000": a reimbursement with its cap is an amount cell (stored as as-charged, never a formula).
+  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from|as charged)\b/i.test(cell);
 }
 export type BenefitRow={label:string;value:string;line:string;
   /** Where this row sits in the page's lines, so a heading above it (for
