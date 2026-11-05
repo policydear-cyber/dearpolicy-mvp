@@ -292,9 +292,13 @@ async function main() {
       const perYear: [string, number][] = [["Monthly", 12], ["Monthly (GIRO)", 12], ["Once a month", 12], ["Bulanan", 12], ["Every 2 months", 6], ["Bi-monthly", 6],
         ["Every 3 months", 4], ["Quarterly", 4], ["Twice a year", 2], ["Half-yearly", 2], ["Semi-annual", 2], ["Every 6 months", 2], ["Annual", 1], ["Payable yearly in advance", 1],
         ["Per policy year", 1], ["Once per policy year", 1], ["ONCE A YEAR", 1], ["Annual, single life", 1], ["p.a.", 1], ["Tahunan", 1], ["Weekly", 52], ["Fortnightly", 26], ["Every 2 weeks", 26],
-        ["Monthly by credit card", 12], ["Monthly, 12 instalments", 12], ["Quarterly, 4 payments", 4], ["Annual multi-trip", 1], ["One annual payment", 1], ["Annual (MediSave)", 1], ["Yearly via CPF", 1], ["Monthly through GIRO", 12]];
+        ["Monthly by credit card", 12], ["Monthly, 12 instalments", 12], ["Quarterly, 4 payments", 4], ["Annual multi-trip", 1], ["One annual payment", 1], ["Annual (MediSave)", 1], ["Yearly via CPF", 1], ["Monthly through GIRO", 12],
+        // Critic #372: payment sources, GST, renewal, level, rider, plan and currency words around a period.
+        ["Annual - Cash & MediSave", 1], ["Annual (Cash/Medisave)", 1], ["Annual Premium (inclusive of GST)", 1], ["Annual premium incl. GST", 1], ["Annual (with GST)", 1],
+        ["Annual renewal", 1], ["Yearly renewable", 1], ["Annual (auto-renew)", 1], ["Yearly (Level)", 1], ["Level annual premium", 1], ["Annual (Rider)", 1],
+        ["Annual - basic plan", 1], ["Annual (SGD)", 1], ["Annually by cheque", 1], ["Monthly by Direct Debit", 12], ["Monthly via PayNow", 12], ["Yearly by credit card", 1], ["Annual/Yearly", 1], ["Annual (12 months)", 1]];
       for (const [f, n] of perYear) { assert.equal(paymentsPerYear(f), n, f); assert.equal(isUnclearFrequency({ frequency: f }), false, f); }
-      for (const f of ["For a 12-month term", "Prepaid for 2 weeks", "Paid upfront, 6 months cover", "Paid in full for 3 months", "12 months", "Every 18 months", "Every 2 years", "Biennial", "Bi-weekly", "Twice a month", "once a year once a month", "Annual, 12 instalments", "Paid in 3 instalments", "One payment"]) {
+      for (const f of ["For a 12-month term", "Prepaid for 2 weeks", "Paid upfront, 6 months cover", "Paid in full for 3 months", "12 months", "Every 18 months", "Every 2 years", "Biennial", "Bi-weekly", "Twice a month", "once a year once a month", "Annual, 12 instalments", "Paid in 3 instalments", "One payment", "Monthly/Yearly", "Bi-annual", "Biannually", "First year", "Year 1"]) {
         assert.equal(paymentsPerYear(f), null, f);
         assert.equal(isUnclearFrequency({ frequency: f }), true, f);
       }
