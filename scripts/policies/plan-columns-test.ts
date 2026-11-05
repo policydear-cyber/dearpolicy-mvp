@@ -453,7 +453,13 @@ test("prices in the header, the header nearest above the row's own line, and no 
   const grouped = travel(`Medical\n${evac}\nTravel inconvenience\n${pp}`);
   assert.deepEqual(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: grouped }), { plan: "Business", figureText: "up to S$1,000" }, "group titles");
   assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 500)], { pageText: grouped }), null, "group titles: first plan's cell");
-  for (const title of ["Section 2 Travel inconvenience", "Table 2 - Travel inconvenience", "Travel inconvenience benefits for families"])
+  // A numbered section whose words are a group title counts too; any other section, part or table line does not.
+  for (const title of ["Section 2 Travel inconvenience", "Section 2: Travel inconvenience", "Section B - Travel inconvenience", "Section 12. Travel inconvenience"]) {
+    const page = travel(`Section 1 Medical\n${evac}\n${title}\n${pp}`);
+    assert.deepEqual(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: page }), { plan: "Business", figureText: "up to S$1,000" }, title);
+    assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 500)], { pageText: page }), null, title + ": first plan's cell");
+  }
+  for (const title of ["Section 2", "Section 2 Trip disruption", "Part B Travel inconvenience", "Table 2 - Travel inconvenience", "Travel inconvenience benefits for families", "Section 2 Travel inconvenience extras"])
     assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\n${title}\n${pp}`) }), null, title);
   assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\nTravel inconvenience\nBenefits\tElite\tPrestige\n${pp}`) }), null, "a group title with no row below it");
   // The route reads only the row's own page.

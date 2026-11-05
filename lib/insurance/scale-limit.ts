@@ -440,9 +440,10 @@ const cellCount=(text:string)=>{
   if(!run||!new RegExp(MONEY_CELL).test(run))return 0;
   return run.match(new RegExp(WIDE_CELL,"g"))?.length??0;
 };
-/** Benefit-group titles a plan table prints between its rows under one header ("Travel inconvenience"). A closed list,
- * allowed only between two rows of the same width (Critic r373 M2). "Section 2" or "Table 2" is never one. */
-const GROUP_TITLE=/^(?:medical(?: and health)?|travel inconvenience|travel delay|personal accident|baggage(?: and personal belongings)?|personal belongings|personal liability|emergency (?:medical )?assistance)(?: benefits)?:?$/i;
+/** Benefit-group titles a plan table prints between its rows under one header ("Travel inconvenience", "Section 2
+ * Travel inconvenience"). A closed list, allowed only with a row of the same width below it (Critic r373 M2). A bare
+ * "Section 2", "Section 2" with other words, "Part B" or "Table 2" is never one. */
+const GROUP_TITLE=/^(?:section (?:\d+|[a-z])\s*[:.\-–]?\s+)?(?:medical(?: and health)?|travel inconvenience|travel delay|personal accident|baggage(?: and personal belongings)?|personal belongings|personal liability|emergency (?:medical )?assistance)(?: benefits)?:?$/i;
 /** Whether a plan row printed as its cells alone, with its explaining line below them ("S$500 S$1,000 S$1,500 / If you
  * have to postpone your trip"), binds to the household's plan. Off: only rows printing their name then their cells bind,
  * and a reading quoting the cells first never does. */
