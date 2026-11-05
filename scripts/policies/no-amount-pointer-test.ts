@@ -48,7 +48,7 @@ test("a waiver, named or in words, never gets it (Critic M1, TE EXTRA 1)", () =>
 });
 test("a benefit whose amount is not the sum insured never gets it (Critic M1, TE product question)", () => {
   for (const [benefitName, quote] of [["Emergency Medical Evacuation", "We arrange emergency medical evacuation."], ["24-hour Helpline", "Call our 24-hour helpline."],
-    ["Hospital Cash", "A daily cash benefit is paid for each day in hospital."], ["Funeral Expenses", "Funeral costs are reimbursed after the death of the life insured."], ["Repatriation", "We arrange repatriation of mortal remains."]]) {
+    ["Hospital Cash", "A daily cash benefit is paid for each day in hospital."], ["Funeral Expenses", "Funeral costs are reimbursed after the death of the life insured."], ["Repatriation", "We arrange repatriation of mortal remains."], ["Death Funeral Grant", "A grant towards funeral costs is paid on death."], ["Accidental Death Burial Expenses", "Burial expenses are reimbursed."]]) {
     const line = unreadAmountLine(3, quote, benefitName);
     assert.equal(pointsToScheduleSum(row({ attention: "unreadable", benefitName, quote }), line), false, `${benefitName}: ${line}`);
     assert.equal(pointsToScheduleSum(row({ benefitName, quote }), named), false, benefitName);

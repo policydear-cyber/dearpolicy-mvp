@@ -18,6 +18,9 @@ const SUM_BENEFIT = /\b(?:death|dies|terminal(?:ly)?\s+ill(?:ness)?|total\s+(?:a
 const NAMES_SUM = /\b(?:sum\s+(?:insured|assured)|insured\s+amount|amount\s+(?:of\s+)?(?:insurance|cover(?:age)?)|coverage\s+amount|face\s+amount)\b/i;
 /** Never beside a waiver: it pays no amount itself, so a sum insured beside it misleads (#348 shows it as named). */
 const WAIVER = /\bwaiv(?:e|er|es|ed|ing)\b/i;
+/** A benefit named after death but paying something else (a funeral grant, burial expenses, a cash allowance) is not the sum
+ * insured either (TE #355). */
+const OTHER_PAYMENT = /\b(?:funeral|burial|cremation|expenses?|costs?|allowance|cash|grant)\b/i;
 const WHOLE_SUM = /\bpays the whole sum insured, which this document does not print for you\b/i;
 
 /** Whether the row, showing `line` as what it pays, is one of those. */
@@ -26,7 +29,7 @@ export function pointsToScheduleSum(b: { formulaKind: string; attention: string 
   if (b.formulaKind !== "none" || b.attention === "confirm" || b.needsConfirmation || b.planColumns || !NO_AMOUNT_HERE.test(line)) return false;
   const words = `${b.benefitName} ${b.quote ?? ""}`;
   if (WAIVER.test(words)) return false;
-  return WHOLE_SUM.test(line) || SUM_BENEFIT.test(b.benefitName) || NAMES_SUM.test(b.quote ?? "");
+  return WHOLE_SUM.test(line) || (SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName)) || NAMES_SUM.test(b.quote ?? "");
 }
 
 export const SCHEDULE_SUM_POINTER = "If your schedule prints a sum insured for this policy, Coverage shows it.";
