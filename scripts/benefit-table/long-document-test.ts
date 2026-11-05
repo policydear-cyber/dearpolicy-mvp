@@ -296,7 +296,8 @@ async function main() {
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
       row("Medical expenses", 250_000, lines[0]), row("Trip cancellation", 10_000, lines[1]), row("Curtailment", 5_000, lines[2]),
-      row("Hospital cash", 200, lines[3]), row("Hospital allowance", 8_000, lines[4]), row("Hospital allowance", 200, lines[4]),
+      // A daily rate is read as one: shown as "up to S$200" it would lose its unit (unit-before-test).
+      row("Hospital cash", 200, lines[3]), row("Hospital allowance", 8_000, lines[4]), { ...row("Hospital allowance", 200, lines[4]), pays: "per_day" },
       row("Accidental death", 100_000, lines[5]),
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital allowance", 8_000], ["Hospital allowance", 200], ["Accidental death", 100_000]]);
@@ -310,7 +311,7 @@ async function main() {
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
-      row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), row("Hospital income", 200, lines[2]), row("Hospital income", 20_000, lines[2]),
+      row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), { ...row("Hospital income", 200, lines[2]), pays: "per_day" }, row("Hospital income", 20_000, lines[2]),
       row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]),
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000]]);
