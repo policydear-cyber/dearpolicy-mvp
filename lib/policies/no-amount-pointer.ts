@@ -25,6 +25,10 @@ const WAIVER = /\bwaiv(?:e|er|es|ed|ing)\b/i;
  * insured either (TE #355). */
 const OTHER_PAYMENT = /\b(?:funeral|burial|cremation|expenses?|costs?|allowance|cash|grant)\b/i;
 const WHOLE_SUM = /\bpays the whole sum insured, which this document does not print for you\b/i;
+/** A passage that pays a share, a multiple or a capped part of the sum ("25% of the sum assured, up to S$250,000", "double the
+ * sum assured", "an extra 50%"): the whole sum on Coverage is not what it pays, so a row whose amount could not be read gets
+ * no pointer beside it (TE #365 EXTRA 1-5). */
+const SHARE_OR_CAP = /%|\bper\s*cent\b|\bpercent(?:age)?\b|\bhalf\b|\bdouble\b|\btwice\b|\btriple\b|\bthrice\b|\bextra\b|\badditional\b|\bbooster\b|\bmultiple\b|\btimes\b|\bfold\b|\b\d+\s*\/\s*\d+\b|\b(?:thirds?|quarters?|fifths?|tenths?)\b|\bportion\b|\bshare\b|\bmax(?:imum|\.)?\b|\bup\s+to\b|\blimit(?:ed)?\b|\bcap(?:ped)?\b|\bnot\s+exceed(?:ing)?\b/i;
 /** unreadAmountLine's last line: the passage was read, its amount was not. */
 const NOT_READ = /^The amount on (?:page \d+|the page) could not be read\.$/;
 
@@ -35,7 +39,7 @@ export function pointsToScheduleSum(b: { formulaKind: string; attention: string 
   if (b.formulaKind !== "none" || b.attention === "confirm" || b.needsConfirmation || b.planColumns || !(NO_AMOUNT_HERE.test(line) || notRead)) return false;
   const words = `${b.benefitName} ${b.quote ?? ""}`;
   if (WAIVER.test(words)) return false;
-  if (notRead) return SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName);
+  if (notRead) return SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName) && !SHARE_OR_CAP.test(words);
   return WHOLE_SUM.test(line) || (SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName)) || NAMES_SUM.test(b.quote ?? "");
 }
 

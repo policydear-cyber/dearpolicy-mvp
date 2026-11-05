@@ -76,6 +76,16 @@ test("a sum-insured row whose amount could not be read gets it only when Coverag
   // A benefit that pays something other than the sum insured, or a waiver, never gets it, whatever Coverage holds.
   for (const benefitName of ["Hospital Cash", "Funeral Expenses", "Death Funeral Grant", "Waiver of Premium on Death", "Emergency Medical Evacuation", "Main Benefit"])
     assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName }), line), false, benefitName);
+  // A share, a multiple or a cap of the sum is not the whole sum on Coverage, in the passage or in the name (TE #365 EXTRA 1-5).
+  for (const [benefitName, q] of [["Early Critical Illness", "Early critical illness: 25% of the sum assured, up to S$250,000"],
+    ["Accidental Death Benefit", "Accidental death: double the sum assured (200%)"], ["Critical Illness Booster", "An extra 50% of the sum assured"],
+    ["Death Benefit", "Death benefit: 105% of the sum assured"], ["Juvenile Critical Illness", "Juvenile critical illness: 20 per cent of the sum assured, max S$25,000"],
+    ["Death Benefit", "We pay twice the sum assured on accidental death."], ["Terminal Illness Benefit", "Half of the sum assured is paid in advance."],
+    ["Critical Illness Benefit", "One third of the sum assured, not exceeding S$100,000"], ["Death Benefit", "We pay the sum assured, limited to S$1,000,000 per life."],
+    ["Double Indemnity Death Benefit", "Payable on accidental death."], ["Additional Death Benefit", "Payable on death within 90 days of an accident."]])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: q }), line), false, `${benefitName}: ${q}`);
+  // The plain death or illness passage still gets it.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, quote: "The sum assured is payable on death of the life assured." }), line), true);
   // Only an unreadable row, and only the plain "could not be read" line: an amount awaiting a check, or a line that already
   // says where its amount comes from, gets none.
   assert.equal(pointsToScheduleSum(unread({ foundSum: true, attention: "confirm" }), line), false);
