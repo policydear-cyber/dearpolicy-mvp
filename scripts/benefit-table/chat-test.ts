@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -69,10 +69,10 @@ const rows = chatRows(tableWith(), HOUSE);
 const idOf = (person: string, benefit: string) => rows.find((r) => r.person === person && r.benefit === benefit)!.id;
 
 /** The model's reply with these statements, through the row step, readModelAnswer and verifyAnswer. */
-function answer(statements: Record<string, unknown>[], rs = rows) {
+function answer(statements: Record<string, unknown>[], rs = rows, forNobody = false) {
   const raw = { bottomLine: "The amounts below.", nextSteps: [], question: null, statements: statements.map((s) => ({
     kind: "amount", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...s })) };
-  const fromRows = amountsFromRows(raw, rs, HOUSE);
+  const fromRows = amountsFromRows(raw, rs, HOUSE, undefined, "", [], forNobody);
   const parsed = readModelAnswer(fromRows.json)!;
   const { answer: a, report } = verifyAnswer(HOUSE, parsed, ["How much?"], new Set(fromRows.report.labels));
   if (process.env.DEBUG_CHAT) console.log(JSON.stringify({ st: parsed.statements, report }, null, 1));
@@ -83,6 +83,53 @@ function answer(statements: Record<string, unknown>[], rs = rows) {
   const amounts = (a.statements ?? []).filter((s) => s.amount).map((s) => ({ person: s.personName, text: s.text, amount: s.amount!.text }));
   return { amounts, dropped: fromRows.report.dropped, statements: a.statements ?? [] };
 }
+
+test("a chat for nobody in particular names every insured person's own card for a benefit, never only the one picked (live 637c547)", () => {
+  const amb = (person: string) => ({ row: idOf(person, "Ambulance Cost"), person, quote: "Ambulance Cost Up to S$500 per incident", eventFit: "any_event" });
+  const hip = (person: string) => ({ row: idOf(person, "Hip"), person, quote: "Hip 75%", eventFit: "any_event" });
+  const who = (r: ReturnType<typeof answer>) => r.amounts.map((a) => `${a.person}: ${a.amount}`).sort();
+  assert.deepEqual(who(answer([amb("Lim Ah Kow")], rows, true)), ["Lim Ah Kow: Up to S$500", "Tan Mei Ling: Up to S$500"]);
+  // Each person's own figure, from their own row (a different sum insured).
+  assert.deepEqual(who(answer([hip("Tan Mei Ling")], rows, true)), ["Lim Ah Kow: S$450,000", "Tan Mei Ling: S$150,000"]);
+  // Given once each when the model already gave both.
+  assert.deepEqual(who(answer([amb("Lim Ah Kow"), amb("Tan Mei Ling")], rows, true)), ["Lim Ah Kow: Up to S$500", "Tan Mei Ling: Up to S$500"]);
+  // A person's own card from the model, with its own conditions, is never replaced by one spread from an earlier card.
+  const per = { text: "Paid once per incident.", quote: "Up to S$500 per incident" };
+  const conds = (r: ReturnType<typeof answer>, person: string) => r.statements.filter((x) => x.amount && x.personName === person).map((x) => (x.conditions ?? []).map((c) => typeof c === "string" ? c : (c as { text: string }).text));
+  assert.deepEqual(conds(answer([amb("Lim Ah Kow"), { ...amb("Tan Mei Ling"), conditions: [per] }], rows, true), "Tan Mei Ling"), [[per.text]]);
+  // A spread card never takes the model's conditions, which may be about the person they were given for (TE #345): only
+  // its own row's printed ones.
+  const both = answer([{ ...amb("Lim Ah Kow"), conditions: [per, { text: "She has been insured over 10 months.", quote: "Up to S$500 per incident" }] }], rows, true);
+  assert.deepEqual(conds(both, "Tan Mei Ling"), [[]], JSON.stringify(both.statements));
+  // A chat about one person, or a question naming one, keeps to the card asked for.
+  assert.deepEqual(who(answer([amb("Lim Ah Kow")])), ["Lim Ah Kow: Up to S$500"]);
+  // A row printed for a qualified column ("Child", an employee-only column) is never spread to another person.
+  const childCash = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Hospital cash")!;
+  assert.ok(childCash.qualifier && rows.some((r) => r.person === "Tan Mei Ling" && r.benefit === "Hospital cash"));
+  assert.deepEqual(who(answer([{ row: childCash.id, person: "Lim Ah Kow", quote: "Hospital cash S$50 per day", eventFit: "any_event" }], rows, true)).filter((x) => /Tan/.test(x)), []);
+  // A benefit another member has no row for is given only for the person who has it.
+  const surrender = rows.find((r) => r.benefit === "Surrender value")!;
+  assert.deepEqual(who(answer([{ row: surrender.id, person: "Lim Ah Kow", quote: "Non-Guaranteed Surrender Value S$12,400", eventFit: "any_event" }], rows, true)), ["Lim Ah Kow: S$12,400"]);
+});
+test("whose words: a member's own name word or a family word names someone; 'my' and 'I' alone do not", () => {
+  for (const q of ["What does Mei Ling's plan pay?", "how much for my wife if she breaks a hip", "Berapa untuk isteri saya?", "我老婆住院可以赔多少", "what about ah kow", "¿Cuánto para mi hijo?"])
+    assert.equal(namesSomeone([q], HOUSE), true, q);
+  for (const q of ["What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "What do we get if our house floods?", "How much is the ambulance benefit?"])
+    assert.equal(namesSomeone([q], HOUSE), false, q);
+  // Allow-list (Critic #345): several people asked for, or the policy alone in the household's own benefit words. Anything
+  // that may point at one person (a pronoun, "the maid", "our helper", a possessive, a shared surname, an unknown word) does not spread.
+  const H4 = { ...HOUSE, members: [{ name: "Alex Tan", relationship: "self" }, { name: "Mary Tan", relationship: "spouse" }, { name: "Ben Tan", relationship: "child" }, { name: "Siti Aminah", relationship: "other" }] } as Household;
+  const own = [{ ...rows[0], benefit: "Hospital cash", product: "Group Scheme", cover: "Group Personal Accident" }] as ChatRow[];
+  for (const q of ["How much do we each get?", "Who gets hospital cash?", "How much hospital cash does the group policy pay?", "How much do we get for hospital cash?"])
+    assert.equal(asksForNobody([q], H4, own), true, q);
+  for (const q of ["Is she covered for hospital cash?", "Does he get the dental benefit?", "What does his policy pay for ICU?", "What about her?", "Can the missus claim outpatient?",
+    "How much for the hubby's surgery?", "Our helper was warded, how much?", "Is the maid covered?", "The boy broke his arm, how much?", "Grandson got dengue, how much hospital cash?",
+    "Mak was warded, how much?", "Appa had surgery, what's covered?", "Is the toddler covered?", "How much for the twins?", "What's the hospital cash for the employee?", "Is Tan covered?",
+    "What's the most my hospital plan pays in total?", "Am I covered for a broken wrist?", "I broke my hip, how much?", "Berapa saya boleh tuntut?", "How much for Mei Ling?",
+    "Can we claim for mak hospital stay?", "Who covers grandson for dental?", "Can we claim hospital cash for junior?", "We want hospital cash for boyfriend",
+    "Everyone covered for dental incl. maid?", "How much each day for nephew?", "How much for Li?", "How much would Encik Ahmad get?"])
+    assert.equal(asksForNobody([q], H4, own), false, q);
+});
 
 test("the table block numbers every row and states the figure the Coverage page shows", () => {
   const block = renderTable(rows);
