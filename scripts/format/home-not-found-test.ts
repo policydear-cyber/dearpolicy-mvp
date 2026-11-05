@@ -31,6 +31,8 @@ test("nothing missing: nothing shown", () => {
 });
 test("Home puts only found cover in tiles and the rest in the line, by status", () => {
   const page = readFileSync("app/page.tsx", "utf8");
+  // "On file, please confirm" (#358) keeps its own tile, with no amount: it is never folded into "Not found".
+  assert.match(page, /c\.status==="on_file"\?<><strong className="coverage-status muted-status">On file, please confirm<\/strong>/);
   assert.match(page, /\{data\?\.coverages\?\.some\(c=>c\.status!=="not_covered"\)&&<div className="coverage-grid">\{data\.coverages\.filter\(c=>c\.status!=="not_covered"\)\.map\(c=>/);
   assert.match(page, /<HomeNotFound categories=\{\(data\?\.coverages\?\?\[\]\)\.filter\(c=>c\.status==="not_covered"\)\.map\(c=>c\.category\)\} memberId=\{active\?\.id\?\?""\} note=\{data\?\.notFullyRead\}\/>/);
 });

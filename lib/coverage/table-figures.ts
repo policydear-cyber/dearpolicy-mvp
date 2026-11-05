@@ -166,6 +166,10 @@ export function categoryOfBenefit(benefit: string, section?: string | null): str
  * nowhere. Only these two categories are read from a section or cover name, the row's own name decides first, and a row
  * naming another kind of payment or cover for other people is never moved. The same for any insurer, market or currency. */
 const CI_COVER = new RegExp(String.raw`\b(?:critical\s+illness(?:es)?|dread\s+diseases?|major\s+illness(?:es)?)\b`, "iu");
+/** The uppercase abbreviation "CI" standing alone in a cover's own name ("Lotus CI Care", "CI Plus (Rider)"): a whole word
+ * between spaces, brackets or the ends of the name, never inside a word ("CIRCLE"), a code ("CIF", "CIS", "CI-4004") or a
+ * number ("CI 4004"). Read only for a row that names nothing but an illness (categoryOfRow). */
+const CI_ABBREVIATION = /(?<=^|[\s(])CI(?=$|\)|\s+(?![\s\d]))/u;
 const EARLY_COVER = new RegExp(String.raw`\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b|\bpenyakit\s+kritikal\s+(?:peringkat\s+)?awal\b|早期危疾|早期重大疾病`, "iu");
 /** The words a covered illness is named with, and nothing else (Critic R on #252 H1a): every word of the row's name must be
  * one of them, so "Cancer Screening Benefit", "Child Cancer Benefit", "Kematian akibat Kanser", "癌症身故保险金" or "Liver
@@ -220,7 +224,7 @@ export function categoryOfRow(r: { benefit: string; section?: string | null } & 
   const own_ = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const names = [r.section, r.cover, !r.cover || own_(r.cover) === own_(r.product) ? r.product : null].filter((x): x is string => !!x);
   if (names.some((n) => EARLY_COVER.test(n))) return "Early Critical Illness";
-  if (!names.some((n) => CI_COVER.test(n))) return null;
+  if (!names.some((n) => CI_COVER.test(n) || CI_ABBREVIATION.test(n))) return null;
   return EARLY_STAGE.test(r.benefit) ? "Early Critical Illness" : "Critical Illness";
 }
 

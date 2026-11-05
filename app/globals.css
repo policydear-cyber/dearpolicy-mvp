@@ -236,7 +236,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .coverage-card.covered { border-color: var(--good-line); }
 .coverage-card.reference_found { background: var(--surface-2); }
 .coverage-card.needs_review { border-color: var(--warn-line); background: var(--warn-tint); }
-.coverage-card.not_covered { background: var(--surface-2); }
+.coverage-card.not_covered, .coverage-card.on_file { background: var(--surface-2); }
 .coverage-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .coverage-icon { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--brand-ink); background: var(--surface-2); font-size: var(--fs-lg); font-weight: 650; }
 .coverage-card.covered .coverage-icon { background: var(--good-tint); border-color: var(--good-line); color: var(--good-text); }
@@ -249,13 +249,13 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .home-not-found small { color: var(--muted); }
 .coverage-status.reference-status { color: var(--ink-2); }
 .coverage-status.review-status { color: var(--warn-text); }
-.coverage-card.not_covered .coverage-status { color: var(--ink-2); }
+.coverage-card.not_covered .coverage-status, .coverage-card.on_file .coverage-status { color: var(--ink-2); }
 .coverage-amount { font-size: var(--fs-sm); font-weight: 650; color: var(--money); font-variant-numeric: tabular-nums; }
 .coverage-card small { color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; margin-top: auto; }
 .evidence-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); flex: none; }
 .evidence-dot.covered { background: var(--good); }
 .evidence-dot.reference_found { background: var(--ink-2); }
-.evidence-dot.not_confirmed, .evidence-dot.not_covered { background: var(--line-strong); }
+.evidence-dot.not_confirmed, .evidence-dot.not_covered, .evidence-dot.on_file { background: var(--line-strong); }
 .evidence-dot.needs_review { background: var(--warn); }
 .premium-breakdown-panel, .dashboard-panel { border-radius: var(--r-lg); }
 .premium-breakdown-list, .payment-list { display: grid; gap: 8px; }
