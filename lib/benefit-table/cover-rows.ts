@@ -28,13 +28,9 @@ const withoutFigure = <R extends RowLike>(r: R): R => ({ ...r, percent: null, ba
 
 const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 
-/** Words that never tell one benefit from another, in the languages policies are written in. A closed list. */
+/** Words that never tell one benefit from another, in English. A closed list. */
 const FILLER = new Set([
   "benefit", "benefits", "rider", "riders", "cover", "coverage", "plan", "the", "of", "on", "for", "and", "a", "an", "to", "in", "upon", "with",
-  "manfaat", "faedah", "perlindungan", "untuk", "dan", "atas", "bagi", "pelan",
-  "prestation", "prestations", "garantie", "garanties", "de", "du", "des", "la", "le", "les", "en", "et", "au", "aux",
-  "leistung", "leistungen", "der", "die", "das", "des", "für", "bei", "und", "von",
-  "beneficio", "beneficios", "cobertura", "el", "los", "del", "por", "y",
 ]);
 /** Short forms read in full, so "TPD" and "total and permanent disability" are the same words. A closed list. */
 const SHORT: Record<string, string[]> = {

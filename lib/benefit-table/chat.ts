@@ -676,13 +676,7 @@ const MOST_ONLY_PHRASES = /\b(?:(?:hospital|hospitalisation|hospitalization|trav
 const MOST_ONLY_WORDS = new Set(("what what's whats how much many is the a an my our your his her their me i we us you can could would will does do should "
   + "get gets give gives pay pays paid payout payouts payable claim claims claimable cover covers covered coverage plan plans policy policies scheme schemes insurance insurer "
   + "benefit benefits most maximum max highest limit limits cap caps capped ceiling in total totals overall altogether combined under from for of on to by with "
-  + "each per year yearly annual annually lifetime amount amounts sum sums any which plan's policy's scheme's "
-  // Malay, French and Spanish: the same kinds of words only.
-  + "apakah apa berapa maksimum maksima paling tinggi banyak polisi pelan insurans saya kami kita anda bayar dibayar membayar yang boleh tuntut dituntut jumlah untuk "
-  + "quel quelle est le la les l' maximum que mon ma mes notre nos votre contrat contrats police assurance paie paye verse rembourse plafond montant de du des pour "
-  + "cuál cual es el la los las máximo maximo que mi mis nuestra nuestro su póliza poliza pólizas seguro paga cubre tope monto de del por").split(" "));
-/** Chinese has no spaces: these words, in any order, and nothing else. */
-const MOST_ONLY_CJK = /我的|我们的|我們的|保单|保單|保险|保險|计划|計劃|最多|最高|上限|封顶|封頂|可以|能|赔|賠|付|多少|是|的|总共|總共|一共/g;
+  + "each per year yearly annual annually lifetime amount amounts sum sums any which plan's policy's scheme's").split(" "));
 export function asksMostOfNothing(question: string, rows: ChatRow[] = []): boolean {
   const q = question.normalize("NFKC").toLowerCase().replace(/[’`]/g, "'");
   if (!MOST_WORDS.some((w) => w.test(q)) || EVENT_WORDS.some((w) => w.test(q))) return false;
@@ -690,7 +684,7 @@ export function asksMostOfNothing(question: string, rows: ChatRow[] = []): boole
   // often an illness or a place ("cancer", "japan"), which tells of an event (Critic #319 H1b).
   const spaced = (t: string) => ` ${t.toLowerCase().split(/[^\p{L}\d']+/u).filter(Boolean).join(" ")} `;
   const names = [...new Set(rows.map((r) => spaced(r.product ?? "").trim()).filter((n) => n.split(" ").length >= 2 && !EVENT_WORDS.some((e) => e.test(n))))].sort((a, b) => b.length - a.length);
-  let left = spaced(q.replace(MOST_ONLY_PHRASES, " ").replace(MOST_ONLY_CJK, " "));
+  let left = spaced(q.replace(MOST_ONLY_PHRASES, " "));
   for (const n of names) left = left.split(` ${n} `).join("  ");
   return left.split(" ").filter(Boolean).every((w) => MOST_ONLY_WORDS.has(w));
 }
@@ -701,13 +695,8 @@ export function asksMostOfNothing(question: string, rows: ChatRow[] = []): boole
 /** The same pattern with \b as a word edge in any script: JavaScript's \b sees "é" and "ñ" as no letter, so
  * "hospitalisé" would never end a word. */
 const lettersEdge = (r: RegExp) => new RegExp(r.source.replace(/\\b/g, "(?:(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}]))"), r.flags.replace("u", "") + "u");
-const MOST_WORDS = [/\b(?:most|maximum|max|highest|ceiling|caps?(?=\s+(?:on|of|for))|capped|limits?|up\s+to\s+how\s+much)\b/,
-  /\b(?:paling\s+banyak|paling\s+tinggi|maksimum|maksima|tertinggi|had\s+(?:maksimum|keseluruhan|tuntutan|seumur))\b/, /(?:最多|最高|上限|封顶|封頂)/,
-  /(?:\bmaximum\b|\bmaximale?s?\b|\bplafonds?\b|\bau\s+plus\b|\ble\s+plus\b)/, /(?:\bm[áa]ximos?\b|\btopes?\b|\bcomo\s+mucho\b|\blo\s+m[áa]s\b)/].map(lettersEdge);
-const TOGETHER_WORDS = [/\b(?:all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+|these\s+)?claims|every\s+claim|(?:several|multiple|repeated|many)\s+claims|claims\s+combined|combined\s+claims|aggregate|cumulative(?:ly)?|lifetime\s+(?:limit|limits|cap|maximum|max)|(?:in|over|during)\s+(?:my|his|her|their|a)\s+lifetime|over\s+(?:the|many)\s+years|(?:two|three|several|multiple|different|more\s+than\s+one|repeated|many)\s+(?:\w+\s+){0,3}(?:claims|illnesses|conditions|diagnoses)|each\s+time\s+(?:i|he|she|we|they)\s+claim|over\s+(?:my|his|her|their)\s+(?:life|lifetime)|across\s+(?:all|both|every)\b|overall\s+(?:limit|cap|maximum|max|most))\b/,
-  /\b(?:semua\s+tuntutan|kesemua\s+tuntutan|keseluruhan\s+tuntutan|seumur\s+hidup|had\s+keseluruhan)\b/, /(?:所有.{0,8}(?:理赔|理賠|索赔|索償|索偿)|多次|终身|終身|累计|累計)/,
-  /(?:\btoutes\s+(?:les|mes|ses|nos)\s+(?:demandes|r[ée]clamations|indemnisations|remboursements|sinistres)\b|\bcumul[ée]e?s?\b|\bplafond\s+global\b|\bplusieurs\s+(?:sinistres|r[ée]clamations|demandes|maladies)\b|\blimite\s+globale\b|\bau\s+fil\s+des\s+ann[ée]es\b|\b[àa]\s+vie\b)/,
-  /(?:\btodas\s+(?:las|mis|sus|nuestras)\s+reclamaciones\b|\bacumulad[oa]s?\b|\bvarias\s+(?:reclamaciones|enfermedades)\b|\ba\s+lo\s+largo\s+de\s+los\s+a[ñn]os\b|\bde\s+por\s+vida\b)/].map(lettersEdge);
+const MOST_WORDS = [/\b(?:most|maximum|max|highest|ceiling|caps?(?=\s+(?:on|of|for))|capped|limits?|up\s+to\s+how\s+much)\b/].map(lettersEdge);
+const TOGETHER_WORDS = [/\b(?:all\s+(?:of\s+)?(?:my\s+|the\s+|his\s+|her\s+|our\s+|their\s+|these\s+)?claims|every\s+claim|(?:several|multiple|repeated|many)\s+claims|claims\s+combined|combined\s+claims|aggregate|cumulative(?:ly)?|lifetime\s+(?:limit|limits|cap|maximum|max)|(?:in|over|during)\s+(?:my|his|her|their|a)\s+lifetime|over\s+(?:the|many)\s+years|(?:two|three|several|multiple|different|more\s+than\s+one|repeated|many)\s+(?:\w+\s+){0,3}(?:claims|illnesses|conditions|diagnoses)|each\s+time\s+(?:i|he|she|we|they)\s+claim|over\s+(?:my|his|her|their)\s+(?:life|lifetime)|across\s+(?:all|both|every)\b|overall\s+(?:limit|cap|maximum|max|most))\b/].map(lettersEdge);
 const EVENT_WORDS = [/\b(?:diagnos(?:ed|is)|hospitali[sz](?:ed|ation)|admitted|in\s+(?:the\s+)?hospital|warded|icu|intensive\s+care|broke|broken|fractured?|accident|injur(?:ed|y|ies)|surgery|operation|operated|died|passed\s+away|death\s+of|stroke|heart\s+attack|disabled|ambulance|spent\s+\d+\s+days?)\b/,
   /\b(?:didiagnosis|disahkan|dimasukkan\s+ke\s+hospital|masuk\s+hospital|kemalangan|patah|cedera|pembedahan|meninggal)\b/, /(?:住院|确诊|確診|手术|手術|意外|骨折|去世|过世|過世|受伤|受傷)/,
   /(?:\bhospitalis[ée]e?s?\b|\bdiagnostiqu[ée]e?s?\b|\bop[ée]r[ée]e?s?\b|\baccident\b|\bfracture\b|\bd[ée]c[ée]d[ée]e?s?\b|\bbless[ée]e?s?\b)/,
@@ -743,7 +732,55 @@ function readsAsLimit(r: ChatRow): boolean {
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
 /** `earlier`: the household's earlier messages in this conversation, latest first. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = []): { json: unknown; report: RowReport } {
+/** Whether the household's words name one of its members: a word of a member's name that no other member shares, or a
+ * family word (closed list, in the languages households write in). */
+const FAMILY_WORDS = /\b(?:wife|husband|spouse|partner|son|sons|daughter|daughters|child|children|kid|kids|baby|mother|father|mum|mom|dad|mummy|daddy|parents?|brother|sister|grandma|grandpa|grandmother|grandfather|isteri|suami|anak|ibu|ayah|emak|bapa|esposa|esposo|hijo|hija|madre|padre|femme|mari|fils|fille|m[eè]re|p[eè]re)\b|妻子|老婆|丈夫|老公|儿子|兒子|女儿|女兒|孩子|妈妈|媽媽|爸爸|父亲|父親|母亲|母親/i;
+export function namesSomeone(said: string[], household: Household): boolean {
+  const text = said.join(" ").normalize("NFKC").toLowerCase();
+  if (FAMILY_WORDS.test(text)) return true;
+  const words = (n: string) => baseName(n).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
+  const people = household.members.map((m) => m.name);
+  const heard = new Set(text.split(/[^\p{L}]+/u));
+  // Any word of a member's name, shared or not: "Is Tan covered?" names one of several Tans (Critic #345).
+  return people.some((p) => words(p).some((w) => heard.has(w)));
+}
+/** The speaker alone ("I", "my", "saya", "我", "je", "yo"): the account's own member (relationship "self") is meant, as
+ * the model is told, so the words ask for one person. "We", "our" and "我们" ask for the household. Closed list. */
+const FIRST_PERSON = /\b(?:i|me|my|mine|myself|i'm|i’m|im|i've|i’ve|i'd|i’d|i'll|i’ll|saya|aku|daku|je|j'|moi|mon|ma|mes|yo|mi|mis|me)\b|我(?![们們])/i;
+/** Whether the household's words ask for nobody in particular: no member named (namesSomeone), and not the speaker alone. */
+/** Words that ask for more than one person (closed list). */
+const MANY_PEOPLE = /\b(?:we|our|ours|us|everyone|everybody|each|both|all\s+of\s+us|the\s+family|who|whose|anyone|anybody|per\s+person|each\s+person)\b/i;
+/** Words that point at one person without naming them: a third-person pronoun (closed list). */
+const ONE_PERSON = /\b(?:he|she|him|her|his|hers|they|them|their|theirs|himself|herself|themselves)\b/i;
+/** What "the", "our" or a possessive may be about without pointing at a person: the policy itself (closed list). */
+const POLICY_NOUN = /^(?:polic(?:y|ies)|plans?|schemes?|group|insurers?|insurance|family|cover|coverage)$/i;
+/** Whether the household's words ask for nobody in particular: allow-list, default no (Critic #345). They must ask for
+ * several people (MANY_PEOPLE) or be about the policy alone, and never point at one person: no member's name word, no
+ * family word, not the speaker alone, no third-person pronoun, no possessive "'s" on anything but the policy, and every
+ * "the …" or "our …" is the policy itself ("our helper", "the maid", "the employee", "the boy" point at someone). */
+export function asksForNobody(said: string[], household: Household, rows: readonly ChatRow[] = []): boolean {
+  // "Tell me", "show me", "give me" ask for the answer, not about the speaker (TE #345).
+  const text = said.join(" ").normalize("NFKC").replace(/[’`]/g, "'").replace(/\b(?:tell|show|give)\s+me\b/gi, "tell");
+  if (namesSomeone(said, household) || FIRST_PERSON.test(text) || ONE_PERSON.test(text)) return false;
+  // The words of the benefits, products and covers the household holds: "the ambulance benefit" is about the policy.
+  const own = new Set(rows.flatMap((r) => `${r.benefit} ${r.product ?? ""} ${r.cover ?? ""}`.toLowerCase().split(/[^\p{L}\d]+/u)).filter((w) => w.length >= 3));
+  const policyWord = (w: string) => POLICY_NOUN.test(w) || own.has(w.toLowerCase());
+  for (const m of text.matchAll(/\b([\p{L}]+)'s?\b/gu)) if (/'s?$/.test(m[0]) && !policyWord(m[1])) return false;
+  for (const m of text.matchAll(/\b(?:the|our|this|that|these|those)\s+([\p{L}]+)/giu)) if (!policyWord(m[1])) return false;
+  // Several people, or the policy alone: every word is a question, policy, pay or several-people word, or a word of a
+  // benefit's or product's name the household holds ("How much hospital cash does the group policy pay?", "Who gets
+  // hospital cash?"). Any other word ("grandson", "mak", "junior", "maid") may be a person, so no (Critic #345).
+  const words = text.toLowerCase().split(/[^\p{L}\d']+/u).filter(Boolean);
+  return words.length > 0 && words.every((w) => POLICY_ONLY_WORDS.has(w) || own.has(w));
+}
+const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does do the a an can will would pay pays paid payout payable claim claimable cover covers covered tell "
+  + "coverage plan plans policy policies scheme group insurance insurer benefit benefits amount amounts sum get gets give gives for of on under from in per day year total "
+  + "most maximum max limit there any which we our ours us everyone everybody each both all who whose anyone anybody person family day days").split(" "));
+/** `forNobody`: the chat is about no one in particular and the household's words ask for nobody (asksForNobody). Then a
+ * card given for one person's row is given for every other member's own row of the same benefit and document: each
+ * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
+ * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
@@ -789,6 +826,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && samePolicy(o, r) && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
+  // Every row the model itself gives a card for: a person's own card from the model (with its own conditions) is never
+  // replaced by a spread one made from another person's card (forNobody).
+  const modelRows = pointed.flatMap((x) => { const r = x && x.kind === "amount" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined; return r ? [r] : []; });
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
@@ -888,15 +928,22 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         quote: c.quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
       away.set(key, st); points.push(st);
     }
-    for (const r of [row, ...companions, ...firstYear]) {
+    // The same row of every other member, when the chat is for nobody in particular (forNobody).
+    const others = forNobody ? rows.filter((o) => o.personId !== row.personId && !given.has(o.id) && !ruledOut.has(o.id) && o.docIndex === row.docIndex
+      && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
+      && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
+      && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
       // Premiums for different policy years are paid one after the other, never alternatives (live run 23 Oct, A6).
       // A total limit's card always says what the limit is printed for (its sentence), whatever the model gave: its name
       // alone ("Limit in total on Critical Illness Benefit claims") would leave out a scope such as early stages only.
       const own = r.conditions.map((t) => ({ text: r.scopeOnCard ? `${t}, up to this amount.` : t, quote: t }));
+      // A spread card (others) keeps only its own row's printed conditions: a model condition may be about the person it was
+      // given for ("she has been insured over 10 months") and is never copied to another person's card (TE #345).
       const conditions = r !== named ? own : r.scopeOnCard ? [...own, ...(Array.isArray(raw.conditions) ? raw.conditions : [])] : undefined;
-      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || others.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(conditions ? { conditions } : {}) }, labels, names);
       // A printed cover period never changes what a card says: every policy on file is treated as in force (DC, 31 Oct).
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).

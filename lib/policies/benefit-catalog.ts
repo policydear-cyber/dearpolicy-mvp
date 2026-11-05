@@ -1,4 +1,5 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
+import { WORD_FRACTIONS } from "./word-fractions";
 import { replacedFigures } from "./amendments";
 import { pointsElsewhere, printsAmount } from "./model-row-shape";
 import { paidMonthly } from "./paid-monthly";
@@ -727,12 +728,7 @@ function prevailingNotProved(text:string,benefitName?:string|null):boolean{
   return label!==""&&label!==labelWords(benefitName??"");
 }
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
-const WORD_FRACTIONS=[
-  {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
-  {words:"one quarter",value:0.25},{words:"three quarters",value:0.75},{words:"one fifth",value:0.2},
-  {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
-  {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
-];
+
 /** A share of the sum insured whose passage also prints an amount or a bound ("10% of Sum Insured, up to S$25,000",
  * "subject to a maximum of RM25,000", "not exceeding 25 000", "up to the limit in the Benefit Table", "capped at 1/40 of the
  * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover
@@ -757,15 +753,13 @@ const PRINTS_AN_AMOUNT=new RegExp([
  * (a percentage that is not a share of an amount, years, decibels, a length, a weight, a time), or an age compared with a
  * plain number. Allow-list: any other comparative ("never greater than the amount in force", "if smaller than that",
  * "cannot be higher than 20% of the Sum Insured") stays a possible cap (Critic R421, TE pr215). */
-const SHARE_OF_AN_AMOUNT=String.raw`\s*(?:of|daripada|de)\s+(?:the\s+|your\s+|this\s+|that\s+|any\s+|all\s+)?(?:\p{L}+\s+){0,2}?(?:sum|insured|assured|benefits?|premiums?|amounts?|bills?|claims?|limits?|basic|base|death|totals?|polic(?:y|ies)|charges?|loans?|expenses?|costs?|cover(?:age)?|jumlah|faedah)\b`;
+const SHARE_OF_AN_AMOUNT=String.raw`\s*(?:of)\s+(?:the\s+|your\s+|this\s+|that\s+|any\s+|all\s+)?(?:\p{L}+\s+){0,2}?(?:sum|insured|assured|benefits?|premiums?|amounts?|bills?|claims?|limits?|basic|base|death|totals?|polic(?:y|ies)|charges?|loans?|expenses?|costs?|cover(?:age)?|jumlah|faedah)\b`;
 const EVENT_UNIT=String.raw`(?:\s?(?:%|per\s?cent)(?!${SHARE_OF_AN_AMOUNT})|\s?(?:years?|yrs?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?|db|decibels?|cm|mm|centimet(?:re|er)s?|millimet(?:re|er)s?|met(?:re|er)s?|m|feet|ft|inch(?:es)?|kg|kilograms?|lbs?|pounds?\s+in\s+weight)\b)`;
 /** A negation up to three words before the comparative ("not more than 60 days", "never higher than 25%", "which shall
  * not be greater than", "isn't more than") makes it a cap on what is paid, never a threshold of the event (TE pr215 C11,
  * C18, C19; Critic R425). */
 const NEGATED=String.raw`(?<!(?:\b(?:no|not|never|cannot|nor|neither|tidak|bukan)|n['’]t)(?:\s+\p{L}+){0,3}\s+)`;
 const EVENT_THRESHOLD=new RegExp(String.raw`${NEGATED}\b(?:greater|higher|larger|more|lower|less|smaller|fewer|older|younger)\s+than\s+(?:or\s+equal\s+to\s+)?(?:\d+(?:\.\d+)?(?:\s+(?:consecutive|continuous|full|calendar|straight|complete))?${EVENT_UNIT})`
-  // The same comparative in Malay: "lebih daripada 15% permukaan badan".
-  +String.raw`|${NEGATED}\b(?:lebih|kurang)\s+(?:daripada|dari)\s+(?:\d+(?:\.\d+)?${EVENT_UNIT})`
   +String.raw`|\bage[ds]?\s+(?:is\s+|of\s+)?(?:greater|higher|more|lower|less|older|younger)\s+than\s+\d{1,3}\b(?![\d,.])`,"giu");
 /** PRINTS_AN_AMOUNT, with event thresholds taken out first. Only a threshold that comes before any share is taken out:
  * an event band names the event, then the share ("Burns - greater than 15% but less than 25% 30%"). A comparative after
@@ -776,7 +770,7 @@ const SHARE_FIGURE=new RegExp(String.raw`\d\s?%|\bper\s?cent\b|\b(?:${WORD_FRACT
 const SHARE_COUNT_SOURCE=String.raw`\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?per\s?cent\b|\b(?:${WORD_FRACTIONS.map(entry=>entry.words).join("|")})\b|\b(?:half|a\s+quarter|a\s+third)\b`;
 /** The insured amount in the languages read (English, Malay, Indonesian), after "of": "of the Sum Insured", "daripada
  * Jumlah Diinsuranskan", "dari Uang Pertanggungan". */
-const OF_INSURED=String.raw`\s*(?:(?:of|daripada|dari)\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:${INSURED_AMOUNT}|jumlah\s+(?:yang\s+)?(?:diinsuranskan|dijamin(?:kan)?)|uang\s+pertanggungan)`;
+const OF_INSURED=String.raw`\s*(?:(?:of)\s+)?(?:the\s+|your\s+)?(?:prevailing\s+|current\s+)?(?:${INSURED_AMOUNT})`;
 const SHARE_OF_INSURED=new RegExp(String.raw`(?:${SHARE_COUNT_SOURCE})`+OF_INSURED,"iu");
 function printsAnAmount(text:string){
   let out="",at=0;
@@ -824,15 +818,14 @@ const CHANGER_BEFORE_SHARE=/\b(?:deduct\w*|minus|net\s+of|offset|less\s+(?:any|t
 const PAY_WORD=/\b(?:pay|pays|paid|payable|paying|amount|amounts|benefit|benefits|sum)\b/u;
 const PER_BODY_PART=/\b(?:per|for\s+each|for\s+one)\s+(?:eye|ear|limb|arm|leg|hand|foot|finger|toe|thumb|tooth)\b/gu;
 /** What a condition on when or to whom a share is paid may say (allow-list, Critic R454): who is paid, what happens, when,
- * and who certifies it, in English and Malay. Any other word ("in five equal instalments", "to the extent not paid by any
+ * and who certifies it, in English. Any other word ("in five equal instalments", "to the extent not paid by any
  * other insurer", "dibahagi sama rata") may change what is paid, so the share is not used. */
 const CONDITION_WORDS=new Set(("if when where for once provided that within upon on following to after before during until as "
   +"due caused by resulting from result results resulted arise arises arising arose of the a an any one this that his her their your you our its it we us he she they "
   +"is are was were be been being has have had becomes become becoming occurs occur occurred happens happen happened "
   +"and in at least more than or equal with from date event direct directly expected use anniversary legs arms hands feet "
-  +"lasting lasts lasted continuous continuously tertanggung meninggal dibayarkan pemegang ahli kecelakaan sakit kritis "
+  +"lasting lasts lasted continuous continuously "
   +"hospitalised hospitalized confined warded confirmation confirmed made waiting named subject heart attack stroke cancer "
-  +"en cas de du des la le les décès accidentel accidentelle maladie grave diagnostic invalidité totale permanente assuré assurée bénéficiaire "
   +"diagnosis diagnosed diagnose death dies die died dying accident accidental accidents injury injuries illness illnesses "
   +"disease diseases condition conditions disability disabled disablement permanent permanently total totally "
   +"hospital hospitalisation hospitalization admission admitted intensive care coma surgery operation qualifying critical covered "
@@ -841,10 +834,6 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"insured life assured person persons member participant "
   +"age aged under over survival period term cover approval approve approved claim claims receipt proof notification notice "
   +"certified certification confirmed registered medical practitioner doctor specialist physician singapore overseas abroad "
-  +"apabila jika bila semasa sekiranya kepada selepas sebelum dalam tempoh oleh dengan yang mana akibat daripada dari "
-  +"didiagnosis diagnosis kematian meninggal dunia mati berlaku kemalangan kecederaan penyakit kritikal dilindungi hilang upaya kekal "
-  +"menyeluruh hospital pemilik polisi peserta penama waris benefisiari orang diinsuranskan dijamin hayat doktor perubatan berdaftar "
-  +"pengesahan tuntutan diluluskan kelulusan umur berumur atau menderita "
   // Who is paid, as a closed list of payee nouns: never an open slot for any words (Critic R461).
   +"executor executors administrator administrators assignee assignees assignment valid legal personal representative "
   +"representatives trust nominated appointed designated heirs heir failing "
@@ -853,8 +842,7 @@ const CONDITION_WORDS=new Set(("if when where for once provided that within upon
   +"liver lung failure requiring dialysis alzheimer dementia severe motor neurone neuron als parkinson multiple sclerosis "
   +"muscular dystrophy diabetes mellitus heart valve open coronary artery bypass graft angioplasty organ transplant "
   +"paraplegia quadriplegia tetraplegia hemiplegia systemic lupus erythematosus nephritis pulmonary hypertension primary hiv transfusion blood blindness deafness burns encephalitis meningitis aplastic anaemia anemia "
-  +"cervix uteri breast prostate brain early intermediate advanced kanser barah strok jantung serangan kegagalan buah pinggang "
-  +"kanker stadium peringkat type akhir gagal ginjal cardiaque crise vasculaire cérébral").split(" "));
+  +"cervix uteri breast prostate brain early intermediate advanced stage type").split(" "));
 /** A period the share is paid over, not a time it is paid in ("payable for 5 years", "for 12 months", "for life", Critic
  * R465): each payment may be the share, so the amount is not one share. A period that measures the event is the condition
  * ("if hospitalised for 5 consecutive days", "disabled for 6 months"), and "within", "before", "after" or "until" say when. */

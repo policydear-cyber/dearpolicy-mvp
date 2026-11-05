@@ -131,7 +131,6 @@ test("words after a share that change it, or a second share before it, give no f
     "Loss of hearing: hearing reduced by more than 80 decibels in one ear, 50% of Sum Insured",
     "Loss of speech: speech reduced to unintelligible sounds, 50% of Sum Insured",
     "Burns: 20% of body surface, 50% of Sum Insured",
-    "Luka bakar lebih daripada 15% permukaan badan: 50% daripada Jumlah Diinsuranskan",
     "100% of the Sum Assured will be payable in one lump sum.",
     "100% of the Sum Assured upon diagnosis of a Critical Illness",
     "10% of the sum insured if diagnosed under age 65",
@@ -139,7 +138,6 @@ test("words after a share that change it, or a second share before it, give no f
     "100% of the Sum Assured is payable within 30 days of our approval of the claim.",
     "On the death of the Life Assured, we will pay 100% of the Sum Assured to the policy owner.",
     "100% of the Sum Insured shall be paid upon permanent paralysis of two limbs, subject to the terms and conditions of this policy.",
-    "Kami akan membayar 100% daripada Jumlah Diinsuranskan apabila didiagnosis dengan mana-mana penyakit kritikal yang dilindungi.",
     "50% of the Sum Insured for each eye",
     "10% of the sum insured. We won't pay for a pre-existing condition.",
   ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "none", quote);
@@ -208,7 +206,6 @@ test("after 'when' or 'to whom', only words that say who, what, when or who cert
   for (const quote of ["100% of the Sum Assured is payable within 30 days of diagnosis.",
     "100% of the Sum Insured if diagnosed under age 65.", "We will pay the benefit of 100% of the sum insured to your estate upon your death.",
     "100% of the Sum Assured will be paid in one lump sum to the beneficiary in the event of death.",
-    "Sekiranya didiagnosis, 50% daripada Jumlah Diinsuranskan akan dibayar kepada Peserta.",
     "We pay 100% of the Sum Assured in one lump sum; payment is made by bank transfer.",
     "100% of the Sum Assured is payable to the policyowner upon death of the life assured, and we pay it within 14 days.",
     "100% of the Sum Insured is payable to the beneficiary upon the death of the Insured during the Benefit Term."])
@@ -226,7 +223,6 @@ test("ordinary conditions, payees and periods from other insurers keep the share
     "upon confirmation by a registered medical practitioner", "in one lump sum to the policyholder",
     "provided the diagnosis is made after the waiting period of 90 days", "for Total and Permanent Loss of Sight of one eye", "subject to the terms and conditions of this policy",
     "if the insured person dies as a result of an accident", "upon diagnosis of Major Cancer", "upon diagnosis of a covered Critical Illness, subject to a survival period of 14 days",
-    "apabila berlaku kematian akibat kemalangan", "kepada penama", "en cas de décès accidentel",
     "upon diagnosis of one of the 37 covered critical illnesses", "upon Total and Permanent Disability lasting at least 6 consecutive months",
   ]) assert.equal(shareBound("Benefit: 50% of the Sum Insured " + tail, "Benefit").kind, "none", tail);
 });
@@ -240,8 +236,6 @@ test("payees and illnesses from closed word lists keep the share; a period the s
     "100% of the Sum Assured will be paid to the assignee under a valid assignment.",
     "Upon the death of the Life Assured, 100% of the Sum Assured is paid to the trustees of the policy trust.",
     "100% of the Sum Insured is payable to the Policy Owner (or the beneficiary nominated by the Policy Owner).",
-    "100% daripada Jumlah Diinsuranskan akan dibayar kepada penama atau waris apabila Orang Yang Diinsuranskan meninggal dunia.",
-    "100% dari Uang Pertanggungan dibayarkan kepada Tertanggung apabila didiagnosis menderita Kanker Stadium Akhir.",
     "100% of the Sum Assured is payable upon diagnosis of end-stage kidney failure requiring dialysis.",
     "We pay 100% of the Sum Assured upon the diagnosis of Alzheimer's disease / severe dementia.",
     "25% of the Sum Assured is payable upon diagnosis of carcinoma-in-situ of the cervix uteri.",
@@ -298,4 +292,19 @@ test("the event verb in its own forms, and a share's own large figure, do not wi
     factKey: null, offsetDays: null, maximumDays: null }).formulaKind, "none");
   assert.equal(validateCatalogFormula({ kind: "sum_insured", value: 0.25, currency: "SGD", quote: "We pay 25% of the Sum Insured for a simple fracture.",
     factKey: null, offsetDays: null, maximumDays: null, benefitName: "Simple Fracture" }).formulaKind, "sum_insured");
+});
+
+// English only (DC 4 Nov): a share printed in another language is not read, so it gives no figure (fails closed). These
+// were read as paid in full before; they are kept here so a later change can never read them as a figure again.
+test("a share worded in another language gives no figure (English only)", async () => {
+  const { shareBound } = await import("@/lib/policies/benefit-catalog");
+  for (const quote of [
+    "Luka bakar lebih daripada 15% permukaan badan: 50% daripada Jumlah Diinsuranskan",
+    "Kami akan membayar 100% daripada Jumlah Diinsuranskan apabila didiagnosis dengan mana-mana penyakit kritikal yang dilindungi.",
+    "Sekiranya didiagnosis, 50% daripada Jumlah Diinsuranskan akan dibayar kepada Peserta.",
+    "100% daripada Jumlah Diinsuranskan akan dibayar kepada penama atau waris apabila Orang Yang Diinsuranskan meninggal dunia.",
+    "100% dari Uang Pertanggungan dibayarkan kepada Tertanggung apabila didiagnosis menderita Kanker Stadium Akhir.",
+  ]) assert.equal(shareBound(quote, "Critical Illness Benefit").kind, "unsure", quote);
+  for (const tail of ["apabila berlaku kematian akibat kemalangan", "kepada penama", "en cas de décès accidentel"])
+    assert.equal(shareBound("Benefit: 50% of the Sum Insured " + tail, "Benefit").kind, "unsure", tail);
 });

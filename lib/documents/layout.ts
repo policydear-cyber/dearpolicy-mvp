@@ -235,6 +235,7 @@ export function renderPageLayout(items:TextItem[],pageWidth:number):PageLayout{
   // exact-quote check keeps working against this text.
   return {text:lines.map(line=>line.text).join("\n"),lines};
 }
+import { WORDED_SHARE_CELL } from "@/lib/policies/word-fractions";
 /** A printed currency marker in front of an amount: a dollar sign with its
  * country prefix (S$, US$, HK$, A$ …), an ISO code (SGD, USD, EUR …), RM, € or
  * £. Only "S$"-style cells used to count, so a travel schedule printing
@@ -249,8 +250,11 @@ const VALUE_START=new RegExp(String.raw`^(?:${CURRENCY_MARKER}\s?\d|\d)`);
 const BARE_RATE=/^\d[\d,]*(?:\.\d{1,2})?\s*(?:per|\/|a)\s*(?:day|night|week|month|year)\b/i;
 function isValueCell(cell:string){
   if(cell.length<=80&&BARE_RATE.test(cell))return true;
+  // "One twelfth of Sum Insured": a share printed in words is the row's amount, on a closed list of fractions.
+  if(WORDED_SHARE_CELL.test(cell.replace(/\s+/g," ").trim()))return true;
   if(!AMOUNT.test(cell)||cell.length>80)return false;
-  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
+  // "As charged, up to RM 30,000": a reimbursement with its cap is an amount cell (stored as as-charged, never a formula).
+  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from|as charged)\b/i.test(cell);
 }
 export type BenefitRow={label:string;value:string;line:string;
   /** Where this row sits in the page's lines, so a heading above it (for
@@ -322,6 +326,10 @@ function labelAmountRow(line:PageLine|undefined){
   const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
   return !!left&&!AMOUNT.test(left)&&AMOUNT.test(right);
 }
+/** A cap opener in the name's column: at the end of the cell ("Ears, up to"), or at its start with a number after it
+ * ("Maximum 30 days per year"). A name such as "Maximum lifetime limit" is a row of its own. */
+const CAP_LEFT_END=/(?:^|[\s,;:])(?:up to|max(?:imum)?(?: of)?|limited to|not exceed(?:ing)?|capped at|subject to(?: a)?(?: maximum| limit)?(?: of)?)$/i;
+const CAP_LEFT_START=/^(?:up to|max(?:imum)?|limited to|not exceed(?:ing)?|capped at)(?:\s+of)?\s+\d/i;
 function withContinuation(label:string,lines:PageLine[],index:number,value=""){
   let text=label,valueSuffix="",valueLine:string|null=null,consumed:number|null=null;
   for(let next=index+1;next<lines.length&&next<=index+2;next++){
@@ -337,8 +345,30 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
       // S$20,000" / "One Ear | S$10,000" is a list under the name above, not the rest of its amount): left unjoined.
       // Only words that cannot start an amount ("of S$25,000") finish the amount above whatever follows (Critic H1).
       &&(/^[a-z]/.test(right)||!labelAmountRow(lines[next+1]));
+    // A cap printed on the line below in the name's column belongs to the row above, never a benefit of its own with the
+    // cap as its amount (TE #342: "Hearing loss in both | 50% of the Sum Insured" / "Ears, up to | RM 100,000";
+    // "Hospital cash | RM 100 per day" / "Maximum 30 days per year | RM 3,000"): a left cell that ends in a cap opener,
+    // or starts with one followed by a number, finishes the row above, its words before the opener finishing the name.
+    if(next===index+1&&line.cells.length===2&&AMOUNT.test(right)&&!AMOUNT.test(left)){
+      const ends=left.match(CAP_LEFT_END),starts=CAP_LEFT_START.test(left);
+      if(ends||starts){
+        const head=starts?"":left.slice(0,ends!.index).replace(/[,;:\s]+$/,"");
+        if(head)text=text+" "+head;
+        valueLine=line.text;consumed=next;valueSuffix=" "+(starts?left:ends![0].trim())+" "+right;
+        break;
+      }
+    }
+    // "15% of Sum Insured or" / "up to S$50,000, whichever is lesser": an amount that stops on "or" or "and" goes on in
+    // the line below when that line is only the rest of it, one cell in lower case with an amount ("up to …", "or …").
+    // Left apart, the row was stored as half a rule ("15% of Sum Insured or") and shown as not readable.
+    const restOfChoice=next===index+1&&/\b(?:or|and)$/i.test(value.trim())&&line.cells.length===1&&/^[a-z]/.test(left)
+      &&AMOUNT.test(left)&&left.length<=70;
+    if(restOfChoice){valueLine=line.text;consumed=next;valueSuffix=" "+left.replace(/\s+/g," ");break;}
     if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
+    // "th" printed on a line of its own is the raised end of an ordinal in the row below ("from the 11<sup>th</sup> day"),
+    // never part of a name: a name ending in it no longer matches its own quoted row.
+    if(/^\p{L}{1,2}$/u.test(piece))break;
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;
     // "15% of Sum Insured or" / "up to S$50,000, whichever is lesser": the
     // second line finishes the AMOUNT, not the name. Reading it as part of the
@@ -358,6 +388,9 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
     // two-column page that line belongs to the other column.
     if(!UNFINISHED.test(text)&&text.length<8)break;
     if(!UNFINISHED.test(text)&&!/^[a-z]/.test(piece)&&!/\)$/.test(piece))break;
+    // "Terminal age | Seventy (70)" under a finished name is a row of its own (a name and its own cell), never the rest
+    // of the name above.
+    if(!UNFINISHED.test(text)&&line.cells.length>=2&&/^\p{Lu}/u.test(line.cells[0]))break;
     if(text.length+piece.length+1>140)break;
     text=text+" "+piece;
   }
@@ -368,6 +401,33 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
  * is not cover and must never appear as cover. */
 const NOT_A_BENEFIT_TABLE=/pro-?ration factor|premium rate|schedule of premiums|premium table/i;
 const NEW_TABLE=/^table\s+[a-z][:.]/i;
+/** A premium table ends only on a positive signal (Coordinator and Critic #347): a line that is a recognised
+ * benefit-schedule heading and nothing else -- "Disability Benefit Schedule", "Schedule of Benefits", "Table of
+ * Benefits", "Summary of Benefits", "Benefits Table". A cover name ("• Hospital Cover", "• Critical Illness Benefit",
+ * "▪ Basic Benefits") is not one: premium tables are grouped under cover names. The heading must name a schedule,
+ * table or summary of benefits, carry no figure and no premium, rate, charge, cost, rider or guarantee word. And the
+ * first row under it must not be an age or band row ("Age 30 to 39", "Under 26", "26 to 30"), which is a premium
+ * row whatever the heading says. Anything else stays in the premium table and fails closed. */
+const BULLET=/^[\u2022\u25aa\u25cf\u25e6\u2023\u2043]\s*/u;
+const SCHEDULE_HEADING=/^(?:[a-z&'’\/-]+\s+){0,4}(?:benefits?\s+(?:schedule|table|summary)|(?:schedule|table|summary)\s+of\s+benefits)$/i;
+const BAND_ROW=/^(?:(?:age|ages|aged|anb|alb|age next birthday|band|class|tier)\b|under\s+\d|below\s+\d|up to age\b|\d{1,3}\s*(?:to|-|–|and)\s*\d{1,3}\b|\d{1,3}\s*(?:and|or)\s+(?:above|over|below|under)\b)/i;
+function startsBenefitSchedule(line:PageLine){
+  const cells=line.cells.map(cell=>cell.replace(BULLET,"").trim()).filter(Boolean);
+  if(cells.length!==1)return false;
+  const heading=cells[0].replace(/[:.]$/,"").replace(/\s+/g," ").trim();
+  if(!heading||heading.length>60||/\d/.test(heading))return false;
+  if(/\b(?:premiums?|rates?|charges?|costs?|prices?|fees?|loadings?|discounts?|riders?|guaranteed|payable by|you pay)\b/i.test(heading))return false;
+  return SCHEDULE_HEADING.test(heading);
+}
+/** The first line after `from` that carries a value: an age or band row means the premium table goes on. */
+function firstValueRowIsBand(lines:PageLine[],from:number){
+  for(let i=from+1;i<lines.length;i++){
+    const line=lines[i];
+    if(line.cells.length<2||!line.cells.some(isValueCell))continue;
+    return BAND_ROW.test(line.cells[0].replace(BULLET,"").trim());
+  }
+  return false;
+}
 /** A band in a burns table -- "Equals to or greater than 10% but less than 15%".
  * The percentage in the row is a percentage of the BODY; the percentage beside
  * it is the payout. Read on its own the row means nothing, which is why the
@@ -497,7 +557,9 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     if(inTable.has(index)||consumedLines.has(index))continue;
     const whole=line.text.replace(/\s+/g," ").trim();
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
-    else if(suppressed&&NEW_TABLE.test(whole))suppressed=false;
+    // A premium table ends where the next table or the next bulleted section starts ("• Disability Benefit Schedule"):
+    // left on to the foot of the page, it hid the benefit schedule printed under the premium rates.
+    else if(suppressed&&(NEW_TABLE.test(whole)||(startsBenefitSchedule(line)&&!firstValueRowIsBand(lines,index))))suppressed=false;
     if(suppressed)continue;
     const valueIndex=line.cells.findIndex(isValueCell);
     if(valueIndex<0||line.cells.length<2){

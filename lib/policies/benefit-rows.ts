@@ -3,6 +3,7 @@ import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { isIsoCurrency, normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
+import { wordedShare } from "./word-fractions";
 
 /** Reading the "what it pays" cell of a benefit schedule.
  *
@@ -225,9 +226,17 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
   // "100% of the Sum Insured" — needs the person's own schedule to become money.
   const ofSum=text.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?(?:relevant\s+|applicable\s+|full\s+|prevailing\s+|current\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|benefit\s+amount|insured\s+amount)`,"i"));
   if(ofSum){
+    // A share with a cap printed after it ("50% of the Sum Insured up to RM 100,000") is stored as the share and bounded
+    // when read (repairStoredRules / shareBound): the lower of the share and the cap, or no figure when unsure. Nulling it
+    // here sent the row to the sentence reader instead, which read the share back with a note that it came from a
+    // sentence (TE #344 r9).
     const percent=amount(ofSum[1]);
     if(percent!=null&&percent<=200)return {kind:"sum_insured",value:percent/100,currency,basis:ofSum[1]+"% of the sum insured on the schedule"};
   }
+  // "One twelfth of Sum Insured": a share printed in words, the whole cell and nothing else, on a closed list of
+  // fractions. It is the same rule as the share in figures, so it reads the same way.
+  const worded=wordedShare(text);
+  if(worded)return {kind:"sum_insured",value:worded.value,currency,basis:worded.words.toLowerCase()+" of the sum insured on the schedule"};
   // A bare "50%" in a schedule whose heading says what the percentage is of.
   const heading=options?.percentageBasis;
   if(heading){

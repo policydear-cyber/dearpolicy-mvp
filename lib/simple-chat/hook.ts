@@ -21,10 +21,10 @@ import type { ChatAnswer } from "@/types";
 import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
-import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
+import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, asksForNobody, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number }; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -262,11 +262,12 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     // exclusion, are sent with it (about half the cost per question).
     reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now, claimWindows(household)) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
-    if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
+    if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage, LIBRARY_CACHE_WRITE_RATE) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
-  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse()) : { json: reply.json, report: null };
+  const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
+    !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows)) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
@@ -296,7 +297,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const prior = conversation.state as SimpleChatState;
   // Where the time went (kept with the turn, no household text): reading the library and table, the model, the checks.
   const timing = { loadMs, modelMs: modelEnded - started, checkMs: Date.now() - modelEnded };
-  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage), ms: Date.now() - started, timing, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
+  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage, LIBRARY_CACHE_WRITE_RATE), ms: Date.now() - started, timing, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
   const next: SimpleChatState = { ...prior, intent: "policy_question", simpleChat: { turns } };
   delete next.pending;
   await opts.check?.();

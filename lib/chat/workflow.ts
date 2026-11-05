@@ -56,16 +56,12 @@ function confirmStatedCause(answer:ChatAnswer,state:ConversationState,message:st
 const HYPOTHETICAL=new WeakMap<ChatAnswer,string>();
 /** Every answer is saved through here: a concluded claim answer gets its
  * last touches (employer group cover, lib/chat/claim-completion.ts) first. */
-const LANGUAGE_READING=new WeakMap<object,EnglishReading>();
 /** Round 15: a question asked while the claim interview waits on one of its own questions is answered by a turn
  * run on the side (SIDE_TURNS); that turn's save is held (SIDE_SAVED) and the claim's own state is what is saved. */
 const SIDE_TURNS=new WeakSet<object>();
 const SIDE_SAVED=new WeakMap<object,Parameters<typeof storeTurn>[0]>();
 const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   if(SIDE_TURNS.has(args.conversation)){SIDE_SAVED.set(args.conversation,args);return;}
-  // Round 7 (port): an answer to a question read from Malay or Chinese says so, and what it was read as.
-  const reading=LANGUAGE_READING.get(args.conversation);
-  if(reading){LANGUAGE_READING.delete(args.conversation);const note=languageNote(reading);if(!args.answer.summary.startsWith(note))args.answer.summary=note+" "+args.answer.summary;}
   // Round 9: a car or home damage event the claim interview found nothing for (or offered hospital cover
   // for) is answered from the car or home policy instead.
   const damage=DAMAGE_FALLBACK.get(args.conversation);
@@ -116,9 +112,8 @@ import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { answerPolicyQuestion,conciseDetails,withoutListedLimitCards,FULL_LIST,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
 import { printedRuleLines } from "./printed-rules";
-import { conversationalReply,dishonestReply } from "./conversational";
+import { conversationalReply,dishonestReply,notEnglish } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
-import { englishReading,languageNote,type EnglishReading } from "./language";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM,dependantPremiumAnswer,DEPENDANT_PREMIUM_QUESTION } from "./premium-answer";
 import { registryAnswer, otherPoliciesOnFile } from "./registry-answers";
 import { amendmentAnswer } from "./amendment-answers";
@@ -152,8 +147,6 @@ export type ChatRequest={
   submittedQuestion?:string;
   /** Round 9: the household's message as typed, when the chat reads it in plainer words (lib/chat/plain-questions.ts). */
   displayQuestion?:string;
-  /** Round 7 (port): the English a Malay or Chinese question was read as (lib/chat/language.ts). */
-  languageReading?:EnglishReading;
 };
 export type ChatContext={
   request:ChatRequest;family:ClaimPerson[];people:ClaimPerson[];
@@ -376,9 +369,12 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
       WHERE p.account_id=$1 AND p.processing_status='ready' AND ${activePredicate("p")} GROUP BY p.id,p.product_name,p.insurer`,[request.accountId]).catch(()=>({rows:[] as {product_name:string|null;insurer:string|null;owners:string[]|null}[]}))).rows;
   if(!request.personChoiceId){
     const typed=request.question;
-    let words=householdWords(typed);
+    // A message not in English is left as typed, so the chat says it answers in English (TE #343: a spelling fix turned
+    // "insurans" into "insurance" and the Malay question was then answered as a "not found").
+    const foreign=notEnglish(typed,[...family.flatMap(p=>[p.display_name,p.preferred_name??""]),...policyRows.flatMap(r=>[r.product_name??"",r.insurer??""])]);
+    let words=foreign?typed:householdWords(typed);
     // Round 15: "endownment premuim", "equlife endorsment": insurance words and the household's own plan names, spelt right.
-    words=correctTypos(words,[...new Set(policyRows.flatMap(r=>[r.product_name,r.insurer]).filter((n):n is string=>!!n))]);
+    if(!foreign)words=correctTypos(words,[...new Set(policyRows.flatMap(r=>[r.product_name,r.insurer]).filter((n):n is string=>!!n))]);
     const asked=policyNumberAsked(words);
     if(asked){
       const numbered=(await query<{id:string;policy_number:string|null;product_name:string|null;owners:string[]|null}>(`SELECT p.id::text,p.policy_number,p.product_name,(SELECT array_agg(pm.family_member_id::text) FROM policy_members pm WHERE pm.policy_id=p.id) owners FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND p.policy_number IS NOT NULL`,[request.accountId]).catch(()=>({rows:[] as {id:string;policy_number:string|null;product_name:string|null;owners:string[]|null}[]}))).rows;
@@ -386,13 +382,10 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
       const hits=[...new Set(matched.map(p=>p.product_name!))];
       if(hits.length===1)numberedPolicy={ids:matched.map(p=>p.id),product:hits[0],number:asked.token,owners:[...new Set(matched.flatMap(p=>p.owners??[]))]};
       if(hits.length===1){
-        const rest=words.replace(asked.token,"").replace(/\b(?:my|the|policy|polisi|number|no\.?|is|ending|ends?|with|in|last|4|four|digits?|numbers?)\b/gi,"").replace(/[^\p{L}]+/gu," ").trim();
-        words=rest.split(/\s+/).filter(Boolean).length<=2&&!questionTopics(words).length?"What does the "+hits[0]+" cover?":words.replace(new RegExp("(?:\\b(?:policy|polisi)\\s*(?:no\\.?|number|#)?\\s*(?:is\\s*)?)?"+asked.token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"),"the "+hits[0]);
+        const rest=words.replace(asked.token,"").replace(/\b(?:my|the|policy|number|no\.?|is|ending|ends?|with|in|last|4|four|digits?|numbers?)\b/gi,"").replace(/[^\p{L}]+/gu," ").trim();
+        words=rest.split(/\s+/).filter(Boolean).length<=2&&!questionTopics(words).length?"What does the "+hits[0]+" cover?":words.replace(new RegExp("(?:\\bpolicy\\s*(?:no\\.?|number|#)?\\s*(?:is\\s*)?)?"+asked.token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"),"the "+hits[0]);
       }else if(!hits.length)unknownPolicyNumber=asked.token;
     }
-    // Round 7 (port): a question in Malay or Chinese is answered in English, from the English it was read as (said in the answer).
-    const reading=englishReading(typed);
-    if(reading&&!asked){words=reading.english;request={...request,languageReading:reading};}
     if(words!==typed)request={...request,question:words,displayQuestion:request.displayQuestion??typed};
   }
   const previousId=request.conversationId??request.claimSessionId;
@@ -1694,7 +1687,6 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   if(context.chatPath==="simple")return (await import("@/lib/simple-chat/hook")).runSimpleChat(context,{check:options?.check,jobId:options?.jobId});
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).runLoopChat(context,{save:saveTurn,check:options?.check,jobId:options?.jobId});
   const {conversation}=context;let {request}=context;
-  if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);
   const report=options?.report??(async()=>undefined);
   const check=options?.check??(async()=>undefined);
   await check();

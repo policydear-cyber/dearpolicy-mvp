@@ -59,7 +59,6 @@ const KEPT: [string, number, string][] = [
   ["Burns", 0.5, "Burns, nothing paid below this; greater than 20% of the body surface 50%"],
   ["Note", 0.3, "Third degree burns, not less than 30 days in hospital, more than 20% of body 30%"],
   ["Luka bakar", 0.5, "Luka bakar lebih daripada 15% permukaan badan 50%"],
-  ["Luka bakar", 0.3, "Luka bakar lebih daripada 10% tetapi kurang daripada 15% permukaan badan 30% daripada Jumlah Diinsuranskan"],
 ];
 // Passages that print a cap: withheld (or, once read, capped), never the full share.
 const CAPPED: [string, number, string][] = [
@@ -117,6 +116,16 @@ const CAPPED: [string, number, string][] = [
   ["Faedah", 0.5, "50% daripada Jumlah Diinsuranskan, tetapi tidak lebih daripada 25% bagi kanak-kanak"],
   ["Faedah", 0.5, "50% daripada Jumlah Diinsuranskan, dikurangkan kepada 25% selepas umur 65"],
 ];
+
+// English only (DC 4 Nov): a share worded in another language is not read, so the stored share is never kept as an amount.
+test("a stored share worded in another language is not kept as an amount", async () => {
+  const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  for (const [name, value, quote] of [["Luka bakar", 0.3, "Luka bakar lebih daripada 10% tetapi kurang daripada 15% permukaan badan 30% daripada Jumlah Diinsuranskan"]] as [string, number, string][])
+    for (const inferred of [false, true]) {
+      const out = repairStoredRules([row(name, value, quote, inferred)] as never)[0];
+      assert.ok(!out || out.formulaKind !== "sum_insured", quote);
+    }
+});
 
 test("every stored share without a printed cap keeps its amount; one with a cap is never paid in full", async () => {
   const { repairStoredRules, CAPPED_SHARE_NOTE } = await import("@/lib/policies/benefit-catalog");

@@ -48,15 +48,13 @@ const FILLER = new Set(("a an the this that these those it its we will shall wou
   + "you your our his her their life insured assured person policy policyholder policyowner owner plan basic main rider contract "
   + "benefit due date beginning starting diagnosis diagnosed death dies die dying terminal terminally illness illnesses critical "
   + "early major disease diseases condition conditions covered total totally permanent permanently disability disabled "
-  + "accident accidental injury hospital get receive continues continue cover force future further remaining first stated shown specified set out applies apply until anniversary payor payer next attached riders ends end suffers suffer or stage accelerated reaches "
-  + "kami akan yang dan jika apabila semasa hayat diinsuranskan orang polisi pelan manfaat kematian penyakit kritikal hilang upaya kekal "
-  + "masa hadapan depan peserta tertanggung mengalami cacat tetap total").split(" "));
+  + "accident accidental injury hospital get receive continues continue cover force future further remaining first stated shown specified set out applies apply until anniversary payor payer next attached riders ends end suffers suffer or stage accelerated reaches").split(" "));
 /** A value passage may also say how the value is taken: "pay … being the Policy Value as at the relevant Valuation Day",
  * "the higher of (a) … or (b) …", "choose to fully or partially withdraw". Adding to it ("plus a bonus", "together with
  * interest", "otherwise we refund") is not here. */
 const VALUE_FILLER = new Set(("pay pays paid payable return returns refund refunds being higher greater of or following alive maturity "
   + "relevant valuation day determined reference prevailing immediately choose either fully partially withdraw withdrawn surrender "
-  + "surrendered term dies policy guaranteed declared accumulated which depends depend performance funds fund date death at polis dibayar diserahkan").split(" "));
+  + "surrendered term dies policy guaranteed declared accumulated which depends depend performance funds fund date death at").split(" "));
 /** Fees and charges taken from a value leave it a value: "(less applicable fees and charges, if any)". */
 const LESS_FEES = /\(?\s*less\s+(?:any\s+)?(?:applicable\s+)?(?:fees|charges)(?:\s+and\s+(?:fees|charges))?(?:,?\s*if\s+any)?\s*\)?/giu;
 /** "we will pay the TI benefit as …", "is paid as …": the reason itself, said with a verb of paying. */
