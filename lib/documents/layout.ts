@@ -323,6 +323,10 @@ function labelAmountRow(line:PageLine|undefined){
   const left=line.cells[0]?.trim()??"",right=line.cells[1]?.trim()??"";
   return !!left&&!AMOUNT.test(left)&&AMOUNT.test(right);
 }
+/** A cap opener in the name's column: at the end of the cell ("Ears, up to"), or at its start with a number after it
+ * ("Maximum 30 days per year"). A name such as "Maximum lifetime limit" is a row of its own. */
+const CAP_LEFT_END=/(?:^|[\s,;:])(?:up to|max(?:imum)?(?: of)?|limited to|not exceed(?:ing)?|capped at|subject to(?: a)?(?: maximum| limit)?(?: of)?)$/i;
+const CAP_LEFT_START=/^(?:up to|max(?:imum)?|limited to|not exceed(?:ing)?|capped at)(?:\s+of)?\s+\d/i;
 function withContinuation(label:string,lines:PageLine[],index:number,value=""){
   let text=label,valueSuffix="",valueLine:string|null=null,consumed:number|null=null;
   for(let next=index+1;next<lines.length&&next<=index+2;next++){
@@ -338,6 +342,19 @@ function withContinuation(label:string,lines:PageLine[],index:number,value=""){
       // S$20,000" / "One Ear | S$10,000" is a list under the name above, not the rest of its amount): left unjoined.
       // Only words that cannot start an amount ("of S$25,000") finish the amount above whatever follows (Critic H1).
       &&(/^[a-z]/.test(right)||!labelAmountRow(lines[next+1]));
+    // A cap printed on the line below in the name's column belongs to the row above, never a benefit of its own with the
+    // cap as its amount (TE #342: "Hearing loss in both | 50% of the Sum Insured" / "Ears, up to | RM 100,000";
+    // "Hospital cash | RM 100 per day" / "Maximum 30 days per year | RM 3,000"): a left cell that ends in a cap opener,
+    // or starts with one followed by a number, finishes the row above, its words before the opener finishing the name.
+    if(next===index+1&&line.cells.length===2&&AMOUNT.test(right)&&!AMOUNT.test(left)){
+      const ends=left.match(CAP_LEFT_END),starts=CAP_LEFT_START.test(left);
+      if(ends||starts){
+        const head=starts?"":left.slice(0,ends!.index).replace(/[,;:\s]+$/,"");
+        if(head)text=text+" "+head;
+        valueLine=line.text;consumed=next;valueSuffix=" "+(starts?left:ends![0].trim())+" "+right;
+        break;
+      }
+    }
     if(line.cells.some(isValueCell)&&!dangling)break;
     const piece=line.cells.join(" ").replace(/\s+/g," ").trim();
     if(!piece||piece.length>70||/^\d+[.)]/.test(piece))break;
