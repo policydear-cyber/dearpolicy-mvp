@@ -89,23 +89,33 @@ function component(row: PremiumRecordRow) {
 }
 const RECURRING = /month|quarter|semi|half.?year|6 month|week|fortnight|year|annum|annual|\bp\.?\s*a\b\.?|bulanan|tahunan/i;
 /** Words that a premium is paid once ("Single premium", "one-off", "one-time", "once", "lump sum", "per trip", "for the
- * period") (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). Weak words ("single", "once")
- * say so only with no recurring period beside them: "Once a year" and "Yearly (single life)" are yearly (TE pr370). */
-const ONE_OFF_STRONG = /one[- ]?(?:off|time)|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey)|\bsingle\s+(?:premium|payment|trip)\b/i;
-const ONE_OFF_WEAK = /\bsingle\b|\bonce\b/i;
+ * period") (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). */
+const ONE_OFF_STRONG = /one[- ]?(?:off|time)|once[- ]?off|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey)|\bsingle\s+(?:premium|payment|trip)\b/i;
+/** Weaker words: a one-off on their own ("Single", "Once"); beside a recurring word, see RECURRING_WITH_WEAK. */
+const ONE_OFF_WEAK = /\bsingle\b|\bonce\b|\bonly\b/i;
+/** The only shapes in which a weak word sits beside a recurring period and the premium is still recurring: "once a
+ * month", "once every year", "once yearly", "single life". A recurring word is often the cover's length, not how often
+ * it is paid ("Single, covers 12 months", "Once, for a 3-week trip", "Paid once for a 6 month term"), so any other mix
+ * is unclear: named, never totalled (TE pr370 round 2). */
+const RECURRING_WITH_WEAK = /\bonce\s+(?:a|an|every|per|each)\s+(?:calendar\s+|policy\s+)?(?:month|quarter|year|week|fortnight|annum)\b|\bonce\s+(?:monthly|quarterly|yearly|annually|weekly|fortnightly)\b|\bsingle\s+life\b/gi;
+type FrequencyReading = "recurring" | "one_off" | "unclear" | "none";
+function readFrequency(frequency: string | null | undefined): FrequencyReading {
+  const f = (frequency ?? "").trim();
+  if (!f) return "none";
+  const recurring = RECURRING.test(f), strong = ONE_OFF_STRONG.test(f), weak = ONE_OFF_WEAK.test(f);
+  if (!recurring) return strong || weak ? "one_off" : "unclear";
+  if (strong) return "unclear";
+  // A weak word beside a recurring period: recurring only in RECURRING_WITH_WEAK's shapes.
+  return weak && ONE_OFF_WEAK.test(f.replace(RECURRING_WITH_WEAK, " ")) ? "unclear" : "recurring";
+}
 export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency">) {
-  const f = row.frequency ?? "";
-  if (RECURRING.test(f)) return false;
-  return ONE_OFF_STRONG.test(f) || ONE_OFF_WEAK.test(f);
+  return readFrequency(row.frequency) === "one_off";
 }
 /** A printed frequency whose payment period is not plain: it names neither a recurring period nor a one-off ("Regular",
- * "As agreed"), or it names both ("Single premium, yearly"). It is never totalled, never taken for a one-off, and named in
- * the note (closed lists: RECURRING, ONE_OFF_STRONG, ONE_OFF_WEAK). */
+ * "As agreed"), or it mixes the two outside the closed shapes above ("Single premium, yearly", "Single, covers 12
+ * months"). It is never totalled, never taken for a one-off, and named in the note. */
 export function isUnclearFrequency(row: Pick<PremiumRecordRow, "frequency">) {
-  const f = (row.frequency ?? "").trim();
-  if (!f) return false;
-  if (RECURRING.test(f)) return ONE_OFF_STRONG.test(f);
-  return !ONE_OFF_STRONG.test(f) && !ONE_OFF_WEAK.test(f);
+  return readFrequency(row.frequency) === "unclear";
 }
 /** A premium with no payment frequency whose record prints a cover period of at most SHORT_TERM_DAYS (29 Sep to 4 Oct) is
  * not known to be yearly: S$73.17 for a six-day trip is not S$73.17 a year (Home tile showed "S$6.10/month", 27 Oct), and

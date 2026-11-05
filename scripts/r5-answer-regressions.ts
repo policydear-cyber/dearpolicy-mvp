@@ -271,13 +271,16 @@ async function main() {
         assert.equal(isUnclearFrequency({ frequency: f }), false, f);
       }
       // One that names both a recurring period and a plain one-off is unclear: named, never totalled, never a silent one-off.
-      for (const f of ["Single premium, yearly", "One-time annual payment", "Lump sum per year", "Yearly per trip cover"]) {
+      for (const f of ["Single premium, yearly", "One-time annual payment", "Lump sum per year", "Yearly per trip cover",
+        // A recurring word that is the cover's length, not how often it is paid (TE pr370 round 2).
+        "Single, covers 12 months", "Once, for a 3-week trip", "Once-off for a 2 week trip", "Paid once for a 6 month term", "Paid once at the start of the year",
+        "Once only (annual policy)", "Monthly, first month only", "Single payment, 1 year cover", "Once per trip, annual cover"]) {
         assert.equal(isOneOffPremium({ frequency: f }), false, f);
         assert.equal(isUnclearFrequency({ frequency: f }), true, f);
       }
       for (const f of ["Single", "Paid once", "Per policy"]) assert.equal(isOneOffPremium({ frequency: f }) || isUnclearFrequency({ frequency: f }), true, f);
       assert.equal(isOneOffPremium({ frequency: "Per policy" }), false, "bare 'per policy' is not a one-off");
-      for (const f of ["One-time", "Single premium", "Once", "Lump sum", "Per trip", "Non-recurring", "Single trip"]) assert.equal(isOneOffPremium({ frequency: f }), true, f);
+      for (const f of ["One-time", "Single premium", "Once", "Lump sum", "Per trip", "Non-recurring", "Single trip", "Once-off", "Once only"]) assert.equal(isOneOffPremium({ frequency: f }), true, f);
       for (const f of ["Regular", "As agreed", "Mthly", "Yrly", "M", "A"]) assert.equal(isUnclearFrequency({ frequency: f }), true, f);
       for (const f of ["Monthly", "Yearly", "one-time", null, ""]) assert.equal(isUnclearFrequency({ frequency: f }), false, String(f));
       // A record with no period of its own takes its document's printed cover period, both ends from one source.
