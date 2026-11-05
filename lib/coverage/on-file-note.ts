@@ -17,25 +17,24 @@ export function onFileNote(documents: readonly string[], person: string): string
  * it has one; only when it has none is the product name read, never the file name (Critic #368: "health" with an "Overseas
  * Travel Benefit", or a life policy in "travel-docs-scan.pdf", is not a travel policy). Nothing for any other kind, for a
  * document that reads as two, or on the tile of its own kind. */
-const OWN_KINDS: { kind: string; note: string; type: RegExp; product: RegExp }[] = [
-  { kind: "Travel", note: "travel cover, for trips", type: /\btravel\b/i, product: /\btravel\s+(?:insurance|policy|cover|protect\w*|plan|guard|shield)\b/i },
-  { kind: "Home", note: "home cover", type: /\b(?:home|household|contents|fire|property)\b/i,
+const OWN_KINDS: { kind: string; note: string; names: Set<string>; type: RegExp; product: RegExp }[] = [
+  { kind: "Travel", note: "travel cover, for trips", names: new Set(["travel", "travel insurance", "travel medical", "travel policy", "travel cover", "travel plan"]), type: /\btravel\b/i, product: /\btravel\s+(?:insurance|policy|cover|protect\w*|plan|guard|shield)\b/i },
+  { kind: "Home", note: "home cover", names: new Set(["home", "home insurance", "home contents", "home contents insurance", "household", "household insurance", "contents", "contents insurance", "fire", "fire insurance", "home policy", "home cover"]), type: /\b(?:home|household|contents|fire|property)\b/i,
     product: /\b(?:home|household|contents|homeowners?|fire)\s+(?:insurance|policy|cover|protect\w*|plan)\b/i },
-  { kind: "Motor", note: "motor cover", type: /\b(?:motor|car|vehicle|motorcycle)\b/i, product: /\b(?:motor|car|vehicle|motorcycle)\s+(?:insurance|policy|cover|plan)\b/i },
+  { kind: "Motor", note: "motor cover", names: new Set(["motor", "motor insurance", "car", "car insurance", "vehicle", "vehicle insurance", "motor policy", "motor cover", "motorcycle", "motorcycle insurance"]), type: /\b(?:motor|car|vehicle|motorcycle)\b/i, product: /\b(?:motor|car|vehicle|motorcycle)\s+(?:insurance|policy|cover|plan)\b/i },
 ];
-const OTHER_COVER = /\b(?:health|medical|hospital\w*|surgical|life|term|accident\w*|PA|group|employee\w*|critical|illness|disability|care|carers?|shield\s+plan|integrated|loans?|mortgage|MRTA|assurance)\b/i;
-const LOAN = /\b(?:loans?|mortgage|MRTA)\b/i;
+const OTHER_COVER = /\b(?:health|medical|hospital\w*|surgical|life|term|accident\w*|PA|group|employee\w*|critical|illness|disability|care|carers?|shield|integrated|loans?|mortgage|MRTA|assurance|benefits?)\b/i;
+/** Words that say which version of the cover, never another cover: "Travel Insurance (Annual Multi-Trip)" is travel. */
+const TYPE_QUALIFIERS = /\b(?:annual|single|multi|trip|trips|comprehensive|basic|standard)\b/g;
 export function documentKindNote(doc: { type: string | null; product: string | null }, category: string): string | null {
   const type = doc.type?.trim();
   const product = doc.product ?? "";
   // Without a type, the product name counts only when it names one kind and no other, and no health, life, accident or
   // group cover (TE #368: "Travel and Home Insurance", "Steadfast Life with Travel Accident Benefit").
-  // A type that also names another cover ("Personal Accident (incl. travel)", "Group Hospital and Surgical (business travel
-  // included)") or a loan ("Home Loan Protection", "Mortgage Reducing Term Assurance") gets no note either (TE #368 R2).
-  // A type that opens with its kind ("Travel Medical", "Home Contents") and names no other kind is that kind, unless it is a
-  // loan's.
-  const lead = type ? OWN_KINDS.filter((k) => k.type.test(type.split(/[\s(,/-]+/)[0] ?? "")) : [];
-  const kinds = type ? (LOAN.test(type) ? [] : lead.length === 1 && OWN_KINDS.filter((k) => k.type.test(type)).length === 1 ? lead : OTHER_COVER.test(type) ? [] : OWN_KINDS.filter((k) => k.type.test(type)))
+  // A stored type counts only when the whole type is a kind's own name ("travel", "Travel Medical", "Home Contents", "motor
+  // insurance"); a type that adds anything else ("Personal Accident (incl. travel)", "Home Loan Protection", "Fire Shield
+  // Life") gets no note (TE #368: a closed list).
+  const kinds = type ? OWN_KINDS.filter((k) => k.names.has(type.toLowerCase().replace(/[^a-z]+/g, " ").replace(TYPE_QUALIFIERS, " ").trim().replace(/\s+/g, " ")))
     : OTHER_COVER.test(product) || OWN_KINDS.filter((k) => k.type.test(product)).length > 1 ? [] : OWN_KINDS.filter((k) => k.product.test(product));
   // One kind only: a document that reads as two (a "travel and home" bundle) is left as it is named.
   if (kinds.length !== 1) return null;
