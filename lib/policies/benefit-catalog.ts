@@ -1,6 +1,7 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { WORD_FRACTIONS } from "./word-fractions";
 import { replacedFigures } from "./amendments";
+import { pointsElsewhere, printsAmount } from "./model-row-shape";
 import { paidMonthly } from "./paid-monthly";
 import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-failures";
 import { knownValue,normalText } from "@/lib/chat/facts";
@@ -1282,6 +1283,10 @@ export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"
     const cap=benefit.maximumDays!=null?", up to "+benefit.maximumDays+" days":"";
     return money(value,currency)+" per day"+after+cap;
   }
+  // A benefit whose passage prints no amount at all is named, not unreadable: there is nothing for the person to tell.
+  // Its amount may be printed elsewhere (a schedule on another page), so the line says only what this passage shows.
+  if(benefit.formulaKind==="none"&&benefit.quote!=null&&!printsAmount(benefit.quote))
+    return pointsElsewhere(benefit.quote)?"No amount printed beside it here; check the schedule":"Named in the policy; no amount is printed beside it here";
   return "Not yet readable — tell DearPolicy what this pays";
 }
 export type ReviewedFormula=Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">;

@@ -7,6 +7,7 @@ import type { ScenarioTrait } from "@/lib/chat/types";
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
 import { CURRENCY_MARKER,benefitRowsFromText,costSharingRowsFromText } from "@/lib/documents/layout";
 import { deterministicConditions } from "@/lib/policies/condition-catalog";
+import { modelRowWithoutRule } from "./model-row-shape";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode,treatmentSubLimit } from "./benefit-rows";
 import { pageProductScopes } from "./inventory";
 import { benefitTraits,replaceBenefitCatalog,requiredTraits,validateCatalogFormula,type CatalogBenefit } from "./benefit-catalog";
@@ -439,6 +440,9 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         methods.set(evidenceKey(benefits[printedOnly].benefitName,page.page_number,found.quote),methodFor("model",page.extraction_method));
         continue;
       }
+      // A model reading with no rule is a benefit row only when its passage prints an amount, or when the page names it as
+      // a heading of its own; a feature line, a price or a clause is never shown as a benefit asking what it pays.
+      if(formula.formulaKind==="none"&&modelRowWithoutRule(found.name,found.quote,page.text)==="drop")continue;
       methods.set(evidenceKey(found.name.trim(),page.page_number,found.quote),methodFor("model",page.extraction_method));
       benefits.push({productName:section,benefitName:found.name.replace(/\s+/g," ").trim(),
         traits:benefitTraits(found.name,found.quote),requires:requiredTraits(found.name,found.quote),...formula,
