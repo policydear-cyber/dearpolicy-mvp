@@ -73,7 +73,7 @@ function fakeDb(pages: { page: number; text: string }[], earlier?: { reading: un
 
 /** A stand-in model that lists one row per table line it is shown and runs out of output, as a real one does, when
  * those rows need more than the call's output allowance (about 25 output tokens a row here). */
-function lister(o: { tokensPerRow?: number; failPage?: number; plans?: boolean; lateNames?: boolean } = {}) {
+function lister(o: { tokensPerRow?: number; failPage?: number; plans?: boolean; lateNames?: boolean; printedPlan?: boolean } = {}) {
   const calls: { pages: number[]; chars: number; maxTokens: number; user: string; context: number | null; output: number }[] = [];
   const model: TableModel = { choice: { provider: "anthropic", model: "stand-in" }, async call(c: TableCall): Promise<TableReply> {
     const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN);
@@ -87,11 +87,14 @@ function lister(o: { tokensPerRow?: number; failPage?: number; plans?: boolean; 
       return { json: null, stopReason: "max_tokens", model: "stand-in", input: 0, output: c.maxTokens, ms: 1 };
     const cover = pages.find((p) => /Plan: Voyager/.test(p.text));
     const last = pages.some((p) => /Insured person: Ruth Adeyemi/.test(p.text));
+    // A naive reader: the first "Plan:" line it sees, a brochure's or a schedule's.
+    const printedPlan = pages.map((p) => p.text.match(/^Plan: (\w+)/m)?.[1]).find(Boolean) ?? null;
+    const person = pages.map((p) => p.text.match(/^Insured person: (.+)$/m)?.[1]).find(Boolean);
     // A plan table's columns, seen on a page shown (the context page too) or named in the note.
     const planColumns = shown.some((p) => /Classic\tBusiness\tPremium/.test(p.text));
     return { json: {
       document: { kind: "policy_wording", product: cover || (!o.lateNames && false) ? "Harbourline Travel Protect" : pages.some((p) => p.page === 1) ? "Harbourline Travel Protect" : null, insurer: null,
-        namedPeople: last ? ["Ruth Adeyemi"] : [], plan: o.lateNames ? (last ? "Voyager" : null) : cover ? "Voyager" : null, periodFrom: null, periodTo: null },
+        namedPeople: o.printedPlan ? (person ? [person] : []) : last ? ["Ruth Adeyemi"] : [], plan: o.printedPlan ? printedPlan : o.lateNames ? (last ? "Voyager" : null) : cover ? "Voyager" : null, periodFrom: null, periodTo: null },
       covers: [],
       benefits: rows.map((r) => {
         const cells = r.line.split("\t");
@@ -221,6 +224,32 @@ async function main() {
     assert.equal(doc.plan, "Voyager");
     assert.equal(doc.product, "Harbourline Travel Protect");
     assert.deepEqual(doc.namedPeople, ["Ruth Adeyemi"]);
+  });
+  await test("L11 a brochure line in one part never outranks the schedule that names the insured person; parts that name people and disagree store no plan (TE pr364 PLANPICK)", async () => {
+    const pick = booklet(30);
+    pick[0] = { page: 1, text: "Harbourline Travel Protect\nPolicy booklet\nThis booklet sets out the benefits of your plan." };
+    pick[1] = { page: 2, text: pick[1].text + "\nPlan: Classic is our most popular choice." };
+    pick[29] = { page: 30, text: pick[29].text + "\nPolicy schedule\nInsured person: Ruth Adeyemi\nPlan: Elite" };
+    let f = fakeDb(pick), m = lister({ printedPlan: true });
+    assert.equal((await readDocument(f.db, m.model, A, "doc")).read, true);
+    assert.ok(m.calls.length > 1, "read in parts");
+    let doc = rowsStored(f.s).stored.document.document as { plan: string | null; namedPeople?: string[] };
+    assert.equal(doc.plan, "Elite");
+    assert.deepEqual(doc.namedPeople, ["Ruth Adeyemi"]);
+    // Two parts that each name a person and a different plan: no plan is stored, so plan columns stay held.
+    const both = pick.map((p) => ({ ...p }));
+    both[1] = { page: 2, text: both[1].text + "\nInsured person: Sam Okoro" };
+    f = fakeDb(both); m = lister({ printedPlan: true });
+    assert.equal((await readDocument(f.db, m.model, A, "doc")).read, true);
+    doc = rowsStored(f.s).stored.document.document as { plan: string | null; namedPeople?: string[] };
+    assert.equal(doc.plan, null);
+    assert.deepEqual([...(doc.namedPeople ?? [])].sort(), ["Ruth Adeyemi", "Sam Okoro"]);
+    // No part names a person and two parts print different plans: none is stored either.
+    const none = pick.map((p) => ({ ...p }));
+    none[29] = { page: 30, text: booklet(30)[29].text + "\nPlan: Elite" };
+    f = fakeDb(none); m = lister({ printedPlan: true });
+    assert.equal((await readDocument(f.db, m.model, A, "doc")).read, true);
+    assert.equal((rowsStored(f.s).stored.document.document as { plan: string | null }).plan, null);
   });
   await test("L10 the check drops a row read with no plan column whose line prints a figure for each plan (Critic R364 H1)", async () => {
     const { checkReading } = await import("@/lib/benefit-table/check");

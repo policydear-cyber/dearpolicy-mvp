@@ -327,15 +327,28 @@ function withoutPage(json: unknown, page: number): unknown {
   const keep = (rows: { page?: unknown }[] | undefined) => Array.isArray(rows) ? rows.filter((x) => Number(x?.page) !== page) : rows;
   return { ...r, covers: keep(r.covers), benefits: keep(r.benefits) };
 }
-/** The first part's reading with the document's facts merged across every part: the first kind (other than "other"),
- * product, insurer, plan and period any part gives, and every person any part names. Each is still checked against the
- * printed pages (checkReading), as for a reading in one call. */
+/** The first part's reading with the document's facts merged across every part. A part whose reading names the insured
+ * people speaks for the document (the schedule page), so its kind, plan and period come first; a brochure line in
+ * another part ("Plan: Classic is our most popular choice") never outranks it. When the parts that speak still disagree
+ * on the plan or period, none is stored (on the kind, "other"), so plan columns stay held rather than pick the wrong plan (TE pr364
+ * PLANPICK). Product and insurer: the first any part gives. Every person any part names is kept. Each fact is still
+ * checked against the printed pages (checkReading), as for a reading in one call. */
 function withMergedDocument(readings: unknown[]): unknown {
   const docs = readings.map((r) => ((r ?? {}) as RawReading).document ?? {});
-  const firstOf = (key: string, skip?: string) => docs.map((d) => d[key]).find((v) => v != null && v !== "" && v !== skip) ?? docs[0]?.[key] ?? null;
-  const named = [...new Set(docs.flatMap((d) => Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => typeof n === "string" && !!n.trim()) : []))];
-  const document = { ...docs[0], kind: firstOf("kind", "other"), product: firstOf("product"), insurer: firstOf("insurer"), plan: firstOf("plan"),
-    periodFrom: firstOf("periodFrom"), periodTo: firstOf("periodTo"), namedPeople: named };
+  const peopleOf = (d: Record<string, unknown>) => Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => typeof n === "string" && !!n.trim()) : [];
+  const named = [...new Set(docs.flatMap(peopleOf))];
+  const speaking = docs.filter((d) => peopleOf(d).length > 0);
+  const given = (group: Record<string, unknown>[], key: string, skip?: string) => group.map((d) => d[key]).filter((v) => v != null && v !== "" && v !== skip);
+  const firstOf = (key: string) => given(docs, key)[0] ?? docs[0]?.[key] ?? null;
+  const agreed = (key: string, skip?: string) => {
+    const group = given(speaking, key, skip).length ? speaking : docs;
+    const values = given(group, key, skip);
+    const distinct = new Set(values.map((v) => typeof v === "string" ? v.trim().toLowerCase().replace(/\s+/g, " ") : JSON.stringify(v)));
+    if (distinct.size > 1) return null;
+    return values[0] ?? (skip != null && docs.some((d) => d[key] === skip) ? skip : null);
+  };
+  const document = { ...docs[0], kind: agreed("kind", "other") ?? "other", product: firstOf("product"), insurer: firstOf("insurer"), plan: agreed("plan"),
+    periodFrom: agreed("periodFrom"), periodTo: agreed("periodTo"), namedPeople: named };
   return { ...((readings[0] ?? {}) as RawReading), document };
 }
 
