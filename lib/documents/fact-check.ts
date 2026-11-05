@@ -471,17 +471,29 @@ const KIND_FIRST = /^(?:notice\s+of\s+lapse|lapse\s+notice|renewal\s+notice|prem
 /** A line that is nothing but the kind of document ("POLICY SCHEDULE") under a title line. */
 const KIND_ONLY = /^(?:policy\s+schedule|schedule(?:\s+of\s+insurance)?|certificate(?:\s+of\s+insurance)?|policy\s+certificate|policy\s+statement|annual\s+statement|benefit\s+illustration|policy\s+illustration|endorsement|renewal\s+(?:notice|certificate))$/i;
 /** The document's own lines with its contents entries left out: a line with dot leaders ("Policy schedule ...... 3") or a
- * page number after a tab ("2. SafeTrip Plus - Policy Schedule<tab>5"), and, after a "Contents" heading, every line of
- * that page. A contents entry names a section further on, never the document, so the topmost title line names it. */
+ * page number after a tab ("2. SafeTrip Plus - Policy Schedule<tab>5"), and, under a "Contents" heading, its entries: a
+ * line ending in a page number ("Claims 9", "Claims p. 9"), a numbered line ("1<tab>Who is covered?"), a page number
+ * alone ("pg 2", "5"), or a line followed by one. The block ends at a blank line or the first line that is no entry, so
+ * a title printed below a contents box still names the document. A contents entry names a section further on, never
+ * the document. */
 function linesWithoutContents(pages: Page[]): string[] {
   const out: string[] = [];
+  const pageNumberOnly = (l: string) => /^(?:p(?:age|g)?\.?\s*)?\d{1,3}$/i.test(l);
   for (const p of pages) {
+    const raws = p.text.split("\n");
     let inContents = false;
-    for (const raw of p.text.split("\n")) {
+    for (const [i, raw] of raws.entries()) {
       const line = raw.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
-      if (!line || /DPTEST-|^[A-Za-z0-9+/=]{40,}$/.test(line)) continue;
+      if (!line) { inContents = false; continue; }
+      if (/DPTEST-|^[A-Za-z0-9+/=]{40,}$/.test(line)) continue;
       if (/^(?:table\s+of\s+)?contents:?$/i.test(line)) { inContents = true; continue; }
-      if (inContents || /\.{3,}|…/.test(raw) || /\t\s*(?:p(?:age|g)\.?\s*)?\d{1,3}\s*$/i.test(raw)) continue;
+      if (/\.{3,}|…/.test(raw) || /\t\s*(?:p(?:age|g)\.?\s*)?\d{1,3}\s*$/i.test(raw)) continue;
+      if (inContents) {
+        const next = (raws[i + 1] ?? "").replace(/\s+/g, " ").trim();
+        const entry = /\s(?:p(?:age|g)?\.?\s*)?\d{1,3}$/i.test(line) || /^\d{1,2}(?:\.|\t|\s)/.test(raw.trim()) || pageNumberOnly(line) || pageNumberOnly(next);
+        if (entry) continue;
+        inContents = false;
+      }
       out.push(line);
     }
   }

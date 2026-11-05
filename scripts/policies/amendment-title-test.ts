@@ -12,7 +12,20 @@ globalThis.fetch = (async () => { throw new Error("no network in this test"); })
 
 test("an amending document is known by its own title or an amending sentence", async () => {
   const { amendmentWording } = await import("@/lib/policies/amendments");
+  const letterhead = "Lionrock Assurance Ltd\n1 Example Place\nSingapore 048616\n";
   const amending: [string, string][] = [
+    // Critic r375 H1: titles, a letter and a page-two title main caught.
+    ...["ENDORSEMENT SCHEDULE", "Endorsement Certificate", "Rider Endorsement", "Change of Sum Assured", "Reduction of Sum Assured", "Alteration of Policy",
+      "Confirmation of Policy Changes", "Changes to your plan"].map((t) => [t, letterhead + t + "\nPolicy No. TL-1"] as [string, string]),
+    ["a letter: we have reduced", letterhead + "15 March 2026\nMr A Tan\n12 Example Road\nSingapore 123456\nDear Mr Tan\nRe: Policy No. TL-1\nWe have reduced your sum assured to S$500,000 as you requested."],
+    ["a title below a long address block", letterhead + "Address line\n".repeat(10) + "Policy Alteration\nPolicy No. TL-1"],
+    ["a title on page 2 behind a cover letter", letterhead + "Cover letter\n\fENDORSEMENT NO. 1\nPolicy No. TL-1"],
+    ["the sum assured has been reduced", letterhead + "Policy No. TL-1\nThe sum assured has been reduced with effect from 1 March 2026."],
+    ["a Before / After table", letterhead + "Policy No. TL-1\nItem\tBefore\tAfter\nDeath\tS$300,000\tS$250,000"],
+    ["a policy alteration notice", letterhead + "Policy Alteration Notice\nPolicy No. TL-1\nPlease keep this with your policy."],
+    ["a letter: reduced from a date", letterhead + "Dear Ms Lim\nWe have reduced your sum assured to S$200,000 from 1 May 2026."],
+    ["confirmation of change of sum assured", letterhead + "Confirmation of change of sum assured\nPolicy No. TL-1"],
+    ["amendment to policy schedule", letterhead + "Amendment to Policy Schedule\nPolicy No. TL-1"],
     ["endorsement title with a dash", "Kestrel Life Assurance (made up)\nPolicy alteration (made up)\n\nENDORSEMENT NO. 2 - REDUCTION OF SUM ASSURED\nDate: 1 March 2026\nItem\tBefore\tAfter\nDeath sum assured\tS$300,000\tS$250,000"],
     ["endorsement to a policy number", "Endorsement No. 4 to policy KL-TL-100245\nEffective 1 May 2026\nThe sum assured is hereby amended as follows."],
     ["a notice of alteration", "Bramble General Insurance\nNOTICE OF POLICY ALTERATION\nDear Policyholder,\nWe have recorded your request."],
@@ -30,14 +43,37 @@ test("an amending document is known by its own title or an amending sentence", a
     ["a booklet on the law", "The scheme is set up under the Act and the Regulations made under the Act (and any amendments made to them from time to time)."],
     ["a premium review clause", "Premiums are not guaranteed and may be increased with effect from the next renewal. The premium is reviewed every year."],
     ["an alteration heading deep in a wording", "Orchard Health Plan\nPolicy wording\n\fSection 5\nPolicy alteration\nYou may ask us to alter the policy."],
-    ["a title further down the first page", ["Orchard Health Plan", "Product summary", ...Array.from({ length: 12 }, (_, i) => `Benefit ${i + 1}\tS$${(i + 1) * 100}`), "Endorsement"].join("\n")],
+    // Critic r375 H2: a schedule's form lines and a booklet's standard clause.
+    ["Endorsements: Nil", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil\nSum assured S$1,000,000"],
+    ["Endorsement No. 0", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsement No. 0\nSum assured S$1,000,000"],
+    ["Endorsements - E01", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements - E01 Terrorism exclusion"],
+    ["Endorsement: Applicable", letterhead + "Policy Schedule\nPolicy No. TL-1\nEndorsement: Applicable"],
+    ["Amendments: None", letterhead + "Policy Schedule\nPolicy No. TL-1\nAmendments: None"],
+    ["amended as follows: none", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nThe schedule is amended as follows: none"],
+    ["a booklet's endorsement clause", letterhead + "Travel Insurance Booklet\nSection 9 Endorsements\nThis endorsement forms part of the policy and applies only if shown in the schedule."],
+    ["a renewal notice", letterhead + "Renewal Notice\nPolicy No. TL-1\nYour premium will change."],
+    // TE r375: empty values, a booklet's section heading, and "with effect from" without a date or "hereby".
+    ["Endorsement: None", letterhead + "POLICY SCHEDULE\nEndorsement: None"],
+    ["Alteration: none", letterhead + "Policy No. TL-1\nAlteration: none"],
+    ["Endorsements - see attached", letterhead + "Policy No. TL-1\nEndorsements - see attached"],
+    ["amendments this year: none", letterhead + "Annual statement\nAmendments to your policy this year: none"],
+    ["a booklet's Endorsement heading", letterhead + "Harbourline Travel Booklet\nEndorsement\nTerrorism cover applies only if shown."],
+    ["an illustration", letterhead + "Benefit illustration\nThe premium is reduced with effect from 1 March 2040."],
+    ["a product summary", letterhead + "Product summary\nYour cover is increased with effect from the second policy year."],
+    ["with effect from without a date", letterhead + "Renewal notice\nYour premium is changed with effect from your renewal date."],
+    ["a title further down the first page", ["Orchard Health Plan", "Product summary", ...Array.from({ length: 30 }, (_, i) => `Benefit ${i + 1}\tS$${(i + 1) * 100}`), "Endorsement"].join("\n")],
   ];
   for (const [why, text] of ordinary) assert.equal(amendmentWording(text), false, why);
-  // The reader's document type alone never makes an amendment: only the document's own wording does.
+  // The reader's "endorsement" type still makes an amendment (a lost one leaves an old figure shown), unless the text
+  // says it is not one: an empty endorsement field, or a wording, booklet, summary or illustration title.
+  const { endorsementTypeVetoed } = await import("@/lib/policies/amendments");
+  for (const t of ["Policy No. TL-1\nSum assured S$500,000", "POLICY SCHEDULE (ENDORSED)\nPolicy No. TL-1\nSum assured S$500,000", "Policy Alteration Notice\nPolicy No. TL-1"])
+    assert.equal(endorsementTypeVetoed(t), false, t);
+  for (const t of ["POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil", "Travel Insurance Booklet\nEndorsement\nTerrorism", "Orchard Plan Benefit Illustration\nThe premium is reduced with effect from age 65.", "Harbourline Policy Wording\nPolicy No. TL-1"])
+    assert.equal(endorsementTypeVetoed(t), true, t);
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../../lib/policies/amendments.ts", import.meta.url), "utf8");
-  assert.match(src, /d\.d && amendmentWording\(pages\.get\(d\.id\) \?\? ""\)/);
-  assert.doesNotMatch(src, /document_role === "endorsement"/);
+  assert.match(src, /amendmentWording\(pages\.get\(d\.id\) \?\? ""\) \|\| \(d\.document_role === "endorsement" && !endorsementTypeVetoed/);
 });
 
 test("a contents entry never names the document; its topmost title line does", async () => {
@@ -49,6 +85,9 @@ test("a contents entry never names the document; its topmost title line does", a
   assert.equal(titleProductName([page(1, "Bramble General Insurance\n1. Voyager Plus - Policy Schedule\t5\n2. Claims\t9"), page(5, "Kingfisher Home Shield - Policy Schedule")]), "Kingfisher Home Shield");
   // The topmost title line wins over a contents list below it.
   assert.equal(titleProductName([page(1, "MERIDIAN CARE PLUS - POLICY SCHEDULE\nTable of contents\nVoyager Plus - Policy schedule\t4")]), "Meridian Care Plus");
+  // A contents box at the top of the cover ends at its first line that is no entry: the title below it names the document.
+  assert.equal(titleProductName([page(1, "Contents\nSchedule\t2\nWording\t4\n\nOSPREY HOME GUARD - POLICY SCHEDULE\nPolicy number OH-881"), page(2, "Kestrel Motor Plus - Policy Schedule")]), "Osprey Home Guard");
+  assert.equal(titleProductName([page(1, "Table of contents\nSchedule 2\nClaims p. 9\nOSPREY HOME GUARD - POLICY SCHEDULE")]), "Osprey Home Guard");
   // Only contents: no name (fails closed).
   assert.equal(titleProductName([page(1, "Contents\nVoyager Plus - Policy schedule\npg 2\nClaims\npg 9")]), null);
   // Unchanged: a title over two lines.
