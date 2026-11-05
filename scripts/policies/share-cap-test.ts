@@ -105,6 +105,36 @@ test("anything less sure than one cap in the cover's currency gives no figure, n
   }
 });
 
+test("a sentence wrapped onto a new line, and a name that says how minor a condition is, keep the cap; another row's line or a minor person does not (TE pr353)", async () => {
+  const { repairStoredRules, assessCatalogBenefit } = await import("@/lib/policies/benefit-catalog");
+  const pay = (name: string, quote: string, share: number, sumInsured: number, stored: boolean) => {
+    const [b] = repairStoredRules([{ ...base, id: "x", benefitName: name, quote, ...(stored ? { formulaKind: "sum_insured", formulaValue: share } : {}) }] as never);
+    const a = assessCatalogBenefit({ benefit: b as never, coverage: coverage(sumInsured, "SGD") as never, ownerName: "Ana", facts: {} as never, events: ["critical_illness"] as never }) as { item?: { calculatedAmount?: number | null } } | null;
+    return a?.item?.calculatedAmount ?? null;
+  };
+  for (const [name, quote, share, sumInsured, expected] of [
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum Assured\nor up to S$20,000, whichever is less", 0.1, 600_000, 20_000],
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum\nAssured or up to S$20,000, whichever is less", 0.1, 600_000, 20_000],
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of the Sum\nInsured or up to S$20,000, whichever is lower", 0.1, 100_000, 10_000],
+    ["Heart valve repair", "Heart valve repair: 20% of the sum assured\nup to S$40,000", 0.2, 1_000_000, 40_000],
+    ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000, whichever is the smaller", 0.15, 100_000, 15_000],
+    ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000, whichever is lower", 0.15, 1_000_000, 25_000],
+    ["Minor burns", "Minor burns: 10% of Sum Insured, up to S$15,000", 0.1, 1_000_000, 15_000],
+  ] as const) for (const stored of [true, false]) assert.equal(pay(name, quote, share, sumInsured, stored), expected, `${stored ? "stored" : "read"}: ${quote}`);
+  for (const [name, quote, share] of [
+    // Another row's label on the next line: its cap is not this share's.
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum Assured\nAngioplasty: up to S$20,000, whichever is lower", 0.1],
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum Assured\nAngioplasty up to S$20,000", 0.1],
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum Assured\nfor a child, or up to S$20,000, whichever is lower", 0.1],
+    ["Pacemaker insertion", "Pacemaker insertion: 10% of Sum\nAssured.\nUp to S$20,000 per claim", 0.1],
+    // "Minor" as a person, in the name or the passage.
+    ["Stroke benefit for a minor", "Stroke benefit for a minor: 15% of the Sum Assured or up to S$25,000, whichever is lower", 0.15],
+    ["Minor life assured", "Minor life assured: 15% of the Sum Assured or up to S$25,000, whichever is lower", 0.15],
+    ["Stroke", "Stroke: 15% of the Sum Assured or up to S$25,000 for a minor, whichever is lower", 0.15],
+    ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000 for children, whichever is lower", 0.15],
+  ] as const) for (const stored of [true, false]) assert.equal(pay(name, quote, share, 1_000_000, stored), null, `${stored ? "stored" : "read"}: ${quote}`);
+});
+
 test("a capped share says its cap in the line people read, not only in the details", async () => {
   const { repairStoredRules, describeBenefitFormula } = await import("@/lib/policies/benefit-catalog");
   for (const [quote, share, line] of [
