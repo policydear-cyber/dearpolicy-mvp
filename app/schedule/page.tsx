@@ -34,6 +34,8 @@ type Benefit={
   calculatedAgainst:{ownerId?:string;owner:string;plan:string|null;amount:string|null}[];
   /** A benefit that pays the whole sum insured in words: each person's own sum of the cover named the same (whole-sum.ts). */
   wholeSum?:{owner:string;plan:string;amount:string;source:string}[]|null;
+  /** An unreadable row: whether the household's own cover on the same document holds a sum for each person shown (no figure). */
+  foundSum?:boolean;
   documentName:string;insurer:string|null;owners:string[];
   /** Two documents print different amounts for this benefit: drawn as one either/or block, never a total. */
   alternatives?:AlternativeAmounts|null;

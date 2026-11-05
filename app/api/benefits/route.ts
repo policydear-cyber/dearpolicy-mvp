@@ -16,6 +16,8 @@ import { conditionEffect,describeCondition,type CoverCondition,type CoverConditi
 import { formatMoney } from "@/lib/format/currency";
 import { cutNameSuffix } from "@/lib/policies/cut-name";
 import { wholeSumAgainst } from "@/lib/policies/whole-sum";
+import { sumKindsOf } from "@/lib/policies/no-amount-pointer";
+import { normalizeCoverageCategory } from "@/lib/insurance";
 import { oncePerPerson } from "@/lib/policies/benefit-people";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
@@ -242,10 +244,22 @@ export async function GET(request:NextRequest){
       const wholeSum=attention==="unreadable"&&stub.formulaKind==="none"
         ?wholeSumAgainst((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member),{benefitName:row.benefit_name,quote:row.quote})
         :null;
+      // A row whose amount could not be read, beside the household's own cover on the same policy (the contract that holds the
+      // row's document, its schedule or its booklet): whether every person it is shown for has a sum there with its currency
+      // written in their evidence (what Coverage shows). Only a yes/no for the
+      // Benefits pointer (no-amount-pointer.ts); no figure leaves here with it.
+      const foundSum=attention==="unreadable"?(()=>{
+        const shown=(contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member);
+        const people=[...new Set(shown.map(c=>c.ownerId))];
+        // Only a cover of the kind the row pays: a hospital-cash sum on the same policy is not the death benefit's (Critic #365).
+        const kinds=new Set(sumKindsOf(row.benefit_name));
+        return kinds.size>0&&people.length>0&&people.every(id=>shown.filter(c=>c.ownerId===id).some(c=>c.coverages.some(cover=>
+          kinds.has(normalizeCoverageCategory(cover.category))&&cover.amount!=null&&cover.amount>0&&!!cover.currency&&cover.currencyVerified===true)));
+      })():false;
       return {
         id:row.id,policyId:row.policy_id,
         productName:row.product_name??row.document_product,
-        wholeSum,
+        wholeSum,foundSum,
         // For a "% of Sum Insured" rule: whose sum insured, from which plan.
         calculatedAgainst,
         // Without a plan cell run into the name only beside this household's own plan figure (Critic R394 M2).
