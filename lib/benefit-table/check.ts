@@ -50,10 +50,18 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
     // Two caps in one unit side by side ("up to S$500 up to S$1,000") are two plans' caps too.
     // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's figure,
     // never another plan's (TE pr367).
-    const conditioned = (i: number) => /^\s*,?\s*(?:in|if|for|when|while|during|after|where|under|upon|on)\b/i.test(line.slice(cells[i].end, cells[i + 1]?.start ?? line.length));
+    const trail = (i: number) => line.slice(cells[i].end, cells[i + 1]?.start ?? line.length);
+    const conditionWord = (i: number) => /^\s*,?\s*(in|if|for|when|while|during|after|where|under|upon|on)\b/i.exec(trail(i))?.[1].toLowerCase() ?? null;
     const apart = (i: number) => {
-      if (conditioned(i + 1)) return false;
-      const between = line.slice(cells[i].end, cells[i + 1].start);
+      const between = trail(i);
+      const here = conditionWord(i), next = conditionWord(i + 1);
+      // Parallel cells that each name what they are for ("S$5,000 for Plan A | S$10,000 for Plan B", "S$500 on Basic,
+      // S$1,000 on Premier", "S$100,000 for adults / S$25,000 for children") are plans' or people's cells (Critic R367).
+      if (here && here === next && /^(?:for|on|in|under)$/.test(here))
+        return /^\s*,?\s*\w+\s+(?:[\w.'&-]+\s*){1,4}?[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between);
+      // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's
+      // figure, never another plan's (TE pr367).
+      if (here || next) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
     };
