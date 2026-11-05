@@ -73,6 +73,8 @@ check("a date's parts still read when spaced: 31 12 2025", () => assert.equal(da
     ["year cell before a percent", "Policy year\tFactor\n1\t75%", "1\t75%", 75, "percent"],
     ["year cell before a spaced percent", "Policy year\tFactor\n2\t50 %", "2\t50 %", 50, "percent"],
     ["tab and spaces before a value", "Year\tValue\n30 \t 96,400", "30 \t 96,400", 96400, "value"],
+    // A currency cell with a whole figure before a 3-digit cell is not split: only 1-3 digits right after the sign are.
+    ["a priced cell before a count cell", "Benefit\tLimit\tDays\nRoom\tS$1,500\t120", "Room\tS$1,500\t120", 1500, "amount"],
   ];
   for (const [name, table, quote, value, pays] of keeps) {
     const got = read(header + table, [{ benefit: "Cash value", pays, value, quote }]);
@@ -85,6 +87,13 @@ check("a date's parts still read when spaced: 31 12 2025", () => assert.equal(da
     ["space-grouped amount after a label", "Benefit\tLimit\nRoom\tS$ 1 500", "Room\tS$ 1 500", 500, "amount"],
     ["space-joined percent run in one cell", "Year\tFactor\n1\t10 20 %", "1\t10 20 %", 20, "percent"],
     ["a figure the row does not print", "Year\tValue\n60\t143,309", "60\t143,309", 160143, "value"],
+    // A cell break inside one spaced money figure parts nothing (Critic and TE #352 M1).
+    ["a spaced figure split by a cell break", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 500, "amount"],
+    ["its first piece", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 1, "amount"],
+    ["its joined figure", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 1500, "amount"],
+    ["a split figure with a code", "Benefit\tLimit\nWard\tSGD 12\t500", "Ward\tSGD 12\t500", 500, "amount"],
+    ["a split figure in pounds", "Benefit\tLimit\nWard\t£ 120\t000", "Ward\t£ 120\t000", 0, "amount"],
+    ["a split figure before a grouped tail", "Benefit\tLimit\nDeath\tUS$ 2\t500,000", "Death\tUS$ 2\t500,000", 500000, "amount"],
   ];
   for (const [name, table, quote, value, pays] of refuses) {
     const got = read(header + table, [{ benefit: "Cash value", pays, value, quote }]);

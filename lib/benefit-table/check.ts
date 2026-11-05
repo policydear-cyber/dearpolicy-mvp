@@ -353,7 +353,10 @@ function asHousehold(doc: SourceDoc): Household {
 }
 
 
-/** A printed date ("06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
+const SPLIT_FIGURE = new RegExp(String.raw`(${MONEY_SIGN}${RUN_SPACE}?\d{1,3})${RUN_SPACE}*\t[\t \u00a0\u202f]*(?=\d{3}(?!\d))`, "gi");
+/** A row's own text with its table cells kept apart by tabs, except a cell break inside one spaced money figure. */
+export const cellsApart = (row: string) => row.replace(SPLIT_FIGURE, "$1 ");
+/** A printed date (""06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
 export function dateOnPage(date: string | null, pageText: string): string | null {
   if (!date) return null;
   const digits = date.match(/\d+/g);
@@ -636,9 +639,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   // A figure counts as printed on its row as the page prints it: the quote's own span of the page, with its table cells
   // still parted by tabs. The excerpt joins cells with single spaces (locateQuote), so a year, age or count cell before
   // a figure ("60\t143,309", "1\t75%") would read as one space-grouped run and print nothing (#339 live regression).
+  // A cell break inside one spaced figure ("Room\tS$ 1\t500") parts nothing: a cell ending in a currency sign and 1 to 3
+  // digits, before a cell that opens with exactly 3 digits, is one unclear run, and prints neither piece (Critic and TE #352).
   const printedIn = (src: Source, value: number) => {
     const p = placed.get(src);
-    return printsNumber(p ? pageText(src.page).slice(p.start, p.end) : src.excerpt, value);
+    return printsNumber(p ? cellsApart(pageText(src.page).slice(p.start, p.end)) : src.excerpt, value);
   };
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
