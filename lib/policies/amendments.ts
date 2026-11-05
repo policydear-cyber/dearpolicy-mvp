@@ -64,10 +64,14 @@ function firstTitle(pages: string[]): { line: string; raw: string; amends: boole
  * amendment title (AMENDMENT_TITLE; a title further down is a section of another document), it dates its own change
  * (DATED_CHANGE) and prints the policy number it changes (OWN_POLICY_NUMBER), and it is not a form, an option, an illustration or a clause that applies only if shown
  * (NOT_A_CHANGE). pagesText: pages joined by "\f". */
-export function amendmentWording(pagesText: string): boolean {
+/** The first-title catch is off: each round of fresh documents found another quotation, brochure or form page with a
+ * listed title, a policy number and a date (te-pr375-amend.ts E11, p375d.ts Q1-Q5). Off, amendment wording is main's,
+ * and the change keeps only the empty-field veto and the contents fix. */
+export const FIRST_TITLE_CATCH = false;
+export function amendmentWording(pagesText: string, o: { firstTitleCatch?: boolean } = {}): boolean {
   const text = String(pagesText ?? "");
   if (AMENDS.test(text)) return true;
-  if (!firstTitle(text.split("\f"))?.amends) return false;
+  if (!(o.firstTitleCatch ?? FIRST_TITLE_CATCH) || !firstTitle(text.split("\f"))?.amends) return false;
   const flat = text.replace(/\s+/g, " ");
   return DATED_CHANGE.test(flat) && OWN_POLICY_NUMBER.test(flat) && !NOT_A_CHANGE.test(flat);
 }
@@ -81,12 +85,14 @@ const CHANGE_WORDS = new RegExp(String.raw`\b(?:(?:is|are|has\s+been|have\s+been
 /** The date the document's own change takes effect: "with effect from 1 March 2026", "Effective 1 May 2026", "Effective
  * date: 01/05/2026", "From 1 June 2026 your death benefit is S$250,000". */
 const DATED_CHANGE = new RegExp(String.raw`\b(?:with\s+effect\s+from|effective(?:\s+(?:from|on|date))?\s*:?|from)\s+(?:the\s+)?` + DATE, "i");
-/** The policy number the document changes, printed on it: "Policy No. TL-1", "Policy number: HG-55120", "to policy
- * KL-TL-100245". A brochure or a booklet names no policy of its own. */
-const OWN_POLICY_NUMBER = /\bpolicy\s*(?:no\.?|number|#)?\s*:?\s*(?=[A-Z0-9\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]{2,}\b/i;
+/** The policy number the document changes, printed with its label: "Policy No. TL-1", "Policy number: HG-55120". A
+ * bare year ("policy 2026") is no id, and a shared "Proposal / Policy No." label names a proposal. A brochure or a
+ * booklet names no policy of its own. */
+const OWN_POLICY_NUMBER = /(?<!\b(?:proposal|application|quotation|quote)\s*(?:\/|or|and)\s*)\bpolicy\s+(?:no\.?|number|#)\s*:?\s*(?!(?:19|20)\d\d\b)(?=[A-Z0-9\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]{2,}\b/i;
 /** A page that only describes a change someone may make, or a clause that may apply: a form to fill in, an option, an
- * illustration, a brochure, "applies only if shown in your schedule". */
-const NOT_A_CHANGE = /\b(?:to\s+be\s+completed|please\s+complete|request\s+form|application\s+form|options?\b|illustration|brochure|(?:applies|apply)\s+only\s+if|only\s+if\s+shown|if\s+shown\s+in)|_{3,}/i;
+ * illustration, a brochure, a quotation or proposal, a requested change "subject to acceptance", "applies only if shown in
+ * your schedule". */
+const NOT_A_CHANGE = /\b(?:quot(?:e|ation)s?\b|proposals?\b|proposed|requested|subject\s+to\s+(?:acceptance|approval|underwriting)|if\s+accepted|not\s+a\s+contract|to\s+be\s+completed|please\s+complete|request\s+form|application\s+form|options?\b|illustration|brochure|(?:applies|apply)\s+only\s+if|only\s+if\s+shown|if\s+shown\s+in)|_{3,}/i;
 function ownAmendmentEvidence(pages: string[]): boolean {
   if (pages.slice(0, 2).some((p) => p.split(/\r?\n/).some((l) => /\b(?:endorsement|alteration|amendment)\s+(?:no\.?|number)\s*0*[1-9]/i.test(l)))) return true;
   if (CHANGE_WORDS.test(pages.join(" ").replace(/\s+/g, " "))) return true;

@@ -1,6 +1,6 @@
 /**
- * Amendments (lib/policies/amendments.ts): main's wording is kept as it is, a first title line on the closed amendment
- * list now also amends, and the reader's "endorsement" type is set aside only when the document shows no amendment of its
+ * Amendments (lib/policies/amendments.ts): main's wording is kept as it is; a first title line on the closed amendment
+ * list can also amend, behind a switch that ships off; and the reader's "endorsement" type is set aside only when the document shows no amendment of its
  * own and prints an empty endorsement field ("Endorsements: Nil"); a title never sets it aside. And a contents entry never names the document: its
  * topmost title line does (lib/documents/fact-check.ts). Made-up English documents, no database, no network, no model.
  */
@@ -30,9 +30,9 @@ test("an amending document is known by its own title or an amending sentence", a
     ["only a sentence: altered with effect from", "Policy number EQ-551204\nAt your request, the policy is altered with effect from 1 September 2026."],
     ["only a sentence: premium amended as follows", "Renewal letter\nThe premium is amended as follows from the next policy year."],
   ];
-  for (const [why, text] of amending) assert.equal(amendmentWording(text), true, why);
+  for (const [why, text] of amending) assert.equal(amendmentWording(text, { firstTitleCatch: true }), true, why);
   for (const title of ["ENDORSEMENT SCHEDULE", "Change of Sum Assured", "Changes to your plan", "Amendment to Policy Schedule"])
-    assert.equal(amendmentWording(letterhead + title + "\nPolicy No. TL-1"), false, title + " with no date of its own");
+    assert.equal(amendmentWording(letterhead + title + "\nPolicy No. TL-1", { firstTitleCatch: true }), false, title + " with no date of its own");
   const ordinary: [string, string][] = [
     // TE r375 Q1-Q4: an appendix that applies only if shown, a blank form, an option page, a brochure heading.
     ["an endorsements appendix", "ENDORSEMENT\nApplies only if shown in your schedule\nWar and terrorism exclusion\nThis policy does not cover loss caused by war."],
@@ -42,6 +42,11 @@ test("an amending document is known by its own title or an amending sentence", a
     // TE r375 round 4 E4: a brochure page with an effective date and no policy number of its own.
     ["a dated brochure page", "Change of plan\nEffective date: 1 March 2026\nAt each renewal you can move up one plan level."],
     ["a dated title with no policy number", letterhead + "Changes to your plan\nEffective 1 March 2026\nYour new premium is S$410.00 a year."],
+    // Critic r375 p375d: a quotation, a change subject to acceptance, a proposal, a brochure naming "policy 2026 holders".
+    ["a quotation", "Change of Plan\nQuotation\nPolicy No. TW-88213\nThe new plan is effective from 1 January 2027."],
+    ["subject to acceptance", "Changes to your cover\nPolicy No. TW-88213\nEffective 1 January 2027, subject to acceptance."],
+    ["a proposal", "Change of Sum Assured\nProposal / Policy No.: P-77821\nRequested effective date: 1 January 2027"],
+    ["a brochure for policy 2026 holders", "Change of plan\nAvailable to policy 2026 holders from 1 Jan 2027."],
     ["a dated option page", "Increase in sum assured option\nPolicy No. TL-1\nFrom 1 June 2026 you may raise the sum assured by S$50,000."],
     ["a booklet on the law", "The scheme is set up under the Act and the Regulations made under the Act (and any amendments made to them from time to time)."],
     ["a premium review clause", "Premiums are not guaranteed and may be increased with effect from the next renewal. The premium is reviewed every year."],
@@ -63,7 +68,7 @@ test("an amending document is known by its own title or an amending sentence", a
     ["with effect from without a date", letterhead + "Renewal notice\nYour premium is changed with effect from your renewal date."],
     ["a title further down the first page", ["Orchard Health Plan", "Product summary", ...Array.from({ length: 30 }, (_, i) => `Benefit ${i + 1}\tS$${(i + 1) * 100}`), "Endorsement"].join("\n")],
   ];
-  for (const [why, text] of ordinary) assert.equal(amendmentWording(text), false, why);
+  for (const [why, text] of ordinary) assert.equal(amendmentWording(text, { firstTitleCatch: true }), false, why);
   // Sentences and form lines this change leaves exactly as main reads them (wider sentence catches leak both ways and are
   // left for a later change): main's own wording decides, with no new catch and no new miss.
   const MAIN_AMENDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
@@ -87,6 +92,13 @@ test("an amending document is known by its own title or an amending sentence", a
   ];
   for (const [why, text] of asMain) assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why);
   for (const why of ["an inflation clause", "a claim letter", "a projected values table"]) assert.equal(amendmentWording(asMain.find((c) => c[0] === why)![1]), false, why);
+  // As shipped the first-title catch is off (FIRST_TITLE_CATCH): every document reads exactly as on main, including the
+  // brochure page and quotation shapes that kept slipping through it (TE r375 E11, Critic p375d Q1-Q5).
+  const { FIRST_TITLE_CATCH } = await import("@/lib/policies/amendments");
+  assert.equal(FIRST_TITLE_CATCH, false);
+  const brochure = "Change of plan\nPolicy number LT-5520\nEffective date: 1 March 2026\nAt each renewal the plan can be moved up one level.\nPlan Plus premium S$480 a year";
+  for (const [why, text] of [...amending, ...ordinary, ...asMain, ["a brochure page with a policy number", brochure] as [string, string]])
+    assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why + " (as shipped)");
   // The reader's "endorsement" type still makes an amendment (a lost one leaves an old figure shown), unless the text
   // prints an empty endorsement field and no amendment evidence of its own.
   const { endorsementTypeVetoed } = await import("@/lib/policies/amendments");
