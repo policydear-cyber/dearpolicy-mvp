@@ -49,7 +49,9 @@ export function printedUnits(line: string, figures: FigureSpan[]): string[] {
     // A phrase between this figure and the one before it that is only that phrase: whose it is depends on the layout.
     const sharedBefore = b != null && i > 0 && after[i - 1] != null && onlyUnitBetween(line.slice(figures[i - 1].end, f.start));
     const sharedAfter = a != null && i < figures.length - 1 && before[i + 1] != null && onlyUnitBetween(line.slice(f.end, figures[i + 1].start));
-    const own = [unitsFirst || !sharedBefore ? b : null, !unitsFirst || !sharedAfter ? a : null].filter((u): u is string => u != null);
+    let own = [unitsFirst || !sharedBefore ? b : null, !unitsFirst || !sharedAfter ? a : null].filter((u): u is string => u != null);
+    // "Per (insured) person" on one side gives way to a unit on the other ("Per insured person: S$2,000 a month").
+    if (own.length === 2 && own.some((u) => u === "person") && own.some((u) => u !== "person")) own = own.filter((u) => u !== "person");
     // A rate unit before and a different unit after ("Per day S$100 per year"): no one unit is the figure's. Two units
     // that are no rate ("each trip up to S$500 per person") may both hold: the first printed stands.
     if (own.length === 2 && own[0] !== own[1] && (RATE_UNITS.has(own[0]) || RATE_UNITS.has(own[1]))) { out.push("?"); return; }

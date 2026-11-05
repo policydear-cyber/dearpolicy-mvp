@@ -27,7 +27,7 @@ const helper: [string, string[]][] = [
   ["Per day: S$100 S$200 S$300", ["day", "day", "day"]], ["S$300 per day maximum S$9,000", ["day", ""]],
   ["Room and board per day S$300 per day maximum S$9,000", ["day", ""]], ["Each trip up to S$500 per person", ["trip"]],
   // TE r376: "per (insured) person" before another unit gives way to it.
-  ["S$50 per person per day", ["day"]], ["S$200 per insured person per day", ["day"]], ["S$2,000 per insured person per month", ["month"]],
+  ["S$50 per person per day", ["day"]], ["S$200 per insured person per day", ["day"]], ["S$2,000 per insured person per month", ["month"]], ["Per insured person: S$2,000 a month", ["month"]], ["Per person S$50 per day", ["day"]],
   // Words that are no unit stay none.
   ["Hospital cash for day surgery S$100", [""]], ["Payable per the schedule S$500", [""]], ["Daily living S$500", [""]],
 ];
@@ -94,6 +94,7 @@ plans.push(["one unit before the run", "Hospital cash Per day: S$100 S$200 S$300
 for (const [name, line, v] of plans) check(`plans, no column: ${name}`, () => assert.equal(value(line, { pays: "per_day", value: v }), null));
 check("per person before a run of lump sums is still plans (Critic r376 P4)", () => assert.equal(value("Accidental death per person S$100,000 S$200,000", { pays: "amount", value: 100000 }), null));
 // Critic r376 P5-P7: real rows kept.
+check("kept: per insured person before, a month after (TE r376 Q9)", () => assert.equal(value("Disability income per insured person: S$2,000 a month", { pays: "per_period", period: "month", value: 2000 }), 2000));
 check("kept: per trip and per person on one cap", () => assert.equal(value("Baggage delay each trip up to S$500 per person", { pays: "up_to", value: 500 }), 500));
 check("kept: a cap after a rate's unit and a cap word", () => assert.equal(value("Room and board per day S$300 per day maximum S$9,000", { pays: "up_to", value: 9000 }), 9000));
 check("kept: the row's own line, not another line printing the same figure", () => {
