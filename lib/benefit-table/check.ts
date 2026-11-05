@@ -59,9 +59,11 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // S$1,000 on Premier", "S$100,000 for adults / S$25,000 for children") are plans' or people's cells (Critic R367).
       if (here && here === next && /^(?:for|on|in|under)$/.test(here))
         return /^\s*,?\s*\w+\s+(?:[\w.'&-]+\s*){1,4}?[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between);
-      // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's
-      // figure, never another plan's (TE pr367).
-      if (here || next) return false;
+      // A condition between two cells sets them apart. A condition after the last cell joined by "and"/"or" ("S$100 per
+      // day and S$200 per day in ICU") is that cell's own condition (TE pr367); after cells set side by side by spaces,
+      // "|", "/" or ";" it qualifies the whole row ("S$5,000 | S$10,000 for any one trip", TE pr367 r2).
+      if (here) return false;
+      if (next && /\b(?:and|or|plus)\b/i.test(between)) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
     };

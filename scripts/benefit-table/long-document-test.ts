@@ -320,12 +320,14 @@ async function main() {
       ["Lost item", 200], ["Lost item", 1_000], ["Course fees", 2_000], ["Hospital cash", 100]]);
   });
 
-  await test("L15 parallel cells that each name their plan or person are plans; a lone condition is not (Critic R367)", async () => {
+  await test("L15 parallel cells that each name their plan or person are plans; a row-wide qualifier keeps them plans; a lone condition is not (Critic R367, TE pr367)", async () => {
     const { checkReading } = await import("@/lib/benefit-table/check");
     const lines = ["Trip cancellation S$5,000 for Plan A | S$10,000 for Plan B", "Hospital cash S$100 per day for Classic / S$200 per day for Elite",
       "Baggage S$500 on Basic, S$1,000 on Premier", "Medical expenses S$50,000 in Plan 1 or S$100,000 in Plan 2",
       "Accidental death S$100,000 under Silver; S$250,000 under Gold", "Accidental death S$100,000 for adults / S$25,000 for children",
-      "Personal accident S$100,000 for each adult, S$25,000 for each child", "Hospital income S$100 per day and S$200 per day in ICU"];
+      "Personal accident S$100,000 for each adult, S$25,000 for each child", "Hospital income S$100 per day and S$200 per day in ICU",
+      "Trip cancellation S$5,000 | S$10,000 for any one trip", "Medical expenses S$150,000 S$400,000 for each insured person",
+      "Baggage S$1,000 / S$3,000 in total", "Travel delay S$100 / S$200 after every 6 hours of delay"];
     const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
@@ -333,6 +335,8 @@ async function main() {
       row("Trip cancellation", 5_000, lines[0]), row("Hospital cash", 200, lines[1]), row("Baggage", 500, lines[2]), row("Medical expenses", 100_000, lines[3]),
       row("Accidental death", 100_000, lines[4]), row("Accidental death", 25_000, lines[5]), row("Personal accident", 100_000, lines[6]),
       row("Hospital income", 100, lines[7]),
+      // A qualifier after the last cell applies to the whole row (TE pr367 r2).
+      row("Trip cancellation", 5_000, lines[8]), row("Medical expenses", 150_000, lines[9]), row("Baggage", 1_000, lines[10]), row("Travel delay", 100, lines[11]),
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100]]);
   });
