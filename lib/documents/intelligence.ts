@@ -100,14 +100,28 @@ function summaryTitle(pages: PdfPage[]): "product_summary" | null {
   if (/\b(?:schedule|certificate)\b/.test(head)) return null;
   // A summary that prints the policy's own number and the person it is for is that person's schedule (Critic R362 B2).
   if (personalParticulars(fullText(pages, 2).toLowerCase())) return null;
-  return SUMMARY_TITLE.test(head) ? "product_summary" : null;
+  return titleLine(head, SUMMARY_TITLE) ? "product_summary" : null;
 }
 
 /** The type a document's pages print about themselves in a title or a fixed layout, and nothing weaker: a letter or
  * notice, Part 2 of a certificate alone, a certificate or schedule with its particulars, an endorsement or alteration
  * title, a summary title, a "Policy wording" title line, a schedule page. Keyword hints ("the policy schedule",
  * "definitions") are not used, since a wording's glossary mentions all of them. Null when the pages print no such type. */
-const CERTIFICATE_TITLE = /certificate of (?:group )?insurance\b(?!["'\u201d\u2019]?\s*(?:means\b|refers\b|is\b|:\s*(?:the|a|an|this|any|our|your)\b))/;
+/** What follows a defined term in a glossary ("Endorsement means ...", "Certificate of insurance: the document ..."). */
+const DEFINITION_AFTER = /^["'\u201d\u2019]?\s*(?:means\b|refers\b|is\b|:\s*(?:the|a|an|this|any|our|your)\b)/;
+/** Whether one of these lines (lower-case) is a title the pattern names: a short line (at most 8 words, unless `longOk`
+ * matches it, as "Endorsement no. 2 to policy ..." may run on) that does not go on to define the term (Critic R362). */
+function titleLine(lines: string, title: RegExp, longOk?: RegExp) {
+  return lines.split("\n").map((l) => l.trim()).some((line) => {
+    const m = title.exec(line);
+    if (!m) return false;
+    if (DEFINITION_AFTER.test(line.slice(m.index + m[0].length))) return false;
+    return line.split(/\s+/).length <= 8 || !!longOk?.test(line);
+  });
+}
+const CERTIFICATE_TITLE = /certificate of (?:group )?insurance\b/;
+const ENDORSEMENT_NUMBER = /\bendorsement\s+(?:no\.?|number)\s*\d/;
+const ENDORSEMENT_TITLE = /\bendorsement\s+(?:no\.?|number)\s*\d|^(?:policy\s+)?endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/;
 
 export function printedDocumentRole(pages: PdfPage[]): PolicyExtraction["documentRole"] | null {
   const correspondence = correspondenceRole(pages);
@@ -118,13 +132,13 @@ export function printedDocumentRole(pages: PdfPage[]): PolicyExtraction["documen
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   // A certificate titles itself on page 1; a glossary's entry ("Certificate of insurance means ...", "Certificate of
   // insurance: the document we ...") is not a title (Critic R362 M1).
-  if (CERTIFICATE_TITLE.test(opening) && (/(sum assured|effective date|particulars of insured|insured person)/.test(text) || partOneParticulars(text))) return "certificate";
+  if (titleLine(opening, CERTIFICATE_TITLE) && (/(sum assured|effective date|particulars of insured|insured person)/.test(text) || partOneParticulars(text))) return "certificate";
   const titled = personalDocumentTitle(fullText(pages, 2));
   if (titled) return titled;
-  if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*(?:policy\s+)?endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement";
+  if (titleLine(opening, ENDORSEMENT_TITLE, ENDORSEMENT_NUMBER) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement";
   const summary = summaryTitle(pages);
   if (summary) return summary;
-  if (/^\s*policy wording\s*$/m.test(opening) && !/\bthis endorsement\b/.test(opening)) return "policy_wording";
+  if (titleLine(opening, /^policy wording$/) && !/\bthis endorsement\b/.test(opening)) return "policy_wording";
   if (schedulePage(pages) != null) return "personal_schedule";
   return null;
 }

@@ -125,6 +125,14 @@ async function main() {
     assert.equal(printedDocumentRole(G1), "policy_wording");
     const G2 = P("Harbourline Travel insurance\nCertificate of insurance means the document that names the insured person and the effective date.");
     assert.notEqual(printedDocumentRole(G2), "certificate");
+    // A wording that opens on its definitions prints no type of its own: no glossary line is a title (Critic R362 G1).
+    const G3 = P("Kestrel Journey Terms\nSection 1 Definitions\nCertificate of insurance means the document that names the insured person.\nPolicy schedule means the schedule.\nEndorsement means a change to this policy.\nPolicy summary: the leaflet we give you before you buy.\nEffective date means the date cover starts.");
+    assert.equal(printedDocumentRole(G3), null);
+    assert.equal(roleOnReread("policy_wording", "endorsement", false, { codeRole: printedDocumentRole(G3) }), "policy_wording");
+    assert.equal(roleOnReread("policy_wording", "certificate", false, { codeRole: printedDocumentRole(G3) }), "policy_wording");
+    // A long sentence that only mentions an endorsement is not its title; a numbered endorsement title may run on.
+    assert.equal(printedDocumentRole(P("Kestrel Journey Terms\nEndorsement of any change we agree will be sent to you in writing within 14 days.\nPolicy number: KJ-44120")), null);
+    assert.equal(printedDocumentRole(P("Kestrel Assurance\nEndorsement No. 3 to policy KJ-44120 issued to the policyholder named below\nEffective date: 1 March 2026")), "endorsement");
     // A real certificate titles itself on page 1.
     assert.equal(printedDocumentRole(P("Harbourline Assurance\nCertificate of Insurance\nInsured person: Ana Rivera\nEffective date: 1 March 2026\nSum assured S$200,000")), "certificate");
   });
