@@ -39,14 +39,21 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/s$/, "");
       // A figure after "up to" or "maximum" is a cap, whatever its unit.
       const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
-      return { text: m[1], amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
+      return { text: m[1], start: m.index!, end: m.index! + m[0].length, amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
     });
-    const mine = cells.find((c) => Math.abs(c.amount - value) < 0.005);
-    if (!mine) return false;
-    const sameUnit = cells.filter((c) => c.unit === mine.unit);
+    const at = cells.findIndex((c) => Math.abs(c.amount - value) < 0.005);
+    if (at < 0) return false;
+    // The run of cells side by side with this one: only separators between them (spaces, tabs, "|", "/", ";", ",", "or").
+    // A figure set off by words ("RM150 per day (RM300 per day if confined in ICU)") is a condition, not another plan.
+    const apart = (i: number) => /^[\s|/;,]*(?:or\b)?[\s|/;,]*$/i.test(line.slice(cells[i].end, cells[i + 1].start));
+    let from = at, to = at;
+    while (from > 0 && apart(from - 1)) from--;
+    while (to < cells.length - 1 && apart(to)) to++;
+    const mine = cells[at];
+    const sameUnit = cells.slice(from, to + 1).filter((c) => c.unit === mine.unit);
     if (new Set(sameUnit.map((c) => c.amount)).size < 2) return false;
     // The same cells side by side, for figuresDifferByPlan's sum-and-premium and currency rules.
-    return figuresDifferByPlan(line.slice(0, line.indexOf(cells[0].text)) + "\t" + sameUnit.map((c) => c.text).join("\t"));
+    return figuresDifferByPlan(line.slice(0, cells[0].start) + "\t" + sameUnit.map((c) => c.text).join("\t"));
   });
 }
 
