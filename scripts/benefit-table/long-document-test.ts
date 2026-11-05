@@ -302,6 +302,20 @@ async function main() {
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital allowance", 8_000], ["Hospital allowance", 200], ["Accidental death", 100_000]]);
   });
 
+  await test("L14 two plans' rates in one unit are plans whatever separates them; a rate and its cap in another unit stay (TE pr364)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const lines = ["Hospital cash S$100 per day | S$200 per day", "Hotel stay S$50/night or S$80/night", "Hospital income S$200 per day S$20,000 per year",
+      "Medical expenses S$100,000; S$250,000", "Travel delay S$100 every 6 hours up to S$1,000"];
+    const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
+    const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
+      row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), row("Hospital income", 200, lines[2]), row("Hospital income", 20_000, lines[2]),
+      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]),
+    ] });
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000]]);
+  });
+
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);

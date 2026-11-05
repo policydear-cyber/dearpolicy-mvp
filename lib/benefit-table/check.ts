@@ -23,22 +23,30 @@ import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, typ
 
 /** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
 const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-Za-z$])\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d[\d,]*(?:\.\d+)?`;
-const MONEY_CELL = new RegExp(MONEY, "g");
-/** A "/" or "|" between two money cells separates plans' columns ("S$5,000 / S$10,000"). */
-const CELL_SEPARATOR = new RegExp(String.raw`(\d)\s*[/|]\s*(?=` + MONEY + ")", "g");
-/** A money cell that is a rate: a unit word right after the figure ("S$200 per day", "S$50/night", "S$100 each", "daily"). */
-const RATE_CELL = new RegExp(MONEY + String.raw`\s*(?:\/\s*(?:day|night|week|month|trip)\b|per\b|each\b|daily\b|weekly\b|a (?:day|night|week|month)\b)`, "gi");
-/** Whether the excerpt's line that prints this figure is a row of plan figures: three or more money cells that differ,
- * or two that differ unless exactly one is a rate and the other its limit ("RM200 per day RM8,000"). Slash and pipe
- * layouts count as cells; a sum and its premium are set aside by figuresDifferByPlan (Critic R364). */
+/** A money cell and the unit printed right after it ("S$200 per day", "S$50/night", "S$100 each", "daily"). */
+const UNIT_AFTER = String.raw`(?:\s*(?:\/\s*(day|night|week|month|year|trip)s?\b|(?:per|every)\s+(?:\d+\s+)?([a-z]+)|(each)\b|(daily|weekly|monthly|yearly|annually)\b|a\s+(day|night|week|month|year)\b))?`;
+const MONEY_WITH_UNIT = new RegExp("(" + MONEY + ")" + UNIT_AFTER, "gi");
+const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year", annually: "year", annum: "year", annual: "year", each: "item", item: "item" };
+/** Whether the excerpt's line that prints this figure is a row of plan figures (Critic R364, TE pr364): the figure is
+ * one of two or more different figures in one unit ("S$5,000 S$10,000", "S$100 per day | S$200 per day", "S$50/night or
+ * S$80/night"), however the cells are separated. Figures in different units are a rate and its cap ("S$200 per day up
+ * to S$8,000", "S$200 per day S$20,000 per year", "S$100 every 6 hours up to S$1,000"); a sum and its premium, or figures in different currencies, are set
+ * aside by figuresDifferByPlan. */
 function plansOnValueLine(excerpt: string, value: number): boolean {
   const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
-  return (lines.length ? lines : [excerpt]).some((raw) => {
-    const line = raw.replace(CELL_SEPARATOR, "$1\t");
-    if (!figuresDifferByPlan(line)) return false;
-    const cells = (line.match(MONEY_CELL) ?? []).length;
-    const rates = (line.match(RATE_CELL) ?? []).length;
-    return cells >= 3 || (cells === 2 && rates !== 1);
+  return (lines.length ? lines : [excerpt]).some((line) => {
+    const cells = [...line.matchAll(MONEY_WITH_UNIT)].map((m) => {
+      const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/s$/, "");
+      // A figure after "up to" or "maximum" is a cap, whatever its unit.
+      const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
+      return { text: m[1], amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
+    });
+    const mine = cells.find((c) => Math.abs(c.amount - value) < 0.005);
+    if (!mine) return false;
+    const sameUnit = cells.filter((c) => c.unit === mine.unit);
+    if (new Set(sameUnit.map((c) => c.amount)).size < 2) return false;
+    // The same cells side by side, for figuresDifferByPlan's sum-and-premium and currency rules.
+    return figuresDifferByPlan(line.slice(0, line.indexOf(cells[0].text)) + "\t" + sameUnit.map((c) => c.text).join("\t"));
   });
 }
 
