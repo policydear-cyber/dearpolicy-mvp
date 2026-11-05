@@ -37,7 +37,7 @@ const HARMLESS_FIGURES = /\b\p{Nd}{1,3}\s+(?:early\s+|covered\s+|specified\s+|ma
 /** How it is paid, not how much: "in one lump sum". */
 const IN_A_LUMP_SUM = /\b(?:in|as)\s+(?:a|one)\s+(?:single\s+)?lump[\s-]sum\b/giu;
 /** Words that make the payout differ from the whole sum: "less any loan", "for each child", "in ten yearly instalments". */
-const CHANGES_THE_SUM = /\b(?:less|minus|deduct\w*|net|reduc\w*|loans?|debts?|offset|except|or|but|times|instead|after|plus|subject|each|per|every|instal\w*|yearly|annual\w*|monthly|parts?|only|base)\b/iu;
+export const CHANGES_THE_SUM = /\b(?:less|minus|deduct\w*|net|reduc\w*|loans?|debts?|offset|except|or|but|times|instead|after|plus|subject|each|per|every|instal\w*|yearly|annual\w*|monthly|parts?|only|base)\b/iu;
 const NAMED_LIMIT = /\b(?:(?:will\s+)?not\s+(?:be\s+)?more\s+than|no\s+more\s+than|within|up\s+to|subject\s+to)\s+the\s+[\p{L}/()\s-]{0,40}?\blimits?\b/giu;
 /** What else a waiver, an advance or a whole-sum passage may say (allow-list, Critic R466): who, what event, when, and
  * the plan's own words. A word of paying, adding, refunding or adjusting ("and pay the sum insured", "together with an

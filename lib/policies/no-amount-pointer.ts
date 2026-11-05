@@ -11,6 +11,8 @@
  * figure the row itself could not, and the two must not read as a contradiction (live check, 5 Nov). Pure: safe for
  * client components.
  */
+import { CHANGES_THE_SUM } from "@/lib/policies/unread-amount-line";
+
 const NO_AMOUNT_HERE = /\bno amount (?:is )?printed beside it here\b|\bwith no amount in it\b|\bpays the whole sum insured, which this document does not print for you\b/i;
 
 /** Only a benefit whose amount is the policy's sum insured (Critic M1, TE #355): one that names a lump sum paid on death,
@@ -29,6 +31,30 @@ const WHOLE_SUM = /\bpays the whole sum insured, which this document does not pr
  * sum assured", "an extra 50%"): the whole sum on Coverage is not what it pays, so a row whose amount could not be read gets
  * no pointer beside it (TE #365 EXTRA 1-5). */
 const SHARE_OR_CAP = /%|\bper\s*cent\b|\bpercent(?:age)?\b|\bhalf\b|\bdouble\b|\btwice\b|\btriple\b|\bthrice\b|\bextra\b|\badditional\b|\bbooster\b|\bmultiple\b|\btimes\b|\bfold\b|\b\d+\s*\/\s*\d+\b|\b(?:thirds?|quarters?|fifths?|tenths?)\b|\bportion\b|\bshare\b|\bmax(?:imum|\.)?\b|\bup\s+to\b|\blimit(?:ed)?\b|\bcap(?:ped)?\b|\bnot\s+exceed(?:ing)?\b/i;
+/** A row whose amount could not be read gets the pointer only when its own name, once the policy's product name, "benefit",
+ * "cover" and "(lump sum)" are taken out, is exactly one of these (Critic #365: a closed list, so "Early", "Minor",
+ * "Partial", "Advance", "Accelerated", "Juvenile", "Special" or any other word that pays part of the sum is left out without
+ * being named). "Basic", "main", "comprehensive" and "full" say which cover it is, not how much of it. */
+const WHOLE_SUM_NAMES = new Set(["death", "terminal illness", "death or terminal illness", "total and permanent disability", "total & permanent disability",
+  "permanent total disability", "tpd", "death or tpd", "critical illness", "critical illnesses", "dread disease", "major illness"]);
+function plainSumName(benefitName: string, productName?: string | null): boolean {
+  let name = benefitName.normalize("NFKC").toLowerCase();
+  const product = (productName ?? "").normalize("NFKC").toLowerCase().trim();
+  if (product && !WHOLE_SUM_NAMES.has(product)) name = name.split(product).join(" ");
+  name = name.replace(/\(\s*lump[\s-]sum\s*\)/g, " ").replace(/\b(?:benefits?|cover(?:age)?|the|basic|main|comprehensive|full)\b/g, " ")
+    .replace(/[^\p{L}\p{N}&]+/gu, " ").trim().replace(/\s+/g, " ");
+  return WHOLE_SUM_NAMES.has(name);
+}
+/** What a passage may say that does not change how much is paid: where it is printed (an item, section, table or page of
+ * the schedule), and the age the cover lasts to. Taken out before the passage is checked for words that change the sum. */
+const WHERE_PRINTED = /\b(?:(?:as\s+)?per|see|refer\s+to|in|under|at)?\s*(?:item|section|clause|table|rider|page|paragraph|part)\s+[\p{N}][\p{N}.]*(?:\s*\([\p{L}\p{N}]{1,3}\))?(?:\s+of\s+(?:your|the)\s+(?:policy\s+)?schedule)?|\(?\s*(?:S\$|\$)?\s*see\s+(?:your\s+|the\s+)?(?:policy\s+)?schedule\s*\)?|\b(?:up\s+to|before|until|till|to|by)\s+(?:the\s+)?age\s+(?:of\s+)?\p{N}{1,3}\b/giu;
+/** After that, any word that makes the payout differ from the whole sum (unreadAmountLine's own list), a share, a multiple,
+ * a bonus, a cap or a condition gives no pointer (TE #365 R1-R2). */
+const CHANGES_IT = /\p{N}(?:\.\p{N}+)?\s*[x×]|[x×]\s*\p{N}|\bbonus\w*|\bif\b|\bunless\b|\bprovided\b|\bdepend\w*|\baccident\w*|\bsurrender\w*|\bvalue\b/iu;
+function passageKeepsTheSum(quote: string | null): boolean {
+  const rest = (quote ?? "").normalize("NFKC").replace(WHERE_PRINTED, " ");
+  return !CHANGES_THE_SUM.test(rest) && !SHARE_OR_CAP.test(rest) && !CHANGES_IT.test(rest);
+}
 /** unreadAmountLine's last line: the passage was read, its amount was not. */
 const NOT_READ = /^The amount on (?:page \d+|the page) could not be read\.$/;
 
@@ -44,13 +70,13 @@ export function sumKindsOf(benefitName: string): string[] {
 }
 
 /** Whether the row, showing `line` as what it pays, is one of those. */
-export function pointsToScheduleSum(b: { formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns?: boolean; benefitName: string; quote: string | null; foundSum?: boolean },
+export function pointsToScheduleSum(b: { formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns?: boolean; benefitName: string; quote: string | null; foundSum?: boolean; productName?: string | null },
   line: string) {
   const notRead = b.attention === "unreadable" && b.foundSum === true && NOT_READ.test(line);
   if (b.formulaKind !== "none" || b.attention === "confirm" || b.needsConfirmation || b.planColumns || !(NO_AMOUNT_HERE.test(line) || notRead)) return false;
   const words = `${b.benefitName} ${b.quote ?? ""}`;
   if (WAIVER.test(words)) return false;
-  if (notRead) return SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName) && !SHARE_OR_CAP.test(words);
+  if (notRead) return plainSumName(b.benefitName, b.productName) && passageKeepsTheSum(b.quote);
   return WHOLE_SUM.test(line) || (SUM_BENEFIT.test(b.benefitName) && !OTHER_PAYMENT.test(b.benefitName)) || NAMES_SUM.test(b.quote ?? "");
 }
 

@@ -15,7 +15,7 @@ let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
 
 const none = { formulaKind: "none" as const, formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null };
-type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null; foundSum: boolean }>;
+type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null; foundSum: boolean; productName: string | null }>;
 const row = (extra: Extra = {}) => ({ formulaKind: "none", attention: null, needsConfirmation: false, benefitName: "Critical Illness II", quote: "Critical Illness II is included in this plan.", ...extra });
 const named = "Named in the policy; no amount is printed beside it here";
 
@@ -84,6 +84,25 @@ test("a sum-insured row whose amount could not be read gets it only when Coverag
     ["Critical Illness Benefit", "One third of the sum assured, not exceeding S$100,000"], ["Death Benefit", "We pay the sum assured, limited to S$1,000,000 per life."],
     ["Double Indemnity Death Benefit", "Payable on accidental death."], ["Additional Death Benefit", "Payable on death within 90 days of an accident."]])
     assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: q }), line), false, `${benefitName}: ${q}`);
+  // A closed list of names: any word that pays part of the sum is left out without being named (Critic #365).
+  for (const benefitName of ["Early critical illness benefit", "Early stage critical illness", "Minor critical illness", "Advance payment of death benefit",
+    "Accelerated critical illness", "Juvenile critical illness", "Special critical illness", "Partial total and permanent disability", "Accidental Death Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: null }), line), false, benefitName);
+  // The policy's own product name, "benefit", "(lump sum)" and a word that only says which cover it is do not count.
+  for (const [benefitName, productName] of [["Death benefit", null], ["Terminal illness benefit", null], ["Death Benefit (lump sum)", null], ["Basic TPD Cover", null],
+    ["Comprehensive Critical Illness Benefit", null], ["Lotus Shield Death Benefit", "Lotus Shield"], ["Death or TPD Benefit", null]] as const)
+    assert.equal(pointsToScheduleSum({ ...unread({ foundSum: true, benefitName, quote: null }), productName }, line), true, benefitName);
+  assert.equal(pointsToScheduleSum({ ...unread({ foundSum: true, benefitName: "Lotus Shield Early Death Benefit", quote: null }), productName: "Lotus Shield" }, line), false);
+  // A passage that changes the sum (a multiple, a bonus, a loan, an earlier claim, a condition), whatever its name (TE #365 R2).
+  for (const q of ["Death benefit: 1.5x the sum assured if death is due to an accident, item 3.", "Death benefit: the sum assured plus any bonuses declared, item 3.",
+    "Death benefit: the sum assured less any outstanding policy loan, item 3.", "Death benefit: the sum assured, reduced by any earlier early-stage claim, item 4.",
+    "Death benefit: the sum assured or the surrender value, whichever is higher.", "Death benefit (item 3), subject to the limit of liability clause."])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, quote: q }), line), false, q);
+  // Where it is printed, and the age the cover lasts to, do not change the sum (TE #365 R2).
+  for (const [benefitName, q] of [["Death Benefit", "Death benefit, payable on death before age 99 (item 3)."], ["Terminal Illness Benefit", "Terminal illness benefit: see item 5 of your schedule."],
+    ["Total and Permanent Disability", "TPD covered up to age 65, item 7."], ["Death Benefit", "Death benefit: the amount in Table 4.2(b) applies."],
+    ["Terminal Illness Benefit", "Terminal illness: as per item 3 of the schedule (S$ see schedule)."], ["Dread Disease Benefit", "Dread disease benefit, item 2.4."]])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: q }), line), true, q);
   // The plain death or illness passage still gets it.
   assert.equal(pointsToScheduleSum(unread({ foundSum: true, quote: "The sum assured is payable on death of the life assured." }), line), true);
   // Only an unreadable row, and only the plain "could not be read" line: an amount awaiting a check, or a line that already
