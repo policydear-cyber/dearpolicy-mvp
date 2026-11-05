@@ -30,8 +30,12 @@ const MONEY_WITH_UNIT = new RegExp("(" + MONEY + ")" + UNIT_AFTER, "gi");
 const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year", annually: "year", annum: "year", annual: "year", each: "item", item: "item" };
 /** The units printed with each place the excerpt prints this money figure (lib/insurance/printed-unit), leaving out the
  * places that print none. */
-function printedUnitsOf(excerpt: string, value: number): string[] {
-  return excerpt.split("\n").flatMap((line) => {
+function printedUnitsOf(excerpt: string, value: number, label: string): string[] {
+  // The lines that print the figure; of those, the ones that carry the row's own label when any does ("Hospital cash
+  // S$100 per day" and not "Excess S$100 per claim" below it), else the first, where the quote starts.
+  const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
+  const own = lines.filter((l) => label.trim() && flat(l).includes(flat(label)));
+  return (own.length ? own : lines.slice(0, 1)).flatMap((line) => {
     const found = [...line.matchAll(new RegExp(MONEY, "gi"))];
     const units = printedUnits(line, found.map((m) => ({ start: m.index!, end: m.index! + m[0].length })));
     return found.flatMap((m, i) => Math.abs(Number(m[0].replace(/^[^\d]*/, "").replace(/,/g, "")) - value) < 0.005 && units[i] ? [units[i]] : []);
@@ -822,7 +826,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // A payment with no period is dropped below, as before.
     const knownPeriod = (PERIODS as readonly string[]).includes(b.period as string);
     if (value != null && (pays === "amount" || pays === "up_to" || pays === "per_day" || (pays === "per_period" && knownPeriod))) {
-      const units = printedUnitsOf(source.excerpt, value);
+      const units = printedUnitsOf(source.excerpt, value, benefit);
       const period = pays === "per_period" ? String(b.period) : "";
       const wrong = units.find((u) => u === "?"
         || (pays === "per_day" && u !== "day" && u !== "night")

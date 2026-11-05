@@ -22,7 +22,12 @@ const helper: [string, string[]][] = [
   ["S$100 per day S$200 per day", ["day", "day"]], ["Per day S$100 per day S$200", ["day", "day"]],
   ["S$200 per day up to S$8,000", ["day", ""]], ["Per day S$200 up to S$8,000", ["day", ""]], ["S$100 per day S$3,000", ["day", ""]],
   ["Per trip S$300 per year S$1,500", ["trip", "year"]], ["S$300 per trip, S$1,500 per year", ["trip", "year"]],
-  ["Per day S$100 per year", ["?"]], ["RM 150 a day", ["day"]], ["Per night: £80 | £120", ["night", ""]],
+  ["Per day S$100 per year", ["?"]], ["RM 150 a day", ["day"]], ["Per night: £80 | £120", ["night", "night"]],
+  // Critic r376: a run of cells under one unit printed first; a unit and its cap; two units that are no rate.
+  ["Per day: S$100 S$200 S$300", ["day", "day", "day"]], ["S$300 per day maximum S$9,000", ["day", ""]],
+  ["Room and board per day S$300 per day maximum S$9,000", ["day", ""]], ["Each trip up to S$500 per person", ["trip"]],
+  // TE r376: "per (insured) person" before another unit gives way to it.
+  ["S$50 per person per day", ["day"]], ["S$200 per insured person per day", ["day"]], ["S$2,000 per insured person per month", ["month"]],
   // Words that are no unit stay none.
   ["Hospital cash for day surgery S$100", [""]], ["Payable per the schedule S$500", [""]], ["Daily living S$500", [""]],
 ];
@@ -83,7 +88,19 @@ const plans: [string, string, number][] = [
   ["units before, second plan", "Hospital cash per day S$100 per day S$200 per day S$300", 200],
   ["units before, pipes", "Hotel stay per night S$80 | per night S$120", 80],
 ];
+// Critic r376 P1-P4: a unit printed once before a run of plan cells covers the whole run.
+plans.push(["one unit before the run", "Hospital cash Per day: S$100 S$200 S$300", 100], ["one unit, pipes", "Hotel Per night: S$80 | S$120", 80],
+  ["'Daily' before the run", "Hospital income Daily S$100 S$200", 100]);
 for (const [name, line, v] of plans) check(`plans, no column: ${name}`, () => assert.equal(value(line, { pays: "per_day", value: v }), null));
+check("per person before a run of lump sums is still plans (Critic r376 P4)", () => assert.equal(value("Accidental death per person S$100,000 S$200,000", { pays: "amount", value: 100000 }), null));
+// Critic r376 P5-P7: real rows kept.
+check("kept: per trip and per person on one cap", () => assert.equal(value("Baggage delay each trip up to S$500 per person", { pays: "up_to", value: 500 }), 500));
+check("kept: a cap after a rate's unit and a cap word", () => assert.equal(value("Room and board per day S$300 per day maximum S$9,000", { pays: "up_to", value: 9000 }), 9000));
+check("kept: the row's own line, not another line printing the same figure", () => {
+  const text = header + "Hospital cash S$100 per day\nExcess S$100 per claim";
+  const got = read(text, [{ benefit: "Hospital cash", pays: "per_day", value: 100, quote: "Hospital cash S$100 per day\nExcess S$100 per claim" }]);
+  assert.equal(got.benefits[0]?.value, 100, JSON.stringify(got.dropped));
+});
 check("a rate and its cap stay one plan's figures with the unit before", () => assert.equal(value("ICU per day S$600 up to S$18,000", { pays: "per_day", value: 600 }), 600));
 
 // Schedule terms: units before each figure.
