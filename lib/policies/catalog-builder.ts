@@ -177,9 +177,31 @@ export function cleanBenefitName(label:string){
  * everything else is a typed, cited row of the schedule that is never
  * calculated into a claim amount here. */
 export type TableRowKind="benefit"|"as_charged"|"not_covered"|"unlimited"|"deductible"|"co_insurance"|"co_payment"|"co_payment_cap"|"pro_ration"|"policy_year_limit"|"family_limit";
+/** A cell that says the benefit does not apply: "N/A", "n.a.", "Nil", "Not applicable", "Excluded", a dash. */
+const NOT_APPLYING_CELL=/^\s*:?\s*(?:not\s+(?:applicable|covered|available|included|insured|payable)|excluded|no\s+cover|n\.\s?a\.?|n\/a|nil|[-–—])[*.†#^]*\s*$/i;
+/** The cells of a value printed as "label : value" pairs or tabs (": N/A : N/A" is two cells). */
+const formCells=(value:string)=>value.split(/\t|\s:\s|^\s*:\s*/).map(c=>c.trim()).filter(Boolean);
+/** A row the table parser took from a summary's "label : value" form, not a benefit table (5 Nov: a travel summary's
+ * riders "Cancel for any reason", "Sports equipment protector" and "Pet care", each ": N/A", were read as one benefit
+ * "Cancel for any reason Sports equipment protector" under columns ": See table below" and "Home cover", and shown twice
+ * as "The amount on page 1 could not be read"):
+ * - a column whose name is a form value (it starts with ":"): the line above was a form line, not a header;
+ * - a value of two or more cells that each say the benefit does not apply: two labels' cells, whose names were joined;
+ * - a value ending in such a cell with no figure outside brackets: another label's "not applying" cell.
+ * Such a row is never stored: what it would say is "not covered", and which benefit it belongs to is not known. */
+export function formRowMisread(value:string,tier:string|null):boolean{
+  if(tier&&/^\s*:/.test(tier))return true;
+  const cells=formCells(value);
+  if(cells.length>=2&&cells.every(c=>NOT_APPLYING_CELL.test(c)))return true;
+  const unbracketed=value.replace(/\([^()]*\)/g," ");
+  return cells.length>=2&&NOT_APPLYING_CELL.test(cells[cells.length-1])&&!/\d/.test(unbracketed);
+}
 export function rowKind(label:string,value:string,tier:string|null=null):TableRowKind{
   const l=label.toLowerCase(),v=value.trim().toLowerCase();
   if(/^not\s+covered\b/.test(v))return "not_covered";
+  // One cell that says the benefit does not apply ("N/A", ": Nil", "Not applicable") is a benefit not covered, never
+  // an amount that could not be read.
+  if(NOT_APPLYING_CELL.test(value))return "not_covered";
   if(/\bdeductible\b/.test(l))return "deductible";
   if(/co-?pay(?:ment)?\s+cap|stop[-\s]?loss/.test(l))return "co_payment_cap";
   if(/co-?insurance/.test(l))return "co_insurance";
@@ -328,6 +350,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       const tier=row.tier??null;
       const benefitName=cleanBenefitName(row.label);
       if(!benefitName)continue;
+      if(formRowMisread(row.value,tier))continue;
       // Round 10: an empty cell printed as a dash ("Surgical cash | S$1,000 | -") is not part of what is quoted.
       const quote=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().replace(/(?:\s+[-–—])+$/,"").slice(0,260);
       const kind=rowKind(row.label,row.value,tier);

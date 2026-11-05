@@ -201,7 +201,8 @@ export async function startJobNow(params: { jobType: string; idempotencyKey: str
   try {
     const config = (params.jobTypes ?? (await import("./processors")).PRODUCTION_JOB_TYPES).find((t) => t.jobType === params.jobType);
     if (!config) return "not_claimable";
-    const outcome = await claimAndProcessOne({ jobType: config.jobType, process: config.process, idempotencyKey: params.idempotencyKey, workerId: `start-${Math.random().toString(36).slice(2, 10)}` });
+    const { withFunctionDeadline } = await import("./function-time");
+    const outcome = await withFunctionDeadline(Date.now(), () => claimAndProcessOne({ jobType: config.jobType, process: config.process, idempotencyKey: params.idempotencyKey, workerId: `start-${Math.random().toString(36).slice(2, 10)}` }));
     return outcome === "empty" ? "not_claimable" : outcome;
   } catch (error) {
     console.error(`start job now: failed (${error instanceof Error ? error.name : "unknown"})`);
