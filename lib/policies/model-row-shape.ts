@@ -6,6 +6,9 @@
 
 const CURRENCY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])(?:Rp|Rs)\.?|€|£|¥|₹|₱|฿)`;
 const MONEY=String.raw`${CURRENCY}\s?\d[\d,]*(?:\.\d+)?`;
+const NUMBER_WORD=String.raw`(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|a\s+(?:hundred|thousand|million))`;
+const AMOUNT_IN_WORDS=new RegExp(String.raw`\b${NUMBER_WORD}(?:[\s-]+${NUMBER_WORD})*[\s-]+(?:hundred|thousand|million|billion)?\s*(?:dollars?|ringgit|pounds?|euros?|rupees?|pesos?|baht|yuan|yen)\b|\b${NUMBER_WORD}(?:[\s-]+${NUMBER_WORD})*[\s-]+(?:thousand|million|billion)\b`,"i");
+const MULTIPLE=/\b(?:double|twice|triple|treble|quadruple)\b|\b(?:two|three|four|five|six|ten|\d+)\s*(?:times|x)\s+(?:the|its|your|their|that|this)\b|\b(?:a\s+)?multiple\s+of\b|\bhalf\s+(?:of\s+)?the\b/i;
 const FRACTION_WORDS=/\b(?:one|two|three)[\s-]+(?:half|thirds?|quarters?|fifth|sixth|eighth|tenth|twelfth|twenty[- ]fourth|thirtieth)\b|\b\d+\s?\/\s?\d+\b/i;
 /** The passage prints an amount a benefit could pay: a figure with a currency, a percentage, a share in words, "as
  * charged", or a table cell ending in a bare figure ("Non-Panel General Practitioner 30"). A count ("30 days", "(6)
@@ -17,7 +20,10 @@ export function printsAmount(quote:string|null|undefined){
   if(/\d\s?%|\bper\s?cent\b/i.test(q))return true;
   if(FRACTION_WORDS.test(q))return true;
   if(/\bas\s+charged\b/i.test(q))return true;
-  return /(?:^|\s)\d[\d,]*(?:\.\d{1,2})?$/.test(q)&&!/\b(?:days?|months?|years?|age|weeks?|hours?)\s+\d[\d,]*$/i.test(q);
+  // An amount in words ("up to five thousand dollars") or a multiple of another figure ("double the daily cash amount",
+  // "twice the sum assured", "3 times the room rate") is printed too: not read as a figure, never said to print none (TE #348).
+  if(AMOUNT_IN_WORDS.test(q)||MULTIPLE.test(q))return true;
+  return /(?:^|\s)\d[\d,]*(?:\.\d{1,2})?$/.test(q)&&!/\b(?:days?|months?|years?|age|weeks?|hours?|ages?|aged|under|over|above|below|section|sections|clause|page|item|part|paragraph|rule|note|schedule|table|chapter|article)\s+\d[\d,]*$/i.test(q);
 }
 const key=(text:string)=>text.normalize("NFKC").toLowerCase().replace(/^[\s•▪●◦‣⁃\-–]+|^\(?[a-z0-9ivx]{1,4}[.)]\s+/giu,"").replace(/[^\p{L}\p{N}]+/gu," ").trim();
 /** The passage opens with the benefit's own name ("Funeral costs up to S$5,000", "Get Well Benefit S$500"): it is the
@@ -71,7 +77,10 @@ export function modelRowWithoutRule(name:string,quote:string,_pageText:string):"
   if(statesAPrice(quote))return "drop";
   if(startsWithName(name,quote))return amount;
   if(statesAClause(quote))return "drop";
-  if(statesAFeature(quote)&&!/\b(?:benefit|cover|coverage|allowance)s?\s*$/i.test(name.trim()))return "drop";
+  // A feature line that prints an amount is a benefit, as a clause with an amount is (TE #348 journey gate).
+  // A choice of cover sizes ("Choose cover from S$50,000 to S$500,000") is a range to buy, not an amount paid.
+  if(new RegExp(String.raw`^[\s•▪●◦‣⁃\-–]*choose\b[^.;]*\bfrom\s+${MONEY}\s+to\s+${MONEY}`,"iu").test(quote))return "drop";
+  if(statesAFeature(quote)&&amount==="named"&&!/\b(?:benefit|cover|coverage|allowance)s?\s*$/i.test(name.trim()))return "drop";
   return amount;
 }
 /** The passage points to an amount printed somewhere else ("the amount shown in the schedule on page 5"). */

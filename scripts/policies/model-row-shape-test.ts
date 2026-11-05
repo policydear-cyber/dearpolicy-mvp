@@ -97,16 +97,36 @@ const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   ["Clinic Visit", "Clinic Visit 40", table, "keep"],
   ["Specialist Visit", "Specialist Visit As charged", table, "keep"],
   ["Income Benefit", "One twelfth of the Sum Insured is paid each month", wording, "keep"],
+  // TE #348 journey gate: a feature line that prints an amount is a benefit, as a clause with an amount is.
+  ["Hospital Cash", "Receive S$100 a day while you are in hospital", summary, "keep"],
+  ["Death", "Enjoy cover of up to S$1,000,000 on death", summary, "keep"],
+  ["Outpatient", "Enjoy up to S$500 a year for outpatient visits", summary, "keep"],
+  ["Funeral", "Get paid S$5,000 towards funeral costs", summary, "keep"],
+  ["Daily Cash", "Be covered with daily cash of S$80 a day in hospital", summary, "keep"],
+  ["Critical Illness", "• Receive 50% of the sum assured on early critical illness", summary, "keep"],
+  // ...but a feature line with no amount still drops, and so does a choice of cover sizes or a priced marketing line.
+  ["Daily Hospital Cash", "Enjoy peace of mind while you are in hospital", summary, "drop"],
+  ["Plan Size", "• Choose cover from US$100,000 to US$1,000,000", summary, "drop"],
+  ["Term Life Cover", "Be insured up to S$800,000 at only S$1.10 per day", summary, "drop"],
+  // An amount in words or a multiple of another figure is printed: never said to print none (TE #348).
+  ["Trip Cancellation", "Trip cancellation up to five thousand dollars", summary, "keep"],
+  ["Intensive Care", "Double the daily cash amount for each day in intensive care", wording, "keep"],
+  ["Accidental Death", "Twice the sum assured if death is caused by an accident", wording, "keep"],
+  ["Overseas Cash", "Hospital cash paid at 3 times the daily amount when overseas", wording, "keep"],
+  // A trailing section number is no table amount.
+  ["Section Note", "For the avoidance of doubt, a claim under section 4 excludes section 5", wording, "drop"],
   ["Large Claims", "If the sum payable is above S$150,000, we pay S$150,000 first and the balance in instalments", wording, "keep"],
 ];
 for (const [name, quote, page, want] of CASES)
   check(`${name}: ${want}`, () => assert.equal(modelRowWithoutRule(name, quote, page), want));
 
 check("a count is not an amount", () => {
-  for (const q of ["must survive for 30 days", "within six (6) months", "up to age 65", "after 90 days"]) assert.equal(printsAmount(q), false, q);
+  for (const q of ["must survive for 30 days", "within six (6) months", "up to age 65", "after 90 days", "see section 5", "as set out in clause 12",
+    "a waiting period of ninety days", "children under 16", "adults aged 18", "for three months", "the doubt", "a dollar-for-dollar basis is not used"]) assert.equal(printsAmount(q), false, q);
 });
 check("amounts in any printed form count", () => {
-  for (const q of ["up to RM 5,000", "50% of the Sum Insured", "€200 per night", "one third of the benefit", "1/30 of the benefit", "As charged", "Clinic 40"])
+  for (const q of ["up to RM 5,000", "50% of the Sum Insured", "€200 per night", "one third of the benefit", "1/30 of the benefit", "As charged", "Clinic 40", "up to five thousand dollars",
+    "twenty-five thousand", "one hundred dollars a day", "double the daily cash", "twice the sum assured", "2 times the benefit"])
     assert.equal(printsAmount(q), true, q);
 });
 check("waiving or refunding a premium is not a price", () => {
