@@ -243,7 +243,7 @@ const ROLE_WORDS: Partial<Record<NonNullable<PolicyExtraction["documentRole"]>, 
  * "TravelSafe Annual Family" is a product, not an annual statement). "CERTIFICATE OF RENEWAL" names a
  * certificate, not a renewal notice. */
 export function titleRoles(pages: Page[], productNames: (string | null | undefined)[] = []): Set<string> {
-  let title = contentLines(pages).slice(0, 6).join("\n");
+  let title = linesWithoutContents(pages).slice(0, 6).join("\n");
   for (const name of [...productNames, titleProductName(pages)]) if (name && name.trim().length >= 4) title = title.split(new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")).join(" ");
   const out = new Set<string>();
   const t = title.replace(/\s+/g, " ");
@@ -470,8 +470,25 @@ const TITLE_KINDS = /\s+[-–:]\s+(?:policy\s+schedule|schedule|certificate|poli
 const KIND_FIRST = /^(?:notice\s+of\s+lapse|lapse\s+notice|renewal\s+notice|premium\s+notice|premium\s+reminder|grace\s+period\s+reminder|reminder|annual\s+statement|statement)\s*[-–:]\s*(.+)$/i;
 /** A line that is nothing but the kind of document ("POLICY SCHEDULE") under a title line. */
 const KIND_ONLY = /^(?:policy\s+schedule|schedule(?:\s+of\s+insurance)?|certificate(?:\s+of\s+insurance)?|policy\s+certificate|policy\s+statement|annual\s+statement|benefit\s+illustration|policy\s+illustration|endorsement|renewal\s+(?:notice|certificate))$/i;
+/** The document's own lines with its contents entries left out: a line with dot leaders ("Policy schedule ...... 3") or a
+ * page number after a tab ("2. SafeTrip Plus - Policy Schedule<tab>5"), and, after a "Contents" heading, every line of
+ * that page. A contents entry names a section further on, never the document, so the topmost title line names it. */
+function linesWithoutContents(pages: Page[]): string[] {
+  const out: string[] = [];
+  for (const p of pages) {
+    let inContents = false;
+    for (const raw of p.text.split("\n")) {
+      const line = raw.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+      if (!line || /DPTEST-|^[A-Za-z0-9+/=]{40,}$/.test(line)) continue;
+      if (/^(?:table\s+of\s+)?contents:?$/i.test(line)) { inContents = true; continue; }
+      if (inContents || /\.{3,}|…/.test(raw) || /\t\s*(?:p(?:age|g)\.?\s*)?\d{1,3}\s*$/i.test(raw)) continue;
+      out.push(line);
+    }
+  }
+  return out;
+}
 export function titleProductName(pages: Page[]): string | null {
-  const lines = contentLines(pages).slice(0, 40);
+  const lines = linesWithoutContents(pages).slice(0, 40);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // Round 13: a title printed over two lines ("SHIELDCARE PREMIER - Integrated Shield Plan" / "POLICY SCHEDULE").
