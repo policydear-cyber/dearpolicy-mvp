@@ -404,6 +404,28 @@ test("prices in the header, the header nearest above the row's own line, and no 
   const belowPage = `Benefits\tStandard\tPlus\tMax\n${cells.join("\t")}\n${name}`;
   assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: belowPage }), { plan: "Plus", figureText: "up to S$1,000" }, "cells then line");
   assert.equal(planColumnFigure(row, [reading(500)], { pageText: belowPage }), null, "cells then line: first plan's cell");
+  // Every line between the header and the row must belong to the same table (a closed list), else none (TE r4 A3-A6).
+  const other = "Benefits\tPlus\tStandard\tMax\nMedical expenses\tS$250,000\tS$100,000\tS$500,000";
+  for (const [why, between] of [["A3 a title", "Trip disruption benefits"], ["A4 a numbered table title", "Table 2 - Travel inconvenience"],
+    ["A5 a bare label line", "Optional benefits\nBenefits"], ["A6 a two-plan table", "Benefits\tElite\tPrestige\nGolf cover\tS$300\tS$600"],
+    ["A7 a part heading", "Part B Travel inconvenience"]] as [string, string][]) {
+    const pageText = `${other}\n${between}\n${rows}`;
+    assert.equal(planColumnFigure(row, [reading(500)], { pageText }), null, why + ": misread");
+    assert.equal(planColumnFigure(row, [reading(1000)], { pageText }), null, why + ": another table's header");
+  }
+  // Allowed between: other rows of n cells, a cells-alone row's explaining line, the row's own wrapped name, a sub-heading.
+  const ok = (pageText: string, amount: number, why: string) =>
+    assert.deepEqual(planColumnFigure(row, [reading(amount)], { pageText }), { plan: "Plus", figureText: "up to S$" + amount.toLocaleString("en-SG") }, why);
+  ok(`Benefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$250,000\tS$500,000\n${rows}`, 1000, "a row between");
+  ok(`Benefits\tStandard\tPlus\tMax\nS$100,000\tS$250,000\tS$500,000\nIf you need treatment overseas\n${cells.join("\t")}\n${name}`, 1000, "an explaining line between");
+  ok(`Benefits\tStandard\tPlus\tMax\nMaximum limits per trip\n${rows}`, 1000, "A11 a sub-heading");
+  const wrapped = { ...row, quote: `Costs if you have to come home early because a close relative is seriously ill ${cells.join(" ")}`, benefitName: "Costs if you have to come home early" };
+  const wrappedReading = (amount: number) => ({ ...reading(amount), excerpt: `relative is seriously ill\t${cells.join("\t")}` });
+  const wrapPage = `Benefits\tStandard\tPlus\tMax\nCosts if you have to come home early because a close\nrelative is seriously ill\t${cells.join("\t")}`;
+  assert.deepEqual(planColumnFigure(wrapped, [wrappedReading(1000)], { pageText: wrapPage }), { plan: "Plus", figureText: "up to S$1,000" }, "A10 the name wraps");
+  assert.equal(planColumnFigure(wrapped, [wrappedReading(500)], { pageText: wrapPage }), null, "A10 misread");
+  // An explaining line is allowed only right below a row of cells alone: below a row with its name it is a title.
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: `Benefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$250,000\tS$500,000\nTrip disruption\n${rows}` }), null, "a title after a named row");
   // The route reads only the row's own page.
   const { readFileSync } = await import("node:fs");
   const route = readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8");

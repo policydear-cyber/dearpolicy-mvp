@@ -425,15 +425,18 @@ export function planHeaderIndex(pageText:string|null|undefined,column:string,n:n
   }
   return found.size===1?[...found][0]:null;
 }
-/** A line that starts a new part of the document ("Section 5 Trip disruption", "Part B"): a header above it belongs to
- * another table. */
-const SECTION_START=/^(?:section|part|chapter)\s+(?:\d+[a-z]?|[ivxlc]+|[a-z])\b/i;
-/** The place of the column in the plan header nearest above the row's own line on its page (TE and Critic r373):
+/** The few sub-headings a plan table prints between its header and its rows ("Maximum limits per trip"). A closed list. */
+const TABLE_SUBHEADING=/^(?:maximum (?:benefit )?limits?|benefit limits?|limits? of (?:cover|benefits?))(?: (?:per|for each|for any one) (?:trip|journey|insured person|person|policy year|year))?(?: \((?:s\$|us\$|\$|sgd|usd)\))?:?$/i;
+/** The number of plan cells a line prints as its one run of cells, else 0. */
+const cellCount=(text:string)=>{const runs=text.match(PLAN_ROW)??[];return runs.length===1?(runs[0].match(new RegExp(PLAN_CELL,"g"))??[]).length:0;};
+/** The place of the column in the plan header of the row's own table (TE and Critic r373):
  *  - the row's own line is the one line printing its cells after its last words, or its cells alone with its first
  *    words on the next line; none or two such lines, none;
- *  - scanning up from it, the first plan header of n plans decides: the column named exactly once there, else none;
- *  - a line that starts a new section, or names the plan (as a whole phrase) without being a header read, before any
- *    header is found: none.
+ *  - scanning up from it, the first plan header of n plans decides, the column named exactly once there;
+ *  - every line passed on the way must belong to the same table, from a closed list: a row of n plan cells; the line
+ *    explaining a row printed as cells alone, right below those cells; the row's own name wrapped onto the lines right
+ *    above its cells; a table sub-heading (TABLE_SUBHEADING); a blank line. Any other line (a title, a section, a label,
+ *    another table's row or header) gives none.
  * No other page is read: a row whose page prints no header for it gets no figure. */
 export function rowHeaderIndex(pageText:string|null|undefined,column:string,n:number,row:{run:string;name:string}):number|null{
   const want=headingKey(column);
@@ -442,13 +445,20 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,n:nu
   const last=row.name.split(" ").slice(-3).join(" "),first=row.name.split(" ").slice(0,3).join(" ");
   const own=lines.map((l,i)=>l.text.includes(last+" "+row.run)||(l.text===row.run&&(lines[i+1]?.text??"").startsWith(first))?i:-1).filter(i=>i>=0);
   if(own.length!==1)return null;
-  const phrase=new RegExp("(?:^|[^a-z0-9])"+want.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?:$|[^a-z0-9])");
+  let wrapping=true;
   for(let i=own[0]-1;i>=0;i--){
     const {raw,text}=lines[i];
     if(!text)continue;
     const plans=headerPlans(raw,n);
     if(plans)return placeIn(plans,want);
-    if(SECTION_START.test(text)||phrase.test(text.toLowerCase()))return null;
+    const isWrap:boolean=wrapping&&!/\d/.test(text)&&row.name.includes(text);
+    wrapping=isWrap;
+    if(isWrap)continue;
+    if(cellCount(text)===n)continue;
+    const above=lines.slice(0,i).map(l=>l.text).filter(Boolean).pop()??"";
+    if(!/\d/.test(text)&&above===(above.match(PLAN_ROW)??[])[0]&&cellCount(above)===n)continue;
+    if(TABLE_SUBHEADING.test(text))continue;
+    return null;
   }
   return null;
 }
