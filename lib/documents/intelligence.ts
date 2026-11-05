@@ -294,15 +294,34 @@ function nonCoverExtraction(raw: PolicyExtraction, role: string, pages: PdfPage[
 }
 export { NON_COVER_ROLES };
 
-/** The type a document keeps when it is read again (DC 5 Nov): the type its earlier reading gave it, unless the new
- * reading is personal proof of cover (a personal schedule, certificate or endorsement that confirms this household's
- * cover). A reader names the type afresh on every read and can name it differently for the same file (FWD re-read 5 Nov:
- * an endorsement re-typed as policy wording, so Home listed two policy wordings); a re-read changes the type only when
- * it now proves more. A first read (no earlier type) takes the reader's type; a re-read that names none keeps the earlier one. */
-export function roleOnReread(earlier: PolicyExtraction["documentRole"] | string | null | undefined, next: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean): PolicyExtraction["documentRole"] {
+// What an amendment prints: an endorsement or alteration title near the top, or wording that alters the policy (the same
+// tests the amendment readers use, lib/policies/amendments.ts and the endorsement title rule above).
+const AMENDMENT_TITLE = /\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m;
+const AMENDING_WORDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
+/** Whether a document's pages print that it amends a policy. */
+export function printsAmendment(pages: PdfPage[]): boolean {
+  const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
+  return AMENDMENT_TITLE.test(opening) || AMENDING_WORDS.test(fullText(pages));
+}
+
+/** The type a document keeps when it is read again (DC 5 Nov): the type its earlier reading gave it. A reader names the
+ * type afresh on every read and can name it differently for the same file (FWD re-read 5 Nov: an endorsement re-typed
+ * as policy wording, so Home listed two policy wordings). The new type wins only when it is surer than the earlier one
+ * (Critic R362 M1):
+ * - it is personal proof of cover (a personal schedule, certificate or endorsement confirming the household's cover);
+ * - it says the document holds no cover (a letter, a bill, the family's own notes): showing less is the safe side;
+ * - the pages' own wording decides a type (deterministicDocumentRole, passed as codeRole) other than the earlier one;
+ * - the earlier type is an endorsement but the pages print no amendment (an endorsement replaces older figures, so a
+ *   wording once mis-typed as one must be correctable).
+ * A first read (no earlier type) takes the reader's type; a re-read that names none keeps the earlier one. */
+export function roleOnReread(earlier: PolicyExtraction["documentRole"] | string | null | undefined, next: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean,
+  o: { codeRole?: PolicyExtraction["documentRole"] | string | null; printsAmendment?: boolean } = {}): PolicyExtraction["documentRole"] {
   if (!earlier || earlier === next) return next;
+  if (earlier === "endorsement" && o.printsAmendment === false) return next;
   if (!next) return earlier as PolicyExtraction["documentRole"];
+  if (NON_COVER_ROLES.has(next)) return next;
   if (documentAuthority(next, personalCoverageConfirmed).level >= 95) return next;
+  if (o.codeRole && o.codeRole !== earlier) return next;
   return earlier as PolicyExtraction["documentRole"];
 }
 
