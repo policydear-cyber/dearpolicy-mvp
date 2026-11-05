@@ -9,6 +9,7 @@
 import { normalizePersonName } from "@/lib/insurance";
 import { SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
+import { figuresDifferByPlan, planCellRun } from "@/lib/insurance/scale-limit";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
@@ -746,6 +747,15 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000") gives a figure
+    // only with the plan column it was read under: without one, the figure may be any plan's (Critic R364 H1, the FWD
+    // plan-column regression). Fails closed whatever the reader did, including a table whose header is on another page.
+    // Three or more side-by-side cells only: two figures on a line are as often a rate and its limit ("RM200 per day
+    // RM8,000") or a sum and its premium as two plans.
+    if (value != null && !str(b.column) && figuresDifferByPlan(source.excerpt)
+      && ((planCellRun(source.excerpt) ?? "").match(/(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d/g) ?? []).length >= 3) {
+      out.dropped.push({ what: label, why: `figure ${value} is one of several plans' figures on its line, read with no plan column` }); continue;
+    }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional
     // sum: the row stays, paid as its wording says, with no figure.
     if (value != null && pays !== "percent" && out.covers.some((c) => c.notionalSum != null && c.page === source.page && Math.abs(c.notionalSum - value!) < 0.005)) {

@@ -127,11 +127,15 @@ export function renderLinkingInput(sections: SectionRef[], covers: CoverType[]):
 
 /** For reading one page again on its own (lib/benefit-table/completeness.ts): which page, and the headings the whole
  * document's reading found, so a row under a heading printed on an earlier page keeps that heading. */
-/** For a long document read in parts (lib/benefit-table/service.ts pageParts): which pages this call holds. */
-export function partReadingNote(pages: number[], total: number, headings: string[]): string {
+/** For a long document read in parts (lib/benefit-table/service.ts pageParts): which pages this call holds, the page
+ * before shown for context only, and the headings and plan columns found so far, so a table that runs on from the page
+ * before is read under its own columns. */
+export function partReadingNote(pages: number[], total: number, headings: string[], columns: string[] = [], contextPage: number | null = null): string {
   const range = pages.length === 1 ? `page ${pages[0]}` : `pages ${pages[0]} to ${pages[pages.length - 1]}`;
   return `\n\nThis document has ${total} pages and is read in parts; this part is ${range}. List every row of every table on these pages, and fill "document" from what these pages print.` +
-    (headings.length ? ` Headings found on earlier pages of this document, for "section" when one is still in force here: ${headings.map((h) => JSON.stringify(h)).join(", ")}.` : "");
+    (contextPage != null ? ` Page ${contextPage} is shown only so you can see the headings and plan columns of a table that runs on from it: do not list rows from page ${contextPage}.` : "") +
+    (headings.length ? ` Headings found on earlier pages of this document, for "section" when one is still in force here: ${headings.map((h) => JSON.stringify(h)).join(", ")}.` : "") +
+    (columns.length ? ` Plan or person columns found on earlier pages, for "column" when a table here runs on under them: ${columns.map((c) => JSON.stringify(c)).join(", ")}.` : "");
 }
 
 export function pageReadingNote(page: number, headings: string[]): string {

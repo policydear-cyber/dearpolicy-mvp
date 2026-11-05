@@ -252,40 +252,59 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
 }
 
 /** Reads one document into the table: the document once, in parts of consecutive pages when it is long (pageParts), then
- * each page whose figures were mostly left unread. A part that runs out of output is read again as two halves, down to a
- * single page; a part that still gives nothing fails the reading. Replaces any earlier reading of the document only when
- * every part was read: a reading with pages missing would drop their rows. A failed reading is never silent: the earlier
- * reading is kept, and the document says that the table still shows it (noteUnreadTable). A document the app could not
- * read is not sent. */
+ * each page whose figures were mostly left unread.
+ * - Each part after the first is also shown the previous part's last page, for context only (its rows are not taken
+ *   from this part), and the section and plan-column headings found so far, so a table whose header is on the page
+ *   before is still read under its columns (Critic R364 H1). The check drops a row that prints a figure for each plan
+ *   with no column (check.ts), whatever the reader does.
+ * - A part that runs out of output is read again as two halves, down to a single page, and every part still to come
+ *   is made smaller too. At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
+ * - The document's own facts are merged across parts: the first kind, product, insurer, plan and period any part
+ *   gives, and every named person (TE pr364).
+ * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
+ * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
+ * reading that finishes takes that note away. A document the app could not read is not sent. */
 export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
   const [doc] = await documents(db, accountId, policyId);
   if (!doc) return { read: false, why: "no such current document", pagesReread: 0 };
   if (!doc.readable || !doc.pages.length) return { read: false, why: "the document could not be read", pagesReread: 0 };
-  const queue = pageParts(doc.pages);
+  let limit = PART_MAX_CHARS;
+  let queue = pageParts(doc.pages, limit);
+  const maxCalls = 2 * queue.length + 4;
   const whole = queue.length === 1;
   const done: { pages: number[]; json: unknown; model: string }[] = [];
-  let headings: string[] = [];
+  let headings: string[] = [], columns: string[] = [], calls = 0;
+  const fail = async (why: string) => { await noteUnreadTable(db, accountId, doc.id); return { read: false, why, pagesReread: 0 }; };
   while (queue.length) {
+    if (calls >= maxCalls) return fail(`the reading did not finish (more than ${maxCalls} calls for this document)`);
     const part = queue.shift()!;
     const pages = part.map((p) => p.page);
-    const user = renderDocument({ name: doc.name, pages: part }) + (whole && done.length === 0 && pages.length === doc.pages.length ? "" : partReadingNote(pages, doc.pages.length, headings));
+    const before = done.length ? doc.pages.filter((p) => p.page < pages[0]).at(-1) : undefined;
+    const user = whole && done.length === 0 && pages.length === doc.pages.length
+      ? renderDocument({ name: doc.name, pages: part })
+      : renderDocument({ name: doc.name, pages: before ? [before, ...part] : part }) + partReadingNote(pages, doc.pages.length, headings, columns, before?.page ?? null);
+    calls++;
     const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
     await onUsage?.("reading", reply);
     if (reply.json == null) {
       if (reply.stopReason === "max_tokens" && part.length > 1) {
+        // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
+        limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
         const half = Math.ceil(part.length / 2);
-        queue.unshift(part.slice(0, half), part.slice(half));
+        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit)];
         continue;
       }
-      const why = `the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`;
-      await noteUnreadTable(db, accountId, doc.id);
-      return { read: false, why, pagesReread: 0 };
+      return fail(`the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`);
     }
-    done.push({ pages, json: reply.json, model: reply.model });
-    headings = [...new Set([...headings, ...checkReading(doc, reply.json).benefits.map((b) => b.section).filter((h): h is string => !!h)])];
+    // Rows of the context page belong to the part before.
+    const json = before ? withoutPage(reply.json, before.page) : reply.json;
+    done.push({ pages, json, model: reply.model });
+    const read = checkReading(doc, json);
+    headings = [...new Set([...headings, ...read.benefits.map((b) => b.section).filter((h): h is string => !!h)])];
+    columns = [...new Set([...columns, ...read.benefits.map((b) => b.column).filter((c): c is string => !!c)])];
   }
-  // The first part is the document's own reading (its kind, product, plan and named people); the others add their rows.
-  const stored: StoredReading = { document: done[0].json, pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
+  // The document's own facts, merged across parts; the parts' rows are added as page readings (checkStored merges them).
+  const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
   const first = checkStored(doc, stored);
   for (const f of pagesToReread(doc, first).slice(0, MAX_PAGE_REREADS)) {
     const page = { name: doc.name, pages: doc.pages.filter((p) => p.page === f.page) };
@@ -297,15 +316,45 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading, model=EXCLUDED.model, prompt_version=EXCLUDED.prompt_version, read_at=now()
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
+  await clearUnreadTableNote(db, accountId, doc.id);
   return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}) };
+}
+
+type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
+/** A part's reading without the rows it read from its context page. */
+function withoutPage(json: unknown, page: number): unknown {
+  const r = (json ?? {}) as RawReading;
+  const keep = (rows: { page?: unknown }[] | undefined) => Array.isArray(rows) ? rows.filter((x) => Number(x?.page) !== page) : rows;
+  return { ...r, covers: keep(r.covers), benefits: keep(r.benefits) };
+}
+/** The first part's reading with the document's facts merged across every part: the first kind (other than "other"),
+ * product, insurer, plan and period any part gives, and every person any part names. Each is still checked against the
+ * printed pages (checkReading), as for a reading in one call. */
+function withMergedDocument(readings: unknown[]): unknown {
+  const docs = readings.map((r) => ((r ?? {}) as RawReading).document ?? {});
+  const firstOf = (key: string, skip?: string) => docs.map((d) => d[key]).find((v) => v != null && v !== "" && v !== skip) ?? docs[0]?.[key] ?? null;
+  const named = [...new Set(docs.flatMap((d) => Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => typeof n === "string" && !!n.trim()) : []))];
+  const document = { ...docs[0], kind: firstOf("kind", "other"), product: firstOf("product"), insurer: firstOf("insurer"), plan: firstOf("plan"),
+    periodFrom: firstOf("periodFrom"), periodTo: firstOf("periodTo"), namedPeople: named };
+  return { ...((readings[0] ?? {}) as RawReading), document };
 }
 
 const pageRange = (pages: number[]) => pages.length === 1 ? String(pages[0]) : `${pages[0]}-${pages[pages.length - 1]}`;
 /** What a document says when its table could not be read this time: the table keeps the earlier reading, if any, and says
  * from when. Added once to the document's notes and its message on the Documents page (as lib/rag/ingest.ts adds its notes). */
+export const UNREAD_TABLE_PREFIX = "The table of benefits could not be read";
 export const UNREAD_TABLE_NOTE = (when: string | null) => when
   ? `The table of benefits could not be read again this time, so it still shows the reading from ${when}.`
   : "The table of benefits could not be read this time, so it has no rows from this document yet.";
+/** Takes away the "could not be read" note once a reading of the document finishes. */
+async function clearUnreadTableNote(db: Db, accountId: string, policyId: string) {
+  try {
+    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits could not be read[^.]*\\.', '', 'g')), ''),
+        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3),'[]'::jsonb)),updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND jsonb_typeof(extracted_json->'documentNotes')='array'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%"]);
+  } catch (error) { console.warn("Benefit table: could not clear the unread-table note for " + policyId + ":", error instanceof Error ? error.message : error); }
+}
 async function noteUnreadTable(db: Db, accountId: string, policyId: string) {
   try {
     const earlier = await db("SELECT read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);

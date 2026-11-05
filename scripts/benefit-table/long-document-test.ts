@@ -28,6 +28,19 @@ function booklet(pages: number): { page: number; text: string }[] {
   return out;
 }
 
+/** A booklet whose plan table starts at the foot of page 10 (its header and first row) and runs on over page 11. */
+function planBooklet(): { page: number; text: string }[] {
+  const pages = booklet(20);
+  // The table starts on the last page of the first part (pageParts) and runs on into the second.
+  const b = pageParts(pages)[0].at(-1)!.page;
+  const header = "\nBenefit\tClassic\tBusiness\tPremium\nMedical expenses\tS$100,000\tS$250,000\tS$500,000";
+  const at = pages.findIndex((p) => p.page === b);
+  pages[at] = { page: b, text: pages[at].text.slice(0, pages[at].text.length - header.length - 200) + header };
+  pages[at + 1] = { page: b + 1, text: "Emergency evacuation\tS$50,000\tS$150,000\tS$300,000\nTrip postponement\tS$500\tS$1,000\tS$1,500\n" + pages[at + 1].text };
+  assert.equal(pageParts(pages)[0].at(-1)!.page, b, "the table's header ends the first part");
+  return pages;
+}
+
 /** Just the statements readDocument sends, against in-memory rows. */
 function fakeDb(pages: { page: number; text: string }[], earlier?: { reading: unknown; read_at: string }) {
   const s = {
@@ -43,6 +56,12 @@ function fakeDb(pages: { page: number; text: string }[], earlier?: { reading: un
     if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages")) return pages.map((x) => ({ policy_id: "doc", page_number: x.page, text: x.text }));
     if (q.startsWith("INSERT INTO benefit_readings")) { s.readings.set(p[0] as string, { reading: p[2] as string, model: p[3] as string }); return []; }
     if (q.startsWith("SELECT read_at FROM benefit_readings")) return earlier && s.readings.has(p[0] as string) ? [{ read_at: earlier.read_at }] : [];
+    if (q.startsWith("UPDATE policies SET processing_message=nullif(")) {
+      const prefix = String(p[2]).replace(/%$/, "");
+      s.notes = s.notes.filter((n) => !n.startsWith(prefix));
+      s.message = s.message.replace(new RegExp("\\s*" + prefix + "[^.]*\\.", "g"), "");
+      return [];
+    }
     if (q.startsWith("UPDATE policies SET processing_message")) {
       if (!s.notes.includes(p[2] as string)) { s.notes.push(p[2] as string); s.message += " " + p[2]; }
       return [];
@@ -54,22 +73,32 @@ function fakeDb(pages: { page: number; text: string }[], earlier?: { reading: un
 
 /** A stand-in model that lists one row per table line it is shown and runs out of output, as a real one does, when
  * those rows need more than the call's output allowance (about 25 output tokens a row here). */
-function lister(o: { tokensPerRow?: number; failPage?: number } = {}) {
-  const calls: { pages: number[]; chars: number; maxTokens: number; user: string }[] = [];
+function lister(o: { tokensPerRow?: number; failPage?: number; plans?: boolean; lateNames?: boolean } = {}) {
+  const calls: { pages: number[]; chars: number; maxTokens: number; user: string; context: number | null; output: number }[] = [];
   const model: TableModel = { choice: { provider: "anthropic", model: "stand-in" }, async call(c: TableCall): Promise<TableReply> {
-    const pages = [...c.user.matchAll(/<page n="(\d+)">\n([\s\S]*?)\n<\/page>/g)].map((m) => ({ page: Number(m[1]), text: m[2] }));
-    calls.push({ pages: pages.map((p) => p.page), chars: pages.reduce((n, p) => n + p.text.length, 0), maxTokens: c.maxTokens, user: c.user });
+    const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN);
+    const shown = [...c.user.matchAll(/<page n="(\d+)">\n([\s\S]*?)\n<\/page>/g)].map((m) => ({ page: Number(m[1]), text: m[2] }));
+    // A reader does as the note says: the context page's rows are not listed.
+    const pages = shown.filter((p) => p.page !== context);
     const rows = pages.flatMap((p) => p.text.split("\n").filter((l) => /S\$/.test(l)).map((line) => ({ page: p.page, line })));
     const output = rows.length * (o.tokensPerRow ?? 25);
-    if (output > c.maxTokens || (o.failPage && pages.length === 1 && pages[0].page === o.failPage))
+    calls.push({ pages: pages.map((p) => p.page), chars: pages.reduce((n, p) => n + p.text.length, 0), maxTokens: c.maxTokens, user: c.user, context: Number.isNaN(context) ? null : context, output });
+    if (output > c.maxTokens || (o.failPage && pages.some((p) => p.page === o.failPage)))
       return { json: null, stopReason: "max_tokens", model: "stand-in", input: 0, output: c.maxTokens, ms: 1 };
     const cover = pages.find((p) => /Plan: Voyager/.test(p.text));
+    const last = pages.some((p) => /Insured person: Ruth Adeyemi/.test(p.text));
+    // A plan table's columns, seen on a page shown (the context page too) or named in the note.
+    const planColumns = shown.some((p) => /Classic\tBusiness\tPremium/.test(p.text));
     return { json: {
-      document: { kind: "policy_wording", product: cover ? "Harbourline Travel Protect" : null, insurer: null, namedPeople: [], plan: cover ? "Voyager" : null, periodFrom: null, periodTo: null },
+      document: { kind: "policy_wording", product: cover || (!o.lateNames && false) ? "Harbourline Travel Protect" : pages.some((p) => p.page === 1) ? "Harbourline Travel Protect" : null, insurer: null,
+        namedPeople: last ? ["Ruth Adeyemi"] : [], plan: o.lateNames ? (last ? "Voyager" : null) : cover ? "Voyager" : null, periodFrom: null, periodTo: null },
       covers: [],
       benefits: rows.map((r) => {
-        const [label, figure] = r.line.split("\t");
-        return { section: "Table of benefits", column: null, benefit: label.replace(/^Benefit [\d.]+ /, ""), pays: "up_to", value: Number(figure.replace(/[^\d]/g, "")),
+        const cells = r.line.split("\t");
+        const several = cells.length > 2;
+        if (o.plans && several && !planColumns) throw new Error("stand-in asked to read a plan row with no plan columns in sight");
+        const figure = several ? cells[2] : cells[1];
+        return { section: "Table of benefits", column: several ? "Business" : null, benefit: cells[0].replace(/^Benefit [\d.]+ /, ""), pays: "up_to", value: Number(figure.replace(/[^\d]/g, "")),
           period: null, basis: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: r.page, quote: r.line };
       }),
     }, stopReason: "end_turn", model: "stand-in", input: 0, output, ms: 1 };
@@ -120,16 +149,20 @@ async function main() {
   await test("L4 a reading that cannot be finished keeps the earlier reading and says so on the document", async () => {
     const earlier = { document: { kind: "policy_wording", product: "Harbourline Travel Protect", insurer: null, namedPeople: [], plan: "Voyager", periodFrom: null, periodTo: null }, covers: [], benefits: [] };
     const f = fakeDb(long, { reading: { document: earlier, pages: [] }, read_at: "2026-10-22T08:00:00Z" });
-    const m = lister({ failPage: 17, tokensPerRow: 400 }); // page 17 alone still runs out
-    const r = await readDocument(f.db, m.model, A, "doc");
+    const r = await readDocument(f.db, lister({ failPage: 17 }).model, A, "doc"); // any part holding page 17 runs out
     assert.equal(r.read, false);
-    assert.match(r.why ?? "", /did not finish \(max_tokens, pages? 17/);
+    assert.match(r.why ?? "", /did not finish/);
     assert.equal(f.s.readings.get("doc")!.model, "earlier-model", "the earlier reading is kept");
     assert.deepEqual(f.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")]);
     assert.match(f.s.message, /still shows the reading from 22 October 2026/);
     // Reading again and failing again does not repeat the note.
-    await readDocument(f.db, lister({ failPage: 17, tokensPerRow: 400 }).model, A, "doc");
+    await readDocument(f.db, lister({ failPage: 17 }).model, A, "doc");
     assert.equal(f.s.notes.length, 1);
+    // A later reading that finishes takes the note away (TE pr364).
+    const ok = await readDocument(f.db, lister().model, A, "doc");
+    assert.equal(ok.read, true);
+    assert.deepEqual(f.s.notes, []);
+    assert.doesNotMatch(f.s.message, /could not be read/);
   });
   await test("L5 a document never read before that cannot be read says the table has no rows from it yet", async () => {
     const f = fakeDb(booklet(3));
@@ -145,6 +178,62 @@ async function main() {
     assert.equal(m.calls.length, 1);
     assert.doesNotMatch(m.calls[0].user, /read in parts/);
     assert.equal(rowsStored(f.s).rows.length, 3 * 40);
+  });
+
+  await test("L7 no document costs more than 2 x its parts + 4 calls, however often its parts run out (Critic R364 M2)", async () => {
+    for (const n of [30, 60]) {
+      const pages = booklet(n), m = lister({ tokensPerRow: 1_000 }); // every multi-page part runs out
+      const r = await readDocument(fakeDb(pages).db, m.model, A, "doc");
+      assert.equal(r.read, false);
+      assert.ok(m.calls.length <= 2 * pageParts(pages).length + 4, `${n} pages: ${m.calls.length} calls`);
+    }
+    // After the first part runs out, the parts still to come are made smaller too, so each is not paid for twice.
+    const m = lister({ tokensPerRow: 80 });
+    await readDocument(fakeDb(long).db, m.model, A, "doc");
+    const ranOut = m.calls.filter((c) => c.output > READ_MAX_OUTPUT).length;
+    assert.equal(ranOut, 1, `${ranOut} calls ran out`);
+  });
+  await test("L8 each part after the first is shown the page before for context only, with the plan columns found so far (Critic R364 H1)", async () => {
+    const m = lister({ plans: true });
+    const f = fakeDb(planBooklet());
+    const r = await readDocument(f.db, m.model, A, "doc");
+    assert.equal(r.read, true, r.why);
+    const later = m.calls.slice(1);
+    assert.ok(later.length && later.every((c) => c.context === c.pages[0] - 1), JSON.stringify(later.map((c) => [c.context, c.pages[0]])));
+    // The page before shows the table's header; the columns rows were read under so far are named too.
+    assert.match(later[0].user, /Classic\tBusiness\tPremium/);
+    assert.match(later[0].user, /Plan or person columns found on earlier pages, for "column" when a table here runs on under them: "Business"\./);
+    // The run-on rows are read under their plan column.
+    const { rows } = rowsStored(f.s);
+    const evacuation = rows.find((b) => (b as { quote?: string }).quote?.startsWith("Emergency evacuation")) as { column?: string; value?: number } | undefined;
+    assert.deepEqual([evacuation?.column, evacuation?.value], ["Business", 150_000]);
+    // No row is stored twice, and none from a part's context page.
+    const keys = rows.map((b) => `${b.page}|${(b as { quote?: string }).quote}|${(b as { column?: string }).column}`);
+    assert.equal(new Set(keys).size, keys.length);
+  });
+  await test("L9 the document's own facts are merged across parts: a plan and a person printed only on a later page are kept (TE pr364)", async () => {
+    const late = booklet(30);
+    late[0] = { page: 1, text: "Harbourline Travel Protect\nPolicy booklet\nThis booklet sets out the benefits of your plan." };
+    late[29] = { page: 30, text: late[29].text + "\nInsured person: Ruth Adeyemi\nPlan: Voyager" };
+    const f = fakeDb(late), m = lister({ lateNames: true });
+    assert.equal((await readDocument(f.db, m.model, A, "doc")).read, true);
+    const doc = rowsStored(f.s).stored.document.document as { plan: string | null; namedPeople?: string[]; product: string | null };
+    assert.equal(doc.plan, "Voyager");
+    assert.equal(doc.product, "Harbourline Travel Protect");
+    assert.deepEqual(doc.namedPeople, ["Ruth Adeyemi"]);
+  });
+  await test("L10 the check drops a row read with no plan column whose line prints a figure for each plan (Critic R364 H1)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: "Emergency evacuation\tS$50,000\tS$150,000\tS$300,000\nBaggage delay\tS$100" }] };
+    const row = (benefit: string, value: number, quote: string, column: string | null) => ({ section: null, column, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
+      row("Emergency evacuation", 300_000, "Emergency evacuation\tS$50,000\tS$150,000\tS$300,000", null),
+      row("Emergency evacuation", 150_000, "Emergency evacuation\tS$50,000\tS$150,000\tS$300,000", "Business"),
+      row("Baggage delay", 100, "Baggage delay\tS$100", null),
+    ] });
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.column, b.value]), [["Emergency evacuation", "Business", 150_000], ["Baggage delay", null, 100]]);
+    assert.ok(read.dropped.some((d) => /several plans' figures/.test(d.why)));
   });
 
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
