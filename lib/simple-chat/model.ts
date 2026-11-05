@@ -40,15 +40,21 @@ export function alternating(history: Turn[]): Turn[] {
   return out;
 }
 
+/** How long the household's library stays cached, and what writing it costs as a multiple of the input price
+ * (Anthropic: 1.25x for 5 minutes, 2x for 1 hour). The ledger and the spend cap book the chat's writes at this rate. */
+export const LIBRARY_CACHE_TTL = "1h" as const;
+export const CACHE_WRITE_RATE = { "5m": 1.25, "1h": 2 } as const;
+export const LIBRARY_CACHE_WRITE_RATE = CACHE_WRITE_RATE[LIBRARY_CACHE_TTL];
+
 export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
   return {
     model: choice.model,
     max_tokens: MAX_OUTPUT_TOKENS,
-    // The library is the same for every question of a household, so it is cached after the first request. The 5-minute
-    // cache costs 1.25x input to write (the 1-hour one 2x), and still covers a conversation's follow-ups.
+    // The library is the same for every question of a household, so it is cached after the first request. It is kept
+    // for an hour (LIBRARY_CACHE_TTL), so a household that comes back within the hour reads it at the cached price.
     system: [
       { type: "text" as const, text: SIMPLE_SYSTEM_PROMPT },
-      { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } },
+      { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: LIBRARY_CACHE_TTL } },
     ],
     messages: [...alternating(args.history).map((t) => ({ role: t.role, content: t.text })), { role: "user" as const, content: args.question }],
     output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
@@ -114,12 +120,13 @@ export function modelFromChoice(choice: ModelChoice): SimpleModel {
   throw new Error(`The simple chat has no path for provider ${choice.provider}`);
 }
 
-/** Usage as lib/ai/ledger.ts books it: input counts every prompt token (5-minute cache writes at their 1.25x price), cached
- * the cache reads. */
-export function ledgerUsage(u: SimpleUsage): { input: number; output: number; cached: number } {
-  return { input: u.input + u.cacheRead + Math.ceil(1.25 * u.cacheWrite), output: u.output, cached: u.cacheRead };
+/** Usage as lib/ai/ledger.ts books it: input counts every prompt token (cache writes at their write rate: the chat's
+ * library at LIBRARY_CACHE_WRITE_RATE, a 5-minute cache at 1.25x), cached the cache reads. */
+export function ledgerUsage(u: SimpleUsage, writeRate: number = CACHE_WRITE_RATE["5m"]): { input: number; output: number; cached: number } {
+  return { input: u.input + u.cacheRead + Math.ceil(writeRate * u.cacheWrite), output: u.output, cached: u.cacheRead };
 }
-/** What one call cost at list price, US$ (5-minute cache writes at 1.25x input, cache reads at the cached price). */
-export function callUsd(price: { input: number; output: number; cachedInput?: number }, u: SimpleUsage): number {
-  return (u.input * price.input + 1.25 * u.cacheWrite * price.input + u.cacheRead * (price.cachedInput ?? price.input) + u.output * price.output) / 1e6;
+/** What one chat call cost at list price, US$ (library cache writes at LIBRARY_CACHE_WRITE_RATE x input, cache reads at
+ * the cached price). */
+export function callUsd(price: { input: number; output: number; cachedInput?: number }, u: SimpleUsage, writeRate: number = LIBRARY_CACHE_WRITE_RATE): number {
+  return (u.input * price.input + writeRate * u.cacheWrite * price.input + u.cacheRead * (price.cachedInput ?? price.input) + u.output * price.output) / 1e6;
 }
