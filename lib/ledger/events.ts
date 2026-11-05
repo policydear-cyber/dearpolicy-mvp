@@ -465,12 +465,41 @@ function withPlanKind(own:{event:EventType;detail:string|null},name:string,produ
   return own;
 }
 const ROOM_AND_BOARD=new RegExp(B+"(?:room\\s*(?:and|&)\\s*board|(?:daily\\s+)?room\\s+(?:charges?|rates?|accommodation)|ward\\s+(?:charges?|and board|&\\s*board))"+E,"iu");
+/** A row that pays only for an accident or an injury. Two rules, kept apart (Critic #350):
+ * (a) A name that prints "accident" stays accident-only, as before, whatever else it says ("Accidental Death Benefit
+ *     (excluding war)", "Accidental Death or Dismemberment", "Accident Death Benefit (Plan A)"): reading such a row as any
+ *     cause would count an accident-only sum toward a death from illness. It is any cause only when the name joins an
+ *     ALTERNATIVE cause to the accident ("Death due to accident or illness", "Accident and Sickness Death", "Illness or
+ *     Accident TPD") or says "any cause" / "all causes" that is not "of accident/injury" -- and nothing in the name
+ *     excludes or negates (Critic #350: "Accidental Death (illness excluded)", "other than by disease", "not covered
+ *     for sickness" name a cause only to shut it out; "natural disasters" is not natural causes). Unsure stays accident.
+ * (b) A name that prints only an injury ("Death due to Injury", "TPD resulting from bodily injury", "Injury Death") is
+ *     accident-only only when the injury is its SOLE cause (TE and Critic #343): any word that opens another cause or a
+ *     second clause ("or", "including", "not", "no", ";", a bracket) and the row is any cause. An injury counts only as
+ *     the cause ("due to", "caused by", "resulting from", "following", "from" an injury, or "Injury Death"), never one the
+ *     name just mentions ("Death or injury to any person", "Injury overseas"). */
+const ACCIDENT_WORD=/\baccident/;
+const OTHER_CAUSE=String.raw`(?:an?\s+)?(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+causes?)`;
+const ACCIDENT_CAUSE=String.raw`(?:an?\s+)?(?:accident(?:s|al)?|injur(?:y|ies))`;
+const JOIN=String.raw`(?:\s+(?:or|and)\s+|\s*[&\/]\s*)`;
+/** An alternative cause joined to the accident, either way round, or an any-cause phrase not about an accident. */
+const ALTERNATIVE_CAUSE=new RegExp(String.raw`\b${ACCIDENT_CAUSE}${JOIN}${OTHER_CAUSE}\b|\b${OTHER_CAUSE}${JOIN}${ACCIDENT_CAUSE}\b|\b(?:any\s+(?:other\s+)?|all\s+)(?:causes?|reasons?)\b(?!\s+of\s+(?:an?\s+)?(?:accident|injur))`);
+/** A word that excludes, negates or limits a cause: with it the name may name a cause only to shut it out. */
+const EXCLUDES_A_CAUSE=/\b(?:exclud\w*|except\w*|not|no|non|other\s+than|without|unless|save\s+for|but)\b|\bnon-/;
+const INJURY_CAUSE=/\b(?:due to|caused by|resulting from|arising from|following|from)\s+(?:an?\s+|bodily\s+|accidental\s+)?injur(?:y|ies)\b|^(?:accidental\s+)?injury\s+death\b/;
+const ANOTHER_CAUSE=/\b(?:or|otherwise|any\s+(?:other\s+)?(?:cause|reason)s?|natural|illness(?:es)?|sickness(?:es)?|disease|diseases|including|includes|excluding|excludes|except|other than|not|no\s+(?:accident|injury|injuries|waiting)|non|self[- ]inflicted|whether|and illness|and sickness)\b|[;(]/;
+export function namesOnlyAnAccidentCause(n:string){
+  const t=n.toLowerCase();
+  if(ACCIDENT_WORD.test(t))return !(ALTERNATIVE_CAUSE.test(t)&&!EXCLUDES_A_CAUSE.test(t));
+  if(!INJURY_CAUSE.test(t))return false;
+  return !ANOTHER_CAUSE.test(t.replace(/\((?:injury|injuries)(?:\s+only)?\)/g," "));
+}
 function eventForOwnName(name:string):{event:EventType;detail:string|null}{
   const n=glossedName(name).toLowerCase();
   if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
   // An income paid while unable to work is its own benefit, not the total and permanent disability lump sum.
   if(/disability income|income (?:protection|replacement)|loss of income|salary continuance/.test(n))return {event:"disability_income",detail:name};
-  const accident=/\baccident/.test(n);
+  const accident=namesOnlyAnAccidentCause(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
   if(/\b(?:total (?:and|&) permanent|tpd|permanent (?:total )?disab)/.test(n))return {event:accident?"accidental_disablement":"tpd",detail:null};
@@ -503,8 +532,9 @@ function eventForOwnName(name:string):{event:EventType;detail:string|null}{
  * Recuperation" pays for a hospital stay, but only one an accident caused. */
 export function causeForBenefit(name:string,requires:string[]=[]):"accident"|"illness"|null{
   const n=withoutNegatedAccident(name).toLowerCase();
-  if(requires.includes("accident")||/\baccident/.test(n))return "accident";
-  if(requires.includes("illness")||/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n))return "illness";
+  if(requires.includes("accident")||namesOnlyAnAccidentCause(n))return "accident";
+  // "Death from illness excluded" names illness only to shut it out (Critic #350).
+  if(requires.includes("illness")||(/\b(?:due to|caused by|from) (?:an )?(?:illness|sickness|disease)\b/.test(n)&&!EXCLUDES_A_CAUSE.test(n)))return "illness";
   return null;
 }
 
