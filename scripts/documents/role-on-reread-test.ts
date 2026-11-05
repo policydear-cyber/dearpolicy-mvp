@@ -109,13 +109,9 @@ async function main() {
     // A group scheme's number with a definition of the insured person is not personal: a summary stays a summary.
     assert.equal(printedDocumentRole(P("Policy summary\nGroup policy number: GP-778812\nInsured person: any eligible employee")), "product_summary");
   });
-  await test("R12 a printed reference type never overrides a reading that is personal proof (Critic R362 B2)", () => {
-    assert.equal(roleOnReread("personal_schedule", "personal_schedule", true, { codeRole: "product_summary" }), "personal_schedule");
-    assert.equal(roleOnReread("product_summary", "certificate", true, { codeRole: "policy_wording" }), "certificate");
-    // Without personal proof, the printed type still decides.
+  await test("R12 a printed type decides over the reader's confirmed flag; a personal summary is recognised on its page (R11)", () => {
     assert.equal(roleOnReread("endorsement", "policy_wording", true, { codeRole: "policy_wording" }), "policy_wording");
-    assert.equal(roleOnReread("personal_schedule", "personal_schedule", false, { codeRole: "product_summary" }), "product_summary");
-    // A printed personal or no-cover type is not a reference type and still decides.
+    assert.equal(roleOnReread("personal_schedule", "personal_schedule", true, { codeRole: "product_summary" }), "product_summary");
     assert.equal(roleOnReread("certificate", "certificate", true, { codeRole: "claim_decision" }), "claim_decision");
   });
   await test("R13 a glossary entry for a certificate is not a certificate title (Critic R362 M1)", async () => {

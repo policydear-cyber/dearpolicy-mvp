@@ -371,10 +371,10 @@ export { NON_COVER_ROLES };
  * A re-read that names no type keeps the earlier one. */
 export function roleOnReread(earlier: PolicyExtraction["documentRole"] | string | null | undefined, next: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean,
   o: { codeRole?: PolicyExtraction["documentRole"] | string | null } = {}): PolicyExtraction["documentRole"] {
-  // A printed reference type (a summary or wording title) never overrides a reading that is personal proof of the
-  // household's own cover: such a page also prints particulars the title rules do not see (Critic R362 B2).
-  const nextIsProof = !!next && personalCoverageConfirmed && documentAuthority(next, true).level >= 95;
-  if (o.codeRole && !(REFERENCE_ROLES.has(o.codeRole as never) && nextIsProof)) return o.codeRole as PolicyExtraction["documentRole"];
+  // A summary that is the household's own (the policy's number and a labelled person) is never printed as a summary:
+  // summaryTitle hands it to the schedule rules (Critic R362 B2). The reader's "confirmed" alone does not override a
+  // printed type: it changed which documents count as cover compared with main (r7 H2, a scheme summary).
+  if (o.codeRole) return o.codeRole as PolicyExtraction["documentRole"];
   if (!earlier || earlier === next) return next;
   if (!next) return earlier as PolicyExtraction["documentRole"];
   if (NON_COVER_ROLES.has(next)) return next;
