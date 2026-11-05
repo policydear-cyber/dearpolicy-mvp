@@ -15,7 +15,7 @@ import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documen
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
-import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, printsAmendment, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
+import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
@@ -211,12 +211,12 @@ function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNum
   } satisfies PolicyExtraction;
 }
 
-/** The type this reading stores (roleOnReread): the earlier reading's type, unless this reading is personal proof of
- * cover, says the document holds no cover, or the pages' own wording decides another type. */
+/** The type this reading stores (roleOnReread): a type the pages print about themselves, else a no-cover type, else
+ * personal proof of cover, else the earlier reading's type, else the reader's. */
 export async function documentRoleOnReread(args: Pick<ProcessPolicyArgs, "accountId" | "policyId">, extraction: Pick<PolicyExtraction, "documentRole" | "personalCoverageConfirmed">, pages: PdfPage[]): Promise<PolicyExtraction["documentRole"]> {
   const earlier = (await query<{ document_role: string | null }>(`SELECT document_role FROM policies WHERE id=$1 AND account_id=$2`, [args.policyId, args.accountId])).rows[0]?.document_role ?? null;
   return roleOnReread(earlier, extraction.documentRole, extraction.personalCoverageConfirmed,
-    { codeRole: deterministicDocumentRole(pages, null), printsAmendment: printsAmendment(pages) });
+    { codeRole: printedDocumentRole(pages) });
 }
 
 /** The extraction an earlier, successful read of this document stored (not a

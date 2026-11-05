@@ -85,6 +85,36 @@ function partOneParticulars(text: string) {
   return text.split("\n").some((line) => /(?:s\$|sgd)\s?\d[\d,]{3,}/.test(line) && /\bas of \d|effective date\s*:?\s*\d/.test(line));
 }
 
+/** A summary's own title in the first lines of page 1 ("Your travel insurance summary", "Policy summary", "Summary of
+ * cover", "Benefits at a glance"), on a page that does not also call itself a schedule or certificate. */
+function summaryTitle(pages: PdfPage[]): "product_summary" | null {
+  const head = fullText(pages, 1).toLowerCase().split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 4).join("\n");
+  if (/\b(?:schedule|certificate)\b/.test(head)) return null;
+  return /\b(?:insurance|policy|product|cover|travel|plan)\s+summary\b|^\s*summary of (?:cover|benefits|your (?:cover|policy|plan))\b|^\s*benefits at a glance\b/m.test(head) ? "product_summary" : null;
+}
+
+/** The type a document's pages print about themselves in a title or a fixed layout, and nothing weaker: a letter or
+ * notice, Part 2 of a certificate alone, a certificate or schedule with its particulars, an endorsement or alteration
+ * title, a summary title, a "Policy wording" title line, a schedule page. Keyword hints ("the policy schedule",
+ * "definitions") are not used, since a wording's glossary mentions all of them. Null when the pages print no such type. */
+export function printedDocumentRole(pages: PdfPage[]): PolicyExtraction["documentRole"] | null {
+  const correspondence = correspondenceRole(pages);
+  if (correspondence) return correspondence;
+  if (statusNotice(pages)) return statusNoticeRole(pages);
+  const text = fullText(pages).toLowerCase();
+  if (/certificate of insurance part 2|part 2:\s*highlights of cover/.test(text) && !partOneParticulars(text)) return "benefit_guide";
+  if (/certificate of (group )?insurance/.test(text) && (/(sum assured|effective date|particulars of insured|insured person)/.test(text) || partOneParticulars(text))) return "certificate";
+  const titled = personalDocumentTitle(fullText(pages, 2));
+  if (titled) return titled;
+  const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
+  if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*(?:policy\s+)?endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement";
+  const summary = summaryTitle(pages);
+  if (summary) return summary;
+  if (/^\s*policy wording\s*$/m.test(opening) && !/\bthis endorsement\b/.test(opening)) return "policy_wording";
+  if (schedulePage(pages) != null) return "personal_schedule";
+  return null;
+}
+
 export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExtraction["documentRole"]) {
   // Round 10: a letter, claim decision, bill, app screenshot or the family's own
   // notes, by what it prints -- before any keyword it quotes ("policy wording").
@@ -108,6 +138,12 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   // policy schedule" -- which must not make it the schedule itself.
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
+  // A summary says so in its title ("Your travel insurance summary", "Summary of cover") and often cites the policy
+  // wording or schedule it summarises: that does not make it either one (FWD 5 Nov: a one-page travel summary typed as
+  // policy wording, so Home listed it as "FWD policy wording"). A personal summary with the policy's own number and the
+  // person's name is a schedule (personalDocumentTitle, above).
+  const summary = summaryTitle(pages);
+  if (summary) return summary;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
   // A policy pack (cover letter, then "SCHEDULE PAGE" with the policy number and the life insured, then the contract and
   // its endorsement clauses) is the policy: the word "endorsement" in its wording does not make it one.
@@ -294,34 +330,24 @@ function nonCoverExtraction(raw: PolicyExtraction, role: string, pages: PdfPage[
 }
 export { NON_COVER_ROLES };
 
-// What an amendment prints: an endorsement or alteration title near the top, or wording that alters the policy (the same
-// tests the amendment readers use, lib/policies/amendments.ts and the endorsement title rule above).
-const AMENDMENT_TITLE = /\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m;
-const AMENDING_WORDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
-/** Whether a document's pages print that it amends a policy. */
-export function printsAmendment(pages: PdfPage[]): boolean {
-  const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
-  return AMENDMENT_TITLE.test(opening) || AMENDING_WORDS.test(fullText(pages));
-}
-
-/** The type a document keeps when it is read again (DC 5 Nov): the type its earlier reading gave it. A reader names the
- * type afresh on every read and can name it differently for the same file (FWD re-read 5 Nov: an endorsement re-typed
- * as policy wording, so Home listed two policy wordings). The new type wins only when it is surer than the earlier one
- * (Critic R362 M1):
- * - it is personal proof of cover (a personal schedule, certificate or endorsement confirming the household's cover);
- * - it says the document holds no cover (a letter, a bill, the family's own notes): showing less is the safe side;
- * - the pages' own wording decides a type (deterministicDocumentRole, passed as codeRole) other than the earlier one;
- * - the earlier type is an endorsement but the pages print no amendment (an endorsement replaces older figures, so a
- *   wording once mis-typed as one must be correctable).
- * A first read (no earlier type) takes the reader's type; a re-read that names none keeps the earlier one. */
+/** The type a document stores when it is read again (DC 5 Nov; Critic R362 M1; TE pr362). The reader names the type
+ * afresh on every read and can name it differently for the same file, so one order of precedence decides, surest first:
+ * 1. a type the pages print about themselves (printedDocumentRole: a title or fixed layout, passed as codeRole): that
+ *    type is stored, whatever the reader or the earlier reading said (a page titled "Policy wording" is the wording,
+ *    an "ENDORSEMENT NO. 2" is an endorsement);
+ * 2. a type that holds no cover (a letter, claim decision, bill, app screenshot, the family's own notes): showing less
+ *    is the safe side;
+ * 3. personal proof of cover (a personal schedule, certificate or endorsement confirming the household's cover);
+ * 4. the earlier reading's type;
+ * 5. the reader's type (a first read, or an earlier read that named none).
+ * A re-read that names no type keeps the earlier one. */
 export function roleOnReread(earlier: PolicyExtraction["documentRole"] | string | null | undefined, next: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean,
-  o: { codeRole?: PolicyExtraction["documentRole"] | string | null; printsAmendment?: boolean } = {}): PolicyExtraction["documentRole"] {
+  o: { codeRole?: PolicyExtraction["documentRole"] | string | null } = {}): PolicyExtraction["documentRole"] {
+  if (o.codeRole) return o.codeRole as PolicyExtraction["documentRole"];
   if (!earlier || earlier === next) return next;
-  if (earlier === "endorsement" && o.printsAmendment === false) return next;
   if (!next) return earlier as PolicyExtraction["documentRole"];
   if (NON_COVER_ROLES.has(next)) return next;
   if (documentAuthority(next, personalCoverageConfirmed).level >= 95) return next;
-  if (o.codeRole && o.codeRole !== earlier) return next;
   return earlier as PolicyExtraction["documentRole"];
 }
 

@@ -42,31 +42,59 @@ async function main() {
     assert.equal(roleOnReread("policy_wording", "personal_schedule", false), "policy_wording");
     assert.equal(roleOnReread("product_summary", "endorsement", false), "product_summary");
   });
-  await test("R7 a type the pages' own wording decides wins over the earlier one; the same one keeps it (Critic R362 M1)", () => {
-    assert.equal(roleOnReread("certificate", "benefit_guide", false, { codeRole: "benefit_guide" }), "benefit_guide");
-    assert.equal(roleOnReread("endorsement", "policy_wording", false, { codeRole: "policy_wording", printsAmendment: true }), "policy_wording");
-    // The FWD case: the reader said wording, the pages' title says endorsement, as the earlier reading did.
-    assert.equal(roleOnReread("endorsement", "policy_wording", false, { codeRole: "endorsement", printsAmendment: true }), "endorsement");
-    assert.equal(roleOnReread("endorsement", "policy_wording", false, { codeRole: null, printsAmendment: true }), "endorsement");
+  // Made-up English documents, as their pages print them.
+  const P = (...t: string[]) => t.map((text, i) => ({ pageNumber: i + 1, text })) as never;
+  const LAYOUTS = {
+    // A wording whose glossary and conditions mention endorsements and the policy schedule (the real FWD layout).
+    wording: P("Harbourline Travel insurance\nPolicy wording\nThis is your contract with us. Please read it with your policy schedule.",
+      "Definitions\nEndorsement means a change to this policy that we have agreed in writing.\nInsured person means the person named in the policy schedule.\nPolicy number means the number shown on your policy schedule.",
+      "General conditions\nAny endorsement we issue forms part of this policy."),
+    endorsement: P("Harbourline Assurance\nPolicy Endorsement\nPolicy number: HL-200311\nEffective date: 1 March 2026\nYour plan is changed from Classic to Elite with effect from the date above."),
+    changeNotice: P("Harbourline Assurance\nChange to your policy\nPolicy number: HL-200311\nEffective date: 1 March 2026\nFrom the date above your sum assured is reduced."),
+    beforeAfter: P("Harbourline Assurance\nPolicy number: HL-200311\nEffective date: 1 March 2026\nBenefit\tBefore\tAfter\nDeath benefit\tS$300,000\tS$250,000\nThe policy is otherwise unchanged."),
+    claimLetter: P("Harbourline Assurance\nDear Ms Okafor,\nClaim reference CL-88812\nWe have reviewed your claim and regret that we are unable to pay it under your policy number HL-200311.\nYours sincerely,\nClaims Department"),
+    summary: P("Your travel insurance summary\nHarbourline Travel insurance\nThis summary is not your policy wording; please read the policy wording for the full terms.\nMedical expenses overseas up to S$150,000\nTrip cancellation up to S$10,000"),
+  };
+  await test("R7 what the pages print about themselves: titles and layouts only, never a glossary's keywords", async () => {
+    const { printedDocumentRole } = await import("@/lib/documents/intelligence");
+    assert.equal(printedDocumentRole(LAYOUTS.wording), "policy_wording");
+    assert.equal(printedDocumentRole(LAYOUTS.endorsement), "endorsement");
+    assert.equal(printedDocumentRole(LAYOUTS.claimLetter), "claim_decision");
+    assert.equal(printedDocumentRole(LAYOUTS.summary), "product_summary");
+    assert.equal(printedDocumentRole(LAYOUTS.changeNotice), null);
+    assert.equal(printedDocumentRole(LAYOUTS.beforeAfter), null);
   });
-  await test("R8 a type that holds no cover always wins: a letter, notes, a claim decision or a bill read before as a certificate (Critic R362 M1)", () => {
-    for (const next of ["insurer_letter", "personal_notes", "claim_decision", "medical_bill"]) {
+  await test("R8 one order: the printed type, then a no-cover type, then personal proof, then the earlier type, then the reader's (TE pr362)", async () => {
+    const { printedDocumentRole } = await import("@/lib/documents/intelligence");
+    const reread = (earlier: string | null, next: string, confirmed: boolean, pages: never) => roleOnReread(earlier, next as never, confirmed, { codeRole: printedDocumentRole(pages) });
+    // The real FWD case: a wording once stored as an endorsement is the wording again, whatever its glossary says.
+    assert.equal(reread("endorsement", "policy_wording", false, LAYOUTS.wording), "policy_wording");
+    assert.equal(reread("endorsement", "endorsement", false, LAYOUTS.wording), "policy_wording");
+    // An endorsement that says so in its title stays one, whatever the reader says.
+    assert.equal(reread("endorsement", "policy_wording", false, LAYOUTS.endorsement), "endorsement");
+    // Pages that print no type of their own keep the earlier type over the reader's guess.
+    assert.equal(reread("endorsement", "policy_wording", false, LAYOUTS.changeNotice), "endorsement");
+    assert.equal(reread("endorsement", "policy_wording", false, LAYOUTS.beforeAfter), "endorsement");
+    // A letter stays a letter; a stored letter re-read as an unconfirmed schedule stays a letter.
+    assert.equal(reread("certificate", "certificate", true, LAYOUTS.claimLetter), "claim_decision");
+    assert.equal(reread("claim_decision", "personal_schedule", false, LAYOUTS.beforeAfter), "claim_decision");
+    // A summary is a summary, never the wording it cites (the one-page FWD travel summary on Home).
+    assert.equal(reread(null, "policy_wording", false, LAYOUTS.summary), "product_summary");
+    assert.equal(reread("policy_wording", "policy_wording", false, LAYOUTS.summary), "product_summary");
+  });
+  await test("R9 without a printed type: no-cover wins, proof wins, else the earlier type (Critic R362 M1)", () => {
+    for (const next of ["insurer_letter", "personal_notes", "claim_decision", "medical_bill"])
       assert.equal(roleOnReread("certificate", next as never, false, { codeRole: null }), next);
-      assert.equal(roleOnReread("personal_schedule", next as never, true, { codeRole: next }), next);
-    }
+    assert.equal(roleOnReread("policy_wording", "certificate", true, { codeRole: null }), "certificate");
+    assert.equal(roleOnReread("certificate", "benefit_guide", false, { codeRole: null }), "certificate");
   });
-  await test("R9 an earlier endorsement is kept only while the pages print an amendment (Critic R362 M1)", () => {
-    assert.equal(roleOnReread("endorsement", "policy_wording", false, { codeRole: null, printsAmendment: false }), "policy_wording");
-    assert.equal(roleOnReread("endorsement", "product_summary", false, { printsAmendment: false }), "product_summary");
-  });
-  await test("R10 what an amendment prints", async () => {
-    const { printsAmendment } = await import("@/lib/documents/intelligence");
-    const page = (text: string) => [{ pageNumber: 1, text }] as never;
-    assert.equal(printsAmendment(page("ENDORSEMENT\nPolicy number: HT-100245")), true);
-    assert.equal(printsAmendment(page("Harbour Life\nEndorsement No. 2\nPolicy number: HL-1")), true);
-    assert.equal(printsAmendment(page("Policy alteration\nThe sum assured is amended to S$200,000.")), true);
-    assert.equal(printsAmendment(page("Policy wording\nGeneral exclusions\nWe will not pay for claims arising from war.")), false);
-    assert.equal(printsAmendment(page("Harbour Travel Shield\nBenefits at a glance\nKeep this with your policy schedule.")), false);
+  await test("R10 a first reading also takes the summary title over the keyword it cites", async () => {
+    const { deterministicDocumentRole } = await import("@/lib/documents/intelligence");
+    assert.equal(deterministicDocumentRole(LAYOUTS.summary, "policy_wording"), "product_summary");
+    // A personal summary with the policy's own number and the person's name stays the person's schedule.
+    assert.equal(deterministicDocumentRole(P("Your travel insurance summary\nPolicy number: HT-100245\nInsured person: Nadia Okafor\nTrip cancellation up to S$10,000"), null), "personal_schedule");
+    // A schedule whose opening also says "summary of cover" is still a schedule.
+    assert.notEqual(deterministicDocumentRole(P("Policy Schedule\nSummary of cover\nPolicy number: HL-200311\nInsured person: Nadia Okafor\nSum insured S$100,000"), null), "product_summary");
   });
   await test("R6 the reading pipeline decides the stored type with this rule, before anything reads the type", async () => {
     const src = await readFile("lib/rag/ingest.ts", "utf8");
@@ -96,11 +124,12 @@ async function main() {
       await add(ids.other, OTHER, "endorsement");
       // A made-up endorsement that says it is one in its title, and a made-up schedule-free travel booklet.
       const endorsementPages = [{ pageNumber: 1, text: "ENDORSEMENT\nHarbour Travel Shield\nPolicy number: HT-100245\nEffective date: 1 March 2026\nThis endorsement forms part of your policy. The benefits below replace those in the policy wording." }];
-      const bookletPages = [{ pageNumber: 1, text: "Harbour Travel Shield\nBenefits at a glance\nOverall limit per trip S$5,000\nBaggage delay S$100 for every six hours" }];
-      const decide = (policyId: string, documentRole: string, personalCoverageConfirmed: boolean, accountId = ACCOUNT, pages: { pageNumber: number; text: string }[] = endorsementPages) =>
+      const bookletPages = [{ pageNumber: 1, text: "Harbour Travel Shield\nOverall limit per trip S$5,000\nBaggage delay S$100 for every six hours" }];
+      const decide = (policyId: string, documentRole: string, personalCoverageConfirmed: boolean, accountId = ACCOUNT, pages: { pageNumber: number; text: string }[] = bookletPages) =>
         documentRoleOnReread({ accountId, policyId }, { documentRole: documentRole as never, personalCoverageConfirmed }, pages as never);
       await test("D1 a stored endorsement read again as policy wording stays an endorsement", async () => {
         assert.equal(await decide(ids.endorsement, "policy_wording", false), "endorsement");
+        assert.equal(await decide(ids.endorsement, "policy_wording", false, ACCOUNT, endorsementPages), "endorsement");
       });
       await test("D2 a document never read before takes the reader's type", async () => {
         assert.equal(await decide(ids.fresh, "policy_wording", false), "policy_wording");
@@ -109,8 +138,8 @@ async function main() {
         assert.equal(await decide(ids.wording, "personal_schedule", true, ACCOUNT, bookletPages), "personal_schedule");
         assert.equal(await decide(ids.wording, "product_summary", false, ACCOUNT, bookletPages), "policy_wording");
       });
-      await test("D5 a stored endorsement whose pages print no amendment takes the new type (Critic R362 M1)", async () => {
-        assert.equal(await decide(ids.endorsement, "policy_wording", false, ACCOUNT, bookletPages), "policy_wording");
+      await test("D5 a stored endorsement whose pages are titled \"Policy wording\" is the wording again (the real FWD layout)", async () => {
+        assert.equal(await decide(ids.endorsement, "policy_wording", false, ACCOUNT, [{ pageNumber: 1, text: "Harbour Travel insurance\nPolicy wording\nThis is your contract with us.\nEndorsement means a change to this policy." }]), "policy_wording");
       });
       await test("D4 another household's document never lends its type", async () => {
         assert.equal(await decide(ids.other, "policy_wording", false), "policy_wording");
