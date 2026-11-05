@@ -942,10 +942,13 @@ const NAME_NAMES_A_LIMIT=/\b(?:limit(?:s|ed)?|max(?:imum|ima)?|maksimum|aggregat
 /** "Minor" naming how severe a condition or procedure is ("Minor stroke", "Minor surgery"), never a child: a closed list of
  * what may follow it (TE pr353 gap 1). Anywhere else "minor" may be a person and still changes the share. */
 const MINOR_CONDITION=/\bminor\s+(?=(?:stroke|surgery|surgeries|surgical|burns?|fractures?|injur(?:y|ies)|procedures?|operations?)\b)/giu;
+/** Whether a name holds a word that changes the share once a "minor <condition>" is set aside. Any other person word left in
+ * it ("for Minors", "child") keeps it (Critic M2 on #360). */
+const minorChanges=(name:string)=>SHARE_CHANGER.test(name)&&(SHARE_CHANGER.test(name.replace(MINOR_CONDITION," "))||/\bminors?\b/u.test(name.replace(MINOR_CONDITION," ")));
 function withoutLeadingName(quote:string,benefitName:string|null|undefined){
   const name=(benefitName??"").normalize("NFKC");
   // A name that itself changes an amount ("halved for children", "less any loan") stays in the passage and is read.
-  if(!name||/[\p{Nd}\p{Sc}]/u.test(name)||SHARE_CHANGER.test(normalText(name).replace(MINOR_CONDITION," "))||CHANGER_BEFORE_SHARE.test(normalText(name))
+  if(!name||/[\p{Nd}\p{Sc}]/u.test(name)||minorChanges(normalText(name))||CHANGER_BEFORE_SHARE.test(normalText(name))
     // A name that names a limit or a scope ("Combined Limit with Surgery", "Lifetime Limit", "Benefit within Plan Limit")
     // may be what bounds the share, so it is read with the passage (TE pr234 D2).
     ||NAME_NAMES_A_LIMIT.test(normalText(name)))return quote;
@@ -1022,7 +1025,10 @@ export function shareBound(quote:string|null|undefined,benefitName?:string|null)
 }
 /** Line breaks that only wrap one sentence, each turned into a space so positions hold: a closed list of continuations,
  * never a break before another row's label. */
-const softWraps=(s:string)=>s.replace(/(?<=\bsum[ \t]*)\n(?=[ \t]*(?:assured|insured)\b)/giu," ").replace(/\n(?=[ \t]*(?:or|up[ \t]+to|whichever)\b)/giu," ");
+// The continuation must start in lower case, or follow a comma: a capitalised "Up to S$500" line may be the next row's value
+// under this row's share, where labels and values were read column by column (Critic M1 on #360).
+const softWraps=(s:string)=>s.replace(/(?<=\bsum[ \t]*)\n(?=[ \t]*(?:assured|insured)\b)/giu," ").replace(/\n(?=[ \t]*(?:or|up[ \t]+to|whichever)\b)/gu," ")
+  .replace(/(?<=,[ \t]*)\n(?=[ \t]*(?:or|up[ \t]+to|whichever)\b)/giu," ");
 export const shareCapNote=(amount:number,currency:string)=>"Paid up to "+formatMoney(amount,currency)+", the cap this passage prints.";
 /** A rule the document states in a sentence rather than in a table cell.
  *

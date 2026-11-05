@@ -120,6 +120,8 @@ test("a sentence wrapped onto a new line, and a name that says how minor a condi
     ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000, whichever is the smaller", 0.15, 100_000, 15_000],
     ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000, whichever is lower", 0.15, 1_000_000, 25_000],
     ["Minor burns", "Minor burns: 10% of Sum Insured, up to S$15,000", 0.1, 1_000_000, 15_000],
+    ["Angioplasty", "Angioplasty: 10% of Sum Insured,\nUp to S$25,000", 0.1, 1_000_000, 25_000],
+    ["Angioplasty", "Angioplasty: 10% of Sum Insured,\nup to S$25,000", 0.1, 1_000_000, 25_000],
   ] as const) for (const stored of [true, false]) assert.equal(pay(name, quote, share, sumInsured, stored), expected, `${stored ? "stored" : "read"}: ${quote}`);
   for (const [name, quote, share] of [
     // Another row's label on the next line: its cap is not this share's.
@@ -132,6 +134,13 @@ test("a sentence wrapped onto a new line, and a name that says how minor a condi
     ["Minor life assured", "Minor life assured: 15% of the Sum Assured or up to S$25,000, whichever is lower", 0.15],
     ["Stroke", "Stroke: 15% of the Sum Assured or up to S$25,000 for a minor, whichever is lower", 0.15],
     ["Minor stroke", "Minor stroke: 15% of the Sum Assured or up to S$25,000 for children, whichever is lower", 0.15],
+    ["Minor Surgery for Minors", "Minor Surgery for Minors 10% of Sum Insured, up to S$25,000", 0.1],
+    ["Minor surgery (minor)", "Minor surgery (minor) 10% of Sum Insured, up to S$25,000", 0.1],
+    // A capitalised value line under the share may be the next row's, read column by column (Critic M1 on #360).
+    ["Angioplasty", "Angioplasty 10% of Sum Insured\nUp to S$500", 0.1],
+    ["Angioplasty", "Angioplasty 10% of Sum Insured\nUp to S$500 per claim", 0.1],
+    ["Angioplasty", "Angioplasty 10% of Sum Insured\nOr S$500, whichever is lower", 0.1],
+    ["Angioplasty", "Angioplasty 10% of Sum Insured\n\nor up to S$500, whichever is lower", 0.1],
   ] as const) for (const stored of [true, false]) assert.equal(pay(name, quote, share, 1_000_000, stored), null, `${stored ? "stored" : "read"}: ${quote}`);
 });
 
