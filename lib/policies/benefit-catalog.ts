@@ -1100,7 +1100,9 @@ export function validateCatalogFormula(input:{
   if(input.kind==="sum_insured"){
     // A choice of the lower that belongs to a printed cap ("or RM5,000, whichever is lower") is read by shareBound.
     const bound=shareBound(input.quote,input.benefitName);
-    if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(bound.kind==="cap"?normalText(shareCapInPassage(input.quote)?.rest??""):quote))return none;
+    // The cap's own choice of the lower ("or up to S$30,000, whichever is lower", "whichever is less") is that cap, never a
+    // word that changes the share: only the words left once it is taken out are read (FWD pre-check, 5 Nov).
+    if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(bound.kind==="cap"?normalText(shareCapInPassage(input.quote)?.rest??"").replace(CAP_PASSAGE_PHRASES," "):quote))return none;
     if(prevailingNotProved(quote,input.benefitName))return none;
     const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?(?:"+PREVAILING+")?"+INSURED_AMOUNT))?.[1];
     const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);

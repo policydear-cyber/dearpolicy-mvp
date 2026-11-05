@@ -30,6 +30,9 @@ const key=(text:string)=>text.normalize("NFKC").toLowerCase().replace(/^[\s•�
  * benefit's own row, never a price, clause or feature line, whatever words follow (Critic #348 H1b). */
 export function startsWithName(name:string,quote:string){
   const n=key(name),q=key(quote);
+  // A "name" that is itself a feature line or a price ("Receive daily hospital cash benefit") is the sentence copied as a
+  // name, never a benefit's own name (FWD pre-check, 5 Nov).
+  if(statesAFeature(name)||statesAPrice(name))return false;
   return n.length>=4&&(q===n||q.startsWith(n+" "));
 }
 /** A price, not a benefit, by its shape only (Critic #348): a marketing line that opens "Be insured/covered/protected" and
@@ -80,7 +83,7 @@ export function modelRowWithoutRule(name:string,quote:string,_pageText:string):"
   // A feature line that prints an amount is a benefit, as a clause with an amount is (TE #348 journey gate).
   // A choice of cover sizes ("Choose cover from S$50,000 to S$500,000") is a range to buy, not an amount paid.
   if(new RegExp(String.raw`^[\s•▪●◦‣⁃\-–]*choose\b[^.;]*\bfrom\s+${MONEY}\s+to\s+${MONEY}`,"iu").test(quote))return "drop";
-  if(statesAFeature(quote)&&amount==="named"&&!/\b(?:benefit|cover|coverage|allowance)s?\s*$/i.test(name.trim()))return "drop";
+  if(statesAFeature(quote)&&amount==="named"&&(statesAFeature(name)||!/\b(?:benefit|cover|coverage|allowance)s?\s*$/i.test(name.trim())))return "drop";
   return amount;
 }
 /** The passage points to an amount printed somewhere else ("the amount shown in the schedule on page 5"). */

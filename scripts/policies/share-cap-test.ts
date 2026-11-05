@@ -39,6 +39,12 @@ test("one printed cap in the cover's currency: the lower of the share and the ca
     ["10% of Sum Insured, up to a maximum of S$25,000", 1_000_000, "SGD", 25_000],
     ["10% of Sum Insured, up to S$25,000, payable only once", 1_000_000, "SGD", 25_000],
     ["10% of the sum insured, but up to a maximum of RM20,000 per claim", 1_000_000, "MYR", 20_000],
+    // FWD pre-check (5 Nov): "or up to <cap>, whichever is lower / less / lesser" is the cap's own choice of the lower.
+    ["10% of Sum Insured or up to S$30,000, whichever is lower", 1_000_000, "SGD", 30_000],
+    ["10% of Sum Insured or up to S$30,000, whichever is lower", 200_000, "SGD", 20_000],
+    ["20% of the sum insured or up to S$40,000, whichever is less", 1_000_000, "SGD", 40_000],
+    ["15% of Sum Insured or up to S$50,000, whichever is lesser", 1_000_000, "SGD", 50_000],
+    ["25% of Sum Insured or up to S$25,000, whichever is the lower", 1_000_000, "SGD", 25_000],
   ] as const) {
     assert.equal(pay(quote, sumInsured, currency, true), expected, "stored: " + quote);
     assert.equal(pay(quote, sumInsured, currency, false), expected, "read: " + quote);
@@ -48,6 +54,16 @@ test("one printed cap in the cover's currency: the lower of the share and the ca
 });
 
 test("anything less sure than one cap in the cover's currency gives no figure, never the full share", async () => {
+  const { repairStoredRules: repair, validateCatalogFormula: validate } = await import("@/lib/policies/benefit-catalog");
+  // A changer word outside the cap's own "whichever is lower" still withholds the share (FWD pre-check negatives).
+  for (const quote of ["10% of Sum Insured or up to S$30,000, whichever is lower, less any amount already paid",
+    "10% of Sum Insured or up to S$30,000, whichever is lower, reduced by any earlier claim",
+    "10% of Sum Insured minus any loan, or up to S$30,000, whichever is lower",
+    "10% of Sum Insured or up to S$30,000, whichever is greater",
+    "10% of Sum Insured or up to S$30,000, whichever is higher"]) {
+    assert.equal(validate({ kind: "sum_insured", value: 0.1, currency: null, quote, factKey: null, offsetDays: null, maximumDays: null, benefitName: "Angioplasty" }).formulaKind, "none", quote);
+    assert.equal(repair([{ ...base, id: "x", benefitName: "Angioplasty", quote }] as never)[0].formulaKind, "none", quote);
+  }
   const { repairStoredRules, assessCatalogBenefit } = await import("@/lib/policies/benefit-catalog");
   for (const [quote, currency] of [
     ["10% of the sum insured, up to US$25,000", "SGD"], // cap in another currency
