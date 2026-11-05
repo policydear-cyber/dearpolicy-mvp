@@ -394,24 +394,30 @@ const pageRange = (pages: number[]) => pages.length === 1 ? String(pages[0]) : `
 /** What a document says when its table could not be read this time: the table keeps the earlier reading, if any, and says
  * from when. Added once to the document's notes and its message on the Documents page (as lib/rag/ingest.ts adds its notes). */
 export const UNREAD_TABLE_PREFIX = "The table of benefits could not be read";
+/** A table reading that was not tried (a retried job never pays for one): the document says so and how to read it. */
+export const NOT_READ_TABLE_PREFIX = "The table of benefits was not read";
+export const NOT_READ_TABLE_NOTE = (when: string | null) => when
+  ? `The table of benefits was not read again this time, so it still shows the reading from ${when}. Choose Read again to read it.`
+  : "The table of benefits was not read this time. Choose Read again to read it.";
 export const UNREAD_TABLE_NOTE = (when: string | null) => when
   ? `The table of benefits could not be read again this time, so it still shows the reading from ${when}.`
   : "The table of benefits could not be read this time, so it has no rows from this document yet.";
 /** Takes away the "could not be read" note once a reading of the document finishes. */
 async function clearUnreadTableNote(db: Db, accountId: string, policyId: string) {
   try {
-    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits could not be read[^.]*\\.', '', 'g')), ''),
-        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3),'[]'::jsonb)),updated_at=now()
+    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits (?:could not be read[^.]*\\.|was not read[^.]*\\. Choose Read again to read it\\.)', '', 'g')), ''),
+        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3 AND n #>> '{}' NOT LIKE $4),'[]'::jsonb)),updated_at=now()
       WHERE id=$1 AND account_id=$2 AND jsonb_typeof(extracted_json->'documentNotes')='array'
-        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%"]);
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3 OR n #>> '{}' LIKE $4)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%", NOT_READ_TABLE_PREFIX + "%"]);
   } catch (error) { console.warn("Benefit table: could not clear the unread-table note for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
-export async function noteUnreadTable(db: Db, accountId: string, policyId: string) {
+/** notTried: the reading was not tried (a retried job), so the note says so and points to Read again. */
+export async function noteUnreadTable(db: Db, accountId: string, policyId: string, notTried = false) {
   try {
     const earlier = await db("SELECT read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
     const at = earlier[0]?.read_at;
     const when = at == null ? null : new Date(String(at instanceof Date ? at.toISOString() : at)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-    const note = UNREAD_TABLE_NOTE(when);
+    const note = notTried ? NOT_READ_TABLE_NOTE(when) : UNREAD_TABLE_NOTE(when);
     await db(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
         extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
       WHERE id=$1 AND account_id=$2 AND NOT (coalesce(extracted_json->'documentNotes','[]'::jsonb) ? $3::text)`, [policyId, accountId, note]);

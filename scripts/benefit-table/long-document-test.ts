@@ -5,7 +5,7 @@
  * of output the way a real one does, an in-memory database; no network, nothing paid.
  *   npm run -s benefit-table:long-document-test */
 import assert from "node:assert/strict";
-import { MIN_CALL_MS, PAGE_MAX_OUTPUT, PART_MAX_CHARS, PART_MAX_OUTPUT, READ_MAX_OUTPUT, SAVE_MARGIN_MS, TOKENS_PER_CHAR, TOKENS_PER_FIGURE, UNREAD_TABLE_NOTE, expectedOutput, pageParts, readDocument, type Db } from "@/lib/benefit-table/service";
+import { NOT_READ_TABLE_NOTE, MIN_CALL_MS, PAGE_MAX_OUTPUT, PART_MAX_CHARS, PART_MAX_OUTPUT, READ_MAX_OUTPUT, SAVE_MARGIN_MS, TOKENS_PER_CHAR, TOKENS_PER_FIGURE, UNREAD_TABLE_NOTE, expectedOutput, pageParts, readDocument, type Db } from "@/lib/benefit-table/service";
 import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY/i.test(k)) delete process.env[k];
@@ -438,7 +438,7 @@ async function main() {
     let r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
     assert.equal(r.read, false);
     assert.equal(m.calls.length, 0, "R1: no paid call");
-    assert.deepEqual(w.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")]);
+    assert.deepEqual(w.s.notes, [NOT_READ_TABLE_NOTE("22 October 2026")]);
     assert.equal(w.marked(), false);
     // ...and (a) attempt 3 of the same job makes no call either, although attempt 2 cleared the mark.
     m = priced();
@@ -452,7 +452,7 @@ async function main() {
     m = priced();
     r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
     assert.equal(m.calls.length, 0, "(b) attempt 2: no paid call");
-    assert.deepEqual(w.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")], "(b) the earlier reading is kept and the document says the new one was not read");
+    assert.deepEqual(w.s.notes, [NOT_READ_TABLE_NOTE("22 October 2026")], "(b) the earlier reading is kept and the document says the new one was not read");
     // (c) attempt 1 finished the reading and the job failed later: attempt 2 makes no call and keeps the stored reading,
     // with no note.
     w = withMark(booklet(3, 10), false); m = priced();
@@ -478,7 +478,18 @@ async function main() {
     assert.equal(m.calls.length, before, "(d) the deferred re-read: no paid call");
     assert.equal(w.s.readings.get("doc")?.reading, stored);
     const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("../../lib/rag/ingest.ts", import.meta.url), "utf8"), /retry: benefitTable\.tableReadingRetry\(args\)/, "(d) the document job decides with tableReadingRetry");
+    const ingest = readFileSync(new URL("../../lib/rag/ingest.ts", import.meta.url), "utf8");
+    assert.match(ingest, /retry: benefitTable\.tableReadingRetry\(args\)/, "(d) the document job decides with tableReadingRetry");
+    // (e) A bundle's parts run as their own documents with the bundle's attempt and deferredRetry, so a deferred re-read of a
+    // bundle pays for no part's table reading: each part is decided like (d) and makes no call.
+    const partCall = ingest.match(/await processPolicy\(\{[^}]*bundleOf: args\.policyId[^}]*\}\)/)?.[0] ?? "";
+    assert.match(partCall, /attempt: args\.attempt/, "(e) a bundle part carries its job's attempt");
+    assert.match(partCall, /deferredRetry: args\.deferredRetry/, "(e) a bundle part carries the deferred re-read");
+    for (const part of ["part-1", "part-2", "part-3"]) {
+      w = withMark(booklet(3, 10), false); m = priced();
+      r = await readIntoTable(w.db, m.model, A, "doc", { retry: tableReadingRetry({ attempt: { number: 1 }, deferredRetry: true }) });
+      assert.equal(m.calls.length, 0, `(e) ${part} of a deferred bundle re-read: no paid call`);
+    }
     // A first attempt that ends normally out of time clears its mark (its note says the table was not read).
     const clock = { t: 0 };
     w = withMark(wording(), false); m = priced({ worse: 1.9, clock });

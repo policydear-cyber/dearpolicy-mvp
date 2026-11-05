@@ -94,7 +94,7 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
   if (opts.retry) {
     const cutOff = await tableReadingCutOff(db, accountId, policyId);
     const stored = (await db("SELECT 1 FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId])).length > 0;
-    if (cutOff || !stored) await noteUnreadTable(db, accountId, policyId);
+    if (cutOff || !stored) await noteUnreadTable(db, accountId, policyId, true);
     if (cutOff) await markTableReading(db, accountId, policyId, false);
     return { read: false, why: "a retried job does not read the table again; Read again starts a fresh reading", pagesReread: 0, linked: 0 };
   }

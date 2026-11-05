@@ -294,7 +294,7 @@ async function readBundleParts(args: ProcessPolicyArgs, bytes: Uint8Array, segme
       else { const { copyOwnerChosen } = await import("@/lib/policies/upload-owner"); await copyOwnerChosen(args.accountId, args.policyId, partId); }
     }
     try {
-      await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType });
+      await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType, deferredRetry: args.deferredRetry });
     } catch { /* the part records its own outcome; the file goes on */ }
     phrases.push(`pages ${segment.from}–${segment.to} (${segment.title.replace(/\s+/g, " ").trim()}) became “${filename}”`);
   }
