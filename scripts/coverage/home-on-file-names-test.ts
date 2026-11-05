@@ -44,12 +44,20 @@ async function pure() {
     const travel = { type: "travel", product: "Harbour Travel Guard", name: "Harbour Travel Guard" };
     assert.equal(onFileDocumentName(travel, "Hospitalisation"), "Harbour Travel Guard (travel cover, for trips)");
     assert.equal(onFileDocumentName(travel, "Travel"), "Harbour Travel Guard");
-    assert.equal(documentKindNote({ type: null, product: null, name: "Kestrel travel wording" }, "Outpatient"), "travel cover, for trips");
-    assert.equal(documentKindNote({ type: "Home insurance", product: "Nest Shield", name: "Nest Shield" }, "Personal Accident"), "home cover");
-    assert.equal(documentKindNote({ type: null, product: "Roadwise Motor Insurance", name: "Roadwise Motor Insurance" }, "Hospitalisation"), "motor cover");
+    assert.equal(documentKindNote({ type: null, product: "Kestrel Travel Insurance" }, "Outpatient"), "travel cover, for trips");
+    assert.equal(documentKindNote({ type: "travel", product: "Harbour Journey Plan" }, "Outpatient"), "travel cover, for trips");
+    assert.equal(documentKindNote({ type: "Home insurance", product: "Nest Shield" }, "Personal Accident"), "home cover");
+    assert.equal(documentKindNote({ type: null, product: "Roadwise Motor Insurance" }, "Hospitalisation"), "motor cover");
+    // The stored type decides alone; the file name and document name are never read (Critic #368).
+    for (const [doc, category] of [[{ type: "health", product: "Kestrel Shield with Overseas Travel Benefit" }, "Hospitalisation"],
+      [{ type: "accident", product: "Personal Accident Plus (travel extension)" }, "Personal Accident"],
+      [{ type: "life", product: null, name: "travel-docs-scan" }, "Death"], [{ type: "health", product: "Harbour Health trip claim form" }, "Hospitalisation"], [{ type: "health", product: "Kestrel Travel Shield" }, "Hospitalisation"],
+      [{ type: null, product: "Lotus Shield", name: "Lotus travel wording" }, "Hospitalisation"], [{ type: null, product: "Home Loan Protector" }, "Death"],
+      [{ type: null, product: "Car Loan Shield" }, "Death"]] as const)
+      { const name = "name" in doc ? doc.name : "Doc"; assert.equal(onFileDocumentName({ ...doc, name }, category), name, JSON.stringify(doc)); }
     // Health, life and anything else: no note. A document that reads as two kinds is left as named.
-    for (const doc of [{ type: "health", product: "Pinnacle Shield", name: "Pinnacle Shield" }, { type: null, product: "LifeTrip Saver", name: "LifeTrip Saver" },
-      { type: null, product: "Careplus Critical Illness", name: "Careplus Critical Illness" }, { type: "travel", product: "Travel and Home Insurance Bundle", name: "Bundle" }])
+    for (const doc of [{ type: "health", product: "Pinnacle Shield" }, { type: null, product: "LifeTrip Saver" },
+      { type: null, product: "Careplus Critical Illness" }, { type: null, product: "Travel Insurance and Home Insurance Bundle" }, { type: "travel and home", product: "Bundle" }])
       assert.equal(documentKindNote(doc, "Hospitalisation"), null, doc.product);
     assert.equal(onFileNote([onFileDocumentName(travel, "Hospitalisation")], "Raj"), "Harbour Travel Guard (travel cover, for trips) mentions this cover, but does not show yet that it is Raj’s. Open it to check.");
   });

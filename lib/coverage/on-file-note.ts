@@ -13,20 +13,22 @@ export function onFileNote(documents: readonly string[], person: string): string
 
 /** What a document covers when it is a policy for something other than the person's own health or life: travel, a home or
  * a vehicle. Said beside its name on a tile for another cover, so wording from a travel policy on the Hospitalisation tile
- * reads as travel cover, for trips, never as hospital cover at home (live check, 5 Nov). Read from the document's own
- * stored type, product and name; nothing for any other kind, or on the tile of its own kind. */
-const OWN_KINDS: [RegExp, string, string][] = [
-  [/\btravel(?:ling|ler|lers)?\b|\btrip\b/i, "Travel", "travel cover, for trips"],
-  [/\b(?:home|household|contents|homeowners?|fire)\s+(?:insurance|policy|cover|protect\w*|plan)\b|\bhome\s+contents\b/i, "Home", "home cover"],
-  [/\b(?:motor|car|vehicle|motorcycle)\s+(?:insurance|policy|cover|plan)\b/i, "Motor", "motor cover"],
+ * reads as travel cover, for trips, never as hospital cover at home (live check, 5 Nov). Its stored type decides alone when
+ * it has one; only when it has none is the product name read, never the file name (Critic #368: "health" with an "Overseas
+ * Travel Benefit", or a life policy in "travel-docs-scan.pdf", is not a travel policy). Nothing for any other kind, for a
+ * document that reads as two, or on the tile of its own kind. */
+const OWN_KINDS: { kind: string; note: string; type: RegExp; product: RegExp }[] = [
+  { kind: "Travel", note: "travel cover, for trips", type: /\btravel\b/i, product: /\btravel\s+(?:insurance|policy|cover|protect\w*|plan|guard|shield)\b/i },
+  { kind: "Home", note: "home cover", type: /\b(?:home|household|contents|fire|property)\b/i,
+    product: /\b(?:home|household|contents|homeowners?|fire)\s+(?:insurance|policy|cover|protect\w*|plan)\b/i },
+  { kind: "Motor", note: "motor cover", type: /\b(?:motor|car|vehicle|motorcycle)\b/i, product: /\b(?:motor|car|vehicle|motorcycle)\s+(?:insurance|policy|cover|plan)\b/i },
 ];
-export function documentKindNote(doc: { type: string | null; product: string | null; name: string }, category: string): string | null {
-  const text = [doc.type, doc.product, doc.name].filter(Boolean).join(" ");
-  const kinds = OWN_KINDS.filter(([re]) => re.test(text));
+export function documentKindNote(doc: { type: string | null; product: string | null }, category: string): string | null {
+  const type = doc.type?.trim();
+  const kinds = type ? OWN_KINDS.filter((k) => k.type.test(type)) : OWN_KINDS.filter((k) => k.product.test(doc.product ?? ""));
   // One kind only: a document that reads as two (a "travel and home" bundle) is left as it is named.
   if (kinds.length !== 1) return null;
-  const [, kind, note] = kinds[0];
-  return kind === category ? null : note;
+  return kinds[0].kind === category ? null : kinds[0].note;
 }
 /** The name a tile shows for an on-file document: its own name, with its kind when it is a policy of another kind. */
 export function onFileDocumentName(doc: { type: string | null; product: string | null; name: string }, category: string): string {
