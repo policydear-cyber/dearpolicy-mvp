@@ -181,7 +181,7 @@ test("a schedule term that prints one figure per plan is held, never shown with 
   assert.equal(describeScheduleTerm("policy_year_limit", 150_000, "SGD"), "Limit of SGD 150,000 a policy year");
 });
 
-test("a term whose plans are set apart by labels or separators is held too; one plan's own limits keep their figure (TE pr361)", async () => {
+test("a term printing two different figures in one currency is held unless each carries its own unit; one plan's own limits keep their figure (TE pr361)", async () => {
   const { termFiguresDifferByPlan } = await import("@/lib/insurance/scale-limit");
   const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
   const term = (id: string, quote: string, value: number) =>
@@ -193,12 +193,24 @@ test("a term whose plans are set apart by labels or separators is held too; one 
     "Overall limit S$200,000 (Classic), S$500,000 (Elite)",
     "Annual limit: Silver RM 50,000, Gold RM 100,000",
     "Maximum per trip Standard £5,000 / Superior £10,000",
+    "Overall limit Individual S$300; Family S$800",
+    "Overall limit Adult S$300; Child S$150",
+    "Overall limit: Gold - S$500,000, Silver - S$250,000",
+    "Overall limit: silver S$100,000 / gold S$250,000",
+    "Overall limit S$200,000 or S$500,000 depending on the plan chosen",
+    "Medical expenses up to S$150,000 for Basic and S$300,000 for Premier",
+    "Overall limit Classic S$200 per trip | Elite S$500 per trip",
+    "Excess: Plan 1: S$100 / Plan 2: S$250",
+    "Overall limit S$200,000, or S$500,000 if the injury is caused by an accident",
   ];
   const keptQuotes = [
     "Overall limit S$300 per trip, S$1,500 per year",
     "Overall limit S$300 (per trip), S$1,500 (per year)",
-    "Overall limit S$200,000, or S$500,000 if the injury is caused by an accident",
-    "Per item limit S$500; Overall S$3,000",
+    "Overall limit S$5,000 per trip, up to S$20,000 per policy year",
+    "Annual limit S$150,000, of which S$5,000 for outpatient",
+    "Room and board S$300 / day, overall S$3,000 per policy year",
+    // One family plan's own two limits: each figure says whom it is for.
+    "Overall limit S$300 per person, S$800 per family",
     "Overall limit S$200,000 | S$200,000",
     "Overall limit S$500,000",
     "Overall limit S$1,000,000 US$750,000",
@@ -207,4 +219,12 @@ test("a term whose plans are set apart by labels or separators is held too; one 
   for (const q of keptQuotes) assert.equal(termFiguresDifferByPlan(q), false, q);
   const out = repairStoredRules([...heldQuotes, ...keptQuotes].map((q, i) => term("q" + i, q, 200_000)) as never) as { formulaValue: number | null }[];
   assert.deepEqual(out.map((b) => b.formulaValue === null), [...heldQuotes.map(() => true), ...keptQuotes.map(() => false)]);
+});
+
+test("a benefit row's own sub-items keep their figure; only side-by-side plan cells hold a benefit (Critic R361b M1)", async () => {
+  const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  const quotes = ["Ward S$300; ICU S$600", "Room & Board S$500; Surgical S$3,000", "Classic S$200 | Elite S$500"];
+  const out = repairStoredRules(quotes.map((q, i) => ({ ...row("b" + i, q, 300), rowKind: "benefit" })) as never) as { formulaValue: number | null }[];
+  // Benefit rows are judged by side-by-side cells only, as on main; the labelled-plans test is for schedule terms.
+  assert.deepEqual(out.map((b) => b.formulaValue), [300, 300, 300]);
 });
