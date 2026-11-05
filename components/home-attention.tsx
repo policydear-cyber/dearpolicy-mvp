@@ -23,9 +23,15 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 function readJson<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "") as T; } catch { return fallback; } }
 
+/** The line shown when nothing needs the household: never "nothing needs you" while Home's own To-do lists something. */
+export function AllClear({ todo }: { todo: number }) {
+  return todo ? <>Nothing urgent. <Link className="text-link" href="#home-todo">{plural(todo, "thing", "things")} to check in your To-do</Link>.</> : <>Nothing needs you right now.</>;
+}
+
 /** What a returning household needs on landing: what changed since the last visit, what needs them, and a box to ask.
- * Built only from GET /api/policies and GET /api/claims, the same data the Documents and Claims pages show. */
-export function HomeAttention({ memberId }: { memberId?: string }) {
+ * Built only from GET /api/policies and GET /api/claims, the same data the Documents and Claims pages show. `todo`: how
+ * many items Home's own To-do list shows, so the top never says "nothing needs you" above a To-do that lists something. */
+export function HomeAttention({ memberId, todo = 0 }: { memberId?: string; todo?: number }) {
   const router = useRouter();
   const [policies, setPolicies] = useState<Policy[] | null>(null);
   const [claims, setClaims] = useState<Claim[] | null>(null);
@@ -104,6 +110,6 @@ export function HomeAttention({ memberId }: { memberId?: string }) {
         <Link href={i.href}><span className="home-attention-text"><strong>{i.title}</strong><small>{i.detail}</small></span><span className="home-attention-action">{i.action} ›</span></Link>
       </li>)}</ul>
       {items.length > 5 ? <p className="muted">{plural(items.length - 5, "more item is", "more items are")} on the Documents and Claims pages.</p> : null}
-    </> : <p className="home-all-clear" data-testid="home-all-clear">Nothing needs you right now.</p> : null}
+    </> : <p className="home-all-clear" data-testid="home-all-clear"><AllClear todo={todo} /></p> : null}
   </section>;
 }
