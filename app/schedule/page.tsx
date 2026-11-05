@@ -7,6 +7,7 @@ import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@
 import { customerError } from "@/components/customer-text";
 import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
 import { sharedPolicyNote,sharedPolicyText } from "@/lib/policies/shared-policy";
+import { pointsToScheduleSum,SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Benefits: what the household's documents say each policy pays.
@@ -186,6 +187,7 @@ export default function BenefitsPage(){
               <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&!shared(rows)&&<small>{benefit.owners.join(", ")}</small>}</div>
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
+                {pointsToScheduleSum(benefit,line.text)&&<small className="pays-basis" data-testid="schedule-sum-pointer">{SCHEDULE_SUM_POINTER} <Link className="text-link" href="/ledger">See Coverage →</Link></small>}
                 {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
                 {line.established&&benefit.attention==="unreadable"&&benefit.wholeSum?.map((c,i)=><small key={i} className="pays-basis" data-testid="whole-sum">{c.owner}: {c.amount} ({c.plan}, from {c.source})</small>)}
               </>}

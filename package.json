@@ -130,6 +130,7 @@
     "policies:document-filter-test": "node --import tsx scripts/policies/document-filter-test.ts",
     "policies:shared-policy-test": "node --import tsx scripts/policies/shared-policy-test.ts",
     "policies:shared-policy-route-test": "node --import tsx scripts/policies/shared-policy-route-test.ts",
+    "policies:no-amount-pointer-test": "node --import tsx scripts/policies/no-amount-pointer-test.ts",
     "policies:move-detected-name-test": "node --import tsx scripts/policies/move-detected-name-test.ts",
     "policies:product-scopes-test": "node --import tsx scripts/policies/product-scopes-test.ts",
     "benefit-table:household-record-test": "node --import tsx scripts/benefit-table/household-record-test.ts",
