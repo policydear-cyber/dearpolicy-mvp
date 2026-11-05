@@ -18,7 +18,7 @@ import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
-import { printedUnits, RATE_UNITS, unitsBeforeFigures, withoutUnitBefore } from "@/lib/insurance/printed-unit";
+import { printedUnits, RATE_UNITS, runUnitsBefore, unitsBeforeFigures, withoutUnitBefore } from "@/lib/insurance/printed-unit";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -51,9 +51,11 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
   return (lines.length ? lines : [excerpt]).some((line) => {
     const found = [...line.matchAll(MONEY_WITH_UNIT)];
     // A line that prints its units before its figures ("Per day S$100 per day S$200") gives each figure the unit before
-    // it; read after the figure, each unit would be the next cell's, and plan cells would look like a rate and its cap.
+    // it; read after the figure, each unit would be the next cell's, and plan cells would look like a rate and its cap. A
+    // later cell with no unit of its own takes the run's ("Per day S$100 for Plan A, S$200 for Plan B"), before the
+    // cells are compared, so the plan and care-setting checks below run as they do on a line with units after (TE r376).
     const spans = found.map((m) => ({ start: m.index!, end: m.index! + m[1].length }));
-    const before = unitsBeforeFigures(line, spans) ? printedUnits(line, spans) : null;
+    const before = unitsBeforeFigures(line, spans) ? runUnitsBefore(line, spans) : null;
     const cells = found.map((m, i) => {
       // "each night" is a nightly rate; "each" alone is per item.
       const unit = before ? before[i] : (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/^each\s+/, "").replace(/s$/, "");
