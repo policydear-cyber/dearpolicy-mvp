@@ -40,69 +40,59 @@ const OTHER_TITLE = /\b(?:policy\s+schedule|schedule\s+of\s+(?:insurance|benefit
 const NEVER_AMENDS = /\b(?:illustration|summary|brochure|booklet)\b/i;
 /** A heading of a wording, a contents list or a clause: below it a line is part of that document, never its title. */
 const BODY_HEADING = /^(?:general\s+)?(?:conditions|exclusions|definitions)$|^(?:table\s+of\s+)?contents$|^section\s+\d+\b/i;
-/** A sentence only an amending document prints, anywhere in it. A closed list: what a policy may do ("may be amended",
- * "amended from time to time") or what any endorsement does is not one, nor a change "as follows: none". "With effect
- * from" counts only with "hereby", or with a date after it. */
-const DATE = String.raw`(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})`;
-const AMENDMENT_ACT = [
-  /\b(?:the\s+)?(?:policy|sum\s+(?:assured|insured)|premium|cover(?:age)?|schedule)\s+(?:is|are|has\s+been|have\s+been)\s+(?:hereby\s+)?(?:amended|altered|changed|reduced|increased)\s+as\s+follows(?!\s*:?\s*(?:none|nil|n\/a)\b)/i,
-  /\b(?:the\s+)?(?:policy|sum\s+(?:assured|insured)|premium|cover(?:age)?|schedule)\s+(?:is|are|has\s+been|have\s+been)\s+hereby\s+(?:amended|altered|changed|reduced|increased)\b/i,
-  new RegExp(String.raw`\b(?:the\s+)?(?:policy|sum\s+(?:assured|insured)|premium|cover(?:age)?|schedule)\s+(?:is|are|has\s+been|have\s+been)\s+(?:amended|altered|changed|reduced|increased)\s+with\s+effect\s+from\s+(?:the\s+)?` + DATE, "i"),
-  /\bthe\s+following\s+(?:alterations?|amendments?|changes?)\s+(?:has|have)\s+been\s+made\b/i,
-  /\bwe\s+have\s+(?:reduced|increased|changed|amended|altered)\s+(?:your|the)\s+(?:policy|plan|cover(?:age)?|premium|sum\s+(?:assured|insured))\b/i,
-];
+/** Main's amendment wording, unchanged: an endorsement number, "policy alteration", "reduction of sum assured" or "is
+ * amended" anywhere in the text. Wider sentence catches are left for a later change. */
+const AMENDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
 /** The document's first title line, among the first 25 lines of its first two pages (contents entries and lines written
  * as sentences or form lines left out), and whether it is an amendment title. Null when none is printed above a wording,
  * contents or clause heading. */
-function firstTitle(pages: string[]): { line: string; amends: boolean; page: number } | null {
+function firstTitle(pages: string[]): { line: string; raw: string; amends: boolean; page: number } | null {
   for (const [index, page] of pages.slice(0, 2).entries()) {
     const lines = page.split(/\r?\n/).filter((l) => l.trim())
       // A contents entry ("Endorsements ........ 14", "Endorsement - Terrorism<tab>15") names a page further on.
       .filter((l) => !/\.{3,}|…|\t\s*(?:p(?:age|g)\.?\s*)?\d+\s*$/i.test(l))
-      .map((l) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 25);
-    for (const l of lines) {
+      .map((l) => ({ raw: l.replace(/\s+/g, " ").trim(), l: l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim() })).filter((x) => x.l).slice(0, 25);
+    for (const { raw, l } of lines) {
       if (BODY_HEADING.test(l)) break;
       // A title, not a sentence or a form line: no words of a clause, no full stop at its end, no empty value.
       if (/\b(?:you|we|our|us|may|must|will|shall|can|should)\b|\.$/i.test(l) || NO_VALUE.test(l)) continue;
-      if (AMENDMENT_TITLE.some((re) => re.test(l))) return { line: l, amends: true, page: index };
-      if (OTHER_TITLE.test(l)) return { line: l, amends: false, page: index };
+      if (AMENDMENT_TITLE.some((re) => re.test(l))) return { line: l, raw, amends: true, page: index };
+      if (OTHER_TITLE.test(l)) return { line: l, raw, amends: false, page: index };
     }
   }
   return null;
 }
-/** Whether a document's own text is an amendment of its policy (fails closed: an ordinary page, a wording, a schedule or
- * a booklet that mentions endorsements is not one):
- *  - its first title line is an amendment title (AMENDMENT_TITLE);
- *  - or, unless its first title names an illustration, a summary, a brochure or a booklet: "this endorsement forms part
- *    of / is attached to" on its first page above any heading; an amending sentence (AMENDMENT_ACT); a Before / After
- *    table (a line naming both, then a line with two amounts).
- * pagesText: pages joined by "\f". */
+/** Whether a document's own text is an amendment of its policy: main's wording (AMENDS), or its first title line is an
+ * amendment title (AMENDMENT_TITLE; a title further down is a section of another document). pagesText: pages joined
+ * by "\f". */
 export function amendmentWording(pagesText: string): boolean {
-  const pages = String(pagesText ?? "").split("\f");
-  const title = firstTitle(pages);
-  if (title?.amends) return true;
-  if (title && NEVER_AMENDS.test(title.line)) return false;
-  const first = pages[0].split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 25);
-  for (const l of first) {
-    if (BODY_HEADING.test(l) || (OTHER_TITLE.test(l) && NEVER_AMENDS.test(l))) break;
-    if (/\bthis\s+endorsement\s+(?:forms\s+part\s+of|is\s+attached\s+to)\b(?![^.]*\b(?:only\s+if|if\s+shown|where\s+shown|when\s+shown)\b)/i.test(l)) return true;
-  }
-  const text = String(pagesText ?? "").replace(/\s+/g, " ");
-  if (AMENDMENT_ACT.some((re) => re.test(text))) return true;
-  for (const page of pages) {
+  const text = String(pagesText ?? "");
+  return AMENDS.test(text) || !!firstTitle(text.split("\f"))?.amends;
+}
+/** Amendment evidence of a document's own, whatever its title: an "Endorsement No. <n>" line (n >= 1) on its first two
+ * pages, a sentence saying a figure is now another ("the sum assured is reduced to S$400,000"), or a Before / After
+ * table. */
+function ownAmendmentEvidence(pages: string[]): boolean {
+  if (pages.slice(0, 2).some((p) => p.split(/\r?\n/).some((l) => /\b(?:endorsement|alteration|amendment)\s+(?:no\.?|number)\s*0*[1-9]/i.test(l)))) return true;
+  const text = pages.join(" ").replace(/\s+/g, " ");
+  if (/\b(?:sum\s+(?:assured|insured)|premium|cover(?:age)?|plan|benefit|limit)\s+(?:is|are|has\s+been|have\s+been|was|were)\s+(?:reduced|increased|changed|amended|altered|revised)\s+(?:to|from)\b/i.test(text)) return true;
+  return pages.some((page) => {
     const lines = page.split(/\r?\n/);
     const at = lines.findIndex((l) => /\bbefore\b[^\n]*\bafter\b/i.test(l));
-    if (at >= 0 && lines.slice(at + 1).some((l) => (l.match(/(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) ?? []).length === 2)) return true;
-  }
-  return false;
+    return at >= 0 && lines.slice(at + 1).some((l) => (l.match(/(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) ?? []).length === 2);
+  });
 }
-/** A document the reader typed "endorsement" whose own text says it is not one: a form line with an empty value
- * ("Endorsements: Nil"), or a first title naming a wording, a booklet, a brochure, a summary or an illustration. Only
+/** A document the reader typed "endorsement" whose own text says it is not one, and shows no amendment evidence of its
+ * own (ownAmendmentEvidence): an empty endorsement field ("Endorsements: Nil", "Endorsements this year: none"; a fee,
+ * premium or charge field is not one), or a first title naming a wording, terms and conditions, a booklet, a brochure, a
+ * summary or an illustration, with no amend, endorse, alter or revise word in that title line, brackets included. Only
  * then is the reader's type set aside; otherwise it stands (a lost amendment leaves an old figure shown). */
 export function endorsementTypeVetoed(pagesText: string): boolean {
   const pages = String(pagesText ?? "").split("\f");
-  if (pages.slice(0, 2).some((p) => p.split(/\r?\n/).some((l) => /^\s*(?:endorsements?|amendments?|alterations?)\b[^:\n-–]{0,30}[:\-–]\s*(?:nil|none|n\/?a|not\s+applicable|-|see\s+attached)\s*$/i.test(l)))) return true;
+  if (ownAmendmentEvidence(pages)) return false;
   const title = firstTitle(pages);
+  if (title && /\b(?:amend|endors|alter|revis)/i.test(title.raw)) return false;
+  if (pages.slice(0, 2).some((p) => p.split(/\r?\n/).some((l) => /^\s*(?:endorsements?|amendments?|alterations?)\b(?![^:\n]*\b(?:fees?|premiums?|charges?|costs?)\b)[^:\n\-–]{0,30}[:\-–]\s*(?:nil|none|n\/?a|not\s+applicable|-|see\s+attached)\s*$/i.test(l)))) return true;
   return !!title && !title.amends && (NEVER_AMENDS.test(title.line) || /\b(?:policy\s+wording|terms\s+and\s+conditions)\b/i.test(title.line));
 }
 const MONEY = /(?:S\$|SGD\s?|US\$|USD\s?)\s?(\d[\d,]*(?:\.\d+)?)/g;

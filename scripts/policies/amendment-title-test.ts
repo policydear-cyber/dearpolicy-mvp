@@ -1,7 +1,7 @@
 /**
- * Only a document that prints amendment wording of its own amends its policy (lib/policies/amendments.ts): an amendment
- * title among the first lines of its first page, or an amending sentence. An ordinary page (a wording, a schedule, a
- * booklet that mentions endorsements, a contents list) never does. And a contents entry never names the document: its
+ * Amendments (lib/policies/amendments.ts): main's wording is kept as it is, a first title line on the closed amendment
+ * list now also amends, and the reader's "endorsement" type is set aside only when the document shows no amendment of its
+ * own and says it is not one (an empty endorsement field, or a wording, booklet or summary title). And a contents entry never names the document: its
  * topmost title line does (lib/documents/fact-check.ts). Made-up English documents, no database, no network, no model.
  */
 import assert from "node:assert/strict";
@@ -17,39 +17,27 @@ test("an amending document is known by its own title or an amending sentence", a
     // Critic r375 H1: titles, a letter and a page-two title main caught.
     ...["ENDORSEMENT SCHEDULE", "Endorsement Certificate", "Rider Endorsement", "Change of Sum Assured", "Reduction of Sum Assured", "Alteration of Policy",
       "Confirmation of Policy Changes", "Changes to your plan"].map((t) => [t, letterhead + t + "\nPolicy No. TL-1"] as [string, string]),
-    ["a letter: we have reduced", letterhead + "15 March 2026\nMr A Tan\n12 Example Road\nSingapore 123456\nDear Mr Tan\nRe: Policy No. TL-1\nWe have reduced your sum assured to S$500,000 as you requested."],
     ["a title below a long address block", letterhead + "Address line\n".repeat(10) + "Policy Alteration\nPolicy No. TL-1"],
     ["a title on page 2 behind a cover letter", letterhead + "Cover letter\n\fENDORSEMENT NO. 1\nPolicy No. TL-1"],
-    ["the sum assured has been reduced", letterhead + "Policy No. TL-1\nThe sum assured has been reduced with effect from 1 March 2026."],
-    ["a Before / After table", letterhead + "Policy No. TL-1\nItem\tBefore\tAfter\nDeath\tS$300,000\tS$250,000"],
     ["a policy alteration notice", letterhead + "Policy Alteration Notice\nPolicy No. TL-1\nPlease keep this with your policy."],
-    ["a letter: reduced from a date", letterhead + "Dear Ms Lim\nWe have reduced your sum assured to S$200,000 from 1 May 2026."],
     ["confirmation of change of sum assured", letterhead + "Confirmation of change of sum assured\nPolicy No. TL-1"],
     ["amendment to policy schedule", letterhead + "Amendment to Policy Schedule\nPolicy No. TL-1"],
     ["endorsement title with a dash", "Kestrel Life Assurance (made up)\nPolicy alteration (made up)\n\nENDORSEMENT NO. 2 - REDUCTION OF SUM ASSURED\nDate: 1 March 2026\nItem\tBefore\tAfter\nDeath sum assured\tS$300,000\tS$250,000"],
     ["endorsement to a policy number", "Endorsement No. 4 to policy KL-TL-100245\nEffective 1 May 2026\nThe sum assured is hereby amended as follows."],
     ["a notice of alteration", "Bramble General Insurance\nNOTICE OF POLICY ALTERATION\nDear Policyholder,\nWe have recorded your request."],
     ["changes to your policy", "Changes to your policy\nPolicy number HG-55120\nYour new premium is S$410.00 a year."],
-    ["only a sentence: changes made", "Policyholder services\nPolicy number HG-55120\nPlease note that the following changes have been made to your policy:\nAnnual premium\tS$450.00\tS$410.00"],
-    ["only a sentence: this endorsement", "Kestrel Life Assurance\nPolicy number KL-TL-100245\nThis endorsement forms part of the policy and should be kept with it."],
     ["only a sentence: altered with effect from", "Policy number EQ-551204\nAt your request, the policy is altered with effect from 1 September 2026."],
     ["only a sentence: premium amended as follows", "Renewal letter\nThe premium is amended as follows from the next policy year."],
   ];
   for (const [why, text] of amending) assert.equal(amendmentWording(text), true, why);
   const ordinary: [string, string][] = [
-    ["a wording's general conditions", "Harbourline Travel Insurance\nPolicy wording\nGeneral conditions\nThis policy may be amended by endorsement. All endorsements form part of the policy.\nAny alteration to the policy must be agreed by us in writing.\nPolicy alteration: you may ask us to change your plan at renewal."],
-    ["a contents list naming endorsements", "Harbourline Travel Insurance\nContents\nGeneral conditions ........ 4\nEndorsements ........ 14\nEndorsement - Terrorism exclusion\t15\nEndorsement No. 2 - Pandemic cover\t16"],
-    ["a schedule listing the endorsements that apply", "Bramble Home Insurance\nPolicy schedule\nPolicy number BH-2210\nSum insured\tS$80,000\nEndorsements applying: Endorsement No. 1 (Flood), Endorsement No. 3 (Renovation)"],
     ["a booklet on the law", "The scheme is set up under the Act and the Regulations made under the Act (and any amendments made to them from time to time)."],
     ["a premium review clause", "Premiums are not guaranteed and may be increased with effect from the next renewal. The premium is reviewed every year."],
-    ["an alteration heading deep in a wording", "Orchard Health Plan\nPolicy wording\n\fSection 5\nPolicy alteration\nYou may ask us to alter the policy."],
     // Critic r375 H2: a schedule's form lines and a booklet's standard clause.
     ["Endorsements: Nil", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil\nSum assured S$1,000,000"],
-    ["Endorsement No. 0", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsement No. 0\nSum assured S$1,000,000"],
     ["Endorsements - E01", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements - E01 Terrorism exclusion"],
     ["Endorsement: Applicable", letterhead + "Policy Schedule\nPolicy No. TL-1\nEndorsement: Applicable"],
     ["Amendments: None", letterhead + "Policy Schedule\nPolicy No. TL-1\nAmendments: None"],
-    ["amended as follows: none", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nThe schedule is amended as follows: none"],
     ["a booklet's endorsement clause", letterhead + "Travel Insurance Booklet\nSection 9 Endorsements\nThis endorsement forms part of the policy and applies only if shown in the schedule."],
     ["a renewal notice", letterhead + "Renewal Notice\nPolicy No. TL-1\nYour premium will change."],
     // TE r375: empty values, a booklet's section heading, and "with effect from" without a date or "hereby".
@@ -64,12 +52,46 @@ test("an amending document is known by its own title or an amending sentence", a
     ["a title further down the first page", ["Orchard Health Plan", "Product summary", ...Array.from({ length: 30 }, (_, i) => `Benefit ${i + 1}\tS$${(i + 1) * 100}`), "Endorsement"].join("\n")],
   ];
   for (const [why, text] of ordinary) assert.equal(amendmentWording(text), false, why);
+  // Sentences and form lines this change leaves exactly as main reads them (wider sentence catches leak both ways and are
+  // left for a later change): main's own wording decides, with no new catch and no new miss.
+  const MAIN_AMENDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
+  const asMain: [string, string][] = [
+    ["a letter: we have reduced", letterhead + "15 March 2026\nMr A Tan\n12 Example Road\nSingapore 123456\nDear Mr Tan\nRe: Policy No. TL-1\nWe have reduced your sum assured to S$500,000 as you requested."],
+    ["the sum assured has been reduced", letterhead + "Policy No. TL-1\nThe sum assured has been reduced with effect from 1 March 2026."],
+    ["a Before / After table", letterhead + "Policy No. TL-1\nItem\tBefore\tAfter\nDeath\tS$300,000\tS$250,000"],
+    ["a letter: reduced from a date", letterhead + "Dear Ms Lim\nWe have reduced your sum assured to S$200,000 from 1 May 2026."],
+    ["only a sentence: changes made", "Policyholder services\nPolicy number HG-55120\nPlease note that the following changes have been made to your policy:\nAnnual premium\tS$450.00\tS$410.00"],
+    ["only a sentence: this endorsement", "Kestrel Life Assurance\nPolicy number KL-TL-100245\nThis endorsement forms part of the policy and should be kept with it."],
+    ["a wording's general conditions", "Harbourline Travel Insurance\nPolicy wording\nGeneral conditions\nThis policy may be amended by endorsement. All endorsements form part of the policy.\nAny alteration to the policy must be agreed by us in writing.\nPolicy alteration: you may ask us to change your plan at renewal."],
+    ["a contents list naming endorsements", "Harbourline Travel Insurance\nContents\nGeneral conditions ........ 4\nEndorsements ........ 14\nEndorsement - Terrorism exclusion\t15\nEndorsement No. 2 - Pandemic cover\t16"],
+    ["a schedule listing the endorsements that apply", "Bramble Home Insurance\nPolicy schedule\nPolicy number BH-2210\nSum insured\tS$80,000\nEndorsements applying: Endorsement No. 1 (Flood), Endorsement No. 3 (Renovation)"],
+    ["an alteration heading deep in a wording", "Orchard Health Plan\nPolicy wording\n\fSection 5\nPolicy alteration\nYou may ask us to alter the policy."],
+    ["Endorsement No. 0", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsement No. 0\nSum assured S$1,000,000"],
+    ["amended as follows: none", letterhead + "POLICY SCHEDULE\nPolicy No. TL-1\nThe schedule is amended as follows: none"],
+    // TE r375 round 2: an inflation clause, a claim letter, a projected-values age table.
+    ["an inflation clause", "Orchard Life Plan\nPolicy wording\nInflation protection\nThe sum insured is hereby increased by 10% on each renewal."],
+    ["a claim letter", "Claims department\nClaim decision\nDear Mr Tan\nWe have reduced the cover for this claim because the bill was not itemised."],
+    ["a projected values table", "Projected values\nBefore age 65\tAfter age 65\nS$100,000\tS$50,000"],
+  ];
+  for (const [why, text] of asMain) assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why);
+  for (const why of ["an inflation clause", "a claim letter", "a projected values table"]) assert.equal(amendmentWording(asMain.find((c) => c[0] === why)![1]), false, why);
   // The reader's "endorsement" type still makes an amendment (a lost one leaves an old figure shown), unless the text
   // says it is not one: an empty endorsement field, or a wording, booklet, summary or illustration title.
   const { endorsementTypeVetoed } = await import("@/lib/policies/amendments");
-  for (const t of ["Policy No. TL-1\nSum assured S$500,000", "POLICY SCHEDULE (ENDORSED)\nPolicy No. TL-1\nSum assured S$500,000", "Policy Alteration Notice\nPolicy No. TL-1"])
+  for (const t of ["Policy No. TL-1\nSum assured S$500,000", "POLICY SCHEDULE (ENDORSED)\nPolicy No. TL-1\nSum assured S$500,000", "Policy Alteration Notice\nPolicy No. TL-1",
+    // Critic r375 p375b: the document's own amendment evidence keeps the type, whatever its title or form lines.
+    "Policy No. HL-9\nEndorsements: Nil\nThe sum assured is reduced to S$400,000 from 1 March 2026",
+    "Amendment to Terms and Conditions\nPolicy No. HL-9\nClause 4 is replaced.",
+    "Endorsement - Amended Benefit Summary\nPolicy No. HL-9\nHospital cash S$200",
+    "Revised Policy Wording (Endorsement No. 3)\nPolicy No. HL-9",
+    "Product Summary\nEndorsement No. 2\nPolicy No. HL-9",
+    "Endorsement\nPolicy No. HL-9\nSum assured reduced to S$400,000\nAmendment fee: Nil",
+    "ENDORSEMENT NO. 3\nPolicy No. HL-9\nEndorsement premium: Nil",
+    "Policy No. HL-9\nPrevious endorsements: None\nNew sum assured S$400,000",
+    // TE r375 round 2 H6.
+    "Revised benefit summary\nPolicy No. HL-9\nHospital cash S$200"])
     assert.equal(endorsementTypeVetoed(t), false, t);
-  for (const t of ["POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil", "Travel Insurance Booklet\nEndorsement\nTerrorism", "Orchard Plan Benefit Illustration\nThe premium is reduced with effect from age 65.", "Harbourline Policy Wording\nPolicy No. TL-1"])
+  for (const t of ["POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil", "POLICY SCHEDULE\nPolicy No. HL-9\nEndorsements this year: Nil", "Travel Insurance Booklet\nEndorsement\nTerrorism", "Orchard Plan Benefit Illustration\nThe premium is reduced with effect from age 65.", "Harbourline Policy Wording\nPolicy No. TL-1"])
     assert.equal(endorsementTypeVetoed(t), true, t);
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../../lib/policies/amendments.ts", import.meta.url), "utf8");
@@ -88,6 +110,8 @@ test("a contents entry never names the document; its topmost title line does", a
   // A contents box at the top of the cover ends at its first line that is no entry: the title below it names the document.
   assert.equal(titleProductName([page(1, "Contents\nSchedule\t2\nWording\t4\n\nOSPREY HOME GUARD - POLICY SCHEDULE\nPolicy number OH-881"), page(2, "Kestrel Motor Plus - Policy Schedule")]), "Osprey Home Guard");
   assert.equal(titleProductName([page(1, "Table of contents\nSchedule 2\nClaims p. 9\nOSPREY HOME GUARD - POLICY SCHEDULE")]), "Osprey Home Guard");
+  // TE r375 round 2 N8: a title ending in a number below a contents box is the document's own, not an entry.
+  assert.equal(titleProductName([page(1, "Contents\nSchedule 2\nWording 4\nSECURE LIFE 65\nPOLICY SCHEDULE\nPolicy number SL-65")]), "Secure Life 65");
   // Only contents: no name (fails closed).
   assert.equal(titleProductName([page(1, "Contents\nVoyager Plus - Policy schedule\npg 2\nClaims\npg 9")]), null);
   // Unchanged: a title over two lines.

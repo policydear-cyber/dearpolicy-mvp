@@ -489,8 +489,14 @@ function linesWithoutContents(pages: Page[]): string[] {
       if (/^(?:table\s+of\s+)?contents:?$/i.test(line)) { inContents = true; continue; }
       if (/\.{3,}|…/.test(raw) || /\t\s*(?:p(?:age|g)\.?\s*)?\d{1,3}\s*$/i.test(raw)) continue;
       if (inContents) {
-        const next = (raws[i + 1] ?? "").replace(/\s+/g, " ").trim();
-        const entry = /\s(?:p(?:age|g)?\.?\s*)?\d{1,3}$/i.test(line) || /^\d{1,2}(?:\.|\t|\s)/.test(raw.trim()) || pageNumberOnly(line) || pageNumberOnly(next);
+        const nextRaw = raws[i + 1] ?? "";
+        const next = nextRaw.replace(/\s+/g, " ").trim();
+        // A page number after a gap or a "p." ("Claims  9", "Claims p. 9") is an entry's; after a single space
+        // ("Schedule 2") only when the next line is an entry too, so a title ending in a number ("SECURE LIFE 65")
+        // above its kind line is the document's own.
+        const strong = (r: string) => /(?:\s{2,}|\t|\s(?:p(?:age|g)?\.?\s*))\d{1,3}\s*$/i.test(r) || /^\d{1,2}(?:\.|\t|\s)/.test(r.trim()) || pageNumberOnly(r.replace(/\s+/g, " ").trim());
+        const weak = (r: string) => /\s\d{1,3}\s*$/.test(r);
+        const entry = strong(raw) || pageNumberOnly(next) || (weak(raw) && (strong(nextRaw) || weak(nextRaw)));
         if (entry) continue;
         inContents = false;
       }
