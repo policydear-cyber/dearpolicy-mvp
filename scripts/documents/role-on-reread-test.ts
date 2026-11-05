@@ -96,6 +96,38 @@ async function main() {
     // A schedule whose opening also says "summary of cover" is still a schedule.
     assert.notEqual(deterministicDocumentRole(P("Policy Schedule\nSummary of cover\nPolicy number: HL-200311\nInsured person: Nadia Okafor\nSum insured S$100,000"), null), "product_summary");
   });
+  await test("R11 a summary that prints the policy's own number and a labelled person is that person's schedule (Critic R362 B2)", async () => {
+    const { printedDocumentRole, deterministicDocumentRole } = await import("@/lib/documents/intelligence");
+    const S1 = P("Summary of cover\nPolicy number: TJ-55120\nInsured person: Ana Rivera\nMedical expenses overseas up to S$150,000");
+    const S2 = P("Your travel summary\nPolicy No. TJ-55120\nYour name: Ana Rivera\nTrip cancellation up to S$10,000");
+    const S4 = P("Benefits at a glance\nPolicy number: TJ-55120\nInsured person: Ana Rivera\nBaggage delay S$100 for every six hours");
+    for (const [name, pages] of [["S1", S1], ["S2", S2], ["S4", S4]] as const) {
+      assert.notEqual(printedDocumentRole(pages), "product_summary", `${name} printed`);
+      assert.notEqual(deterministicDocumentRole(pages, "product_summary"), "product_summary", `${name} first read`);
+      assert.equal(roleOnReread("personal_schedule", "personal_schedule", true, { codeRole: printedDocumentRole(pages) }), "personal_schedule", `${name} re-read`);
+    }
+    // A group scheme's number with a definition of the insured person is not personal: a summary stays a summary.
+    assert.equal(printedDocumentRole(P("Policy summary\nGroup policy number: GP-778812\nInsured person: any eligible employee")), "product_summary");
+  });
+  await test("R12 a printed reference type never overrides a reading that is personal proof (Critic R362 B2)", () => {
+    assert.equal(roleOnReread("personal_schedule", "personal_schedule", true, { codeRole: "product_summary" }), "personal_schedule");
+    assert.equal(roleOnReread("product_summary", "certificate", true, { codeRole: "policy_wording" }), "certificate");
+    // Without personal proof, the printed type still decides.
+    assert.equal(roleOnReread("endorsement", "policy_wording", true, { codeRole: "policy_wording" }), "policy_wording");
+    assert.equal(roleOnReread("personal_schedule", "personal_schedule", false, { codeRole: "product_summary" }), "product_summary");
+    // A printed personal or no-cover type is not a reference type and still decides.
+    assert.equal(roleOnReread("certificate", "certificate", true, { codeRole: "claim_decision" }), "claim_decision");
+  });
+  await test("R13 a glossary entry for a certificate is not a certificate title (Critic R362 M1)", async () => {
+    const { printedDocumentRole } = await import("@/lib/documents/intelligence");
+    const G1 = P("Harbourline Travel insurance\nPolicy wording\nDefinitions\n\"Certificate of insurance\" means the document we send you that names the insured person and the effective date.",
+      "Certificate of insurance: the document that shows your sum assured.\nEffective date means the date cover starts.");
+    assert.equal(printedDocumentRole(G1), "policy_wording");
+    const G2 = P("Harbourline Travel insurance\nCertificate of insurance means the document that names the insured person and the effective date.");
+    assert.notEqual(printedDocumentRole(G2), "certificate");
+    // A real certificate titles itself on page 1.
+    assert.equal(printedDocumentRole(P("Harbourline Assurance\nCertificate of Insurance\nInsured person: Ana Rivera\nEffective date: 1 March 2026\nSum assured S$200,000")), "certificate");
+  });
   await test("R6 the reading pipeline decides the stored type with this rule, before anything reads the type", async () => {
     const src = await readFile("lib/rag/ingest.ts", "utf8");
     const at = src.indexOf("extraction.documentRole = await documentRoleOnReread(args, extraction, pages);");

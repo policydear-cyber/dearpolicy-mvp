@@ -214,7 +214,7 @@ function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNum
 /** The type this reading stores (roleOnReread): a type the pages print about themselves, else a no-cover type, else
  * personal proof of cover, else the earlier reading's type, else the reader's. */
 export async function documentRoleOnReread(args: Pick<ProcessPolicyArgs, "accountId" | "policyId">, extraction: Pick<PolicyExtraction, "documentRole" | "personalCoverageConfirmed">, pages: PdfPage[]): Promise<PolicyExtraction["documentRole"]> {
-  const earlier = (await query<{ document_role: string | null }>(`SELECT document_role FROM policies WHERE id=$1 AND account_id=$2`, [args.policyId, args.accountId])).rows[0]?.document_role ?? null;
+  const earlier = (await query<{ document_role: string | null }>(`SELECT document_role FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [args.policyId, args.accountId])).rows[0]?.document_role ?? null;
   return roleOnReread(earlier, extraction.documentRole, extraction.personalCoverageConfirmed,
     { codeRole: printedDocumentRole(pages) });
 }
