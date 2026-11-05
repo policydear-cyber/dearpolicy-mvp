@@ -48,7 +48,11 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
     // "or", "and").
     // A figure set off by words ("RM150 per day (RM300 per day if confined in ICU)") is a condition, not another plan.
     // Two caps in one unit side by side ("up to S$500 up to S$1,000") are two plans' caps too.
+    // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's figure,
+    // never another plan's (TE pr367).
+    const conditioned = (i: number) => /^\s*,?\s*(?:in|if|for|when|while|during|after|where|under|upon|on)\b/i.test(line.slice(cells[i].end, cells[i + 1]?.start ?? line.length));
     const apart = (i: number) => {
+      if (conditioned(i + 1)) return false;
       const between = line.slice(cells[i].end, cells[i + 1].start);
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
