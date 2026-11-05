@@ -16,6 +16,8 @@ import { conditionEffect,describeCondition,type CoverCondition,type CoverConditi
 import { formatMoney } from "@/lib/format/currency";
 import { cutNameSuffix } from "@/lib/policies/cut-name";
 import { wholeSumAgainst } from "@/lib/policies/whole-sum";
+import { sumKindsOf } from "@/lib/policies/no-amount-pointer";
+import { normalizeCoverageCategory } from "@/lib/insurance";
 import { oncePerPerson } from "@/lib/policies/benefit-people";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
@@ -249,8 +251,10 @@ export async function GET(request:NextRequest){
       const foundSum=attention==="unreadable"?(()=>{
         const shown=(contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member);
         const people=[...new Set(shown.map(c=>c.ownerId))];
-        return people.length>0&&people.every(id=>shown.filter(c=>c.ownerId===id).some(c=>c.coverages.some(cover=>
-          cover.amount!=null&&cover.amount>0&&!!cover.currency&&cover.currencyVerified===true)));
+        // Only a cover of the kind the row pays: a hospital-cash sum on the same policy is not the death benefit's (Critic #365).
+        const kinds=new Set(sumKindsOf(row.benefit_name));
+        return kinds.size>0&&people.length>0&&people.every(id=>shown.filter(c=>c.ownerId===id).some(c=>c.coverages.some(cover=>
+          kinds.has(normalizeCoverageCategory(cover.category))&&cover.amount!=null&&cover.amount>0&&!!cover.currency&&cover.currencyVerified===true)));
       })():false;
       return {
         id:row.id,policyId:row.policy_id,

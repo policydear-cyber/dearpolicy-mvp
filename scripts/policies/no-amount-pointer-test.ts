@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
-import { pointsToScheduleSum, SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
+import { pointsToScheduleSum, SCHEDULE_SUM_POINTER, sumKindsOf } from "@/lib/policies/no-amount-pointer";
 import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
@@ -100,8 +100,19 @@ test("/api/benefits sets foundSum from each shown person's own cover with a writ
   assert.match(block, /attention==="unreadable"/);
   assert.match(block, /filter\(contract=>!member\|\|contract\.ownerId===member\)/);
   assert.match(block, /people\.length>0&&people\.every\(/);
-  assert.match(block, /cover\.amount!=null&&cover\.amount>0&&!!cover\.currency&&cover\.currencyVerified===true/);
+  assert.match(block, /kinds\.has\(normalizeCoverageCategory\(cover\.category\)\)&&cover\.amount!=null&&cover\.amount>0&&!!cover\.currency&&cover\.currencyVerified===true/);
+  assert.match(block, /const kinds=new Set\(sumKindsOf\(row\.benefit_name\)\);\s*return kinds\.size>0&&/);
   assert.match(route, /wholeSum,foundSum,/);
+});
+test("only a cover of the kind the row pays counts as Coverage's sum for it (Critic #365 follow-up)", () => {
+  assert.deepEqual(sumKindsOf("Death Benefit"), ["Death"]);
+  assert.deepEqual(sumKindsOf("Terminal Illness Benefit"), ["Death"]);
+  assert.deepEqual(sumKindsOf("TPD Benefit"), ["Total Permanent Disability"]);
+  assert.deepEqual(sumKindsOf("Total and Permanent Disability"), ["Total Permanent Disability"]);
+  assert.deepEqual(sumKindsOf("Comprehensive Critical Illness Benefit"), ["Critical Illness"]);
+  assert.deepEqual(sumKindsOf("Dread Disease Cover"), ["Critical Illness"]);
+  assert.deepEqual(sumKindsOf("Death or TPD Benefit"), ["Death", "Total Permanent Disability"]);
+  for (const name of ["Hospital Cash", "Main Benefit", "Emergency Medical Evacuation", "Outpatient"]) assert.deepEqual(sumKindsOf(name), [], name);
 });
 test("a row with an amount, a plan table, or one awaiting a check gets none", () => {
   assert.equal(pointsToScheduleSum(row({ formulaKind: "fixed" }), describeBenefitFormula({ ...none, formulaKind: "fixed", formulaValue: 5000, currency: "MYR", quote: "RM 5,000" })), false);

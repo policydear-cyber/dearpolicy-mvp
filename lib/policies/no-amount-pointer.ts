@@ -32,6 +32,17 @@ const SHARE_OR_CAP = /%|\bper\s*cent\b|\bpercent(?:age)?\b|\bhalf\b|\bdouble\b|\
 /** unreadAmountLine's last line: the passage was read, its amount was not. */
 const NOT_READ = /^The amount on (?:page \d+|the page) could not be read\.$/;
 
+/** The Coverage kinds whose sum a death, terminal illness, TPD or critical illness benefit pays, by the benefit's own name: the
+ * cover /api/benefits must find a sum for before an unread row points to Coverage (Critic #365 follow-up: a hospital-cash sum
+ * on the same policy is not the death benefit's). Empty for any other name. */
+export function sumKindsOf(benefitName: string): string[] {
+  const kinds: string[] = [];
+  if (/\b(?:death|dies|terminal(?:ly)?\s+ill(?:ness)?)\b/i.test(benefitName)) kinds.push("Death");
+  if (/\b(?:total\s+(?:and|&)\s+permanent\s+disab(?:ility|led)|permanent\s+total\s+disab(?:ility|led)|TPD)\b/i.test(benefitName)) kinds.push("Total Permanent Disability");
+  if (/\b(?:critical\s+illness(?:es)?|dread\s+disease|major\s+illness)\b/i.test(benefitName)) kinds.push("Critical Illness");
+  return kinds;
+}
+
 /** Whether the row, showing `line` as what it pays, is one of those. */
 export function pointsToScheduleSum(b: { formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns?: boolean; benefitName: string; quote: string | null; foundSum?: boolean },
   line: string) {
