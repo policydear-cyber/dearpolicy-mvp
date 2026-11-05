@@ -12,7 +12,7 @@
  * person whose tier is not printed keeps benefit_tier NULL and every column
  * stays a candidate (see tierApplies in ./benefit-catalog).
  */
-import { figuresDifferByPlan } from "@/lib/insurance/scale-limit";
+import { termFiguresDifferByPlan } from "@/lib/insurance/scale-limit";
 import { query } from "@/lib/db/client";
 import { ensureEvidenceSchema } from "@/lib/documents/evidence";
 import { normalizeCoverageCategory } from "@/lib/insurance";
@@ -108,7 +108,7 @@ export async function applyMemberTiers(args: {
   const limits = (await query<{ id: string; value: string; currency: string | null; source_page: number | null; quote: string | null; tier: string | null; passage_verified: boolean | null }>(
     `SELECT id,formula_value::text AS value,currency,source_page,quote,tier,passage_verified FROM policy_benefits
       WHERE account_id=$1 AND policy_id=$2 AND row_kind='policy_year_limit' AND formula_value IS NOT NULL ORDER BY source_page,id`,
-    [args.accountId, args.policyId])).rows.filter((l) => !!l.tier || !figuresDifferByPlan(l.quote));
+    [args.accountId, args.policyId])).rows.filter((l) => !!l.tier || !termFiguresDifferByPlan(l.quote));
   const printed = flat(args.text).toLowerCase();
   for (const person of args.people) {
     const shown = await query(`SELECT 1 FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND family_member_id=$3 AND category=$4 AND confirmed AND evidence_verified`,

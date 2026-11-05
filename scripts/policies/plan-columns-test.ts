@@ -180,3 +180,31 @@ test("a schedule term that prints one figure per plan is held, never shown with 
   assert.equal(describeScheduleTerm("policy_year_limit", null, null, "Overall limit^ S$300 S$800 S$1,500"), "Limit (see the schedule)");
   assert.equal(describeScheduleTerm("policy_year_limit", 150_000, "SGD"), "Limit of SGD 150,000 a policy year");
 });
+
+test("a term whose plans are set apart by labels or separators is held too; one plan's own limits keep their figure (TE pr361)", async () => {
+  const { termFiguresDifferByPlan } = await import("@/lib/insurance/scale-limit");
+  const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  const term = (id: string, quote: string, value: number) =>
+    ({ ...row(id, quote, value), formulaKind: "none" as never, rowKind: "policy_year_limit", benefitName: "Overall limit" });
+  const heldQuotes = [
+    "Overall limit per insured person per trip: Classic S$200,000 | Elite S$500,000 | Premier S$1,000,000",
+    "Overall limit: Plan A S$200,000; Plan B S$500,000",
+    "Overall limit S$200,000 | S$500,000 | S$1,000,000",
+    "Overall limit S$200,000 (Classic), S$500,000 (Elite)",
+    "Annual limit: Silver RM 50,000, Gold RM 100,000",
+    "Maximum per trip Standard £5,000 / Superior £10,000",
+  ];
+  const keptQuotes = [
+    "Overall limit S$300 per trip, S$1,500 per year",
+    "Overall limit S$300 (per trip), S$1,500 (per year)",
+    "Overall limit S$200,000, or S$500,000 if the injury is caused by an accident",
+    "Per item limit S$500; Overall S$3,000",
+    "Overall limit S$200,000 | S$200,000",
+    "Overall limit S$500,000",
+    "Overall limit S$1,000,000 US$750,000",
+  ];
+  for (const q of heldQuotes) assert.equal(termFiguresDifferByPlan(q), true, q);
+  for (const q of keptQuotes) assert.equal(termFiguresDifferByPlan(q), false, q);
+  const out = repairStoredRules([...heldQuotes, ...keptQuotes].map((q, i) => term("q" + i, q, 200_000)) as never) as { formulaValue: number | null }[];
+  assert.deepEqual(out.map((b) => b.formulaValue === null), [...heldQuotes.map(() => true), ...keptQuotes.map(() => false)]);
+});

@@ -296,6 +296,32 @@ export function figuresDifferByPlan(quote:string|null|undefined):boolean{
   for(const run of String(quote??"").match(BARE_ROW)??[])if(new Set(run.split(/\s+/).map(v=>v.replace(/\.00$/,""))).size>1)return true;
   return false;
 }
+// One money figure with its currency, and what may stand between two plans' figures in one line: a separator (a pipe,
+// semicolon, comma or slash) and a plan's label ("Plan B", "Elite", "(Classic)"), and nothing else. Lowercase words never
+// stand between plans' figures, so "S$300 per trip, S$1,500 per year" is one plan's two limits, not two plans.
+const SIGNED_FIGURE=/(S\$|US\$|A\$|HK\$|RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?(\d[\d,]*(?:\.\d+)?)(?![\d,]*\d)/g;
+// A term's own words ("Overall S$3,000", "Maximum S$500") are never a plan's label.
+const TERM_WORD=String.raw`(?:Overall|Maximum|Max|Minimum|Limit|Sub-?limit|Total|Aggregate|Excess|Deductible|Co-?payment|Per|Each|Any|Up|Or|And|Plus|Including|Subject|Lifetime|Annual|Yearly|Policy|Family|Individual|Child|Children|Adult|Insured|Death|TPD|Accident|Accidental|Medical|Hospital|Trip|Baggage|Item)\b`;
+const PLAN_LABEL=String.raw`(?:Plan\s+[A-Z0-9][\w+&-]*|(?!${TERM_WORD})[A-Z][A-Za-z0-9+&-]*(?:\s+(?!${TERM_WORD})[A-Z][A-Za-z0-9+&-]*){0,2})`;
+const BETWEEN_PLANS=new RegExp(String.raw`^\s*(?:\(${PLAN_LABEL}\))?\s*[|;,/]?\s*(?:${PLAN_LABEL}\s*:?)?\s*$`,"u");
+const CURRENCY_OF:Record<string,string>={SGD:"S$",USD:"US$",MYR:"RM",GBP:"£",EUR:"€",AUD:"A$",HKD:"HK$"};
+/** Whether a schedule term's quote prints a figure for each plan: side-by-side cells (figuresDifferByPlan), or figures in
+ * one currency set apart only by separators and plan labels ("Classic S$200,000 | Elite S$500,000", "Plan A S$200,000;
+ * Plan B S$500,000", "S$200,000 (Classic), S$500,000 (Elite)") that do not all say the same figure (TE pr361). A term
+ * like this is no person's limit until their plan is known, on Benefits and Portfolio alike. */
+export function termFiguresDifferByPlan(quote:string|null|undefined):boolean{
+  const text=String(quote??"");
+  if(figuresDifferByPlan(text))return true;
+  const figures=[...text.matchAll(SIGNED_FIGURE)].map(m=>({sign:CURRENCY_OF[m[1]]??m[1],value:m[2].replace(/,/g,"").replace(/\.0+$/,""),start:m.index!,end:m.index!+m[0].length}));
+  let run=figures.slice(0,1);
+  const differ=(cells:typeof figures)=>cells.length>1&&new Set(cells.map(c=>c.value)).size>1;
+  for(let i=1;i<figures.length;i++){
+    const between=text.slice(figures[i-1].end,figures[i].start);
+    if(figures[i].sign===figures[i-1].sign&&between.trim()!==""&&BETWEEN_PLANS.test(between))run.push(figures[i]);
+    else{if(differ(run))return true;run=[figures[i]];}
+  }
+  return differ(run);
+}
 /** A "benefit" whose name is only a plan's empty cell ("Not covered", "N/A") and whose quote begins with that name
  * followed by the other plans' cells ("Not covered S$500 S$1,000"): the reader took the first cell of a plan-table row
  * as its name, so the row's own name is lost and it names nothing. A name like this with any other quote is kept. */
@@ -310,7 +336,7 @@ export function namesOnlyAPlanCell(name:string|null|undefined,quote:string|null|
 export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{
   // A schedule term (a limit, a deductible) is held the same way: its stored figure may be the first plan's column (FWD
   // re-read 5 Nov: "Overall limit S$300 S$800 S$1,500" shown as a limit of S$300 for a Business plan holder).
-  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&(benefit.formulaKind!=="none"||(!!benefit.rowKind&&benefit.rowKind!=="benefit"))&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
+  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&(benefit.formulaKind!=="none"||(!!benefit.rowKind&&benefit.rowKind!=="benefit"))&&benefit.formulaValue!=null&&termFiguresDifferByPlan(benefit.quote)
     ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}
     :benefit);
 }
