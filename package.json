@@ -215,6 +215,7 @@
     "claims:injury-sequencing-test": "node --import tsx scripts/injury-chat-sequencing-regressions.ts",
     "claims:injury-adversarial-test": "node --import tsx scripts/injury-chat-adversarial-regressions.ts",
     "v1:ingestion-test": "node --import tsx scripts/v1-ingestion-regressions.ts",
+    "benefit-table:space-runs-test": "node --import tsx scripts/benefit-table/space-runs-test.ts",
     "v1:retrieval-test": "node --import tsx scripts/v1-retrieval-regressions.ts",
     "v1:chat-contract-test": "node --import tsx scripts/v1-chat-contract-regressions.ts",
     "v1:chat-fix-test": "node --import tsx scripts/v1-chat-fix-regressions.ts",

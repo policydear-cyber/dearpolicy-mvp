@@ -17,13 +17,16 @@ const has = (text: string, v: number) => printsNumber(text, v);
 // Read with the word, in several markets.
 for (const [text, v, bare] of [
   ["Sum assured\tS$1.5 million", 1_500_000, 1.5], ["Sum assured\tS$1 million", 1_000_000, 1], ["Limit\tUS$2.5m", 2_500_000, 2.5],
-  ["Uang Pertanggungan\tRp 2 juta", 2_000_000, 2], ["Santunan\tRp 1,5 juta", 1_500_000, 1.5], ["Limit\tS$3 mn", 3_000_000, 3],
+  ["Uang Pertanggungan\tRp 2 juta", 2_000_000, 2], ["Limit\tS$3 mn", 3_000_000, 3],
   ["Limit\tHK$2 bn", 2_000_000_000, 2], ["Excess\t£5k", 5_000, 5], ["Cover\t₹2 crore", 20_000_000, 2], ["Cover\t₹5 lakh", 500_000, 5],
-  ["Leistung\t€2 Mio.", 2_000_000, 2], ["Leistung\t€1,5 Mio.", 1_500_000, 1.5],
+  ["Leistung\t€2 Mio.", 2_000_000, 2],
 ] as const) {
   t(`${text}: reads ${v}`, has(text, v), numbersIn(text));
   t(`${text}: never the bare ${bare}`, !has(text, bare), numbersIn(text));
 }
+// A decimal comma ("1,5") is not English: DearPolicy reads English documents only, so it prints no figure (fails closed).
+for (const text of ["Santunan\tRp 1,5 juta", "Leistung\t€1,5 Mio.", "Santunan\tRp 1,5 jt"])
+  t(`${text}: decimal comma prints nothing`, numbersIn(text).length === 0, numbersIn(text));
 t("1,5 juta is never 15 or 15 million", !has("Rp 1,5 juta", 15) && !has("Rp 1,5 juta", 15_000_000), numbersIn("Rp 1,5 juta"));
 // Reads two ways: no figure.
 t("€5 mil (a thousand or a million) prints nothing", numbersIn("Limite\t€5 mil").length === 0, numbersIn("€5 mil"));
@@ -43,7 +46,7 @@ t("Limit 1.5m (no currency) keeps its old million reading", has("Limit\t1.5m", 1
 t("2 Mio. € reads 2 million", has("Leistung\t2 Mio. €", 2_000_000), numbersIn("2 Mio. €"));
 t("S$ 1.25m reads 1.25 million", has("Limit\tS$ 1.25m", 1_250_000) && !has("S$ 1.25m", 1.25), numbersIn("S$ 1.25m"));
 // Short abbreviations, only beside a currency (Critic #265): juta, ribu, crore, triệu.
-for (const [text, v, bare] of [["Santunan\tRp 2 jt", 2_000_000, 2], ["Santunan\tRp 1,5 jt", 1_500_000, 1.5], ["Santunan\tRp 500 rb", 500_000, 500],
+for (const [text, v, bare] of [["Santunan\tRp 2 jt", 2_000_000, 2], ["Santunan\tRp 500 rb", 500_000, 500],
   ["Cover\t₹2 Cr", 20_000_000, 2], ["Quyền lợi\t150 tr ₫", 150_000_000, 150]] as const) {
   t(`${text}: reads ${v}`, has(text, v), numbersIn(text));
   t(`${text}: never the bare ${bare}`, !has(text, bare), numbersIn(text));
