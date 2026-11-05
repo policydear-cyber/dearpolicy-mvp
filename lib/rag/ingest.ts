@@ -1047,7 +1047,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // instead, and the old ledger rows and seeded defaults are not made. Switched off, nothing below changes.
       const benefitTable = await import("@/lib/benefit-table/app");
       if (await benefitTable.benefitTableLive(args.accountId)) {
-        if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId, { deadline: (await import("@/lib/jobs/function-time")).functionDeadline(startedAt), retry: (args.attempt?.number ?? 1) > 1 }).catch((error) => {
+        if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId, { deadline: (await import("@/lib/jobs/function-time")).functionDeadline(startedAt), retry: benefitTable.tableReadingRetry(args) }).catch((error) => {
           console.warn("Benefit table reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
         });
       } else {

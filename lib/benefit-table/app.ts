@@ -81,6 +81,11 @@ export async function readIntoBenefitTable(accountId: string, policyId: string, 
   const model = anthropicTableModel(benefitTableModel());
   return readIntoTable(appDb, model, accountId, policyId, opts, usage(accountId, model.choice));
 }
+/** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
+ * reading-service failure schedules (a fresh job at attempt 1, lib/rag/ingest.ts). Neither pays for a table reading. */
+export function tableReadingRetry(args: { attempt?: { number: number } | null; deferredRetry?: boolean | null }): boolean {
+  return (args.attempt?.number ?? 1) > 1 || args.deferredRetry === true;
+}
 /** readIntoBenefitTable with its database and model passed in (tests pass fakes). */
 export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number } = {}, onUsage?: OnUsage) {
   // A retry of a job (attempt 2 or later) never calls the table model, whatever happened to the attempt before it: only a

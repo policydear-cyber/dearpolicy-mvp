@@ -464,6 +464,21 @@ async function main() {
     assert.equal(m.calls.length, n, "(c) attempt 2: no paid call");
     assert.equal(w.s.readings.get("doc")?.reading, kept);
     assert.deepEqual(w.s.notes, []);
+    // (d) The deferred re-read a reading-service failure schedules (a fresh ":retry-read" job at attempt 1) is a retry too:
+    // run through the same decision the document job uses, it makes no call and keeps the stored reading.
+    const { tableReadingRetry } = await import("@/lib/benefit-table/app");
+    assert.equal(tableReadingRetry({ attempt: { number: 1 }, deferredRetry: true }), true);
+    assert.equal(tableReadingRetry({ attempt: { number: 2 } }), true);
+    assert.equal(tableReadingRetry({ attempt: { number: 1 } }), false);
+    assert.equal(tableReadingRetry({}), false);
+    w = withMark(booklet(3, 10), false); m = priced();
+    await readIntoTable(w.db, m.model, A, "doc");
+    const before = m.calls.length, stored = w.s.readings.get("doc")?.reading;
+    r = await readIntoTable(w.db, m.model, A, "doc", { retry: tableReadingRetry({ attempt: { number: 1 }, deferredRetry: true }) });
+    assert.equal(m.calls.length, before, "(d) the deferred re-read: no paid call");
+    assert.equal(w.s.readings.get("doc")?.reading, stored);
+    const { readFileSync } = await import("node:fs");
+    assert.match(readFileSync(new URL("../../lib/rag/ingest.ts", import.meta.url), "utf8"), /retry: benefitTable\.tableReadingRetry\(args\)/, "(d) the document job decides with tableReadingRetry");
     // A first attempt that ends normally out of time clears its mark (its note says the table was not read).
     const clock = { t: 0 };
     w = withMark(wording(), false); m = priced({ worse: 1.9, clock });

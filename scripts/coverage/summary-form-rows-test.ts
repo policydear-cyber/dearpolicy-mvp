@@ -40,6 +40,13 @@ t("F6 another pair's value after the label's own 'N/A' cells is not this row's a
   { label: "Cancel for any reason", line: "Cancel for any reason\t: N/A : N/A\tPet care (S$50 per six-hour period of delay) : N/A" }), null);
 t("F6b a label's own figure beside it keeps the row", !formRowMisread("S$5,000\tN/A", { label: "Medical", line: "Medical\tS$5,000\tN/A" })
   && !formRowMisread("N/A\tS$5,000", { label: "Medical", line: "Medical\tN/A\tS$5,000" }), null);
+t("F6c a plan row whose first plan cell says N/A or a dash keeps its next plan's figure (Critic #371)",
+  !formRowMisread("S$300", { label: "Daily room and board", line: "Daily room and board\tN/A\tS$300\tS$500" })
+  && !formRowMisread("S$300", { label: "Daily room and board", line: "Daily room and board  -  S$300  S$500" }), null);
+for (const line of ["Daily room and board\tN/A\tS$300\tS$500", "Daily room and board  -  S$300  S$500"]) {
+  const rows = benefitRowsFromText("Benefit\tPlan A\tPlan B\tPlan C\n" + line);
+  t(`F6d ${JSON.stringify(line)}: every row with a figure is kept`, rows.filter((r) => /\d/.test(r.value)).every((r) => !formRowMisread(r.value, r)), rows);
+}
 // Never dropped: a value with any figure (in brackets too) or any worded cell (Critic and TE, #371).
 for (const value of ["S$1,000", ": S$250,000", "(S$100 per day) : N/A", "Covered (up to S$500) : N/A", "As charged : N/A", "S$100 per day : N/A",
   "S$5,000\tN/A", "N/A\tS$5,000", "S$5,000 : Nil", "Up to S$500 : N/A for children", "N/A", "S$100 for every 6 hours", ": S$500,000 : S$1,000,000", "100,000 : -"])

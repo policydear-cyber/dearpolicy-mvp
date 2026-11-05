@@ -186,7 +186,8 @@ const formCells=(value:string)=>value.split(/\t|\s:\s|^\s*:\s*/).map(c=>c.trim()
  * reason Sports equipment protector" and shown as "The amount on page 1 could not be read"): a value of two or more
  * cells that EACH say the benefit does not apply is two labels' cells, whose names were joined. Such a row is never
  * stored: what it would say is "not covered", and which benefit it belongs to is not known. The same when the label's
- * own cells, between it and the value, all say so: the value is the next pair's. Otherwise a value with any figure
+ * own cells, between it and the value, all say so and the value has no figure outside brackets: the value is the next
+ * pair's. Otherwise a value with any figure
  * (in brackets too) or any worded cell ("As charged", "Covered") is never dropped here. */
 export function formRowMisread(value:string,row?:{label:string;line:string}):boolean{
   const cells=formCells(value);
@@ -194,7 +195,9 @@ export function formRowMisread(value:string,row?:{label:string;line:string}):boo
   // The label's own cells, printed between it and the value the parser took, all say "does not apply": the value is the
   // next form pair's ("Cancel for any reason Sports equipment protector  : N/A : N/A  Pet care (S$50 per six-hour period
   // of delay) : N/A" is not a S$50 benefit).
-  if(row){
+  // Only for a value with no figure of its own outside brackets: a plan row whose first plan cell says N/A ("Daily room
+  // and board | N/A | S$300 | S$500") keeps its next plan's figure.
+  if(row&&!/\d/.test(value.replace(/\([^()]*\)/g," "))){
     const start=row.line.indexOf(row.label),end=row.line.lastIndexOf(value);
     if(start>=0&&end>start+row.label.length){
       const between=formCells(row.line.slice(start+row.label.length,end));
