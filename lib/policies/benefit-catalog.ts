@@ -1,4 +1,5 @@
 import { FIGURE_END, NO_SCALE_AFTER, PRINTED_FIGURE, groupsInLakhs, printedNumber } from "@/lib/format/printed-number";
+import { WORD_FRACTIONS } from "./word-fractions";
 import { replacedFigures } from "./amendments";
 import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-failures";
 import { knownValue,normalText } from "@/lib/chat/facts";
@@ -725,12 +726,7 @@ function prevailingNotProved(text:string,benefitName?:string|null):boolean{
   return label!==""&&label!==labelWords(benefitName??"");
 }
 export const PREVAILING_NOTE="It is a share of the insured amount when the claim is made, which an earlier claim on this policy may have reduced.";
-const WORD_FRACTIONS=[
-  {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
-  {words:"one quarter",value:0.25},{words:"three quarters",value:0.75},{words:"one fifth",value:0.2},
-  {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
-  {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
-];
+
 /** A share of the sum insured whose passage also prints an amount or a bound ("10% of Sum Insured, up to S$25,000",
  * "subject to a maximum of RM25,000", "not exceeding 25 000", "up to the limit in the Benefit Table", "capped at 1/40 of the
  * Sum Insured"): it may cap the share, and paying the full share overstated the benefit (S$100,000 on a S$1,000,000 cover

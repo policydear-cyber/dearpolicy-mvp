@@ -3,6 +3,7 @@ import { explicitCurrency } from "@/lib/chat/policy-analysis";
 import { isIsoCurrency, normalizeCurrencyCode } from "@/lib/format/currency";
 import { linesFromStoredText } from "@/lib/documents/layout";
 import type { CatalogFormulaKind } from "./benefit-catalog";
+import { wordedShare } from "./word-fractions";
 
 /** Reading the "what it pays" cell of a benefit schedule.
  *
@@ -232,6 +233,10 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     const percent=amount(ofSum[1]);
     if(percent!=null&&percent<=200)return {kind:"sum_insured",value:percent/100,currency,basis:ofSum[1]+"% of the sum insured on the schedule"};
   }
+  // "One twelfth of Sum Insured": a share printed in words, the whole cell and nothing else, on a closed list of
+  // fractions. It is the same rule as the share in figures, so it reads the same way.
+  const worded=wordedShare(text);
+  if(worded)return {kind:"sum_insured",value:worded.value,currency,basis:worded.words.toLowerCase()+" of the sum insured on the schedule"};
   // A bare "50%" in a schedule whose heading says what the percentage is of.
   const heading=options?.percentageBasis;
   if(heading){

@@ -86,6 +86,7 @@
     "ocr:test": "node --import tsx scripts/ocr-regressions.ts",
     "documents:own-row-test": "node --import tsx scripts/documents/own-row-test.ts",
     "documents:wrapped-cap-test": "node --import tsx scripts/documents/wrapped-cap-test.ts",
+    "documents:printed-shapes-test": "node --import tsx scripts/documents/printed-shapes-test.ts",
     "documents:amount-whole-test": "node --import tsx scripts/documents/amount-whole-test.ts",
     "documents:ocr-not-read-test": "node --import tsx --test scripts/documents/ocr-not-read-test.ts",
     "ocr:openai-test": "node --import tsx scripts/ocr-openai-regressions.ts",
