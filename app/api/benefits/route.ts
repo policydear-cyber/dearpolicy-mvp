@@ -20,7 +20,7 @@ import { sumKindsOf } from "@/lib/policies/no-amount-pointer";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { oncePerPerson } from "@/lib/policies/benefit-people";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
-import { PLAN_COLUMNS_NOTE,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
+import { PLAN_COLUMNS_NOTE,conditionsWithPlan,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
 import { documentKinds,type DocumentKind } from "@/lib/coverage/table-figures";
 
@@ -273,7 +273,8 @@ export async function GET(request:NextRequest){
         sourcePage:row.source_page,quote:row.quote,
         // What the page adds after a name cut at its stored length: ")" or "…" (lib/policies/cut-name).
         nameSuffix:cutNameSuffix(row.benefit_name,row.quote),
-        conditions:stub.conditions,planColumns,planFigure,
+        // A plan the household's documents settle: the "which plan is yours is not shown" note no longer applies.
+        conditions:conditionsWithPlan(stub.conditions,planFigure),planColumns,planFigure,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and

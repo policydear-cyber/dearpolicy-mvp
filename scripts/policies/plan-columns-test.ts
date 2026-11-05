@@ -228,3 +228,46 @@ test("a benefit row's own sub-items keep their figure; only side-by-side plan ce
   // Benefit rows are judged by side-by-side cells only, as on main; the labelled-plans test is for schedule terms.
   assert.deepEqual(out.map((b) => b.formulaValue), [300, 300, 300]);
 });
+
+test("a plan table that prints each benefit's cells, then the line that explains it, binds the row to the household's plan", async () => {
+  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const reading = (excerpt: string, amount: number, column: string | null = "Voyager", page = 4) => ({ documentId: "docT", page, excerpt, column, qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG") });
+  // Made-up three-plan travel wordings: a name line, the cells, then the line that says what it pays for (the row is
+  // stored as that line then the cells).
+  const cases: [string, string, number][] = [
+    ["If you need to put off your journey from home", "S$400 S$800 S$1,200", 800],
+    ["Paying for a relative to arrange the return of remains", "S$4,000 S$6,000 S$9,000", 6000],
+    ["Kennel fees if your return home is delayed", "S$150 S$300 S$450", 300],
+    ["Cover for your emergency calls while overseas", "S$200 S$300 S$400", 300],
+  ];
+  for (const [name, run, amount] of cases) {
+    const row = { policyId: "docT", sourcePage: 4, quote: `${name} ${run}`, benefitName: name };
+    const cells = run.split(" ").join("\t");
+    assert.deepEqual(planColumnFigure(row, [reading(`${cells}\n${name}`, amount)]), { plan: "Voyager", figureText: "up to S$" + amount.toLocaleString("en-SG") }, name);
+    // Fails closed: any other words in the excerpt, another line below the cells, another page, the cells of another
+    // benefit, or a row with words after its cells.
+    for (const [why, readings, at] of [
+      ["more words", [reading(`${cells}\n${name}\nTrip delay`, amount)], row],
+      ["other line", [reading(`${cells}\nPaying for a family member to visit you in hospital`, amount)], row],
+      ["name line too", [reading(`Trip postponement\n${cells}\n${name} and more`, amount)], row],
+      ["other page", [reading(`${cells}\n${name}`, amount, "Voyager", 5)], row],
+      ["not a cell", [reading(`${cells}\n${name}`, amount + 1)], row],
+      ["no column", [reading(`${cells}\n${name}`, amount, null)], row],
+      ["words after cells", [reading(`${cells}\n${name}`, amount)], { ...row, quote: `${name} ${run} per trip` }],
+      ["two plans", [reading(`${cells}\n${name}`, amount), reading(`${cells}\n${name}`, amount * 1.5, "Nomad")], row],
+    ] as [string, ReturnType<typeof reading>[], typeof row][])
+      assert.equal(planColumnFigure(at, readings), null, `${name}: ${why}`);
+  }
+});
+
+test("once the household's plan figure is known, the 'which plan is yours is not shown' note is no longer shown", async () => {
+  const { PLAN_COLUMNS_NOTE, conditionsWithPlan } = await import("@/lib/insurance/scale-limit");
+  const kept = "Only for a trip booked before the insured event";
+  assert.deepEqual(conditionsWithPlan([PLAN_COLUMNS_NOTE, kept], { plan: "Voyager", figureText: "up to S$800" }), [kept]);
+  assert.deepEqual(conditionsWithPlan([PLAN_COLUMNS_NOTE, kept], null), [PLAN_COLUMNS_NOTE, kept]);
+  assert.deepEqual(conditionsWithPlan([kept], { plan: "Voyager", figureText: "up to S$800" }), [kept]);
+  // The Benefits route sends the row's conditions through it.
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8"), /conditions:conditionsWithPlan\(stub\.conditions,planFigure\)/);
+});

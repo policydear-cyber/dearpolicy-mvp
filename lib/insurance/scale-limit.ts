@@ -384,9 +384,15 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   if(!code)return null;
   const cells=money.map(cellAmount);
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
+  // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
+  // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
+  // the line that explains it: "S$500 S$1,000 S$1,500 / If you have to postpone your trip from Singapore"). Only that
+  // exact shape: the excerpt is the run, then those words, and nothing else.
+  const name=quote.slice(0,quote.indexOf(run)).trim();
+  const nameBelow=quote===name+" "+run?run+" "+name:null;
   let found=onPage.filter(r=>{
     const excerpt=spaced(r.excerpt);
-    return (excerpt.match(PLAN_ROW)??[]).length===1&&excerpt.includes(words+" "+run);
+    return (excerpt.match(PLAN_ROW)??[]).length===1&&(excerpt.includes(words+" "+run)||excerpt===nameBelow);
   });
   if(!found.length&&o.runIsUnique){
     const printing=onPage.filter(r=>spaced(r.excerpt).includes(run));
@@ -407,6 +413,12 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   if(picks.size!==1||picks.has("none"))return null;
   const [plan,figureText]=JSON.parse([...picks][0]) as [string,string];
   return {plan,figureText};
+}
+/** A plan-table row's conditions as shown: once the household's own plan figure is known (planColumnFigure), the note
+ * that its plan is not shown (PLAN_COLUMNS_NOTE) no longer holds and is left out; every other condition stays. Without a
+ * plan figure the conditions are as stored. */
+export function conditionsWithPlan(conditions:readonly string[],planFigure:{plan:string;figureText:string}|null):string[]{
+  return planFigure?conditions.filter(c=>c!==PLAN_COLUMNS_NOTE):[...conditions];
 }
 /** A plan-table row's name as shown, without the first plan's empty cell the reader ran into it ("Reinstatement fees
  * for frequent flyer miles Not Applicable", quote "… miles Not Applicable S$1,000 S$1,500"): beside the household's plan
