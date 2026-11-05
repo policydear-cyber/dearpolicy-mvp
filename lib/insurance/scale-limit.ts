@@ -397,51 +397,69 @@ function singleSpacedHeader(line:string,n:number):string[]|null{
   }
   return null;
 }
-export function planHeaderIndex(pageText:string|null|undefined,column:string,n:number,o:{aboveRun?:string}={}):number|null{
+/** A line's plan headings when it is a plan header of n plans (see planHeaderIndex), else null. */
+function headerPlans(line:string,n:number):string[]|null{
+  // A plan heading may carry its own price ("Standard S$38"): taken off before the line is judged. A currency marker
+  // in brackets on a heading ("Benefits (S$)") is not an amount either.
+  const raw=line.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean).map(c=>c.replace(PRICE_AFTER_NAME,""));
+  if(PRINTS_AMOUNT.test(raw.join("\t").replace(/\((?:s\$|us\$|hk\$|a\$|\$|£|€|rm|sgd|usd|myr|gbp|eur|hkd|aud)\)/gi," ")))return null;
+  // Label headings are judged as printed ("Your plan"); plan headings without a last word "plan" ("Business Plan").
+  let heads=raw.map(c=>labelKey(c)).filter(Boolean);
+  // A header printed with single spaces (a scanned page): only "<label heading> Word Word Word", every plan a single
+  // capitalised word that is no joining word, so a line of prose is never read as one.
+  if(heads.length===1)heads=singleSpacedHeader(line,n)??heads;
+  const labels=heads.length-n;
+  if(labels<0||labels>2||!heads.slice(0,labels).every(c=>LABEL_HEADING.test(c)))return null;
+  if(heads.slice(labels).some(c=>LABEL_HEADING.test(c)||NOT_PLAN_HEADING.test(c)))return null;
+  return heads.slice(labels).map(headingKey);
+}
+/** Where the column sits among a header's plans: its place when named exactly once, else null. */
+const placeIn=(plans:string[],want:string)=>{const at=plans.indexOf(want);return at>=0&&plans.lastIndexOf(want)===at?at:null;};
+export function planHeaderIndex(pageText:string|null|undefined,column:string,n:number):number|null{
   const want=headingKey(column);
   if(!want||n<2)return null;
-  const found=new Set<number>();
+  const found=new Set<number|null>();
   for(const line of String(pageText??"").split(/\r?\n/)){
-    // The header sits above the row: scanning stops at the first line that prints the row's cells (TE pr373 LOW).
-    if(o.aboveRun&&spaced(line).includes(o.aboveRun))break;
-    // A plan heading may carry its own price ("Standard S$38"): taken off before the line is judged. A currency marker
-    // in brackets on a heading ("Benefits (S$)") is not an amount either.
-    const raw=line.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean).map(c=>c.replace(PRICE_AFTER_NAME,""));
-    if(PRINTS_AMOUNT.test(raw.join("\t").replace(/\((?:s\$|us\$|hk\$|a\$|\$|£|€|rm|sgd|usd|myr|gbp|eur|hkd|aud)\)/gi," ")))continue;
-    // Label headings are judged as printed ("Your plan"); plan headings without a last word "plan" ("Business Plan").
-    let heads=raw.map(c=>labelKey(c)).filter(Boolean);
-    // A header printed with single spaces (a scanned page): only "<label heading> Word Word Word", every plan a single
-    // capitalised word that is no joining word, so a line of prose is never read as one.
-    if(heads.length===1)heads=singleSpacedHeader(line,n)??heads;
-    const labels=heads.length-n;
-    if(labels<0||labels>2||!heads.slice(0,labels).every(c=>LABEL_HEADING.test(c)))continue;
-    if(heads.slice(labels).some(c=>LABEL_HEADING.test(c)||NOT_PLAN_HEADING.test(c)))continue;
-    const plans=heads.slice(labels).map(headingKey);
-    const at=plans.indexOf(want);
-    if(at>=0&&plans.lastIndexOf(want)===at)found.add(at);
+    const plans=headerPlans(line,n);
+    if(plans&&plans.includes(want))found.add(placeIn(plans,want));
   }
   return found.size===1?[...found][0]:null;
 }
-/** Whether the page names the plan in any cell above the row (a header, read or not): then the header decides, and the
- * readings are never used to place the plan. With no page text, true: nothing is placed without the page. */
-function hasHeaderFor(pageText:string|null|undefined,column:string,run:string):boolean{
-  if(pageText==null)return true;
+/** A line that starts a new part of the document ("Section 5 Trip disruption", "Part B"): a header above it belongs to
+ * another table. */
+const SECTION_START=/^(?:section|part|chapter)\s+(?:\d+[a-z]?|[ivxlc]+|[a-z])\b/i;
+/** The place of the column in the plan header nearest above the row's own line on its page (TE and Critic r373):
+ *  - the row's own line is the one line printing its cells after its last words, or its cells alone with its first
+ *    words on the next line; none or two such lines, none;
+ *  - scanning up from it, the first plan header of n plans decides: the column named exactly once there, else none;
+ *  - a line that starts a new section, or names the plan (as a whole phrase) without being a header read, before any
+ *    header is found: none.
+ * No other page is read: a row whose page prints no header for it gets no figure. */
+export function rowHeaderIndex(pageText:string|null|undefined,column:string,n:number,row:{run:string;name:string}):number|null{
   const want=headingKey(column);
-  for(const line of pageText.split(/\r?\n/)){
-    if(spaced(line).includes(run))break;
-    if(line.split(/\t|\s{2,}/).some(c=>headingKey(c.replace(PRICE_AFTER_NAME,""))===want)||spaced(line).toLowerCase().split(" ").includes(want))return true;
+  if(pageText==null||!want||n<2||!row.name)return null;
+  const lines=pageText.split(/\r?\n/).map(l=>({raw:l,text:spaced(l)}));
+  const last=row.name.split(" ").slice(-3).join(" "),first=row.name.split(" ").slice(0,3).join(" ");
+  const own=lines.map((l,i)=>l.text.includes(last+" "+row.run)||(l.text===row.run&&(lines[i+1]?.text??"").startsWith(first))?i:-1).filter(i=>i>=0);
+  if(own.length!==1)return null;
+  const phrase=new RegExp("(?:^|[^a-z0-9])"+want.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?:$|[^a-z0-9])");
+  for(let i=own[0]-1;i>=0;i--){
+    const {raw,text}=lines[i];
+    if(!text)continue;
+    const plans=headerPlans(raw,n);
+    if(plans)return placeIn(plans,want);
+    if(SECTION_START.test(text)||phrase.test(text.toLowerCase()))return null;
   }
-  return false;
+  return null;
 }
 /** A price printed after a plan's name in its heading cell ("Standard S$38", "Plus SGD 52.00"): letters, then one amount. */
 const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?$/i;
 /** pageText: the text of the row's page. A reading's figure is taken only when it is the cell at its column's place in
- * the page's plan header (planHeaderIndex): a reading that names one plan but gives another plan's cell gives none (TE
- * pr373 W1). Without the page's text, none. previousPageText: the page before; read only when the row's own page names
- * the plan nowhere above the row (a table carried over from the page before), and then its header must place the plan
- * on its own. The readings never place a plan. */
+ * the plan header nearest above the row's own line (rowHeaderIndex): a reading that names one plan but gives another
+ * plan's cell gives none (TE pr373 W1). Without the page's text, or with no such header on the page, none: the readings
+ * never place a plan. */
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
-  o:{runIsUnique?:boolean;pageText?:string|null;previousPageText?:string|null}={}):{plan:string;figureText:string}|null{
+  o:{runIsUnique?:boolean;pageText?:string|null}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
   const runs=quote.match(PLAN_ROW)??[];
   if(runs.length!==1||row.sourcePage==null)return null;
@@ -479,9 +497,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
     // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
-    const placed=column?planHeaderIndex(o.pageText,column,runCells.length,{aboveRun:run}):null;
-    const noHeader=column&&placed==null&&!hasHeaderFor(o.pageText,column,run);
-    const at=placed??(noHeader&&o.previousPageText?planHeaderIndex(o.previousPageText,column,runCells.length):null);
+    const at=column?rowHeaderIndex(o.pageText,column,runCells.length,{run,name}):null;
     const own=at==null?null:runCells[at];
     return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";

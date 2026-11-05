@@ -213,7 +213,7 @@ export async function GET(request:NextRequest){
             `SELECT pp.policy_id,pp.page_number,pp.text FROM policy_pages pp
                JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id AND ${activePredicate("p")}
               WHERE pp.account_id=$1 AND pp.policy_id=ANY($2::uuid[]) AND pp.page_number=ANY($3::int[])`,
-            [accountId,[...new Set(wanted.map(row=>row.policy_id))],[...new Set(wanted.flatMap(row=>[row.source_page as number,(row.source_page as number)-1]))]]);
+            [accountId,[...new Set(wanted.map(row=>row.policy_id))],[...new Set(wanted.map(row=>row.source_page as number))]]);
           for(const pg of pages.rows)pageTexts.set(pg.policy_id+":"+pg.page_number,pg.text??"");
         }
       }catch(error){console.warn("Benefit table unavailable for Benefits:",error instanceof Error?error.message:error);}
@@ -239,8 +239,7 @@ export async function GET(request:NextRequest){
       const planFigure=planColumns?(()=>{
         const people=member?[member]:holders.get(row.policy_id)??[];
         const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote,benefitName:row.benefit_name},planReadings.get(id)??[],
-          {runIsUnique:runIsUnique(row),pageText:pageTexts.get(row.policy_id+":"+row.source_page)??null,
-            previousPageText:row.source_page!=null?pageTexts.get(row.policy_id+":"+(row.source_page-1))??null:null}));
+          {runIsUnique:runIsUnique(row),pageText:pageTexts.get(row.policy_id+":"+row.source_page)??null}));
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
