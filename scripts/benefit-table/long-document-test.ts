@@ -305,15 +305,18 @@ async function main() {
   await test("L14 two plans' rates in one unit are plans whatever separates them; a rate and its cap in another unit stay (TE pr364)", async () => {
     const { checkReading } = await import("@/lib/benefit-table/check");
     const lines = ["Hospital cash S$100 per day | S$200 per day", "Hotel stay S$50/night or S$80/night", "Hospital income S$200 per day S$20,000 per year",
-      "Medical expenses S$100,000; S$250,000", "Travel delay S$100 every 6 hours up to S$1,000"];
+      "Medical expenses S$100,000; S$250,000", "Travel delay S$100 every 6 hours up to S$1,000",
+      "Trip cancellation S$5,000 and S$10,000", "Curtailment S$5,000 - S$10,000", "Baggage up to S$500 up to S$1,000",
+      "Kennel fees S$40 each night | S$60 each night | S$90 each night", "Lost item S$200 each up to S$1,000", "Course fees S$2,000 per term or S$5,000"];
     const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
       row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), row("Hospital income", 200, lines[2]), row("Hospital income", 20_000, lines[2]),
-      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]),
+      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]), row("Trip cancellation", 10_000, lines[5]), row("Curtailment", 5_000, lines[6]), row("Baggage", 1_000, lines[7]), row("Kennel fees", 40, lines[8]), row("Lost item", 200, lines[9]), row("Lost item", 1_000, lines[9]), row("Course fees", 2_000, lines[10]),
     ] });
-    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000]]);
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000],
+      ["Lost item", 200], ["Lost item", 1_000], ["Course fees", 2_000]]);
   });
 
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
