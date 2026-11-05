@@ -21,16 +21,24 @@ import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
-const MONEY_CELL = /(?:S\$|US\$|A\$|HK\$|RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d/g;
-const RATE_AFTER_FIGURE = /\d[\d,.]*\s*(?:\/|per\b|each\b|a (?:day|night|week|month)\b|daily\b|weekly\b)/i;
-/** Whether the excerpt's line that prints this figure is a row of plan figures: three or more money cells that differ, or
- * two that differ with neither a rate (Critic R364). */
+/** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
+const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-Za-z$])\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d[\d,]*(?:\.\d+)?`;
+const MONEY_CELL = new RegExp(MONEY, "g");
+/** A "/" or "|" between two money cells separates plans' columns ("S$5,000 / S$10,000"). */
+const CELL_SEPARATOR = new RegExp(String.raw`(\d)\s*[/|]\s*(?=` + MONEY + ")", "g");
+/** A money cell that is a rate: a unit word right after the figure ("S$200 per day", "S$50/night", "S$100 each", "daily"). */
+const RATE_CELL = new RegExp(MONEY + String.raw`\s*(?:\/\s*(?:day|night|week|month|trip)\b|per\b|each\b|daily\b|weekly\b|a (?:day|night|week|month)\b)`, "gi");
+/** Whether the excerpt's line that prints this figure is a row of plan figures: three or more money cells that differ,
+ * or two that differ unless exactly one is a rate and the other its limit ("RM200 per day RM8,000"). Slash and pipe
+ * layouts count as cells; a sum and its premium are set aside by figuresDifferByPlan (Critic R364). */
 function plansOnValueLine(excerpt: string, value: number): boolean {
   const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
-  return (lines.length ? lines : [excerpt]).some((line) => {
+  return (lines.length ? lines : [excerpt]).some((raw) => {
+    const line = raw.replace(CELL_SEPARATOR, "$1\t");
     if (!figuresDifferByPlan(line)) return false;
-    const cells = ((planCellRun(line) ?? line).match(MONEY_CELL) ?? []).length;
-    return cells >= 3 || (cells === 2 && !RATE_AFTER_FIGURE.test(line));
+    const cells = (line.match(MONEY_CELL) ?? []).length;
+    const rates = (line.match(RATE_CELL) ?? []).length;
+    return cells >= 3 || (cells === 2 && rates !== 1);
   });
 }
 

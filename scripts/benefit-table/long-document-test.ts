@@ -287,6 +287,21 @@ async function main() {
     assert.equal(read.dropped.filter((d) => /several plans' figures/.test(d.why)).length, 4);
   });
 
+  await test("L13 slash plan figures and two plans' daily rates read with no plan column are dropped (Critic R364)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const lines = ["Medical expenses S$100,000 / S$250,000 / S$500,000", "Trip cancellation S$5,000 / S$10,000", "Curtailment S$5,000/S$10,000",
+      "Hospital cash S$100 per day S$200 per day", "Hospital allowance S$200 per day up to S$8,000", "Accidental death S$100,000 S$1,234.56"];
+    const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
+    const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
+      row("Medical expenses", 250_000, lines[0]), row("Trip cancellation", 10_000, lines[1]), row("Curtailment", 5_000, lines[2]),
+      row("Hospital cash", 200, lines[3]), row("Hospital allowance", 8_000, lines[4]), row("Hospital allowance", 200, lines[4]),
+      row("Accidental death", 100_000, lines[5]),
+    ] });
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital allowance", 8_000], ["Hospital allowance", 200], ["Accidental death", 100_000]]);
+  });
+
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);
