@@ -428,39 +428,79 @@ export function planHeaderIndex(pageText:string|null|undefined,column:string,n:n
 /** The few sub-headings a plan table prints between its header and its rows ("Maximum limits per trip"). A closed list. */
 const TABLE_SUBHEADING=/^(?:maximum (?:benefit )?limits?|benefit limits?|limits? of (?:cover|benefits?))(?: (?:per|for each|for any one) (?:trip|journey|insured person|person|policy year|year))?(?: \((?:s\$|us\$|\$|sgd|usd)\))?:?$/i;
 /** The number of plan cells a line prints as its one run of cells, else 0. */
-const cellCount=(text:string)=>{const runs=text.match(PLAN_ROW)??[];return runs.length===1?(runs[0].match(new RegExp(PLAN_CELL,"g"))??[]).length:0;};
-/** The place of the column in the plan header of the row's own table (TE and Critic r373):
- *  - the row's own line is the one line printing its cells after its last words, or its cells alone with its first
- *    words on the next line; none or two such lines, none;
- *  - scanning up from it, the first plan header of n plans decides, the column named exactly once there;
- *  - every line passed on the way must belong to the same table, from a closed list: a row of n plan cells; the line
- *    explaining a row printed as cells alone, right below those cells; the row's own name wrapped onto the lines right
- *    above its cells; a table sub-heading (TABLE_SUBHEADING); a blank line. Any other line (a title, a section, a label,
- *    another table's row or header) gives none.
- * No other page is read: a row whose page prints no header for it gets no figure. */
-export function rowHeaderIndex(pageText:string|null|undefined,column:string,n:number,row:{run:string;name:string}):number|null{
+/** For a line's width only: a whole cell in words that a plan table prints instead of an amount ("Unlimited", "As
+ * charged", "Covered", "-"). A closed list. It never gives a figure and never places a plan. */
+const WORD_CELL=String.raw`(?:[Uu]nlimited|UNLIMITED|[Aa]s\s+[Cc]harged|AS\s+CHARGED|[Cc]overed|COVERED|[Ff]ull\s+[Cc]ost|-|–|—)`;
+const WIDE_CELL=`(?:${PLAN_CELL}|${WORD_CELL})`;
+const WIDE_ROW=new RegExp(`(?<=^|\\s)${WIDE_CELL}(?:\\s+${WIDE_CELL})+$`);
+/** The number of cells a table row prints after its words: amounts, "Not covered"-style cells and whole worded cells
+ * (WORD_CELL), the row printing at least one amount. 0 when the line is no such row (Critic r373 M1). */
+const cellCount=(text:string)=>{
+  const run=text.match(WIDE_ROW)?.[0];
+  if(!run||!new RegExp(MONEY_CELL).test(run))return 0;
+  return run.match(new RegExp(WIDE_CELL,"g"))?.length??0;
+};
+/** Benefit-group titles a plan table prints between its rows under one header ("Travel inconvenience"). A closed list,
+ * allowed only between two rows of the same width (Critic r373 M2). "Section 2" or "Table 2" is never one. */
+const GROUP_TITLE=/^(?:medical(?: and health)?|travel inconvenience|travel delay|personal accident|baggage(?: and personal belongings)?|personal belongings|personal liability|emergency (?:medical )?assistance)(?: benefits)?:?$/i;
+/** Whether a plan row printed as its cells alone, with its explaining line below them ("S$500 S$1,000 S$1,500 / If you
+ * have to postpone your trip"), binds to the household's plan. Off: only rows printing their name then their cells bind,
+ * and a reading quoting the cells first never does. */
+export const CELLS_THEN_LINE_BINDING=true;
+/** The place of the column in the plan header of the row's own table, and the cells of the row's own line (TE and Critic
+ * r373):
+ *  - the row's own line is the one line printing its cells after its last words (or, with CELLS_THEN_LINE_BINDING, its
+ *    cells alone with its first words on the next line); none or two such lines, none. Its cells are counted on the page,
+ *    whole worded cells too ("Unlimited"), so a plan's place is its place in the printed row;
+ *  - the nearest plan header above it, of as many plans as the row has cells, is the table's header;
+ *  - every line between that header and the row must belong to the table, from a closed list, else none:
+ *    a sub-heading (TABLE_SUBHEADING) only directly under the header, before any row; a row of the same width; a
+ *    benefit-group title (GROUP_TITLE) only with a row of the same width (or the row itself) next below it; the row's own
+ *    name wrapped onto the lines right above its line, only when that line does not already print the whole name; and,
+ *    with CELLS_THEN_LINE_BINDING, the explaining line right below a row of cells alone, with another row of cells alone
+ *    (or the row itself, or a benefit-group title then a row) next below it.
+ * No other page is read. Known limit: two tables printed one under the other with nothing between them and the second's
+ * header lost read as one table. */
+export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:{run:string;name:string},
+  o:{cellsThenLine?:boolean}={}):{at:number;cells:string[]}|null{
+  const cellsThenLine=o.cellsThenLine??CELLS_THEN_LINE_BINDING;
   const want=headingKey(column);
-  if(pageText==null||!want||n<2||!row.name)return null;
+  if(pageText==null||!want||!row.name)return null;
   const lines=pageText.split(/\r?\n/).map(l=>({raw:l,text:spaced(l)}));
   const last=row.name.split(" ").slice(-3).join(" "),first=row.name.split(" ").slice(0,3).join(" ");
-  const own=lines.map((l,i)=>l.text.includes(last+" "+row.run)||(l.text===row.run&&(lines[i+1]?.text??"").startsWith(first))?i:-1).filter(i=>i>=0);
+  const named=(t:string)=>t.includes(last+" "+row.run);
+  const alone=(t:string,i:number)=>cellsThenLine&&t===row.run&&(lines[i+1]?.text??"").startsWith(first);
+  const own=lines.map((l,i)=>named(l.text)||alone(l.text,i)?i:-1).filter(i=>i>=0);
   if(own.length!==1)return null;
-  let wrapping=true;
-  for(let i=own[0]-1;i>=0;i--){
-    const {raw,text}=lines[i];
-    if(!text)continue;
-    const plans=headerPlans(raw,n);
-    if(plans)return placeIn(plans,want);
-    const isWrap:boolean=wrapping&&!/\d/.test(text)&&row.name.includes(text);
-    wrapping=isWrap;
-    if(isWrap)continue;
-    if(cellCount(text)===n)continue;
-    const above=lines.slice(0,i).map(l=>l.text).filter(Boolean).pop()??"";
-    if(!/\d/.test(text)&&above===(above.match(PLAN_ROW)??[])[0]&&cellCount(above)===n)continue;
-    if(TABLE_SUBHEADING.test(text))continue;
+  const ownText=lines[own[0]].text;
+  const wide=ownText.match(WIDE_ROW)?.[0];
+  const cells=(wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[];
+  const n=cells.length;
+  if(n<2)return null;
+  let h=-1;
+  for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,n)){h=i;break;}
+  if(h<0)return null;
+  const plans=headerPlans(lines[h].raw,n)!;
+  const isRow=(i:number)=>i===own[0]||cellCount(lines[i].text)===n;
+  const isAlone=(i:number)=>i===own[0]?ownText===row.run:cellCount(lines[i].text)===n&&lines[i].text===(lines[i].text.match(WIDE_ROW)?.[0]??"");
+  const body=lines.map((_,i)=>i).filter(i=>i>h&&i<=own[0]&&lines[i].text);
+  // The row's own name wrapped above its line: only the lines right above it, when its line lacks the whole name.
+  const wraps=new Set<number>();
+  if(named(ownText)&&!ownText.startsWith(row.name))
+    for(let k=body.length-2;k>=0;k--){const t=lines[body[k]].text;if(/\d/.test(t)||!row.name.includes(t))break;wraps.add(body[k]);}
+  let rowSeen=false;
+  for(let k=0;k<body.length-1;k++){
+    const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
+    if(isRow(i)){rowSeen=true;continue;}
+    if(wraps.has(i))continue;
+    if(!rowSeen&&body.slice(0,k).every(j=>TABLE_SUBHEADING.test(lines[j].text))&&TABLE_SUBHEADING.test(text))continue;
+    if(GROUP_TITLE.test(text)&&isRow(next))continue;
+    const titleThenRow=GROUP_TITLE.test(lines[next].text)&&body[k+2]!=null&&isRow(body[k+2]);
+    if(cellsThenLine&&!new RegExp(MONEY_CELL).test(text)&&prev!==h&&isAlone(prev)&&(isAlone(next)||titleThenRow))continue;
     return null;
   }
-  return null;
+  const at=placeIn(plans,want);
+  return at==null?null:{at,cells};
 }
 /** A price printed after a plan's name in its heading cell ("Standard S$38", "Plus SGD 52.00"): letters, then one amount. */
 const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?$/i;
@@ -481,7 +521,6 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
   const code=codes.size===1?[...codes][0]:null;
   if(!code)return null;
-  const runCells=run.match(new RegExp(PLAN_CELL,"g"))??[];
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
   // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
   // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
@@ -491,7 +530,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const nameBelow=quote===name+" "+run?run+" "+name:null;
   let found=onPage.filter(r=>{
     const excerpt=spaced(r.excerpt);
-    return (excerpt.match(PLAN_ROW)??[]).length===1&&(excerpt.includes(words+" "+run)||excerpt===nameBelow);
+    return (excerpt.match(PLAN_ROW)??[]).length===1&&(excerpt.includes(words+" "+run)||(CELLS_THEN_LINE_BINDING&&excerpt===nameBelow));
   });
   if(!found.length&&o.runIsUnique){
     const printing=onPage.filter(r=>spaced(r.excerpt).includes(run));
@@ -507,8 +546,8 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
     // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
-    const at=column?rowHeaderIndex(o.pageText,column,runCells.length,{run,name}):null;
-    const own=at==null?null:runCells[at];
+    const placed=column?rowHeaderIndex(o.pageText,column,{run,name}):null;
+    const own=placed==null?null:placed.cells[placed.at];
     return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";
   }));
