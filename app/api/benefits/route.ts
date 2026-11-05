@@ -259,7 +259,8 @@ export async function GET(request:NextRequest){
         sourcePage:row.source_page,quote:row.quote,
         // What the page adds after a name cut at its stored length: ")" or "…" (lib/policies/cut-name).
         nameSuffix:cutNameSuffix(row.benefit_name,row.quote),
-        conditions:stub.conditions,planColumns,planFigure,
+        // Once the household's own plan column is found, "which plan is yours is not shown" is no longer true.
+        conditions:planFigure?stub.conditions.filter(c=>c!==PLAN_COLUMNS_NOTE):stub.conditions,planColumns,planFigure,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and
