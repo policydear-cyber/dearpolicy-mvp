@@ -154,6 +154,30 @@ t("a household's Critical Illness tile counts only the critical illness plan", c
 const deathTile = lumpSumParts(tileRows(categoryRows("Death", household)), [], [], "Death");
 t("its Death tile is unchanged", deathTile.total === 400000 && deathTile.parts.length === 1, deathTile);
 
+// The abbreviation "CI" as a whole word of the cover's own name (UI/UX 5 Nov: "Lotus CI Care" with "Major cancer" and
+// "Heart attack" rows got no Critical Illness tile). Only for rows that name nothing but an illness.
+for (const names of [{ product: "Lotus CI Care", cover: "Lotus CI Care" }, { cover: "Kestrel CI" }, { cover: "CI Plus (Rider)" }, { product: "Harbour Shield", cover: "Harbour CI Protector" },
+  { cover: "Bayfront Life (CI) Rider" }]) {
+  const rows = ["Major cancer", "Heart attack", "Stroke"].map((b) => row("ci-abbr", names, b, 100000, "SGD"));
+  for (const r of rows) t(`"${r.benefit}" under "${names.cover}" is critical illness`, categoryOfRow(r) === "Critical Illness", categoryOfRow(r));
+  const tile = lumpSumParts(tileRows(categoryRows("Critical Illness", rows)), [], [], "Critical Illness");
+  t(`the Critical Illness tile has "${names.cover}"'s sum`, tile.total === 100000 && tile.parts.length === 1, tile);
+}
+// Not the abbreviation: inside a word, a code, a number, lower case, or only the product of a cover with its own name.
+for (const names of [{ cover: "CIRCLE Care Plan" }, { cover: "Harbour CIF Shield" }, { cover: "CIS Protect" }, { cover: "Harbour CI-4004" }, { cover: "Policy CI 2024/88" },
+  { cover: "Lotus ci care" }, { cover: "Lotus Care", product: "Lotus Care with CI Rider" }, { cover: "Kestrel C.I. Care" }, { cover: "ACI Shield" }, { cover: "Harbour CI4004" }]) {
+  const r = row("not-ci", names, "Major cancer", 100000, "SGD");
+  t(`"Major cancer" under "${names.cover}" is not read as critical illness by the abbreviation`, categoryOfRow(r) === null, categoryOfRow(r));
+}
+// A row that names more than an illness keeps its own category, whatever the cover's name says.
+for (const [benefit, expected] of [["Death benefit", "Death"], ["Daily hospital cash", "Hospital Cash"], ["Surrender value", null], ["Premium waiver", null]] as const) {
+  const got = categoryOfRow(row("ci-other", { cover: "Lotus CI Care" }, benefit, 1000, "SGD"));
+  t(`"${benefit}" under "Lotus CI Care" is not made critical illness`, got !== "Critical Illness", got);
+  void expected;
+}
+// Early stage under a CI abbreviation stays early (the cover's own early-stage name is read first).
+t('"Early CI Care" with "Carcinoma in situ" is early critical illness', categoryOfRow(row("eci", { cover: "Early CI Care" }, "Carcinoma in situ", 25000, "SGD")) === "Early Critical Illness",
+  categoryOfRow(row("eci", { cover: "Early CI Care" }, "Carcinoma in situ", 25000, "SGD")));
 t("no outbound fetch", fetches === 0, fetches);
 // A bilingual illness label is critical illness only when every word on every side is an illness word (closed list): a
 // side or a character that names a death, a hospital stay, treatment or an allowance keeps the row off the CI tile
