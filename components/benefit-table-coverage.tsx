@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
+import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
 
 /** Coverage from the benefit table (lib/benefit-table), as a summary to read, with nothing to confirm: for each person,
  * one card per cover with its sum insured, premium and a few key benefits, and every other benefit in a collapsed list
@@ -49,7 +50,8 @@ const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Nu
  * document not uploaded yet (or its benefits could not be read). */
 /** listedWith: no row is this cover's own or this very benefit, but another cover of the same product lists its rows
  * (lib/benefit-table/cover-rows.ts): the card points there, never asks for a wording that is already on file. */
-function CoverCard({cover,rows,reading,listedWith}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null}){
+/** shared: the cover is on a document that also covers others in the household (lib/benefit-table/shared-cover.ts). */
+function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
   const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
@@ -62,6 +64,7 @@ function CoverCard({cover,rows,reading,listedWith}:{cover:Cover;rows:Row[];readi
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
+    {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":"No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays."}</p>:<>
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
@@ -134,7 +137,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {people.length>1?<nav className="cov-people" aria-label="People">{people.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {people.map(person=><section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
-      {person.covers.map(c=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0}/>;})}
+      {person.covers.map(c=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0} shared={sharedCoverText(data.people,person,c,shown.rows)}/>;})}
       <TellUs person={person}/>
     </section>)}
     {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length||data.ambiguousCovers?.length?<section className="cov-person" data-testid="table-also-found">
