@@ -113,6 +113,13 @@ const CASES: [string, string, string, "keep" | "named" | "drop"][] = [
   ["Intensive Care", "Double the daily cash amount for each day in intensive care", wording, "keep"],
   ["Accidental Death", "Twice the sum assured if death is caused by an accident", wording, "keep"],
   ["Overseas Cash", "Hospital cash paid at 3 times the daily amount when overseas", wording, "keep"],
+  // FWD pre-check (5 Nov): a feature line copied as its own name is still a feature line, whatever word it ends on.
+  ["Receive daily hospital cash benefit", "Receive daily hospital cash benefit", summary, "drop"],
+  ["Enjoy peace of mind wherever you travel", "Enjoy peace of mind wherever you travel", summary, "drop"],
+  ["Be covered for as low as S$1 a day", "Be covered for as low as S$1 a day", summary, "drop"],
+  // ...while a real name that opens its quote, and a feature line with an amount, are kept as before.
+  ["Funeral costs", "Funeral costs up to S$5,000", summary, "keep"],
+  ["Receive S$100 a day while you are in hospital", "Receive S$100 a day while you are in hospital", summary, "keep"],
   // A trailing section number is no table amount.
   ["Section Note", "For the avoidance of doubt, a claim under section 4 excludes section 5", wording, "drop"],
   ["Large Claims", "If the sum payable is above S$150,000, we pay S$150,000 first and the balance in instalments", wording, "keep"],
