@@ -369,8 +369,31 @@ export function planCellRun(quote:string|null|undefined):string|null{
 const GENERIC_WORD=/^(?:with|from|that|this|will|your|while|trips?|travel(?:l?ing)?|overseas|abroad|journey|during|benefits?|cover(?:ed|age)?|insured|insurance|policy|plan|persons?|people|others?|each|also|have|been|under|upon|after|before|which|where|when|such|what|them|they|their|there|into|only|more|than|made|make|paid|pays|payable|amounts?|maximum|limits?|items?)$/;
 /** The first four letters of each word that names something ("liable" and "liability" share "liab"). */
 const nameStems=(text:string)=>new Set((text.toLowerCase().match(/[a-z]{4,}/g)??[]).filter(w=>!GENERIC_WORD.test(w)).map(w=>w.slice(0,4)));
+/** Words that may head a plan table's label column, before its plan headings ("Benefits | Classic | Business | First"). */
+const LABEL_HEADING=/^(?:benefits?|benefits? payable|cover(?:age)?|section|items?|descriptions?|schedule of benefits|table of benefits|maximum (?:benefit )?limits?|benefit limits?|plans?|plan type|your plan)$/i;
+/** Where a plan column sits among a table's n plan cells, read from the page's own header line: a line of headings (no
+ * figures) whose last n cells name the plans, with nothing before them or one label heading (LABEL_HEADING). The
+ * column must be one of those cells exactly, and every such header line on the page must put it in the same place.
+ * Null when the page prints no such header, or two that disagree. */
+export function planHeaderIndex(pageText:string|null|undefined,column:string,n:number):number|null{
+  const want=spaced(column).toLowerCase();
+  if(!want||n<2)return null;
+  const found=new Set<number>();
+  for(const line of String(pageText??"").split(/\r?\n/)){
+    if(/\d/.test(line))continue;
+    const cells=line.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean);
+    if(cells.length!==n&&!(cells.length===n+1&&LABEL_HEADING.test(cells[0])))continue;
+    const plans=cells.slice(cells.length-n).map(c=>c.toLowerCase());
+    const at=plans.indexOf(want);
+    if(at>=0&&plans.lastIndexOf(want)===at)found.add(at);
+  }
+  return found.size===1?[...found][0]:null;
+}
+/** pageText: the text of the row's page. A reading's figure is taken only when it is the cell at its column's place in
+ * the page's plan header (planHeaderIndex): a reading that names one plan but gives another plan's cell gives none (TE
+ * pr373 W1). Without the page's text, none. */
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
-  o:{runIsUnique?:boolean}={}):{plan:string;figureText:string}|null{
+  o:{runIsUnique?:boolean;pageText?:string|null}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
   const runs=quote.match(PLAN_ROW)??[];
   if(runs.length!==1||row.sourcePage==null)return null;
@@ -382,7 +405,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
   const code=codes.size===1?[...codes][0]:null;
   if(!code)return null;
-  const cells=money.map(cellAmount);
+  const runCells=run.match(new RegExp(PLAN_CELL,"g"))??[];
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
   // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
   // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
@@ -407,7 +430,10 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   if(!found.length)return null;
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
-    return column&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)&&r.figure.currency===code
+    // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
+    const at=column?planHeaderIndex(o.pageText,column,runCells.length):null;
+    const own=at==null?null:runCells[at];
+    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";
   }));
   if(picks.size!==1||picks.has("none"))return null;

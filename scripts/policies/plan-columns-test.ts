@@ -71,7 +71,9 @@ test("a held row is never read again from its quote as a percentage (Critic R351
 });
 
 test("a held row takes its plan's column only from a checked reading of the same page that names one plan", async () => {
-  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const { planColumnFigure: placed } = await import("@/lib/insurance/scale-limit");
+  // The page's own plan header: Gold is the middle plan.
+  const planColumnFigure = (r: Parameters<typeof placed>[0], x: Parameters<typeof placed>[1], o: Parameters<typeof placed>[2] = {}) => placed(r, x, { pageText: "Table of benefits\nBenefits\tSilver\tGold\tPlatinum", ...o });
   const at = { policyId: "doc1", sourcePage: 5, quote: "If you have to cancel your entire trip S$7,500 S$10,000 S$15,000" };
   const reading = (o: Partial<{ documentId: string; page: number; excerpt: string; column: string | null; qualifier: string | null; amount: number; kind: string }> = {}) => ({
     documentId: o.documentId ?? "doc1", page: o.page ?? 5, excerpt: o.excerpt ?? "If you have to cancel\nyour entire trip S$7,500  S$10,000  S$15,000",
@@ -104,7 +106,10 @@ test("a held row takes its plan's column only from a checked reading of the same
 });
 
 test("a reading that quotes only the row's cells gives the plan's figure only when the cells are the page's alone", async () => {
-  const { planColumnFigure, planCellRun } = await import("@/lib/insurance/scale-limit");
+  const { planCellRun } = await import("@/lib/insurance/scale-limit");
+  const { planColumnFigure: placed } = await import("@/lib/insurance/scale-limit");
+  // The page's own plan header: Gold is the middle plan.
+  const planColumnFigure = (r: Parameters<typeof placed>[0], x: Parameters<typeof placed>[1], o: Parameters<typeof placed>[2] = {}) => placed(r, x, { pageText: "Table of benefits\nBenefits\tSilver\tGold\tPlatinum", ...o });
   const at = { policyId: "doc1", sourcePage: 7, quote: "If you are liable for accidental death, injury or damage to S$500,000 S$750,000 S$1,000,000" };
   const cells = (o: Partial<{ excerpt: string; benefit: string; column: string | null; amount: number; page: number; qualifier: string | null }> = {}) => ({
     documentId: "doc1", page: o.page ?? 7, excerpt: o.excerpt ?? "S$500,000\tS$750,000\tS$1,000,000", column: o.column === undefined ? "Gold" : o.column,
@@ -230,7 +235,9 @@ test("a benefit row's own sub-items keep their figure; only side-by-side plan ce
 });
 
 test("a plan table that prints each benefit's cells, then the line that explains it, binds the row to the household's plan", async () => {
-  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const { planColumnFigure: placed } = await import("@/lib/insurance/scale-limit");
+  // The page's own plan header: Gold is the middle plan.
+  const planColumnFigure = (r: Parameters<typeof placed>[0], x: Parameters<typeof placed>[1], o: Parameters<typeof placed>[2] = {}) => placed(r, x, { pageText: "Table of benefits\nMaximum benefit limit\nBenefits\tExplorer\tVoyager\tNomad", ...o });
   const reading = (excerpt: string, amount: number, column: string | null = "Voyager", page = 4) => ({ documentId: "docT", page, excerpt, column, qualifier: null,
     figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG") });
   // Made-up three-plan travel wordings: a name line, the cells, then the line that says what it pays for (the row is
@@ -270,4 +277,44 @@ test("once the household's plan figure is known, the 'which plan is yours is not
   // The Benefits route sends the row's conditions through it.
   const { readFileSync } = await import("node:fs");
   assert.match(readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8"), /conditions:conditionsWithPlan\(stub\.conditions,planFigure\)/);
+});
+
+test("a reading's figure is taken only when it is the cell at its plan's place in the page's header (TE pr373 W1)", async () => {
+  const { planColumnFigure, planHeaderIndex } = await import("@/lib/insurance/scale-limit");
+  const header = "Table of benefits\nExplorer\tVoyager\tNomad";
+  // The header line: n headings, or one label heading then n; the column exactly one of them; every header agrees.
+  assert.equal(planHeaderIndex(header, "Voyager", 3), 1);
+  assert.equal(planHeaderIndex("Benefits\tExplorer\tVoyager\tNomad", "voyager", 3), 1);
+  assert.equal(planHeaderIndex("Cover  Explorer  Voyager  Nomad", "Nomad", 3), 2);
+  for (const [why, text, column, n] of [
+    ["no header", "Trip delay S$100 S$200 S$300", "Voyager", 3], ["not a plan heading", header, "Business", 3],
+    ["other count", header, "Voyager", 2], ["unknown label first", "Extras\tExplorer\tVoyager\tNomad", "Voyager", 3],
+    ["two orders", header + "\nVoyager\tExplorer\tNomad", "Voyager", 3], ["a figure in the line", "Explorer S$1\tVoyager\tNomad", "Voyager", 3],
+    ["named twice", "Voyager\tVoyager\tNomad", "Voyager", 3],
+  ] as [string, string, string, number][]) assert.equal(planHeaderIndex(text, column, n), null, why);
+  const reading = (excerpt: string, amount: number, column = "Voyager") => ({ documentId: "docH", page: 3, excerpt, column, qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG") });
+  for (const [name, run, below] of [
+    ["If your journey must be put back", "S$500 S$1,000 S$1,500", true], ["Trip cancellation", "S$5,000 S$10,000 S$15,000", false],
+  ] as [string, string, boolean][]) {
+    const row = { policyId: "docH", sourcePage: 3, quote: `${name} ${run}`, benefitName: name };
+    const cells = run.split(" ");
+    const excerpt = below ? `${cells.join("\t")}\n${name}` : `${name}\t${cells.join("\t")}`;
+    const amount = (i: number) => Number(cells[i].replace(/[^\d]/g, ""));
+    // The plan's own cell binds; the first or last plan's cell under the Voyager label does not, on either layout.
+    assert.deepEqual(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: header }), { plan: "Voyager", figureText: "up to S$" + amount(1).toLocaleString("en-SG") }, name);
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(0))], { pageText: header }), null, name + ": first plan's cell");
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(2))], { pageText: header }), null, name + ": last plan's cell");
+    // No page text, or a page whose header does not place the plan: none.
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))]), null, name + ": no page");
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: "Explorer\tNomad\tVoyager" }), null, name + ": other order");
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: "Trip delay" }), null, name + ": no header");
+  }
+  // A "Not covered" cell keeps its place: Voyager's cell is the second cell, not the second figure.
+  const row = { policyId: "docH", sourcePage: 3, quote: "Golf equipment Not covered S$500 S$800", benefitName: "Golf equipment" };
+  assert.deepEqual(planColumnFigure(row, [reading("Golf equipment Not covered S$500 S$800", 500)], { pageText: header }), { plan: "Voyager", figureText: "up to S$500" });
+  assert.equal(planColumnFigure(row, [reading("Golf equipment Not covered S$500 S$800", 800)], { pageText: header }), null);
+  // The Benefits route passes each row's page text.
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8"), /pageText:pageTexts\.get\(row\.policy_id\+":"\+row\.source_page\)/);
 });

@@ -193,6 +193,7 @@ export async function GET(request:NextRequest){
     // its document (or the one person asked about) has the same plan column for it (Critic R370 M1).
     const planReadings=new Map<string,PlanColumnReading[]>();
     const holders=new Map<string,string[]>();
+    const pageTexts=new Map<string,string>();
     if(usableRows.some(row=>resolved.get(row.id)?.conditions.includes(PLAN_COLUMNS_NOTE))){
       try{
         const built=await tableOnce;
@@ -206,6 +207,14 @@ export async function GET(request:NextRequest){
                JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")}
               WHERE pm.account_id=$1`,[accountId]);
           for(const h of held.rows)holders.set(h.policy_id,[...(holders.get(h.policy_id)??[]),h.family_member_id]);
+          // The pages of the plan rows, for their plan header (planHeaderIndex): a figure is taken only from its plan's place.
+          const wanted=usableRows.filter(row=>row.source_page!=null&&resolved.get(row.id)?.conditions.includes(PLAN_COLUMNS_NOTE));
+          const pages=await query<{policy_id:string;page_number:number;text:string|null}>(
+            `SELECT pp.policy_id,pp.page_number,pp.text FROM policy_pages pp
+               JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id AND ${activePredicate("p")}
+              WHERE pp.account_id=$1 AND pp.policy_id=ANY($2::uuid[]) AND pp.page_number=ANY($3::int[])`,
+            [accountId,[...new Set(wanted.map(row=>row.policy_id))],[...new Set(wanted.map(row=>row.source_page as number))]]);
+          for(const pg of pages.rows)pageTexts.set(pg.policy_id+":"+pg.page_number,pg.text??"");
         }
       }catch(error){console.warn("Benefit table unavailable for Benefits:",error instanceof Error?error.message:error);}
     }
@@ -230,7 +239,7 @@ export async function GET(request:NextRequest){
       const planFigure=planColumns?(()=>{
         const people=member?[member]:holders.get(row.policy_id)??[];
         const picks=people.map(id=>planColumnFigure({policyId:row.policy_id,sourcePage:row.source_page,quote:row.quote,benefitName:row.benefit_name},planReadings.get(id)??[],
-          {runIsUnique:runIsUnique(row)}));
+          {runIsUnique:runIsUnique(row),pageText:pageTexts.get(row.policy_id+":"+row.source_page)??null}));
         return picks.length&&picks.every(p=>p&&JSON.stringify(p)===JSON.stringify(picks[0]))?picks[0]:null;
       })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
