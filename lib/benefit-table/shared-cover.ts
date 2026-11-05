@@ -12,15 +12,24 @@ import { sharedPolicyNote, sharedPolicyText } from "@/lib/policies/shared-policy
 type CoverLike = { coverKey: string; sumInsured: number | null; currency: string | null; source: { documentId: string } };
 type PersonLike = { id: string; name: string; covers: CoverLike[] };
 
-/** The sentence a cover card shows, or null: the cover is this person's alone, or every amount listed under it is this
- * person's own sum (nothing there can be read as someone else's). */
+/** The sentence a cover card shows, or null: the document names no one else in the household, or every amount listed
+ * under the cover is this person's own sum (nothing there can be read as someone else's). Shared means another person
+ * has any cover on the same document, whatever it is called there: a group certificate can read the employee's cover and
+ * the spouse's under different names (Critic L2, TE #354). An own sum with no currency on its page is said as the
+ * table says it, never with a bare "$" (Critic R374 L1). A namesake is named as another household member, so the
+ * sentence never seems to name the person themself. */
 export function sharedCoverText(people: PersonLike[], person: { id: string; name: string }, cover: CoverLike, rows: SummaryRow[]): string | null {
   if (!rows.length) return null;
-  const others = people.filter((p) => p.id !== person.id && p.covers.some((c) => c.coverKey === cover.coverKey && c.source.documentId === cover.source.documentId)).map((p) => p.name);
+  const others = people.filter((p) => p.id !== person.id && p.covers.some((c) => c.source.documentId === cover.source.documentId))
+    .map((p) => p.name === person.name ? `another household member named ${p.name}` : p.name);
   if (!others.length) return null;
-  const ownSum = cover.sumInsured != null ? money(cover.sumInsured, cover.currency) : null;
+  const sum = cover.sumInsured;
+  const ownSum = sum == null ? null : cover.currency ? money(sum, cover.currency)
+    : `${sum.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(sum) ? 0 : 2, maximumFractionDigits: 2 })} (currency not stated)`;
   const note = sharedPolicyNote([person.name, ...others], person, [[{ ownerId: person.id, amount: ownSum }]]);
   if (!note) return null;
-  if (ownSum && rows.every((r) => shortFigure(r).text === ownSum)) return null;
+  // The row text says a figure the way shortFigure does ("$100,000 (currency not stated)" when its page states none).
+  const asRows = sum == null ? null : money(sum, cover.currency) + (cover.currency ? "" : " (currency not stated)");
+  if (asRows && rows.every((r) => shortFigure(r).text === asRows)) return null;
   return sharedPolicyText(note, person.name, "an amount listed below");
 }

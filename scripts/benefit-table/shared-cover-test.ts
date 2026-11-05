@@ -34,6 +34,20 @@ test("a cover only this person holds, or a cover with no rows, says nothing extr
   assert.equal(sharedCoverText(people, rahul, rahul.covers[1], [row("Death benefit", 600000), row("Terminal illness", 50000)]), null);
   assert.equal(sharedCoverText(people, rahul, rahul.covers[0], []), null);
 });
+test("an own sum with no currency is never said with a bare $ (Critic M1)", () => {
+  const a = { id: "a", name: "Alex Tan", covers: [cover("group life", "dX", 100000, null)] };
+  const b = { id: "b", name: "Bea Tan", covers: [cover("group life", "dX", 200000, null)] };
+  const t = sharedCoverText([a, b], a, a.covers[0], [row("Death benefit", 200000, null)]) ?? "";
+  assert.equal(t, "This policy also covers Bea Tan. Alex Tan's own sum insured on it is 100,000 (currency not stated); an amount listed below may be for another person on it.");
+  assert.doesNotMatch(t, /\$/);
+  assert.equal(sharedCoverText([a, b], a, a.covers[0], [row("Death benefit", 100000, null)]), null, "a line equal to the own sum still hides the note");
+});
+test("another person's cover read under a different name on the same document still counts (Critic L2, TE)", () => {
+  const emp = { id: "e", name: "Priya Nair", covers: [cover("group term life", "dG", 300000)] };
+  const sp = { id: "s", name: "Arjun Nair", covers: [cover("spouse group term life", "dG", 100000)] };
+  assert.equal(sharedCoverText([emp, sp], sp, sp.covers[0], [row("Death benefit", 300000)]),
+    "This policy also covers Priya Nair. Arjun Nair's own sum insured on it is S$100,000; an amount listed below may be for another person on it.");
+});
 test("the same product on two different documents is not shared", () => {
   const a = { id: "a", name: "Ama Owusu", covers: [cover("family health", "dA", 9000, "GHS")] };
   const b = { id: "b", name: "Kofi Owusu", covers: [cover("family health", "dB", 9000, "GHS")] };
@@ -51,7 +65,7 @@ test("a row paid as charged under a shared cover still gets the note (it is not 
 });
 test("two people with the same name: the other one is still named", () => {
   const r2 = { id: "p9", name: "Rahul Menon", covers: [cover("group life", "d3", 80000)] };
-  assert.match(sharedCoverText([rahul, r2], rahul, rahul.covers[0], [row("Death benefit", 250000)]) ?? "", /^This policy also covers Rahul Menon\. Rahul Menon's own sum insured on it is S\$150,000;/);
+  assert.match(sharedCoverText([rahul, r2], rahul, rahul.covers[0], [row("Death benefit", 250000)]) ?? "", /^This policy also covers another household member named Rahul Menon\. Rahul Menon's own sum insured on it is S\$150,000;/);
 });
 test("the Coverage page shows it on each cover card", () => {
   const page = readFileSync("components/benefit-table-coverage.tsx", "utf8");
