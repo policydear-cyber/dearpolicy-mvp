@@ -26,7 +26,7 @@ function t(id: string, ok: boolean, detail: unknown) {
 const family: FamilyMember[] = [{ id: "p-ana", display_name: "Ana Reyes" }];
 const MARKETS = [
   { m: "SG", cur: "SGD", plan: "Harbour Builder 10", rider: "TERMINAL ILLNESS", says: "we will pay the death benefit in a lump sum." },
-  { m: "MY", cur: "MYR", plan: "Pelan Simpanan Maju 15", rider: "Terminal Illness Benefit Rider", says: "kami akan membayar manfaat kematian secara sekaligus." },
+  { m: "MY", cur: "MYR", plan: "Pelan Simpanan Maju 15", rider: "Terminal Illness Benefit Rider", says: "we will pay the death benefit as one lump sum." },  // English only (DC 4 Nov): an English document from Malaysia
   { m: "UK", cur: "GBP", plan: "Alder Savings Builder", rider: "Terminal Illness Cover", says: "the death benefit will be paid early as one lump sum." },
 ] as const;
 

@@ -139,7 +139,7 @@ const REFERENCE_PHRASES = [
   // "The cover in your policy schedule ended on 1 March 2026."
   new RegExp(String.raw`\b(?:cover|benefits?)\s+(?:in|under)\s+(?:your|the)\s+` + DOC_NAME + REFERENCE_END, "gi"),
 ];
-const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|jadual polisi|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
+const DOCUMENT_ITSELF = /\b(?:policy schedule|schedule of (?:insurance|benefits)|schedule page|certificate of (?:group )?insurance|certificate (?:no\.?|number)|insurance certificate|renewal certificate|certificate of renewal|policy certificate|policy contract|policy wording|policy information page|endorsement|serves as)\b|(?<!\b(?:payment|premium|instalment)\s)\bschedule\b/im;
 const NOTICE_TITLE = String.raw`^(?:(?:final|first|second|overdue)\s+)?(?:notice of (?:policy\s+)?(?:lapse|reinstatement|renewal|termination)|(?:policy\s+)?lapse (?:notice|notification)|premium (?:reminder|notice|due notice)|(?:reminder\s*:\s*)?premium overdue|grace period (?:reminder|notice)|renewal notice|reinstatement(?: notice| of (?:your |the )?policy)?|notis peringatan premium|notis luput(?: polisi)?|official receipt|premium receipt|payment receipt|payment acknowledge?ment)`;
 const NOTICE_TITLE_LINE = new RegExp(NOTICE_TITLE + String.raw`(?:\s*[-–—:/]\s*[^.;]{0,60})?$`, "i");
 // Beside a page of policy particulars only a bare title, or one followed by a policy number or a date, is a title: a

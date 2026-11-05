@@ -25,9 +25,12 @@ async function test(name: string, fn: () => void | Promise<void>) {
 
 async function main() {
   const { planKind } = await import("@/lib/chat/plan-kinds");
-  await test("a plan stored as Health, Medical, Hospitalisation or Perubatan is a health plan, whatever its name", () => {
-    for (const [product, type] of [["Heron Family Care", "Health"], ["VitalCare Family", "Medical"], ["MyCare Plus", "Hospitalisation"], ["Pelan Prima", "Perubatan"], ["Premier Care", "Hospital and Surgical"], ["Lotus Family Plan", "醫療"], ["Keluarga Sehat", "Asuransi Kesehatan"], ["Familienschutz", "Krankenversicherung"], ["Plan Familia", "Seguro de salud"]])
+  await test("a plan stored as Health, Medical or Hospitalisation is a health plan, whatever its name", () => {
+    for (const [product, type] of [["Heron Family Care", "Health"], ["VitalCare Family", "Medical"], ["MyCare Plus", "Hospitalisation"], ["Premier Care", "Hospital and Surgical"]])
       assert.equal(planKind({ product, type }), "health", product);
+    // English only (DC 4 Nov): a type stored in another language is no known kind.
+    for (const [product, type] of [["Pelan Prima", "Perubatan"], ["Lotus Family Plan", "醫療"], ["Keluarga Sehat", "Asuransi Kesehatan"], ["Familienschutz", "Krankenversicherung"], ["Plan Familia", "Seguro de salud"]])
+      assert.notEqual(planKind({ product, type }), "health", product);
     // A name that says another kind wins nothing: it is neither kind.
     for (const [product, type] of [["Early Critical Protector", "Health"], ["Hospital Cash Plus", "Medical"], ["Accident Care", "Medical"]])
       assert.equal(planKind({ product, type }), "other", product);

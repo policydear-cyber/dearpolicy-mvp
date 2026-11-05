@@ -45,18 +45,8 @@ function wordsToNumber(words: string[]): number | null {
   return seen ? total + current : null;
 }
 const REPLACEMENTS: [RegExp, string][] = [
-  // Chinese
-  [/我的/g, " my "], [/我/g, " I "], [/妈妈|媽媽/g, " mother "], [/爸爸/g, " father "], [/儿子|兒子/g, " son "], [/女儿|女兒/g, " daughter "], [/医院|醫院/g, " hospital "], [/多少/g, " how much "], [/保险|保險/g, " insurance "],
-  // Tamil (romanised)
-  [/\b(?:admit|admitted)\s+(?:aachu|aayiduchu|ayiduchu|panniyachu)\b/gi, "was admitted to hospital"], [/\bamma\b/gi, "mother"], [/\bappa\b/gi, "father"], [/\bpaati\b/gi, "grandmother"], [/\bthatha\b/gi, "grandfather"], [/\b(?:aachu|aayiduchu)\b/gi, ""],
   // Hokkien / Singlish kin words
   [/\bah\s?(?:ma|mah|mah mah)\b/gi, "grandma"], [/\bah\s?gong\b/gi, "grandpa"],
-  // Malay
-  [/\bmasuk hospital\b/gi, "was admitted to hospital"], [/\bkena langgar\b/gi, "was hit"], [/\blanggar\b/gi, "hit"], [/\bkemalangan\b/gi, "accident"],
-  [/\bboleh claim (?:tak|ke|tidak)\b/gi, "can claim or not"], [/\bboleh\b/gi, "can"], [/\bberapa\b/gi, "how much"], [/\bsemalam\b/gi, "yesterday"], [/\bhari ini\b/gi, "today"],
-  [/\b(kereta|rumah|anak|polisi|insurans)\s+saya\b/gi, "my $1"], [/\bsaya\b/gi, "I"], [/\bkereta\b/gi, "car"], [/\brumah\b/gi, "house"], [/\bpolisi\b/gi, "policy"], [/\binsurans\b/gi, "insurance"],
-  [/\banak\b(?!\s+(?:lelaki|perempuan))/gi, "child"], [/\bjatuh\b/gi, "fell"], [/\bbasikal\b/gi, "bicycle"], [/\bpatah\b/gi, "broke"], [/\btangan\b/gi, "arm"], [/\bkaki\b/gi, "leg"],
-  [/\bsakit\b/gi, "sick"], [/\bdemam\b/gi, "fever"], [/\bdoktor\b/gi, "doctor"], [/\bbayar\b/gi, "pay"], [/\bbanjir\b/gi, "flood"], [/\bbocor\b/gi, "leak"], [/\b(?:tak|tidak)\b/gi, "not"],
   // Terms written apart ("co insurance", "pre existing")
   [/\bco\s+(insurance|payments?|pay)\b/gi, "co-$1"], [/\bpre\s+(existing|authori[sz]ation)\b/gi, "pre-$1"], [/\bpro\s+ration\b/gi, "pro-ration"],
   // Shortened month names and ordinal days ("3rd sept")

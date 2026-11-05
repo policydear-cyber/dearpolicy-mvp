@@ -1,5 +1,6 @@
 /**
- * Benefit rows printed in other languages, and rows whose name only says "the sum", map to the event they pay instead of
+ * English only (DC 4 Nov): rows printed in another language are not read, so they stay "Other benefit" (no figure for
+ * an event); rows whose name only says "the sum" map to the event they pay instead of
  * "Other benefit"; a fixed figure printed with a period is paid per day or per month, never as a lump sum.
  * Cross-page check, 31 Oct. No database, no model.
  */
@@ -15,27 +16,27 @@ const ev = (name: string, plan?: string) => eventForBenefitName(name, plan).even
 // Row names in other languages, each case its own household's wording.
 const rows: [string, string][] = [
   // Malay / Indonesian
-  ["Kanser Tahap Kritikal", "critical_illness"], ["Serangan Jantung", "critical_illness"], ["Strok", "critical_illness"],
-  ["Kematian atau Hilang Upaya Menyeluruh dan Kekal", "death"], ["Hilang Upaya Menyeluruh dan Kekal", "tpd"],
-  ["Kematian akibat Kemalangan", "accidental_death"], ["Penyakit Kritis Tahap Awal", "early_critical_illness"],
-  ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Unit Rawatan Rapi", "icu_daily_cash"], ["Pembedahan", "surgery"],
-  ["Meninggal Dunia karena Kecelakaan", "accidental_death"], ["Penyakit Kritis", "critical_illness"], ["Patah Tulang", "fracture"],
-  ["Cacat Tetap Total", "tpd"], ["Biaya Pengobatan di Luar Negeri", "travel_medical"], ["Ambulans", "ambulance"],
+  ["Kanser Tahap Kritikal", "other"], ["Serangan Jantung", "other"], ["Strok", "other"],
+  ["Kematian atau Hilang Upaya Menyeluruh dan Kekal", "other"], ["Hilang Upaya Menyeluruh dan Kekal", "other"],
+  ["Kematian akibat Kemalangan", "other"], ["Penyakit Kritis Tahap Awal", "other"],
+  ["Santunan rawat inap per hari", "other"], ["Unit Rawatan Rapi", "other"], ["Pembedahan", "other"],
+  ["Meninggal Dunia karena Kecelakaan", "other"], ["Penyakit Kritis", "other"], ["Patah Tulang", "other"],
+  ["Cacat Tetap Total", "other"], ["Biaya Pengobatan di Luar Negeri", "other"], ["Ambulans", "other"],
   // Chinese
-  ["身故保险金", "death"], ["重大疾病保险金", "critical_illness"], ["意外身故", "accidental_death"], ["住院日额津贴", "hospital_daily_cash"],
-  ["全残保险金", "tpd"], ["癌症", "critical_illness"], ["早期重疾", "early_critical_illness"], ["行李延误", "baggage"], ["航班延误", "travel_delay"],
+  ["身故保险金", "other"], ["重大疾病保险金", "other"], ["意外身故", "other"], ["住院日额津贴", "other"],
+  ["全残保险金", "other"], ["癌症", "other"], ["早期重疾", "other"], ["行李延误", "other"], ["航班延误", "other"],
   // Spanish
-  ["Fallecimiento por accidente", "accidental_death"], ["Invalidez total y permanente", "tpd"], ["Enfermedades graves", "critical_illness"],
-  ["Gastos médicos en el extranjero", "travel_medical"], ["Renta por invalidez", "disability_income"], ["Cancelación de viaje", "trip_cancellation"],
+  ["Fallecimiento por accidente", "other"], ["Invalidez total y permanente", "other"], ["Enfermedades graves", "other"],
+  ["Gastos médicos en el extranjero", "other"], ["Renta por invalidez", "other"], ["Cancelación de viaje", "trip_cancellation"],
   // Portuguese
-  ["Morte acidental", "accidental_death"], ["Invalidez total e permanente", "tpd"], ["Doenças graves", "critical_illness"], ["Diária por internação", "hospital_daily_cash"],
+  ["Morte acidental", "other"], ["Invalidez total e permanente", "other"], ["Doenças graves", "other"], ["Diária por internação", "other"],
   // French
-  ["Décès accidentel", "accidental_death"], ["Invalidité totale et définitive", "tpd"], ["Frais médicaux à l'étranger", "travel_medical"], ["Bagages", "baggage"],
+  ["Décès accidentel", "other"], ["Invalidité totale et définitive", "other"], ["Frais médicaux à l'étranger", "other"], ["Bagages", "other"],
   // German
-  ["Todesfall", "death"], ["Unfalltod", "accidental_death"], ["Schwere Krankheiten", "critical_illness"], ["Krankenhaustagegeld", "hospital_daily_cash"],
-  ["Berufsunfähigkeitsrente", "disability_income"],
+  ["Todesfall", "other"], ["Unfalltod", "other"], ["Schwere Krankheiten", "other"], ["Krankenhaustagegeld", "other"],
+  ["Berufsunfähigkeitsrente", "other"],
   // Italian, Vietnamese
-  ["Morte da infortunio", "accidental_death"], ["Malattie gravi", "critical_illness"], ["Tử vong do tai nạn", "accidental_death"], ["Bệnh hiểm nghèo", "critical_illness"],
+  ["Morte da infortunio", "other"], ["Malattie gravi", "other"], ["Tử vong do tai nạn", "other"], ["Bệnh hiểm nghèo", "other"],
   // English names keep their mapping
   ["Death benefit", "death"], ["Hospital income", "hospital_daily_cash"], ["Disability income benefit", "disability_income"], ["Income protection", "disability_income"],
   ["Total and permanent disability", "tpd"], ["Room and board per day", "hospital_medical_expense"], ["Annual limit", "other"], ["Premium waiver", "other"],
@@ -45,21 +46,21 @@ const rows: [string, string][] = [
   ["Had tahunan", "other"],
   // A room and board line is a limit on the room charge, a hospital bill, in any language: never a cash amount per night
   // (cross-page check, 1 Nov; before, "Room and board per day" was read as daily hospital cash)
-  ["Bilik dan Makan", "hospital_medical_expense"], ["Bilik dan Makan (sehari)", "hospital_medical_expense"], ["Room & Board (per day)", "hospital_medical_expense"],
-  ["Daily room charges", "hospital_medical_expense"], ["房间及膳食", "hospital_medical_expense"], ["Zimmerzuschlag pro Tag", "hospital_medical_expense"],
+  ["Bilik dan Makan", "other"], ["Bilik dan Makan (sehari)", "other"], ["Room & Board (per day)", "hospital_medical_expense"],
+  ["Daily room charges", "hospital_medical_expense"], ["房间及膳食", "other"], ["Zimmerzuschlag pro Tag", "other"],
   // ...while a cash amount per day stays daily cash
   // Cash words in any language keep a room line a cash benefit (Critic #285 M1)
-  ["Bilik dan makan - elaun harian", "hospital_daily_cash"], ["Biaya kamar - santunan harian", "hospital_daily_cash"], ["Kamar dan makan (tunjangan tunai harian)", "hospital_daily_cash"],
-  ["Chambre particulière - indemnité journalière forfaitaire", "hospital_daily_cash"], ["Zimmerzuschlag (Krankenhaustagegeld)", "hospital_daily_cash"],
-  ["Bilik dan Makan (elaun tunai)", "other"], ["Elaun Bilik dan Makan Harian", "hospital_daily_cash"], ["Wang tunai bilik dan makan sehari", "hospital_daily_cash"],
-  ["Uang harian kamar dan makan", "hospital_daily_cash"], ["Indemnité journalière chambre et pension", "hospital_daily_cash"], ["房间及膳食津贴 每日", "hospital_daily_cash"],
-  ["病房费现金 每日", "hospital_daily_cash"], ["Tiền phòng trợ cấp mỗi ngày", "hospital_daily_cash"],
+  ["Bilik dan makan - elaun harian", "other"], ["Biaya kamar - santunan harian", "other"], ["Kamar dan makan (tunjangan tunai harian)", "other"],
+  ["Chambre particulière - indemnité journalière forfaitaire", "other"], ["Zimmerzuschlag (Krankenhaustagegeld)", "other"],
+  ["Bilik dan Makan (elaun tunai)", "other"], ["Elaun Bilik dan Makan Harian", "other"], ["Wang tunai bilik dan makan sehari", "other"],
+  ["Uang harian kamar dan makan", "other"], ["Indemnité journalière chambre et pension", "other"], ["房间及膳食津贴 每日", "other"],
+  ["病房费现金 每日", "other"], ["Tiền phòng trợ cấp mỗi ngày", "other"],
   // 房租 alone is rent (TE #285 F2)
   ["Loss of rent (房租损失)", "other"],
   // TE #285 G1
-  ["Subsidio diario habitación y alimentación", "hospital_daily_cash"], ["Room & board: daily payment of S$150", "hospital_daily_cash"],
+  ["Subsidio diario habitación y alimentación", "other"], ["Room & board: daily payment of S$150", "hospital_daily_cash"],
   ["Room and board per diem payment", "hospital_daily_cash"], ["Room and board limit, cash-less admission", "hospital_medical_expense"], ["房间及膳食（现金）", "other"], ["Room and board (accident only)", "accident_medical_expense"],
-  ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "hospital_daily_cash"], ["Krankenhaustagegeld", "hospital_daily_cash"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
+  ["Hospital cash (per day)", "hospital_daily_cash"], ["Santunan rawat inap per hari", "other"], ["Krankenhaustagegeld", "other"], ["Room upgrade cash allowance per day", "hospital_daily_cash"],
   // A premium, contribution, waiver or value row is never the cover it names, in any language (TE #270 F1)
   ["Pengecualian Sumbangan atas Kematian", "other"], ["Pengecualian Caruman (Hilang Upaya Menyeluruh dan Kekal)", "other"],
   ["Pembebasan Premi karena Penyakit Kritis", "other"], ["Exención de primas por invalidez total y permanente", "other"], ["身故豁免保费", "other"],
@@ -67,22 +68,22 @@ const rows: [string, string][] = [
   ["身故退还保费", "other"], ["Rückkaufswert bei Todesfall", "other"], ["Beitragsbefreiung bei Berufsunfähigkeit", "other"], ["Waiver of premium on death", "other"],
   // ...but a plan tier or a reimbursement of costs is still a cover
   ["Premium Plan death benefit", "death"], ["Premier Death Benefit", "death"], ["Contribution Takaful death benefit", "death"],
-  ["Remboursement des frais médicaux", "hospital_medical_expense"], ["Rückerstattung der Behandlungskosten", "hospital_medical_expense"],
+  ["Remboursement des frais médicaux", "other"], ["Rückerstattung der Behandlungskosten", "other"],
   // A negated accident is death from any other cause, never accidental death (TE #270 F2)
-  ["Kematian bukan akibat kemalangan", "death"], ["Muerte no accidental", "death"], ["非意外身故", "death"], ["Non-accidental death", "death"],
-  ["Death not caused by an accident", "death"], ["Death (other than by accident)", "death"], ["Kematian selain kemalangan", "death"],
-  ["No claim bonus accidental death", "accidental_death"], ["Kematian akibat kemalangan", "accidental_death"], ["意外身故", "accidental_death"],
+  ["Kematian bukan akibat kemalangan", "other"], ["Muerte no accidental", "other"], ["非意外身故", "other"], ["Non-accidental death", "death"],
+  ["Death not caused by an accident", "death"], ["Death (other than by accident)", "death"], ["Kematian selain kemalangan", "other"],
+  ["No claim bonus accidental death", "accidental_death"], ["Kematian akibat kemalangan", "other"], ["意外身故", "other"],
 ];
 for (const [name, want] of rows) eq(name, ev(name), want);
 
 // A row naming only the sum takes the plan's own main benefit when exactly one plan kind fits the plan's name.
 const plans: [string, string, string][] = [
   ["Sum assured", "Heronsgate Joint Life Cover", "death"],
-  ["Uang Pertanggungan", "Cendana Proteksi Jiwa", "death"],
-  ["Jumlah Diinsuranskan", "Insurans Hayat Bakti", "death"],
-  ["Suma asegurada", "Seguro de Vida Andes", "death"],
-  ["Somme assurée", "Plan Maladies Graves Sérénité", "critical_illness"],
-  ["保额", "安心人寿定期寿险", "death"],
+  ["Uang Pertanggungan", "Cendana Proteksi Jiwa", "other"],
+  ["Jumlah Diinsuranskan", "Insurans Hayat Bakti", "other"],
+  ["Suma asegurada", "Seguro de Vida Andes", "other"],
+  ["Somme assurée", "Plan Maladies Graves Sérénité", "other"],
+  ["保额", "安心人寿定期寿险", "other"],
   ["Basic sum insured", "Kestrel Personal Accident Plan", "accidental_death"],
   ["Monthly benefit", "Larkfield Income Protection", "disability_income"],
   ["Monthly benefit", "Income Protection Plan", "disability_income"],
@@ -107,13 +108,13 @@ const limits: [string, string | undefined, string][] = [
   ["Annual Limit per policy year", "MediShield Life", "hospital_medical_expense"],
   ["Lifetime limit", "Integrated Shield Plan", "hospital_medical_expense"],
   ["Overall limit of benefits per policy year", "Kingsmere Health Insurance", "hospital_medical_expense"],
-  ["Had Tahunan", "Insurans Perubatan Cemerlang", "hospital_medical_expense"],
-  ["Had Tahunan", "Takaful Perubatan Mesra", "hospital_medical_expense"],
-  ["Batas Manfaat Tahunan", "Asuransi Kesehatan Prima", "hospital_medical_expense"],
-  ["Límite anual", "Seguro de Salud Andes", "hospital_medical_expense"],
-  ["Plafond annuel", "Assurance Santé Horizon", "hospital_medical_expense"],
-  ["Jahreshöchstbetrag", "Krankenversicherung Komfort", "hospital_medical_expense"],
-  ["年度限额", "安心医疗保险", "hospital_medical_expense"],
+  ["Had Tahunan", "Insurans Perubatan Cemerlang", "other"],
+  ["Had Tahunan", "Takaful Perubatan Mesra", "other"],
+  ["Batas Manfaat Tahunan", "Asuransi Kesehatan Prima", "other"],
+  ["Límite anual", "Seguro de Salud Andes", "other"],
+  ["Plafond annuel", "Assurance Santé Horizon", "other"],
+  ["Jahreshöchstbetrag", "Krankenversicherung Komfort", "other"],
+  ["年度限额", "安心医疗保险", "other"],
   // Not a hospital plan, more than one kind, no plan name, or a name that says more than the limit: no event
   ["Annual limit", "Heronsgate Joint Life Cover", "other"],
   ["Annual limit", "Kestrel Personal Accident Plan", "other"],
@@ -127,8 +128,8 @@ const limits: [string, string | undefined, string][] = [
   // "Hospital and Surgical" names one hospital plan, not two covers (cross-page check, 1 Nov)
   ["Annual limit", "Hospital and Surgical Plan", "hospital_medical_expense"],
   ["Annual limit", "Lotus Hospital & Surgical Plan", "hospital_medical_expense"],
-  ["Annual limit", "Pelan Hospital dan Pembedahan", "hospital_medical_expense"],
-  ["Had tahunan", "Teratai MediCare", "hospital_medical_expense"],
+  ["Annual limit", "Pelan Hospital dan Pembedahan", "other"],
+  ["Had tahunan", "Teratai MediCare", "other"],
   // A Medi* plan is a hospital plan only when nothing else in its name says what it is (Critic #285 M2)
   ["Sum assured", "Medicover Term Life", "death"],
   ["Sum insured", "MediCare Accident Plan", "accidental_death"],
@@ -147,7 +148,7 @@ const limits: [string, string | undefined, string][] = [
   ["Room and board", "Hospital Income Plan", "hospital_daily_cash"],
   ["Daily room and board benefit", "Hospital Income Plan", "hospital_daily_cash"],
   ["Room & Board (per day)", "Hospital & Surgical Cash Plan", "hospital_daily_cash"],
-  ["Bilik dan Makan (sehari)", "Pelan Elaun Hospital", "hospital_daily_cash"],
+  ["Bilik dan Makan (sehari)", "Pelan Elaun Hospital", "other"],
   ["房间及膳食津贴", "住院现金计划", "other"],
   // A cash word that is no plan type, or a reimbursement plan word, never makes a cash plan (Critic #285 M1, round 3)
   ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
@@ -156,14 +157,14 @@ const limits: [string, string | undefined, string][] = [
   ["Room & Board (per day)", "Lion Hospital Cash Plan", "hospital_daily_cash"],
   // Both a cash-plan phrase and a reimbursement word: unsure, so other (Critic #285 low, round 4)
   ["Room and board", "Medic Hospital Cash Plan", "other"],
-  ["Room and board", "住院医疗现金", "other"],
+  ["Room and board", "住院医疗现金", "hospital_medical_expense"],
   ["Room and board", "Hospital Cash Plan (with surgical benefit)", "other"],
   ["Room and board", "Integrated Shield Plan (Cash rebate)", "hospital_medical_expense"],
   // A daily-allowance plan with words between 住院 and 津贴; a "reimbursement" cash plan is mixed, so other (TE #285 round 6)
-  ["房间及膳食 每日", "住院期间每日津贴计划", "hospital_daily_cash"],
+  ["房间及膳食 每日", "住院期间每日津贴计划", "other"],
   ["Room and board", "Hospital Cash Reimbursement Plan", "other"],
-  ["房间及膳食 每日", "住院医疗费用报销计划", "hospital_medical_expense"],
-  ["Room and board", "Krankenhaustagegeldversicherung", "hospital_daily_cash"],
+  ["房间及膳食 每日", "住院医疗费用报销计划", "other"],
+  ["Room and board", "Krankenhaustagegeldversicherung", "hospital_medical_expense"],
   ["Co-insurance limit", "Harbour Hospital Plan", "other"],
   ["Limit of liability", "Harbour Hospital Plan", "other"],
   ["Deductible", "Harbour Hospital Plan", "other"],
@@ -181,14 +182,14 @@ const treatments: [string, string | undefined, string][] = [
   ["Annual limit for outpatient cancer drug", "Integrated Shield Plan", "hospital_medical_expense"],
   ["Cancer drug treatment", "Harbour Hospital Plan", "hospital_medical_expense"],
   ["Outpatient cancer treatment - chemotherapy and radiotherapy", "MediShield Life", "hospital_medical_expense"],
-  ["Rawatan kemoterapi kanser", "Insurans Perubatan", "hospital_medical_expense"],
-  ["Tratamiento de cáncer", "Seguro de Salud Andes", "hospital_medical_expense"],
-  ["癌症化疗", "医疗保险", "hospital_medical_expense"],
+  ["Rawatan kemoterapi kanser", "Insurans Perubatan", "other"],
+  ["Tratamiento de cáncer", "Seguro de Salud Andes", "other"],
+  ["癌症化疗", "医疗保险", "other"],
   ["Kidney Failure (requiring dialysis)", "Critical Illness Plan", "critical_illness"],
   ["End-stage kidney failure requiring permanent dialysis", "Early Critical Illness Plan", "critical_illness"],
   ["Major Cancer (requiring treatment)", "Critical Illness Plan", "critical_illness"],
-  ["Kanser memerlukan rawatan", "Takaful Penyakit Kritikal", "critical_illness"],
-  ["癌症治疗", "重疾险", "critical_illness"],
+  ["Kanser memerlukan rawatan", "Takaful Penyakit Kritikal", "other"],
+  ["癌症治疗", "重疾险", "other"],
   ["Cancer treatment benefit", "Cancer Care Plan", "critical_illness"],
   ["Outpatient cancer drug", undefined, "critical_illness"],
   ["Major organ transplant (treatment received)", "Critical Illness Plan", "other"],
@@ -205,8 +206,8 @@ const treatments: [string, string | undefined, string][] = [
   ["Major cancer", undefined, "critical_illness"],
   ["Kidney failure", undefined, "critical_illness"],
   ["Heart attack of specified severity", undefined, "critical_illness"],
-  ["Kanser Tahap Kritikal", undefined, "critical_illness"],
-  ["癌症", undefined, "critical_illness"],
+  ["Kanser Tahap Kritikal", undefined, "other"],
+  ["癌症", undefined, "other"],
   ["Early stage cancer", undefined, "early_critical_illness"],
 ];
 for (const [name, plan, want] of treatments) eq(`treatment ${name} / ${plan}`, ev(name, plan as string), want);

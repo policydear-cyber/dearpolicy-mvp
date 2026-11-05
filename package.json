@@ -6,6 +6,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "chat:kin-words-test": "node --import tsx scripts/chat/kin-words-test.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

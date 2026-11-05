@@ -125,7 +125,8 @@ export function battery(): Conversation[] {
 
   // =============================================================== Malay / Chinese / Tamil mix
   one("r7", null, "malay mak hospital", "mak masuk hospital semalam, ElderShield boleh claim tak", { person: "AMINAH" });
-  one("r7", "RAHMAN", "malay kereta", "kereta saya kena langgar, excess berapa", { mentions: /DriveSafe|excess/i, not: /MediGuard/ });
+  // English only (owner's decision, 4 Nov 2026; confirmed for this row 4 Nov): a Malay question gets the English-only reply.
+  one("r7", "RAHMAN", "malay kereta", "kereta saya kena langgar, excess berapa", { mentions: /English/, not: /MediGuard/ });
   one("r6", null, "chinese mix", "我的 deductible how much ah", { person: "MEILING", mentions: /S\$3,500/ });
   one("r6", null, "hokkien ah ma", "ah ma fall down at home, got insurance or not", {});
   one("r7", null, "tamil amma", "amma hospital admit aachu, what cover she got", {});
@@ -321,7 +322,8 @@ export function battery(): Conversation[] {
   one("r6", "WEIJIE", "leave company", "if i resign from harbourfront what happens to my group insurance", { mentions: /HR|leav|group|employ/i });
   one("r7", "MARIA", "helper agent", "who to call for helper insurance claim", {});
   // Malay / Tamil / Chinese mix
-  one("r7", null, "malay rumah", "rumah saya banjir, insurans boleh claim tak", { person: "RAHMAN", mentions: /HomeShield/i });
+  // English only (owner's decision, 4 Nov 2026; confirmed for this row 4 Nov): a Malay question gets the English-only reply.
+  one("r7", null, "malay rumah", "rumah saya banjir, insurans boleh claim tak", { person: "RAHMAN", mentions: /English/ });
   one("r7", null, "tamil appa", "appa hospital admit aachu yesterday", {});
   one("r6", null, "chinese mother", "我 mother got insurance or not", {});
   // multi-turn conversations

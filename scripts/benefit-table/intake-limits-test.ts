@@ -299,7 +299,7 @@ for (const { m, sign } of MARKETS) {
   });
   test(`${m}: asked for the most paid for all claims together, the limit is what was asked; an event question still never gets it (chat-speed S4)`, () => {
     for (const fit of ["on_list", "any_event"]) {
-      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?", "berapa had keseluruhan untuk semua tuntutan?"]) {
+      for (const q of ["if I claim for two illnesses over the years, what's the most the plan pays in total?", "is there a lifetime limit on all my claims?"]) {
         assert.equal(card(fit, q, chat, true).report.labels.length, 1, `${fit}: ${q}`);
         // Given alone for an event it would read as what the event pays (Critic #312 M1).
         assert.deepEqual(card(fit, q).report.labels, [], `alone ${fit}: ${q}`);
