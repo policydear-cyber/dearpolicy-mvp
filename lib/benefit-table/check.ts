@@ -353,7 +353,10 @@ function asHousehold(doc: SourceDoc): Household {
 }
 
 
-/** A printed date ("06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
+const SPLIT_FIGURE = new RegExp(String.raw`(${MONEY_SIGN}${RUN_SPACE}?\d{1,3})${RUN_SPACE}*\t[\t \u00a0\u202f]*(?=\d{3}(?!\d))`, "gi");
+/** A row's own text with its table cells kept apart by tabs, except a cell break inside one spaced money figure. */
+export const cellsApart = (row: string) => row.replace(SPLIT_FIGURE, "$1 ");
+/** A printed date (""06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
 export function dateOnPage(date: string | null, pageText: string): string | null {
   if (!date) return null;
   const digits = date.match(/\d+/g);
@@ -633,6 +636,15 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     return at(f);
   };
+  // A figure counts as printed on its row as the page prints it: the quote's own span of the page, with its table cells
+  // still parted by tabs. The excerpt joins cells with single spaces (locateQuote), so a year, age or count cell before
+  // a figure ("60\t143,309", "1\t75%") would read as one space-grouped run and print nothing (#339 live regression).
+  // A cell break inside one spaced figure ("Room\tS$ 1\t500") parts nothing: a cell ending in a currency sign and 1 to 3
+  // digits, before a cell that opens with exactly 3 digits, is one unclear run, and prints neither piece (Critic and TE #352).
+  const printedIn = (src: Source, value: number) => {
+    const p = placed.get(src);
+    return printsNumber(p ? cellsApart(pageText(src.page).slice(p.start, p.end)) : src.excerpt, value);
+  };
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
@@ -643,13 +655,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     if (!nameOnPage(person, pageText(source.page))) { out.dropped.push({ what: label, why: "person's name not printed on that page" }); continue; }
     const sumInsured = num(c.sumInsured);
-    if (sumInsured != null && !printsNumber(source.excerpt, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
+    if (sumInsured != null && !printedIn(source, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
     let premium = num(c.premium);
     // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
     // A premium equal to the cover's sum insured is not proved by the quote that prints the sum insured: it needs its own
     // premium line (TE pr161 R1), and a stacked figure equal to the sum insured is not one (TE pr162 S1).
-    if (premium != null && (!printsNumber(source.excerpt, premium) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
+    if (premium != null && (!printedIn(source, premium) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
       const at = find(str(c.premiumQuote), source.page);
       const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005 && (sumInsured == null || Math.abs(x.amount - sumInsured) >= 0.005)) : undefined;
       const said = stacked ? stacked.label : at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
@@ -733,7 +745,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const source = find(quote, int(b.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
-    if (value != null && !printsNumber(source.excerpt, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional
     // sum: the row stays, paid as its wording says, with no figure.
     if (value != null && pays !== "percent" && out.covers.some((c) => c.notionalSum != null && c.page === source.page && Math.abs(c.notionalSum - value!) < 0.005)) {
@@ -751,7 +763,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (percentOf === "fixed_amount") {
       baseAmount = num(b.baseAmount);
       baseSource = find(str(b.baseQuote), source.page);
-      if (baseAmount == null || !baseSource || baseSource.page !== source.page || !printsNumber(baseSource.excerpt, baseAmount)) {
+      if (baseAmount == null || !baseSource || baseSource.page !== source.page || !printedIn(baseSource, baseAmount)) {
         out.dropped.push({ what: label, why: "fixed base not printed on the row's page" }); continue;
       }
     }
@@ -776,7 +788,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
-      const tied = s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
+      const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
       const otherMoney = moneyIn(row).some((m) => m.value !== claimed);
@@ -801,7 +813,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       }
     }
     // Day counts are figures too: one the quote does not print is not kept.
-    const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
+    const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
     // The first paid day the quote states, parsed once as a number, is the row's: "after the 10th day" is day 11, "from day
     // 1" is day 1, whatever the reading said (live run 23 Oct, B3; TE #108 B2, B4). A quote that states two is none; one

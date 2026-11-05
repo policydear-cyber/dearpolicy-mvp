@@ -3,7 +3,7 @@
  * digits cannot be told apart prints nothing (a wrong amount otherwise: "S$ 1 500" made 500 look printed). Figures grouped
  * with commas, and columns of such figures, read as before. Made-up lines only; no model, no network. */
 import assert from "node:assert/strict";
-import { dateOnPage, numbersIn, printsNumber } from "../../lib/benefit-table/check";
+import { checkReading, dateOnPage, numbersIn, printsNumber } from "../../lib/benefit-table/check";
 
 let pass = 0, fail = 0;
 function check(name: string, fn: () => void) {
@@ -52,6 +52,56 @@ check("printsNumber: 500 is not printed by 'S$ 1 500', and S$1,500 is", () => {
   assert.equal(printsNumber("Room S$1,500 per day", 1500), true);
 });
 check("a date's parts still read when spaced: 31 12 2025", () => assert.equal(dateOnPage("2025-12-31", "Issued 31 12 2025"), "2025-12-31"));
+
+// Whole readings: a table cell before a figure is its own cell. A year, age or count cell parted from the figure by a tab
+// ("60\t143,309", "1\t75%") never joins it as one space-grouped run, so the row keeps its figure (live #339 regression:
+// cash-value and factor rows were dropped). Made-up English schedules only.
+{
+  const PERSON = "Alex Tan", PRODUCT = "Harbour Steady Saver";
+  const row = (o: Record<string, unknown>) => ({ section: "SCHEDULE", column: null, pays: "value", value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
+    cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, ...o });
+  const read = (text: string, benefits: Record<string, unknown>[]) => checkReading({ id: "bbbbbbbb-0000-0000-0000-000000000001", name: "saver.pdf", readable: true, pages: [{ page: 1, text }] }, {
+    document: { kind: "personal_proof", product: PRODUCT, insurer: null, namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: PERSON, product: PRODUCT, cover: "Endowment", plan: null, riderOf: null, policyNumber: null, sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: `Life assured\t${PERSON}` }],
+    benefits: benefits.map(row) } as never);
+  const header = `BENEFIT ILLUSTRATION\n${PRODUCT}\nLife assured\t${PERSON}\n`;
+  const keeps: [string, string, string, number, string][] = [
+    ["policy year cell before a guaranteed value", "End of policy year\tGuaranteed cash value\n60\t143,309", "60\t143,309", 143309, "value"],
+    ["age cell before a value", "Age\tTotal cash value at 4.75%\n65\t212,450", "65\t212,450", 212450, "value"],
+    ["year cell before two values", "Year\tAt 3.25%\tAt 4.75%\n40\t88,120\t101,930", "40\t88,120\t101,930", 101930, "value"],
+    ["count cell before an amount", "Visits\tLimit\n5\t1,250", "5\t1,250", 1250, "amount"],
+    ["year cell before a percent", "Policy year\tFactor\n1\t75%", "1\t75%", 75, "percent"],
+    ["year cell before a spaced percent", "Policy year\tFactor\n2\t50 %", "2\t50 %", 50, "percent"],
+    ["tab and spaces before a value", "Year\tValue\n30 \t 96,400", "30 \t 96,400", 96400, "value"],
+    // A currency cell with a whole figure before a 3-digit cell is not split: only 1-3 digits right after the sign are.
+    ["a priced cell before a count cell", "Benefit\tLimit\tDays\nRoom\tS$1,500\t120", "Room\tS$1,500\t120", 1500, "amount"],
+  ];
+  for (const [name, table, quote, value, pays] of keeps) {
+    const got = read(header + table, [{ benefit: "Cash value", pays, value, quote }]);
+    check(`kept: ${name}`, () => assert.equal(got.benefits[0]?.value, value, JSON.stringify(got.dropped)));
+  }
+  // A real space-grouped figure inside one cell still prints nothing, table or not.
+  const refuses: [string, string, string, number, string][] = [
+    ["space-grouped figure in one cell", "Year\tValue\n60\t143 309", "60\t143 309", 143309, "value"],
+    ["a piece of a space-grouped figure", "Year\tValue\n60\t143 309", "60\t143 309", 309, "value"],
+    ["space-grouped amount after a label", "Benefit\tLimit\nRoom\tS$ 1 500", "Room\tS$ 1 500", 500, "amount"],
+    ["space-joined percent run in one cell", "Year\tFactor\n1\t10 20 %", "1\t10 20 %", 20, "percent"],
+    ["a figure the row does not print", "Year\tValue\n60\t143,309", "60\t143,309", 160143, "value"],
+    // A cell break inside one spaced money figure parts nothing (Critic and TE #352 M1).
+    ["a spaced figure split by a cell break", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 500, "amount"],
+    ["its first piece", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 1, "amount"],
+    ["its joined figure", "Benefit\tLimit\nRoom\tS$ 1\t500", "Room\tS$ 1\t500", 1500, "amount"],
+    ["a split figure with a code", "Benefit\tLimit\nWard\tSGD 12\t500", "Ward\tSGD 12\t500", 500, "amount"],
+    ["a split figure in pounds", "Benefit\tLimit\nWard\t£ 120\t000", "Ward\t£ 120\t000", 0, "amount"],
+    ["a split figure before a grouped tail", "Benefit\tLimit\nDeath\tUS$ 2\t500,000", "Death\tUS$ 2\t500,000", 500000, "amount"],
+  ];
+  for (const [name, table, quote, value, pays] of refuses) {
+    const got = read(header + table, [{ benefit: "Cash value", pays, value, quote }]);
+    check(`refused: ${name}`, () => assert.ok(!got.benefits.some((b) => b.value === value), JSON.stringify(got.benefits.map((b) => b.value))));
+  }
+  // Without a tab, a year before a figure is still one unclear run (unchanged).
+  check("no tab: '60 143,309' still reads as one run", () => assert.equal(printsNumber("60 143,309", 143309), false));
+}
 
 console.log(`space-runs: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
