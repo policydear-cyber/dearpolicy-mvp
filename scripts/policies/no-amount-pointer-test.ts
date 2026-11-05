@@ -15,7 +15,7 @@ let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
 
 const none = { formulaKind: "none" as const, formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null };
-type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null }>;
+type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null; foundSum: boolean }>;
 const row = (extra: Extra = {}) => ({ formulaKind: "none", attention: null, needsConfirmation: false, benefitName: "Critical Illness II", quote: "Critical Illness II is included in this plan.", ...extra });
 const named = "Named in the policy; no amount is printed beside it here";
 
@@ -60,6 +60,38 @@ test("lines that already say where the amount comes from, or ask the household, 
     "The passage on page 3 stops before the maximum it pays up to, so no amount is used for it. The maximum is printed further down page 3.",
     "The amount on page 3 could not be read.", "As stated in the document."])
     assert.equal(pointsToScheduleSum(row({ attention: "unreadable", benefitName: "Death Benefit" }), line), false, line);
+});
+test("a sum-insured row whose amount could not be read gets it only when Coverage holds a sum for it (live check, 5 Nov)", () => {
+  const quote = "Death Benefit RM 5,0O0 payable on death of the life assured.";
+  const line = unreadAmountLine(3, quote, "Death Benefit");
+  assert.equal(line, "The amount on page 3 could not be read.");
+  const unread = (extra: Extra = {}) => row({ attention: "unreadable", benefitName: "Death Benefit", quote, ...extra });
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), line), true);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The amount on the page could not be read."), true, "no page number");
+  for (const benefitName of ["Comprehensive Critical Illness Benefit", "Terminal Illness Benefit", "TPD Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName }), line), true, benefitName);
+  // No sum on Coverage for the person and policy, or not known: nothing, as before.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: false }), line), false);
+  assert.equal(pointsToScheduleSum(unread(), line), false);
+  // A benefit that pays something other than the sum insured, or a waiver, never gets it, whatever Coverage holds.
+  for (const benefitName of ["Hospital Cash", "Funeral Expenses", "Death Funeral Grant", "Waiver of Premium on Death", "Emergency Medical Evacuation", "Main Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName }), line), false, benefitName);
+  // Only an unreadable row, and only the plain "could not be read" line: an amount awaiting a check, or a line that already
+  // says where its amount comes from, gets none.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, attention: "confirm" }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, attention: null }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, planColumns: true }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The passage on page 3 pays this in advance from the death benefit, so its amount follows the death benefit, within any limit the policy sets."), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The amount on page 3 could not be read. Ask your insurer."), false);
+});
+test("/api/benefits sets foundSum from each shown person's own cover with a written currency, and sends no figure with it", () => {
+  const route = readFileSync("app/api/benefits/route.ts", "utf8");
+  const block = route.slice(route.indexOf("const foundSum="), route.indexOf("})():false;") + 11);
+  assert.match(block, /attention==="unreadable"/);
+  assert.match(block, /filter\(contract=>!member\|\|contract\.ownerId===member\)/);
+  assert.match(block, /people\.length>0&&people\.every\(/);
+  assert.match(block, /cover\.amount!=null&&cover\.amount>0&&!!cover\.currency&&cover\.currencyVerified===true/);
+  assert.match(route, /wholeSum,foundSum,/);
 });
 test("a row with an amount, a plan table, or one awaiting a check gets none", () => {
   assert.equal(pointsToScheduleSum(row({ formulaKind: "fixed" }), describeBenefitFormula({ ...none, formulaKind: "fixed", formulaValue: 5000, currency: "MYR", quote: "RM 5,000" })), false);
