@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
-import { onFileNote } from "@/lib/coverage/on-file-note";
+import { documentKindNote, onFileDocumentName, onFileNote } from "@/lib/coverage/on-file-note";
 
 for (const k of Object.keys(process.env)) if (/API_KEY|ANTHROPIC_KEY|OPENAI_KEY/i.test(k)) delete process.env[k];
 let outbound = 0;
@@ -39,6 +39,19 @@ async function pure() {
   });
   await test("P4 no figure in any note", () => {
     for (const docs of [[], ["Plan"], ["Plan", "Other"]]) assert.doesNotMatch(onFileNote(docs, "X"), /\d/);
+  });
+  await test("P6 a travel, home or motor policy is named with its kind on another cover's tile, never on its own", () => {
+    const travel = { type: "travel", product: "Harbour Travel Guard", name: "Harbour Travel Guard" };
+    assert.equal(onFileDocumentName(travel, "Hospitalisation"), "Harbour Travel Guard (travel cover, for trips)");
+    assert.equal(onFileDocumentName(travel, "Travel"), "Harbour Travel Guard");
+    assert.equal(documentKindNote({ type: null, product: null, name: "Kestrel travel wording" }, "Outpatient"), "travel cover, for trips");
+    assert.equal(documentKindNote({ type: "Home insurance", product: "Nest Shield", name: "Nest Shield" }, "Personal Accident"), "home cover");
+    assert.equal(documentKindNote({ type: null, product: "Roadwise Motor Insurance", name: "Roadwise Motor Insurance" }, "Hospitalisation"), "motor cover");
+    // Health, life and anything else: no note. A document that reads as two kinds is left as named.
+    for (const doc of [{ type: "health", product: "Pinnacle Shield", name: "Pinnacle Shield" }, { type: null, product: "LifeTrip Saver", name: "LifeTrip Saver" },
+      { type: null, product: "Careplus Critical Illness", name: "Careplus Critical Illness" }, { type: "travel", product: "Travel and Home Insurance Bundle", name: "Bundle" }])
+      assert.equal(documentKindNote(doc, "Hospitalisation"), null, doc.product);
+    assert.equal(onFileNote([onFileDocumentName(travel, "Hospitalisation")], "Raj"), "Harbour Travel Guard (travel cover, for trips) mentions this cover, but does not show yet that it is Raj’s. Open it to check.");
   });
   await test("P5 Home draws the note from the tile's own documents", () => {
     const page = readFileSync("app/page.tsx", "utf8");
@@ -86,6 +99,10 @@ async function route() {
     // A superseded document's line never names it.
     const old = await doc({ member: raj, product: "Old Hospital Plan", file: "old.pdf", role: "personal_schedule", own: true, superseded: true });
     await line(old, raj, "Hospitalisation", 500, "Old Hospital Plan", false);
+    // A travel policy's wording that mentions hospital cover: named with its kind on the Hospitalisation tile.
+    const trip = await doc({ member: raj, product: "Harbour Travel Guard", file: "harbour-travel.pdf", role: "policy_wording", own: false, insurer: "Harbour General" });
+    await query("UPDATE policies SET policy_type='travel' WHERE id=$1", [trip]);
+    await query("INSERT INTO policy_reference_coverages(account_id,policy_id,category,product_name,source_page) VALUES($1,$2,'Hospitalisation','Harbour Travel Guard',1)", [ACCOUNT, trip]);
     const t = await tiles(raj);
     const by = (c: string) => t.find((x) => x.category === c)!;
     await test("R1 an on-file tile lists the documents that put it on file, each once", () => {
@@ -93,6 +110,10 @@ async function route() {
       assert.deepEqual(by("Death").onFileDocuments, ["Pinnacle Term Guard", "Term cover letter"]);
       assert.equal(by("Critical Illness").status, "on_file");
       assert.deepEqual(by("Critical Illness").onFileDocuments, ["Kestrel Shield Protector"]);
+    });
+    await test("R1b a travel policy on another cover's tile is named with its kind", () => {
+      assert.equal(by("Hospitalisation").status, "on_file", JSON.stringify(by("Hospitalisation")));
+      assert.deepEqual(by("Hospitalisation").onFileDocuments, ["Harbour Travel Guard (travel cover, for trips)"]);
     });
     await test("R2 every other tile lists none, and a superseded document is never named", () => {
       for (const c of t.filter((x) => x.status !== "on_file")) assert.deepEqual(c.onFileDocuments, [], c.category);
