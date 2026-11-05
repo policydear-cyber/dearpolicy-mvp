@@ -308,7 +308,9 @@ export function namesOnlyAPlanCell(name:string|null|undefined,quote:string|null|
   return runs.length===1&&runs[0]===q;
 }
 export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&benefit.formulaKind!=="none"&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
+  // A schedule term (a limit, a deductible) is held the same way: its stored figure may be the first plan's column (FWD
+  // re-read 5 Nov: "Overall limit S$300 S$800 S$1,500" shown as a limit of S$300 for a Business plan holder).
+  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&(benefit.formulaKind!=="none"||(!!benefit.rowKind&&benefit.rowKind!=="benefit"))&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
     ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}
     :benefit);
 }
