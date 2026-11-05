@@ -20,6 +20,7 @@ import { maskShownText } from "@/lib/chat/identity-numbers";
 import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote, unownedNotFullyRead } from "@/lib/policies/not-fully-read";
 import { readingCacheReady } from "@/lib/policies/read-failures";
+import { coverVerdict } from "@/lib/coverage/cover-verdict";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -162,14 +163,22 @@ export async function GET(request:NextRequest){
 
   // Reference wording can expand an OWNED product into its included benefits. It never creates ownership on its own,
   // and it never supplies an amount: the wording's figure is shown only where the person's benefit table prints it.
-  const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
+  const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
+  // What is on file for a cover but proves nothing yet (lib/coverage/cover-verdict.ts, the rule the Coverage page uses): wording
+  // with no plan of the person's that it describes, or a schedule line not yet matched to its page. Its tile asks the person
+  // to confirm, with no amount, and it is never counted as their cover.
+  const referenceOnly=new Map<string,number>();
   for(const ref of refs.rows){
     const category=normalizeCoverageCategory(ref.category); if(coverageMap.has(category))continue;
-    const owner=selected.find(x=>wordingDescribes(x,{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}))??null; if(!owner)continue;
+    const owner=selected.find(x=>wordingDescribes(x,{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}))??null; if(!owner){referenceOnly.set(category,(referenceOnly.get(category)??0)+1);continue;}
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null};});
+  const unmatchedRows=await query<{category:string;amount:string|null;evidence_text:string|null}>(`SELECT pc.category,pc.amount::text,pc.evidence_text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND NOT (pc.confirmed=true AND pc.evidence_verified=true)`,[accountId,active.id]);
+  const unmatchedLines=new Map<string,number>();
+  for(const r of unmatchedRows.rows){if(!asBenefitLine(r,r.evidence_text))continue;const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);}
+  const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0})];
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null};});
 
   // The premiums Home counts, from the same computation Payments shows (lib/policies/counted-premiums.ts).
   const premiums=await countedPremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers);
