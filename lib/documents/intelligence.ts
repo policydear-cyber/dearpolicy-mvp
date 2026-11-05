@@ -294,6 +294,18 @@ function nonCoverExtraction(raw: PolicyExtraction, role: string, pages: PdfPage[
 }
 export { NON_COVER_ROLES };
 
+/** The type a document keeps when it is read again (DC 5 Nov): the type its earlier reading gave it, unless the new
+ * reading is personal proof of cover (a personal schedule, certificate or endorsement that confirms this household's
+ * cover). A reader names the type afresh on every read and can name it differently for the same file (FWD re-read 5 Nov:
+ * an endorsement re-typed as policy wording, so Home listed two policy wordings); a re-read changes the type only when
+ * it now proves more. A first read (no earlier type) takes the reader's type; a re-read that names none keeps the earlier one. */
+export function roleOnReread(earlier: PolicyExtraction["documentRole"] | string | null | undefined, next: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean): PolicyExtraction["documentRole"] {
+  if (!earlier || earlier === next) return next;
+  if (!next) return earlier as PolicyExtraction["documentRole"];
+  if (documentAuthority(next, personalCoverageConfirmed).level >= 95) return next;
+  return earlier as PolicyExtraction["documentRole"];
+}
+
 export function documentAuthority(role: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean) {
   if (role && NON_COVER_ROLES.has(role)) return { level: 20, label: role === "personal_notes" ? "Your own notes" : role === "app_screenshot" ? "App screenshot" : "Correspondence", kind: "correspondence" };
   if (personalCoverageConfirmed && role === "endorsement") return { level: 100, label: "Personal amendment", kind: "personal" };
