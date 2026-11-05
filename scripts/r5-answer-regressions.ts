@@ -30,7 +30,7 @@ import { pool } from "@/lib/db/client";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
-import { isOneOffPremium, isShortPeriodPremium, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { isOneOffPremium, isShortPeriodPremium, isUnclearFrequency, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { whoIsCovered } from "@/lib/chat/household-status";
 import { singaporeDay } from "@/lib/benefit-table/dates";
@@ -258,6 +258,46 @@ async function main() {
         assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
         assert.ok(!data.premiums.items.some((i: { amount: number }) => i.amount === 73.17), "the trip is not a current premium line on Home");
       } finally { await db.query("DELETE FROM premium_records WHERE id=$1", [tripRow.rows[0].id]); }
+    });
+
+    await check("P4b a one-time or short-cover premium is never a recurring cost, whatever the record calls it (5 Nov: a trip schedule's 'one-time' S$73.17 shown as S$6.10/month)", async () => {
+      for (const f of ["one-time", "One time", "Once", "Lump sum", "Per trip", "Single trip premium", "Non-recurring", "for the trip"]) assert.equal(isOneOffPremium({ frequency: f }), true, f);
+      for (const f of ["Monthly", "Annual", "per annum", "Quarterly", "Half-yearly", null, ""]) assert.equal(isOneOffPremium({ frequency: f }), false, String(f));
+      for (const f of ["Regular", "As agreed", "Flexible"]) assert.equal(isUnclearFrequency({ frequency: f }), true, f);
+      for (const f of ["Monthly", "Yearly", "one-time", null, ""]) assert.equal(isUnclearFrequency({ frequency: f }), false, String(f));
+      // A record with no period of its own takes its document's printed cover period, both ends from one source.
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), true);
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: null, document_start: "2026-01-01", document_end: "2026-12-31" }), false, "a year's document stays yearly");
+      assert.equal(isShortPeriodPremium({ frequency: null, period_start: "2026-03-10", period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), false, "never one end from the record and one from the document");
+      assert.equal(isShortPeriodPremium({ frequency: "Monthly", period_start: null, period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), false, "a stated monthly premium stays monthly");
+      const TRIP = id(171), TOUR = id(172), REG = id(173);
+      await addDoc(TRIP, "Wanderlight Single Trip", "WL-TRIP-4410", [{ pageNumber: 1, text: "Wanderlight Single Trip\nPolicy Schedule\nInsured: Tan Mei Ling\nPeriod of insurance: 10/03/2026 to 17/03/2026\nTotal premium: S$58.40" }], "2026-03-10", "2026-03-17", null, "personal_schedule");
+      await addDoc(TOUR, "Roamwell Tour Cover", "RW-5521", [{ pageNumber: 1, text: "Roamwell Tour Cover\nPolicy Schedule\nInsured: Tan Mei Ling\nPeriod of insurance: 02/05/2026 to 12/05/2026\nPremium: S$41.20" }], "2026-05-02", "2026-05-12", null, "personal_schedule");
+      await addDoc(REG, "Steadfast Hospital Plan", "SH-7781", [{ pageNumber: 1, text: "Steadfast Hospital Plan\nPolicy Schedule\nInsured: Tan Mei Ling\nPremium: S$88.00 (Regular)" }], "2026-01-01", null, null, "personal_schedule");
+      const rows = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,notes) VALUES
+        ($1,$3,$3,$2,'Wanderlight Insurance','Wanderlight Single Trip','WL-TRIP-4410',58.40,'SGD','one-time','Extracted current premium from personalised policy document'),
+        ($1,$4,$4,$2,'Roamwell Insurance','Roamwell Tour Cover','RW-5521',41.20,'SGD',NULL,'Extracted current premium from personalised policy document'),
+        ($1,$5,$5,$2,'Steadfast Insurance','Steadfast Hospital Plan','SH-7781',88.00,'SGD','Regular','Extracted current premium from personalised policy document') RETURNING id`, [H, mei.id, TRIP, TOUR, REG]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.equal(Math.round(s.annual * 100) / 100, 2170, "none of the three is a recurring cost: " + s.annual);
+        assert.deepEqual(s.oneOff.map((i) => i.amount), [58.4]);
+        assert.deepEqual(s.shortPeriod.map((i) => i.amount), [41.2]);
+        assert.deepEqual(s.unclear.map((i) => i.amount), [88]);
+        assert.equal(s.complete, false);
+        assert.match(s.note ?? "", /Roamwell Tour Cover \(S\$41\.20 for 2 May 2026 to 12 May 2026\)/);
+        assert.match(s.note ?? "", /Steadfast Hospital Plan \(S\$88\.00, \u201cRegular\u201d\): how often it is paid is not plain/);
+        assert.ok(!s.missing.some((m) => /Wanderlight|Roamwell|Steadfast/.test(m)), "a policy with a premium on file is not 'missing' one: " + JSON.stringify(s.missing));
+        const { GET } = await import("@/app/api/dashboard/route");
+        process.env.DEV_ACCOUNT_ID = H;
+        const data = await (await GET(new NextRequest("http://localhost/api/dashboard"))).json();
+        assert.equal(Math.round(data.premiums.annual), 2170, "Home annual " + data.premiums.annual);
+        assert.ok(!data.premiums.items.some((i: { amount: number }) => [58.4, 41.2, 88].includes(i.amount)), "none is a current premium line on Home");
+      } finally {
+        await db.query("DELETE FROM premium_records WHERE id=ANY($1::uuid[])", [rows.rows.map((r) => r.id)]);
+        for (const d of [TRIP, TOUR, REG]) for (const t of ["policy_chunks", "policy_pages", "policy_members"]) await db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [d]);
+        await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])", [[TRIP, TOUR, REG]]);
+      }
     });
 
     await check("P5 a policy with no premium record is counted on Home from the premium its own schedule prints (CI II S$470.85, 28 Oct)", async () => {

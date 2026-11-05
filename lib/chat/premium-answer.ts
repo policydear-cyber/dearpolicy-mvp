@@ -191,7 +191,7 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
   const premiumMemo: PremiumSummaryMemo = {};
   for (const person of args.people) {
     const summary = await summarisePremiums(args.accountId, person, undefined, premiumMemo);
-    const listed = [...summary.items, ...summary.oneOff, ...summary.shortPeriod], ids = listed.map((i) => i.id);
+    const listed = [...summary.items, ...summary.oneOff, ...summary.shortPeriod, ...summary.unclear], ids = listed.map((i) => i.id);
     const sources = ids.length ? (await query<{ id: string; doc_id: string | null; page: number | null; product_name: string | null; role: string | null; insurer: string | null; policy_type: string | null; active: boolean }>(
       `SELECT pr.id::text AS id,coalesce(pr.source_document_id,pr.policy_id)::text AS doc_id,pr.source_page AS page,p.product_name,p.document_role AS role,p.insurer,p.policy_type,
               (p.id IS NOT NULL) AS active
@@ -205,6 +205,11 @@ async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson
       const docId = byId.get(item.id)?.doc_id ?? null;
       const status = docId ? await statusFor(args.accountId, docId, memo) : null;
       if (status && status.state === "lapsed") { if (docId && status.page) uncounted.push({ docId, page: status.page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id }); notCounted.push((item.product_name ?? byId.get(item.id)?.product_name ?? "A policy") + " — it " + (status.state === "lapsed" ? "lapsed" : "ended") + " on " + status.printed); continue; }
+      if (item.unclearFrequency) {
+        const amount = item.currencyStated ? money(item.amount, item.currency) : formatMoney(item.amount, null);
+        notCounted.push((item.product_name ?? "A policy") + " — a premium of " + amount + " paid \u201c" + (item.frequency ?? "").trim() + "\u201d; how often it is paid is not plain, so it is not counted as a recurring cost");
+        continue;
+      }
       if (item.oneOff || item.shortPeriod) {
         const span = (docId ? await periodFor(args.accountId, docId, memo) : null) ?? recordPeriod(item);
         const docPages = docId ? await pagesOf(args.accountId, docId, memo) : [];
