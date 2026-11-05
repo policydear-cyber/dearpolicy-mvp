@@ -244,6 +244,9 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .coverage-name { font-size: var(--fs-md); font-weight: 600; line-height: 1.25; min-height: 38px; }
 .coverage-status { font-size: var(--fs-lg); font-weight: 650; line-height: 1.1; }
 .coverage-status.muted-status { color: var(--muted); }
+.home-not-found { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface-2); display: flex; flex-direction: column; gap: 4px; }
+.home-not-found p { margin: 0; line-height: 1.6; }
+.home-not-found small { color: var(--muted); }
 .coverage-status.reference-status { color: var(--ink-2); }
 .coverage-status.review-status { color: var(--warn-text); }
 .coverage-card.not_covered .coverage-status { color: var(--ink-2); }
