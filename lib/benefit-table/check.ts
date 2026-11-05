@@ -59,13 +59,15 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // S$1,000 on Premier", "S$100,000 for adults / S$25,000 for children") are plans' or people's cells (Critic R367).
       if (here && here === next && /^(?:for|on|in|under)$/.test(here))
         return /^\s*,?\s*\w+\s+(?:[\w.'&-]+\s*){1,4}?[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between);
-      // A condition between two cells sets them apart. A condition after the last cell qualifies the whole row ("S$5,000 |
-      // S$10,000 for any one trip", "S$200,000 or S$500,000 for any one trip"), except after a rate and a raised rate in
-      // the same unit ("S$100 per day and S$200 per day in ICU", "S$100 a day, S$200 a day if in ICU"): that is the
-      // raised rate's own condition (TE pr367 r3). Fails closed: bare figures with a trailing qualifier stay held.
+      // A condition between two cells sets them apart. Any other run of side-by-side figures is plans, whatever follows
+      // it ("S$5,000 | S$10,000 for any one trip", "S$100 per day | S$200 per day for each insured person"), except one
+      // closed shape: a rate and a raised rate in the same unit, then the setting the raised rate is for ("S$100 per day
+      // and S$200 per day in ICU", "S$100 a day, S$200 a day if in ICU") (TE and Critic, pr367 r4). Fails closed.
       if (here) return false;
       const rates = cells[i].unit && cells[i].unit !== "cap" && cells[i].unit === cells[i + 1].unit;
-      if (next && rates && /^[\s|/;,\-–—]*(?:or\b|and\b|plus\b)?[\s|/;,\-–—]*$/i.test(between)) return false;
+      // The one closed shape kept: a rate, "and"/"or"/a comma, a raised rate, then the setting it is raised in.
+      const setting = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?(?:icu|intensive care(?: unit)?|hdu|high dependency(?: unit| ward)?|ccu|coronary care(?: unit)?|isolation(?: ward)?|(?:a\s+)?(?:private\s+)?(?:hospital\s+)?ward|hospital)\b/i;
+      if (next && rates && setting.test(trail(i + 1)) && /^\s*(?:,\s*(?:or\b|and\b)?|or\b|and\b)\s*$/i.test(between)) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
     };

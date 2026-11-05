@@ -329,7 +329,10 @@ async function main() {
       "Trip cancellation S$5,000 | S$10,000 for any one trip", "Medical expenses S$150,000 S$400,000 for each insured person",
       "Baggage S$1,000 / S$3,000 in total", "Travel delay S$100 / S$200 after every 6 hours of delay",
       "Medical expenses S$100,000 and S$200,000 for each insured person", "Overall limit S$200,000 or S$500,000 for any one trip",
-      "Personal liability S$250,000 and S$500,000 if legally liable to pay", "Hospital cash S$100 a day, S$200 a day if in ICU"];
+      "Personal liability S$250,000 and S$500,000 if legally liable to pay", "Hospital cash S$100 a day, S$200 a day if in ICU",
+      "Hospital cash S$100 per day | S$200 per day for each insured person", "Hospital cash S$100 per day S$200 per day during hospitalisation",
+      "Hospital cash S$100 per day / S$200 per day while in hospital", "Hospital cash S$100 per day S$200 per day in ICU",
+      "Hospital cash S$100 per day and S$200 per day for each insured person"];
     const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
@@ -342,6 +345,10 @@ async function main() {
       // Bare figures joined by "and"/"or" with a trailing qualifier stay held; a rate and a raised rate keep the first (TE pr367 r3).
       row("Medical expenses", 100_000, lines[12]), row("Overall limit", 200_000, lines[13]), row("Personal liability", 250_000, lines[14]),
       row("Hospital cash", 100, lines[15]),
+      // Rate cells laid out as columns are plans, whatever follows; only "and"/"or"/a comma before a raised rate for a
+      // setting (ICU, ward, hospital) keeps the first (TE and Critic, pr367 r4).
+      row("Hospital cash", 100, lines[16]), row("Hospital cash", 100, lines[17]), row("Hospital cash", 100, lines[18]),
+      row("Hospital cash", 100, lines[19]), row("Hospital cash", 100, lines[20]),
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100], ["Hospital cash", 100]]);
   });
