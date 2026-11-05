@@ -14,7 +14,7 @@ import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePa
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
+import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
 export const READ_MAX_OUTPUT = 24_000;
@@ -22,6 +22,23 @@ export const PAGE_MAX_OUTPUT = 8_000;
 export const LINK_MAX_OUTPUT = 8_000;
 /** At most this many pages of one document are read again on their own. */
 export const MAX_PAGE_REREADS = 12;
+/** A document is read in parts of consecutive pages, each part at most this many characters of page text (a page longer
+ * than this is a part on its own). One call over a long document can run out of output before it finishes and give
+ * nothing (FWD re-read 5 Nov: 40,651 tokens in, the 24,000-token cap reached, the whole reading lost and paid for). A part
+ * this size leaves room for every row of its pages. A document under it is read in one call, as before. */
+export const PART_MAX_CHARS = 40_000;
+
+/** Consecutive runs of pages, each at most `limit` characters of text, in page order. */
+export function pageParts<T extends { page: number; text: string }>(pages: T[], limit = PART_MAX_CHARS): T[][] {
+  const parts: T[][] = [];
+  let part: T[] = [], size = 0;
+  for (const p of [...pages].sort((a, b) => a.page - b.page)) {
+    if (part.length && size + p.text.length > limit) { parts.push(part); part = []; size = 0; }
+    part.push(p); size += p.text.length;
+  }
+  if (part.length) parts.push(part);
+  return parts;
+}
 
 type Row = Record<string, unknown>;
 export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
@@ -234,18 +251,61 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
   return structuredClone(hit);
 }
 
-/** Reads one document into the table: the whole document once, then each page whose figures were mostly left unread.
- * Replaces any earlier reading of the document. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number }> {
+/** Reads one document into the table: the document once, in parts of consecutive pages when it is long (pageParts), then
+ * each page whose figures were mostly left unread.
+ * - Each part after the first is also shown the previous part's last page, for context only (its rows are not taken
+ *   from this part), and the section and plan-column headings found so far, so a table whose header is on the page
+ *   before is still read under its columns (Critic R364 H1). The check drops a row that prints a figure for each plan
+ *   with no column (check.ts), whatever the reader does.
+ * - A part that runs out of output is read again as two halves, down to a single page, and every part still to come
+ *   is made smaller too. At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
+ * - The document's own facts are merged across parts: the first kind, product, insurer, plan and period any part
+ *   gives, and every named person (TE pr364).
+ * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
+ * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
+ * reading that finishes takes that note away. A document the app could not read is not sent. */
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
   const [doc] = await documents(db, accountId, policyId);
   if (!doc) return { read: false, why: "no such current document", pagesReread: 0 };
   if (!doc.readable || !doc.pages.length) return { read: false, why: "the document could not be read", pagesReread: 0 };
-  const whole = await model.call({ system: READING_PROMPT, user: renderDocument(doc), schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
-  await onUsage?.("reading", whole);
-  if (whole.json == null) return { read: false, why: `the reading did not finish (${whole.stopReason ?? "no reply"})`, pagesReread: 0 };
-  const stored: StoredReading = { document: whole.json, pages: [] };
-  const first = checkReading(doc, whole.json);
-  const headings = [...new Set(first.benefits.map((b) => b.section).filter((h): h is string => !!h))];
+  let limit = PART_MAX_CHARS;
+  let queue = pageParts(doc.pages, limit);
+  const maxCalls = 2 * queue.length + 4;
+  const whole = queue.length === 1;
+  const done: { pages: number[]; json: unknown; model: string }[] = [];
+  let headings: string[] = [], columns: string[] = [], calls = 0;
+  const fail = async (why: string) => { await noteUnreadTable(db, accountId, doc.id); return { read: false, why, pagesReread: 0 }; };
+  while (queue.length) {
+    if (calls >= maxCalls) return fail(`the reading did not finish (more than ${maxCalls} calls for this document)`);
+    const part = queue.shift()!;
+    const pages = part.map((p) => p.page);
+    const before = done.length ? doc.pages.filter((p) => p.page < pages[0]).at(-1) : undefined;
+    const user = whole && done.length === 0 && pages.length === doc.pages.length
+      ? renderDocument({ name: doc.name, pages: part })
+      : renderDocument({ name: doc.name, pages: before ? [before, ...part] : part }) + partReadingNote(pages, doc.pages.length, headings, columns, before?.page ?? null);
+    calls++;
+    const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
+    await onUsage?.("reading", reply);
+    if (reply.json == null) {
+      if (reply.stopReason === "max_tokens" && part.length > 1) {
+        // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
+        limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
+        const half = Math.ceil(part.length / 2);
+        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit)];
+        continue;
+      }
+      return fail(`the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`);
+    }
+    // Rows of the context page belong to the part before.
+    const json = before ? withoutPage(reply.json, before.page) : reply.json;
+    done.push({ pages, json, model: reply.model });
+    const read = checkReading(doc, json);
+    headings = [...new Set([...headings, ...read.benefits.map((b) => b.section).filter((h): h is string => !!h)])];
+    columns = [...new Set([...columns, ...read.benefits.map((b) => b.column).filter((c): c is string => !!c)])];
+  }
+  // The document's own facts, merged across parts; the parts' rows are added as page readings (checkStored merges them).
+  const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
+  const first = checkStored(doc, stored);
   for (const f of pagesToReread(doc, first).slice(0, MAX_PAGE_REREADS)) {
     const page = { name: doc.name, pages: doc.pages.filter((p) => p.page === f.page) };
     const reply = await model.call({ system: READING_PROMPT, user: renderDocument(page) + pageReadingNote(f.page, headings), schema: READING_SCHEMA, maxTokens: PAGE_MAX_OUTPUT });
@@ -255,8 +315,69 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
     ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading, model=EXCLUDED.model, prompt_version=EXCLUDED.prompt_version, read_at=now()
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
-    [doc.id, accountId, JSON.stringify(stored), whole.model, PROMPT_VERSION]);
-  return { read: true, pagesReread: stored.pages.length };
+    [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
+  await clearUnreadTableNote(db, accountId, doc.id);
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}) };
+}
+
+type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
+/** A part's reading without the rows it read from its context page. */
+function withoutPage(json: unknown, page: number): unknown {
+  const r = (json ?? {}) as RawReading;
+  const keep = (rows: { page?: unknown }[] | undefined) => Array.isArray(rows) ? rows.filter((x) => Number(x?.page) !== page) : rows;
+  return { ...r, covers: keep(r.covers), benefits: keep(r.benefits) };
+}
+/** The first part's reading with the document's facts merged across every part. A part whose reading names the insured
+ * people speaks for the document (the schedule page), so its kind, plan and period come first; a brochure line in
+ * another part ("Plan: Classic is our most popular choice") never outranks it. When the parts that speak still disagree
+ * on the plan or period, none is stored (on the kind, "other"), so plan columns stay held rather than pick the wrong plan (TE pr364
+ * PLANPICK). Product and insurer: the first any part gives. Every person any part names is kept. Each fact is still
+ * checked against the printed pages (checkReading), as for a reading in one call. */
+function withMergedDocument(readings: unknown[]): unknown {
+  const docs = readings.map((r) => ((r ?? {}) as RawReading).document ?? {});
+  const peopleOf = (d: Record<string, unknown>) => Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => typeof n === "string" && !!n.trim()) : [];
+  const named = [...new Set(docs.flatMap(peopleOf))];
+  const speaking = docs.filter((d) => peopleOf(d).length > 0);
+  const given = (group: Record<string, unknown>[], key: string, skip?: string) => group.map((d) => d[key]).filter((v) => v != null && v !== "" && v !== skip);
+  const firstOf = (key: string) => given(docs, key)[0] ?? docs[0]?.[key] ?? null;
+  const agreed = (key: string, skip?: string) => {
+    const group = given(speaking, key, skip).length ? speaking : docs;
+    const values = given(group, key, skip);
+    const distinct = new Set(values.map((v) => typeof v === "string" ? v.trim().toLowerCase().replace(/\s+/g, " ") : JSON.stringify(v)));
+    if (distinct.size > 1) return null;
+    return values[0] ?? (skip != null && docs.some((d) => d[key] === skip) ? skip : null);
+  };
+  const document = { ...docs[0], kind: agreed("kind", "other") ?? "other", product: firstOf("product"), insurer: firstOf("insurer"), plan: agreed("plan"),
+    periodFrom: agreed("periodFrom"), periodTo: agreed("periodTo"), namedPeople: named };
+  return { ...((readings[0] ?? {}) as RawReading), document };
+}
+
+const pageRange = (pages: number[]) => pages.length === 1 ? String(pages[0]) : `${pages[0]}-${pages[pages.length - 1]}`;
+/** What a document says when its table could not be read this time: the table keeps the earlier reading, if any, and says
+ * from when. Added once to the document's notes and its message on the Documents page (as lib/rag/ingest.ts adds its notes). */
+export const UNREAD_TABLE_PREFIX = "The table of benefits could not be read";
+export const UNREAD_TABLE_NOTE = (when: string | null) => when
+  ? `The table of benefits could not be read again this time, so it still shows the reading from ${when}.`
+  : "The table of benefits could not be read this time, so it has no rows from this document yet.";
+/** Takes away the "could not be read" note once a reading of the document finishes. */
+async function clearUnreadTableNote(db: Db, accountId: string, policyId: string) {
+  try {
+    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits could not be read[^.]*\\.', '', 'g')), ''),
+        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3),'[]'::jsonb)),updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND jsonb_typeof(extracted_json->'documentNotes')='array'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%"]);
+  } catch (error) { console.warn("Benefit table: could not clear the unread-table note for " + policyId + ":", error instanceof Error ? error.message : error); }
+}
+async function noteUnreadTable(db: Db, accountId: string, policyId: string) {
+  try {
+    const earlier = await db("SELECT read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
+    const at = earlier[0]?.read_at;
+    const when = at == null ? null : new Date(String(at instanceof Date ? at.toISOString() : at)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+    const note = UNREAD_TABLE_NOTE(when);
+    await db(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
+        extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND NOT (coalesce(extracted_json->'documentNotes','[]'::jsonb) ? $3::text)`, [policyId, accountId, note]);
+  } catch (error) { console.warn("Benefit table: could not note the unread table for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
 
 type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (SectionLink & { chosenBy: "model" | "household" })[]; confirmations: Confirmation[];

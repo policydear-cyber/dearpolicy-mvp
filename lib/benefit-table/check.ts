@@ -9,6 +9,7 @@
 import { normalizePersonName } from "@/lib/insurance";
 import { SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
+import { figuresDifferByPlan, planCellRun } from "@/lib/insurance/scale-limit";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
@@ -19,6 +20,43 @@ import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
+
+/** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
+const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-Za-z$])\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d[\d,]*(?:\.\d+)?`;
+/** A money cell and the unit printed right after it ("S$200 per day", "S$50/night", "S$100 each", "daily"). */
+const UNIT_AFTER = String.raw`(?:\s*(?:\/\s*(day|night|week|month|year|trip)s?\b|(?:per|every)\s+(?:\d+\s+)?([a-z]+)|(each)\b|(daily|weekly|monthly|yearly|annually)\b|a\s+(day|night|week|month|year)\b))?`;
+const MONEY_WITH_UNIT = new RegExp("(" + MONEY + ")" + UNIT_AFTER, "gi");
+const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year", annually: "year", annum: "year", annual: "year", each: "item", item: "item" };
+/** Whether the excerpt's line that prints this figure is a row of plan figures (Critic R364, TE pr364): the figure is
+ * one of two or more different figures in one unit ("S$5,000 S$10,000", "S$100 per day | S$200 per day", "S$50/night or
+ * S$80/night"), however the cells are separated. Figures in different units are a rate and its cap ("S$200 per day up
+ * to S$8,000", "S$200 per day S$20,000 per year", "S$100 every 6 hours up to S$1,000"); a sum and its premium, or figures in different currencies, are set
+ * aside by figuresDifferByPlan. */
+function plansOnValueLine(excerpt: string, value: number): boolean {
+  const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
+  return (lines.length ? lines : [excerpt]).some((line) => {
+    const cells = [...line.matchAll(MONEY_WITH_UNIT)].map((m) => {
+      const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/s$/, "");
+      // A figure after "up to" or "maximum" is a cap, whatever its unit.
+      const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
+      return { text: m[1], start: m.index!, end: m.index! + m[0].length, amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
+    });
+    const at = cells.findIndex((c) => Math.abs(c.amount - value) < 0.005);
+    if (at < 0) return false;
+    // The run of cells side by side with this one: only separators between them (spaces, tabs, "|", "/", ";", ",", "or").
+    // A figure set off by words ("RM150 per day (RM300 per day if confined in ICU)") is a condition, not another plan.
+    const apart = (i: number) => /^[\s|/;,]*(?:or\b)?[\s|/;,]*$/i.test(line.slice(cells[i].end, cells[i + 1].start));
+    let from = at, to = at;
+    while (from > 0 && apart(from - 1)) from--;
+    while (to < cells.length - 1 && apart(to)) to++;
+    const mine = cells[at];
+    const sameUnit = cells.slice(from, to + 1).filter((c) => c.unit === mine.unit);
+    if (new Set(sameUnit.map((c) => c.amount)).size < 2) return false;
+    // The same cells side by side, for figuresDifferByPlan's sum-and-premium and currency rules.
+    return figuresDifferByPlan(line.slice(0, cells[0].start) + "\t" + sameUnit.map((c) => c.text).join("\t"));
+  });
+}
+
 
 /** people: the household's member names, so a page naming another member is known (only the premium check uses it). */
 export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[]; people?: string[] };
@@ -746,6 +784,15 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
+    // cancellation S$5,000 S$10,000") gives a figure only with the plan column it was read under: without one, the figure
+    // may be any plan's (Critic R364 H1, the FWD plan-column regression). Fails closed whatever the reader did, including
+    // a table whose header is on another page. The line tested is the one that prints the value, so a quote of two plan
+    // lines is judged line by line. Two figures on a line are kept only when one is a rate ("RM200 per day RM8,000"); a
+    // sum and its premium are already set aside by figuresDifferByPlan.
+    if (value != null && !str(b.column) && plansOnValueLine(source.excerpt, value)) {
+      out.dropped.push({ what: label, why: `figure ${value} is one of several plans' figures on its line, read with no plan column` }); continue;
+    }
     // A figure equal to the sum insured its page says is not what is paid (lib/documents/notional-sum) is that notional
     // sum: the row stays, paid as its wording says, with no figure.
     if (value != null && pays !== "percent" && out.covers.some((c) => c.notionalSum != null && c.page === source.page && Math.abs(c.notionalSum - value!) < 0.005)) {
