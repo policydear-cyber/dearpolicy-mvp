@@ -228,3 +228,33 @@ test("a benefit row's own sub-items keep their figure; only side-by-side plan ce
   // Benefit rows are judged by side-by-side cells only, as on main; the labelled-plans test is for schedule terms.
   assert.deepEqual(out.map((b) => b.formulaValue), [300, 300, 300]);
 });
+
+test("a reading that prints the row's cells before its words gives the plan's figure only for this row's own benefit (FWD 5 Nov)", async () => {
+  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const at = { policyId: "doc1", sourcePage: 5, quote: "If you have to postpone your trip from Singapore S$500 S$1,000 S$1,500", benefitName: "If you have to postpone your trip from Singapore" };
+  const reading = (excerpt: string, benefit: string, o: { amount?: number; column?: string | null } = {}) => ({
+    documentId: "doc1", page: 5, excerpt, column: o.column === undefined ? "Business" : o.column, qualifier: null, benefit,
+    figure: { kind: "printed", amount: o.amount ?? 1000, currency: "SGD" }, figureText: "up to S$" + (o.amount ?? 1000).toLocaleString("en-SG") });
+  const flipped = "S$500 S$1,000 S$1,500\nIf you have to postpone your trip from Singapore";
+  assert.deepEqual(planColumnFigure(at, [reading(flipped, "Trip postponement")]), { plan: "Business", figureText: "up to S$1,000" });
+  // The words-first order still works, with or without a benefit name.
+  assert.deepEqual(planColumnFigure(at, [reading("If you have to postpone your trip from Singapore S$500 S$1,000 S$1,500", "")]), { plan: "Business", figureText: "up to S$1,000" });
+  for (const [why, readings] of [
+    // Another benefit's reading, even with the same cells and this row's words after them.
+    ["another benefit", [reading(flipped, "Loss of deposit")]],
+    ["no benefit name", [reading(flipped, "")]],
+    // The reading prints another run too, or the cells are not right before the row's first words.
+    ["two runs", [reading("S$500 S$1,000 S$1,500\nIf you have to postpone your trip from Singapore S$200 S$300 S$400", "Trip postponement")]],
+    ["words between", [reading("S$500 S$1,000 S$1,500 for each person\nIf you have to postpone your trip from Singapore", "Trip postponement")]],
+    ["other cells", [reading("S$700 S$1,000 S$1,500\nIf you have to postpone your trip from Singapore", "Trip postponement")]],
+    ["not a cell", [reading(flipped, "Trip postponement", { amount: 1200 })]],
+    ["no column", [reading(flipped, "Trip postponement", { column: null })]],
+  ] as [string, ReturnType<typeof reading>[]][])
+    assert.equal(planColumnFigure(at, readings), null, why);
+});
+
+test("once the household's plan column is found, the row no longer says which plan is yours is not shown", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const route = await readFile("app/api/benefits/route.ts", "utf8");
+  assert.match(route, /conditions:planFigure\?stub\.conditions\.filter\(c=>c!==PLAN_COLUMNS_NOTE\):stub\.conditions,planColumns,planFigure,/);
+});

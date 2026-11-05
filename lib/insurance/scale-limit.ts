@@ -384,9 +384,17 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   if(!code)return null;
   const cells=money.map(cellAmount);
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
+  // A page's text layer may print a row's cells before its words ("S$500 S$1,000 S$1,500\nIf you have to postpone your
+  // trip"), so a reading may quote the row that way round. Taken only when the reading prints this row's own cells
+  // right before the row's own first words, prints no other run of cells, and is a reading of this row's benefit (its
+  // name shares a naming word with the row's, as below).
+  const lead=quote.slice(0,quote.indexOf(run)).trim().split(" ").filter(Boolean).slice(0,3).join(" ");
+  const own=nameStems((row.benefitName??"")+" "+quote.slice(0,quote.indexOf(run)));
+  const ofThisRow=(r:PlanColumnReading)=>[...nameStems(r.benefit??"")].some(w=>own.has(w));
   let found=onPage.filter(r=>{
     const excerpt=spaced(r.excerpt);
-    return (excerpt.match(PLAN_ROW)??[]).length===1&&excerpt.includes(words+" "+run);
+    if((excerpt.match(PLAN_ROW)??[]).length!==1)return false;
+    return excerpt.includes(words+" "+run)||(excerpt.includes(run+" "+lead)&&ofThisRow(r));
   });
   if(!found.length&&o.runIsUnique){
     const printing=onPage.filter(r=>spaced(r.excerpt).includes(run));
@@ -394,7 +402,6 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
     const names=new Set(printing.map(r=>spaced(r.benefit??"")));
     // The reading's benefit must be this row's: its name shares a naming word with the row's name or words, so a
     // reading of another benefit whose row was not stored never lends its cells (TE pr200 G6, Critic R389 L1).
-    const own=nameStems((row.benefitName??"")+" "+quote.slice(0,quote.indexOf(run)));
     const ours=[...names].every(n=>[...nameStems(n)].some(w=>own.has(w)));
     if(cellsOnly&&names.size===1&&!names.has("")&&ours)found=printing;
   }
