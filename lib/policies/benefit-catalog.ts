@@ -1215,7 +1215,17 @@ export const SCHEDULE_TERM_KINDS=["as_charged","not_covered","unlimited","deduct
 export function isScheduleTerm(rowKind:string|null|undefined){return !!rowKind&&(SCHEDULE_TERM_KINDS as readonly string[]).includes(rowKind);}
 /** A schedule term as a sentence. The stored value is shown, never used to
  * calculate a claim amount here. */
-export function describeScheduleTerm(rowKind:string,value:number|null,currency:string|null){
+/** The period a limit's own printed words give it: "a policy year" only where they say so (FWD re-read 5 Nov: an "Overall
+ * limit" printed "per insured person per trip" was shown as a limit a policy year). */
+function limitPeriod(words:string|null|undefined):string|null{
+  const w=(words??"").toLowerCase();
+  const trip=/\bper\s+(?:insured\s+person\s+per\s+)?(?:trip|journey)\b|\b(?:each|every)\s+(?:trip|journey)\b/.test(w);
+  const year=/\bpolicy[-\s]year\b|\bper\s+(?:annum|year)\b|\bannual\b|\byearly\b|\b(?:each|every)\s+year\b/.test(w);
+  if(trip&&year)return null;
+  if(trip)return " a trip";
+  return year?" a policy year":null;
+}
+export function describeScheduleTerm(rowKind:string,value:number|null,currency:string|null,words?:string|null){
   const money=value==null?null:(currency?currency+" ":"")+value.toLocaleString("en-SG",{maximumFractionDigits:2});
   const percent=value==null?null:Math.round(value*10000)/100+"%";
   switch(rowKind){
@@ -1227,7 +1237,11 @@ export function describeScheduleTerm(rowKind:string,value:number|null,currency:s
     case "co_payment":return money?"Co-payment of "+money:percent&&value!=null&&value<=1?"Co-payment of "+percent:"Co-payment (see the schedule)";
     case "co_payment_cap":return money?"Your co-payment is capped at "+money+" a policy year":"Co-payment cap (see the schedule)";
     case "pro_ration":return percent?"Pro-ration: pays "+percent+" of the bill in a higher ward than covered":"Pro-ration (see the schedule)";
-    case "policy_year_limit":return money?"Limit of "+money+" a policy year":"Policy-year limit (see the schedule)";
+    case "policy_year_limit":{
+      // Without the printed words (an older caller), the row kind's own name stands.
+      const period=words==null?" a policy year":limitPeriod(words);
+      return money?"Limit of "+money+(period??""):period===" a policy year"?"Policy-year limit (see the schedule)":"Limit (see the schedule)";
+    }
     case "family_limit":return money?"Family maximum of "+money:"Family maximum (see the schedule)";
     default:return "As printed in the schedule";
   }

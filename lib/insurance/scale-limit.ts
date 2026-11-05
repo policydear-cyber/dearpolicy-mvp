@@ -296,6 +296,35 @@ export function figuresDifferByPlan(quote:string|null|undefined):boolean{
   for(const run of String(quote??"").match(BARE_ROW)??[])if(new Set(run.split(/\s+/).map(v=>v.replace(/\.00$/,""))).size>1)return true;
   return false;
 }
+// One money figure with its currency. A schedule term that prints two or more different figures in one currency is
+// held unless every later figure carries its own unit or says it is part of the first ("S$300 per trip, S$1,500 per
+// year", "S$150,000, of which S$5,000 for outpatient"). Plans are printed in too many ways to list (labels, pipes,
+// "Gold - S$500,000", "for Basic and ... for Premier", "respectively", TE pr361 r2), so a term fails closed instead.
+const SIGNED_FIGURE=/(S\$|US\$|A\$|HK\$|RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?(\d[\d,]*(?:\.\d+)?)(?![\d,]*\d)/g;
+const CURRENCY_OF:Record<string,string>={SGD:"S$",USD:"US$",MYR:"RM",GBP:"£",EUR:"€",AUD:"A$",HKD:"HK$"};
+const OWN_UNIT_AFTER=/^\s*\(?\s*(?:(?:per|each|every|an?)\s+(?!plans?\b)([a-z]+(?:\s+(?:year|day|trip|claim|person|visit|disability|period|illness|injury|item|event|incident))?)|\/\s*(day|night|week|month|year|visit|trip|claim|person|item|event|incident)\b|(daily|weekly|monthly|annually|yearly)\b)/iu;
+const PART_OF_FIRST_BEFORE=/(?:\bof\s+which|\bwithin\s+which|\bincluding|\bsub-?limit(?:\s+of)?)[\s:,]*(?:up\s+to\s+|a\s+maximum\s+of\s+)?$/iu;
+const ADVERB_UNIT:Record<string,string>={daily:"day",weekly:"week",monthly:"month",annually:"year",yearly:"year"};
+/** Whether a schedule term's quote may print a figure for each plan (TE pr361; Critic R361b M2, L1): side-by-side cells
+ * (figuresDifferByPlan), or two different figures in one currency with the same unit, or both with none ("Gold -
+ * S$500,000, Silver - S$250,000", "S$200 per trip | S$500 per trip"). One plan's figures each carry a unit of their own
+ * ("S$300 per trip, S$1,500 per year") or say they are part of another ("of which S$5,000"). A term like this is no
+ * person's limit until their plan is known, on Benefits and Portfolio alike. Benefit rows are not judged by this: a
+ * benefit's own sub-items ("Ward S$300; ICU S$600") are one plan's figures (Critic R361b M1). */
+export function termFiguresDifferByPlan(quote:string|null|undefined):boolean{
+  const text=String(quote??"");
+  if(figuresDifferByPlan(text))return true;
+  const figures=[...text.matchAll(SIGNED_FIGURE)].flatMap(m=>{
+    const start=m.index!,end=start+m[0].length;
+    if(PART_OF_FIRST_BEFORE.test(text.slice(0,start)))return [];
+    const u=text.slice(end).match(OWN_UNIT_AFTER);
+    const unit=u?(u[1]??u[2]??ADVERB_UNIT[u[3].toLowerCase()]).toLowerCase().replace(/^policy\s+/,"").replace(/\s+/g," "):"";
+    return [{key:`${CURRENCY_OF[m[1]]??m[1]}|${unit}`,value:m[2].replace(/,/g,"").replace(/\.0+$/,"")}];
+  });
+  const values=new Map<string,Set<string>>();
+  for(const f of figures)values.set(f.key,(values.get(f.key)??new Set()).add(f.value));
+  return [...values.values()].some(v=>v.size>1);
+}
 /** A "benefit" whose name is only a plan's empty cell ("Not covered", "N/A") and whose quote begins with that name
  * followed by the other plans' cells ("Not covered S$500 S$1,000"): the reader took the first cell of a plan-table row
  * as its name, so the row's own name is lost and it names nothing. A name like this with any other quote is kept. */
@@ -308,7 +337,9 @@ export function namesOnlyAPlanCell(name:string|null|undefined,quote:string|null|
   return runs.length===1&&runs[0]===q;
 }
 export function holdPlanColumnFigures(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&benefit.formulaKind!=="none"&&benefit.formulaValue!=null&&figuresDifferByPlan(benefit.quote)
+  // A schedule term (a limit, a deductible) is held the same way: its stored figure may be the first plan's column (FWD
+  // re-read 5 Nov: "Overall limit S$300 S$800 S$1,500" shown as a limit of S$300 for a Business plan holder).
+  return benefits.map(benefit=>!benefit.tier&&!benefit.reviewedAt&&(benefit.formulaKind!=="none"||(!!benefit.rowKind&&benefit.rowKind!=="benefit"))&&benefit.formulaValue!=null&&(benefit.rowKind&&benefit.rowKind!=="benefit"?termFiguresDifferByPlan(benefit.quote):figuresDifferByPlan(benefit.quote))
     ?{...benefit,formulaKind:"none" as CatalogBenefit["formulaKind"],formulaValue:null,conditions:[...new Set([...benefit.conditions,PLAN_COLUMNS_NOTE])]}
     :benefit);
 }

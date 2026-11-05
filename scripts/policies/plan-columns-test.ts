@@ -143,3 +143,88 @@ test("a reading that quotes only the row's cells gives the plan's figure only wh
   assert.equal(planCellRun("Death S$1,000,000"), null);
   assert.equal(planCellRun(at.quote + " Family S$1,000,000 S$1,500,000"), null);
 });
+
+// FWD re-read (5 Nov): a schedule term (a limit, a family maximum, a deductible) whose quote prints one figure per plan
+// was shown with its first column's figure ("Overall limit^ S$300 S$800 S$1,500" as a limit of S$300 for a Business plan
+// holder). It is held like any plan row: no figure from the quote; the person's plan column only from their own reading.
+test("a schedule term that prints one figure per plan is held, never shown with its first column", async () => {
+  const { repairStoredRules, describeScheduleTerm } = await import("@/lib/policies/benefit-catalog");
+  const { PLAN_COLUMNS_NOTE } = await import("@/lib/insurance/scale-limit");
+  const term = (id: string, rowKind: string, quote: string, value: number, o: { tier?: string | null; reviewedAt?: string | null } = {}) =>
+    ({ ...row(id, quote, value, o), formulaKind: "none" as never, rowKind, benefitName: quote.replace(/\s+(?:S\$|RM|£|\$).*$/, "") });
+  const held = repairStoredRules([
+    term("t1", "policy_year_limit", "Overall limit^ S$300 S$800 S$1,500", 300),
+    term("t2", "policy_year_limit", "Overall limit for family plan* S$18,750 S$25,000 S$37,500", 18_750),
+    term("t3", "family_limit", "Family maximum RM 5,000 RM 8,000 RM 12,000", 5_000),
+    term("t4", "deductible", "Excess £100 £50 Nil", 100),
+    term("t5", "co_payment_cap", "Co-payment cap S$3,000 S$2,000", 3_000),
+  ] as never) as { id: string; formulaValue: number | null; conditions: string[] }[];
+  for (const b of held) {
+    assert.equal(b.formulaValue, null, b.id);
+    assert.ok(b.conditions.includes(PLAN_COLUMNS_NOTE), b.id);
+  }
+  // Kept: one figure in every column, one figure only, a row read for one plan, and a row a person corrected.
+  const kept = repairStoredRules([
+    term("k1", "policy_year_limit", "Overall limit S$5,000 S$5,000 S$5,000", 5_000),
+    term("k2", "policy_year_limit", "Policy year limit S$150,000", 150_000),
+    term("k3", "policy_year_limit", "Overall limit S$300 S$800 S$1,500", 800, { tier: "Business" }),
+    term("k4", "policy_year_limit", "Overall limit S$300 S$800 S$1,500", 800, { reviewedAt: "2026-11-01T00:00:00Z" }),
+  ] as never) as { id: string; formulaValue: number | null }[];
+  assert.deepEqual(kept.map((b) => b.formulaValue), [5_000, 150_000, 800, 800]);
+  // Its period is the one its own words print, never one made up.
+  assert.equal(describeScheduleTerm("policy_year_limit", 5_000, "SGD", "Overall limit per insured person per trip S$5,000"), "Limit of SGD 5,000 a trip");
+  assert.equal(describeScheduleTerm("policy_year_limit", 150_000, "SGD", "Policy year limit S$150,000"), "Limit of SGD 150,000 a policy year");
+  assert.equal(describeScheduleTerm("policy_year_limit", 150_000, "SGD", "Annual limit S$150,000"), "Limit of SGD 150,000 a policy year");
+  assert.equal(describeScheduleTerm("policy_year_limit", 5_000, "SGD", "Overall limit S$5,000"), "Limit of SGD 5,000");
+  assert.equal(describeScheduleTerm("policy_year_limit", 5_000, "SGD", "Overall limit S$5,000 per trip, up to S$20,000 per policy year"), "Limit of SGD 5,000");
+  assert.equal(describeScheduleTerm("policy_year_limit", null, null, "Overall limit^ S$300 S$800 S$1,500"), "Limit (see the schedule)");
+  assert.equal(describeScheduleTerm("policy_year_limit", 150_000, "SGD"), "Limit of SGD 150,000 a policy year");
+});
+
+test("a term printing two different figures in one currency is held unless each carries its own unit; one plan's own limits keep their figure (TE pr361)", async () => {
+  const { termFiguresDifferByPlan } = await import("@/lib/insurance/scale-limit");
+  const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  const term = (id: string, quote: string, value: number) =>
+    ({ ...row(id, quote, value), formulaKind: "none" as never, rowKind: "policy_year_limit", benefitName: "Overall limit" });
+  const heldQuotes = [
+    "Overall limit per insured person per trip: Classic S$200,000 | Elite S$500,000 | Premier S$1,000,000",
+    "Overall limit: Plan A S$200,000; Plan B S$500,000",
+    "Overall limit S$200,000 | S$500,000 | S$1,000,000",
+    "Overall limit S$200,000 (Classic), S$500,000 (Elite)",
+    "Annual limit: Silver RM 50,000, Gold RM 100,000",
+    "Maximum per trip Standard £5,000 / Superior £10,000",
+    "Overall limit Individual S$300; Family S$800",
+    "Overall limit Adult S$300; Child S$150",
+    "Overall limit: Gold - S$500,000, Silver - S$250,000",
+    "Overall limit: silver S$100,000 / gold S$250,000",
+    "Overall limit S$200,000 or S$500,000 depending on the plan chosen",
+    "Medical expenses up to S$150,000 for Basic and S$300,000 for Premier",
+    "Overall limit Classic S$200 per trip | Elite S$500 per trip",
+    "Excess: Plan 1: S$100 / Plan 2: S$250",
+    "Overall limit S$200,000, or S$500,000 if the injury is caused by an accident",
+  ];
+  const keptQuotes = [
+    "Overall limit S$300 per trip, S$1,500 per year",
+    "Overall limit S$300 (per trip), S$1,500 (per year)",
+    "Overall limit S$5,000 per trip, up to S$20,000 per policy year",
+    "Annual limit S$150,000, of which S$5,000 for outpatient",
+    "Room and board S$300 / day, overall S$3,000 per policy year",
+    // One family plan's own two limits: each figure says whom it is for.
+    "Overall limit S$300 per person, S$800 per family",
+    "Overall limit S$200,000 | S$200,000",
+    "Overall limit S$500,000",
+    "Overall limit S$1,000,000 US$750,000",
+  ];
+  for (const q of heldQuotes) assert.equal(termFiguresDifferByPlan(q), true, q);
+  for (const q of keptQuotes) assert.equal(termFiguresDifferByPlan(q), false, q);
+  const out = repairStoredRules([...heldQuotes, ...keptQuotes].map((q, i) => term("q" + i, q, 200_000)) as never) as { formulaValue: number | null }[];
+  assert.deepEqual(out.map((b) => b.formulaValue === null), [...heldQuotes.map(() => true), ...keptQuotes.map(() => false)]);
+});
+
+test("a benefit row's own sub-items keep their figure; only side-by-side plan cells hold a benefit (Critic R361b M1)", async () => {
+  const { repairStoredRules } = await import("@/lib/policies/benefit-catalog");
+  const quotes = ["Ward S$300; ICU S$600", "Room & Board S$500; Surgical S$3,000", "Classic S$200 | Elite S$500"];
+  const out = repairStoredRules(quotes.map((q, i) => ({ ...row("b" + i, q, 300), rowKind: "benefit" })) as never) as { formulaValue: number | null }[];
+  // Benefit rows are judged by side-by-side cells only, as on main; the labelled-plans test is for schedule terms.
+  assert.deepEqual(out.map((b) => b.formulaValue), [300, 300, 300]);
+});
