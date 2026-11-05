@@ -39,6 +39,9 @@ test("an amending document is known by its own title or an amending sentence", a
     ["a blank amendment form", "Amendment Schedule\nTo be completed by the policyholder\nPolicy number ____\nNew sum assured ____"],
     ["an option page", "Increase in sum assured option\nOn marriage or the birth of a child the sum assured can rise by up to S$50,000 without health questions."],
     ["a brochure heading", "Change of plan\nAt each renewal the plan can be moved up one level, subject to health questions.\nPlan Plus premium S$480 a year"],
+    // TE r375 round 4 E4: a brochure page with an effective date and no policy number of its own.
+    ["a dated brochure page", "Change of plan\nEffective date: 1 March 2026\nAt each renewal you can move up one plan level."],
+    ["a dated title with no policy number", letterhead + "Changes to your plan\nEffective 1 March 2026\nYour new premium is S$410.00 a year."],
     ["a dated option page", "Increase in sum assured option\nPolicy No. TL-1\nFrom 1 June 2026 you may raise the sum assured by S$50,000."],
     ["a booklet on the law", "The scheme is set up under the Act and the Regulations made under the Act (and any amendments made to them from time to time)."],
     ["a premium review clause", "Premiums are not guaranteed and may be increased with effect from the next renewal. The premium is reviewed every year."],

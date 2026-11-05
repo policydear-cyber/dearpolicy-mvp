@@ -61,15 +61,15 @@ function firstTitle(pages: string[]): { line: string; raw: string; amends: boole
   return null;
 }
 /** Whether a document's own text is an amendment of its policy: main's wording (AMENDS), or its first title line is an
- * amendment title (AMENDMENT_TITLE; a title further down is a section of another document) and it dates its own change
- * (DATED_CHANGE), and it is not a form, an option, an illustration or a clause that applies only if shown
+ * amendment title (AMENDMENT_TITLE; a title further down is a section of another document), it dates its own change
+ * (DATED_CHANGE) and prints the policy number it changes (OWN_POLICY_NUMBER), and it is not a form, an option, an illustration or a clause that applies only if shown
  * (NOT_A_CHANGE). pagesText: pages joined by "\f". */
 export function amendmentWording(pagesText: string): boolean {
   const text = String(pagesText ?? "");
   if (AMENDS.test(text)) return true;
   if (!firstTitle(text.split("\f"))?.amends) return false;
   const flat = text.replace(/\s+/g, " ");
-  return DATED_CHANGE.test(flat) && !NOT_A_CHANGE.test(flat);
+  return DATED_CHANGE.test(flat) && OWN_POLICY_NUMBER.test(flat) && !NOT_A_CHANGE.test(flat);
 }
 /** Amendment evidence of a document's own: an "Endorsement No. <n>" line (n >= 1) on its first two pages, a word or
  * phrase of change ("reduced to", "previously", "was S$", "formerly", "now reads", "becomes", "supersedes", "replaces",
@@ -81,6 +81,9 @@ const CHANGE_WORDS = new RegExp(String.raw`\b(?:(?:is|are|has\s+been|have\s+been
 /** The date the document's own change takes effect: "with effect from 1 March 2026", "Effective 1 May 2026", "Effective
  * date: 01/05/2026", "From 1 June 2026 your death benefit is S$250,000". */
 const DATED_CHANGE = new RegExp(String.raw`\b(?:with\s+effect\s+from|effective(?:\s+(?:from|on|date))?\s*:?|from)\s+(?:the\s+)?` + DATE, "i");
+/** The policy number the document changes, printed on it: "Policy No. TL-1", "Policy number: HG-55120", "to policy
+ * KL-TL-100245". A brochure or a booklet names no policy of its own. */
+const OWN_POLICY_NUMBER = /\bpolicy\s*(?:no\.?|number|#)?\s*:?\s*(?=[A-Z0-9\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]{2,}\b/i;
 /** A page that only describes a change someone may make, or a clause that may apply: a form to fill in, an option, an
  * illustration, a brochure, "applies only if shown in your schedule". */
 const NOT_A_CHANGE = /\b(?:to\s+be\s+completed|please\s+complete|request\s+form|application\s+form|options?\b|illustration|brochure|(?:applies|apply)\s+only\s+if|only\s+if\s+shown|if\s+shown\s+in)|_{3,}/i;
