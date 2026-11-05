@@ -14,7 +14,7 @@ import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePa
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
+import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
 export const READ_MAX_OUTPUT = 24_000;
@@ -22,6 +22,23 @@ export const PAGE_MAX_OUTPUT = 8_000;
 export const LINK_MAX_OUTPUT = 8_000;
 /** At most this many pages of one document are read again on their own. */
 export const MAX_PAGE_REREADS = 12;
+/** A document is read in parts of consecutive pages, each part at most this many characters of page text (a page longer
+ * than this is a part on its own). One call over a long document can run out of output before it finishes and give
+ * nothing (FWD re-read 5 Nov: 40,651 tokens in, the 24,000-token cap reached, the whole reading lost and paid for). A part
+ * this size leaves room for every row of its pages. A document under it is read in one call, as before. */
+export const PART_MAX_CHARS = 40_000;
+
+/** Consecutive runs of pages, each at most `limit` characters of text, in page order. */
+export function pageParts<T extends { page: number; text: string }>(pages: T[], limit = PART_MAX_CHARS): T[][] {
+  const parts: T[][] = [];
+  let part: T[] = [], size = 0;
+  for (const p of [...pages].sort((a, b) => a.page - b.page)) {
+    if (part.length && size + p.text.length > limit) { parts.push(part); part = []; size = 0; }
+    part.push(p); size += p.text.length;
+  }
+  if (part.length) parts.push(part);
+  return parts;
+}
 
 type Row = Record<string, unknown>;
 export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
@@ -234,18 +251,42 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
   return structuredClone(hit);
 }
 
-/** Reads one document into the table: the whole document once, then each page whose figures were mostly left unread.
- * Replaces any earlier reading of the document. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number }> {
+/** Reads one document into the table: the document once, in parts of consecutive pages when it is long (pageParts), then
+ * each page whose figures were mostly left unread. A part that runs out of output is read again as two halves, down to a
+ * single page; a part that still gives nothing fails the reading. Replaces any earlier reading of the document only when
+ * every part was read: a reading with pages missing would drop their rows. A failed reading is never silent: the earlier
+ * reading is kept, and the document says that the table still shows it (noteUnreadTable). A document the app could not
+ * read is not sent. */
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
   const [doc] = await documents(db, accountId, policyId);
   if (!doc) return { read: false, why: "no such current document", pagesReread: 0 };
   if (!doc.readable || !doc.pages.length) return { read: false, why: "the document could not be read", pagesReread: 0 };
-  const whole = await model.call({ system: READING_PROMPT, user: renderDocument(doc), schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
-  await onUsage?.("reading", whole);
-  if (whole.json == null) return { read: false, why: `the reading did not finish (${whole.stopReason ?? "no reply"})`, pagesReread: 0 };
-  const stored: StoredReading = { document: whole.json, pages: [] };
-  const first = checkReading(doc, whole.json);
-  const headings = [...new Set(first.benefits.map((b) => b.section).filter((h): h is string => !!h))];
+  const queue = pageParts(doc.pages);
+  const whole = queue.length === 1;
+  const done: { pages: number[]; json: unknown; model: string }[] = [];
+  let headings: string[] = [];
+  while (queue.length) {
+    const part = queue.shift()!;
+    const pages = part.map((p) => p.page);
+    const user = renderDocument({ name: doc.name, pages: part }) + (whole && done.length === 0 && pages.length === doc.pages.length ? "" : partReadingNote(pages, doc.pages.length, headings));
+    const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
+    await onUsage?.("reading", reply);
+    if (reply.json == null) {
+      if (reply.stopReason === "max_tokens" && part.length > 1) {
+        const half = Math.ceil(part.length / 2);
+        queue.unshift(part.slice(0, half), part.slice(half));
+        continue;
+      }
+      const why = `the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`;
+      await noteUnreadTable(db, accountId, doc.id);
+      return { read: false, why, pagesReread: 0 };
+    }
+    done.push({ pages, json: reply.json, model: reply.model });
+    headings = [...new Set([...headings, ...checkReading(doc, reply.json).benefits.map((b) => b.section).filter((h): h is string => !!h)])];
+  }
+  // The first part is the document's own reading (its kind, product, plan and named people); the others add their rows.
+  const stored: StoredReading = { document: done[0].json, pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
+  const first = checkStored(doc, stored);
   for (const f of pagesToReread(doc, first).slice(0, MAX_PAGE_REREADS)) {
     const page = { name: doc.name, pages: doc.pages.filter((p) => p.page === f.page) };
     const reply = await model.call({ system: READING_PROMPT, user: renderDocument(page) + pageReadingNote(f.page, headings), schema: READING_SCHEMA, maxTokens: PAGE_MAX_OUTPUT });
@@ -255,8 +296,26 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
     ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading, model=EXCLUDED.model, prompt_version=EXCLUDED.prompt_version, read_at=now()
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
-    [doc.id, accountId, JSON.stringify(stored), whole.model, PROMPT_VERSION]);
-  return { read: true, pagesReread: stored.pages.length };
+    [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}) };
+}
+
+const pageRange = (pages: number[]) => pages.length === 1 ? String(pages[0]) : `${pages[0]}-${pages[pages.length - 1]}`;
+/** What a document says when its table could not be read this time: the table keeps the earlier reading, if any, and says
+ * from when. Added once to the document's notes and its message on the Documents page (as lib/rag/ingest.ts adds its notes). */
+export const UNREAD_TABLE_NOTE = (when: string | null) => when
+  ? `The table of benefits could not be read again this time, so it still shows the reading from ${when}.`
+  : "The table of benefits could not be read this time, so it has no rows from this document yet.";
+async function noteUnreadTable(db: Db, accountId: string, policyId: string) {
+  try {
+    const earlier = await db("SELECT read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
+    const at = earlier[0]?.read_at;
+    const when = at == null ? null : new Date(String(at instanceof Date ? at.toISOString() : at)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+    const note = UNREAD_TABLE_NOTE(when);
+    await db(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
+        extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND NOT (coalesce(extracted_json->'documentNotes','[]'::jsonb) ? $3::text)`, [policyId, accountId, note]);
+  } catch (error) { console.warn("Benefit table: could not note the unread table for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
 
 type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (SectionLink & { chosenBy: "model" | "household" })[]; confirmations: Confirmation[];

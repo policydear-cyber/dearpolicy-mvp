@@ -127,6 +127,13 @@ export function renderLinkingInput(sections: SectionRef[], covers: CoverType[]):
 
 /** For reading one page again on its own (lib/benefit-table/completeness.ts): which page, and the headings the whole
  * document's reading found, so a row under a heading printed on an earlier page keeps that heading. */
+/** For a long document read in parts (lib/benefit-table/service.ts pageParts): which pages this call holds. */
+export function partReadingNote(pages: number[], total: number, headings: string[]): string {
+  const range = pages.length === 1 ? `page ${pages[0]}` : `pages ${pages[0]} to ${pages[pages.length - 1]}`;
+  return `\n\nThis document has ${total} pages and is read in parts; this part is ${range}. List every row of every table on these pages, and fill "document" from what these pages print.` +
+    (headings.length ? ` Headings found on earlier pages of this document, for "section" when one is still in force here: ${headings.map((h) => JSON.stringify(h)).join(", ")}.` : "");
+}
+
 export function pageReadingNote(page: number, headings: string[]): string {
   return `\n\nList the rows of page ${page} only. The rest of the document was read before; a table on this page may have been skipped, so list every row of every table on it.` +
     (headings.length ? ` Headings found on earlier pages of this document, for "section" when one is still in force here: ${headings.map((h) => JSON.stringify(h)).join(", ")}.` : "");

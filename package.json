@@ -16,6 +16,7 @@
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
     "benefit-table:same-name-test": "node --import tsx scripts/benefit-table/same-name-test.ts",
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
+    "benefit-table:long-document-test": "node --import tsx scripts/benefit-table/long-document-test.ts",
     "benefit-table:speed-test": "node --import tsx scripts/benefit-table/speed-test.ts",
     "benefits:load-speed-test": "node --import tsx --test scripts/benefits/load-speed-test.ts",
     "benefits:warm-ping-test": "node --import tsx --test scripts/benefits/warm-ping-test.ts",
