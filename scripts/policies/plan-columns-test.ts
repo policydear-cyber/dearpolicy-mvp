@@ -289,7 +289,7 @@ test("a reading's figure is taken only when it is the cell at its plan's place i
   for (const [why, text, column, n] of [
     ["no header", "Trip delay S$100 S$200 S$300", "Voyager", 3], ["not a plan heading", header, "Business", 3],
     ["other count", header, "Voyager", 2], ["unknown label first", "Extras\tExplorer\tVoyager\tNomad", "Voyager", 3],
-    ["two orders", header + "\nVoyager\tExplorer\tNomad", "Voyager", 3], ["a figure in the line", "Explorer S$1\tVoyager\tNomad", "Voyager", 3],
+    ["two orders", header + "\nVoyager\tExplorer\tNomad", "Voyager", 3], ["a figure in its own cell", "Explorer\tS$1\tNomad", "Nomad", 3], ["a figure, not a price after a name", "Explorer 2,500\tVoyager\tNomad", "Voyager", 3],
     ["named twice", "Voyager\tVoyager\tNomad", "Voyager", 3],
   ] as [string, string, string, number][]) assert.equal(planHeaderIndex(text, column, n), null, why);
   const reading = (excerpt: string, amount: number, column = "Voyager") => ({ documentId: "docH", page: 3, excerpt, column, qualifier: null,
@@ -317,4 +317,82 @@ test("a reading's figure is taken only when it is the cell at its plan's place i
   // The Benefits route passes each row's page text.
   const { readFileSync } = await import("node:fs");
   assert.match(readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8"), /pageText:pageTexts\.get\(row\.policy_id\+":"\+row\.source_page\)/);
+});
+
+test("the plan header shapes main read are read again, each with a wrong-column twin (Critic #373)", async () => {
+  const { planColumnFigure, planHeaderIndex } = await import("@/lib/insurance/scale-limit");
+  // [header line, the plan named in the reading, where it sits]
+  const shapes: [string, string, string, number][] = [
+    ["single-spaced (scanned page)", "Benefits Classic Business First", "Business", 1],
+    ["numbered plans", "Benefits\tPlan 1\tPlan 2\tPlan 3", "Plan 2", 1],
+    ["'Plan' after each name", "Classic Plan\tBusiness Plan\tFirst Plan", "Business", 1],
+    ["a currency marker on the label", "Benefits (S$)\tClassic\tBusiness\tFirst", "Business", 1],
+    ["a sum-insured label", "Maximum Sum Insured (S$)    Classic    Business    First", "First", 2],
+    ["'Benefit description'", "Benefit description\tClassic\tBusiness\tFirst", "Classic", 0],
+    ["'What we pay'", "What we pay\tClassic\tBusiness\tFirst", "Business", 1],
+    ["two label columns", "Section\tBenefits\tClassic\tBusiness\tFirst", "Business", 1],
+  ];
+  const run = "S$1,000 S$2,000 S$3,000", cells = run.split(" ");
+  const row = { policyId: "docS", sourcePage: 2, quote: `Loss of travel documents ${run}`, benefitName: "Loss of travel documents" };
+  const reading = (column: string, amount: number) => ({ documentId: "docS", page: 2, excerpt: `Loss of travel documents\t${cells.join("\t")}`, column, qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG") });
+  for (const [why, header, column, at] of shapes) {
+    const pageText = `Table of benefits\n${header}\nLoss of travel documents\t${cells.join("\t")}`;
+    assert.equal(planHeaderIndex(pageText, column, 3), at, why);
+    const own = (at + 1) * 1000, other = at === 0 ? 2000 : 1000;
+    assert.deepEqual(planColumnFigure(row, [reading(column, own)], { pageText }), { plan: column, figureText: "up to S$" + own.toLocaleString("en-SG") }, why);
+    // The twin: the same plan's reading giving another plan's cell shows nothing.
+    assert.equal(planColumnFigure(row, [reading(column, other)], { pageText }), null, why + ": wrong column");
+  }
+  // A label heading is never a plan: a header of n cells that starts with one does not place n plans (Critic M).
+  assert.equal(planHeaderIndex("Benefits    Essential    Enhanced", "Enhanced", 3), null);
+  assert.equal(planHeaderIndex("Benefits    Essential    Enhanced", "Enhanced", 2), 1);
+  // Single-spaced lines stay closed: no label heading first, a joining word, or a lower-case word is no header.
+  for (const line of ["Classic Business First", "Cover for Business trips", "Benefits Classic business First", "Benefits Business Class Travel Cover"])
+    assert.equal(planHeaderIndex(line, "Business", 3), null, line);
+  // A line with an amount is never a header; a plan number is not an amount.
+  assert.equal(planHeaderIndex("Benefits\tS$1,000\tBusiness\tFirst", "Business", 3), null);
+  assert.equal(planHeaderIndex("Plan 1\tPlan 2\tPlan 3", "Plan 3", 3), 2);
+});
+
+test("prices in the header, the header above the row, and a table carried over from the page before (TE pr373)", async () => {
+  const { planColumnFigure, planHeaderIndex } = await import("@/lib/insurance/scale-limit");
+  // A price printed after each plan's name is not a figure of the table.
+  assert.equal(planHeaderIndex("Benefits\tStandard S$38\tPlus S$52\tMax S$71", "Plus", 3), 1);
+  assert.equal(planHeaderIndex("Benefits\tStandard SGD 38.00\tPlus SGD 52.00\tMax SGD 71.00", "Max", 3), 2);
+  const name = "Trip postponement", cells = ["S$500", "S$1,000", "S$1,500"];
+  const row = { policyId: "docP", sourcePage: 4, quote: `${name} ${cells.join(" ")}`, benefitName: name };
+  const reading = (amount: number, column = "Plus") => ({ documentId: "docP", page: 4, excerpt: `${name}\t${cells.join("\t")}`, column, qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG") });
+  const priced = "Benefits\tStandard S$38\tPlus S$52\tMax S$71\n" + `${name}\t${cells.join("\t")}`;
+  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: priced }), { plan: "Plus", figureText: "up to S$1,000" });
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: priced }), null, "priced header: first plan's cell");
+  // A three-cell line of notes headings naming Plus first is no plan header, above the row or below it.
+  assert.equal(planHeaderIndex("Plus\tAdd-on\tDetails", "Plus", 3), null);
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: `Plus\tAdd-on\tDetails\n${name}\t${cells.join("\t")}` }), null, "notes line above");
+  // Multi-word plan names under "Your plan" (the label keeps its last word).
+  assert.equal(planHeaderIndex("Your plan\tTravel Lite\tTravel Plus\tTravel Max", "Travel Plus", 3), 1);
+  assert.equal(planHeaderIndex("Your plan\tTravel Lite\tTravel Plus\tTravel Max", "Travel Max", 3), 2);
+  // The header must sit above the row: a three-cell line below it naming Plus first places nothing.
+  const strayBelow = `Benefits\tStandard\tPlus\tMax\n${name}\t${cells.join("\t")}\nPlus\tAdd-on\tDetails`;
+  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: strayBelow }), { plan: "Plus", figureText: "up to S$1,000" });
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: strayBelow }), null, "stray line below: first cell");
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: `${name}\t${cells.join("\t")}\nPlus\tAdd-on\tDetails` }), null, "only a stray line below");
+  // No header on the row's page: the page before places the plan, when it prints one header that does.
+  const own = `Section 3 continued\n${name}\t${cells.join("\t")}`;
+  const before = "Table of benefits\nBenefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$200,000\tS$300,000";
+  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: own, previousPageText: before }), { plan: "Plus", figureText: "up to S$1,000" });
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: own, previousPageText: before }), null, "page before: first plan's cell");
+  // Without the page before, or one whose headers disagree, or one that places another order: the row's own figure only.
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: own }), null, "no page before");
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: own, previousPageText: before + "\nCover\tPlus\tStandard\tMax" }), null, "two headers before");
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: own, previousPageText: "Benefits\tPlus\tStandard\tMax" }), null, "other order before");
+  // A page that names the plan above the row decides alone, even when it does not place it: the page before is not read.
+  const ownNamed = `Plus members also get\n${name}\t${cells.join("\t")}`;
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: ownNamed, previousPageText: before }), null, "own page names the plan");
+  // The readings never place a plan: three agreeing readings without any header give none.
+  assert.equal(planColumnFigure(row, [reading(1000), reading(1000), reading(1000)], { pageText: own }), null, "readings alone");
+  // The route loads the page before as well.
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8"), /previousPageText:row\.source_page!=null\?pageTexts\.get\(row\.policy_id\+":"\+\(row\.source_page-1\)\)/);
 });
