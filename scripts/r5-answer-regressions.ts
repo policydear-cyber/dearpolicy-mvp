@@ -264,6 +264,21 @@ async function main() {
       for (const f of ["one-time", "One time", "Once", "Lump sum", "Per trip", "Single trip premium", "Non-recurring", "for the trip"]) assert.equal(isOneOffPremium({ frequency: f }), true, f);
       for (const f of ["Monthly", "Annual", "per annum", "Quarterly", "Half-yearly", null, ""]) assert.equal(isOneOffPremium({ frequency: f }), false, String(f));
       for (const f of ["Regular", "As agreed", "Flexible"]) assert.equal(isUnclearFrequency({ frequency: f }), true, f);
+      // A frequency that names a recurring period is recurring, whatever weak one-off word it also has (TE pr370).
+      for (const f of ["Once a year", "Once a month", "Paid once every year", "Annual premium per policy", "Per policy year", "Per policy, payable yearly", "Yearly (single life)",
+        "Paid once yearly", "Monthly (single life)", "Annual - per policy"]) {
+        assert.equal(isOneOffPremium({ frequency: f }), false, f);
+        assert.equal(isUnclearFrequency({ frequency: f }), false, f);
+      }
+      // One that names both a recurring period and a plain one-off is unclear: named, never totalled, never a silent one-off.
+      for (const f of ["Single premium, yearly", "One-time annual payment", "Lump sum per year", "Yearly per trip cover"]) {
+        assert.equal(isOneOffPremium({ frequency: f }), false, f);
+        assert.equal(isUnclearFrequency({ frequency: f }), true, f);
+      }
+      for (const f of ["Single", "Paid once", "Per policy"]) assert.equal(isOneOffPremium({ frequency: f }) || isUnclearFrequency({ frequency: f }), true, f);
+      assert.equal(isOneOffPremium({ frequency: "Per policy" }), false, "bare 'per policy' is not a one-off");
+      for (const f of ["One-time", "Single premium", "Once", "Lump sum", "Per trip", "Non-recurring", "Single trip"]) assert.equal(isOneOffPremium({ frequency: f }), true, f);
+      for (const f of ["Regular", "As agreed", "Mthly", "Yrly", "M", "A"]) assert.equal(isUnclearFrequency({ frequency: f }), true, f);
       for (const f of ["Monthly", "Yearly", "one-time", null, ""]) assert.equal(isUnclearFrequency({ frequency: f }), false, String(f));
       // A record with no period of its own takes its document's printed cover period, both ends from one source.
       assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), true);

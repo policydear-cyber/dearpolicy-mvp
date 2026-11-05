@@ -88,17 +88,24 @@ function component(row: PremiumRecordRow) {
   return (normalizedIdentifier(row.policy_number) || row.policy_id || (row.insurer ?? "")) + "|" + product;
 }
 const RECURRING = /month|quarter|semi|half.?year|6 month|week|fortnight|year|annum|annual|\bp\.?\s*a\b\.?|bulanan|tahunan/i;
-/** A premium the record says is paid once ("Single premium", "one-off", "one-time", "once", "lump sum", "per trip", "for
- * the period") is a one-off premium (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). */
-const ONE_OFF = /single|one[- ]?(?:off|time)|\bonce\b|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey|policy|period)/i;
+/** Words that a premium is paid once ("Single premium", "one-off", "one-time", "once", "lump sum", "per trip", "for the
+ * period") (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). Weak words ("single", "once")
+ * say so only with no recurring period beside them: "Once a year" and "Yearly (single life)" are yearly (TE pr370). */
+const ONE_OFF_STRONG = /one[- ]?(?:off|time)|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey)|\bsingle\s+(?:premium|payment|trip)\b/i;
+const ONE_OFF_WEAK = /\bsingle\b|\bonce\b/i;
 export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency">) {
-  return ONE_OFF.test(row.frequency ?? "");
+  const f = row.frequency ?? "";
+  if (RECURRING.test(f)) return false;
+  return ONE_OFF_STRONG.test(f) || ONE_OFF_WEAK.test(f);
 }
-/** A printed frequency that names neither a recurring period nor a one-off ("Regular", "As agreed"): how often it is paid is
- * not known, so it is never annualised into the recurring cost, only named (closed list: RECURRING and ONE_OFF). */
+/** A printed frequency whose payment period is not plain: it names neither a recurring period nor a one-off ("Regular",
+ * "As agreed"), or it names both ("Single premium, yearly"). It is never totalled, never taken for a one-off, and named in
+ * the note (closed lists: RECURRING, ONE_OFF_STRONG, ONE_OFF_WEAK). */
 export function isUnclearFrequency(row: Pick<PremiumRecordRow, "frequency">) {
   const f = (row.frequency ?? "").trim();
-  return !!f && !ONE_OFF.test(f) && !RECURRING.test(f);
+  if (!f) return false;
+  if (RECURRING.test(f)) return ONE_OFF_STRONG.test(f);
+  return !ONE_OFF_STRONG.test(f) && !ONE_OFF_WEAK.test(f);
 }
 /** A premium with no payment frequency whose record prints a cover period of at most SHORT_TERM_DAYS (29 Sep to 4 Oct) is
  * not known to be yearly: S$73.17 for a six-day trip is not S$73.17 a year (Home tile showed "S$6.10/month", 27 Oct), and
