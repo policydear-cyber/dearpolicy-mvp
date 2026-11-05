@@ -15,7 +15,9 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
   /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
   premiumCurrency?:string|null;};
 type Row=SummaryRow&{coverKey:string;source:Source;product?:string|null};
-type Person={id:string;name:string;covers:Cover[];rows:Row[]};
+type Person={id:string;name:string;covers:Cover[];rows:Row[];
+  /** The person's schedule lines (what Home's tiles count), from GET /api/benefit-table. Optional: an older server sends none. */
+  scheduleLines?:{policyId:string;category:string}[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
 export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"stalled"|"held"|"table_unread"|"no_table"|"not_readable";hold?:string|null}[];
   unmatchedCovers:Other[];illustrationCovers:Other[];
@@ -96,11 +98,15 @@ function TellUs({person}:{person:Person}){
   </form>;
 }
 
-/** A person in the family with no cover on this page: listed with their name, never silently left out. */
-function NoCoverShown({person}:{person:Person}){
+/** A person in the family with no cover on this page: listed with their name, never silently left out. Asked to upload
+ * only when nothing they may already have uploaded is on its way here: no document of the household is still being read,
+ * stalled, on hold or not yet read into this table, and Home counts no schedule line of theirs (Critic #359 M1, the same
+ * rule as the page's empty state). */
+function NoCoverShown({person,pending}:{person:Person;pending:boolean}){
+  const askUpload=!pending&&!person.scheduleLines?.length;
   return <section className="cov-person" id={`person-${person.id}`} data-testid="table-person">
     <div className="cov-person-head"><h2>{person.name}</h2></div>
-    <p className="muted cov-reading" data-testid="table-person-none">No cover is shown for {person.name} from your documents yet. If a policy covers {person.name}, upload its schedule or certificate on the <Link className="text-link" href="/policies">Documents page</Link>.</p>
+    <p className="muted cov-reading" data-testid="table-person-none">No cover is shown for {person.name} from your documents yet.{askUpload?<> If a policy covers {person.name}, upload its schedule or certificate on the <Link className="text-link" href="/policies">Documents page</Link>.</>:null}</p>
     <TellUs person={person}/>
   </section>;
 }
@@ -144,7 +150,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
         in this table is never told to upload a schedule. */}
     {!people.length?<div className="empty-card">{data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))?"No covers are shown from your documents yet.":"No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
     {listed.length>1?<nav className="cov-people" aria-label="People">{listed.map(p=><a key={p.id} href={`#person-${p.id}`}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
-    {listed.map(person=>!person.covers.length?<NoCoverShown key={person.id} person={person}/>:<section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
+    {listed.map(person=>!person.covers.length?<NoCoverShown key={person.id} person={person} pending={data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))}/>:<section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
       {person.covers.map(c=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0}/>;})}
       <TellUs person={person}/>

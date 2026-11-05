@@ -17,9 +17,10 @@ const source = { documentId: "d1", document: "Family Health Plan", page: 1, exce
 const cover = (personId: string) => ({ personId, coverKey: "family health", product: "Family Health Plan", cover: "Family Health Plan", plan: null, riderOf: null, policyNumber: null,
   sumInsured: 20000, premium: null, premiumFrequency: null, startDate: null, endDate: null, currency: "KES", source });
 const person = (id: string, name: string, covered: boolean) => ({ id, name, covers: covered ? [cover(id)] : [], rows: [] });
-const data = (people: ReturnType<typeof person>[]): BenefitTableData =>
-  ({ enabled: true, people, documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [] } as unknown as BenefitTableData);
-const render = (people: ReturnType<typeof person>[]) => renderToStaticMarkup(createElement(BenefitTableCoverage, { data: data(people) }));
+type P = ReturnType<typeof person> & { scheduleLines?: { policyId: string; category: string }[] };
+const data = (people: P[], documents: { id: string; name: string; state: string }[] = []): BenefitTableData =>
+  ({ enabled: true, people, documents, unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [] } as unknown as BenefitTableData);
+const render = (people: P[], documents: { id: string; name: string; state: string }[] = []) => renderToStaticMarkup(createElement(BenefitTableCoverage, { data: data(people, documents) }));
 const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 test("a person with no cover is listed, linked and told none is shown yet", () => {
@@ -29,6 +30,16 @@ test("a person with no cover is listed, linked and told none is shown yet", () =
   assert.doesNotMatch(text(h), /0 covers/);
   assert.equal((h.match(/data-testid="table-person-none"/g) ?? []).length, 1);
   assert.match(text(h), /Wanjiru Kamau 1 cover · 0 benefits/);
+});
+test("never told to upload what may already be on its way (Critic M1, TE)", () => {
+  for (const state of ["waiting", "stalled", "held", "table_unread"]) {
+    const t = text(render([person("a", "Wanjiru Kamau", true), person("b", "Baraka Kamau", false)], [{ id: "d9", name: "Baraka schedule", state }]));
+    assert.match(t, /No cover is shown for Baraka Kamau from your documents yet\./, state);
+    assert.doesNotMatch(t, /If a policy covers Baraka Kamau/, state);
+  }
+  const lines = { ...person("b", "Baraka Kamau", false), scheduleLines: [{ policyId: "p1", category: "Hospitalisation" }] };
+  assert.doesNotMatch(text(render([person("a", "Wanjiru Kamau", true), lines])), /If a policy covers Baraka Kamau/, "Home counts a schedule line of theirs");
+  assert.match(text(render([person("a", "Wanjiru Kamau", true), person("b", "Baraka Kamau", false)], [{ id: "d1", name: "Read", state: "read" }])), /If a policy covers Baraka Kamau/, "a read document does not hold the line back");
 });
 test("a household with cover for everyone shows no such line", () => {
   assert.doesNotMatch(render([person("a", "Ana Silva", true), person("b", "Ben Silva", true)]), /table-person-none/);
