@@ -98,6 +98,11 @@ for (const u of ["Per day", "Daily", "Per night:"]) for (const v of [100, 200]) 
   "S$100 and S$200 when admitted", "S$100 on Basic; S$200 on Premier"]) check(`plans, no column: "${u} ${tail}" (${v})`, () => assert.equal(value(`Hospital cash ${u} ${tail}`, { pays: "per_day", value: v }), null));
 check("kept: a rate and its cap with the unit first, no plan", () => assert.equal(value("Hospital cash per day S$100 up to S$3,000", { pays: "up_to", value: 3000 }), 3000));
 check("kept: a rate and its ICU rate, unit first", () => assert.equal(value("Hospital cash per day S$100 and S$200 per day in ICU", { pays: "per_day", value: 100 }), 100));
+// TE r376 r5: a figure with its own unit after it keeps that unit; only a figure with no unit on either side takes the run's.
+for (const [line, b, want] of [["Hospital cash per day S$100 or S$3,000 per year", { pays: "up_to", value: 3000 }, 3000], ["Hospital cash per day S$100 or S$3,000 per year", { pays: "per_day", value: 100 }, 100],
+  ["Hospital cash per person S$100 per day, S$3,000 per year", { pays: "up_to", value: 3000 }, 3000], ["Hospital cash Per day S$100, S$3,000 per year", { pays: "up_to", value: 3000 }, 3000],
+  ["Hospital cash Per day S$100, S$3,000 per year", { pays: "per_day", value: 100 }, 100]] as [string, Record<string, unknown>, number][])
+  check(`kept: "${line}" (${b.value})`, () => assert.equal(value(line, b), want));
 check("per person before a run of lump sums is still plans (Critic r376 P4)", () => assert.equal(value("Accidental death per person S$100,000 S$200,000", { pays: "amount", value: 100000 }), null));
 // Critic r376 P5-P7: real rows kept.
 check("kept: per insured person before, a month after (TE r376 Q9)", () => assert.equal(value("Disability income per insured person: S$2,000 a month", { pays: "per_period", period: "month", value: 2000 }), 2000));

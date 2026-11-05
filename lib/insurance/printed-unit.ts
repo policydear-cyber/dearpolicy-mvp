@@ -62,18 +62,21 @@ export function printedUnits(line: string, figures: FigureSpan[]): string[] {
   });
   return out;
 }
-/** For a line that prints its units before its figures: each figure's unit as the run prints it, the unit printed right
- * before the figure, else the one printed before an earlier figure of the line ("Per day S$100 for Plan A, S$200 for Plan
- * B": both daily). Units printed after a figure are not read, so a later cell's trailing words ("for each insured
- * person") never give it a unit of its own that sets it apart from the run. A cap word between a unit and its figure
- * ("per day maximum S$9,000") gives no unit; the caller reads it as a cap. "" before any unit is printed. */
+/** For a line that prints its units before its figures: each figure's unit as the run prints it. The unit printed right
+ * before the figure; else a unit printed right after it ("Per day S$100 or S$200 per year": the second is yearly); else,
+ * with no unit on either side, the one printed before an earlier figure of the line ("Per day S$100 for Plan A, S$200 for
+ * Plan B": both daily). "For each (insured) person" after a figure is no unit of its own, so it never sets a cell apart
+ * from the run ("Per day S$100 | S$200 for each insured person"). A cap word between a unit and its figure ("per day
+ * maximum S$9,000") gives no unit; the caller reads it as a cap. "" before any unit is printed. */
 export function runUnitsBefore(line: string, figures: FigureSpan[]): string[] {
   let run = "";
   return figures.map((f, i) => {
     const m = line.slice(i > 0 ? figures[i - 1].end : 0, f.start).match(BEFORE);
     if (m && i > 0 && m[3] && CAP_AFTER_UNIT.test(m[3])) return run;
     const u = unitOf(m);
-    if (u) run = u;
+    if (u) { run = u; return u; }
+    const a = unitOf(line.slice(f.end, i < figures.length - 1 ? figures[i + 1].start : line.length).match(AFTER));
+    if (a && a !== "person" && a !== "member") return a;
     return run;
   });
 }
