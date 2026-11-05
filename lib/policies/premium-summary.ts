@@ -101,7 +101,7 @@ const PAYMENTS_PER_YEAR: [number, string[]][] = [
   [6, ["every 2 months", "every two months", "bi monthly", "bimonthly", "once every 2 months", "once every two months"]],
   [4, ["quarterly", "per quarter", "a quarter", "every quarter", "each quarter", "once a quarter", "every 3 months", "every three months", "once every 3 months", "3 monthly", "three monthly"]],
   [2, ["half yearly", "halfyearly", "semi annual", "semi annually", "semiannual", "semiannually", "every 6 months", "every six months", "once every 6 months", "twice a year", "twice yearly", "twice per year", "6 monthly", "six monthly"]],
-  [1, ["yearly", "year", "annual", "annually", "per annum", "pa", "p a", "a year", "per year", "every year", "each year", "once a year", "once yearly", "once annually", "once every year", "once per year", "tahunan"]],
+  [1, ["yearly", "year", "annual", "annually", "per annum", "pa", "p a", "a year", "per year", "every year", "each year", "once a year", "once yearly", "once annually", "once every year", "once per year", "one annual", "one yearly", "tahunan"]],
   [52, ["weekly", "per week", "a week", "every week", "each week", "once a week"]],
   [26, ["fortnightly", "every 2 weeks", "every two weeks", "once a fortnight", "once every 2 weeks", "per fortnight"]],
 ];
@@ -109,11 +109,20 @@ const PERIOD_OF = new Map(PAYMENTS_PER_YEAR.flatMap(([n, names]) => names.map((n
 /** Words around a payment period that do not change it ("Annual premium", "Payable monthly by GIRO", "Yearly (single
  * life)", "Per policy year"): removed before the period is matched. A closed list too: any other word leaves the
  * frequency unclear. */
-const PERIOD_NOISE = /\b(?:per policy(?! year)|single life|joint life|in advance|in arrears|by giro|via giro|credit card|direct debit|auto debit|premiums?|paid|payable|payments?|pay|mode|instalments?|installments?|frequency|policy|basis|giro|cash|the)\b/g;
+const PERIOD_NOISE = /\b(?:per policy(?! year)|single life|joint life|multi trip|in advance|in arrears|credit card|debit card|direct debit|auto debit|standing order|bank transfer|giro|cpf(?: oa| ordinary account)?|medisave|by|via|through|from|with|using|premiums?|paid|payable|payments?|pay|mode|frequency|policy|basis|cash|the)\b/g;
+/** A count of payments printed beside the period ("Monthly, 12 instalments"). It must be the period's own count a year:
+ * "Annual, 12 instalments" says two things, so it is not a payment period. */
+const PAYMENT_COUNT = /\b(\d{1,2}|two|four|six|twelve)\s+(?:instalments?|installments?|payments?)\b/;
+const COUNT_WORDS: Record<string, number> = { two: 2, four: 4, six: 6, twelve: 12 };
 /** Payments a year for a printed payment period (PAYMENTS_PER_YEAR), or null when the frequency is not one of them. */
 export function paymentsPerYear(frequency: string | null | undefined): number | null {
-  const f = (frequency ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(PERIOD_NOISE, " ").replace(/\s+/g, " ").trim();
-  return f ? PERIOD_OF.get(f) ?? null : null;
+  let f = (frequency ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  const count = f.match(PAYMENT_COUNT);
+  if (count) f = f.replace(PAYMENT_COUNT, " ");
+  f = f.replace(/\b(?:instalments?|installments?)\b/g, " ").replace(PERIOD_NOISE, " ").replace(/\s+/g, " ").trim();
+  const n = f ? PERIOD_OF.get(f) ?? null : null;
+  if (n == null || !count) return n;
+  return (COUNT_WORDS[count[1]] ?? Number(count[1])) === n ? n : null;
 }
 type FrequencyReading = "recurring" | "one_off" | "unclear" | "none";
 /** A printed frequency read against closed lists, failing closed:
