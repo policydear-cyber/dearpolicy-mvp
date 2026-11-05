@@ -13,7 +13,13 @@ export type TableModel = { choice: ModelChoice; call(c: TableCall): Promise<Tabl
 
 type Usage = { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
 type Client = { messages: { stream(p: unknown): { finalMessage(): Promise<{ content: { type: string; text?: string }[]; stop_reason: string | null; model: string; usage: Usage }>;
-  abort?(): void; currentMessage?: { model?: string; usage?: Usage } | null } } };
+  abort?(): void; on?(event: "text", listener: (delta: string) => void): unknown; currentMessage?: { model?: string; usage?: Usage } | null } } };
+/** Output tokens a stream stopped mid-reply is booked for: the usage the API reported so far, or the text it streamed at
+ * about 3 characters a token when that is more (the API fills output_tokens only in its last event, so a call stopped
+ * after minutes of streaming would otherwise be booked as about 0). */
+export function stoppedOutputTokens(reported: number | null | undefined, streamedChars: number): number {
+  return Math.max(reported ?? 0, Math.ceil(streamedChars / 3));
+}
 
 export function anthropicTableModel(choice: ModelChoice, client?: Client): TableModel {
   return {
@@ -30,7 +36,8 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client): Table
       const system = [{ type: "text" as const, text: c.system, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } }];
       const stream = api.messages.stream({ model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user", content: c.user }],
         output_config: { effort: "medium", format: { type: "json_schema", schema: c.schema } } });
-      let timedOut = false;
+      let timedOut = false, streamedChars = 0;
+      stream.on?.("text", (delta) => { streamedChars += delta.length; });
       const timer = c.timeoutMs != null && stream.abort ? setTimeout(() => { timedOut = true; stream.abort!(); }, Math.max(0, c.timeoutMs)) : null;
       let message;
       try { message = await stream.finalMessage(); }
@@ -38,7 +45,7 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client): Table
         if (!timedOut) throw error;
         // Stopped at the caller's time limit: the tokens used so far are still booked.
         const u = stream.currentMessage?.usage ?? {};
-        return { json: null, stopReason: "timeout", model: stream.currentMessage?.model ?? choice.model, input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, ms: Date.now() - started,
+        return { json: null, stopReason: "timeout", model: stream.currentMessage?.model ?? choice.model, input: u.input_tokens ?? 0, output: stoppedOutputTokens(u.output_tokens, streamedChars), ms: Date.now() - started,
           cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0 };
       } finally { if (timer) clearTimeout(timer); }
       const text = message.content.flatMap((b) => (b.type === "text" && b.text ? [b.text] : [])).join("");

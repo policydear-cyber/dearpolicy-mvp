@@ -4,7 +4,8 @@
  *    as a plan table: two labels joined into one benefit ("Cancel for any reason Sports equipment protector") under
  *    columns ": See table below" and "Home cover", shown twice as "The amount on page 1 could not be read";
  *  - one cell that says a benefit does not apply ("N/A", ": Nil", "Not applicable") is a benefit not covered, never an
- *    amount that could not be read; a figure beside it keeps the row as before;
+ *    amount that could not be read; a row is dropped only when every cell says so, and a term's "Nil" stays its term;
+ *  - a column named by a form value (": See table below") is no plan column, and its row is kept;
  *  - Home read "Not included: Business (no fixed sum, see Coverage)": a cover whose name is its plan's is named with its
  *    product ("Travel insurance, Business plan").
  * Made-up English documents; no model, no database, no network.
@@ -13,7 +14,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k))
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 
 import { benefitRowsFromText } from "@/lib/documents/layout";
-import { formRowMisread, rowKind } from "@/lib/policies/catalog-builder";
+import { formRowMisread, formTier, rowKind } from "@/lib/policies/catalog-builder";
 import { planCoverName } from "@/lib/coverage/table-figures";
 
 let pass = 0, fail = 0;
@@ -30,19 +31,26 @@ const SUMMARIES = [
 ];
 for (const [i, text] of SUMMARIES.entries()) {
   const rows = benefitRowsFromText(text);
-  const kept = rows.filter((r) => !formRowMisread(r.value, r.tier ?? null));
-  t(`F${i + 1} no row of a summary's form lines is stored as a benefit with an unreadable amount`, kept.every((r) => rowKind(r.label, r.value, r.tier ?? null) !== "benefit" || /\d/.test(r.value.replace(/\([^()]*\)/g, ""))),
-    { rows, kept });
+  const kept = rows.filter((r) => !formRowMisread(r.value, r));
   t(`F${i + 1}b two labels joined into one name are never stored`, !kept.some((r) => /cancel for any reason sports|golf cover gadget|business equipment hijack/i.test(r.label)), kept);
 }
-t("F4 a column named by a form value (': See table below') is not a plan column", formRowMisread("S$5,000", ": See table below"), null);
-t("F5 two 'does not apply' cells are two labels' cells", formRowMisread(": N/A : N/A", null) && formRowMisread("Nil\tNil", "Gold"), null);
-t("F6 another label's 'N/A' after a bracketed rate is not this row's amount", formRowMisread("Pet care (S$50 per six-hour period of delay) : N/A", "Home cover"), null);
-// Unchanged: a figure in a cell, or one cell that says it does not apply.
-for (const [value, tier] of [["S$5,000", "Classic"], ["S$5,000\tN/A", null], ["Up to S$500 : N/A for children", null], ["N/A", "Classic"], ["S$200 per day", null]] as const)
-  t(`F7 kept: ${JSON.stringify(value)} under ${tier}`, !formRowMisread(value, tier), null);
+t("F4 a column named by a form value (': See table below') is no plan column, and its row is kept", formTier(": See table below") === null && formTier("Gold") === "Gold" && !formRowMisread("S$5,000"), null);
+t("F5 two 'does not apply' cells are two labels' cells", formRowMisread(": N/A : N/A") && formRowMisread("Nil\tNil"), null);
+t("F6 another pair's value after the label's own 'N/A' cells is not this row's amount", formRowMisread("Pet care (S$50 per six-hour period of delay) : N/A",
+  { label: "Cancel for any reason", line: "Cancel for any reason\t: N/A : N/A\tPet care (S$50 per six-hour period of delay) : N/A" }), null);
+t("F6b a label's own figure beside it keeps the row", !formRowMisread("S$5,000\tN/A", { label: "Medical", line: "Medical\tS$5,000\tN/A" })
+  && !formRowMisread("N/A\tS$5,000", { label: "Medical", line: "Medical\tN/A\tS$5,000" }), null);
+// Never dropped: a value with any figure (in brackets too) or any worded cell (Critic and TE, #371).
+for (const value of ["S$1,000", ": S$250,000", "(S$100 per day) : N/A", "Covered (up to S$500) : N/A", "As charged : N/A", "S$100 per day : N/A",
+  "S$5,000\tN/A", "N/A\tS$5,000", "S$5,000 : Nil", "Up to S$500 : N/A for children", "N/A", "S$100 for every 6 hours", ": S$500,000 : S$1,000,000", "100,000 : -"])
+  t(`F7 kept: ${JSON.stringify(value)}`, !formRowMisread(value), null);
 for (const v of ["N/A", ": N/A", "Not applicable", "Nil", "n.a.", "Excluded", "-"]) t(`F8 "${v}" alone is not covered`, rowKind("Golf equipment", v) === "not_covered", rowKind("Golf equipment", v));
 for (const v of ["S$500", "Up to S$500", "As charged", "Unlimited"]) t(`F9 "${v}" keeps its kind`, rowKind("Baggage", v) !== "not_covered", rowKind("Baggage", v));
+// A term's "Nil" is no such term, never "not covered": the label decides first, as on main.
+for (const [label, value, want] of [["Deductible", "Nil", "deductible"], ["Deductible", ": Nil", "deductible"], ["Co-payment", "-", "co_payment"], ["Co-payment", "Nil", "co_payment"],
+  ["Co-insurance", "Nil", "co_insurance"], ["Co-insurance", "-", "co_insurance"], ["Co-payment cap", "Nil", "co_payment_cap"], ["Policy year limit", "Not applicable", "policy_year_limit"],
+  ["Excess", "Nil", "benefit"]] as const)
+  t(`F10 ${label} | ${value} is ${want}`, rowKind(label, value) === want, rowKind(label, value));
 
 // A cover named only by its plan.
 const names: [string | null, string | null, string | null, string | null][] = [

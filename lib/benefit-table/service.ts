@@ -470,15 +470,17 @@ export async function tableFor(db: Db, accountId: string): Promise<{ table: Bene
 
 /** Asks the model which cover each section is paid under, for every section the household has not linked itself. The
  * model's earlier links are replaced; the household's are never touched. */
-export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage): Promise<{ proposed: number }> {
+export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number): Promise<{ proposed: number }> {
   const l = await load(db, accountId);
   const fixed = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
   const sections = sectionsOf(l.readings).filter((s) => !fixed.has(s.key));
   const { types } = coversOf(l.readings, l.family);
   let links: SectionLink[] = [];
   if (sections.length && types.length) {
-    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT });
+    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(timeoutMs != null ? { timeoutMs } : {}) });
     await onUsage?.("linking", reply);
+    // Stopped at the time limit: the links already in place are kept, not replaced by none.
+    if (reply.stopReason === "timeout") return { proposed: 0 };
     const keys = new Set(sections.map((s) => s.key)), covers = new Set(types.map((t) => t.key));
     links = ((reply.json as { links?: SectionLink[] } | null)?.links ?? []).filter((x) => keys.has(x.section) && (x.cover == null || covers.has(x.cover)));
   }

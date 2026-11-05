@@ -56,6 +56,7 @@ function fakeDb(pages: { page: number; text: string }[], earlier?: { reading: un
         policy_number: null, quarantine_status: "scan_clean", scan_result_detail: null, reading_live: true, scan_live: false }];
     if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages")) return pages.map((x) => ({ policy_id: "doc", page_number: x.page, text: x.text }));
     if (q.startsWith("INSERT INTO benefit_readings")) { s.readings.set(p[0] as string, { reading: p[2] as string, model: p[3] as string }); return []; }
+    if (q.startsWith("SELECT 1 FROM benefit_readings")) return s.readings.has(p[0] as string) ? [{ "?column?": 1 }] : [];
     if (q.startsWith("SELECT read_at FROM benefit_readings")) return earlier && s.readings.has(p[0] as string) ? [{ read_at: earlier.read_at }] : [];
     if (q.startsWith("UPDATE policies SET processing_message=nullif(")) {
       const prefix = String(p[2]).replace(/%$/, "");
@@ -425,27 +426,49 @@ async function main() {
         if (q.startsWith("SELECT (extracted_json ?")) return [{ cut: mark }];
         if (q.startsWith("UPDATE policies SET extracted_json=jsonb_set(") && q.includes(TABLE_READING_MARK)) { mark = true; log.push("mark"); return []; }
         if (q.startsWith("UPDATE policies SET extracted_json=extracted_json -")) { mark = false; log.push("clear"); return []; }
-        return f.db(sql, p);
+        // The re-link after a full reading: no household, so nothing to link (and no call).
+        if (q.startsWith("DELETE FROM benefit_links")) return [];
+        try { return await f.db(sql, p); } catch (error) { if (q.startsWith("SELECT")) return []; throw error; }
       };
       return { db, s: f.s, log, marked: () => mark };
     };
-    // A retry after a cut-off reading: no model call, the note is saved, the mark is cleared.
+    // The rule: a retry (attempt 2 or later) never calls the table model, whatever its earlier attempt did.
+    // R1: attempt 1 cut off mid-reading (its mark stays): attempt 2 makes no call, saves the note, clears the mark...
     let w = withMark(wording(), true), m = priced();
     let r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
     assert.equal(r.read, false);
-    assert.equal(m.calls.length, 0, "no paid call");
+    assert.equal(m.calls.length, 0, "R1: no paid call");
     assert.deepEqual(w.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")]);
     assert.equal(w.marked(), false);
-    // A first attempt that fails (here: out of time) still clears its mark, so the job's retry is not refused for it...
+    // ...and (a) attempt 3 of the same job makes no call either, although attempt 2 cleared the mark.
+    m = priced();
+    r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
+    assert.equal(m.calls.length, 0, "(a) attempt 3: no paid call");
+    // (b) attempt 1's reading threw (a model-service error): its mark is kept, and attempt 2 makes no call.
+    w = withMark(booklet(3, 10), false);
+    const throwing: TableModel = { choice: { provider: "anthropic", model: "stand-in" }, async call() { throw new Error("overloaded"); } };
+    await assert.rejects(readIntoTable(w.db, throwing, A, "doc"), /overloaded/);
+    assert.equal(w.marked(), true, "(b) a reading that threw keeps its mark");
+    m = priced();
+    r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
+    assert.equal(m.calls.length, 0, "(b) attempt 2: no paid call");
+    assert.deepEqual(w.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")], "(b) the earlier reading is kept and the document says the new one was not read");
+    // (c) attempt 1 finished the reading and the job failed later: attempt 2 makes no call and keeps the stored reading,
+    // with no note.
+    w = withMark(booklet(3, 10), false); m = priced();
+    r = await readIntoTable(w.db, m.model, A, "doc");
+    assert.equal(r.read, true);
+    assert.deepEqual(w.log, ["mark", "clear"]);
+    const kept = w.s.readings.get("doc")?.reading, n = m.calls.length;
+    r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
+    assert.equal(m.calls.length, n, "(c) attempt 2: no paid call");
+    assert.equal(w.s.readings.get("doc")?.reading, kept);
+    assert.deepEqual(w.s.notes, []);
+    // A first attempt that ends normally out of time clears its mark (its note says the table was not read).
     const clock = { t: 0 };
     w = withMark(wording(), false); m = priced({ worse: 1.9, clock });
     r = await readIntoTable(w.db, m.model, A, "doc", { deadline: 150_000, now: () => clock.t });
     assert.equal(r.read, false);
-    assert.deepEqual(w.log, ["mark", "clear"]);
-    // ...and a retry whose earlier attempt never reached the table reading (no mark) reads it.
-    w = withMark(booklet(3, 10), false); m = priced({ worse: 100 }); // it runs out, so no re-linking follows
-    r = await readIntoTable(w.db, m.model, A, "doc", { retry: true });
-    assert.ok(m.calls.length >= 1, "read on a retry with no cut-off reading");
     assert.deepEqual(w.log, ["mark", "clear"]);
   });
   await test("L20 the Anthropic call is stopped at its time limit and books the tokens it used", async () => {
@@ -462,6 +485,16 @@ async function main() {
     assert.equal(reply.stopReason, "timeout");
     assert.equal(reply.json, null);
     assert.deepEqual([reply.input, reply.output], [9_000, 3_100]);
+    // The API reports output tokens only in its last event: a call stopped after streaming books its streamed text.
+    const streaming = { messages: { stream: () => {
+      let reject: (e: Error) => void = () => undefined, onText: (d: string) => void = () => undefined;
+      const done = new Promise<never>((_, rj) => { reject = rj; });
+      setTimeout(() => onText("x".repeat(30_000)), 1);
+      return { finalMessage: () => done, abort: () => reject(new Error("aborted")), on: (_e: string, l: (d: string) => void) => { onText = l; },
+        currentMessage: { model: "stand-in-sonnet", usage: { input_tokens: 9_000, output_tokens: 1 } } };
+    } } };
+    const streamed = await anthropicTableModel({ provider: "anthropic", model: "stand-in" } as never, streaming as never).call({ system: "s", user: "u", schema: {}, maxTokens: 24_000, timeoutMs: 30 });
+    assert.equal(streamed.output, 10_000, "30,000 streamed characters are booked as about 10,000 output tokens");
     // A failure that is not the time limit is still thrown.
     const failing = anthropicTableModel({ provider: "anthropic", model: "stand-in" } as never, { messages: { stream: () => ({ finalMessage: () => Promise.reject(new Error("overloaded")) }) } } as never);
     await assert.rejects(failing.call({ system: "s", user: "u", schema: {}, maxTokens: 10, timeoutMs: 1000 }), /overloaded/);

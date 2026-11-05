@@ -172,7 +172,8 @@ export async function drainChatOnce(params: { jobTypes?: WorkerJobTypeConfig[]; 
  * never delays or changes the response. */
 export function scheduleChatDrain(): void {
   if (!requestDrainEnabled()) return;
-  try { after(async () => { await drainChatOnce(); }); }
+  const startedAt = Date.now();
+  try { after(() => inFunctionTime(startedAt, () => drainChatOnce())); }
   catch { /* Outside a request scope: nothing to run after (see scheduleRequestDrain). */ }
 }
 
@@ -194,6 +195,12 @@ export type StartNowOutcome = "disabled" | "busy" | "not_claimable" | "succeeded
 /** Claims and runs the one job of this type with this idempotency key, now, when it is claimable (awaitable; tests and
  * scheduleJobStart). At most START_NOW_MAX_IN_FLIGHT per instance; "not_claimable" when it is already running, done,
  * cancelled or waiting out a retry delay. */
+/** Runs a drain inside the time limit of the function that serves this request (lib/jobs/function-time.ts). */
+async function inFunctionTime(startedAt: number, fn: () => Promise<unknown>): Promise<void> {
+  const { withFunctionDeadline } = await import("./function-time");
+  await withFunctionDeadline(startedAt, fn);
+}
+
 export async function startJobNow(params: { jobType: string; idempotencyKey: string; jobTypes?: WorkerJobTypeConfig[]; env?: NodeJS.ProcessEnv }): Promise<StartNowOutcome> {
   if (!requestDrainEnabled(params.env ?? process.env)) return "disabled";
   if (startNowInFlight >= START_NOW_MAX_IN_FLIGHT) return "busy";
@@ -224,7 +231,9 @@ export function scheduleJobStart(jobType: string, idempotencyKey: string): void 
  * changes the response. */
 export function scheduleRequestDrain(): void {
   if (!requestDrainEnabled()) return;
-  const task = async () => { await drainOnce(); };
+  // The function's time counts from this request, not from when the drain starts after the response.
+  const startedAt = Date.now();
+  const task = () => inFunctionTime(startedAt, () => drainOnce());
   try {
     after(task);
   } catch {
