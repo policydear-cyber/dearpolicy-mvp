@@ -107,6 +107,18 @@ for (const [line, b, want] of [["Hospital cash per day S$100 or S$3,000 per year
 check("plans, no column: two runs, each with its unit first (R8)", () => assert.equal(value("Delay Per trip: S$500 S$1,000, per day S$50 S$100", { pays: "up_to", value: 500 }), null));
 check("plans, no column: the second run (R8)", () => assert.equal(value("Delay Per trip: S$500 S$1,000, per day S$50 S$100", { pays: "per_day", value: 50 }), null));
 check("kept: a rate, then its yearly cap with the unit after (Critic p376c)", () => assert.equal(value("Hospital cash Per day S$100 per day and S$3,000 per year", { pays: "per_day", value: 100 }), 100));
+// Critic LOW r376: a cap word covers the bare cells after its figure, so side-by-side caps are plans' caps and a row read
+// with no plan column shows none of them, units first or after. A cell with its own unit or another term after it, or
+// set off in brackets, keeps its own reading.
+for (const [line, b] of [["Hospital cash Per day: S$100 S$200 up to S$3,000 S$6,000", { pays: "up_to", value: 3000 }], ["Hospital cash Per day: S$100 S$200 up to S$3,000 S$6,000", { pays: "up_to", value: 6000 }],
+  ["Room and board S$300 per day S$500 per day up to S$9,000 S$15,000", { pays: "up_to", value: 9000 }], ["Baggage up to S$500 S$1,000", { pays: "up_to", value: 500 }],
+  ["Per trip up to S$5,000 | S$10,000 | S$15,000", { pays: "up_to", value: 10000 }], ["Medical expenses up to S$200,000 S$400,000 for each insured person", { pays: "up_to", value: 200000 }],
+  ["Trip curtailment up to S$2,000, S$4,000", { pays: "up_to", value: 4000 }]] as [string, Record<string, unknown>][])
+  check(`plans, no column: side-by-side caps "${line}" (${b.value})`, () => assert.equal(value(line, b), null));
+for (const [line, b, want] of [["Baggage up to S$500 S$100 excess", { pays: "up_to", value: 500 }, 500], ["Medical up to S$200,000 (S$50,000 for age 70 and above)", { pays: "up_to", value: 200000 }, 200000],
+  ["Room and board S$300 per day up to S$9,000", { pays: "up_to", value: 9000 }, 9000], ["Hospital cash per day S$100 up to S$3,000", { pays: "up_to", value: 3000 }, 3000],
+  ["Overseas medical up to S$250,000 S$5,000 per day for ICU", { pays: "up_to", value: 250000 }, 250000]] as [string, Record<string, unknown>, number][])
+  check(`kept: one cap "${line}" (${b.value})`, () => assert.equal(value(line, b), want));
 check("per person before a run of lump sums is still plans (Critic r376 P4)", () => assert.equal(value("Accidental death per person S$100,000 S$200,000", { pays: "amount", value: 100000 }), null));
 // Critic r376 P5-P7: real rows kept.
 check("kept: per insured person before, a month after (TE r376 Q9)", () => assert.equal(value("Disability income per insured person: S$2,000 a month", { pays: "per_period", period: "month", value: 2000 }), 2000));

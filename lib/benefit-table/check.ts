@@ -63,6 +63,18 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
       return { text: m[1], start: m.index!, end: m.index! + m[0].length, amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
     });
+    // A cap word covers the bare cells right after its figure ("Per day: S$100 S$200 up to S$3,000 S$6,000", "Baggage up
+    // to S$500 | S$1,000"): with only separators between and no unit of their own, they are the other plans' caps, so
+    // the run is plan cells, as "up to S$500 up to S$1,000" is (Critic LOW r376). A cell with its own unit, or with words
+    // between, keeps its own reading.
+    for (let i = 1; i < cells.length; i++) {
+      const own = found[i][2] ?? found[i][3] ?? found[i][4] ?? found[i][5] ?? found[i][6];
+      // What follows the cell is the line's end, a separator, the next figure, or a plan's or period's words; never
+      // another term ("up to S$500 S$100 excess" is a cap and an excess).
+      const after = line.slice(cells[i].end, cells[i + 1]?.start ?? line.length);
+      const bareAfter = /^\s*(?:$|[|/;,]|(?:for|per|each|any|a|an|in|on|under)\b)/i.test(after);
+      if (cells[i - 1].unit === "cap" && cells[i].unit !== "cap" && !own && bareAfter && /^[\s|/;,]*(?:(?:or|and)\s+)?$/i.test(line.slice(cells[i - 1].end, cells[i].start))) cells[i].unit = "cap";
+    }
     const at = cells.findIndex((c) => Math.abs(c.amount - value) < 0.005);
     if (at < 0) return false;
     // The run of cells side by side with this one: only separators between them (spaces, tabs, "|", "/", ";", ",", a dash,
