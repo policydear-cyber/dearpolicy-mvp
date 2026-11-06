@@ -464,6 +464,10 @@ async function main() {
     assert.equal(at(swapped, 2)!.value, 50000, "the main table keeps its own agreed figure");
     const back = show(read([main, addOn]));
     assert.equal(at(back, 3)!.value, 20000);
+    // Only the main table in a fresh reading (Critic R389d): the add-on's figure never lands on the main row.
+    const mainOnly = show(read([main]));
+    assert.equal(at(mainOnly, 2)!.value, null, "the main row is not given the add-on's figure");
+    assert.equal((at(mainOnly, 2) as { figureCheck?: GuardNote[] }).figureCheck?.[0].status, "confirm");
     // Both rows cited on a page the household never confirmed: the reading cannot tell them apart, so ask again.
     const moved = read([main, addOn]);
     for (const b of moved.benefits) b.source = { ...b.source, page: 1 };
@@ -476,13 +480,20 @@ async function main() {
     }
   });
 
-  await test("the household's figure stays with its row when a fresh reading cites another page or words the heading differently", () => {
+  await test("a fresh reading that cites another page or words the heading differently asks the household again, offering their figure", () => {
     const r = checked(), key = businessTripKey(r);
     const moved = structuredClone(r);
     for (const b of moved.benefits) { b.section = "SECTION 2 - TRAVEL INCONVENIENCE BENEFITS"; b.source = { ...b.source, page: 3 }; }
     assert.equal(businessTripKey(moved).split(".")[0], key.split(".")[0], "the same printed row");
-    const pick = (x: CheckedReading) => x.benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")!.value;
-    assert.equal(pick(applyGuards(moved, null, [{ documentId: DOC.id, claimKey: key, value: 1000 }])), 1000);
+    const pick = (x: CheckedReading) => x.benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")!;
+    const agreedAll: GuardRecord = { version: "t", at: "t", spentUsd: 0, calls: 0, verdicts: Object.fromEntries(claimsOf(moved).map((c) =>
+      [c.key, { status: "agreed", value: c.value, per: c.per, page: c.page, line: c.excerpt, candidates: [c.value], rounds: 0 } as Verdict])) };
+    const row = pick(applyGuards(moved, agreedAll, [{ documentId: DOC.id, claimKey: key, value: 1000 }]));
+    assert.equal(row.value, null, "no guard figure over the household's");
+    const note = (row as { figureCheck?: GuardNote[] }).figureCheck?.[0];
+    assert.equal(note?.status, "confirm");
+    assert.ok(note!.candidates.includes(1000));
+    assert.equal(pick(applyGuards(r, agreedAll, [{ documentId: DOC.id, claimKey: key, value: 1000 }])).value, 1000, "the same reading keeps it");
   });
 
   await test("Haiku 4.5 is sent no effort setting (it refuses one); the other guards keep it", () => {

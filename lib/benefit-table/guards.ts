@@ -82,11 +82,10 @@ function coverWhere(c: CheckedCover, page: number): string {
 
 /** Every figure a checked reading uses, as claims with stable keys. A key binds to exactly one printed row: the row's
  * label and column (or the person and cover) and the row's own printed words (the excerpt found on the page), never the
- * figure the reader gave, its page or the heading's wording. So a household's confirmation stays with its row when a fresh
- * reading cites another page or words the heading differently (Critic R389-2), and never moves to another table's row
- * with the same label (Critic R389b: an add-on's "Medical expenses" printed with other figures). Two rows that print the
- * very same words under the same label and column also need the same page, heading and order to match, so a reading that
- * cannot tell them apart asks the household again rather than guess. */
+ * figure the reader gave. The exact key adds the page, the heading and the order among identical rows there. A household's
+ * confirmation applies only on the exact key (confirmationFor); a fresh reading that cites another page or rewords the
+ * heading asks the household again with their own figure offered, so a figure never moves to another table's row with the
+ * same label and printed words (Critic R389b/c/d). */
 export function claimsOf(r: CheckedReading): Claim[] {
   const out: Claim[] = [];
   const drafts: { base: string; strict: unknown[]; claim: Omit<Claim, "key"> }[] = [];
@@ -236,23 +235,17 @@ type Marked = { figureCheck?: GuardNote[] };
  * guards null (the document was read before the guards, or with them off): every figure is "never checked". */
 const rowOf = (key: string) => key.split(".")[0];
 
-/** Which household figure applies to each claim. An exact key wins. Otherwise a confirmation stored for the same printed
- * row (a fresh reading cited another page, or identical rows became one) applies when this reading has just one claim
- * for that row; with several, and no exact match, the household is asked again. A confirmation that exactly matches
- * another claim of this reading belongs to that claim. */
+/** Which household figure applies to each claim. Fails closed: a confirmation applies only on its exact key (the same
+ * printed row, page, heading and order). A confirmation for the same printed row that matches no claim of this reading
+ * exactly (a fresh reading cited another page, reworded the heading, or dropped an identical row in another table) is
+ * never applied and never overridden: that row is asked again, with the household's figure among the choices (Critic
+ * R389c/d). A confirmation that exactly matches another claim of this reading belongs to that claim. */
 export function confirmationFor(claims: Claim[], confirmations: FigureConfirmation[]): (c: Claim) => { value: number | null; ambiguous: number[] } {
   const keys = new Set(claims.map((c) => c.key));
   const exact = new Map(confirmations.map((c) => [c.claimKey, c.value]));
   const loose = new Map<string, number[]>();
   for (const c of confirmations) if (!keys.has(c.claimKey)) loose.set(rowOf(c.claimKey), [...(loose.get(rowOf(c.claimKey)) ?? []), c.value]);
-  const perRow = new Map<string, number>();
-  for (const c of claims) perRow.set(rowOf(c.key), (perRow.get(rowOf(c.key)) ?? 0) + 1);
-  return (c) => {
-    if (exact.has(c.key)) return { value: exact.get(c.key)!, ambiguous: [] };
-    const found = loose.get(rowOf(c.key)) ?? [];
-    if (found.length === 1 && perRow.get(rowOf(c.key)) === 1) return { value: found[0], ambiguous: [] };
-    return { value: null, ambiguous: found };
-  };
+  return (c) => exact.has(c.key) ? { value: exact.get(c.key)!, ambiguous: [] } : { value: null, ambiguous: loose.get(rowOf(c.key)) ?? [] };
 }
 
 export function applyGuards(r: CheckedReading, guards: GuardRecord | null | undefined, confirmations: FigureConfirmation[] = []): CheckedReading {
@@ -264,7 +257,7 @@ export function applyGuards(r: CheckedReading, guards: GuardRecord | null | unde
   const settle = (claim: Claim): { value: number | null; note: GuardNote | null } => {
     const own = confirmedFor(claim);
     if (own.value != null) return { value: own.value, note: null };
-    // The household confirmed this row but the reading cannot say which of its identical rows it was: ask again,
+    // The household confirmed this printed row, but not at this page, heading and order: ask again,
     // never show a guard's figure over a household's (Critic R389c).
     if (own.ambiguous.length) return { value: null, note: { status: "confirm", field: claim.field, claimKey: claim.key, page: claim.page, line: claim.excerpt,
       candidates: [...new Set([...own.ambiguous, claim.value])], note: NEEDS_CONFIRMATION } };
