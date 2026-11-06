@@ -60,7 +60,7 @@ const people: [string, string, boolean][] = [
 for (const [text, who, want] of people) check(`${who} as particulars in "${text.split("\n")[0]}": ${want}`, () => assert.equal(personAsParticulars(who, text), want));
 // Critic r377: ordinary insured lines keep their person; real own figures stay; a sentence mentioning a sample is no sample.
 for (const [text, who] of [["Name of Life Assured Lim Wei Jie", "Lim Wei Jie"], ["Name Of Insured Person Lim Wei Jie", "Lim Wei Jie"], ["Insured Child: Tan Xiao Ming, 5 years", "Tan Xiao Ming"],
-  ["Insured Child: Tan Xiao Ming born 3 Mar 2019", "Tan Xiao Ming"], ["1 Lee Mei Ling Spouse S$100,000", "Lee Mei Ling"], ["This is to certify that Lim Wei Jie is insured under the policy below.", "Lim Wei Jie"],
+  ["Insured Child: Tan Xiao Ming born 3 Mar 2019", "Tan Xiao Ming"], ["No Name Relationship Sum Insured\n1 Lee Mei Ling Spouse S$100,000", "Lee Mei Ling"], ["This is to certify that Lim Wei Jie is insured under the policy below.", "Lim Wei Jie"],
   ["Insured person name Lim Wei Jie, NRIC S1234567A", "Lim Wei Jie"], ["Insured: Lee Mei Ling Female 12/03/1985", "Lee Mei Ling"], ["Insured Lee Mei Ling 40", "Lee Mei Ling"], ["Policyholder : LIM, WEI JIE", "Lim Wei Jie"]])
   check(`${who} as particulars in "${text}"`, () => assert.equal(personAsParticulars(who, text), true));
 for (const [line, n] of [["The sum assured will be paid on death: S$500,000", 500000], ["Your benefit will be S$100 per day", 100], ["Premium waiver: S$100,000 sum assured", 100000],
@@ -132,6 +132,20 @@ const D2: [string, number, string | null][] = [["Rider premium waiver sum assure
   ["Total monthly payout with SilverYears Care: S$2,140", 2140, "combined_total"], ["Annual premium: S$298.40", 298.4, "premium"], ["Your premium for the coming year is S$331.60.", 331.6, "premium"], ["Premium (paid from MediSave): S$298.40", 298.4, "premium"],
   ["Example: a 40-year-old receives S$700 a month.", 700, "example"], ["Premium waiver benefit sum assured S$100,000", 100000, null], ["Instalment Protection Benefit S$5,000", 5000, null]];
 for (const [t, n, want] of D2) check(`TE r377 context of ${n} in "${t}"`, () => assert.equal(amountOnlyInContext(t, n, { premium: true }), want));
+
+// TE and Critic r377 round 2: an own rider is never "another payer"; waiver of premium is cover; banners are whole short lines.
+const D3: [string, number, string | null][] = [["This plan works with the Hospital Cash Rider, which pays S$100 per day.", 100, null], ["Works with SilverCare Rider, which pays S$100 a day.", 100, null],
+  ["We pay the benefit less any payout from MediCare Rider (currently S$500).", 500, null], ["Waiver of premium: S$100,000", 100000, null], ["Waiver of Premium Benefit S$50,000", 50000, null],
+  ["Return of premium on death: S$12,000", 12000, null], ["This plan works with HealthBase, which pays up to S$120,000 a year.", 120000, "other_payer"]];
+for (const [t, n, want] of D3) check(`r377b context of ${n} in "${t}"`, () => assert.equal(amountOnlyInContext(t, n, { premium: true }), want));
+const B3: [string, boolean][] = [["SAMPLE POLICY SCHEDULE", true], ["Specimen Certificate of Insurance", true], ["MOCK-UP - NOT A REAL POLICY", true], ["EXAMPLE ONLY", true], ["VOID - SPECIMEN", true],
+  ["TEST DOCUMENT - NOT FOR ISSUE", true], ["*** Sample schedule for training ***", true], ["Specimen Policy Schedule", true],
+  ["Sample - Blood test: up to S$500", false], ["Sample Collection Benefit", false], ["Sample", false], ["Example: a 40-year-old receives S$700 a month.", false]];
+for (const [t, want] of B3) check(`r377b sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
+check("r377b a lab-sample benefit line keeps the schedule real", () => assert.equal(specimenPage("Policy Schedule\nLife assured: OWEN TAY\nSample - Blood test: up to S$500\nSum assured S$100,000"), false));
+const A3: [string, string, boolean][] = [["Covered person - Lim Wei Jie", "Lim Wei Jie", true], ["Covered persons: Tan Ah Kow, Lee Mei Ling", "Lee Mei Ling", true], ["Insured traveller: Lee Mei Ling", "Lee Mei Ling", true],
+  ["Traveller(s): Tan Ah Kow, Lee Mei Ling", "Tan Ah Kow", true], ["Covered member: Tan Xiao Ming, 5", "Tan Xiao Ming", true]];
+for (const [t, w, want] of A3) check(`r377b particulars: ${w} in "${t}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

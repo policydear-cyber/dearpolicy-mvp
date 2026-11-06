@@ -25,7 +25,14 @@ const SCHEME = /\b(?:national|public|government|state)\s+(?:[a-z-]+\s+){0,3}sche
 const NAMED_AT = new RegExp("^" + NAMED);
 /** Whether a lead-in (matched without regard to case, its last group the rest of the text) is followed by a named payer
  * (matched with regard to case) or a scheme. */
-const namedAfter = (text: string, lead: RegExp) => [...text.matchAll(lead)].some((m) => NAMED_AT.test(m[m.length - 1]) || /^(?:(?:the|your)\s+)?(?:[\w-]+\s+){0,2}scheme\b/i.test(m[m.length - 1]));
+/** A name that ends as this policy's own part ("the Hospital Cash Rider", "SilverCare Rider", "Family Plan") is not another
+ * payer (Critic r377 F1, F2). */
+const OWN_PART = /\b(?:riders?|plans?|benefits?|supplements?|covers?|polic(?:y|ies))$/i;
+const namedAfter = (text: string, lead: RegExp) => [...text.matchAll(lead)].some((m) => {
+  const rest = m[m.length - 1];
+  const name = NAMED_AT.exec(rest)?.[0].trim();
+  return (!!name && !OWN_PART.test(name)) || /^(?:(?:the|your)\s+)?(?:[\w-]+\s+){0,2}scheme\b/i.test(rest);
+});
 const WITH_LEAD = /\b(?:works?\s+(?:together\s+)?with|on\s+top\s+of|alongside|in\s+addition\s+to)\s+(.*)$/gi;
 const PAYS_NOW = /\b(?:which|that)\s+(?:currently\s+|now\s+|also\s+)?pays\b[^.;]{0,30}$|\b(?:currently|now)\s+pays\b[^.;]{0,30}$/i;
 const LESS_LEAD = /\b(?:less|minus|net\s+of|after\s+deducting|deducting|reduced\s+by|offset\s+(?:by|against))\b[^.;]{0,40}\b(?:payouts?|payments?|benefits?|amounts?)\s+(?:from|under|paid\s+by)\s+(.*)$/gi;
@@ -43,7 +50,7 @@ const LATER = /\b20\d\d\b|\bin\s+\d+\s+years?\b|\bafter\s+\d+\s+years?\b/i;
 /** A premium being paid: the figure's own label is a premium ("Annual premium:", "Premium (paid from MediSave):", "Amount
  * due:"), or a sentence says the premium is the figure ("Your premium for the coming year is S$331.60"). A premium word
  * inside a benefit's name ("Rider premium waiver sum assured:", "death benefit (including return of premiums):") is not. */
-const PREMIUM_LABEL = /\b(?:premium|instal+ment)s?(?:\s+(?:payable|due|paid|amount))?\s*(?:\([^)]*\))?\s*[:\-–]?\s*$|\b(?:premium|instal+ment)s?\b[^.;:()]{0,40}\b(?:is|are|will\s+be)\s*$|\bamount\s+due\s*[:\-–]?\s*$/i;
+const PREMIUM_LABEL = /(?<!\b(?:waiver|return|refund|waive)\s+of\s+(?:the\s+)?)\b(?:premium|instal+ment)s?(?:\s+(?:payable|due|paid|amount))?\s*(?:\([^)]*\))?\s*[:\-–]?\s*$|\b(?:premium|instal+ment)s?\b[^.;:()]{0,40}\b(?:is|are|will\s+be)\s*$|\bamount\s+due\s*[:\-–]?\s*$/i;
 
 export type FigureContext = "other_payer" | "combined_total" | "example" | "projection" | "premium";
 const WHY: Record<FigureContext, string> = {
@@ -127,8 +134,22 @@ export function amountOnlyInContext(text: string, amount: number, o: { premium?:
  * "DUMMY", "FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", or "This is a sample". A sentence that mentions
  * a sample ("We enclose a sample copy", "A specimen policy contract is available at ...") is not one (Critic r377 C2, TE
  * r377), nor a disclaimer such as "not a real policy" (made-up test documents print it). */
-const SPECIMEN = /^[\s*#=_-]*(?:(?:sample|specimen|dummy)(?:\s+(?:only|copy|statement|schedule|certificate|policy|letter|document|notice|card|contract))?(?:\s*[-–:.!|]\s*.{0,80})?|for\s+illustration(?:\s+purposes)?\s+only\b.{0,80})[\s*#=_-]*$|\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/im;
-export function specimenPage(text: string) { return SPECIMEN.test(text); }
+/** One segment of a banner line: a closed list of markers, at its start. */
+const BANNER_SEGMENT = /^(?:specimen\b(?!\s+signature)|dummy\b|mock[\s-]?up\b|void\b|test\s+document\b|for\s+illustration(?:\s+purposes)?\s+only\b|(?:sample|example)\s+(?:only\b|copy\b|(?:[a-z]+\s+){0,2}(?:schedule|statement|certificate|policy|document|contract|letter|notice|card)\b))/i;
+/** A banner or heading line that marks a page as a sample: a short whole line with no figure, one of whose parts (split at
+ * dashes, colons or bars) opens with a marker ("SAMPLE POLICY SCHEDULE", "Specimen Certificate of Insurance", "VOID -
+ * SPECIMEN", "TEST DOCUMENT - NOT FOR ISSUE", "EXAMPLE ONLY", "MOCK-UP - NOT A REAL POLICY", "*** Sample schedule for
+ * training ***", "Sample - not valid for claims"), or a line in capitals that holds SPECIMEN, DUMMY or MOCK-UP ("POLICY
+ * SCHEDULE (SPECIMEN)"). */
+function bannerLine(line: string): boolean {
+  const t = line.trim().replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, "");
+  if (!t || /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d|\d{3,}/.test(t) || t.split(/\s+/).length > 10) return false;
+  const parts = t.split(/\s*[-–:|]\s+|\s+[-–:|]\s*/).map((x) => x.replace(/^[\s()[\]*]+|[\s()[\]*]+$/g, "")).filter(Boolean);
+  if (parts.some((x) => BANNER_SEGMENT.test(x))) return true;
+  if (parts.length > 1 && /^(?:sample|example)$/i.test(parts[0]) && parts.slice(1).some((x) => /\bnot\s+(?:valid|for|a\s+real|an\s+actual)\b/i.test(x))) return true;
+  return t === t.toUpperCase() && /\b(?:SPECIMEN|DUMMY|MOCK-?UP)\b/.test(t);
+}
+export function specimenPage(text: string) { return /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/i.test(text) || text.split("\n").some(bannerLine); }
 
 /** Lower-case words that are part of a name ("binti", "a/l", "van", "de"). */
 const NAME_PARTICLE = /^(?:bin|binti|binte|bte|bt|b\.|bint|ibn|d\/o|s\/o|a\/l|a\/p|ap|van|von|der|den|de|da|das|do|dos|du|del|della|di|la|le|al|el|y|e)$/i;
@@ -145,12 +166,19 @@ const NOT_A_PERSON_LABEL = /(?<!\p{L})(?:example|e\.g|sample|specimen|illustrati
 export function personAsParticulars(person: string, pageText: string): boolean {
   const want = normalizePersonName(person).split(" ").filter((w) => w.length > 0 && !HONORIFIC.test(w));
   if (!want.length) return false;
-  for (const raw of pageText.split("\n")) {
+  const lines = pageText.split("\n");
+  // A page with a table whose header names a name column ("No Name Relationship Sum Insured") prints its people in rows.
+  const tableish = lines.some((l) => /\bnames?\b/i.test(l) && /\b(?:relationship|nric|age|sum|plan|dob|gender|insured|assured|cover)\b/i.test(l) && l.trim().split(/\s+/).length <= 12);
+  for (const [k, raw] of lines.entries()) {
+    // A line that is an example's or a greeting's, or comes right under such a heading ("Meet our customer", "Example"),
+    // names no insured (Critic r377 E4, E5, E7).
+    const prev = (lines[k - 1] ?? "").trim();
+    if (NOT_A_PERSON_LABEL.test(raw) || (prev && NOT_A_PERSON_LABEL.test(prev) && prev.split(/\s+/).length <= 8)) continue;
     // A name printed in capitals is how a schedule or certificate prints its insured, even inside a sentence ("This is
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
     const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
     if (!NOT_A_PERSON_LABEL.test(raw) && capitals.some((run) => { const n = normalizePersonName(run).split(" "); return want.every((w) => n.includes(w)) && n.length <= want.length + 2; })) return true;
-    if (afterInsuredLabel(raw, want)) return true;
+    if (afterInsuredLabel(raw, want, tableish)) return true;
     // Cells: parts of the line set off by a tab, a colon, a bar or a run of spaces, and names joined by "and" or "&"; a
     // bracket ("(NRIC S1234567A)", "(the Life Assured)") and an age, date of birth or identity number after a comma are
     // not part of a name.
@@ -178,15 +206,15 @@ export function personAsParticulars(person: string, pageText: string): boolean {
 
 /** A label that introduces the insured person, a closed list ("Name of Life Assured", "Insured Child:", "Policyholder",
  * "Insured person name", "Member"), or a row number at the start of a table row ("1"), or nothing at all. */
-const INSURED_LABEL = /^(?:\d{1,3}[.)]?|(?:name\s+of\s+(?:the\s+)?)?(?:(?:joint\s+)?(?:life|lives)\s+(?:assured|insured)|insured(?:\s+(?:person|persons|member|members|child|children|spouse|life|lives|employee))?|assured|policy\s*holder|policy\s+owner|proposer|member|employee|dependants?)(?:'?s)?(?:\s+(?:name|names))?|name|this\s+is\s+to\s+certify\s+that|we\s+certify\s+that|certif(?:y|ies)\s+that)?$/i;
+const INSURED_LABEL = /^(?:\d{1,3}[.)]?|(?:name\s+of\s+(?:the\s+)?)?(?:(?:joint\s+)?(?:life|lives)\s+(?:assured|insured)|insured(?:\s+(?:person|persons|member|members|child|children|spouse|life|lives|employee|travell?ers?))?|covered\s+(?:person|persons|member|members|life|lives)|travell?ers?|assured|policy\s*holder|policy\s+owner|proposer|member|employee|dependants?)(?:'?s|\(s\))?(?:\s+(?:name|names))?|name|this\s+is\s+to\s+certify\s+that|we\s+certify\s+that|certif(?:y|ies)\s+that)?$/i;
 /** What may follow the name on its line: a cell break, or only an age, gender, relationship, date, identity number, money
  * figure or plan cell ("Female 12/03/1985", ", 5 years", "born 3 Mar 2019", ", NRIC S1234567A", "Spouse S$100,000"), or
  * "is insured" after a certificate's "certify that". */
-const TRAIL_TOKEN = /^(?:\d[\d\/.,-]*|[stfg]\d{7}[a-z]|[stfg]\*+\d*[a-z]?|s\$[\d,.]+|(?:sgd|rm|us\$|\$)[\d,.]*|age[d]?|years?|yrs?|old|born|dob|on|nric|fin|id|passport|no\.?|male|female|m|f|self|spouse|wife|husband|child|son|daughter|father|mother|dependant|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|is|are|insured|covered|under|the|this|policy|below|above|plan|[a-z])$/i;
+const TRAIL_TOKEN = /^(?:\d[\d\/.,-]*|[stfg]\d{7}[a-z]|[stfg]\*+\d*[a-z]?|s\$[\d,.]+|(?:sgd|rm|us\$|\$)[\d,.]*|age[d]?|years?|yrs?|old|born|dob|on|nric|fin|id|passport|no\.?|male|female|m|f|self|spouse|wife|husband|child|son|daughter|father|mother|dependant|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)$/i;
 /** The person printed after an insured label (or a row number, or alone), with only particulars after the name on its line
  * (Critic r377 A1-A23: "Name of Life Assured Lim Wei Jie", "Insured Child: Tan Xiao Ming, 5 years", "1 Lee Mei Ling
  * Spouse S$100,000", "This is to certify that Lim Wei Jie is insured"). */
-function afterInsuredLabel(raw: string, want: string[]): boolean {
+function afterInsuredLabel(raw: string, want: string[], tableish: boolean): boolean {
   if (NOT_A_PERSON_LABEL.test(raw)) return false;
   // A list after an insured label ("Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Insured: Lim Wei Jie,
   // born 3 Mar 1980", "Insured: Lee Mei Ling, Female, 45"): each item is a name with only particulars, or particulars.
@@ -204,6 +232,8 @@ function afterInsuredLabel(raw: string, want: string[]): boolean {
       // A certifying sentence names its insured, whatever follows ("We hereby certify that Lim Wei Jie, born ..., is insured").
       if (/\bcertif(?:y|ies|ied)\b[^.]{0,30}\bthat$/i.test(before)) return true;
       if (!INSURED_LABEL.test(before)) continue;
+      // No label, or a row number: only on a table line (cell breaks) or a page with a name column (Critic r377 E2, E3).
+      if ((!before || /^\d/.test(before)) && !tableish && !/\t|\s{2,}|\|/.test(raw)) continue;
       const after = raw.slice(tokens[i + len - 1].end);
       if (/^\s*(?:\t|\s{2,}|\||$)/.test(after)) return true;
       const rest = after.replace(/\([^)]*\)/g, " ").split(/[\s,;:.]+/).filter(Boolean);
