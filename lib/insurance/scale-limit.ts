@@ -464,9 +464,11 @@ export const CELLS_THEN_LINE_BINDING=false;
  *    with CELLS_THEN_LINE_BINDING, the explaining line right below a row of cells alone, with another row of cells alone
  *    (or the row itself, or a benefit-group title then a row) next below it.
  * No other page is read. Known limit: two tables printed one under the other with nothing between them and the second's
- * header lost read as one table. */
+ * header lost read as one table.
+ * nearest: only the nearest plan header above the row's own line, whatever lines sit between them (planColumnFigure,
+ * which uses it only to set aside a reading that gives another plan's cell, never to bind a figure on its own). */
 export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:{run:string;name:string},
-  o:{cellsThenLine?:boolean}={}):{at:number;cells:string[]}|null{
+  o:{cellsThenLine?:boolean;nearest?:boolean}={}):{at:number;cells:string[]}|null{
   const cellsThenLine=o.cellsThenLine??CELLS_THEN_LINE_BINDING;
   const want=headingKey(column);
   if(pageText==null||!want||!row.name)return null;
@@ -493,7 +495,7 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   if(named(ownText)&&!ownText.startsWith(row.name))
     for(let k=body.length-2;k>=0;k--){const t=lines[body[k]].text;if(/\d/.test(t)||!row.name.includes(t))break;wraps.add(body[k]);}
   let rowSeen=false;
-  for(let k=0;k<body.length-1;k++){
+  for(let k=0;k<(o.nearest?0:body.length-1);k++){
     const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
     if(isRow(i)){rowSeen=true;continue;}
     if(wraps.has(i))continue;
@@ -508,10 +510,12 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
 }
 /** A price printed after a plan's name in its heading cell ("Standard S$38", "Plus SGD 52.00"): letters, then one amount. */
 const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?$/i;
-/** pageText: the text of the row's page. A reading's figure is taken only when it is the cell at its column's place in
- * the plan header nearest above the row's own line (rowHeaderIndex): a reading that names one plan but gives another
- * plan's cell gives none (TE pr373 W1). Without the page's text, or with no such header on the page, none: the readings
- * never place a plan. */
+/** pageText: the text of the row's page. A reading's figure must be one of the row's own cells, as before #373. When the
+ * plan header nearest above the row's own line places the reading's plan (rowHeaderIndex, nearest), the figure must also
+ * be the cell at that place: a reading that names one plan but gives another plan's cell gives none (TE pr373 W1). The
+ * header only ever sets a reading aside; it never binds a figure the cells alone would not (live 6 Nov: requiring every
+ * line between the header and the row to be on a closed list dropped 7 figures of a travel table whose section titles
+ * and explaining lines sit between its rows). */
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
   o:{runIsUnique?:boolean;pageText?:string|null}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
@@ -525,6 +529,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
   const code=codes.size===1?[...codes][0]:null;
   if(!code)return null;
+  const cells=money.map(cellAmount);
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
   // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
   // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
@@ -550,9 +555,10 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
     // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
-    const placed=column?rowHeaderIndex(o.pageText,column,{run,name}):null;
+    const placed=column?rowHeaderIndex(o.pageText,column,{run,name},{nearest:true}):null;
     const own=placed==null?null:placed.cells[placed.at];
-    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
+    const atPlace=placed==null||(own!=null&&/\d/.test(own)&&cellAmount(own)===r.figure.amount);
+    return column&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)&&atPlace&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";
   }));
   if(picks.size!==1||picks.has("none"))return null;
