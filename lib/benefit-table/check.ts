@@ -72,8 +72,10 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // What follows the cell is the line's end, a separator, the next figure, or a plan's or period's words; never
       // another term ("up to S$500 S$100 excess" is a cap and an excess).
       const after = line.slice(cells[i].end, cells[i + 1]?.start ?? line.length);
-      const bareAfter = /^\s*(?:$|[|/;,]|(?:for|per|each|any|a|an|in|on|under)\b)/i.test(after);
-      if (cells[i - 1].unit === "cap" && cells[i].unit !== "cap" && !own && bareAfter && /^[\s|/;,]*(?:(?:or|and)\s+)?$/i.test(line.slice(cells[i - 1].end, cells[i].start))) cells[i].unit = "cap";
+      // A cap word covers only its own clause: never past a semicolon or a comma, and never a cell followed by a condition
+      // or a setting ("S$120 in ICU", "if ...", "for age 70 and above") (TE r379: "Daily S$60 maximum S$1,800; S$120 in ICU").
+      const bareAfter = /^\s*(?:$|[|/]|\S*\s*(?:S\$|US\$|\$|SGD|RM)|(?:for\s+(?:each|any|every)|per|each)\b)/i.test(after);
+      if (cells[i - 1].unit === "cap" && cells[i].unit !== "cap" && !own && bareAfter && /^[ \t|/]*(?:(?:or|and)\s+)?$/i.test(line.slice(cells[i - 1].end, cells[i].start))) cells[i].unit = "cap";
     }
     const at = cells.findIndex((c) => Math.abs(c.amount - value) < 0.005);
     if (at < 0) return false;
