@@ -245,16 +245,18 @@ export async function GET(request:NextRequest){
         ?wholeSumAgainst((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member),{benefitName:row.benefit_name,quote:row.quote})
         :null;
       // A row whose amount could not be read, beside the household's own cover on the same policy (the contract that holds the
-      // row's document, its schedule or its booklet): whether every person it is shown for has a sum there with its currency
-      // written in their evidence (what Coverage shows). Only a yes/no for the
-      // Benefits pointer (no-amount-pointer.ts); no figure leaves here with it.
+      // row's document, its schedule or its booklet): whether every person it is shown for has a sum there that Coverage shows
+      // (a confirmed, page-matched line, which is all the inventory holds). Only a yes/no for the Benefits pointer
+      // (no-amount-pointer.ts); no figure leaves here with it, so the sum's currency need not be proven against the page as
+      // it must be wherever a figure is used (live check 5 Nov: a schedule printing "Death Benefit 5,000.00" with its
+      // currency only in a heading got no pointer although Coverage shows S$5,000).
       const foundSum=attention==="unreadable"?(()=>{
         const shown=(contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member);
         const people=[...new Set(shown.map(c=>c.ownerId))];
         // Only a cover of the kind the row pays: a hospital-cash sum on the same policy is not the death benefit's (Critic #365).
         const kinds=new Set(sumKindsOf(row.benefit_name));
         return kinds.size>0&&people.length>0&&people.every(id=>shown.filter(c=>c.ownerId===id).some(c=>c.coverages.some(cover=>
-          kinds.has(normalizeCoverageCategory(cover.category))&&cover.amount!=null&&cover.amount>0&&!!cover.currency&&cover.currencyVerified===true)));
+          kinds.has(normalizeCoverageCategory(cover.category))&&cover.amount!=null&&cover.amount>0&&!!cover.currency)));
       })():false;
       return {
         id:row.id,policyId:row.policy_id,
