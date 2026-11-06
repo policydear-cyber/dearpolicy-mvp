@@ -55,8 +55,15 @@ export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, col
   // which can name the stored file. Its resource_id is the document's id for document and scan failures.
   ["processing_failure_diagnostics", "resource_id"],
   // Premiums read from it (counted on Home); the deletion request removes them at once, a late reading can add more.
-  ["premium_records", "source_document_id"], ["premium_records", "policy_id"],
+  ["premium_records", "source_document_id"],
 ];
+
+/**
+ * Rows of another source (another document, or the household's own entry) that only point at the deleted document:
+ * they stay on file and are unlinked from it. (A premium filed against it with no source is deleted first.) A premium from a renewal receipt filed against the
+ * deleted policy still counts on Home.
+ */
+export const DOCUMENT_LINK_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [["premium_records", "policy_id"]];
 
 /**
  * The tombstone keeps ids, kind, states and timestamps; every column read from the document is cleared. A column this
@@ -125,7 +132,7 @@ export async function finishDeletedDocuments(db: Db, policyIds?: string[], delet
 }
 
 async function existingTables(db: Db): Promise<Set<string>> {
-  const names = [...DOCUMENT_CONTENT_TABLES.map(([t]) => t), "policy_document_audit_log"];
+  const names = [...DOCUMENT_CONTENT_TABLES.map(([t]) => t), ...DOCUMENT_LINK_COLUMNS.map(([t]) => t), "policy_document_audit_log"];
   const r = await db.query<{ name: string }>(`SELECT n AS name FROM unnest($1::text[]) n WHERE to_regclass('public.'||n) IS NOT NULL`, [names]);
   return new Set(r.rows.map((x) => x.name));
 }
@@ -144,7 +151,7 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
     // reading still running when the person deleted the document goes on writing pages, passages, benefit lines and
     // the document's own fields for a while (lib/rag/ingest.ts stops at its next step); scrubbing once is not enough.
     const leftovers = [
-      ...DOCUMENT_CONTENT_TABLES.filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
+      ...[...DOCUMENT_CONTENT_TABLES, ...DOCUMENT_LINK_COLUMNS].filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
       ...columns.map((c) => `p.${c} IS NOT NULL`),
     ];
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
@@ -163,6 +170,11 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
           if (!doc.storage_key.startsWith("deleted/")) await enqueueStoragePurge([{ domain: "policy", storageKey: doc.storage_key }], "document_deleted", tx);
           for (const [table, column] of DOCUMENT_CONTENT_TABLES) {
             if (tables.has(table)) await tx.query(`DELETE FROM ${table} WHERE ${column}=$1`, [doc.id]);
+          }
+          // A premium of unknown source filed against it goes (it cannot be shown to come from another document).
+          if (tables.has("premium_records")) await tx.query(`DELETE FROM premium_records WHERE policy_id=$1 AND source_document_id IS NULL`, [doc.id]);
+          for (const [table, column] of DOCUMENT_LINK_COLUMNS) {
+            if (tables.has(table)) await tx.query(`UPDATE ${table} SET ${column}=NULL WHERE ${column}=$1`, [doc.id]);
           }
           if (tables.has("policy_document_audit_log")) await tx.query(SCRUB_AUDIT, [doc.account_id, doc.id, STATUS_KEYS]);
           await tx.query(scrubRow, [doc.id, doc.account_id, DELETED_FILENAME, DELETED_STATES]);

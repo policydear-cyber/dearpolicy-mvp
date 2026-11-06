@@ -235,8 +235,15 @@ export async function requestPolicyDocumentDeletion(args: {
     // in-transaction, without a job framework. premium_records deletion
     // predates this checkpoint (app/api/policies/[id]/route.ts's original
     // behaviour) and is preserved unchanged.
+    // A premium read from this document goes, and so does one filed against it whose source is unknown (every premium
+    // is written with its source document; a missing one cannot be shown to come from elsewhere). One read from another
+    // document still on file (a renewal receipt) stays, unlinked from this policy (the foreign key's own ON DELETE SET NULL).
     await args.client.query(
-      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
+      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR (source_document_id IS NULL AND policy_id=$2))`,
+      [args.accountId, args.policyId],
+    );
+    await args.client.query(
+      `UPDATE premium_records SET policy_id=NULL WHERE account_id=$1 AND policy_id=$2`,
       [args.accountId, args.policyId],
     );
     await sweepDeletedDocumentSideChannels(args.accountId, args.policyId);
@@ -840,8 +847,14 @@ export async function requestPolicyDeletion(args: {
     // 'active'. premium_records is the one exception (it predates the
     // lifecycle column and is still hard-deleted here, same as
     // requestPolicyDocumentDeletion).
+    // Same rule as requestPolicyDocumentDeletion: premiums read from this document (or of unknown source) go; one read
+    // from another document is unlinked.
     await args.client.query(
-      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
+      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR (source_document_id IS NULL AND policy_id=$2))`,
+      [args.accountId, row.id],
+    );
+    await args.client.query(
+      `UPDATE premium_records SET policy_id=NULL WHERE account_id=$1 AND policy_id=$2`,
       [args.accountId, row.id],
     );
     await sweepDeletedDocumentSideChannels(args.accountId, row.id);

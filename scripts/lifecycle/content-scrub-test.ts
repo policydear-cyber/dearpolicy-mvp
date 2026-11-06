@@ -259,6 +259,23 @@ async function main() {
     assert.deepEqual(left, [home.id], "only the premium of the document still on file is left");
   });
 
+  await t("a premium read from ANOTHER document but filed against the deleted policy stays on file, unlinked; the deleted document's own premium goes", async () => {
+    const policyDoc = await upload(aisyah, { filename: "Hospital-Plan-Aisyah.pdf", insurer: "Sihat Takaful (fictitious)", product: "Sihat Plus", policyNo: "SP-31", hash: "h-hosp", pages: ["Annual contribution RM1,200."], amount: 1200, currency: "MYR" });
+    const receipt = await upload(aisyah, { filename: "Renewal-Receipt-Aisyah.pdf", insurer: "Sihat Takaful (fictitious)", product: "Sihat Plus", policyNo: "SP-31", hash: "h-receipt", pages: ["Received RM1,250."], amount: 0, currency: "MYR" });
+    await q(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,amount,currency,frequency) VALUES
+      ($1,$2,$2,$4,1200,'MYR','annual'),($1,$2,$3,$4,1250,'MYR','annual')`, [accountId, policyDoc.id, receipt.id, aisyah]);
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: policyDoc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-receipt" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: policyDoc.id, deletionRequestId: req.deletionRequestId });
+    const rows = (await q<{ source: string; policy: string | null; amount: string }>(
+      `SELECT source_document_id::text AS source, policy_id::text AS policy, amount::text AS amount FROM premium_records WHERE source_document_id IN ($1,$2)`, [policyDoc.id, receipt.id])).rows;
+    assert.deepEqual(rows.map((r) => [r.source, r.policy, Number(r.amount)]), [[receipt.id, null, 1250]], "the receipt's premium stays, unlinked from the deleted policy");
+    // A late link to the deleted policy is unlinked by the next pass, not deleted.
+    await q(`UPDATE premium_records SET policy_id=$1 WHERE source_document_id=$2`, [policyDoc.id, receipt.id]);
+    await scrubDeletedDocuments({ pinecone: pineconeSpy([]) });
+    const after = (await q<{ policy: string | null }>(`SELECT policy_id::text AS policy FROM premium_records WHERE source_document_id=$1`, [receipt.id])).rows;
+    assert.deepEqual(after, [{ policy: null }]);
+  });
+
   await t("a re-read scheduled after the deletion (a reading service failed mid-step) is stopped and stripped again by the next pass", async () => {
     const doc = await upload(aisyah, { filename: "Locked-Health-Aisyah.pdf", insurer: "Sejahtera Health (fictitious)", product: "Sejahtera Med", policyNo: "SH-99887766", hash: "h-locked2", pages: ["Room and board RM300 a day."], amount: 300, currency: "MYR" });
     const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-resurrect" });
