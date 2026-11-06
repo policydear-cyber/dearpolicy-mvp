@@ -73,7 +73,9 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // other word ("the intensive care unit of a hospital", "the ICU of any hospital") makes it no setting (TE pr380).
       const settingAt = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?/i;
       const careUnit = /^(?:icu|nicu|picu|hdu|ccu|(?:neonatal\s+|paediatric\s+|pediatric\s+)?intensive[\s-]care(?:\s+unit)?|high[\s-]dependency(?:\s+unit|\s+ward)?|critical[\s-]care(?:\s+unit)?|coronary[\s-]care(?:\s+unit)?|burns?\s+unit|isolation(?:\s+(?:ward|room))?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b/i;
-      const clauseEnd = /^(?:\s*$|\s*[.,;:)\]|/–—-]|\s*\(|\s+(?:only|for|up to|subject to|from|per|each|during|while|until)\b(?:\s+(?![A-Z])|$))/;
+      // A bracket, dash, colon, slash or pipe then a capitalised word or a plan word names a plan ("in ICU - Plan B", "in ICU
+      // (Plan B)"), so it ends no clause; a full stop, comma or semicolon does.
+      const clauseEnd = /^(?:\s*$|\s*[.,;)\]](?!\s*(?:[(:–—-]\s*)?(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)|\s*[(:|/–—-](?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s+(?:only|for|up to|subject to|from|per|each|during|while|until)\b(?:\s+(?![A-Z])|$))/;
       const unitEnds = (text: string, depth = 0): boolean => {
         // Longest spelling first: "intensive care unit" is never read as "intensive care" followed by "unit".
         const unit = careUnit.exec(text);

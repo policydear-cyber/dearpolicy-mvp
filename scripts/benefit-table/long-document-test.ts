@@ -392,11 +392,14 @@ async function main() {
       "Hospital cash S$100 per day and S$200 per day in Burns Unit Cover", "Hospital cash S$100 per day and S$200 per day in intensive care Plus",
       "Hospital cash S$100 per day or S$200 per day in ICU Shield", "Hospital cash S$100 per day and S$300 per day in the intensive care unit of a hospital",
       "Hospital cash S$100 per day and S$300 per day in the ICU of any hospital", "Hospital cash S$100 per day or S$200 per day in HDU Essential",
-      "Hospital cash S$100 per day and S$200 per day in the coronary care unit Premier plan", "Hospital cash S$100 a day, S$200 a day if admitted to ICU Max"];
+      "Hospital cash S$100 per day and S$200 per day in the coronary care unit Premier plan", "Hospital cash S$100 a day, S$200 a day if admitted to ICU Max",
+      "Hospital cash S$100 per day or S$200 per day in ICU - Plan B", "Hospital cash S$100 per day or S$200 per day in ICU (Plan B)", "Hospital cash S$100 per day and S$200 per day in NICU: Gold",
+      "Hospital cash S$100 per day and S$200 per day in ICU – plan 2", "Hospital cash S$100 per day and S$200 per day in HDU (Essential plan)", "Hospital cash S$100 per day and S$200 per day in ICU) plan B", "Hospital cash S$100 per day and S$200 per day in ICU) Plan B"];
     const settings = ["Hospital cash S$100 per day and S$300 per day in ICU.", "Hospital cash S$100 per day and S$300 per day in ICU, for up to 30 days",
       "Hospital cash S$100 per day and S$300 per day in ICU for up to 30 days", "Hospital cash S$100 per day or S$200 per day in ICU or HDU",
       "Hospital cash S$100 per day and S$300 per day in the intensive care unit (max 10 days)", "Hospital cash S$100 per day and S$300 per day in a critical care unit only",
-      "Hospital cash S$100 per day and S$300 per day in NICU; S$50 per day for a parent"];
+      "Hospital cash S$100 per day and S$300 per day in NICU; S$50 per day for a parent",
+      "Hospital cash S$100 per day and S$300 per day in ICU (up to 30 days)", "Hospital cash S$100 per day and S$300 per day in ICU - for up to 30 days"];
     const lines = [...plans, ...settings];
     const doc = { id: "doc", name: "lakeside-care.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
     const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: 100, period: null, basis: null, percentOf: null,
