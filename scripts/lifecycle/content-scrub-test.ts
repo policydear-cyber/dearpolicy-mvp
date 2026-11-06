@@ -33,7 +33,7 @@ async function main() {
   const { pool } = await import("@/lib/db/client");
   const db = new PGlite({ extensions: { vector, pgcrypto } });
   await db.waitReady;
-  for (const f of ["schema", "claim-evidence", "critical-illness", "disability", "coverage-ledger", "lifecycle", "chat-upgrade", "background-jobs", "storage-purge", "cover-conditions"]) {
+  for (const f of ["schema", "claim-evidence", "critical-illness", "disability", "coverage-ledger", "lifecycle", "chat-upgrade", "background-jobs", "storage-purge", "cover-conditions", "processing-failure-diagnostics"]) {
     await db.exec(await readFile(path.resolve("sql/" + f + ".sql"), "utf8")).catch((e) => { throw new Error("sql/" + f + ".sql: " + (e as Error).message); });
   }
   // One connection, every query in order; a "client" from pool.connect() shares it (transactions run alone here).
@@ -180,6 +180,72 @@ async function main() {
     assert.equal((await q<{ original_filename: string }>(`SELECT original_filename FROM policies WHERE id=$1`, [doc.id])).rows[0].original_filename, "Motor-Haziq.pdf");
     assert.equal((await scrubDeletedDocuments({ policyIds: [doc.id] })).scrubbed, 1);
     assert.equal(await contentCount(doc.id), 0);
+  });
+
+  const pineconeSpy = (calls: string[]) => ({ enabled: () => true, deletePassages: async (a: { policyId: string }) => { calls.push(a.policyId); } });
+
+  await t("a reading still running when the document was deleted: what it writes afterwards goes on the next pass, its passages are removed again, then nothing more", async () => {
+    const doc = await upload(aisyah, { filename: "Kembara-Travel-Aisyah.pdf", insurer: "Kembara Takaful (fictitious)", product: "Kembara Plus", policyNo: "KT-4410", hash: "h-kembara", pages: ["Perubatan luar negara RM500,000."], amount: 500000, currency: "MYR" });
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-inflight" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    assert.equal(await contentCount(doc.id), 0);
+    // The reading that was already running writes its next step after the scrub (as lib/rag/ingest.ts did before it checked).
+    await q(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES ($1,$2,1,'Peserta: Nur Aisyah Rahman')`, [accountId, doc.id]);
+    await q(`INSERT INTO policy_chunks(account_id,family_member_id,policy_id,page_start,page_end,text) VALUES ($1,$2,$3,1,1,'Peserta: Nur Aisyah Rahman')`, [accountId, aisyah, doc.id]);
+    await q(`UPDATE policies SET insurer='Kembara Takaful (fictitious)', processing_message='Saving searchable text…' WHERE id=$1`, [doc.id]);
+    const calls: string[] = [];
+    const again = await scrubDeletedDocuments({ pinecone: pineconeSpy(calls) });
+    assert.equal(again.scrubbed, 1);
+    assert.deepEqual(calls, [doc.id], "its search passages are removed again (the late reading may have added some)");
+    assert.equal(await contentCount(doc.id), 0);
+    const row = (await q<Record<string, unknown>>(`SELECT original_filename, insurer, processing_message, storage_key FROM policies WHERE id=$1`, [doc.id])).rows[0];
+    assert.deepEqual(row, { original_filename: DELETED_FILENAME, insurer: null, processing_message: null, storage_key: "deleted/" + doc.id });
+    const quiet: string[] = [];
+    assert.equal((await scrubDeletedDocuments({ pinecone: pineconeSpy(quiet) })).scrubbed, 0, "a clean tombstone is not picked again");
+    assert.deepEqual(quiet, []);
+    assert.equal(await contentCount(home.id), 5, "an active document is never touched");
+  });
+
+  await t("the raw failure notes kept for support about a deleted document go too; another document's stay", async () => {
+    const doc = await upload(haziq, { filename: "Pet-Cover-Haziq.pdf", insurer: "Paws Mutual (fictitious)", product: "Paws Plus", policyNo: "PM-88", hash: "h-pet", pages: ["Vet fees £4,000."], amount: 4000, currency: "GBP" });
+    await q(`INSERT INTO processing_failure_diagnostics(account_id,resource_type,resource_id,failure_code,detail) VALUES ($1,'policy_document',$2,'PROCESSING_FAILED','reader failed on '||$3),($1,'policy_scan',$2,'SCAN_DETAIL','scan of '||$3),($1,'policy_document',$4,'PROCESSING_FAILED','other doc')`,
+      [accountId, doc.id, doc.key, home.id]);
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-diag" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    const left = (await q<{ resource_id: string }>(`SELECT resource_id::text AS resource_id FROM processing_failure_diagnostics WHERE account_id=$1`, [accountId])).rows.map((r) => r.resource_id);
+    assert.deepEqual(left, [home.id]);
+  });
+
+  await t("deleting a document strips the PDF password and file key from BOTH its reading job and its scheduled re-read, and stops both", async () => {
+    const doc = await upload(aisyah, { filename: "Locked-Life-Aisyah.pdf", insurer: "Amanah Life (fictitious)", product: "Amanah Term", policyNo: "AL-123456789", hash: "h-locked", pages: ["Sum assured RM300,000."], amount: 300000, currency: "MYR" });
+    const payload = JSON.stringify({ policyId: doc.id, storageKey: doc.key, pdfPassword: "s3cret-fictitious", familyMemberId: aisyah });
+    await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status,last_error_message) VALUES
+      ($1,'policy_processing',$2,$3::jsonb,'failed_retryable','reader failed on '||$4),
+      ($1,'policy_processing',$2||':retry-read',$3::jsonb,'queued',NULL),
+      ($1,'policy_processing',$5,$6::jsonb,'queued',NULL)`,
+      [accountId, doc.id, payload, doc.key, home.id, JSON.stringify({ policyId: home.id, storageKey: home.key, pdfPassword: "keep-me" })]);
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-jobs" });
+    assert.equal(req.status, "accepted");
+    const jobs = (await q<{ idempotency_key: string; payload: Record<string, unknown>; cancel_requested: boolean; last_error_message: string | null }>(
+      `SELECT idempotency_key, payload, cancel_requested, last_error_message FROM background_jobs WHERE account_id=$1 ORDER BY idempotency_key`, [accountId])).rows;
+    for (const j of jobs.filter((x) => x.idempotency_key.startsWith(doc.id))) {
+      assert.equal(j.payload.pdfPassword, undefined, j.idempotency_key + " password"); assert.equal(j.payload.storageKey, undefined, j.idempotency_key + " file key");
+      assert.equal(j.cancel_requested, true, j.idempotency_key + " stopped"); assert.equal(j.last_error_message, null);
+    }
+    assert.equal(jobs.filter((x) => x.idempotency_key.startsWith(doc.id)).length, 2);
+    const other = jobs.find((x) => x.idempotency_key === home.id)!;
+    assert.equal(other.payload.pdfPassword, "keep-me"); assert.equal(other.cancel_requested, false, "another document's job is untouched");
+  });
+
+  await t("a reading stops at its next step once its document is deleted, and writes nothing on the deleted document", async () => {
+    const { recordReadingProgress, DocumentDeletedWhileReadingError } = await import("@/lib/rag/ingest");
+    const doc = await upload(haziq, { filename: "Gadget-Haziq.pdf", insurer: "Gizmo Cover (fictitious)", product: "Gizmo", policyNo: "GC-1", hash: "h-gadget", pages: ["Phone £900."], amount: 900, currency: "GBP" });
+    const args = { accountId, policyId: doc.id, familyMemberId: haziq, storageKey: doc.key } as never;
+    await recordReadingProgress(args, "reading_pdf", 7, "Reading pages…", "extracting");
+    assert.equal((await q<{ processing_message: string }>(`SELECT processing_message FROM policies WHERE id=$1`, [doc.id])).rows[0].processing_message, "Reading pages…");
+    await q(`UPDATE policies SET lifecycle_state='pending_deletion', processing_message=NULL WHERE id=$1`, [doc.id]);
+    await assert.rejects(recordReadingProgress(args, "saving_text", 27, "Saving searchable text…", "extracting"), DocumentDeletedWhileReadingError);
+    assert.equal((await q<{ processing_message: string | null }>(`SELECT processing_message FROM policies WHERE id=$1`, [doc.id])).rows[0].processing_message, null);
   });
 
   await t("the request drain and the daily job both run the scrub, so a failed cleanup is retried without anyone asking", async () => {

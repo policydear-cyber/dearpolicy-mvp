@@ -65,9 +65,9 @@ import { recordEvent } from "@/lib/telemetry";
  * Two stores are keyed by the document's id rather than FK-linked to it, so
  * nothing else ever cleans them: policy_analysis_cache (chat analysis and
  * catalogue checkpoints for the document) and the document's durable
- * background_jobs row, whose payload can hold the PDF password the person
+ * background_jobs rows, whose payload can hold the PDF password the person
  * typed at upload. This sweep deletes the cache rows, strips the password
- * from the job payload immediately and asks any in-flight run to stop
+ * (and the stored file's key) from the job payloads immediately and asks any in-flight run to stop
  * (cooperative cancel); the job row itself stays, password-free, as part of
  * the operational record. It runs on the TRUSTED connection because both
  * tables are service-only (browser roles cannot touch them -- see
@@ -88,9 +88,12 @@ async function sweepDeletedDocumentSideChannels(accountId: string, policyId: str
       );
     }
     if (present.rows[0]?.jobs) {
+      // Every reading job of the document: its own (keyed by its id) and the one later re-read scheduled after a
+      // reading service failed (keyed "<id>:retry-read", lib/rag/ingest.ts scheduleDeferredRead), which carries the
+      // same password. The stored file's key (which holds the original filename) and the last error text go too.
       await pool.query(
-        `UPDATE background_jobs SET payload=payload-'pdfPassword', cancel_requested=true, updated_at=now()
-          WHERE account_id=$1 AND job_type='policy_processing' AND idempotency_key=$2`,
+        `UPDATE background_jobs SET payload=payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true, updated_at=now()
+          WHERE account_id=$1 AND job_type='policy_processing' AND (idempotency_key=$2 OR idempotency_key=$2||':retry-read')`,
         [accountId, policyId],
       );
     }

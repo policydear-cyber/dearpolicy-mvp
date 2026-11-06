@@ -47,6 +47,9 @@ export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, col
   ["policy_corrections", "policy_id"], ["policy_name_dismissals", "policy_id"], ["policy_member_exclusions", "policy_id"],
   ["policy_members", "policy_id"], ["claim_cause_definition_matches", "contract_id"],
   ["claim_ci_definition_matches", "contract_id"], ["claim_disability_definition_matches", "contract_id"],
+  // Raw failure detail kept for support (lib/diagnostics/processing-failures.ts): a reading service's own error text,
+  // which can name the stored file. Its resource_id is the document's id for document and scan failures.
+  ["processing_failure_diagnostics", "resource_id"],
 ];
 
 /**
@@ -58,12 +61,15 @@ export const DOCUMENT_CONTENT_COLUMNS = [
   "processing_error", "processing_message", "review_reason", "scan_result_detail", "document_authority_label", "file_hash",
   "effective_date", "renewal_or_expiry_date", "document_date",
 ];
-async function scrubPolicyRowSql(db: Db): Promise<string> {
+async function presentContentColumns(db: Db): Promise<string[]> {
   const r = await db.query<{ name: string }>(
     `SELECT column_name AS name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='policies' AND column_name=ANY($1::text[])`,
     [DOCUMENT_CONTENT_COLUMNS]);
   const present = new Set(r.rows.map((x) => x.name));
-  const cleared = DOCUMENT_CONTENT_COLUMNS.filter((c) => present.has(c)).map((c) => c + "=NULL");
+  return DOCUMENT_CONTENT_COLUMNS.filter((c) => present.has(c));
+}
+function scrubPolicyRowSql(columns: string[]): string {
+  const cleared = columns.map((c) => c + "=NULL");
   return `UPDATE policies SET original_filename=$3, storage_key='deleted/'||id::text, ${[...cleared, "updated_at=now()"].join(", ")}
     WHERE id=$1 AND account_id=$2 AND lifecycle_state=ANY($4::text[])`;
 }
@@ -125,13 +131,22 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
   const result: ScrubResult = { finished: 0, scrubbed: 0, searchIndexPending: [], failed: 0, forgottenKeys: 0 };
   try {
     result.finished = await finishDeletedDocuments(db, opts.policyIds, opts.deletionFinished === true);
+    const tables = await existingTables(db);
+    const columns = await presentContentColumns(db);
+    const scrubRow = scrubPolicyRowSql(columns);
+    // Due: a deleted document not yet scrubbed, or one already scrubbed that has something read from it again. A
+    // reading still running when the person deleted the document goes on writing pages, passages, benefit lines and
+    // the document's own fields for a while (lib/rag/ingest.ts stops at its next step); scrubbing once is not enough.
+    const leftovers = [
+      ...DOCUMENT_CONTENT_TABLES.filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
+      ...columns.map((c) => `p.${c} IS NOT NULL`),
+    ];
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
-      `SELECT id::text AS id, account_id::text AS account_id, storage_key FROM policies
-        WHERE lifecycle_state=ANY($1::text[]) AND original_filename<>$2 AND ($3::uuid[] IS NULL OR id=ANY($3::uuid[]))
-        ORDER BY updated_at LIMIT $4`,
+      `SELECT p.id::text AS id, p.account_id::text AS account_id, p.storage_key FROM policies p
+        WHERE p.lifecycle_state=ANY($1::text[]) AND ($3::uuid[] IS NULL OR p.id=ANY($3::uuid[]))
+          AND (p.original_filename<>$2${leftovers.length ? " OR " + leftovers.join(" OR ") : ""})
+        ORDER BY p.updated_at LIMIT $4`,
       [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
-    const tables = due.rows.length ? await existingTables(db) : new Set<string>();
-    const scrubRow = due.rows.length ? await scrubPolicyRowSql(db) : "";
     for (const doc of due.rows) {
       if (pinecone.enabled()) {
         try { await pinecone.deletePassages({ accountId: doc.account_id, policyId: doc.id }); }

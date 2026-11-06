@@ -112,7 +112,7 @@ export const DEFERRED_READ_RETRY_MINUTES = 30;
  * job has attempts left; quota/spend stops and actionable reasons pass
  * through unchanged. */
 function asServiceFailure(error: unknown, what: string): unknown {
-  if (error instanceof UserActionableProcessingError || error instanceof TemporaryProcessingError || isQuotaOrSpendStop(error)) return error;
+  if (error instanceof UserActionableProcessingError || error instanceof TemporaryProcessingError || error instanceof DocumentDeletedWhileReadingError || isQuotaOrSpendStop(error)) return error;
   return new TemporaryProcessingError(what + " failed: " + (error instanceof Error ? error.name + ": " + error.message : String(error)).slice(0, 300), error);
 }
 function attemptsLeft(args: ProcessPolicyArgs) { return !!args.attempt && args.attempt.number < args.attempt.max; }
@@ -364,17 +364,26 @@ async function settleSameSchedule(args: ProcessPolicyArgs, extraction: PolicyExt
   }
 }
 
+/** Thrown at a reading's next step once the person has deleted the document: the reading stops there, writes nothing
+ * more and is not retried. What it wrote before stopping is removed by lib/lifecycle/content-scrub.ts. */
+export class DocumentDeletedWhileReadingError extends Error {
+  constructor() { super("The document was deleted while it was being read"); this.name = "DocumentDeletedWhileReadingError"; }
+}
+
 async function progress(args: ProcessPolicyArgs, stage: string, percent: number, message: string, status?: string) {
-  await query(
+  // Only a document still on file is updated; none updated means it was deleted, so the reading stops here.
+  const updated = await query(
     `UPDATE policies
         SET processing_stage=$1,
             processing_progress=$2,
             processing_message=$3,
             processing_status=COALESCE($4,processing_status),
             updated_at=now()
-      WHERE id=$5 AND account_id=$6`,
+      WHERE id=$5 AND account_id=$6 AND ${activePredicate()}
+      RETURNING id`,
     [stage, Math.max(0, Math.min(100, Math.round(percent))), message, status ?? null, args.policyId, args.accountId],
   );
+  if (!updated.rows.length) throw new DocumentDeletedWhileReadingError();
   // Best-effort: a heartbeat failure (including the job's lease already
   // having been lost to another worker, per lib/jobs/queue.ts's
   // LeaseLostError) is logged, never thrown -- this keeps the fix
@@ -1089,6 +1098,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     });
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
+    // Deleted while being read: nothing is recorded on the deleted document and nothing is retried or scheduled.
+    if (error instanceof DocumentDeletedWhileReadingError) throw error;
     // policies.processing_error is household-readable (RLS SELECT): store the
     // fixed message only; the raw error goes to the service-only diagnostics
     // table (lib/diagnostics/processing-failures.ts).
@@ -1144,3 +1155,6 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     throw error;
   }
 }
+
+/** The reading's per-step progress update (used by tests). */
+export const recordReadingProgress = progress;
