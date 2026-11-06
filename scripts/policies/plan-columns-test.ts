@@ -515,3 +515,37 @@ test("a header never costs a figure the row's cells give: titles, explaining lin
   assert.deepEqual(planColumnFigure(w8, [w8Read(1000, "Max")], { pageText: w8Page }), { plan: "Max", figureText: "up to S$1,000" }, "W8 dash separator");
   assert.equal(planColumnFigure(w8, [w8Read(500, "Max")], { pageText: w8Page }), null, "W8 dash separator: the other plan's cell");
 });
+
+test("rows whose cells wrap over lines, rows of word cells and a currency note sit inside one plan table (live 6 Nov)", async () => {
+  const { planColumnFigure } = await import("@/lib/insurance/scale-limit");
+  const T = "\t", H = ["Benefits", "Premium", "Business", "First"].join(T);
+  const medical = ["Medical expenses", "S$250,000", "S$500,000", "S$1,000,000"].join(T);
+  const cap = ["Overall limit^", "S$300", "S$800", "S$1,500"].join(T);
+  const pa = ["insured persons aged 70 and above", "S$25,000", "S$50,000", "S$75,000"].join(T);
+  const paName = "Accidental death or permanent disablement for insured persons aged 70 and above";
+  const delay = (indent: string) => [["Travel delay", "S$100 for every", "S$50 for every", "S$50 for every"].join(T),
+    indent + ["six-hour delay", "three-hour delay", "three-hour delay"].join(T), indent + ["only", "up to S$100", "up to S$200"].join(T)];
+  const pages: [string, string, string, number, number][] = [
+    ["a delay row wrapped over three lines, first column empty", [H, medical, ...delay(T), cap].join("\n"), "Overall limit^", 800, 300],
+    ["a delay row wrapped over three lines, cells alone", [H, medical, ...delay(""), cap].join("\n"), "Overall limit^", 800, 300],
+    ["a row of word cells, two titles, a wrapped label", [H, ["Emergency evacuation", "Unlimited", "Unlimited", "Unlimited"].join(T), "Personal liability while on your trip", "Personal accident", "Accidental death or permanent disablement for", pa].join("\n"), paName, 50000, 25000],
+    ["a currency note", [H, "All amounts in SGD", cap].join("\n"), "Overall limit^", 800, 300],
+  ];
+  for (const [why, pageText, name, right, misread] of pages) {
+    const line = pageText.split("\n").at(-1)!.split(T).slice(1).join(" ");
+    const quote = `${name} ${line}`;
+    const row = { policyId: "docW", sourcePage: 5, quote, benefitName: name };
+    const read = (amount: number) => ({ documentId: "docW", page: 5, excerpt: quote, column: "Business", qualifier: null,
+      figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG"), benefit: name });
+    assert.deepEqual(planColumnFigure(row, [read(right)], { runIsUnique: true, pageText }), { plan: "Business", figureText: "up to S$" + right.toLocaleString("en-SG") }, why);
+    assert.equal(planColumnFigure(row, [read(misread)], { runIsUnique: true, pageText }), null, why + ": first plan's cell");
+  }
+  // Still closed: a piece naming a plan, a line of headings with no wrapped row above it, and a piece printing too few cells.
+  const capRow = { policyId: "docW", sourcePage: 5, quote: "Overall limit^ S$300 S$800 S$1,500", benefitName: "Overall limit^" };
+  const capRead = { documentId: "docW", page: 5, excerpt: "Overall limit^ S$300 S$800 S$1,500", column: "Business", qualifier: null,
+    figure: { kind: "printed", amount: 800, currency: "SGD" }, figureText: "up to S$800", benefit: "Overall limit^" };
+  for (const [why, lines] of [["a piece naming a plan", [delay(T)[0], T + ["Business only", "three-hour delay", "three-hour delay"].join(T)]],
+    ["headings with no wrapped row above", [T + ["six-hour delay", "three-hour delay", "three-hour delay"].join(T)]],
+    ["a piece of two cells", [delay(T)[0], T + ["six-hour delay", "three-hour delay"].join(T)]]] as [string, string[]][])
+    assert.equal(planColumnFigure(capRow, [capRead], { runIsUnique: true, pageText: [H, medical, ...lines, cap].join("\n") }), null, why);
+});

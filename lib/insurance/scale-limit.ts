@@ -487,7 +487,15 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   let cells:string[]=[...((wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[])];
   let n=cells.length;
   if(n<2)return null;
-  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width))return i;return -1;};
+  // With titled, a line of headings that continues a row whose cells wrap (rowPiece) is that row's next piece, not a
+  // header: the line above it prints the row's words then n cells with an amount that are no plain run of cells.
+  const pieceOfRow=(i:number)=>{
+    const width=cellsOf(lines[i].raw).length;
+    let k=i-1;
+    while(k>=0&&cellsOf(lines[k].raw).length===width&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"after"))k--;
+    return k>=0&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"first");
+  };
+  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width)&&!(o.titled&&pieceOfRow(i)))return i;return -1;};
   let h=findHeader(n);
   // A dash printed between the row's name and its cells ("Trip curtailment  -  S$500  S$1,000") is a separator, not a
   // plan's cell, when no header of the wider count is above it and one of the narrower count is (TE r6 W8).
@@ -501,12 +509,16 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   const wraps=new Set<number>();
   if(named(ownText)&&!ownText.startsWith(row.name))
     for(let k=body.length-2;k>=0;k--){const t=lines[body[k]].text;if(/\d/.test(t)||!row.name.includes(t))break;wraps.add(body[k]);}
-  let rowSeen=false;
+  let rowSeen=false,piece=-2;
   for(let k=0;k<body.length-1;k++){
     const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
     if(o.titled&&i!==own[0]&&cellCount(text)===n&&PREMIUM_LINE.test(text))return null;
     if(isRow(i)){rowSeen=true;continue;}
     if(o.titled&&titledLine(lines[i].raw,plans,row.name))continue;
+    // Another row of the table printed in words only ("Unlimited  Unlimited  Unlimited"), or a row whose cells wrap
+    // over several lines ("Travel delay  S$100 for every  S$50 for every" / "  six-hour delay  three-hour delay").
+    if(o.titled&&wordRow(text,n))continue;
+    if(o.titled&&(rowPiece(lines[i].raw,n,plans,"first")||(piece===k-1&&rowPiece(lines[i].raw,n,plans,"after")))){piece=k;continue;}
     if(wraps.has(i))continue;
     if(!rowSeen&&body.slice(0,k).every(j=>TABLE_SUBHEADING.test(lines[j].text))&&TABLE_SUBHEADING.test(text))continue;
     if(GROUP_TITLE.test(text)&&isRow(next))continue;
@@ -521,12 +533,38 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
 const PREMIUM_LINE=/^(?:(?:annual|single[- ]trip|total|your)\s+)?(?:premiums?|prices?|costs? of cover)\b/i;
 /** A title line inside one plan table (rowHeaderIndex titled): no amount, no run of cells, no other header of any width,
  * no label heading alone, no sub-heading caption, no "Part"/"Table" line, and not two or more cells without amounts. */
+/** A table row whose cells are all whole worded cells (WORD_CELL), n of them after its words: "Emergency evacuation
+ * Unlimited Unlimited Unlimited". */
+const wordRow=(text:string,n:number)=>{
+  const run=text.match(WIDE_ROW)?.[0];
+  return !!run&&!new RegExp(MONEY_CELL).test(run)&&(run.match(new RegExp(WIDE_CELL,"g"))?.length??0)===n&&text.length>run.length;
+};
+/** A piece of a row whose cells wrap over lines, printed cell by cell: exactly n non-empty cells split by tabs or wide
+ * spaces, after the row's words ("Travel delay  S$100 for every  S$50 for every  S$50 for every") or after an empty first
+ * column ("  six-hour delay  three-hour delay  three-hour delay"). No cell names one of the header's plans; the first piece
+ * is no header of any width (a later piece may read like one: rowHeaderIndex then does not take it as the header). The first piece prints an amount in a cell; a later piece follows another piece. */
+function rowPiece(raw:string,n:number,plans:string[],at:"first"|"after"):boolean{
+  const parts=raw.split(/\t|\s{2,}/).map(c=>spaced(c));
+  const indented=/^\s/.test(raw)||parts[0]==="";
+  // A later piece is n cells, after an empty first column or alone on its line; the first is the row's words then n cells.
+  const cells=(indented||(at==="after"&&parts.filter(Boolean).length===n)?parts:parts.slice(1)).filter(Boolean);
+  if(cells.length!==n||cells.some(c=>c.length>40))return false;
+  if(at==="first")for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  const words=` ${labelKey(spaced(raw)).replace(/[^a-z0-9]+/g," ")} `;
+  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  if(at==="first")return !indented&&cells.some(c=>new RegExp(MONEY_CELL).test(c));
+  return true;
+}
+const cellsOf=(raw:string)=>raw.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean);
+/** A note of the table's currency on its own line ("All amounts in SGD", "Amounts shown in S$", "(S$)"). */
+const CURRENCY_NOTE=/^(?:\(\s*(?:s\$|sgd|us\$|usd)\s*\)|(?:all\s+)?(?:amounts?|figures?|limits?|benefits?)\s+(?:are\s+)?(?:shown\s+|stated\s+|payable\s+)?in\s+(?:s\$|sgd|singapore dollars?|us\$|usd)\.?)$/i;
 function titledLine(raw:string,plans:string[],rowName:string):boolean{
   const text=spaced(raw);
   // A line naming one of the header's plans, or repeating the start of the row's own name, is no group title.
   const words=` ${labelKey(text).replace(/[^a-z0-9]+/g," ")} `;
   if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
   if(rowName.toLowerCase().startsWith(text.toLowerCase().replace(/:$/,"")))return false;
+  if(CURRENCY_NOTE.test(text))return true;
   if(!text||cellCount(text)>0||PRINTS_AMOUNT.test(text.replace(/\((?:s\$|us\$|\$|sgd|usd)\)/gi," ")))return false;
   if(raw.split(/\t|\s{2,}/).map(c=>c.trim()).filter(Boolean).length>=2)return false;
   for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
