@@ -34,12 +34,17 @@ export type Answer = { amount: number | null; per: Per | null; line?: string | n
 /** agreed: all five agreed with reader 1. corrected: all five agreed on another figure printed in the row. confirm: not
  * settled after the re-reads or the spend limit; the household is asked. checking: the run stopped before it was settled
  * (its time limit); read again on the next run. */
+/** seen: for a figure not settled, what each reader answered in each round ([amount, per], reader 1 first), for audit. */
 export type Verdict = { status: "agreed" | "corrected" | "confirm" | "checking"; value: number | null; per: Per | null; page: number; line: string;
-  candidates: number[]; rounds: number };
+  candidates: number[]; rounds: number; seen?: [number | null, Per | null][][] };
 /** at: when this reading's check began (kept when a cut-off check is resumed); spentUsd and calls: the whole check's. */
 export type GuardRecord = { version: string; at: string; verdicts: Record<string, Verdict>; spentUsd: number; calls: number; stopped?: string | null };
 /** How many figures a record left "checking" (stopped by a time limit): what a continuation job still has to do. */
 export const checkingCount = (g: GuardRecord | null | undefined) => Object.values(g?.verdicts ?? {}).filter((v) => v.status === "checking").length;
+/** The figures of a checked reading the guards have not finished: left "checking", or with no verdict at all (a check that
+ * failed before it began). What a continuation job still has to do. */
+export const unfinishedCount = (r: CheckedReading, g: GuardRecord | null | undefined) =>
+  claimsOf(r).filter((c) => { const v = g?.verdicts?.[c.key]; return !v || v.status === "checking"; }).length;
 /** The household's own figure for one claim (benefit_figure_confirmations): final. */
 export type FigureConfirmation = { documentId: string; claimKey: string; value: number };
 
@@ -74,9 +79,10 @@ function coverWhere(c: CheckedCover, page: number): string {
   return `Page ${page}: ${quote(c.person)}'s cover ${quote(c.cover)}${c.product && norm(c.product) !== norm(c.cover) ? ` (${quote(c.product)})` : ""}${c.plan ? `, plan ${quote(c.plan)}` : ""}`;
 }
 
-/** Every figure a checked reading uses, as claims with stable keys. The key never holds the figure itself, so a household's
- * confirmation and a guard's verdict stay with the row when reader 1 reads it again. Two rows with the same place get an
- * occurrence number. */
+/** Every figure a checked reading uses, as claims with stable keys. The key is the row's own label and column (or the
+ * person and cover), never the figure, its page or its section heading, so a household's confirmation stays with the row
+ * when a fresh reading cites another page or words the heading differently (Critic R389-2). Two rows with the same label
+ * and column get an occurrence number, in reading order. */
 export function claimsOf(r: CheckedReading): Claim[] {
   const out: Claim[] = [];
   const seen = new Map<string, number>();
@@ -87,7 +93,7 @@ export function claimsOf(r: CheckedReading): Claim[] {
     out.push({ key: hash([base, n]), field, ...c });
   };
   for (const b of r.benefits) {
-    const place = [b.source.page, norm(b.section), norm(b.benefit), norm(b.column)];
+    const place = [norm(b.benefit), norm(b.column)];
     const where = benefitWhere(b);
     if (b.value != null)
       add("value", place, { page: b.source.page, where, ask: b.pays === "percent" ? "the percentage this row pays (25 for 25%)" : "the figure this row pays or holds",
@@ -96,7 +102,7 @@ export function claimsOf(r: CheckedReading): Claim[] {
       add("cap", place, { page: b.capSource.page, where, ask: "the most this row pays in money (its upper limit, as printed next to it)", value: b.cap, per: null, excerpt: b.capSource.excerpt });
   }
   for (const c of r.covers) {
-    const place = [c.source.page, norm(c.person), norm(c.product), norm(c.cover), norm(c.plan)];
+    const place = [norm(c.person), norm(c.product), norm(c.cover), norm(c.plan)];
     if (c.sumInsured != null)
       add("sum_insured", place, { page: c.source.page, where: coverWhere(c, c.source.page), ask: "the sum insured or sum assured printed for this person's cover", value: c.sumInsured, per: "once", excerpt: c.source.excerpt });
     if (c.premium != null) {
@@ -108,16 +114,20 @@ export function claimsOf(r: CheckedReading): Claim[] {
   return out;
 }
 
+/** Whether the row's words print the figure. The excerpt has its table cells joined by single spaces, which printsNumber
+ * can read as one space-grouped number ("50 100 150"); so each cell (each run without spaces) is also tried on its own. */
+export function rowPrints(excerpt: string, value: number): boolean {
+  return printsNumber(excerpt, value) || excerpt.split(/\s+/).some((cell) => cell && printsNumber(cell, value));
+}
 const same = (a: number | null, b: number | null) => a != null && b != null && Math.abs(a - b) < 0.005;
-/** Whether "per" answers agree: every answer that states one gives the same one, and a figure read as "once" by reader 1
- * with no period printed is not contradicted. A premium whose frequency reader 1 did not read is judged on the amount and
- * the guards' own frequencies. */
-function perAgrees(field: Field, first: Per | null, answers: Answer[]): boolean {
+/** Whether the round's "per" answers agree: every reader states one, and the same one. Only this round's answers count
+ * (round 0 holds reader 1's own reading; a re-read holds reader 1's model reading again, blind), so a re-read can settle
+ * what reader 1 first read wrongly. A premium whose frequency reader 1 did not read is judged on the frequencies stated. */
+function perAgrees(field: Field, answers: Answer[]): boolean {
   if (field === "cap") return true;
   const stated = answers.map((a) => a.per).filter((p): p is Per => p != null);
-  const all = first != null ? [first, ...stated] : stated;
   if (field !== "premium" && stated.length < answers.length) return false;
-  return new Set(all).size <= 1;
+  return new Set(stated).size <= 1;
 }
 
 /** A round's verdict for one claim. answers: the five readers' answers this round (round 0: reader 1's own reading plus
@@ -127,8 +137,8 @@ export function judge(claim: Claim, answers: Answer[], readers: number): { settl
   if (answers.length < readers) return { settled: false, value: null, per: null };
   const first = answers[0]?.amount ?? null;
   if (first == null || !answers.every((a) => same(a.amount, first))) return { settled: false, value: null, per: null };
-  if (!perAgrees(claim.field, claim.per, answers)) return { settled: false, value: null, per: null };
-  if (!printsNumber(claim.excerpt, first)) return { settled: false, value: null, per: null };
+  if (!perAgrees(claim.field, answers)) return { settled: false, value: null, per: null };
+  if (!rowPrints(claim.excerpt, first)) return { settled: false, value: null, per: null };
   const per = answers.map((a) => a.per).find((p) => p != null) ?? claim.per;
   return { settled: true, value: first, per };
 }
@@ -152,9 +162,9 @@ export const GUARD_SCHEMA = {
 const ANSWER_RULES = `For each question give:
 - found: false when the page does not print that row, column, person or cover, or prints no figure for it there; then amount and per are null.
 - amount: the figure as a plain number exactly as printed (25000 for "S$25,000", 25 for "25%", 80.5 for "80.50"). Never work anything out, add, convert or round.
-- per: "once" for a lump sum, a limit or a value; "day", "week", "month", "quarter", "half_year" or "year" when the page prints it per that period (a daily benefit, a monthly premium, a yearly payment); "percent" for a percentage. null only when the page prints nothing that says.
+- per: "once" for a lump sum, or a limit or value with no period; "day", "week", "month", "quarter", "half_year" or "year" when the row or its cell prints it per that period (a daily benefit, a monthly premium, a yearly payment, an annual or per-year limit); "percent" for a percentage. null only when the page prints nothing that says.
 - line: the exact printed words you read the figure from.
-When a table has several plan or person columns, read only the column named; never take another column's figure. When the page prints two different figures for the same row and column, set found to false.`;
+The heading and column names are there to help you find the row: when the page prints the row but under a different heading, still answer for that row. When a table has several plan or person columns, read only the column named; never take another column's figure. When the page prints two different figures for the same row and column, set found to false.`;
 
 export const GUARD_PROMPTS = {
   /** Wording A. */
@@ -222,7 +232,7 @@ export function applyGuards(r: CheckedReading, guards: GuardRecord | null | unde
   const settle = (claim: Claim): { value: number | null; note: GuardNote | null } => {
     if (confirmed.has(claim.key)) return { value: confirmed.get(claim.key)!, note: null };
     const v = guards?.verdicts?.[claim.key];
-    if (v && (v.status === "agreed" || v.status === "corrected") && v.value != null && printsNumber(claim.excerpt, v.value)) return { value: v.value, note: null };
+    if (v && (v.status === "agreed" || v.status === "corrected") && v.value != null && rowPrints(claim.excerpt, v.value)) return { value: v.value, note: null };
     const status = v?.status === "confirm" ? "confirm" : "checking";
     return { value: null, note: { status, field: claim.field, claimKey: claim.key, page: v?.page ?? claim.page, line: v?.line ?? claim.excerpt,
       candidates: v?.candidates ?? [claim.value], note: status === "confirm" ? NEEDS_CONFIRMATION : STILL_CHECKING } };

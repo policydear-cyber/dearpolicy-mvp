@@ -14,7 +14,7 @@ import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePa
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { applyGuards, checkingCount, claimsOf, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
+import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
 import { figureGuardsEnabled } from "./guard-flag";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
@@ -357,14 +357,22 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     if (reply.json != null) stored.pages.push({ page: f.page, json: reply.json });
   }
   // The figure guards (switch on only): every figure of the finished reading is checked by five readers before it is used.
-  if (guards) stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS });
+  // Whatever happens in the check, the paid reading is stored (Critic R389-1); a check that failed outright leaves every
+  // figure unchecked, for the continuation job.
+  if (guards) {
+    try { stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS }); }
+    catch (error) {
+      console.error(`Figure check failed for ${doc.id}:`, error instanceof Error ? error.message : String(error));
+      stored.guards = { version: GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: 0, calls: 0, stopped: "error" };
+    }
+  }
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
     ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading, model=EXCLUDED.model, prompt_version=EXCLUDED.prompt_version, read_at=now()
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
   await clearUnreadTableNote(db, accountId, doc.id);
   return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}),
-    ...(stored.guards ? { figuresChecking: checkingCount(stored.guards), guardsAt: stored.guards.at } : {}) };
+    ...(stored.guards ? { figuresChecking: unfinishedCount(checkStored(doc, stored), stored.guards), guardsAt: stored.guards.at } : {}) };
 }
 
 type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
@@ -539,7 +547,7 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
   if (continuing != null) {
     if (stored.guards?.at !== continuing) return { checked: false, why: "the document was read again since; its own check runs instead" };
-    if (!checkingCount(stored.guards)) return { checked: false, why: "nothing is left to check" };
+    if (!unfinishedCount(checkStored(doc, stored), stored.guards)) return { checked: false, why: "nothing is left to check" };
   }
   // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
   const record = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });

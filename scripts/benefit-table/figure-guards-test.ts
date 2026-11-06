@@ -4,10 +4,10 @@
  *   npm run benefit-table:figure-guards-test */
 import assert from "node:assert/strict";
 import { checkReading, type CheckedReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { MAX_REREADS, applyGuards, claimsOf, renderQuestions, type GuardRecord, type Per } from "@/lib/benefit-table/guards";
+import { MAX_REREADS, applyGuards, claimsOf, judge, renderQuestions, type GuardRecord, type Per } from "@/lib/benefit-table/guards";
 import { BATCH_CLAIMS, batches, runGuards, type GuardReader } from "@/lib/benefit-table/guard-run";
-import { DEFAULT_GUARDS, figureGuardsEnabled, guardCapUsd, guardRoster } from "@/lib/benefit-table/guard-flag";
-import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
+import { DEFAULT_GUARDS, figureGuardsEnabled, guardCapUsd, guardRoster, supportsEffort } from "@/lib/benefit-table/guard-flag";
+import { anthropicTableModel, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import { guardStoredReading, readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
 import { FIGURE_CHECK_JOB_TYPE, MAX_FIGURE_CHECK_RUNS, enqueueFigureCheck, figureCheckPayload } from "@/lib/benefit-table/figure-check-job";
@@ -145,6 +145,28 @@ async function main() {
     const wrong = (name: string) => reader(name, (q) => /"Trip postponement".*"Business"/.test(q) ? { amount: 750, per: "once" } : null);
     const g = await run(r, [wrong("r1"), wrong("g1"), wrong("g2"), wrong("g3"), wrong("g4")]);
     assert.equal(g.verdicts[businessTripKey(r)].status, "confirm");
+  });
+
+  await test("a re-read can overrule what reader 1 read a figure is per: a limit printed per year, read by reader 1 as a lump sum", async () => {
+    const r = checked();
+    const perYear = (name: string) => reader(name, (q, c) => /"Baggage delay".*"Business"/.test(q) ? { amount: 300, per: "year" } : null);
+    const g = await run(r, [perYear("r1"), perYear("g1"), perYear("g2"), perYear("g3"), perYear("g4")]);
+    const v = g.verdicts[keyOf(r, /"Baggage delay".*"Business"/)];
+    assert.equal(v.status, "agreed"); assert.equal(v.rounds, 1); assert.equal(v.per, "year");
+  });
+
+  await test("an unsettled figure keeps what every reader answered in every round, for audit", async () => {
+    const r = checked();
+    const g = await run(r, five({ 3: reader("g3", (q) => /"Trip postponement".*"Business"/.test(q) ? { amount: 500, per: "once" } : null) }));
+    const seen = g.verdicts[businessTripKey(r)].seen!;
+    assert.equal(seen.length, 1 + MAX_REREADS);
+    assert.deepEqual(seen[0], [[1000, "once"], [1000, "once"], [1000, "once"], [500, "once"], [1000, "once"]]);
+  });
+
+  await test("a plain-number plan row (cells joined by spaces, \"50 100 150\") still prints its middle cell (live run fg-live-20261106-03)", () => {
+    const claim = { key: "k", field: "value" as const, page: 2, where: "w", ask: "a", value: 100, per: "day" as const, excerpt: "3 Overseas hospital cash (per day, up to 30 days) 50 100 150" };
+    assert.equal(judge(claim, Array(5).fill({ amount: 100, per: "day" }), 5).settled, true);
+    assert.equal(judge({ ...claim, value: 5010 }, Array(5).fill({ amount: 5010, per: "day" }), 5).settled, false, "a figure no cell prints");
   });
 
   await test("a figure no page prints is never offered to the household", async () => {
@@ -377,6 +399,41 @@ async function main() {
     const none = five();
     assert.equal((await guardStoredReading(g.db, A, DOC.id, setup(none[0].model, none), {}, at)).checked, false);
     assert.equal(calls(none), 0);
+  });
+
+  await test("a guard call that throws (an overload) never loses the paid reading: it is stored, and its figures wait for the continuation", async () => {
+    envOff();
+    const f = fakeDb(), r1 = readerModel(reading());
+    const boom: Fake = { model: { choice: { provider: "anthropic", model: "boom" }, async call() { throw Object.assign(new Error("overloaded"), { status: 529 }); } }, calls: [] };
+    const res = await readDocument(f.db, r1.model, A, DOC.id, undefined, {}, setup(r1.model, five({ 2: boom })));
+    assert.equal(res.read, true);
+    assert.equal(res.figuresChecking, 6);
+    const g = JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord;
+    assert.equal(g.stopped, "error");
+    assert.ok(Object.values(g.verdicts).every((v) => v.status === "checking"));
+  });
+
+  await test("the household's figure stays with its row when a fresh reading cites another page or words the heading differently", () => {
+    const r = checked(), key = businessTripKey(r);
+    const moved = structuredClone(r);
+    for (const b of moved.benefits) { b.section = "SECTION 2 - TRAVEL INCONVENIENCE BENEFITS"; b.source = { ...b.source, page: 3 }; }
+    assert.equal(businessTripKey(moved), key);
+    const pick = (x: CheckedReading) => x.benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")!.value;
+    assert.equal(pick(applyGuards(moved, null, [{ documentId: DOC.id, claimKey: key, value: 1000 }])), 1000);
+  });
+
+  await test("Haiku 4.5 is sent no effort setting (it refuses one); the other guards keep it", () => {
+    assert.equal(supportsEffort("claude-haiku-4-5"), false);
+    assert.equal(supportsEffort("claude-opus-5-5"), true);
+    assert.equal(supportsEffort("claude-sonnet-5"), true);
+    const sent: Record<string, unknown>[] = [];
+    const client = { messages: { stream(p: Record<string, unknown>) { sent.push(p); return { finalMessage: async () => ({ content: [{ type: "text", text: "{}" }], stop_reason: "end_turn", model: "m", usage: {} }) }; } } };
+    const call = { system: "s", user: "u", schema: {}, maxTokens: 10 };
+    return Promise.all([anthropicTableModel({ provider: "anthropic", model: "claude-haiku-4-5" }, client as never, { effort: false }).call(call),
+      anthropicTableModel({ provider: "anthropic", model: "claude-sonnet-5-5" }, client as never).call(call)]).then(() => {
+      assert.equal("effort" in (sent[0].output_config as object), false);
+      assert.equal((sent[1].output_config as { effort?: string }).effort, "medium", "main's reading call is unchanged");
+    });
   });
 
   await test("continuation jobs: one attempt each, idempotent per reading and run, at most MAX_FIGURE_CHECK_RUNS", async () => {

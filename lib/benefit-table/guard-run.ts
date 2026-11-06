@@ -12,7 +12,7 @@ import { renderDocument } from "./reading";
 import type { OnUsage } from "./service";
 import type { TableModel, TableReply } from "./model";
 import { GUARD_PROMPTS, GUARD_SCHEMA, GUARDS_VERSION, MAX_REREADS, candidatesOf, claimsOf, firstAnswer, judge, readAnswers, renderQuestions,
-  type Answer, type Claim, type GuardPrompt, type GuardRecord, type Verdict } from "./guards";
+  type Answer, type Claim, type GuardPrompt, type GuardRecord, type Per, type Verdict } from "./guards";
 
 /** One reader: a model and the wording it is given in the first round. readers[0] is reader 1 (the document's own
  * reading model): it reads in the re-reads only, since its first-round answer is the reading itself. */
@@ -76,7 +76,7 @@ export async function runGuards(doc: SourceDoc, checked: CheckedReading, readers
   const history = new Map<string, Answer[][]>(claims.map((c) => [c.key, []]));
   const pageText = (n: number) => doc.pages.find((p) => p.page === n)?.text ?? "";
   const minCall = o.minCallMs ?? 45_000;
-  const state: { stop: "spend" | "time" | null } = { stop: null };
+  const state: { stop: "spend" | "time" | "error" | null } = { stop: null };
 
   /** One round over the claims: each reader in `who` answers every batch; returns each claim's answers in reader order. */
   const round = async (pending: Claim[], who: { reader: GuardReader; prompt: GuardPrompt }[]): Promise<Map<string, (Answer | null)[]>> => {
@@ -88,15 +88,21 @@ export async function runGuards(doc: SourceDoc, checked: CheckedReading, readers
       if (record.spentUsd + worst > o.capUsd) { state.stop = "spend"; break; }
       const left = o.callTime?.() ?? null;
       if (left != null && left < minCall) { state.stop = "time"; break; }
+      // A call that fails (an overload, a network error) never takes the reading down with it (Critic R389-1): the run
+      // stops, and every figure not settled stays "checking" for the continuation job.
       const replies = await Promise.all(who.map(async (w) => {
-        const reply = await w.reader.model.call({ system: GUARD_PROMPTS[w.prompt], user, schema: GUARD_SCHEMA, maxTokens, ...(left != null ? { timeoutMs: left } : {}) });
-        record.calls++;
-        record.spentUsd += spentUsd(w.reader.model, reply);
-        await w.reader.onUsage?.("figure check", reply);
-        return reply;
+        try {
+          const reply = await w.reader.model.call({ system: GUARD_PROMPTS[w.prompt], user, schema: GUARD_SCHEMA, maxTokens, ...(left != null ? { timeoutMs: left } : {}) });
+          record.calls++;
+          record.spentUsd += spentUsd(w.reader.model, reply);
+          await w.reader.onUsage?.("figure check", reply);
+          if (reply.stopReason === "timeout") state.stop = "time";
+          return reply;
+        } catch { state.stop = "error"; return null; }
       }));
+      if (state.stop === "error" || state.stop === "time") break;
       replies.forEach((reply, i) => {
-        const answers = readAnswers(reply.json, batch);
+        const answers = readAnswers(reply!.json, batch);
         batch.forEach((c, j) => { got.get(c.key)![i] = answers[j]; });
       });
     }
@@ -132,8 +138,10 @@ export async function runGuards(doc: SourceDoc, checked: CheckedReading, readers
   }
   for (const c of pending) {
     const answered = history.get(c.key)!;
-    const status: Verdict["status"] = state.stop === "time" ? "checking" : "confirm";
-    record.verdicts[c.key] = { status, value: null, per: null, page: c.page, line: c.excerpt, candidates: candidatesOf(answered, c, pageText(c.page)), rounds: answered.length };
+    // Cut off by time or a failed call: left for the continuation job. Out of spend, or not agreed after the re-reads: asked.
+    const status: Verdict["status"] = state.stop === "time" || state.stop === "error" ? "checking" : "confirm";
+    record.verdicts[c.key] = { status, value: null, per: null, page: c.page, line: c.excerpt, candidates: candidatesOf(answered, c, pageText(c.page)), rounds: answered.length,
+      seen: answered.map((round) => round.map((a) => [a.amount, a.per] as [number | null, Per | null])) };
   }
   record.stopped = state.stop;
   record.spentUsd = Math.round(record.spentUsd * 1e6) / 1e6;

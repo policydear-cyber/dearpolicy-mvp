@@ -12,7 +12,7 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { MIN_CALL_MS, SAVE_MARGIN_MS, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage } from "./service";
 import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
 import { checkingCount } from "./guards";
-import { figureGuardsEnabled, guardCapUsd, guardRoster } from "./guard-flag";
+import { figureGuardsEnabled, guardCapUsd, guardRoster, supportsEffort } from "./guard-flag";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -102,7 +102,7 @@ export const processFigureCheckJob = async (job: { account_id: string | null; pa
 };
 /** The figure guards (guard-flag.ts): reader 1 is the reading model, then the four guards, each booked at its own price. */
 export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
-  const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
+  const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice, undefined, { effort: supportsEffort(g.choice.model) }); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
   return { readers: [{ model: reader, prompt: "direct", onUsage }, ...guards], capUsd: guardCapUsd(env) };
 }
 /** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
