@@ -9,7 +9,6 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
-import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
@@ -389,27 +388,6 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const keep = people.filter((p) => !(payerOnly(p.name) && (people.length > 1 || insuredElsewhere(p.name))));
     if (keep.length < people.length) { dropped.push("a policyholder named as insured"); people.splice(0, people.length, ...keep); }
   }
-  // A document whose own wording names no type (the reader named it): a person it prints only inside a sentence (a
-  // brochure's example person, a letter's greeting) or on a sample page holds no cover from it; the person is kept, so the
-  // paper is filed with them, with no cover (lib/documents/own-figure).
-  let particularsShown = true;
-  if (opts.roleFromReader) {
-    // Judged page by page (Critic r377d): a pack's specimen wording appendix or sample letter page clears only cover read
-    // from that page, not the schedule's.
-    // A banner in the first page's heading block sets the whole document aside.
-    const samplePages = new Set(pages.filter((p, i) => specimenPage(p.text) || (i > 0 && specimenHeading(pages[0].text))).map((p) => p.pageNumber));
-    const realPage = (p: { pageNumber: number }) => !samplePages.has(p.pageNumber);
-    for (const person of people) {
-      if (!pages.some((p) => realPage(p) && personAsParticulars(person.name, p.text))) {
-        if (person.coverages.length) dropped.push(samplePages.size ? "cover for a person printed only on a sample page or in a sentence" : "cover for a person the document names only in a sentence, not as its insured");
-        person.coverages = [];
-        continue;
-      }
-      const kept = person.coverages.filter((c) => (c.sourcePage == null ? !samplePages.size : !samplePages.has(c.sourcePage)));
-      if (kept.length < person.coverages.length) { dropped.push("cover read from a sample page"); person.coverages = kept; }
-    }
-    particularsShown = people.some((p) => pages.some((page) => realPage(page) && personAsParticulars(p.name, page.text)));
-  }
   for (const person of people) {
     const seen = new Set<string>();
     person.coverages = person.coverages.filter((c) => { const k = [norm(c.category), c.amount, c.currency, c.sourcePage].join("|"); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -451,7 +429,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const titled = [...titleRoles(pages, [productName, ...productsMentioned])];
     if (titled.length === 1 && REFERENCE_ROLE_SET.has(titled[0]) && plausibleRole(titled[0] as PolicyExtraction["documentRole"], fullText, pages, [insurer, productName, ...productsMentioned]) === titled[0]) documentRole = titled[0] as PolicyExtraction["documentRole"];
   }
-  const personalCoverageConfirmed = raw.personalCoverageConfirmed && people.length > 0 && particularsShown && !!documentRole && PERSONAL_AUTHORITY_ROLES.has(documentRole);
+  const personalCoverageConfirmed = raw.personalCoverageConfirmed && people.length > 0 && !!documentRole && PERSONAL_AUTHORITY_ROLES.has(documentRole);
   // Summaries the reader wrote (shown on the document's page): no instruction, and every figure, date and status in them printed.
   const keep = (items: string[]) => [...new Set(items.filter((x) => readerTextSupported(fullText, x)))];
   const documentNotes = raw.documentNotes.filter((note) => readerTextSupported(fullText, note));
@@ -601,12 +579,6 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     else if (coverage.amount != null) ok = evidenceLines.some((line) => moneyPrinted(line, Number(coverage.amount)) && (!coverage.currency || currencyOk(line, coverage.currency)));
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
-  // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
-  // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
-  if (coverage.amount != null && text) {
-    const why = specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true });
-    if (why) return { ...coverage, amount: null, notes: [notes, "Not shown as cover: the page prints this figure only as " + (why === "a sample page" ? why : figureContextWords(why)) + "."].filter(Boolean).join(" · "), evidenceVerified: false };
-  }
   // A sum on a page that says its sum insured is not what is paid (a bonus base, lib/documents/notional-sum) is kept as a
   // line with no amount: the cover is held, its figure is never a cover amount (Home, Coverage, chat, claims).
   if (coverage.amount != null && printsNotionalSum(text) && !RIDER_NAME.test(`${coverage.productName ?? ""} ${coverage.evidenceText ?? ""}`))

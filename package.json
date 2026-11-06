@@ -281,7 +281,6 @@
     "r9:redteam-test": "node --import tsx scripts/r9-redteam-regressions.ts",
     "r10:messy-docs-test": "node --import tsx scripts/r10-messy-docs-regressions.ts",
     "documents:role-test": "node --import tsx scripts/document-role-regressions.ts",
-    "documents:scheme-figure-test": "tsx scripts/documents/scheme-figure-test.ts",
     "documents:role-unchecked-pages-test": "node --import tsx scripts/documents/role-unchecked-pages-test.ts",
     "documents:layout-wrapped-labels-test": "node --import tsx scripts/documents/layout-wrapped-labels-test.ts",
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
