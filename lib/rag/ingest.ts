@@ -294,7 +294,7 @@ async function readBundleParts(args: ProcessPolicyArgs, bytes: Uint8Array, segme
       else { const { copyOwnerChosen } = await import("@/lib/policies/upload-owner"); await copyOwnerChosen(args.accountId, args.policyId, partId); }
     }
     try {
-      await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType });
+      await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType, deferredRetry: args.deferredRetry });
     } catch { /* the part records its own outcome; the file goes on */ }
     phrases.push(`pages ${segment.from}–${segment.to} (${segment.title.replace(/\s+/g, " ").trim()}) became “${filename}”`);
   }
@@ -390,6 +390,8 @@ async function progress(args: ProcessPolicyArgs, stage: string, percent: number,
 }
 
 export async function processPolicy(args: ProcessPolicyArgs) {
+  // When this run's function is stopped (lib/jobs/function-time.ts): the benefit table's reading stops in time to save.
+  const startedAt = Date.now();
   // Round 5: a reading service failed on the last attempt, but the text
   // layer was readable: the document is completed from what code can read.
   let readInPart = false;
@@ -688,7 +690,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     await query(
       `UPDATE policies SET insurer=$1,product_name=$2,policy_number=$3,group_policy_number=$4,policy_type=$5,document_role=$6,
        personal_coverage_confirmed=$7,document_authority=$8,document_authority_label=$9,effective_date=$10,renewal_or_expiry_date=$11,
-       page_count=$12,extracted_json=$13::jsonb,processing_status='indexing',processing_stage='organising',processing_progress=61,
+       page_count=$12,extracted_json=$13::jsonb || CASE WHEN extracted_json ? 'benefitTableReadingStarted' THEN jsonb_build_object('benefitTableReadingStarted', extracted_json->'benefitTableReadingStarted') ELSE '{}'::jsonb END,processing_status='indexing',processing_stage='organising',processing_progress=61,
        processing_message='Organising people, coverage and payment evidence…',updated_at=now()
        WHERE id=$14 AND account_id=$15`,
       [
@@ -1045,7 +1047,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // instead, and the old ledger rows and seeded defaults are not made. Switched off, nothing below changes.
       const benefitTable = await import("@/lib/benefit-table/app");
       if (await benefitTable.benefitTableLive(args.accountId)) {
-        if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId).catch((error) => {
+        if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId, { deadline: (await import("@/lib/jobs/function-time")).functionDeadline(startedAt), retry: benefitTable.tableReadingRetry(args) }).catch((error) => {
           console.warn("Benefit table reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
         });
       } else {

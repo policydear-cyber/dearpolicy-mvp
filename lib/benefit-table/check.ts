@@ -25,7 +25,7 @@ import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, typ
 /** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
 const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-Za-z$])\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d[\d,]*(?:\.\d+)?`;
 /** A money cell and the unit printed right after it ("S$200 per day", "S$50/night", "S$100 each", "daily"). */
-const UNIT_AFTER = String.raw`(?:\s*(?:\/\s*(day|night|week|month|year|trip)s?\b|(?:per|every)\s+(?:\d+\s+)?([a-z]+)|(each)\b|(daily|weekly|monthly|yearly|annually)\b|a\s+(day|night|week|month|year)\b))?`;
+const UNIT_AFTER = String.raw`(?:\s*(?:\/\s*(day|night|week|month|year|trip)s?\b|(?:per|every)\s+(?:\d+\s+)?([a-z]+)|(each(?:\s+(?:day|night|week|month|year|trip|visit))?)\b|(daily|weekly|monthly|yearly|annually)\b|a\s+(day|night|week|month|year)\b))?`;
 const MONEY_WITH_UNIT = new RegExp("(" + MONEY + ")" + UNIT_AFTER, "gi");
 const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year", annually: "year", annum: "year", annual: "year", each: "item", item: "item" };
 /** Whether the excerpt's line that prints this figure is a row of plan figures (Critic R364, TE pr364): the figure is
@@ -37,16 +37,41 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
   const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
   return (lines.length ? lines : [excerpt]).some((line) => {
     const cells = [...line.matchAll(MONEY_WITH_UNIT)].map((m) => {
-      const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/s$/, "");
+      // "each night" is a nightly rate; "each" alone is per item.
+      const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/^each\s+/, "").replace(/s$/, "");
       // A figure after "up to" or "maximum" is a cap, whatever its unit.
       const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
       return { text: m[1], start: m.index!, end: m.index! + m[0].length, amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
     });
     const at = cells.findIndex((c) => Math.abs(c.amount - value) < 0.005);
     if (at < 0) return false;
-    // The run of cells side by side with this one: only separators between them (spaces, tabs, "|", "/", ";", ",", "or").
+    // The run of cells side by side with this one: only separators between them (spaces, tabs, "|", "/", ";", ",", a dash,
+    // "or", "and").
     // A figure set off by words ("RM150 per day (RM300 per day if confined in ICU)") is a condition, not another plan.
-    const apart = (i: number) => /^[\s|/;,]*(?:or\b)?[\s|/;,]*$/i.test(line.slice(cells[i].end, cells[i + 1].start));
+    // Two caps in one unit side by side ("up to S$500 up to S$1,000") are two plans' caps too.
+    // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's figure,
+    // never another plan's (TE pr367).
+    const trail = (i: number) => line.slice(cells[i].end, cells[i + 1]?.start ?? line.length);
+    const conditionWord = (i: number) => /^\s*,?\s*(in|if|for|when|while|during|after|where|under|upon|on)\b/i.exec(trail(i))?.[1].toLowerCase() ?? null;
+    const apart = (i: number) => {
+      const between = trail(i);
+      const here = conditionWord(i), next = conditionWord(i + 1);
+      // Parallel cells that each name what they are for ("S$5,000 for Plan A | S$10,000 for Plan B", "S$500 on Basic,
+      // S$1,000 on Premier", "S$100,000 for adults / S$25,000 for children") are plans' or people's cells (Critic R367).
+      if (here && here === next && /^(?:for|on|in|under)$/.test(here))
+        return /^\s*,?\s*\w+\s+(?:[\w.'&-]+\s*){1,4}?[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between);
+      // A condition between two cells sets them apart. Any other run of side-by-side figures is plans, whatever follows
+      // it ("S$5,000 | S$10,000 for any one trip", "S$100 per day | S$200 per day for each insured person"), except one
+      // closed shape: a rate and a raised rate in the same unit, then the setting the raised rate is for ("S$100 per day
+      // and S$200 per day in ICU", "S$100 a day, S$200 a day if in ICU") (TE and Critic, pr367 r4). Fails closed.
+      if (here) return false;
+      const rates = cells[i].unit && cells[i].unit !== "cap" && cells[i].unit === cells[i + 1].unit;
+      // The one closed shape kept: a rate, "and"/"or"/a comma, a raised rate, then the setting it is raised in.
+      const setting = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?(?:icu|intensive care(?: unit)?|hdu|high dependency(?: unit| ward)?|ccu|coronary care(?: unit)?|isolation(?: ward)?|(?:a\s+)?(?:private\s+)?(?:hospital\s+)?ward|hospital)\b/i;
+      if (next && rates && setting.test(trail(i + 1)) && /^\s*(?:,\s*(?:or\b|and\b)?|or\b|and\b)\s*$/i.test(between)) return false;
+      if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
+      return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
+    };
     let from = at, to = at;
     while (from > 0 && apart(from - 1)) from--;
     while (to < cells.length - 1 && apart(to)) to++;
