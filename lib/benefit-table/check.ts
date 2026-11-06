@@ -12,7 +12,7 @@ import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { figuresDifferByPlan, planCellRun } from "@/lib/insurance/scale-limit";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
-import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
+import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenDocument, specimenPage } from "@/lib/documents/own-figure";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
@@ -695,7 +695,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!nameOnPage(person, pageText(source.page))) { out.dropped.push({ what: label, why: "person's name not printed on that page" }); continue; }
     // A sample page gives no one cover; a person printed only inside a sentence (a brochure's example person, a letter's
     // greeting, a worked example) is not the person the page insures (lib/documents/own-figure).
-    if (specimenPage(pageText(source.page)) || (doc.pages.length > 1 && specimenHeading(doc.pages[0].text))) { out.dropped.push({ what: label, why: "the page is a sample" }); continue; }
+    if (specimenPage(pageText(source.page)) || specimenDocument(doc.pages.map((p) => p.text))) { out.dropped.push({ what: label, why: "the page is a sample" }); continue; }
     if (!doc.pages.some((p) => personAsParticulars(person, p.text))) { out.dropped.push({ what: label, why: "person named only in a sentence, never as the document's insured" }); continue; }
     let sumInsured = num(c.sumInsured);
     // A sum its page prints only as what another scheme pays, a total with another plan, an example, a projection or a
