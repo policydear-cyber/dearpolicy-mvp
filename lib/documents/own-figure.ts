@@ -207,7 +207,10 @@ const ID_TOKEN = /^(?:[stfgm]\d{4,}[a-z]?|x{3,}\d*[a-z]?|\*{2,}\d*[a-z]?|\(.*\)|
 /** A label that never introduces the page's own person ("Example:", "Dear", "Meet"). */
 // Word edges by letters of any script: "hi" is no word of "hiểm".
 const NOT_A_PERSON_LABEL = /(?<!\p{L})(?:example|e\.g|sample|specimen|illustration|illustrative|hypothetical|dear|meet|hi|hello|story|case\s+study|testimonial)(?!\p{L})/iu;
-const START_NOT_A_PERSON = new RegExp("^\\W*" + NOT_A_PERSON_LABEL.source, "iu");
+/** A heading line that sets aside the person under it, a closed shape: the line is only a marker ("Example", "Example:",
+ * "Example 2", "Sample", "Case studies", "Meet our customer"), or a sample banner of document words. A line that opens with
+ * such a word and goes on to name something else ("Sample collection benefit included") never does (TE r377 round 6). */
+const MARKER_HEADING = /^\W*(?:(?:example|e\.g|sample|specimen|illustration|illustrative|hypothetical|case\s+stud(?:y|ies)|testimonials?|customer\s+stor(?:y|ies)|(?:a\s+)?real\s+stor(?:y|ies))\s*\d*\s*[:.\-–!]?|meet\s+(?:our|the|a)?\s*(?:customers?|members?|clients?|famil(?:y|ies)|[A-Z][\w'-]*)(?:\s+[A-Z][\w'-]*)?\s*[:.!,]?)\s*$/iu;
 /** Whether the page prints this person as its particulars: a cell of the page (a line, or a part of one set off by a tab, a
  * colon or a run of spaces) that is the person's name and nothing else but an honorific or an identity number, and whose
  * label (the cell before it on its line) is not an example's or a greeting's. A name only inside a sentence ("Meet Mdm
@@ -229,7 +232,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
     // The previous line counts only as a heading that opens with such a word; a sample or example word elsewhere in a title
     // ("Policy Schedule (sample collection included)") never sets aside the labelled insured under it (TE r377 round 5).
     const prevHead = prev.replace(/\([^)]*\)|\[[^\]]*\]/g, " ").trim();
-    if (NOT_A_PERSON_LABEL.test(raw) || (prevHead && START_NOT_A_PERSON.test(prevHead) && prevHead.split(/\s+/).length <= 8)) continue;
+    if (NOT_A_PERSON_LABEL.test(raw) || (prevHead && (MARKER_HEADING.test(prevHead) || bannerLine(prevHead)))) continue;
     // A name printed in capitals is how a schedule or certificate prints its insured, even inside a sentence ("This is
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
     const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];

@@ -209,5 +209,13 @@ check("round 5: a labelled insured under a title with a bracketed sample word is
 check("round 5: the table keeps that cover and its sum", () => assert.deepEqual(covers(reading(KESTREL, "Priya Nair", "Kestrel Health", 350000, "Annual limit: S$350,000")), [["Priya Nair", 350000]]));
 check("round 5: an 'Example' heading line still sets aside the person under it", () => assert.equal(personAsParticulars("Ahmad Yusof", "Example\nAhmad Yusof, 40, male\nPremium S$1,200"), false));
 
+// TE r377 round 6: only a line that is just a marker sets aside the insured under it.
+const KESTREL2 = "Kestrel Health\nPolicy Schedule\nSample collection benefit included\nInsured person: Priya Nair\nPolicy number: KH-51001\nAnnual limit: S$350,000";
+check("round 6: a 'Sample collection benefit included' line keeps the insured under it", () => assert.deepEqual(covers(reading(KESTREL2, "Priya Nair", "Kestrel Health", 350000, "Annual limit: S$350,000")), [["Priya Nair", 350000]]));
+for (const head of ["Example", "Example:", "Example 2", "Sample", "Example (for illustration)", "Sample schedule", "Case studies", "Meet our customer"])
+  check(`round 6: a "${head}" heading sets aside the person under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nMember: Ahmad Yusof\nPremium S$1,200"), false));
+for (const head of ["Sample collection benefit included", "Example of how we pay is on page 3", "Specimen collection at clinics"])
+  check(`round 6: a "${head}" line does not set aside the insured under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nInsured person: Ahmad Yusof"), true));
+
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
