@@ -369,6 +369,23 @@ async function main() {
     assert.deepEqual(read.benefits.map((b) => b.quote), settings);
   });
 
+  await test("L17 a named care unit keeps its spelling variants (hyphens, NICU, critical care, burns unit); 'the isolation of' and ward classes stay held (Critic LOW r374)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const plans = ["Hospital cash S$100 per day and S$300 per day in the isolation of", "Hospital cash S$100 per day and S$300 per day in a single room",
+      "Hospital cash S$100 per day and S$300 per day in a Class A ward", "Hospital cash S$100 per day and S$300 per day in a private wardrobe"];
+    const settings = ["Hospital cash S$100 per day and S$300 per day in an intensive-care unit", "Hospital cash S$100 per day and S$300 per day in a high-dependency unit",
+      "Hospital cash S$100 per day and S$300 per day in a critical care unit", "Hospital cash S$100 per day and S$300 per day in a neonatal intensive care unit",
+      "Hospital cash S$120 a day, S$240 a day if admitted to NICU", "Hospital cash S$100 per day and S$300 per day in a burns unit",
+      "Hospital cash S$100 per day or S$250 per day in a coronary-care unit", "Hospital cash S$100 per day and S$300 per day in an isolation room"];
+    const lines = [...plans, ...settings];
+    const doc = { id: "doc", name: "harbour-care.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
+    const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: Number(/S\$(\d+)/.exec(quote)![1]), period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 4, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [],
+      benefits: lines.map(row) } as never);
+    assert.deepEqual(read.benefits.map((b) => b.quote), settings);
+  });
+
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);

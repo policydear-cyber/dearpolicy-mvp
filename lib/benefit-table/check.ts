@@ -66,7 +66,9 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       if (here) return false;
       const rates = cells[i].unit && cells[i].unit !== "cap" && cells[i].unit === cells[i + 1].unit;
       // The one closed shape kept: a rate, "and"/"or"/a comma, a raised rate, then the setting it is raised in.
-      const setting = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?(?:icu|intensive care(?: unit)?|hdu|high dependency(?: unit| ward)?|ccu|coronary care(?: unit)?|isolation(?: ward)?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b/i;
+      // A named care unit, a closed list with its hyphen and spacing variants (Critic LOW r374: "intensive-care unit",
+      // "critical care unit", "NICU", "burns unit"); never "the isolation of" (a word, not a unit).
+      const setting = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?(?:icu|nicu|picu|hdu|ccu|(?:neonatal\s+|paediatric\s+|pediatric\s+)?intensive[\s-]care(?:\s+unit)?|high[\s-]dependency(?:\s+unit|\s+ward)?|critical[\s-]care(?:\s+unit)?|coronary[\s-]care(?:\s+unit)?|burns?\s+unit|isolation(?:\s+(?:ward|room))?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b(?!\s+of\b)/i;
       if (next && rates && setting.test(trail(i + 1)) && /^\s*(?:,\s*(?:or\b|and\b)?|or\b|and\b)\s*$/i.test(between)) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
