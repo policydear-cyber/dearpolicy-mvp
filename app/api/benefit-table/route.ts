@@ -18,7 +18,7 @@ export async function GET(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
-    const {table,documents,links}=await tableFor(appDb,accountId);
+    const {table,documents,links,figureChecks}=await tableFor(appDb,accountId);
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
     // Each person's schedule lines, the ones Home's tiles count, so Family lists the same kinds of cover (kindsOfTable). Optional.
     const lines=await scheduleLinesFor(accountId).catch(()=>[]);
@@ -31,7 +31,9 @@ export async function GET(request:NextRequest){
       covers:[...new Map(table.people.flatMap(p=>p.covers).map(c=>[c.coverKey,{key:c.coverKey,product:c.product,cover:c.cover,plan:c.plan,riderOf:c.riderOf??null}])).values()],
       unmatchedCovers:table.unmatchedCovers,ambiguousCovers:table.ambiguousCovers,illustrationCovers:table.illustrationCovers,
       unlinkedSections:table.unlinkedSections.map(u=>({...u,chosenBy:chosenBy.get(u.section.key)??null})),
-      staleConfirmations:table.staleConfirmations}));
+      staleConfirmations:table.staleConfirmations,
+      // Only with the figure guards on (lib/benefit-table/guard-flag.ts): the figures the household is asked to check.
+      ...(figureChecks?{figureChecks}:{})}));
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load your coverage"},{status:500});

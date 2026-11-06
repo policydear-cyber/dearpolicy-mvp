@@ -45,6 +45,7 @@ export const MIGRATION_ORDER = [
   "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
   // Optional household tables (each needs household-rls.sql and sets its own RLS, policies and grants).
   "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql", "sql/benefit-table.sql",
+  "sql/benefit-figure-confirmations.sql",
 ];
 
 let finished = false;

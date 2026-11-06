@@ -9,7 +9,8 @@ import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { MIN_CALL_MS, SAVE_MARGIN_MS, noteUnreadTable, readDocument, relink, tableReady, type Db, type OnUsage } from "./service";
+import { MIN_CALL_MS, SAVE_MARGIN_MS, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage } from "./service";
+import { figureGuardsEnabled, guardCapUsd, guardRoster } from "./guard-flag";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -79,7 +80,13 @@ async function markTableReading(db: Db, accountId: string, policyId: string, sta
  *   finish). */
 export async function readIntoBenefitTable(accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean } = {}) {
   const model = anthropicTableModel(benefitTableModel());
-  return readIntoTable(appDb, model, accountId, policyId, opts, usage(accountId, model.choice));
+  const onUsage = usage(accountId, model.choice);
+  return readIntoTable(appDb, model, accountId, policyId, { ...opts, ...(figureGuardsEnabled(process.env, accountId) ? { guards: guardSetup(accountId, model, onUsage) } : {}) }, onUsage);
+}
+/** The figure guards (guard-flag.ts): reader 1 is the reading model, then the four guards, each booked at its own price. */
+export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
+  const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
+  return { readers: [{ model: reader, prompt: "direct", onUsage }, ...guards], capUsd: guardCapUsd(env) };
 }
 /** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
  * reading-service failure schedules (a fresh job at attempt 1, lib/rag/ingest.ts). Neither pays for a table reading. */
@@ -87,7 +94,7 @@ export function tableReadingRetry(args: { attempt?: { number: number } | null; d
   return (args.attempt?.number ?? 1) > 1 || args.deferredRetry === true;
 }
 /** readIntoBenefitTable with its database and model passed in (tests pass fakes). */
-export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number } = {}, onUsage?: OnUsage) {
+export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number; guards?: GuardSetup } = {}, onUsage?: OnUsage) {
   // A retry of a job (attempt 2 or later) never calls the table model, whatever happened to the attempt before it: only a
   // fresh job (an upload, or the household's Read again) pays for a reading. It keeps the reading already stored; when
   // there is none, or the earlier attempt's reading was cut off, the document says its table could not be read.
@@ -103,7 +110,7 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
   // point in between (an API error, a database error while saving, the time limit during the re-link) leaves it set, so
   // a retry of the job never pays for the whole reading again by itself.
   await markTableReading(db, accountId, policyId, true);
-  const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now });
+  const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now }, opts.guards);
   const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
   const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined) : { proposed: 0 };
   await markTableReading(db, accountId, policyId, false);
