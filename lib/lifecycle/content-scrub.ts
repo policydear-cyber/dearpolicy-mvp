@@ -35,6 +35,10 @@ export const DELETED_FILENAME = "(deleted document)";
 const DELETED_STATES = ["soft_deleted", "permanently_deleted", "audit_tombstone"];
 /** How long a document may sit in pending_deletion before its deletion counts as finished anyway (a crashed request). */
 export const STUCK_PENDING_MINUTES = 60;
+/** How long after its scrub a deleted document is still checked for late writes. A reading stops at its next step
+ * once the document is deleted (lib/rag/ingest.ts) and no reading runs anywhere near this long; each re-scrub restarts
+ * the window. Keeps the per-pass check to recently deleted documents. */
+export const LEFTOVER_WINDOW_HOURS = 24;
 
 /**
  * Every table holding rows read from a document, with the column naming the document. Each is deleted for a scrubbed
@@ -50,6 +54,8 @@ export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, col
   // Raw failure detail kept for support (lib/diagnostics/processing-failures.ts): a reading service's own error text,
   // which can name the stored file. Its resource_id is the document's id for document and scan failures.
   ["processing_failure_diagnostics", "resource_id"],
+  // Premiums read from it (counted on Home); the deletion request removes them at once, a late reading can add more.
+  ["premium_records", "source_document_id"], ["premium_records", "policy_id"],
 ];
 
 /**
@@ -144,7 +150,7 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
       `SELECT p.id::text AS id, p.account_id::text AS account_id, p.storage_key FROM policies p
         WHERE p.lifecycle_state=ANY($1::text[]) AND ($3::uuid[] IS NULL OR p.id=ANY($3::uuid[]))
-          AND (p.original_filename<>$2${leftovers.length ? " OR " + leftovers.join(" OR ") : ""})
+          AND (p.original_filename<>$2${leftovers.length ? ` OR (p.updated_at > now() - make_interval(hours => ${LEFTOVER_WINDOW_HOURS}) AND (${leftovers.join(" OR ")}))` : ""})
         ORDER BY p.updated_at LIMIT $4`,
       [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
     for (const doc of due.rows) {
@@ -167,11 +173,30 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
         console.warn("deleted document content scrub will be retried:", error instanceof Error ? error.name : "unknown");
       }
     }
+    await stopDeletedDocumentJobs(db);
     result.forgottenKeys = await forgetPurgedKeys(db);
   } catch (error) {
     console.warn("deleted document content scrub pass failed:", error instanceof Error ? error.name : "unknown");
   }
   return result;
+}
+
+/**
+ * Every pass: a deleted document's reading jobs (its own, keyed by its id, and its later re-read, "<id>:retry-read")
+ * keep no PDF password, file key or error text, and stay stopped. The deletion strips them once; a reading that was
+ * running can schedule its re-read again afterwards, which brings the job back with the password.
+ */
+export async function stopDeletedDocumentJobs(db: Db): Promise<number> {
+  const r = await db.query(
+    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true,
+            status=CASE WHEN j.status IN ('queued','failed_retryable') THEN 'cancelled' ELSE j.status END, updated_at=now()
+       FROM policies p
+      WHERE j.job_type='policy_processing' AND j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
+        AND p.lifecycle_state=ANY($1::text[])
+        AND (j.payload ?| ARRAY['pdfPassword','storageKey'] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
+             OR j.status IN ('queued','failed_retryable'))`,
+    [DELETED_STATES]).catch(() => ({ rowCount: 0 }));
+  return r.rowCount ?? 0;
 }
 
 /**

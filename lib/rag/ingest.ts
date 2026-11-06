@@ -115,12 +115,18 @@ function asServiceFailure(error: unknown, what: string): unknown {
   if (error instanceof UserActionableProcessingError || error instanceof TemporaryProcessingError || error instanceof DocumentDeletedWhileReadingError || isQuotaOrSpendStop(error)) return error;
   return new TemporaryProcessingError(what + " failed: " + (error instanceof Error ? error.name + ": " + error.message : String(error)).slice(0, 300), error);
 }
+/** Whether the document is still on file (not deleted). */
+async function stillOnFile(args: { policyId: string; accountId: string }): Promise<boolean> {
+  return (await query(`SELECT 1 FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [args.policyId, args.accountId])).rows.length > 0;
+}
 function attemptsLeft(args: ProcessPolicyArgs) { return !!args.attempt && args.attempt.number < args.attempt.max; }
 /** Schedules the single later re-read after the job's own attempts ran out
  * on a service failure. Idempotent (its own key); never from the deferred
  * run itself, so retries stay bounded. Returns whether one is scheduled. */
 async function scheduleDeferredRead(args: ProcessPolicyArgs): Promise<boolean> {
   if (args.deferredRetry) return false;
+  // A document deleted meanwhile is never read again: scheduling would bring back its stopped job with the password.
+  if (!await stillOnFile(args)) return false;
   try {
     const [{ enqueueJob }, { pool }, { POLICY_PROCESSING_JOB_TYPE }] = await Promise.all([import("@/lib/jobs/queue"), import("@/lib/db/client"), import("@/lib/rag/processing-queue")]);
     await enqueueJob(pool, {
@@ -1099,7 +1105,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
     // Deleted while being read: nothing is recorded on the deleted document and nothing is retried or scheduled.
+    // A failure after the deletion (a reading service failing mid-step) counts the same.
     if (error instanceof DocumentDeletedWhileReadingError) throw error;
+    if (!await stillOnFile(args).catch(() => true)) throw new DocumentDeletedWhileReadingError();
     // policies.processing_error is household-readable (RLS SELECT): store the
     // fixed message only; the raw error goes to the service-only diagnostics
     // table (lib/diagnostics/processing-failures.ts).
@@ -1158,3 +1166,5 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
 /** The reading's per-step progress update (used by tests). */
 export const recordReadingProgress = progress;
+/** The single later re-read's scheduler (used by tests). */
+export const scheduleDeferredReadForTest = scheduleDeferredRead;

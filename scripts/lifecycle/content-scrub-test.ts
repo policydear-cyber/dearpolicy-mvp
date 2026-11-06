@@ -248,6 +248,45 @@ async function main() {
     assert.equal((await q<{ processing_message: string | null }>(`SELECT processing_message FROM policies WHERE id=$1`, [doc.id])).rows[0].processing_message, null);
   });
 
+  await t("premiums a late reading saves for a deleted document are removed on the next pass, so they never count on Home", async () => {
+    const doc = await upload(haziq, { filename: "Dental-Haziq.pdf", insurer: "Molar Mutual (fictitious)", product: "Molar Care", policyNo: "MM-77", hash: "h-dental", pages: ["Annual premium £240."], amount: 1000, currency: "GBP" });
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-premium" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    await q(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,amount,currency,frequency) VALUES ($1,$2,$2,$3,'Molar Mutual (fictitious)',240,'GBP','annual'),($1,NULL,$2,$3,'Molar Mutual (fictitious)',20,'GBP','monthly')`, [accountId, doc.id, haziq]);
+    await q(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,amount,currency) VALUES ($1,$2,$2,$3,500,'GBP')`, [accountId, home.id, haziq]);
+    await scrubDeletedDocuments({ pinecone: pineconeSpy([]) });
+    const left = (await q<{ id: string | null }>(`SELECT coalesce(source_document_id, policy_id)::text AS id FROM premium_records WHERE account_id=$1`, [accountId])).rows.map((r) => r.id);
+    assert.deepEqual(left, [home.id], "only the premium of the document still on file is left");
+  });
+
+  await t("a re-read scheduled after the deletion (a reading service failed mid-step) is stopped and stripped again by the next pass", async () => {
+    const doc = await upload(aisyah, { filename: "Locked-Health-Aisyah.pdf", insurer: "Sejahtera Health (fictitious)", product: "Sejahtera Med", policyNo: "SH-99887766", hash: "h-locked2", pages: ["Room and board RM300 a day."], amount: 300, currency: "MYR" });
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-resurrect" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    // What the queue's resurrecting enqueue does to the stopped re-read row (lib/jobs/queue.ts resurrectTerminal).
+    await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status,cancel_requested) VALUES ($1,'policy_processing',$2||':retry-read',$3::jsonb,'queued',false)`,
+      [accountId, doc.id, JSON.stringify({ policyId: doc.id, storageKey: doc.key, pdfPassword: "s3cret-fictitious", deferredRetry: true })]);
+    await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status) VALUES ($1,'policy_processing',$2||':retry-read',$3::jsonb,'queued')`,
+      [accountId, home.id, JSON.stringify({ policyId: home.id, pdfPassword: "keep-me" })]);
+    await scrubDeletedDocuments({ pinecone: pineconeSpy([]) });
+    const jobs = (await q<{ idempotency_key: string; payload: Record<string, unknown>; cancel_requested: boolean; status: string }>(
+      `SELECT idempotency_key, payload, cancel_requested, status FROM background_jobs WHERE idempotency_key LIKE '%:retry-read' AND account_id=$1`, [accountId])).rows;
+    const mine = jobs.find((j) => j.idempotency_key.startsWith(doc.id))!;
+    assert.equal(mine.payload.pdfPassword, undefined); assert.equal(mine.payload.storageKey, undefined);
+    assert.equal(mine.cancel_requested, true); assert.equal(mine.status, "cancelled");
+    const other = jobs.find((j) => j.idempotency_key.startsWith(home.id))!;
+    assert.equal(other.payload.pdfPassword, "keep-me"); assert.equal(other.status, "queued", "another document's re-read is untouched");
+  });
+
+  await t("a reading that fails after its document was deleted schedules no re-read", async () => {
+    const { scheduleDeferredReadForTest } = await import("@/lib/rag/ingest");
+    const doc = await upload(haziq, { filename: "Cycle-Haziq.pdf", insurer: "Pedal Cover (fictitious)", product: "Pedal", policyNo: "PC-5", hash: "h-cycle", pages: ["Bike £1,200."], amount: 1200, currency: "GBP" });
+    await q(`UPDATE policies SET lifecycle_state='pending_deletion' WHERE id=$1`, [doc.id]);
+    const scheduled = await scheduleDeferredReadForTest({ accountId, policyId: doc.id, familyMemberId: haziq, storageKey: doc.key, pdfPassword: "pw-fictitious" } as never);
+    assert.equal(scheduled, false);
+    assert.equal((await q(`SELECT 1 FROM background_jobs WHERE idempotency_key=$1`, [doc.id + ":retry-read"])).rows.length, 0, "no job carrying the password is created");
+  });
+
   await t("the request drain and the daily job both run the scrub, so a failed cleanup is retried without anyone asking", async () => {
     const drain = await readFile("lib/jobs/request-drain.ts", "utf8");
     const cron = await readFile("app/api/internal/jobs/run/route.ts", "utf8");
