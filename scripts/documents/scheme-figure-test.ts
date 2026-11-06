@@ -236,20 +236,31 @@ for (const [n, t, want] of S1) check(`leftovers: ${n}: ${want}`, () => assert.eq
 const S2: [string, string[], boolean][] = [
   ["page-1 banner with the figures on page 2", ["SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie", "Sum Assured S$500,000"], true],
   ["page-1 footer banner", [SCHED + "\nSPECIMEN - NOT VALID FOR CLAIMS", "General Conditions"], true],
-  ["a last page ending SPECIMEN - NOT VALID FOR CLAIMS", [SCHED, "General Conditions\nClaims must be made within 90 days.\nSPECIMEN - NOT VALID FOR CLAIMS"], true],
-  ["a last page ending FOR ILLUSTRATION PURPOSES ONLY", [SCHED, "Notes\nFOR ILLUSTRATION PURPOSES ONLY"], true],
+  // A later page that is itself a specimen, an illustration or a sample card sets aside only that page (Critic r378 L1-L5).
+  ["a last-page specimen contract ending SPECIMEN - NOT VALID FOR CLAIMS", [SCHED, "General Conditions\nClaims must be made within 90 days.\nSPECIMEN - NOT VALID FOR CLAIMS"], false],
+  ["a last-page benefit illustration ending FOR ILLUSTRATION PURPOSES ONLY", [SCHED, "Benefit illustration\nProjected value at age 65 S$48,200\nFOR ILLUSTRATION PURPOSES ONLY"], false],
+  ["a last-page member card ending SAMPLE CARD - NOT VALID FOR CLAIMS", [SCHED, "Your member card\nSAMPLE CARD - NOT VALID FOR CLAIMS"], false],
+  ["a last-page worked claim example ending For illustrative purposes only", ["Harbour Assurance\nHospital Plan Schedule\nInsured person: Rosalind Teo\nPolicy number: HA-77120\nAnnual limit S$250,000", "How a claim is paid\nA 5-day stay costing S$8,000 is paid in full.\nFor illustrative purposes only"], false],
+  ["a one-page sample", ["SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie\nSum Assured S$500,000"], true],
   ["a later SPECIMEN POLICY CONTRACT appendix", [SCHED, "SPECIMEN POLICY CONTRACT\nGeneral Conditions"], false],
   ["a last page ending SPECIMEN COPY", [SCHED, "General Conditions\nThe policy pays S$1\nSPECIMEN COPY"], false],
   ["a real two-page schedule", [SCHED, "General Conditions\nClaims must be made within 90 days."], false],
 ];
 for (const [n, ps, want] of S2) check(`leftovers document: ${n}: ${want}`, () => assert.equal(specimenDocument(ps), want));
 check("leftovers table: a page-1 banner sets aside cover read from page 2", () => assert.deepEqual(checkReading({ id: "cccccccc-0000-0000-0000-000000000005", name: "doc.pdf", readable: true, pages: [{ page: 1, text: "SAMPLE POLICY SCHEDULE\nLife Assured: LIM WEI JIE" }, { page: 2, text: "Life Assured: LIM WEI JIE\nSum Assured S$500,000" }] }, { document: { kind: "personal_proof", product: "Term Life", insurer: null, namedPeople: ["LIM WEI JIE"], plan: null, periodFrom: null, periodTo: null }, covers: [{ person: "LIM WEI JIE", product: "Term Life", cover: "Death", plan: null, riderOf: null, policyNumber: null, sumInsured: 500000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 2, quote: "Sum Assured S$500,000" }], benefits: [] } as never).covers.length, 0));
-check("leftovers intake: a last page ending NOT VALID FOR CLAIMS shows no cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] }), pages(SCHED, "General Conditions\nSPECIMEN - NOT VALID FOR CLAIMS")), []));
+// TE r378: a real two-page policy whose page 2 is a benefit illustration keeps its sum assured, in both engines.
+const PACK2 = ["Northwind Life\nPolicy Schedule\nLife Assured: Lim Wei Jie\nPolicy number: NW-300218\nSum Assured S$400,000", "Benefit illustration\nProjected value at age 65 S$61,500\nFor illustration purposes only"];
+check("leftovers intake: a last-page illustration keeps the schedule's cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 400000, "Sum Assured S$400,000"]]]] }), pages(...PACK2)), [400000]));
+check("leftovers table: a last-page illustration keeps the schedule's cover", () => assert.deepEqual(checkReading({ id: "cccccccc-0000-0000-0000-000000000006", name: "doc.pdf", readable: true, pages: PACK2.map((text, i) => ({ page: i + 1, text })) }, { document: { kind: "personal_proof", product: "Northwind Life", insurer: null, namedPeople: ["Lim Wei Jie"], plan: null, periodFrom: null, periodTo: null }, covers: [{ person: "Lim Wei Jie", product: "Northwind Life", cover: "Death", plan: null, riderOf: null, policyNumber: null, sumInsured: 400000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: "Sum Assured S$400,000" }], benefits: [] } as never).covers.map((c) => c.sumInsured), [400000]));
+check("leftovers intake: a page-1 banner with the figure on page 2 shows no cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] }), pages("SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie", "Life Assured: Lim Wei Jie\nSum Assured S$500,000")), []));
 check("leftovers intake: a real two-page schedule keeps its cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] }), pages(SCHED, "General Conditions\nClaims must be made within 90 days.")), [500000]));
 const S3: [string, string, boolean][] = [
   ["a brochure traveller story with a certificate number", "Travel Guard brochure\nSample certificate no. TRV-88123 shown on page 4\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", false],
   ["a covered-member story", "Policy No: GH-55012\nCovered member - Rosalind Teo\nHer son needed surgery last year.", false],
   ["a real certificate keeps its traveller", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo, 34\nPlan: Gold", true],
+  ["a real certificate's 'They must depart ... together' is no story", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller(s): Lim Wei Jie, Rosalind Teo\nThey must depart from and return to Singapore together.", true],
+  ["a real certificate's 'Their cover starts on the departure date' is no story", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo\nTheir cover starts on the departure date.", true],
+  ["a story with a received payout", "Policy No: GH-55012\nCovered member - Rosalind Teo\nShe received a payout within a week.", false],
 ];
 for (const [n, t, want] of S3) check(`leftovers traveller: ${n}: ${want}`, () => assert.equal(personAsParticulars("Rosalind Teo", t), want));
 

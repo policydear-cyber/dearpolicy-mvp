@@ -191,18 +191,13 @@ export function specimenPage(text: string) {
   const lone = (l: string) => BANNER_MARK.test(l.replace(/^[\s*#=_|~\-–()[\]]+|[\s*#=_|~\-–()[\]]+$/g, ""));
   return THIS_IS_A_SAMPLE.test(text) || head.some(bannerLine) || [...upper, ...foot].filter((l) => !lone(l)).some(bannerLine);
 }
-/** A banner that says outright the document is not real: a disclaimer ("NOT VALID FOR CLAIMS", "NOT FOR ISSUE"), "for
- * illustration only" or "TEST DOCUMENT". */
-const STRONG_BANNER = /\bnot\s+(?:valid|for\s+issue|for\s+claims|a\s+real|an\s+actual)\b|\bfor\s+illustrat(?:ion|ive)\s+(?:purposes\s+)?only\b|^\W*test\s+document\b/i;
-/** Whether a whole document is a sample, so that no page of it gives anyone cover: its first page is a sample page, or its
- * last page ends with a banner that says outright the document is not real ("SPECIMEN - NOT VALID FOR CLAIMS"). An
- * appendix or a later page that is itself a specimen ("SPECIMEN POLICY CONTRACT", "SPECIMEN COPY") sets aside only that
- * page. */
+/** Whether a whole document is a sample, so that no page of it gives anyone cover: its first page is a sample page (a
+ * heading or footer banner). A later page that is itself a specimen or an illustration ("SPECIMEN POLICY CONTRACT", a
+ * benefit illustration's "FOR ILLUSTRATION PURPOSES ONLY", a sample member card) sets aside only that page: real policy
+ * packs end with such pages (Critic r378 L1-L5, TE r378). */
 export function specimenDocument(pages: string[]): boolean {
-  const ps = pages.filter((p) => p.trim());
-  if (!ps.length) return false;
-  if (specimenPage(ps[0])) return true;
-  return pageEdges(ps[ps.length - 1]).foot.some((l) => bannerLine(l) && STRONG_BANNER.test(l));
+  const first = pages.find((p) => p.trim());
+  return !!first && specimenPage(first);
 }
 /** The names a page's own heading block prints as its title or product ("SilverYears Care" on that scheme's own
  * statement), never a document-type line ("Policy Schedule"). The own scheme is taken from these only, never from a
@@ -233,7 +228,9 @@ const MARKER_HEADING = /^\W*(?:(?:example|e\.g|sample|specimen|illustration|illu
  * insured only on a page that prints its own policy or certificate number (TE and Critic r377 round 3). */
 const WEAK_LABEL = /^(?:travell?ers?|covered\s+members?)(?:'?s|\(s\))?(?:\s+names?)?$/i;
 /** A brochure's story: a line that tells what a person did ("She claims S$5,000 for a cancelled trip"). */
-const NARRATIVE = /^\s*(?:she|he|they|her|his|their)\s+(?:\S+\s+){2,}/im;
+/** A story line also prints a money figure or a claim verb; a certificate's condition ("They must depart from and return
+ * to Singapore together", "Their cover starts on the departure date") is no story (Critic r378 N1, N2). */
+const NARRATIVE = /^\s*(?:she|he|they|her|his|their)\b[^\n]*(?:(?:S\$|US\$|\$|SGD|RM)\s?\d|\b(?:claim(?:s|ed)?|receive[sd]?|paid|was|were|needed|got|gets)\b)/im;
 const OWN_NUMBER = /\b(?:policy|certificate|cert\.?|member(?:ship)?)\s*(?:no\.?|number|#)\s*[:.]?\s*[A-Z]{0,6}[-\/]?\d[\w\/-]{3,}/i;
 export function personAsParticulars(person: string, pageText: string): boolean {
   const want = normalizePersonName(person).split(" ").filter((w) => w.length > 0 && !HONORIFIC.test(w));
