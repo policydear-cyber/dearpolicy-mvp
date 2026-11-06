@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { verifiedExtraction } from "../../lib/rag/ingest";
 import { printedDocumentRole, documentAuthority } from "../../lib/documents/intelligence";
 import { checkReading } from "../../lib/benefit-table/check";
+import { factCheckExtraction } from "../../lib/documents/fact-check";
 import { amountOnlyInContext, personAsParticulars, specimenPage } from "../../lib/documents/own-figure";
 import type { PolicyExtraction } from "../../lib/ai/extract-policy";
 
@@ -150,7 +151,7 @@ for (const [t, w, want] of A3) check(`r377b particulars: ${w} in "${t}": ${want}
 // Critic r377c: notes, conditions and signature stamps on real schedules are no banner; an "illustrative" person is no one's.
 const B4: [string, boolean][] = [["Void if altered", false], ["VOID IF NOT SIGNED", false], ["SPECIMEN SIGNATURE OF AUTHORISED OFFICER", false], ["Specimen signature: ____", false],
   ["Example only - see policy wording for full terms", false], ["Example: how a claim is paid", false], ["Previous policy: VOID", false], ["Mock-up of your member card below", false],
-  ["Sample statement of account enclosed", false], ["VOID", false], ["DUMMY", true]];
+  ["Sample statement of account enclosed", false], ["VOID", false], ["DUMMY", false]];
 for (const [t, want] of B4) check(`r377c banner "${t}" on a real schedule: ${want}`, () => assert.equal(specimenPage("POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\n" + t), want));
 check("r377c an illustrative covered person is no one's", () => assert.equal(personAsParticulars("Rosalind Teo", "Covered person: Rosalind Teo (illustrative)"), false));
 check("r377c a covered-persons table keeps its row", () => assert.equal(personAsParticulars("Lee Mei Ling", "Covered Persons\tRelationship\nLee Mei Ling\tSpouse"), true));
@@ -165,19 +166,37 @@ const B5: [string, string, boolean][] = [
   ["a body line SAMPLE far from the heading", REAL + "SAMPLE\nLab tests are covered.\nOne more line.\nAnother line.\nLast line.", false],
   ["a lone SAMPLE under the title", "POLICY SCHEDULE\nSAMPLE\nPolicy No. TL-000000\nLife Assured: Tan Ah Kow\nSum Assured S$500,000", true],
   ["SPECIMEN banner in the footer", REAL + "SPECIMEN - NOT VALID FOR CLAIMS", true],
-  ["POLICY SCHEDULE (SPECIMEN) title", "POLICY SCHEDULE (SPECIMEN)\nLife Assured: Tan Ah Kow\nSum Assured S$500,000", true],
+  ["POLICY SCHEDULE (SPECIMEN) title: brackets are never the banner", "POLICY SCHEDULE (SPECIMEN)\nLife Assured: Tan Ah Kow\nSum Assured S$500,000", false],
   ["VOID - SPECIMEN title", "VOID - SPECIMEN\nPolicy Schedule\nLife Assured: Tan Ah Kow", true],
   ["a lone Sample cell between a label and its figure", "Life Assured: Lim Wei Jie\nSample\nS$50", false],
 ];
 for (const [n, t, want] of B5) check(`r377 round 3 sample page: ${n}: ${want}`, () => assert.equal(specimenPage(t), want));
-const D4: [string, number, string[], string | null][] = [
-  ["Your SilverYears Care, the national long-term care scheme, which pays up to S$1,200 a month.", 1200, [], null],
-  ["SilverYears Care, the national long-term care scheme, currently pays you S$640 a month.", 640, [], null],
-  ["SilverYears Care, the national long-term care scheme, which currently pays S$640 a month.", 640, ["SilverYears Care"], null],
-  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, ["SilverYears Care"], null],
-  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, ["GoldenCare Top-Up"], "other_payer"],
-  ["This plan works with HealthBase, the public hospital scheme, which pays up to S$120,000 a year.", 120000, ["Brightwater Hospital Prime"], "other_payer"]];
-for (const [t, n, own, want] of D4) check(`r377 round 3 own scheme: ${n} in "${t}" (own ${own.join(",") || "none"})`, () => assert.equal(amountOnlyInContext(t, n, { premium: true, own }), want));
+// The own scheme is the one the page's own heading names, never a reading's product (TE round 4).
+const D4: [string, number, string, string | null][] = [
+  ["Your SilverYears Care, the national long-term care scheme, which pays up to S$1,200 a month.", 1200, "", null],
+  ["SilverYears Care, the national long-term care scheme, currently pays you S$640 a month.", 640, "", null],
+  ["SilverYears Care, the national long-term care scheme, which currently pays S$640 a month.", 640, "Elder Care Fund Board\nSilverYears Care\nStatement of Coverage\n", null],
+  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, "SilverYears Care\nStatement of Coverage\n", null],
+  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, "Brightwater Life\nGoldenCare Top-Up\nPolicy Schedule\n", "other_payer"],
+  ["SilverYears Care, the national long-term care scheme, which currently pays S$640 a month.", 640, "Brightwater Life\nGoldenCare Top-Up\nPolicy Schedule\n", "other_payer"],
+  ["We pay the benefit less any payout from SilverYears Care (currently S$640).", 640, "Brightwater Life\nGoldenCare Top-Up\nPolicy Schedule\n", "other_payer"],
+  ["This plan works with HealthBase, the public hospital scheme, which pays up to S$120,000 a year.", 120000, "Brightwater Life\nBrightwater Hospital Prime\nPolicy Schedule\n", "other_payer"]];
+for (const [t, n, head, want] of D4) check(`r377 own scheme: ${n} in "${t}" under "${head.split("\n").filter(Boolean).join(" / ") || "no heading"}"`, () => assert.equal(amountOnlyInContext(head + t, n, { premium: true }), want));
+check("table: a scheme figure in a supplement schedule is dropped even when the reading names the scheme as the product (round 4)", () => assert.deepEqual(covers(reading(SUPPLEMENT_SCHEDULE, "MARK LIEW KOK WAI", "SilverYears Care", 640, "which currently pays S$640 a month")), [["MARK LIEW KOK WAI", null]]));
+check("table: a benefit's scheme figure is dropped even when the reading names the scheme as the product (round 4)", () => {
+  const r = checkReading({ id: "cccccccc-0000-0000-0000-000000000004", name: "doc.pdf", readable: true, pages: [{ page: 1, text: SUPPLEMENT_SCHEDULE }] }, { document: { kind: "personal_proof", product: "SilverYears Care", insurer: null, namedPeople: ["MARK LIEW KOK WAI"], plan: null, periodFrom: null, periodTo: null }, covers: [],
+    benefits: [{ benefit: "Scheme payout", section: "BENEFITS", column: null, pays: "per_period", period: "month", value: 640, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: "This plan pays on top of SilverYears Care, which currently pays S$640 a month." }] } as never);
+  assert.deepEqual(r.benefits.map((b) => b.value), [null]);
+});
+// Per page (Critic r377d): a pack's specimen appendix page does not clear the schedule; a page-1 heading banner clears all.
+const PACK = (p2: string) => pages("POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000", p2);
+const lim = () => raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] });
+check("intake (reader-typed): a SPECIMEN POLICY CONTRACT appendix page keeps the schedule's cover", () => assert.deepEqual(factCheckExtraction(lim(), PACK("SPECIMEN POLICY CONTRACT\nGeneral Conditions\n1. Definitions"), { roleFromReader: true }).extraction.insuredPeople.flatMap((p) => p.coverages.map((c) => c.amount)), [500000]));
+check("intake (reader-typed): a SAMPLE LETTER page keeps the schedule's cover", () => assert.deepEqual(factCheckExtraction(lim(), PACK("SAMPLE LETTER\nTo: The Insurer\nI wish to nominate"), { roleFromReader: true }).extraction.insuredPeople.flatMap((p) => p.coverages.map((c) => c.amount)), [500000]));
+check("intake (reader-typed): a page-1 SAMPLE heading sets the whole pack aside", () => assert.deepEqual(factCheckExtraction(lim(), pages("SAMPLE POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie", "Sum Assured S$500,000"), { roleFromReader: true }).extraction.insuredPeople.flatMap((p) => p.coverages.map((c) => c.amount)), []));
+check("a lone Sample at the foot after the last figure is a row label", () => assert.equal(specimenPage("POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\nSample"), false));
+check("whole text: an appendix page's SPECIMEN COPY footer is no sample", () => assert.equal(specimenPage("POLICY SCHEDULE\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\fGeneral Conditions\nThe policy pays S$1\nSPECIMEN COPY"), false));
+check("brackets in a title are no banner", () => assert.equal(specimenPage("Policy Schedule (sample collection included)\nPolicy No. TL-1\nLife Assured: Lim Wei Jie"), false));
 const A4: [string, string, boolean][] = [["How it works\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", "Rosalind Teo", false],
   ["Family plan explained\nCovered member - Rosalind Teo", "Rosalind Teo", false], ["Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo, 34", "Rosalind Teo", true],
   ["Group Health\nPolicy No: GH-55012\nCovered member - Rosalind Teo", "Rosalind Teo", true]];

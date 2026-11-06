@@ -125,12 +125,13 @@ function amountSpans(text: string, amount: number): { line: string; start: numbe
 
 /** Why an amount is not the person's own cover on this text: it is printed, and every place that prints it is one of the
  * shapes above. Null when it is printed somewhere as it may be cover, or not printed at all (other checks decide that). */
-export function amountOnlyInContext(text: string, amount: number, o: { premium?: boolean; own?: string[] } = {}): FigureContext | null {
+export function amountOnlyInContext(text: string, amount: number, o: { premium?: boolean; title?: string } = {}): FigureContext | null {
   const spans = amountSpans(text, amount);
+  const own = titleNames(o.title ?? text);
   if (!spans.length) return null;
   let first: FigureContext | null = null;
   for (const s of spans) {
-    const c = figureContext(s.line, s.start, s.end, o);
+    const c = figureContext(s.line, s.start, s.end, { premium: o.premium, own });
     if (!c) return null;
     first ??= c;
   }
@@ -148,7 +149,8 @@ const BANNER_MARK = /^(?:sample|specimen|dummy|mock-?up)$/i;
 const BANNER_WORD = /^(?:policy|schedule|statement|certificate|of|insurance|document|contract|card|letter|notice|copy|only|coverage|cover|summary|for|training|void|a|an|the|this|illustration|illustrative|purposes|is)$/i;
 const DISCLAIMER = /\bnot\s+(?:valid|for|a\s+real|an\s+actual|to\s+be\s+used|an?\s+(?:policy|contract))\b/i;
 function bannerLine(line: string): boolean {
-  const t = line.trim().replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, "");
+  // Words in brackets inside a title are never its banner ("Policy Schedule (sample collection included)", TE round 4).
+  const t = line.trim().replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, "").trim();
   if (!t || /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d|\d{3,}/.test(t) || t.split(/\s+/).length > 10) return false;
   const parts = t.split(/\s*[-–:|]\s+|\s+[-–:|]\s*|\.\s+|[()[\]]/).map((x) => x.replace(/^[\s*.,!]+|[\s*.,!]+$/g, "")).filter(Boolean);
   let marked = false;
@@ -160,16 +162,41 @@ function bannerLine(line: string): boolean {
   }
   return marked;
 }
-export function specimenPage(text: string) {
+/** The page's heading block (its first lines before any particulars or figure line, at most five) and its footer (the
+ * lines after its last figure line, at most three). A lone "Sample" between a label and its figure is a table cell, not a
+ * heading (Critic G4). */
+function pageEdges(text: string) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  // The heading block ends at the first particulars or figure line ("Life Assured: ...", "S$50"); the footer starts after
-  // the last figure line. A lone "Sample" between a label and its figure is a table cell, not a banner (Critic G4).
   const body = (l: string) => /\S\s*:\s*\S|(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l);
   const firstBody = lines.findIndex(body), lastMoney = lines.map((l) => /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l)).lastIndexOf(true);
   const head = lines.slice(0, Math.min(5, firstBody < 0 ? lines.length : firstBody));
   const foot = lines.slice(Math.max(head.length, lastMoney + 1, lines.length - 3));
-  const edge = [...head, ...foot];
-  return /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)(?:\s+(?:policy|schedule|statement|certificate|document|copy|contract))?\s*(?:only\b|[.!]|$)/im.test(text) || edge.some(bannerLine);
+  return { head, foot };
+}
+const THIS_IS_A_SAMPLE = /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)(?:\s+(?:policy|schedule|statement|certificate|document|copy|contract))?\s*(?:only\b|[.!]|$)/im;
+/** Whether the page's heading block marks it a sample ("SAMPLE POLICY SCHEDULE", a lone "SAMPLE" under the title). */
+export function specimenHeading(text: string) {
+  const first = text.includes("\f") ? text.split("\f").find((p) => p.trim()) ?? "" : text;
+  const { head } = pageEdges(first);
+  return head.some(bannerLine) || THIS_IS_A_SAMPLE.test(head.join("\n"));
+}
+export function specimenPage(text: string) {
+  // A whole document's text (pages joined by form feeds) is a sample when its first page says so: an appendix page's
+  // "SPECIMEN COPY" does not make the schedule one (Critic r377d K4).
+  if (text.includes("\f")) return specimenPage(text.split("\f").find((p) => p.trim()) ?? "");
+  const { head, foot } = pageEdges(text);
+  // A lone marker word ("Sample", "Specimen") is a banner only in the heading block; in the footer it may be a table's
+  // last row label (Critic r377d K3).
+  const lone = (l: string) => BANNER_MARK.test(l.replace(/^[\s*#=_|~\-–()[\]]+|[\s*#=_|~\-–()[\]]+$/g, ""));
+  return THIS_IS_A_SAMPLE.test(text) || [...head, ...foot.filter((l) => !lone(l))].some(bannerLine);
+}
+/** The names a page's own heading block prints as its title or product ("SilverYears Care" on that scheme's own
+ * statement), never a document-type line ("Policy Schedule"). The own scheme is taken from these only, never from a
+ * reading (TE r377 round 4). */
+function titleNames(text: string): string[] {
+  const first = text.includes("\f") ? text.split("\f").find((p) => p.trim()) ?? "" : text;
+  return pageEdges(first).head.map((l) => l.replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, ""))
+    .filter((l) => l.length >= 3 && l.split(/\s+/).length <= 6 && !/\d/.test(l) && !/\b(?:schedule|statement|certificate|summary|notice|letter|contract|coverage|wording|endorsement|guide|brochure)\b/i.test(l));
 }
 
 /** Lower-case words that are part of a name ("binti", "a/l", "van", "de"). */
