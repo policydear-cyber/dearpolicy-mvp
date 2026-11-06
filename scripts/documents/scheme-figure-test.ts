@@ -203,5 +203,11 @@ const A4: [string, string, boolean][] = [["How it works\nTraveller: Rosalind Teo
 for (const [t, w, want] of A4) check(`r377 round 3 weak label: ${w} in "${t.split("\n")[0]}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
 check("table: the person's own scheme statement keeps its payout (round 3)", () => assert.deepEqual(covers(reading("Elder Care Fund Board\nSilverYears Care\nStatement of Coverage\nName of insured: NADIA BINTE HASSAN\nPolicy number: SY-40917733\nYour SilverYears Care, the national long-term care scheme, which pays S$640 a month if severely disabled.", "NADIA BINTE HASSAN", "SilverYears Care", 640, "which pays S$640 a month if severely disabled")), [["NADIA BINTE HASSAN", 640]]));
 
+// TE r377 round 5: a sample word inside a title's brackets never sets aside the labelled insured under it.
+const KESTREL = "Kestrel Health\nPolicy Schedule (sample collection included)\nInsured person: Priya Nair\nPolicy number: KH-41200\nAnnual limit: S$350,000";
+check("round 5: a labelled insured under a title with a bracketed sample word is particulars", () => assert.equal(personAsParticulars("Priya Nair", KESTREL), true));
+check("round 5: the table keeps that cover and its sum", () => assert.deepEqual(covers(reading(KESTREL, "Priya Nair", "Kestrel Health", 350000, "Annual limit: S$350,000")), [["Priya Nair", 350000]]));
+check("round 5: an 'Example' heading line still sets aside the person under it", () => assert.equal(personAsParticulars("Ahmad Yusof", "Example\nAhmad Yusof, 40, male\nPremium S$1,200"), false));
+
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
