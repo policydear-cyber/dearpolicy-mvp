@@ -1,6 +1,6 @@
 import type { PdfPage } from "@/lib/documents/pdf";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
-import { specimenPage } from "@/lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, specimenPage } from "@/lib/documents/own-figure";
 import { NON_COVER_ROLES, correspondenceRole, schedulePage, statusNotice, statusNoticeRole } from "@/lib/documents/messy";
 
 export const PERSONAL_AUTHORITY_ROLES = new Set([
@@ -64,7 +64,7 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
   if (SUMMARY_TITLE.test(t) && personalParticulars(t)) return "personal_schedule";
   // A statement of one person's cover by its own title line ("Statement of Coverage", "Coverage Summary"), with the
   // policy's own number and the person it is for, on a page that is not a sample (a scheme's statement to its member).
-  if (titleLine(t.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).join("\n"), COVER_STATEMENT_TITLE) && personalParticulars(t) && !specimenPage(t) && !PLACEHOLDER_PERSON.test(t)) return "personal_schedule";
+  if (OWN_FIGURE_CHECKS.on && titleLine(t.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).join("\n"), COVER_STATEMENT_TITLE) && personalParticulars(t) && !specimenPage(t) && !PLACEHOLDER_PERSON.test(t)) return "personal_schedule";
   const personal = /\bpolicy\s+(?:number|no\.?)\b/.test(t)
     && /\b(?:life\s+assured|insured\s+person|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|particulars\s+of\s+insured|sum\s+assured|sum\s+insured)\b/.test(t);
   if (!personal) return null;

@@ -9,7 +9,7 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
-import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenDocument, specimenPage } from "@/lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenDocument, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
@@ -363,7 +363,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
 
   // People: printed in the document, one entry per person, a relationship only as printed near them.
   const people: PolicyExtraction["insuredPeople"] = [];
-  const sampleDocument = specimenDocument(pages.map((p) => p.text));
+  const sampleDocument = OWN_FIGURE_CHECKS.on && specimenDocument(pages.map((p) => p.text));
   for (const person of raw.insuredPeople) {
     if (!personPrinted(fullText, person.name)) { dropped.push("a person who is not named in this document"); continue; }
     const same = people.find((p) => nameKey(p.name) === nameKey(person.name));
@@ -394,14 +394,14 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
   // brochure's example person, a letter's greeting) or on a sample page holds no cover from it; the person is kept, so the
   // paper is filed with them, with no cover (lib/documents/own-figure).
   let particularsShown = true;
-  if (opts.roleFromReader) {
+  if (OWN_FIGURE_CHECKS.on && opts.roleFromReader) {
     // Judged page by page (Critic r377d): a pack's specimen wording appendix or sample letter page clears only cover read
     // from that page, not the schedule's.
     // A sample first page, or a last page ending "NOT VALID FOR CLAIMS", sets the whole document aside.
     const samplePages = new Set(pages.filter((p) => sampleDocument || specimenPage(p.text)).map((p) => p.pageNumber));
     const realPage = (p: { pageNumber: number }) => !samplePages.has(p.pageNumber);
     for (const person of people) {
-      if (!pages.some((p) => realPage(p) && personAsParticulars(person.name, p.text))) {
+      if (personOnlyInExample(person.name, pages.filter(realPage).map((p) => p.text)) || (samplePages.size > 0 && pages.every((p) => !realPage(p) || !nameWordsOnLine(person.name, p.text)) && pages.some((p) => nameWordsOnLine(person.name, p.text)))) {
         if (person.coverages.length) dropped.push(samplePages.size ? "cover for a person printed only on a sample page or in a sentence" : "cover for a person the document names only in a sentence, not as its insured");
         person.coverages = [];
         continue;
@@ -409,7 +409,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
       const kept = person.coverages.filter((c) => (c.sourcePage == null ? !samplePages.size : !samplePages.has(c.sourcePage)));
       if (kept.length < person.coverages.length) { dropped.push("cover read from a sample page"); person.coverages = kept; }
     }
-    particularsShown = people.some((p) => pages.some((page) => realPage(page) && personAsParticulars(p.name, page.text)));
+    particularsShown = people.some((p) => !personOnlyInExample(p.name, pages.filter(realPage).map((page) => page.text)));
   }
   for (const person of people) {
     const seen = new Set<string>();
@@ -604,7 +604,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
   // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
   // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
-  if (coverage.amount != null && text) {
+  if (OWN_FIGURE_CHECKS.on && coverage.amount != null && text) {
     const why = sampleDocument || specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true });
     if (why) return { ...coverage, amount: null, notes: [notes, "Not shown as cover: the page prints this figure only as " + (why === "a sample page" ? why : figureContextWords(why)) + "."].filter(Boolean).join(" · "), evidenceVerified: false };
   }
