@@ -47,6 +47,7 @@ export const LEFTOVER_WINDOW_HOURS = 24;
 export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, column: string]> = [
   ["policy_pages", "policy_id"], ["policy_chunks", "policy_id"], ["policy_coverages", "policy_id"],
   ["policy_reference_coverages", "policy_id"], ["policy_benefits", "policy_id"], ["benefit_readings", "policy_id"],
+  ["benefit_figure_confirmations", "policy_id"],
   ["coverage_rules", "policy_id"], ["policy_cover_conditions", "policy_id"], ["policy_detected_people", "policy_id"],
   ["policy_corrections", "policy_id"], ["policy_name_dismissals", "policy_id"], ["policy_member_exclusions", "policy_id"],
   ["policy_members", "policy_id"], ["claim_cause_definition_matches", "contract_id"],
