@@ -68,7 +68,22 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // The one closed shape kept: a rate, "and"/"or"/a comma, a raised rate, then the setting it is raised in.
       // A named care unit, a closed list with its hyphen and spacing variants (Critic LOW r374: "intensive-care unit",
       // "critical care unit", "NICU", "burns unit"); never "the isolation of" (a word, not a unit).
-      const setting = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?(?:icu|nicu|picu|hdu|ccu|(?:neonatal\s+|paediatric\s+|pediatric\s+)?intensive[\s-]care(?:\s+unit)?|high[\s-]dependency(?:\s+unit|\s+ward)?|critical[\s-]care(?:\s+unit)?|coronary[\s-]care(?:\s+unit)?|burns?\s+unit|isolation(?:\s+(?:ward|room))?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b(?!\s+of\b)/i;
+      // The unit must end its clause: the line's end, punctuation, or a closed lowercase tail ("for up to 30 days", "only",
+      // "or HDU"). A word that starts a name ("in the Critical Care Plan", "in ICU Shield", "in intensive care Plus") or any
+      // other word ("the intensive care unit of a hospital", "the ICU of any hospital") makes it no setting (TE pr380).
+      const settingAt = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?/i;
+      const careUnit = /^(?:icu|nicu|picu|hdu|ccu|(?:neonatal\s+|paediatric\s+|pediatric\s+)?intensive[\s-]care(?:\s+unit)?|high[\s-]dependency(?:\s+unit|\s+ward)?|critical[\s-]care(?:\s+unit)?|coronary[\s-]care(?:\s+unit)?|burns?\s+unit|isolation(?:\s+(?:ward|room))?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b/i;
+      const clauseEnd = /^(?:\s*$|\s*[.,;:)\]|/–—-]|\s*\(|\s+(?:only|for|up to|subject to|from|per|each|during|while|until)\b(?:\s+(?![A-Z])|$))/;
+      const unitEnds = (text: string, depth = 0): boolean => {
+        // Longest spelling first: "intensive care unit" is never read as "intensive care" followed by "unit".
+        const unit = careUnit.exec(text);
+        if (!unit) return false;
+        const rest = text.slice(unit[0].length);
+        if (clauseEnd.test(rest)) return true;
+        const also = /^\s+(?:or|and)\s+(?:an?\s+|the\s+)?/.exec(rest);
+        return depth < 2 && !!also && unitEnds(rest.slice(also[0].length), depth + 1);
+      };
+      const setting = { test: (text: string) => { const at = settingAt.exec(text); return !!at && unitEnds(text.slice(at[0].length)); } };
       if (next && rates && setting.test(trail(i + 1)) && /^\s*(?:,\s*(?:or\b|and\b)?|or\b|and\b)\s*$/i.test(between)) return false;
       if (/^[\s|/;,\-–—]*(?:or\b|and\b)?[\s|/;,\-–—]*$/i.test(between)) return true;
       return cells[i].unit === "cap" && cells[i + 1].unit === "cap" && /^[\s|/;,]*(?:or\s+|and\s+)?(?:up to|maximum(?: of)?|max\.?)\s*$/i.test(between);
