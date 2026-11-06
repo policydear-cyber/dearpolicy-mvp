@@ -74,8 +74,9 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       const settingAt = /^\s*,?\s*(?:if\s+|while\s+|when\s+)?(?:confined\s+|warded\s+|admitted\s+|staying\s+)?(?:in|to|at)\s+(?:an?\s+|the\s+)?/i;
       const careUnit = /^(?:icu|nicu|picu|hdu|ccu|(?:neonatal\s+|paediatric\s+|pediatric\s+)?intensive[\s-]care(?:\s+unit)?|high[\s-]dependency(?:\s+unit|\s+ward)?|critical[\s-]care(?:\s+unit)?|coronary[\s-]care(?:\s+unit)?|burns?\s+unit|isolation(?:\s+(?:ward|room))?|(?:a\s+)?private\s+(?:hospital\s+)?ward)\b/i;
       // A bracket, dash, colon, slash or pipe then a capitalised word or a plan word names a plan ("in ICU - Plan B", "in ICU
-      // (Plan B)"), so it ends no clause; a full stop, comma or semicolon does.
-      const clauseEnd = /^(?:\s*$|\s*[.,)\]](?!\s*(?:[(:–—-]\s*)?(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)|\s*;(?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)[^\d\n;]*(?:;|$))|\s*[(:|/–—-](?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s+(?:only|for|up to|subject to|from|per|each|during|while|until)\b(?:\s+(?![A-Z])|$))/;
+      // (Plan B)"), so it ends no clause; a full stop, comma or semicolon does. "overseas", "abroad", a bracketed day range
+      // ("(Day 1 to 30)") and a closing "ward", "room" or "bed" ("in an ICU ward") keep the setting (Critic LOW p374b/c).
+      const clauseEnd = /^(?:\s*$|\s*[.,)\]](?!\s*(?:[(:–—-]\s*)?(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)|\s*;(?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)[^\d\n;]*(?:;|$))|\s*[(:|/–—-](?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s*\(\s*[Dd]ays?\s+\d[^()]*\)(?=\s*$|\s*[.,;]|\s+[a-z])|\s+(?:only|for|up to|subject to|from|per|each|during|while|until|overseas|abroad)\b(?:\s+(?![A-Z])|$|(?=\s*[.,;)]))|\s+(?:ward|room|bed)\b(?=\s*$|\s*[.,;)]))/;
       const unitEnds = (text: string, depth = 0): boolean => {
         // Longest spelling first: "intensive care unit" is never read as "intensive care" followed by "unit".
         const unit = careUnit.exec(text);

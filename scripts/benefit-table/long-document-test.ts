@@ -396,14 +396,17 @@ async function main() {
       "Hospital cash S$100 per day or S$200 per day in ICU - Plan B", "Hospital cash S$100 per day or S$200 per day in ICU (Plan B)", "Hospital cash S$100 per day and S$200 per day in NICU: Gold",
       "Hospital cash S$100 per day and S$200 per day in ICU – plan 2", "Hospital cash S$100 per day and S$200 per day in HDU (Essential plan)", "Hospital cash S$100 per day and S$200 per day in ICU) plan B", "Hospital cash S$100 per day and S$200 per day in ICU) Plan B",
       "Hospital cash S$100 per day or S$200 per day in ICU; Gold", "Hospital cash S$100 per day or S$200 per day in ICU; plan B only", "Hospital cash S$100 per day or S$200 per day in ICU/Gold",
-      "Hospital cash S$100 per day or S$200 per day in ICU (Gold Plan)", "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit) Plan B"];
+      "Hospital cash S$100 per day or S$200 per day in ICU (Gold Plan)", "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit) Plan B",
+      "Hospital cash S$100 per day or S$200 per day in ICU overseas Plan", "Hospital cash S$100 per day or S$200 per day in an ICU ward Gold", "Hospital cash S$100 per day or S$200 per day in ICU (Day 1 to 30) Plan B"];
     const settings = ["Hospital cash S$100 per day and S$300 per day in ICU.", "Hospital cash S$100 per day and S$300 per day in ICU, for up to 30 days",
       "Hospital cash S$100 per day and S$300 per day in ICU for up to 30 days", "Hospital cash S$100 per day or S$200 per day in ICU or HDU",
       "Hospital cash S$100 per day and S$300 per day in the intensive care unit (max 10 days)", "Hospital cash S$100 per day and S$300 per day in a critical care unit only",
       "Hospital cash S$100 per day and S$300 per day in NICU; S$50 per day for a parent",
       "Hospital cash S$100 per day and S$300 per day in ICU (up to 30 days)", "Hospital cash S$100 per day and S$300 per day in ICU - for up to 30 days",
       "Hospital cash S$100 per day or S$200 per day in ICU/CCU", "Hospital cash S$100 per day or S$200 per day in ICU / HDU", "Hospital cash S$100 per day or S$200 per day in ICU | HDU.",
-      "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit)", "Hospital cash S$100 per day or S$200 per day in HDU (high dependency unit), for up to 10 days"];
+      "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit)", "Hospital cash S$100 per day or S$200 per day in HDU (high dependency unit), for up to 10 days",
+      "Hospital cash S$100 per day or S$300 per day in ICU overseas", "Hospital cash S$100 per day or S$300 per day in a private ward overseas.", "Hospital cash S$100 per day or S$300 per day in an ICU ward",
+      "Hospital cash S$100 per day or S$300 per day in ICU (Day 1 to 30)", "Hospital cash S$100 per day or S$300 per day in ICU (days 1-30)"];
     const lines = [...plans, ...settings];
     const doc = { id: "doc", name: "lakeside-care.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
     const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: 100, period: null, basis: null, percentOf: null,
