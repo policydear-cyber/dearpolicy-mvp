@@ -12,7 +12,7 @@ import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { figuresDifferByPlan, planCellRun } from "@/lib/insurance/scale-limit";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
-import { amountOnlyInContext, figureContextWords, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
@@ -720,12 +720,12 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!nameOnPage(person, pageText(source.page))) { out.dropped.push({ what: label, why: "person's name not printed on that page" }); continue; }
     // A sample page gives no one cover; a person printed only inside a sentence (a brochure's example person, a letter's
     // greeting, a worked example) is not the person the page insures (lib/documents/own-figure).
-    if (specimenPage(pageText(source.page)) || (doc.pages.length > 1 && specimenHeading(doc.pages[0].text))) { out.dropped.push({ what: label, why: "the page is a sample" }); continue; }
-    if (personOnlyInExample(person, doc.pages.map((p) => p.text))) { out.dropped.push({ what: label, why: "person named only in an example, a greeting or a sentence about them, never as the document's insured" }); continue; }
+    if (OWN_FIGURE_CHECKS.on && (specimenPage(pageText(source.page)) || (doc.pages.length > 1 && specimenHeading(doc.pages[0].text)))) { out.dropped.push({ what: label, why: "the page is a sample" }); continue; }
+    if (OWN_FIGURE_CHECKS.on && personOnlyInExample(person, doc.pages.map((p) => p.text))) { out.dropped.push({ what: label, why: "person named only in an example, a greeting or a sentence about them, never as the document's insured" }); continue; }
     let sumInsured = num(c.sumInsured);
     // A sum its page prints only as what another scheme pays, a total with another plan, an example, a projection or a
     // premium is not this cover's sum: the cover is kept without it.
-    const sumWhy = sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
+    const sumWhy = OWN_FIGURE_CHECKS.on && sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
     if (sumWhy) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} is printed only as ${figureContextWords(sumWhy)}; kept the cover without it` }); sumInsured = null; }
     if (sumInsured != null && !printedIn(source, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
     let premium = num(c.premium);
@@ -835,7 +835,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     // A figure its quote prints only as what another scheme or plan pays, a total with another plan, an example or a
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
-    const valueWhy = value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
+    const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }

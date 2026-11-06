@@ -12,6 +12,12 @@
  */
 import { normalizePersonName } from "@/lib/insurance";
 
+/** The own-figure checks (a scheme's or example's figure is not cover, a sample page gives no one cover, a person named only
+ * as an example holds no cover, a statement of coverage is a personal schedule) are OFF: with it off every caller behaves
+ * exactly as before #377. They set aside real covers on live data (#377's regression), so they stay off until an attempt
+ * passes both reviewers' shape files (scripts/documents/scheme-figure-test.ts runs them with the switch on). */
+export const OWN_FIGURE_CHECKS = { on: false };
+
 /** A named payer other than this policy: a name in capitals ("SilverYears Care", "HealthBase"), or a national, public or
  * government scheme. Never "the rider", "the death benefit" or "this plan" (TE r377: "rider, which pays", "on top of the
  * death benefit"). Case-sensitive on the name. */

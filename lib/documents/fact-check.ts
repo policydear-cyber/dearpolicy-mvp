@@ -9,7 +9,7 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
-import { amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
@@ -393,7 +393,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
   // brochure's example person, a letter's greeting) or on a sample page holds no cover from it; the person is kept, so the
   // paper is filed with them, with no cover (lib/documents/own-figure).
   let particularsShown = true;
-  if (opts.roleFromReader) {
+  if (OWN_FIGURE_CHECKS.on && opts.roleFromReader) {
     // Judged page by page (Critic r377d): a pack's specimen wording appendix or sample letter page clears only cover read
     // from that page, not the schedule's.
     // A banner in the first page's heading block sets the whole document aside.
@@ -603,7 +603,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
   // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
   // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
-  if (coverage.amount != null && text) {
+  if (OWN_FIGURE_CHECKS.on && coverage.amount != null && text) {
     const why = specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true });
     if (why) return { ...coverage, amount: null, notes: [notes, "Not shown as cover: the page prints this figure only as " + (why === "a sample page" ? why : figureContextWords(why)) + "."].filter(Boolean).join(" · "), evidenceVerified: false };
   }

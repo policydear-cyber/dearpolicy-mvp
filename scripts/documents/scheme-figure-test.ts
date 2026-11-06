@@ -8,7 +8,9 @@ import { verifiedExtraction } from "../../lib/rag/ingest";
 import { printedDocumentRole, documentAuthority } from "../../lib/documents/intelligence";
 import { checkReading } from "../../lib/benefit-table/check";
 import { factCheckExtraction } from "../../lib/documents/fact-check";
-import { amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenPage } from "../../lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenPage } from "../../lib/documents/own-figure";
+// These are the shapes for the own-figure checks, which ship OFF (lib/documents/own-figure OWN_FIGURE_CHECKS); they run with it on.
+OWN_FIGURE_CHECKS.on = true;
 import type { PolicyExtraction } from "../../lib/ai/extract-policy";
 
 let pass = 0, fail = 0;
@@ -294,6 +296,13 @@ check("table: a portal printout that runs the name into its cells keeps the cove
 const MIXED = "Travel Certificate\nYour name : Lim wei jie\nPlan: Business\nCertificate no: TC-5566778\nTrip cancellation up to S$25,000";
 check("table: a name printed in mixed case keeps the cover (live #377)", () => assert.deepEqual(covers(reading(MIXED, "Lim Wei Jie", "Wayfarer Travel", null, "Plan: Business")), [["Lim Wei Jie", null]]));
 check("table: a brochure's example person still gets no cover", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), []));
+
+// ---- shipped: the switch is off, and every caller behaves as before #377 ----
+OWN_FIGURE_CHECKS.on = false;
+check("off: a brochure's example person keeps the cover read for them, as before #377", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), [["Ken Lau", 900]]));
+check("off: a portal printout keeps its cover", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
+check("off: a sample page's cover is kept, as before #377", () => assert.deepEqual(covers(reading(SAMPLE, "TEO AH BENG", "SilverYears Care", 640, "Monthly payout if severely disabled: S$640")).length, 1));
+OWN_FIGURE_CHECKS.on = true;
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
