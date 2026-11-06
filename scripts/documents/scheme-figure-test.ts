@@ -58,6 +58,18 @@ const people: [string, string, boolean][] = [
   ["Lim Wei Jie\tS$100,000\tS$250.00", "Lim Wei Jie", true], ["Dear MR VICTOR HO", "Victor Ho", false], ["Example: MR ALAN GOH is in hospital for 4 days.", "Alan Goh", false],
 ];
 for (const [text, who, want] of people) check(`${who} as particulars in "${text.split("\n")[0]}": ${want}`, () => assert.equal(personAsParticulars(who, text), want));
+// Critic r377: ordinary insured lines keep their person; real own figures stay; a sentence mentioning a sample is no sample.
+for (const [text, who] of [["Name of Life Assured Lim Wei Jie", "Lim Wei Jie"], ["Name Of Insured Person Lim Wei Jie", "Lim Wei Jie"], ["Insured Child: Tan Xiao Ming, 5 years", "Tan Xiao Ming"],
+  ["Insured Child: Tan Xiao Ming born 3 Mar 2019", "Tan Xiao Ming"], ["1 Lee Mei Ling Spouse S$100,000", "Lee Mei Ling"], ["This is to certify that Lim Wei Jie is insured under the policy below.", "Lim Wei Jie"],
+  ["Insured person name Lim Wei Jie, NRIC S1234567A", "Lim Wei Jie"], ["Insured: Lee Mei Ling Female 12/03/1985", "Lee Mei Ling"], ["Insured Lee Mei Ling 40", "Lee Mei Ling"], ["Policyholder : LIM, WEI JIE", "Lim Wei Jie"]])
+  check(`${who} as particulars in "${text}"`, () => assert.equal(personAsParticulars(who, text), true));
+for (const [line, n] of [["The sum assured will be paid on death: S$500,000", 500000], ["Your benefit will be S$100 per day", 100], ["Premium waiver: S$100,000 sum assured", 100000],
+  ["Instalment premium protection S$5,000", 5000], ["Death benefit together with bonuses S$80,000", 80000]] as [string, number][])
+  check(`own figure: "${line}"`, () => assert.equal(amountOnlyInContext(line, n, { premium: true }), null));
+check("a projection with 'will be' and a later year", () => assert.equal(amountOnlyInContext("Your payout will be S$717 a month in 2030.", 717), "projection"));
+check("a sentence mentioning a sample copy is no sample page", () => assert.equal(specimenPage("Dear Mr Lim\nWe enclose a sample copy of the policy wording for reference.\nLife Assured: Lim Wei Jie"), false));
+check("intake: a template 'Coverage Summary' (placeholder person) is no personal schedule", () => assert.notEqual(printedDocumentRole(pages("COVERAGE SUMMARY\nPolicy No: 12345678\nInsured Person: Your Name Here\nSum insured S$100,000") as never), "personal_schedule"));
+check("intake: a template with John Doe is no personal schedule", () => assert.notEqual(printedDocumentRole(pages("Coverage Summary\nPolicy No.: ABC-123456\nPolicyholder: John Doe") as never), "personal_schedule"));
 check("a sample page", () => assert.equal(specimenPage("SilverYears Care\nSAMPLE STATEMENT\nName of insured: TEO AH BENG"), true));
 check("a schedule is not a sample", () => assert.equal(specimenPage("Policy Schedule\nLife assured: OWEN TAY\nSum assured S$100,000"), false));
 
@@ -101,6 +113,25 @@ check("table: a benefit figure that is the scheme's is kept without it (item 1)"
   const r = reading(SUPPLEMENT_SCHEDULE, "MARK LIEW KOK WAI", "GoldenCare Top-Up", null, "Life assured: MARK LIEW KOK WAI", [{ benefit: "Scheme payout", pays: "per_period", period: "month", value: 640, quote: "This plan pays on top of SilverYears Care, which currently pays S$640 a month." }, { benefit: "Monthly benefit", pays: "per_period", period: "month", value: 1500, quote: "Monthly benefit: S$1,500" }]);
   assert.deepEqual(r.benefits.map((b) => [b.benefit, b.value]), [["Scheme payout", null], ["Monthly benefit", 1500]]);
 });
+
+// TE and Critic r377: the shapes are tied to a named other payer or a premium being paid; banners only; insured lists.
+const A2: [string, string, boolean][] = [
+  ["Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Tan Ah Kow", true], ["Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Lee Mei Ling", true],
+  ["Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Tan Xiao Ming", true], ["Insured: Lim Wei Jie, born 3 March 1980", "Lim Wei Jie", true],
+  ["Insured: Lee Mei Ling, Male, 45", "Lee Mei Ling", true], ["We hereby certify that Mr Lim Wei Jie, born 1 May 1980, is insured under this policy.", "Lim Wei Jie", true],
+  ["This is to certify that Lim Wei Jie is insured.", "Lim Wei Jie", true], ["Lives assured: Tan Ah Kow & Lee Mei Ling", "Lee Mei Ling", true],
+  ["Meet Mdm Lily Seah, 61", "Lily Seah", false], ["Example: Benjamin Foo, born 1990, claims.", "Benjamin Foo", false], ["Ken Lau, 38, chose S$900 a month.", "Ken Lau", false], ["Dear Mr Victor Ho", "Victor Ho", false],
+];
+for (const [t, w, want] of A2) check(`TE r377 particulars: ${w} in "${t}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
+const B2: [string, boolean][] = [["SPECIMEN ONLY", true], ["SPECIMEN - NOT VALID FOR CLAIMS", true], ["Sample only - this is not an actual policy", true], ["FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", true], ["DUMMY", true], ["*** SPECIMEN ***", true],
+  ["A specimen policy contract is available at www.example.com", false], ["We enclose a sample copy of the wording.", false], ["Sample collection fee S$50", false], ["Sample tests: up to S$500", false], ["SYNTHETIC TEST DOCUMENT - fictional insurer and persons - not a real policy", false], ["Specimen signature", false]];
+for (const [t, want] of B2) check(`TE r377 sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
+const D2: [string, number, string | null][] = [["Rider premium waiver sum assured: S$100,000", 100000, null], ["Death benefit (including return of premiums): S$250,000", 250000, null], ["Accident rider, which pays S$50,000 on accidental death", 50000, null],
+  ["Payable on top of the death benefit: S$20,000", 20000, null], ["Combined limit for hospital and surgical, including outpatient: S$100,000", 100000, null], ["Sample tests: up to S$500", 500, null], ["The sum assured will be paid on death: S$500,000", 500000, null],
+  ["This plan works with HealthBase, the public hospital scheme, which pays up to S$120,000 a year.", 120000, "other_payer"], ["We pay the benefit less any payout from SilverYears Care (currently S$640).", 640, "other_payer"],
+  ["Total monthly payout with SilverYears Care: S$2,140", 2140, "combined_total"], ["Annual premium: S$298.40", 298.4, "premium"], ["Your premium for the coming year is S$331.60.", 331.6, "premium"], ["Premium (paid from MediSave): S$298.40", 298.4, "premium"],
+  ["Example: a 40-year-old receives S$700 a month.", 700, "example"], ["Premium waiver benefit sum assured S$100,000", 100000, null], ["Instalment Protection Benefit S$5,000", 5000, null]];
+for (const [t, n, want] of D2) check(`TE r377 context of ${n} in "${t}"`, () => assert.equal(amountOnlyInContext(t, n, { premium: true }), want));
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -64,7 +64,7 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
   if (SUMMARY_TITLE.test(t) && personalParticulars(t)) return "personal_schedule";
   // A statement of one person's cover by its own title line ("Statement of Coverage", "Coverage Summary"), with the
   // policy's own number and the person it is for, on a page that is not a sample (a scheme's statement to its member).
-  if (titleLine(t.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).join("\n"), COVER_STATEMENT_TITLE) && personalParticulars(t) && !specimenPage(t)) return "personal_schedule";
+  if (titleLine(t.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).join("\n"), COVER_STATEMENT_TITLE) && personalParticulars(t) && !specimenPage(t) && !PLACEHOLDER_PERSON.test(t)) return "personal_schedule";
   const personal = /\bpolicy\s+(?:number|no\.?)\b/.test(t)
     && /\b(?:life\s+assured|insured\s+person|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|particulars\s+of\s+insured|sum\s+assured|sum\s+insured)\b/.test(t);
   if (!personal) return null;
@@ -75,6 +75,8 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
 
 /** The title of a statement of one person's cover. Lower-case text; a closed list. */
 const COVER_STATEMENT_TITLE = /^(?:your\s+)?(?:statement\s+of\s+(?:coverage|cover|benefits)|(?:coverage|cover)\s+(?:statement|summary|certificate)|summary\s+of\s+coverage|certificate\s+of\s+coverage|benefits?\s+statement)$/;
+/** A template's stand-in for a person ("Your Name Here", "John Doe", "XXXXX"): no one's statement (Critic r377 D3, D5). */
+const PLACEHOLDER_PERSON = /\b(?:your\s+name|name\s+here|full\s+name|first\s+name|last\s+name|john\s+doe|jane\s+doe|joe\s+bloggs)\b|:\s*x{3,}/;
 /** Every title a summary prints about itself. Lower-case text. */
 const SUMMARY_TITLE = /\b(?:insurance|policy|product|cover|travel|plan)\s+summary\b|^\s*summary of (?:cover|benefits|your (?:cover|policy|plan))\b|^\s*benefits at a glance\b/m;
 

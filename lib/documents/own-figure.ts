@@ -12,23 +12,38 @@
  */
 import { normalizePersonName } from "@/lib/insurance";
 
-/** Another payer: a scheme or plan the policy works with, pays on top of, or deducts. */
-const OTHER_PAYER: RegExp[] = [
-  /\bworks?\s+(?:together\s+)?(?:with|alongside)\b/i,
-  /\b(?:on\s+top\s+of|in\s+addition\s+to|over\s+and\s+above)\b/i,
-  /\bwhich\s+(?:currently\s+|now\s+|also\s+)?pays\b/i,
-  /\b(?:currently|now)\s+pays\b/i,
-  /\b(?:less|minus|net\s+of|after\s+deducting|deducting|reduced\s+by|offset\s+(?:by|against))\b[^.;]{0,60}\b(?:payouts?|payments?|benefits?|amounts?|claims?)\b[^.;]{0,40}\b(?:from|under|by|paid)\b/i,
-  /\bnational\s+(?:[a-z-]+\s+){0,3}scheme\b/i,
-];
-/** A total with another plan or scheme ("Total monthly payout with CarePledge Life", "combined payout including ..."). */
-const COMBINED = /\b(?:total|combined|together)\b[^.;\n]{0,60}\b(?:with|including|plus)\b/i;
-/** A worked example, a sample or an illustration. */
-const EXAMPLE = /\b(?:for\s+example|example|e\.g\.|for\s+instance|illustration|illustrative|hypothetical|sample|specimen)\b/i;
-/** A figure the page projects for later ("rises ... to S$806 in 2036", "will be S$717"). */
-const PROJECTION = /\b(?:rises?|increases?|grows?|goes\s+up)\b[^.;]{0,50}\bto\s*$|\bwill\s+(?:be|rise|increase|grow|become)\b|\bprojected\b/i;
-/** The words before a figure that make it a premium or a payment ("Annual premium:", "will be deducted"); "payable" alone is not one ("Sum assured payable on death"). */
-const PREMIUM_LABEL = /\b(?:premiums?|instal+ments?|deducted|amount\s+due|giro)\b/i;
+/** A named payer other than this policy: a name in capitals ("SilverYears Care", "HealthBase"), or a national, public or
+ * government scheme. Never "the rider", "the death benefit" or "this plan" (TE r377: "rider, which pays", "on top of the
+ * death benefit"). Case-sensitive on the name. */
+const NAMED = String.raw`(?:(?:the|your)\s+)?(?!(?:This|The|Your|Our|Each|Any|Rider|Death|Policy|Plan|Basic|Main)\b)[A-Z][\w'&-]*(?:\s+[A-Z][\w'&-]*){0,4}`;
+const SCHEME = /\b(?:national|public|government|state)\s+(?:[a-z-]+\s+){0,3}scheme\b/i;
+/** The sentence ties the figure to another named payer, in one of a closed list of shapes:
+ * - "works with / on top of / alongside / in addition to <Name>", then "which (currently) pays" or "currently pays" before
+ *   the figure ("This plan works with HealthBase, the public hospital scheme, which pays up to S$120,000 a year");
+ * - "less / minus / net of / after deducting any payout from <Name>" ("less any payout from SilverYears Care (currently
+ *   S$640)"). */
+const NAMED_AT = new RegExp("^" + NAMED);
+/** Whether a lead-in (matched without regard to case, its last group the rest of the text) is followed by a named payer
+ * (matched with regard to case) or a scheme. */
+const namedAfter = (text: string, lead: RegExp) => [...text.matchAll(lead)].some((m) => NAMED_AT.test(m[m.length - 1]) || /^(?:(?:the|your)\s+)?(?:[\w-]+\s+){0,2}scheme\b/i.test(m[m.length - 1]));
+const WITH_LEAD = /\b(?:works?\s+(?:together\s+)?with|on\s+top\s+of|alongside|in\s+addition\s+to)\s+(.*)$/gi;
+const PAYS_NOW = /\b(?:which|that)\s+(?:currently\s+|now\s+|also\s+)?pays\b[^.;]{0,30}$|\b(?:currently|now)\s+pays\b[^.;]{0,30}$/i;
+const LESS_LEAD = /\b(?:less|minus|net\s+of|after\s+deducting|deducting|reduced\s+by|offset\s+(?:by|against))\b[^.;]{0,40}\b(?:payouts?|payments?|benefits?|amounts?)\s+(?:from|under|paid\s+by)\s+(.*)$/gi;
+/** A total with another named plan or scheme ("Total monthly payout with SilverYears Care:", "combined benefit including
+ * your scheme payout"). A combined limit of this policy's own items ("Combined limit including outpatient") is not one. */
+const COMBINED_LEAD = /\b(?:total|combined)\b[^.;:]{0,40}\b(?:payouts?|benefits?|payments?)\b[^.;:]{0,20}\b(?:with|plus|including)\s+(.*)$/gi;
+/** A worked example: the sentence opens as one ("Example:", "For example", "e.g.", "For instance", "Illustration:"). */
+const EXAMPLE = /^\s*(?:for\s+example\b|example\s*\d*\s*[:.\-–]|e\.g\.|for\s+instance\b|illustration\s*\d*\s*[:.\-–]|hypothetically\b)/i;
+/** A figure the page projects for later ("rises ... to S$806 in 2036", "will be S$717 in 2030"). */
+const PROJECTION = /\b(?:rises?|increases?|grows?|goes\s+up)\b[^.;]{0,50}\bto\s*$|\bprojected\b/i;
+/** "Will be" is a projection only with a later year or a number of years in the sentence ("will be S$717 in 2030"); "The sum
+ * assured will be paid on death: S$500,000" is the policy's own sum (Critic r377 B1, B2). */
+const WILL_BE = /\bwill\s+be\b/i;
+const LATER = /\b20\d\d\b|\bin\s+\d+\s+years?\b|\bafter\s+\d+\s+years?\b/i;
+/** A premium being paid: the figure's own label is a premium ("Annual premium:", "Premium (paid from MediSave):", "Amount
+ * due:"), or a sentence says the premium is the figure ("Your premium for the coming year is S$331.60"). A premium word
+ * inside a benefit's name ("Rider premium waiver sum assured:", "death benefit (including return of premiums):") is not. */
+const PREMIUM_LABEL = /\b(?:premium|instal+ment)s?(?:\s+(?:payable|due|paid|amount))?\s*(?:\([^)]*\))?\s*[:\-–]?\s*$|\b(?:premium|instal+ment)s?\b[^.;:()]{0,40}\b(?:is|are|will\s+be)\s*$|\bamount\s+due\s*[:\-–]?\s*$/i;
 
 export type FigureContext = "other_payer" | "combined_total" | "example" | "projection" | "premium";
 const WHY: Record<FigureContext, string> = {
@@ -40,6 +55,13 @@ const WHY: Record<FigureContext, string> = {
 };
 export const figureContextWords = (c: FigureContext) => WHY[c];
 
+/** The sentence a span sits in (between full stops or semicolons; a decimal point is not one). */
+function wholeSentence(line: string, start: number) {
+  const stops = [...line.matchAll(/(?<!\d)[.;](?!\d)|[.;](?=\s)/g)].map((m) => m.index!);
+  const from = Math.max(-1, ...stops.filter((i) => i < start)) + 1;
+  const to = Math.min(line.length, ...stops.filter((i) => i >= start));
+  return line.slice(from, to);
+}
 /** A money figure, to part one figure's words from another's on a line. */
 const MONEY_FIGURE = /(?:S\$|US\$|A\$|HK\$|\$|SGD|USD|MYR|RM|£|€)\s?\d[\d,]*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d{2}\b/gi;
 /** The words a line prints before a span: `sentence`, from the last full stop or semicolon (a decimal point is not one)
@@ -61,12 +83,19 @@ function wordsBefore(line: string, start: number) {
  * label makes it not cover (intake's cover amounts and the table's sums insured; not benefit rows). */
 export function figureContext(line: string, start: number, _end: number, o: { premium?: boolean } = {}): FigureContext | null {
   const b = wordsBefore(line, start);
-  if (OTHER_PAYER.some((re) => re.test(b.clause))) return "other_payer";
-  if (COMBINED.test(b.clause)) return "combined_total";
-  if (EXAMPLE.test(b.sentence)) return "example";
+  if ((PAYS_NOW.test(b.clause) && (namedAfter(b.sentence, WITH_LEAD) || SCHEME.test(b.sentence))) || namedAfter(b.sentence, LESS_LEAD)) return "other_payer";
+  if (namedAfter(b.clause, COMBINED_LEAD)) return "combined_total";
+  if (EXAMPLE.test(sentenceStart(line, start))) return "example";
   if (PROJECTION.test(b.sentence)) return "projection";
+  if (WILL_BE.test(b.sentence) && LATER.test(wholeSentence(line, start))) return "projection";
   if (o.premium && PREMIUM_LABEL.test(b.clause)) return "premium";
   return null;
+}
+/** The sentence before a span, from its last full stop or semicolon (not cut at figures or commas). */
+function sentenceStart(line: string, start: number) {
+  const head = line.slice(0, start);
+  const stops = [...head.matchAll(/(?<!\d)[.;](?!\d)|[.;](?=\s)/g)].map((m) => m.index! + 1);
+  return head.slice(Math.max(0, ...stops));
 }
 
 /** The spans of a text where it prints this amount as a whole figure ("S$1,200", "1,200.00", "SGD 1200"). */
@@ -93,9 +122,12 @@ export function amountOnlyInContext(text: string, amount: number, o: { premium?:
   return first;
 }
 
-/** A page that says it is a sample or specimen ("SAMPLE STATEMENT", "Specimen policy schedule", "This is a sample"). Only
- * the words sample, specimen and dummy: a disclaimer such as "not a real policy" is not one (made-up test documents print it). */
-const SPECIMEN = /\b(?:sample|specimen|dummy)\s+(?:statement|schedule|certificate|policy|letter|document|copy|notice|card)\b|^\s*(?:sample|specimen)\s*$|\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/im;
+/** A page that says it is a sample or specimen in a banner or heading line, a closed list: "SAMPLE STATEMENT", "Specimen
+ * policy schedule", "SPECIMEN ONLY", "SPECIMEN - NOT VALID FOR CLAIMS", "Sample only - this is not an actual policy",
+ * "DUMMY", "FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", or "This is a sample". A sentence that mentions
+ * a sample ("We enclose a sample copy", "A specimen policy contract is available at ...") is not one (Critic r377 C2, TE
+ * r377), nor a disclaimer such as "not a real policy" (made-up test documents print it). */
+const SPECIMEN = /^[\s*#=_-]*(?:(?:sample|specimen|dummy)(?:\s+(?:only|copy|statement|schedule|certificate|policy|letter|document|notice|card|contract))?(?:\s*[-–:.!|]\s*.{0,80})?|for\s+illustration(?:\s+purposes)?\s+only\b.{0,80})[\s*#=_-]*$|\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/im;
 export function specimenPage(text: string) { return SPECIMEN.test(text); }
 
 /** Lower-case words that are part of a name ("binti", "a/l", "van", "de"). */
@@ -118,6 +150,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
     const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
     if (!NOT_A_PERSON_LABEL.test(raw) && capitals.some((run) => { const n = normalizePersonName(run).split(" "); return want.every((w) => n.includes(w)) && n.length <= want.length + 2; })) return true;
+    if (afterInsuredLabel(raw, want)) return true;
     // Cells: parts of the line set off by a tab, a colon, a bar or a run of spaces, and names joined by "and" or "&"; a
     // bracket ("(NRIC S1234567A)", "(the Life Assured)") and an age, date of birth or identity number after a comma are
     // not part of a name.
@@ -139,6 +172,55 @@ export function personAsParticulars(person: string, pageText: string): boolean {
       if (NOT_A_PERSON_LABEL.test(label)) continue;
       return true;
     }
+  }
+  return false;
+}
+
+/** A label that introduces the insured person, a closed list ("Name of Life Assured", "Insured Child:", "Policyholder",
+ * "Insured person name", "Member"), or a row number at the start of a table row ("1"), or nothing at all. */
+const INSURED_LABEL = /^(?:\d{1,3}[.)]?|(?:name\s+of\s+(?:the\s+)?)?(?:(?:joint\s+)?(?:life|lives)\s+(?:assured|insured)|insured(?:\s+(?:person|persons|member|members|child|children|spouse|life|lives|employee))?|assured|policy\s*holder|policy\s+owner|proposer|member|employee|dependants?)(?:'?s)?(?:\s+(?:name|names))?|name|this\s+is\s+to\s+certify\s+that|we\s+certify\s+that|certif(?:y|ies)\s+that)?$/i;
+/** What may follow the name on its line: a cell break, or only an age, gender, relationship, date, identity number, money
+ * figure or plan cell ("Female 12/03/1985", ", 5 years", "born 3 Mar 2019", ", NRIC S1234567A", "Spouse S$100,000"), or
+ * "is insured" after a certificate's "certify that". */
+const TRAIL_TOKEN = /^(?:\d[\d\/.,-]*|[stfg]\d{7}[a-z]|[stfg]\*+\d*[a-z]?|s\$[\d,.]+|(?:sgd|rm|us\$|\$)[\d,.]*|age[d]?|years?|yrs?|old|born|dob|on|nric|fin|id|passport|no\.?|male|female|m|f|self|spouse|wife|husband|child|son|daughter|father|mother|dependant|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|is|are|insured|covered|under|the|this|policy|below|above|plan|[a-z])$/i;
+/** The person printed after an insured label (or a row number, or alone), with only particulars after the name on its line
+ * (Critic r377 A1-A23: "Name of Life Assured Lim Wei Jie", "Insured Child: Tan Xiao Ming, 5 years", "1 Lee Mei Ling
+ * Spouse S$100,000", "This is to certify that Lim Wei Jie is insured"). */
+function afterInsuredLabel(raw: string, want: string[]): boolean {
+  if (NOT_A_PERSON_LABEL.test(raw)) return false;
+  // A list after an insured label ("Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Insured: Lim Wei Jie,
+  // born 3 Mar 1980", "Insured: Lee Mei Ling, Female, 45"): each item is a name with only particulars, or particulars.
+  const listed = /^\s*([^:\t]{2,50}?)\s*(?::|\t|\s[-–]\s)\s*(.+)$/.exec(raw);
+  if (listed && listed[1].trim() && !/^\d/.test(listed[1].trim()) && INSURED_LABEL.test(listed[1].trim())
+      && listed[2].replace(/\([^)]*\)/g, " ").split(/\s*(?:,|;|&|\band\b|\t)\s*/).some((item) => nameWithParticulars(item, want))) return true;
+  const tokens = [...raw.matchAll(/[^\s,;:()]+/g)].map((m) => ({ w: m[0], start: m.index!, end: m.index! + m[0].length }));
+  for (let i = 0; i < tokens.length; i++) {
+    for (let len = want.length; len <= want.length + 2 && i + len <= tokens.length; len++) {
+      const win = tokens.slice(i, i + len).filter((t) => !HONORIFIC.test(t.w));
+      const norm = win.map((t) => normalizePersonName(t.w)).join(" ").split(" ").filter(Boolean);
+      if (!want.every((w) => norm.includes(w)) || norm.length > want.length + 2) continue;
+      if (win.some((t) => /\d/.test(t.w) || (/^[a-z]/.test(t.w) && !NAME_PARTICLE.test(t.w)))) continue;
+      const before = raw.slice(0, tokens[i].start).replace(/(?:\b(?:mr|mrs|ms|mdm|miss|dr|madam)\.?\s*)+$/i, "").replace(/[\s:\-–\t|]+$/, "").trim();
+      // A certifying sentence names its insured, whatever follows ("We hereby certify that Lim Wei Jie, born ..., is insured").
+      if (/\bcertif(?:y|ies|ied)\b[^.]{0,30}\bthat$/i.test(before)) return true;
+      if (!INSURED_LABEL.test(before)) continue;
+      const after = raw.slice(tokens[i + len - 1].end);
+      if (/^\s*(?:\t|\s{2,}|\||$)/.test(after)) return true;
+      const rest = after.replace(/\([^)]*\)/g, " ").split(/[\s,;:.]+/).filter(Boolean);
+      if (rest.every((w) => TRAIL_TOKEN.test(w))) return true;
+    }
+  }
+  return false;
+}
+/** One item of a list: the person's name (with at most two more name words and an honorific), then only particulars. */
+function nameWithParticulars(item: string, want: string[]): boolean {
+  const toks = item.split(/\s+/).filter(Boolean).filter((t) => !HONORIFIC.test(t));
+  for (let len = want.length; len <= want.length + 2 && len <= toks.length; len++) {
+    const win = toks.slice(0, len);
+    const norm = normalizePersonName(win.join(" ")).split(" ").filter(Boolean);
+    if (!want.every((w) => norm.includes(w))) continue;
+    if (win.some((t) => /\d/.test(t) || (/^[a-z]/.test(t) && !NAME_PARTICLE.test(t)))) continue;
+    if (toks.slice(len).every((w) => TRAIL_TOKEN.test(w.replace(/[.,;:]+$/, "")))) return true;
   }
   return false;
 }
