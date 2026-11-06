@@ -91,19 +91,18 @@ test("an amending document is known by its own title or an amending sentence", a
     ["a claim letter", "Claims department\nClaim decision\nDear Mr Tan\nWe have reduced the cover for this claim because the bill was not itemised."],
     ["a projected values table", "Projected values\nBefore age 65\tAfter age 65\nS$100,000\tS$50,000"],
   ];
-  // Two letters that say the sum assured was changed, with their policy number, now amend (ownAmendment, Critic r375 R7/R11).
-  const SAYS_CHANGED = new Set(["a letter: we have reduced", "the sum assured has been reduced"]);
-  for (const [why, text] of asMain) assert.equal(amendmentWording(text), MAIN_AMENDS.test(text) || SAYS_CHANGED.has(why), why);
+  for (const [why, text] of asMain) assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why);
   for (const why of ["an inflation clause", "a claim letter", "a projected values table"]) assert.equal(amendmentWording(asMain.find((c) => c[0] === why)![1]), false, why);
   // As shipped the first-title catch is off (FIRST_TITLE_CATCH): every document reads exactly as on main, including the
   // brochure page and quotation shapes that kept slipping through it (TE r375 E11, Critic p375d Q1-Q5).
   const { FIRST_TITLE_CATCH } = await import("@/lib/policies/amendments");
   assert.equal(FIRST_TITLE_CATCH, false);
-  // As shipped, beyond main: only a page that states a change made (ownAmendment). A title alone never amends.
-  const SHIPPED_WINS = new Set([...SAYS_CHANGED]);
+  // As shipped ownAmendment is off too (OWN_AMENDMENT): every document reads exactly as on main.
+  const { OWN_AMENDMENT } = await import("@/lib/policies/amendments");
+  assert.equal(OWN_AMENDMENT, false);
   const brochure = "Change of plan\nPolicy number LT-5520\nEffective date: 1 March 2026\nAt each renewal the plan can be moved up one level.\nPlan Plus premium S$480 a year";
   for (const [why, text] of [...amending, ...ordinary, ...asMain, ["a brochure page with a policy number", brochure] as [string, string]])
-    assert.equal(amendmentWording(text), MAIN_AMENDS.test(text) || SHIPPED_WINS.has(why), why + " (as shipped)");
+    assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why + " (as shipped)");
   // The reader's "endorsement" type still makes an amendment (a lost one leaves an old figure shown), unless the text
   // is a plain schedule or certificate with an empty endorsement field, no change word and no amendment evidence.
   const { endorsementTypeVetoed } = await import("@/lib/policies/amendments");
@@ -151,7 +150,7 @@ test("an amending document is known by its own title or an amending sentence", a
   assert.match(src, /amendmentWording\(pages\.get\(d\.id\) \?\? ""\) \|\| \(d\.document_role === "endorsement" && !endorsementTypeVetoed/);
 });
 
-test("a page amends only when it states a change made, under a listed title or about its sum assured; requests, refusals, future changes, examples, quotations, forms and schedules never do", async () => {
+test("with the switch on, a page amends only when it states a change made, under a listed title or about its sum assured; requests, refusals, future changes, examples, quotations, forms and schedules never do", async () => {
   const { amendmentWording, ownAmendment } = await import("@/lib/policies/amendments");
   const head = "Lionrock Assurance Ltd\n1 Example Place\nSingapore 048616\n";
   // Missed on main and #375 (Critic p375/p381, TE r375/r381).
@@ -170,9 +169,19 @@ test("a page amends only when it states a change made, under a listed title or a
     ["changes to your policy, change made", head + "Changes to your policy\nPolicy number HG-55120\nWe have changed your plan to Gold from 1 July 2026."],
     ["changes to your policy, Before / After", head + "Changes to your policy\nPolicy number HG-55120\nItem\tBefore\tAfter\nAnnual premium\tS$450.00\tS$410.00"],
     ["endorsement schedule with Before / After", head + "Endorsement Schedule\nPolicy No. TL-1\nItem\tBefore\tAfter\nDeath\tS$300,000\tS$250,000"],
+    // Critic p381b G1-G3.
+    ["G1 is now a figure", head + "Notice of Change\nPolicy No. TL-100245\nYour annual premium is now S$1,400 from 1 March 2026."],
+    ["G2 a rider added", head + "Policy Endorsement\nPolicy No. TL-100245\nThe Hospital Cash rider has been added to your policy."],
+    ["G3 Before / After with an effective date", head + "Alteration Notice\nPolicy No. TL-100245\nBefore\tAfter\nS$500,000\tS$300,000\nEffective 1 March 2026."],
     ["a title on page 2 behind a cover letter, change on that page", head + "Dear Customer\nPlease find enclosed.\fAlteration Notice\nPolicy No. TL-1\nThe death benefit has been reduced to S$250,000."],
   ];
-  for (const [why, text] of amending) { assert.equal(ownAmendment(text), true, why); assert.equal(amendmentWording(text), true, why); }
+  const MAIN_AMENDS = /\bendorsement\s+(?:no\.?|number)\s*\d|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:reduction|increase) of (?:the )?sum (?:assured|insured)\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
+  // ownAmendment ships off (OWN_AMENDMENT): as shipped these read as main; with it on they amend.
+  for (const [why, text] of amending) {
+    assert.equal(ownAmendment(text), true, why);
+    assert.equal(amendmentWording(text, { ownAmendment: true }), true, why);
+    assert.equal(amendmentWording(text), MAIN_AMENDS.test(text), why + " (as shipped)");
+  }
   const ordinary: [string, string][] = [
     // Critic p381 Z1-Z12 and TE r381: a request received, declined, a future change, pending, withdrawn, options, a cover
     // letter then a clause list, an example, a statement's history line, an FAQ, "once approved", a form to sign.
@@ -191,6 +200,23 @@ test("a page amends only when it states a change made, under a listed title or a
     ["Z12 a form to sign", head + "Change of Sum Assured\nPolicy No. TL-100245\nNew sum assured S$800,000\nPlease sign below to confirm you wish to proceed.\nSignature ______"],
     ["a change stated on another page than the title's", head + "Alteration Notice\nPolicy No. TL-1\nSee overleaf.\fGeneral information\nThe sum assured has been reduced to S$1 for this example."],
     ["a title alone", head + "ENDORSEMENT SCHEDULE\nPolicy No. TL-1\nSum assured S$500,000"],
+    // TE r381 round 2: another policy's change; a change reversed in the free-look period.
+    ["TE another policy, this one unchanged", head + "Notice of Change\nPolicy No. TL-1\nWe have reduced the sum assured on policy TL-9 to S$200,000. This policy is unchanged."],
+    ["TE reversed in the free-look period", head + "Alteration Notice\nPolicy No. TL-1\nWe have increased your sum assured to S$600,000. The change was reversed during the free-look period."],
+    // Critic p381b Y1-Y12: offers, errors, provisional, future renewal, a previous or another policy, hypotheticals,
+    // standard clauses, history, a request only.
+    ["Y1 offer with Before / After", head + "Change of Plan\nPolicy No. TL-100245\nBefore\tAfter\nS$500,000\tS$800,000\nCall us to go ahead with the new plan."],
+    ["Y2 in error, reversed", head + "Notice of Change\nPolicy No. TL-100245\nWe have increased your sum assured to S$800,000 in error. This has been reversed and your cover is unchanged."],
+    ["Y3 provisionally", head + "Alteration Notice\nPolicy No. TL-100245\nProvisionally, your sum assured is now S$800,000 while we review your medical report."],
+    ["Y4 past tense, future renewal", head + "Notice of Change\nPolicy No. TL-100245\nYour premium has been increased to S$1,400 at renewal on 1 March 2027."],
+    ["Y5 a previous policy", head + "Policy No. TL-100245\nDear Mr Tan\nThe sum assured was reduced to S$300,000 on your previous policy TL-100100, which has ended."],
+    ["Y6 suppose", head + "Change of Sum Assured\nPolicy No. TL-100245\nSuppose we have reduced your sum assured to S$300,000. Your premium falls by about a third."],
+    ["Y7 another policy number", head + "Notice of Change\nPolicy No. TL-100245\nYour spouse's policy TL-200300 has been reduced to S$100,000."],
+    ["Y8 imagine", head + "Notice of Alteration\nPolicy No. TL-100245\nImagine your sum assured is now S$300,000. Here is how your premium compares."],
+    ["Y9 a standard endorsement", head + "Policy Endorsement\nPolicy No. TL-100245\nStandard endorsement E05. For trips abroad the excess is changed to S$500."],
+    ["Y10 history, later reduced back", head + "Notice of Change\nPolicy No. TL-100245\nIn 2024 your sum assured was increased to S$800,000. It was later reduced back to S$500,000 in 2025."],
+    ["Y11 a proposal with Before / After", head + "Notice of Change\nPolicy No. TL-100245\nHere is what your cover looks like on the new plan.\nBefore\tAfter\nS$500,000\tS$800,000\nTo accept, reply to this letter."],
+    ["Y12 a request only", head + "Confirmation of Changes\nPolicy No. TL-100245\nYou have asked us to change your sum assured to S$300,000. We have received your documents."],
     ["a question", head + "Notice of Change\nPolicy No. TL-1\nHas your sum assured been reduced to S$300,000?"],
     // Critic p375 F1-F10 and p375d Q1-Q5.
     ["F1 Endorsements: Nil", head + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil\nSum assured S$1,000,000"],
@@ -207,7 +233,7 @@ test("a page amends only when it states a change made, under a listed title or a
     ["a letter with no policy number", head + "Dear Ms Lim\nWe have reduced your sum assured to S$200,000."],
     ["a title below a schedule's", head + "POLICY SCHEDULE\nPolicy No. TL-1\nRider Endorsement\nThe rider has been added to your policy."],
   ];
-  for (const [why, text] of ordinary) assert.equal(ownAmendment(text), false, why);
+  for (const [why, text] of ordinary) { assert.equal(ownAmendment(text), false, why); assert.equal(amendmentWording(text, { ownAmendment: true }), MAIN_AMENDS.test(text), why); }
 });
 
 test("a contents entry never names the document; its topmost title line does", async () => {
