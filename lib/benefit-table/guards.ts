@@ -36,7 +36,10 @@ export type Answer = { amount: number | null; per: Per | null; line?: string | n
  * (its time limit); read again on the next run. */
 export type Verdict = { status: "agreed" | "corrected" | "confirm" | "checking"; value: number | null; per: Per | null; page: number; line: string;
   candidates: number[]; rounds: number };
+/** at: when this reading's check began (kept when a cut-off check is resumed); spentUsd and calls: the whole check's. */
 export type GuardRecord = { version: string; at: string; verdicts: Record<string, Verdict>; spentUsd: number; calls: number; stopped?: string | null };
+/** How many figures a record left "checking" (stopped by a time limit): what a continuation job still has to do. */
+export const checkingCount = (g: GuardRecord | null | undefined) => Object.values(g?.verdicts ?? {}).filter((v) => v.status === "checking").length;
 /** The household's own figure for one claim (benefit_figure_confirmations): final. */
 export type FigureConfirmation = { documentId: string; claimKey: string; value: number };
 

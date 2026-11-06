@@ -63,7 +63,10 @@ export function batches(doc: SourceDoc, claims: Claim[]): Claim[][] {
 
 export async function runGuards(doc: SourceDoc, checked: CheckedReading, readers: GuardReader[], o: GuardOptions): Promise<GuardRecord> {
   if (readers.length !== READERS) throw new Error(`the figure check needs ${READERS} readers, not ${readers.length}`);
-  const record: GuardRecord = { version: GUARDS_VERSION, at: (o.now?.() ?? new Date()).toISOString(), verdicts: {}, spentUsd: 0, calls: 0, stopped: null };
+  // A resumed check keeps its start time (what a continuation job checks it is still on the same reading) and counts what
+  // was spent before, so the spend limit holds for the reading as a whole, not per run.
+  const record: GuardRecord = { version: GUARDS_VERSION, at: o.previous?.at ?? (o.now?.() ?? new Date()).toISOString(), verdicts: {},
+    spentUsd: o.previous?.spentUsd ?? 0, calls: o.previous?.calls ?? 0, stopped: null };
   const all = claimsOf(checked);
   for (const c of all) {
     const v = o.previous?.verdicts?.[c.key];

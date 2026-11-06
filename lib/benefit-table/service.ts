@@ -14,7 +14,7 @@ import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePa
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { applyGuards, claimsOf, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
+import { applyGuards, checkingCount, claimsOf, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
 import { figureGuardsEnabled } from "./guard-flag";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
@@ -292,7 +292,7 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string }> {
   const now = time.now ?? Date.now;
   // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
@@ -363,7 +363,8 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
   await clearUnreadTableNote(db, accountId, doc.id);
-  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}) };
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}),
+    ...(stored.guards ? { figuresChecking: checkingCount(stored.guards), guardsAt: stored.guards.at } : {}) };
 }
 
 type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
@@ -526,7 +527,9 @@ export async function setFigureConfirmation(db: Db, accountId: string, userId: s
 
 /** Runs the figure guards on a document's stored reading without reading it again: a document read before the guards were
  * switched on, or one whose check was cut off by its time limit (figures left "checking"). Paid: the caller decides when. The stored reading itself is kept; only its guards are replaced. */
-export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
+/** continuing: the start time of the check a continuation job is finishing (GuardRecord.at). The job does nothing (and pays
+ * nothing) when the document's reading has since been replaced or its check has nothing left "checking". */
+export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
   const now = time.now ?? Date.now;
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
   const [doc] = await documents(db, accountId, policyId);
@@ -534,6 +537,10 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   const rows = await db("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
   if (!rows.length) return { checked: false, why: "the document has no table reading" };
   const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
+  if (continuing != null) {
+    if (stored.guards?.at !== continuing) return { checked: false, why: "the document was read again since; its own check runs instead" };
+    if (!checkingCount(stored.guards)) return { checked: false, why: "nothing is left to check" };
+  }
   // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
   const record = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
   await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2", [policyId, accountId, JSON.stringify(record)]);

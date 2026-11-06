@@ -9,7 +9,9 @@ import { BATCH_CLAIMS, batches, runGuards, type GuardReader } from "@/lib/benefi
 import { DEFAULT_GUARDS, figureGuardsEnabled, guardCapUsd, guardRoster } from "@/lib/benefit-table/guard-flag";
 import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
-import { readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
+import { guardStoredReading, readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
+import { FIGURE_CHECK_JOB_TYPE, MAX_FIGURE_CHECK_RUNS, enqueueFigureCheck, figureCheckPayload } from "@/lib/benefit-table/figure-check-job";
+import { checkingCount } from "@/lib/benefit-table/guards";
 
 let passed = 0;
 const failures: string[] = [];
@@ -259,6 +261,12 @@ async function main() {
       if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages"))
         return p[0] === A ? PAGES.map((x) => ({ policy_id: DOC.id, page_number: x.page, text: x.text })) : [];
       if (q.startsWith("INSERT INTO benefit_readings")) { s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string }); return []; }
+      if (q.startsWith("SELECT reading FROM benefit_readings WHERE policy_id=$1")) { const r = s.readings.get(p[0] as string); return r && r.account_id === p[1] ? [{ reading: r.reading }] : []; }
+      if (q.startsWith("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}'")) {
+        const r = s.readings.get(p[0] as string);
+        if (r && r.account_id === p[1]) r.reading = JSON.stringify({ ...JSON.parse(r.reading), guards: JSON.parse(p[2] as string) });
+        return [];
+      }
       if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
         return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
       if (q.startsWith("SELECT section_key, cover_key, why, chosen_by FROM benefit_links"))
@@ -339,6 +347,55 @@ async function main() {
       assert.equal((tripFigure(t) as { amount: number }).amount, 1000);
       await assert.rejects(setFigureConfirmation(f.db, A, "u1", DOC.id, "k", 1), /not set up/);
     } finally { envOff(); }
+  });
+
+  await test("a check cut off by the time limit: the reading says so, and the continuation finishes only what was left, within the same spend limit", async () => {
+    envOff();
+    // A finished check, then three of its figures marked as cut off by the time limit.
+    const g = fakeDb(), r2 = readerModel(reading());
+    const read = await readDocument(g.db, r2.model, A, DOC.id, undefined, {}, setup(r2.model, five()));
+    assert.equal(read.figuresChecking, 0);
+    const stored = JSON.parse(g.s.readings.get(DOC.id)!.reading);
+    const keys = Object.keys(stored.guards.verdicts);
+    for (const k of keys.slice(0, 3)) stored.guards.verdicts[k] = { ...stored.guards.verdicts[k], status: "checking", value: null };
+    stored.guards.spentUsd = 0.5; stored.guards.calls = 4;
+    g.s.readings.get(DOC.id)!.reading = JSON.stringify(stored);
+    const at = stored.guards.at;
+    // A continuation for another reading does nothing.
+    const idle = five();
+    assert.equal((await guardStoredReading(g.db, A, DOC.id, setup(idle[0].model, idle), {}, "some-other-reading")).checked, false);
+    assert.equal(calls(idle), 0);
+    const more = five();
+    const done = await guardStoredReading(g.db, A, DOC.id, setup(more[0].model, more), {}, at);
+    assert.equal(done.checked, true);
+    assert.equal([...more[1].calls[0].user.matchAll(/<q id=/g)].length, 3, "only the 3 unchecked figures are asked");
+    const after = JSON.parse(g.s.readings.get(DOC.id)!.reading).guards;
+    assert.equal(after.at, at, "the check keeps its start");
+    assert.equal(checkingCount(after), 0);
+    assert.ok(after.spentUsd > 0.5 && after.calls === 4 + 4, "spend and calls count the whole check");
+    // Nothing left: a further continuation pays nothing.
+    const none = five();
+    assert.equal((await guardStoredReading(g.db, A, DOC.id, setup(none[0].model, none), {}, at)).checked, false);
+    assert.equal(calls(none), 0);
+  });
+
+  await test("continuation jobs: one attempt each, idempotent per reading and run, at most MAX_FIGURE_CHECK_RUNS", async () => {
+    const sent: unknown[][] = [];
+    const db = { query: (async (_sql: string, params: unknown[]) => { sent.push(params); return { rows: [{ id: "j" }], rowCount: 1 }; }) as never };
+    await enqueueFigureCheck(db, A, DOC.id, "2026-11-06T00:00:00.000Z", 1);
+    assert.equal(sent[0][1], FIGURE_CHECK_JOB_TYPE);
+    assert.equal(sent[0][2], `${DOC.id}:figure-check:2026-11-06T00:00:00.000Z:1`);
+    assert.equal(sent[0][5], 1, "max attempts 1: a failed paid run is never retried by the queue");
+    assert.equal(await enqueueFigureCheck(db, A, DOC.id, "x", MAX_FIGURE_CHECK_RUNS + 1), null);
+    assert.equal(sent.length, 1);
+    assert.throws(() => figureCheckPayload({ policyId: "p" }));
+    assert.deepEqual(figureCheckPayload({ policyId: "p", at: "t", run: 2 }), { policyId: "p", at: "t", run: 2 });
+  });
+
+  await test("the continuation job does nothing while the guards are off", async () => {
+    envOff();
+    const { processFigureCheckJob } = await import("@/lib/benefit-table/app");
+    await processFigureCheckJob({ account_id: A, payload: { policyId: DOC.id, at: "t", run: 1 } });
   });
 
   if (failures.length) { console.error(`${failures.length} failed, ${passed} passed:\n- ${failures.join("\n- ")}`); process.exit(1); }

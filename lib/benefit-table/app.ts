@@ -1,6 +1,6 @@
 /** The benefit table wired to the app's database, model key and usage ledger. service.ts takes these as arguments so
  * its tests run with fakes; this file is the only place the real ones are passed in. */
-import { query } from "@/lib/db/client";
+import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { recordUsage } from "@/lib/ai/ledger";
 import type { ModelChoice } from "@/lib/ai/providers";
@@ -9,7 +9,9 @@ import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { MIN_CALL_MS, SAVE_MARGIN_MS, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage } from "./service";
+import { MIN_CALL_MS, SAVE_MARGIN_MS, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage } from "./service";
+import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
+import { checkingCount } from "./guards";
 import { figureGuardsEnabled, guardCapUsd, guardRoster } from "./guard-flag";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
@@ -81,8 +83,23 @@ async function markTableReading(db: Db, accountId: string, policyId: string, sta
 export async function readIntoBenefitTable(accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean } = {}) {
   const model = anthropicTableModel(benefitTableModel());
   const onUsage = usage(accountId, model.choice);
-  return readIntoTable(appDb, model, accountId, policyId, { ...opts, ...(figureGuardsEnabled(process.env, accountId) ? { guards: guardSetup(accountId, model, onUsage) } : {}) }, onUsage);
+  const guarded = figureGuardsEnabled(process.env, accountId);
+  const result = await readIntoTable(appDb, model, accountId, policyId, { ...opts, ...(guarded ? { guards: guardSetup(accountId, model, onUsage) } : {}) }, onUsage);
+  // A figure check the time limit cut off is finished by a background job (figure-check-job.ts).
+  if (guarded && result.figuresChecking && result.guardsAt) await enqueueFigureCheck(pool, accountId, policyId, result.guardsAt, 1);
+  return result;
 }
+/** The figure check's continuation job (figure-check-job.ts): checks what the last run left "checking", and queues the next
+ * run while anything is left. With the guards or the table off, or the reading replaced, it makes no model call. */
+export const processFigureCheckJob = async (job: { account_id: string | null; payload: unknown }) => {
+  const p = figureCheckPayload(job.payload);
+  const accountId = job.account_id;
+  if (!accountId || !figureGuardsEnabled(process.env, accountId) || !(await benefitTableLive(accountId))) return;
+  const model = anthropicTableModel(benefitTableModel());
+  const { functionDeadline } = await import("@/lib/jobs/function-time");
+  const r = await guardStoredReading(appDb, accountId, p.policyId, guardSetup(accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at);
+  if (r.record && checkingCount(r.record) > 0) await enqueueFigureCheck(pool, accountId, p.policyId, p.at, p.run + 1);
+};
 /** The figure guards (guard-flag.ts): reader 1 is the reading model, then the four guards, each booked at its own price. */
 export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
   const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
