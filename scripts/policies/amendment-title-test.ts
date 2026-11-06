@@ -31,12 +31,9 @@ test("an amending document is known by its own title or an amending sentence", a
     ["only a sentence: premium amended as follows", "Renewal letter\nThe premium is amended as follows from the next policy year."],
   ];
   for (const [why, text] of amending) assert.equal(amendmentWording(text, { firstTitleCatch: true }), true, why);
-  // A title only an amending document prints, with its policy number, amends with no date of its own (ownAmendment,
-  // Critic r375 R2-R4); a title a quotation or brochure also prints does not.
-  for (const title of ["ENDORSEMENT SCHEDULE", "Amendment to Policy Schedule"])
-    assert.equal(amendmentWording(letterhead + title + "\nPolicy No. TL-1", { firstTitleCatch: true }), true, title + " with its policy number");
-  for (const title of ["Change of Sum Assured", "Changes to your plan"])
-    assert.equal(amendmentWording(letterhead + title + "\nPolicy No. TL-1", { firstTitleCatch: true }), false, title + " with no date or change of its own");
+  // A title alone never amends: the page must state a change made (ownAmendment, TE r381).
+  for (const title of ["ENDORSEMENT SCHEDULE", "Change of Sum Assured", "Changes to your plan", "Amendment to Policy Schedule"])
+    assert.equal(amendmentWording(letterhead + title + "\nPolicy No. TL-1", { firstTitleCatch: true }), false, title + " with no change stated");
   const ordinary: [string, string][] = [
     // TE r375 Q1-Q4: an appendix that applies only if shown, a blank form, an option page, a brochure heading.
     ["an endorsements appendix", "ENDORSEMENT\nApplies only if shown in your schedule\nWar and terrorism exclusion\nThis policy does not cover loss caused by war."],
@@ -102,10 +99,8 @@ test("an amending document is known by its own title or an amending sentence", a
   // brochure page and quotation shapes that kept slipping through it (TE r375 E11, Critic p375d Q1-Q5).
   const { FIRST_TITLE_CATCH } = await import("@/lib/policies/amendments");
   assert.equal(FIRST_TITLE_CATCH, false);
-  // As shipped, beyond main: a whole amending title with its policy number, a change title with a change it says is made,
-  // and a letter saying the sum assured was changed (ownAmendment). Every other document reads as on main.
-  const SHIPPED_WINS = new Set([...SAYS_CHANGED, "ENDORSEMENT SCHEDULE", "Endorsement Certificate", "Rider Endorsement", "Alteration of Policy",
-    "Confirmation of Policy Changes", "confirmation of change of sum assured", "amendment to policy schedule", "changes to your policy"]);
+  // As shipped, beyond main: only a page that states a change made (ownAmendment). A title alone never amends.
+  const SHIPPED_WINS = new Set([...SAYS_CHANGED]);
   const brochure = "Change of plan\nPolicy number LT-5520\nEffective date: 1 March 2026\nAt each renewal the plan can be moved up one level.\nPlan Plus premium S$480 a year";
   for (const [why, text] of [...amending, ...ordinary, ...asMain, ["a brochure page with a policy number", brochure] as [string, string]])
     assert.equal(amendmentWording(text), MAIN_AMENDS.test(text) || SHIPPED_WINS.has(why), why + " (as shipped)");
@@ -156,63 +151,61 @@ test("an amending document is known by its own title or an amending sentence", a
   assert.match(src, /amendmentWording\(pages\.get\(d\.id\) \?\? ""\) \|\| \(d\.document_role === "endorsement" && !endorsementTypeVetoed/);
 });
 
-test("a whole amending title, a change title with a change made, or a letter saying the sum assured changed amends; quotations, forms and schedules never do", async () => {
+test("a page amends only when it states a change made, under a listed title or about its sum assured; requests, refusals, future changes, examples, quotations, forms and schedules never do", async () => {
   const { amendmentWording, ownAmendment } = await import("@/lib/policies/amendments");
-  const head = "Lionrock Assurance Ltd\n1 Raffles Place\nSingapore 048616\n";
-  // Critic p375 R2-R11 and p375d Q7, and TE r375's titles: all missed on main.
+  const head = "Lionrock Assurance Ltd\n1 Example Place\nSingapore 048616\n";
+  // Missed on main and #375 (Critic p375/p381, TE r375/r381).
   const amending: [string, string][] = [
-    ["R2 endorsement schedule", head + "ENDORSEMENT SCHEDULE\nPolicy No. TL-1\nSum assured S$500,000"],
-    ["R3 endorsement certificate", head + "Endorsement Certificate\nPolicy No. TL-1"],
-    ["R4 rider endorsement", head + "Rider Endorsement\nPolicy No. TL-1"],
-    ["R5 change of sum assured with the new sum", head + "Change of Sum Assured\nPolicy No. TL-1\nNew sum assured S$500,000"],
-    ["R7 letter: we have reduced", head + "15 March 2026\nMr A Tan\n12 Example Road\nSingapore 123456\nDear Mr Tan\nRe: Policy No. TL-1\nWe have reduced your sum assured to S$500,000 as you requested."],
-    ["R9 alteration of policy", head + "Alteration of Policy\nPolicy No. TL-1"],
-    ["R10 confirmation of policy changes", head + "Confirmation of Policy Changes\nPolicy No. TL-1"],
-    ["R11 the sum assured has been reduced", head + "Policy No. TL-1\nThe sum assured has been reduced with effect from 1 March 2026."],
+    ["R7 letter: we have reduced, as you requested", head + "15 March 2026\nMr A Tan\n12 Example Road\nSingapore 123456\nDear Mr Tan\nRe: Policy No. TL-1\nWe have reduced your sum assured to S$500,000 as you requested."],
+    ["R11 the sum assured has been reduced with effect from", head + "Policy No. TL-1\nThe sum assured has been reduced with effect from 1 March 2026."],
+    ["the sum assured was increased to a figure on a date", head + "Dear Ms Lim\nPolicy No. TL-1\nYour sum assured was increased to S$300,000 on 1 May 2026."],
+    ["a letter: we have increased, wrapped over two lines", head + "Dear Ms Lim\nPolicy No. TL-1\nWe have increased your sum assured\nto S$600,000 with effect from 1 June 2026."],
     ["Q7 change of plan letter", head + "Change of Plan\nPolicy No. QL-55\nWith effect from 1 March 2026 your plan is changed to Gold."],
-    ["notice of change, date of issue", head + "Notice of Change\nDate of issue: 3 March 2026\nYour sum assured is now S$300,000."],
-    ["notice of change, policy number and effective date", head + "NOTICE OF CHANGE\nPolicy number: HG-55120\nEffective date: 01/04/2026"],
-    ["alteration notice with new figures", head + "Alteration Notice\nPolicy No. TL-1\nDeath benefit S$250,000\nAnnual premium S$1,712.00"],
-    ["rider endorsement with the new rider premium", head + "Rider Endorsement\nPolicy No. TL-1\nNew rider premium S$120.00 a year"],
-    ["confirmation of change of sum assured", head + "Confirmation of change of sum assured\nPolicy No. TL-1\nSum assured S$400,000"],
-    ["amendment to policy schedule", head + "Amendment to Policy Schedule (made up)\nPolicy No. TL-1\nHospital cash S$200"],
+    ["change of plan from one plan to another", head + "Change of plan\nPolicy number: QL-55\nYour plan is changed from Standard to Premier from 1 April 2026."],
+    ["p381 R1 alteration notice, change made", head + "Alteration Notice\nPolicy No. TL-100245\nWe have reduced your sum assured to S$300,000 with effect from 1 March 2026."],
+    ["notice of change, now a figure, date of issue", head + "Notice of Change\nDate of issue: 3 March 2026\nYour sum assured is now S$300,000."],
+    ["policy endorsement with an effective date", head + "Policy Endorsement\nEffective date: 1 March 2026\nThe hospital cash benefit has been increased to S$200 a day."],
+    ["rider endorsement: a rider added", head + "Rider Endorsement\nPolicy No. TL-1\nThe Critical Illness rider has been added to your policy from 1 May 2026."],
+    ["confirmation of change of sum assured", head + "Confirmation of change of sum assured\nPolicy No. TL-1\nYour sum assured has been reduced to S$400,000. All other terms and conditions remain unchanged."],
     ["changes to your policy, change made", head + "Changes to your policy\nPolicy number HG-55120\nWe have changed your plan to Gold from 1 July 2026."],
     ["changes to your policy, Before / After", head + "Changes to your policy\nPolicy number HG-55120\nItem\tBefore\tAfter\nAnnual premium\tS$450.00\tS$410.00"],
-    ["a letter: we have increased", head + "Dear Ms Lim\nPolicy No. TL-1\nWe have increased your sum assured to S$600,000."],
     ["endorsement schedule with Before / After", head + "Endorsement Schedule\nPolicy No. TL-1\nItem\tBefore\tAfter\nDeath\tS$300,000\tS$250,000"],
-    ["a title on page 2 behind a cover letter", head + "Dear Customer\nPlease find enclosed.\n\fRider Endorsement\nPolicy No. TL-1"],
+    ["a title on page 2 behind a cover letter, change on that page", head + "Dear Customer\nPlease find enclosed.\fAlteration Notice\nPolicy No. TL-1\nThe death benefit has been reduced to S$250,000."],
   ];
   for (const [why, text] of amending) { assert.equal(ownAmendment(text), true, why); assert.equal(amendmentWording(text), true, why); }
   const ordinary: [string, string][] = [
-    // Critic p375 F1-F10 and p375d Q1-Q5: schedules, wordings, booklets, renewals, contents, quotations, proposals, brochures.
+    // Critic p381 Z1-Z12 and TE r381: a request received, declined, a future change, pending, withdrawn, options, a cover
+    // letter then a clause list, an example, a statement's history line, an FAQ, "once approved", a form to sign.
+    ["Z1 request received", head + "Alteration Notice\nPolicy No. TL-100245\nWe have received your request to reduce your sum assured to S$300,000. We will write to you once it is processed."],
+    ["Z2 request declined", head + "Notice of Alteration\nPolicy No. TL-100245\nWe are unable to approve your request to increase the sum assured to S$800,000. Your sum assured remains S$500,000."],
+    ["TE r381 not approved, unchanged", head + "Alteration Notice\nPolicy No. TL-1\nDate: 1 March 2026\nWe are unable to approve your request to increase the sum assured. Your policy is unchanged."],
+    ["Z3 a future change", head + "Confirmation of Changes\nPolicy No. TL-100245\nYour sum assured will reduce to S$300,000 from your next policy anniversary on 1 March 2027."],
+    ["Z4 pending underwriting", head + "Notice of Change\nPolicy No. TL-100245\nYour application to increase the sum assured to S$800,000 is pending medical underwriting."],
+    ["Z5 withdrawn", head + "Notice of Change\nPolicy No. TL-100245\nAs requested, your earlier request to reduce the sum assured to S$300,000 has been withdrawn. No change has been made."],
+    ["Z6 options by writing to us", head + "Alteration Schedule\nPolicy No. TL-100245\nYou can reduce your sum assured to S$300,000 or S$400,000 by writing to us."],
+    ["Z7 cover letter then a clause list", head + "Dear Mr Tan\nThank you for choosing us. Please find your policy documents enclosed.\fENDORSEMENT SCHEDULE\nPolicy No. TL-100245\nE01 Terrorism exclusion\nE02 Sum insured S$500,000 applies"],
+    ["Z8 an example", head + "Policy No. TL-100245\nDear Mr Tan\nFor a partial withdrawal of S$10,000, the sum assured has been reduced by the same amount in the example below."],
+    ["Z9 a statement's history line", head + "Annual Statement\nPolicy No. TL-100245\nIn 2025 the sum assured has been reduced to S$450,000.\nCurrent sum assured S$450,000"],
+    ["Z10 an FAQ", head + "Frequently asked questions\nPolicy No. TL-100245\nWhy is my payout lower? The sum assured has been reduced by earlier payouts."],
+    ["Z11 once approved", head + "Change of Plan\nPolicy No. TL-100245\nOnce approved, your plan is changed to Gold and your new premium S$2,400 applies."],
+    ["Z12 a form to sign", head + "Change of Sum Assured\nPolicy No. TL-100245\nNew sum assured S$800,000\nPlease sign below to confirm you wish to proceed.\nSignature ______"],
+    ["a change stated on another page than the title's", head + "Alteration Notice\nPolicy No. TL-1\nSee overleaf.\fGeneral information\nThe sum assured has been reduced to S$1 for this example."],
+    ["a title alone", head + "ENDORSEMENT SCHEDULE\nPolicy No. TL-1\nSum assured S$500,000"],
+    ["a question", head + "Notice of Change\nPolicy No. TL-1\nHas your sum assured been reduced to S$300,000?"],
+    // Critic p375 F1-F10 and p375d Q1-Q5.
     ["F1 Endorsements: Nil", head + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements: Nil\nSum assured S$1,000,000"],
-    ["F3 Endorsements - E01", head + "POLICY SCHEDULE\nPolicy No. TL-1\nEndorsements - E01 Terrorism exclusion"],
-    ["F4 Endorsement: Applicable", head + "Policy Schedule\nPolicy No. TL-1\nEndorsement: Applicable"],
-    ["F5 may be amended", "POLICY WORDING\nThis policy may be amended from time to time."],
     ["F6 booklet clause", head + "Travel Insurance Booklet\nSection 9 Endorsements\nThis endorsement forms part of the policy and applies only if shown in the schedule."],
     ["F8 renewal notice", head + "Renewal Notice\nPolicy No. TL-1\nYour premium will change."],
-    ["F9 contents", head + "Contents\nEndorsements ........ 14\nSchedule ........ 3"],
-    ["F10 Amendments: None", head + "Policy Schedule\nPolicy No. TL-1\nAmendments: None"],
     ["Q1 quotation", head + "Change of Plan\nQuotation\nPolicy No. QL-55\nProposed plan Gold, effective from 1 January 2027\nPremium S$1,200"],
-    ["Q2 subject to acceptance", head + "Changes to your cover\nPolicy No. QL-55\nIf accepted, effective from 1 Jan 2027, subject to acceptance\nNew premium S$900"],
-    ["Q2 with a listed title", head + "Changes to your policy\nPolicy No. QL-55\nIf accepted, effective from 1 Jan 2027\nNew premium S$900"],
+    ["Q2 subject to acceptance", head + "Changes to your policy\nPolicy No. QL-55\nIf accepted, your plan is changed to Gold from 1 Jan 2027."],
     ["Q3 proposal", head + "Change of Sum Assured\nProposal / Policy No.: P-77821\nRequested effective date: 1 March 2027"],
     ["Q4 illustration", head + "Change of plan\nBenefit Illustration\nPolicy No. QL-55\nEffective from 1 Jan 2027"],
     ["Q5 brochure", head + "Change of plan\nAvailable to policy 2026 holders from 1 Jan 2027"],
-    ["a brochure page with a policy number and date", "Change of plan\nPolicy number LT-5520\nEffective date: 1 March 2026\nAt each renewal the plan can be moved up one level.\nPlan Plus premium S$480 a year"],
     ["W8 reissued schedule", head + "POLICY SCHEDULE\nPolicy No. TL-100245\nDate of issue: 1 March 2026\nEndorsements: Nil\nSum assured: S$200,000"],
-    ["change of sum assured, nothing changed", head + "Change of Sum Assured\nPolicy No. TL-1\nEffective 1 March 2026"],
     ["a claim letter", head + "Claims department\nPolicy No. TL-1\nYour sum assured has been reduced by the claim we paid."],
-    ["a wording's condition", head + "Policy wording\nPolicy No. TL-1\nIf the sum assured has been reduced, the premium is reduced too."],
-    ["a when-clause", head + "Policy No. TL-1\nWhen the sum assured has been reduced we will send you a new schedule."],
+    ["a wording's condition", head + "Policy wording\nPolicy No. TL-1\nIf the sum assured has been reduced to S$1, the premium is reduced too."],
     ["a letter with no policy number", head + "Dear Ms Lim\nWe have reduced your sum assured to S$200,000."],
-    ["an option page", head + "Increase in sum assured option\nPolicy No. TL-1\nFrom 1 June 2026 you may raise the sum assured by S$50,000."],
-    ["a blank notice", head + "Notice of Change\nTo be completed by the policyholder\nPolicy number ____"],
-    ["a request form", head + "Alteration Notice\nRequest form\nPolicy No. TL-1"],
-    ["a title below a schedule's", head + "POLICY SCHEDULE\nPolicy No. TL-1\nRider Endorsement\nSum assured S$100,000"],
-    ["a wording's heading", head + "Policy wording\nPolicy No. TL-1\nNotice of change\nYou must tell us of any change."],
-    ["a title inside a sentence", head + "Policy No. TL-1\nPlease send us the rider endorsement form if you want to add cover."],
-    ["an amending title with no number or date", head + "Endorsement Certificate\nKeep this with your policy."],
+    ["a title below a schedule's", head + "POLICY SCHEDULE\nPolicy No. TL-1\nRider Endorsement\nThe rider has been added to your policy."],
   ];
   for (const [why, text] of ordinary) assert.equal(ownAmendment(text), false, why);
 });
