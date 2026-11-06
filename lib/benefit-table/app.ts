@@ -1,14 +1,15 @@
 /** The benefit table wired to the app's database, model key and usage ledger. service.ts takes these as arguments so
  * its tests run with fakes; this file is the only place the real ones are passed in. */
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { recordUsage } from "@/lib/ai/ledger";
 import type { ModelChoice } from "@/lib/ai/providers";
 import { benefitTableModel, benefitTableStatus } from "./flag";
 import { ledgerUsage } from "@/lib/simple-chat/model";
-import { anthropicTableModel } from "./model";
+import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { readDocument, relink, tableReady, type Db, type OnUsage } from "./service";
+import { MIN_CALL_MS, SAVE_MARGIN_MS, noteUnreadTable, readDocument, relink, tableReady, type Db, type OnUsage } from "./service";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -56,10 +57,55 @@ function usage(accountId: string, choice: ModelChoice): OnUsage {
     durationMs: reply.ms, ok: reply.json != null });
 }
 
-/** On upload and on Read again: reads the document into the table, then re-links the household's sections to covers. */
-export async function readIntoBenefitTable(accountId: string, policyId: string) {
+/** The key in policies.extracted_json that says a table reading of the document started and has not ended. It is kept
+ * when the document's own reading rewrites extracted_json (lib/rag/ingest.ts), so a retried job can see it. */
+export const TABLE_READING_MARK = "benefitTableReadingStarted";
+/** Whether a reading of this document started and never ended: its run was stopped mid-reading. */
+export async function tableReadingCutOff(db: Db, accountId: string, policyId: string): Promise<boolean> {
+  const rows = await db(`SELECT (extracted_json ? '${TABLE_READING_MARK}') AS cut FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [policyId, accountId]);
+  return rows[0]?.cut === true;
+}
+async function markTableReading(db: Db, accountId: string, policyId: string, started: boolean) {
+  await db(started
+    ? `UPDATE policies SET extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{${TABLE_READING_MARK}}',to_jsonb(now()::text)) WHERE id=$1 AND account_id=$2`
+    : `UPDATE policies SET extracted_json=extracted_json - '${TABLE_READING_MARK}' WHERE id=$1 AND account_id=$2 AND extracted_json ? '${TABLE_READING_MARK}'`, [policyId, accountId]);
+}
+/** On upload and on Read again: reads the document into the table, then re-links the household's sections to covers.
+ * - `deadline`: when the run that reads must have saved (a serverless function's time limit). The reading stops in time
+ *   to save its "could not be read" note (readDocument), and the sections are not re-linked when too little time is left.
+ * - `retry`: this run is a retry of a job whose earlier attempt failed. It makes no model call at all: the stored reading
+ *   is kept, or the document says its table could not be read, and Read again starts a fresh one (5 Nov: a 47-page
+ *   wording cut off at the time limit was read again by each retry of its job, about US$0.58 a time, and none could
+ *   finish). */
+export async function readIntoBenefitTable(accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean } = {}) {
   const model = anthropicTableModel(benefitTableModel());
-  const read = await readDocument(appDb, model, accountId, policyId, usage(accountId, model.choice));
-  const linked = read.read ? await relink(appDb, model, accountId, usage(accountId, model.choice)) : { proposed: 0 };
+  return readIntoTable(appDb, model, accountId, policyId, opts, usage(accountId, model.choice));
+}
+/** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
+ * reading-service failure schedules (a fresh job at attempt 1, lib/rag/ingest.ts). Neither pays for a table reading. */
+export function tableReadingRetry(args: { attempt?: { number: number } | null; deferredRetry?: boolean | null }): boolean {
+  return (args.attempt?.number ?? 1) > 1 || args.deferredRetry === true;
+}
+/** readIntoBenefitTable with its database and model passed in (tests pass fakes). */
+export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number } = {}, onUsage?: OnUsage) {
+  // A retry of a job (attempt 2 or later) never calls the table model, whatever happened to the attempt before it: only a
+  // fresh job (an upload, or the household's Read again) pays for a reading. It keeps the reading already stored; when
+  // there is none, or the earlier attempt's reading was cut off, the document says its table could not be read.
+  if (opts.retry) {
+    const cutOff = await tableReadingCutOff(db, accountId, policyId);
+    const stored = (await db("SELECT 1 FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId])).length > 0;
+    if (cutOff || !stored) await noteUnreadTable(db, accountId, policyId, true);
+    if (cutOff) await markTableReading(db, accountId, policyId, false);
+    return { read: false, why: "a retried job does not read the table again; Read again starts a fresh reading", pagesReread: 0, linked: 0 };
+  }
+  const now = opts.now ?? Date.now;
+  // The mark is cleared only once the reading and the re-link have both returned. A run that throws or is stopped at any
+  // point in between (an API error, a database error while saving, the time limit during the re-link) leaves it set, so
+  // a retry of the job never pays for the whole reading again by itself.
+  await markTableReading(db, accountId, policyId, true);
+  const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now });
+  const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
+  const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined) : { proposed: 0 };
+  await markTableReading(db, accountId, policyId, false);
   return { ...read, linked: linked.proposed };
 }

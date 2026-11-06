@@ -9,6 +9,7 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
+import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
@@ -243,7 +244,7 @@ const ROLE_WORDS: Partial<Record<NonNullable<PolicyExtraction["documentRole"]>, 
  * "TravelSafe Annual Family" is a product, not an annual statement). "CERTIFICATE OF RENEWAL" names a
  * certificate, not a renewal notice. */
 export function titleRoles(pages: Page[], productNames: (string | null | undefined)[] = []): Set<string> {
-  let title = contentLines(pages).slice(0, 6).join("\n");
+  let title = linesWithoutContents(pages).slice(0, 6).join("\n");
   for (const name of [...productNames, titleProductName(pages)]) if (name && name.trim().length >= 4) title = title.split(new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")).join(" ");
   const out = new Set<string>();
   const t = title.replace(/\s+/g, " ");
@@ -388,6 +389,27 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const keep = people.filter((p) => !(payerOnly(p.name) && (people.length > 1 || insuredElsewhere(p.name))));
     if (keep.length < people.length) { dropped.push("a policyholder named as insured"); people.splice(0, people.length, ...keep); }
   }
+  // A document whose own wording names no type (the reader named it): a person it prints only inside a sentence (a
+  // brochure's example person, a letter's greeting) or on a sample page holds no cover from it; the person is kept, so the
+  // paper is filed with them, with no cover (lib/documents/own-figure).
+  let particularsShown = true;
+  if (opts.roleFromReader) {
+    // Judged page by page (Critic r377d): a pack's specimen wording appendix or sample letter page clears only cover read
+    // from that page, not the schedule's.
+    // A banner in the first page's heading block sets the whole document aside.
+    const samplePages = new Set(pages.filter((p, i) => specimenPage(p.text) || (i > 0 && specimenHeading(pages[0].text))).map((p) => p.pageNumber));
+    const realPage = (p: { pageNumber: number }) => !samplePages.has(p.pageNumber);
+    for (const person of people) {
+      if (!pages.some((p) => realPage(p) && personAsParticulars(person.name, p.text))) {
+        if (person.coverages.length) dropped.push(samplePages.size ? "cover for a person printed only on a sample page or in a sentence" : "cover for a person the document names only in a sentence, not as its insured");
+        person.coverages = [];
+        continue;
+      }
+      const kept = person.coverages.filter((c) => (c.sourcePage == null ? !samplePages.size : !samplePages.has(c.sourcePage)));
+      if (kept.length < person.coverages.length) { dropped.push("cover read from a sample page"); person.coverages = kept; }
+    }
+    particularsShown = people.some((p) => pages.some((page) => realPage(page) && personAsParticulars(p.name, page.text)));
+  }
   for (const person of people) {
     const seen = new Set<string>();
     person.coverages = person.coverages.filter((c) => { const k = [norm(c.category), c.amount, c.currency, c.sourcePage].join("|"); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -429,7 +451,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const titled = [...titleRoles(pages, [productName, ...productsMentioned])];
     if (titled.length === 1 && REFERENCE_ROLE_SET.has(titled[0]) && plausibleRole(titled[0] as PolicyExtraction["documentRole"], fullText, pages, [insurer, productName, ...productsMentioned]) === titled[0]) documentRole = titled[0] as PolicyExtraction["documentRole"];
   }
-  const personalCoverageConfirmed = raw.personalCoverageConfirmed && people.length > 0 && !!documentRole && PERSONAL_AUTHORITY_ROLES.has(documentRole);
+  const personalCoverageConfirmed = raw.personalCoverageConfirmed && people.length > 0 && particularsShown && !!documentRole && PERSONAL_AUTHORITY_ROLES.has(documentRole);
   // Summaries the reader wrote (shown on the document's page): no instruction, and every figure, date and status in them printed.
   const keep = (items: string[]) => [...new Set(items.filter((x) => readerTextSupported(fullText, x)))];
   const documentNotes = raw.documentNotes.filter((note) => readerTextSupported(fullText, note));
@@ -470,8 +492,43 @@ const TITLE_KINDS = /\s+[-–:]\s+(?:policy\s+schedule|schedule|certificate|poli
 const KIND_FIRST = /^(?:notice\s+of\s+lapse|lapse\s+notice|renewal\s+notice|premium\s+notice|premium\s+reminder|grace\s+period\s+reminder|reminder|annual\s+statement|statement)\s*[-–:]\s*(.+)$/i;
 /** A line that is nothing but the kind of document ("POLICY SCHEDULE") under a title line. */
 const KIND_ONLY = /^(?:policy\s+schedule|schedule(?:\s+of\s+insurance)?|certificate(?:\s+of\s+insurance)?|policy\s+certificate|policy\s+statement|annual\s+statement|benefit\s+illustration|policy\s+illustration|endorsement|renewal\s+(?:notice|certificate))$/i;
+/** The document's own lines with its contents entries left out: a line with dot leaders ("Policy schedule ...... 3") or a
+ * page number after a tab ("2. SafeTrip Plus - Policy Schedule<tab>5"), and, under a "Contents" heading, its entries: a
+ * line ending in a page number ("Claims 9", "Claims p. 9"), a numbered line ("1<tab>Who is covered?"), a page number
+ * alone ("pg 2", "5"), or a line followed by one. The block ends at a blank line or the first line that is no entry, so
+ * a title printed below a contents box still names the document. A contents entry names a section further on, never
+ * the document. */
+function linesWithoutContents(pages: Page[]): string[] {
+  const out: string[] = [];
+  const pageNumberOnly = (l: string) => /^(?:p(?:age|g)?\.?\s*)?\d{1,3}$/i.test(l);
+  for (const p of pages) {
+    const raws = p.text.split("\n");
+    let inContents = false;
+    for (const [i, raw] of raws.entries()) {
+      const line = raw.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+      if (!line) { inContents = false; continue; }
+      if (/DPTEST-|^[A-Za-z0-9+/=]{40,}$/.test(line)) continue;
+      if (/^(?:table\s+of\s+)?contents:?$/i.test(line)) { inContents = true; continue; }
+      if (/\.{3,}|…/.test(raw) || /\t\s*(?:p(?:age|g)\.?\s*)?\d{1,3}\s*$/i.test(raw)) continue;
+      if (inContents) {
+        const nextRaw = raws[i + 1] ?? "";
+        const next = nextRaw.replace(/\s+/g, " ").trim();
+        // A page number after a gap or a "p." ("Claims  9", "Claims p. 9") is an entry's; after a single space
+        // ("Schedule 2") only when the next line is an entry too, so a title ending in a number ("SECURE LIFE 65")
+        // above its kind line is the document's own.
+        const strong = (r: string) => /(?:\s{2,}|\t|\s(?:p(?:age|g)?\.?\s*))\d{1,3}\s*$/i.test(r) || /^\d{1,2}(?:\.|\t|\s)/.test(r.trim()) || pageNumberOnly(r.replace(/\s+/g, " ").trim());
+        const weak = (r: string) => /\s\d{1,3}\s*$/.test(r);
+        const entry = strong(raw) || pageNumberOnly(next) || (weak(raw) && (strong(nextRaw) || weak(nextRaw)));
+        if (entry) continue;
+        inContents = false;
+      }
+      out.push(line);
+    }
+  }
+  return out;
+}
 export function titleProductName(pages: Page[]): string | null {
-  const lines = contentLines(pages).slice(0, 40);
+  const lines = linesWithoutContents(pages).slice(0, 40);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // Round 13: a title printed over two lines ("SHIELDCARE PREMIER - Integrated Shield Plan" / "POLICY SCHEDULE").
@@ -544,6 +601,12 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     else if (coverage.amount != null) ok = evidenceLines.some((line) => moneyPrinted(line, Number(coverage.amount)) && (!coverage.currency || currencyOk(line, coverage.currency)));
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
+  // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
+  // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
+  if (coverage.amount != null && text) {
+    const why = specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true });
+    if (why) return { ...coverage, amount: null, notes: [notes, "Not shown as cover: the page prints this figure only as " + (why === "a sample page" ? why : figureContextWords(why)) + "."].filter(Boolean).join(" · "), evidenceVerified: false };
+  }
   // A sum on a page that says its sum insured is not what is paid (a bonus base, lib/documents/notional-sum) is kept as a
   // line with no amount: the cover is held, its figure is never a cover amount (Home, Coverage, chat, claims).
   if (coverage.amount != null && printsNotionalSum(text) && !RIDER_NAME.test(`${coverage.productName ?? ""} ${coverage.evidenceText ?? ""}`))
