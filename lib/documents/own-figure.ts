@@ -263,6 +263,54 @@ export function personAsParticulars(person: string, pageText: string): boolean {
   return false;
 }
 
+/** Words on a line that make it the document's own particulars, never a story about someone: an insured or holder label,
+ * a name label, a certifying phrase. */
+const OWN_PERSON_WORDS = /\b(?:insured|assured|policy\s*holder|policy\s*owner|proposer|member|employee|dependants?|certif(?:y|ies|ied)|names?|nric|fin|passport|relationship|date\s+of\s+birth|dob)\b/i;
+/** Whether the document gives positive evidence that a person it names is NOT its insured: the person is printed, and every
+ * line that prints them (all of the name's words, in any order and case, run into other text or not) is one of these:
+ * - a line with an example's, greeting's or story's word ("Example: Benjamin Foo ...", "Dear Mr Victor Ho", "Meet Mdm Lily Seah");
+ * - a line right under a marker heading ("Example", "Meet our customer") or a sample banner;
+ * - a sentence about the person: the line ends with a full stop, an exclamation or a question mark, has no cell break, no
+ *   insured, holder or name label, no policy or identity number, the name is not in capitals, and at least three other
+ *   lower-case words ("Ken Lau, 38, chose S$900 a month.", "After her fall, Lily Seah could no longer bathe.").
+ * Anything else, and a name the pages do not print as whole words at all, is no evidence: the cover is kept. This fails open
+ * on purpose, so a layout the check does not know (a name in mixed case, "Your name : Lim wei jie"; a portal printout that
+ * runs the name into the next cell, "Plan (XY1)Tan Mei Ling(S0000002B)25") never loses a cover (live regression on #377). */
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A person's name words (no honorific), and a test for each as a whole word in any case, by letters only: digits and
+ * brackets around it do not hide it ("(XY1)Tan Mei Ling(S0000002B)"). */
+function nameWords(person: string) {
+  const want = person.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w && !HONORIFIC.test(w));
+  return { want, word: want.map((w) => new RegExp(`(?<!\\p{L})${escapeRe(w)}(?!\\p{L})`, "iu")) };
+}
+/** Whether one line of the text prints all the person's name words, in any order and case. */
+export function namePrinted(person: string, text: string): boolean {
+  const { want, word } = nameWords(person);
+  return want.length > 0 && text.split("\n").some((l) => word.every((r) => r.test(l)));
+}
+export function personOnlyInExample(person: string, pages: string[]): boolean {
+  const { want, word } = nameWords(person);
+  if (!want.length) return false;
+  const esc = escapeRe;
+  let seen = 0;
+  for (const text of pages) {
+    const lines = text.split("\n");
+    for (const [k, raw] of lines.entries()) {
+      if (!word.every((r) => r.test(raw))) continue;
+      seen++;
+      const prevHead = (lines[k - 1] ?? "").trim().replace(/\([^)]*\)|\[[^\]]*\]/g, " ").trim();
+      if (NOT_A_PERSON_LABEL.test(raw) || (prevHead && (MARKER_HEADING.test(prevHead) || bannerLine(prevHead)))) continue;
+      const line = raw.trim();
+      const capitals = want.every((w) => new RegExp(`(?<![\\p{L}])${esc(w.toUpperCase())}(?![\\p{L}])`, "u").test(line));
+      const others = line.split(/[^\p{L}'-]+/u).filter((t) => /^\p{Ll}/u.test(t) && !want.includes(t.toLowerCase()));
+      const sentence = /[.!?]["')\]]?$/.test(line) && !/\t|\S\s{2,}\S|\|/.test(line) && !OWN_PERSON_WORDS.test(line) && !OWN_NUMBER.test(line)
+        && !/\b[stfgm]\d{7}[a-z]\b/i.test(line) && !capitals && others.length >= 3;
+      if (!sentence) return false;
+    }
+  }
+  return seen > 0;
+}
+
 /** A label that introduces the insured person, a closed list ("Name of Life Assured", "Insured Child:", "Policyholder",
  * "Insured person name", "Member"), or a row number at the start of a table row ("1"), or nothing at all. */
 const INSURED_LABEL = /^(?:\d{1,3}[.)]?|(?:name\s+of\s+(?:the\s+)?)?(?:(?:joint\s+)?(?:life|lives)\s+(?:assured|insured)|insured(?:\s+(?:person|persons|member|members|child|children|spouse|life|lives|employee|travell?ers?))?|covered\s+(?:person|persons|member|members|life|lives)|travell?ers?|assured|policy\s*holder|policy\s+owner|proposer|member|employee|dependants?)(?:'?s|\(s\))?(?:\s+(?:name|names))?|name|this\s+is\s+to\s+certify\s+that|we\s+certify\s+that|certif(?:y|ies)\s+that)?$/i;

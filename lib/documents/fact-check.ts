@@ -9,7 +9,7 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
-import { amountOnlyInContext, figureContextWords, personAsParticulars, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
+import { amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
@@ -400,7 +400,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const samplePages = new Set(pages.filter((p, i) => specimenPage(p.text) || (i > 0 && specimenHeading(pages[0].text))).map((p) => p.pageNumber));
     const realPage = (p: { pageNumber: number }) => !samplePages.has(p.pageNumber);
     for (const person of people) {
-      if (!pages.some((p) => realPage(p) && personAsParticulars(person.name, p.text))) {
+      if (personOnlyInExample(person.name, pages.filter(realPage).map((p) => p.text)) || (samplePages.size > 0 && pages.every((p) => !realPage(p) || !nameWordsOnLine(person.name, p.text)) && pages.some((p) => nameWordsOnLine(person.name, p.text)))) {
         if (person.coverages.length) dropped.push(samplePages.size ? "cover for a person printed only on a sample page or in a sentence" : "cover for a person the document names only in a sentence, not as its insured");
         person.coverages = [];
         continue;
@@ -408,7 +408,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
       const kept = person.coverages.filter((c) => (c.sourcePage == null ? !samplePages.size : !samplePages.has(c.sourcePage)));
       if (kept.length < person.coverages.length) { dropped.push("cover read from a sample page"); person.coverages = kept; }
     }
-    particularsShown = people.some((p) => pages.some((page) => realPage(page) && personAsParticulars(p.name, page.text)));
+    particularsShown = people.some((p) => !personOnlyInExample(p.name, pages.filter(realPage).map((page) => page.text)));
   }
   for (const person of people) {
     const seen = new Set<string>();

@@ -8,7 +8,7 @@ import { verifiedExtraction } from "../../lib/rag/ingest";
 import { printedDocumentRole, documentAuthority } from "../../lib/documents/intelligence";
 import { checkReading } from "../../lib/benefit-table/check";
 import { factCheckExtraction } from "../../lib/documents/fact-check";
-import { amountOnlyInContext, personAsParticulars, specimenPage } from "../../lib/documents/own-figure";
+import { amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenPage } from "../../lib/documents/own-figure";
 import type { PolicyExtraction } from "../../lib/ai/extract-policy";
 
 let pass = 0, fail = 0;
@@ -216,6 +216,50 @@ for (const head of ["Example", "Example:", "Example 2", "Sample", "Example (for 
   check(`round 6: a "${head}" heading sets aside the person under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nMember: Ahmad Yusof\nPremium S$1,200"), false));
 for (const head of ["Sample collection benefit included", "Example of how we pay is on page 3", "Specimen collection at clinics"])
   check(`round 6: a "${head}" line does not set aside the insured under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nInsured person: Ahmad Yusof"), true));
+
+
+// ---- live regression on #377: a person is set aside only on positive evidence (fails open) ----
+// Kept: layouts the check does not know never lose a cover (mixed case, run-in printouts, split or reordered names).
+const KEPT: [string, string][] = [
+  ["Policy Schedule\nYour name : Lim wei jie\nPolicy number: AB-1234567\nSum assured: S$100,000", "Lim Wei Jie"],
+  ["My Policies - printout\nPlan (XY1)Tan Mei Ling(S0000002B)25 0.00 Monthly\nNext due 01/12/2026", "Tan Mei Ling"],
+  ["Certificate of insurance\ninsured: lim wei jie\nPlan: Business", "Lim Wei Jie"],
+  ["Policyholder Tan Mei\nLing\nSum insured S$50,000", "Tan Mei Ling"],
+  ["Life assured NG HUI MIN CHARLOTTE\nSum assured S$200,000", "Charlotte Ng Hui Min"],
+  ["Lim Wei Jie\tS$100,000\tS$250.00", "Lim Wei Jie"],
+  ["Dear Mr Lim Wei Jie\nThank you for choosing us.\nLife assured: LIM WEI JIE\nSum assured S$100,000", "Lim Wei Jie"],
+  ["Mr Lim Wei Jie\n8 Cedar Walk\nSingapore 654321\nYour policy is in force.", "Lim Wei Jie"],
+  ["This certifies that Lim wei jie is covered under this plan.", "Lim Wei Jie"],
+  ["Thank you, Lim Wei Jie (S1234567D), for renewing your plan with us.", "Lim Wei Jie"],
+  ["Coverage summary\nTAN MEI LING has been covered under this plan since 2019.", "Tan Mei Ling"],
+  ["LimWeiJie AB-1234567 S$100,000", "Lim Wei Jie"],
+  ["Plan details\nTraveller: Rosalind Teo, 34", "Rosalind Teo"],
+  ["Insured Person(s): Siti Nurhaliza binti Ahmad; Ahmad bin Yusof", "Ahmad bin Yusof"],
+  ["No person printed here at all.", "Lim Wei Jie"],
+];
+for (const [text, who] of KEPT) check(`fail open: ${who} keeps cover in "${text.split("\n").find((l) => l.toLowerCase().includes(who.split(" ")[0].toLowerCase())) ?? text.split("\n")[0]}"`, () => assert.equal(personOnlyInExample(who, [text]), false));
+// Set aside: every line naming the person is an example, a greeting or a sentence about them (negative controls).
+const SET_ASIDE: [string, string][] = [
+  ["Meet Mdm Lily Seah, 61, who now gets a payout every month.", "Lily Seah"],
+  ["Dear Mr Victor Ho\nYour premium notice is enclosed.", "Victor Ho"],
+  ["Dear lim wei jie,\nHere is how our plan works.", "Lim Wei Jie"],
+  ["Example: Benjamin Foo, born 1990, claims in 2030.", "Benjamin Foo"],
+  ["After her fall, Lily Seah could no longer bathe.", "Lily Seah"],
+  ["Ken Lau, 38, chose S$900 a month.", "Ken Lau"],
+  ["Example: MR ALAN GOH is in hospital for 4 days.", "Alan Goh"],
+  ["Example\nLim Wei Jie\tS$100,000", "Lim Wei Jie"],
+  ["Meet our customer\nRosalind Teo, 34, teacher", "Rosalind Teo"],
+  ["Case study: how tan mei ling got her claim paid quickly", "Tan Mei Ling"],
+  ["Page 1 of the guide\nDear Mr Victor Ho\nPage 2\nVictor Ho was glad he had bought cover early.", "Victor Ho"],
+];
+for (const [text, who] of SET_ASIDE) check(`set aside: ${who} in "${text.split("\n")[0]}"`, () => assert.equal(personOnlyInExample(who, [text]), true));
+check("set aside only when every page agrees: a greeting on one page, particulars on another", () => assert.equal(personOnlyInExample("Victor Ho", ["Dear Mr Victor Ho", "Policy owner: VICTOR HO\nPolicy number: AB-7654321"]), false));
+// The live shapes through the table check: the stored cover is kept with its sum.
+const PORTAL = "My Policies\nPlan (XY1)Tan Mei Ling(S0000002B)25 0.00 Monthly\nSum assured S$150,000\nNext premium due 01/12/2026";
+check("table: a portal printout that runs the name into its cells keeps the cover (live #377)", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
+const MIXED = "Travel Certificate\nYour name : Lim wei jie\nPlan: Business\nCertificate no: TC-5566778\nTrip cancellation up to S$25,000";
+check("table: a name printed in mixed case keeps the cover (live #377)", () => assert.deepEqual(covers(reading(MIXED, "Lim Wei Jie", "Wayfarer Travel", null, "Plan: Business")), [["Lim Wei Jie", null]]));
+check("table: a brochure's example person still gets no cover", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), []));
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
