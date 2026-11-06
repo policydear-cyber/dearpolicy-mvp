@@ -310,15 +310,52 @@ async function main() {
   await test("L14 two plans' rates in one unit are plans whatever separates them; a rate and its cap in another unit stay (TE pr364)", async () => {
     const { checkReading } = await import("@/lib/benefit-table/check");
     const lines = ["Hospital cash S$100 per day | S$200 per day", "Hotel stay S$50/night or S$80/night", "Hospital income S$200 per day S$20,000 per year",
-      "Medical expenses S$100,000; S$250,000", "Travel delay S$100 every 6 hours up to S$1,000"];
+      "Medical expenses S$100,000; S$250,000", "Travel delay S$100 every 6 hours up to S$1,000",
+      "Trip cancellation S$5,000 and S$10,000", "Curtailment S$5,000 - S$10,000", "Baggage up to S$500 up to S$1,000",
+      "Kennel fees S$40 each night | S$60 each night | S$90 each night", "Lost item S$200 each up to S$1,000", "Course fees S$2,000 per term or S$5,000",
+      "Hospital cash S$100 per day and S$200 per day in ICU"];
     const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
       row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), row("Hospital income", 200, lines[2]), row("Hospital income", 20_000, lines[2]),
-      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]),
+      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]), row("Trip cancellation", 10_000, lines[5]), row("Curtailment", 5_000, lines[6]), row("Baggage", 1_000, lines[7]), row("Kennel fees", 40, lines[8]), row("Lost item", 200, lines[9]), row("Lost item", 1_000, lines[9]), row("Course fees", 2_000, lines[10]), row("Hospital cash", 100, lines[11]),
     ] });
-    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000]]);
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000],
+      ["Lost item", 200], ["Lost item", 1_000], ["Course fees", 2_000], ["Hospital cash", 100]]);
+  });
+
+  await test("L15 parallel cells that each name their plan or person are plans; a row-wide qualifier keeps them plans; a lone condition is not (Critic R367, TE pr367)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const lines = ["Trip cancellation S$5,000 for Plan A | S$10,000 for Plan B", "Hospital cash S$100 per day for Classic / S$200 per day for Elite",
+      "Baggage S$500 on Basic, S$1,000 on Premier", "Medical expenses S$50,000 in Plan 1 or S$100,000 in Plan 2",
+      "Accidental death S$100,000 under Silver; S$250,000 under Gold", "Accidental death S$100,000 for adults / S$25,000 for children",
+      "Personal accident S$100,000 for each adult, S$25,000 for each child", "Hospital income S$100 per day and S$200 per day in ICU",
+      "Trip cancellation S$5,000 | S$10,000 for any one trip", "Medical expenses S$150,000 S$400,000 for each insured person",
+      "Baggage S$1,000 / S$3,000 in total", "Travel delay S$100 / S$200 after every 6 hours of delay",
+      "Medical expenses S$100,000 and S$200,000 for each insured person", "Overall limit S$200,000 or S$500,000 for any one trip",
+      "Personal liability S$250,000 and S$500,000 if legally liable to pay", "Hospital cash S$100 a day, S$200 a day if in ICU",
+      "Hospital cash S$100 per day | S$200 per day for each insured person", "Hospital cash S$100 per day S$200 per day during hospitalisation",
+      "Hospital cash S$100 per day / S$200 per day while in hospital", "Hospital cash S$100 per day S$200 per day in ICU",
+      "Hospital cash S$100 per day and S$200 per day for each insured person"];
+    const doc = { id: "doc", name: "harbourline-travel.pdf", readable: true, people: [], pages: [{ page: 11, text: lines.join("\n") }] };
+    const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
+      row("Trip cancellation", 5_000, lines[0]), row("Hospital cash", 200, lines[1]), row("Baggage", 500, lines[2]), row("Medical expenses", 100_000, lines[3]),
+      row("Accidental death", 100_000, lines[4]), row("Accidental death", 25_000, lines[5]), row("Personal accident", 100_000, lines[6]),
+      row("Hospital income", 100, lines[7]),
+      // A qualifier after the last cell applies to the whole row (TE pr367 r2).
+      row("Trip cancellation", 5_000, lines[8]), row("Medical expenses", 150_000, lines[9]), row("Baggage", 1_000, lines[10]), row("Travel delay", 100, lines[11]),
+      // Bare figures joined by "and"/"or" with a trailing qualifier stay held; a rate and a raised rate keep the first (TE pr367 r3).
+      row("Medical expenses", 100_000, lines[12]), row("Overall limit", 200_000, lines[13]), row("Personal liability", 250_000, lines[14]),
+      row("Hospital cash", 100, lines[15]),
+      // Rate cells laid out as columns are plans, whatever follows; only "and"/"or"/a comma before a raised rate for a
+      // setting (ICU, ward, hospital) keeps the first (TE and Critic, pr367 r4).
+      row("Hospital cash", 100, lines[16]), row("Hospital cash", 100, lines[17]), row("Hospital cash", 100, lines[18]),
+      row("Hospital cash", 100, lines[19]), row("Hospital cash", 100, lines[20]),
+    ] });
+    assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100], ["Hospital cash", 100]]);
   });
 
   // ---- 5 Nov FWD re-read: a 47-page wording whose plan table ran parts out of output, two minutes a call, until the
