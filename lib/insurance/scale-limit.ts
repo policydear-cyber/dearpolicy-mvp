@@ -565,10 +565,19 @@ function rowPiece(raw:string,n:number,plans:string[],at:"first"|"after"):boolean
   const cells=(indented||(at==="after"&&parts.filter(Boolean).length===n)?parts:parts.slice(1)).filter(Boolean);
   if(cells.length!==n||cells.some(c=>c.length>40))return false;
   if(at==="first")for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
-  const words=` ${labelKey(spaced(raw)).replace(/[^a-z0-9]+/g," ")} `;
-  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  if(namesPlan(raw,plans))return false;
   if(at==="first")return !indented&&cells.some(c=>new RegExp(MONEY_CELL).test(c));
   return true;
+}
+/** Whether a line names one of the header's plans as a plan is printed: capitalised or in capitals ("First",
+ * "FIRST", "Travel Plus"). The same word in lower case is a word of a sentence ("after the first six hours"). */
+function namesPlan(raw:string,plans:string[]):boolean{
+  return plans.some(p=>{
+    const words=p.split(/[^a-z0-9]+/).filter(Boolean);
+    if(!words.length)return false;
+    const cap=words.map(w=>w[0].toUpperCase()+w.slice(1)).join("\\s+"),upper=words.map(w=>w.toUpperCase()).join("\\s+");
+    return new RegExp(`(?<![A-Za-z0-9])(?:${cap}|${upper})(?![A-Za-z0-9])`).test(raw);
+  });
 }
 /** A cell that prints an amount then words, as a cell wrapped over lines does ("S$100 for every", "S$300 only"). */
 const WRAPPED_CELL=new RegExp(`^${MONEY_CELL}\\s+[A-Za-z]`);
@@ -583,8 +592,7 @@ function looseLine(raw:string,n:number,plans:string[]):boolean{
   // A line of headings is another table's header unless one of its cells starts in lower case ("six-hour delay"): plan
   // names are printed capitalised.
   if(!cellsOf(raw).some(c=>/^[a-z]/.test(c)))for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
-  const words=` ${labelKey(text).replace(/[^a-z0-9]+/g," ")} `;
-  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  if(namesPlan(raw,plans))return false;
   return !LABEL_HEADING.test(labelKey(text.replace(/:$/,"")))&&!TABLE_SUBHEADING.test(text)&&!/^(?:part|table)\b/i.test(text)&&!PREMIUM_LINE.test(text);
 }
 const cellsOf=(raw:string)=>raw.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean);
@@ -593,8 +601,7 @@ const CURRENCY_NOTE=/^(?:\(\s*(?:s\$|sgd|us\$|usd)\s*\)|(?:all\s+)?(?:amounts?|f
 function titledLine(raw:string,plans:string[],rowName:string):boolean{
   const text=spaced(raw);
   // A line naming one of the header's plans, or repeating the start of the row's own name, is no group title.
-  const words=` ${labelKey(text).replace(/[^a-z0-9]+/g," ")} `;
-  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  if(namesPlan(raw,plans))return false;
   if(rowName.toLowerCase().startsWith(text.toLowerCase().replace(/:$/,"")))return false;
   if(CURRENCY_NOTE.test(text))return true;
   if(!text||cellCount(text)>0||PRINTS_AMOUNT.test(text.replace(/\((?:s\$|us\$|\$|sgd|usd)\)/gi," ")))return false;

@@ -558,6 +558,19 @@ test("rows whose cells wrap over lines, rows of word cells and a currency note s
     assert.deepEqual(planColumnFigure(row, [read(right)], { runIsUnique: true, pageText }), { plan: "Gold", figureText: "up to S$" + right.toLocaleString("en-SG") }, why);
     assert.equal(planColumnFigure(row, [read(misread)], { runIsUnique: true, pageText }), null, why + ": first plan's cell");
   }
+  // The live block above an overall limit: amounts then words, the row's words then three cells, two cells of amounts
+  // then words, a plain line saying "first" in lower case (a word of a sentence, not the First plan), two short cells.
+  const FWDH = ["Premium", "Business", "First"].join(T);
+  const block = (fourth: string) => [FWDH, medical, ["S$100 for every", "S$50 for every", "S$50 for every"].join(T),
+    ["If flight delayed", "six-hour delay", "three-hour delay", "three-hour delay"].join(T), ["S$300 in total only", "S$800 in total"].join(T),
+    fourth, ["up to", "up to"].join(T), ["maximum", "up to S$1,500"].join(T), cap].join("\n");
+  const limitRow = { policyId: "docW", sourcePage: 5, quote: "Overall limit^ S$300 S$800 S$1,500", benefitName: "Overall limit^" };
+  const limitRead = (amount: number) => ({ documentId: "docW", page: 5, excerpt: "Overall limit^ S$300 S$800 S$1,500", column: "Business", qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG"), benefit: "Overall limit^" });
+  assert.deepEqual(planColumnFigure(limitRow, [limitRead(800)], { runIsUnique: true, pageText: block("after the first delay") }), { plan: "Business", figureText: "up to S$800" }, "a lower-case plan word in a sentence");
+  assert.equal(planColumnFigure(limitRow, [limitRead(300)], { runIsUnique: true, pageText: block("after the first delay") }), null, "a lower-case plan word: first plan's cell");
+  assert.equal(planColumnFigure(limitRow, [limitRead(800)], { runIsUnique: true, pageText: block("First class travellers") }), null, "a line naming the First plan");
+  assert.equal(planColumnFigure(limitRow, [limitRead(800)], { runIsUnique: true, pageText: block("FIRST PLAN BENEFITS") }), null, "a line naming FIRST in capitals");
   // Still closed: a piece naming a plan, a line of headings with no wrapped row above it, and a piece printing too few cells.
   const capRow = { policyId: "docW", sourcePage: 5, quote: "Overall limit^ S$300 S$800 S$1,500", benefitName: "Overall limit^" };
   const capRead = { documentId: "docW", page: 5, excerpt: "Overall limit^ S$300 S$800 S$1,500", column: "Business", qualifier: null,
