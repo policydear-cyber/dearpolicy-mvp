@@ -276,7 +276,7 @@ const TRAIL_TOKEN = /^(?:\d[\d\/.,-]*|[stfg]\d{7}[a-z]|[stfg]\*+\d*[a-z]?|s\$[\d
 function afterInsuredLabel(raw: string, want: string[], tableish: boolean, numbered: boolean): boolean {
   const labelOk = (l: string) => INSURED_LABEL.test(l) && (numbered || !WEAK_LABEL.test(l));
   if (NOT_A_PERSON_LABEL.test(raw)) return false;
-  // A list after an insured label ("Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Insured: Lim Wei Jie,
+  // A list after an insured label ("Insured persons: A, B and C", "Insured: Lim Wei Jie,
   // born 3 Mar 1980", "Insured: Lee Mei Ling, Female, 45"): each item is a name with only particulars, or particulars.
   const listed = /^\s*([^:\t]{2,50}?)\s*(?::|\t|\s[-–]\s)\s*(.+)$/.exec(raw);
   if (listed && listed[1].trim() && !/^\d/.test(listed[1].trim()) && labelOk(listed[1].trim())
