@@ -235,9 +235,11 @@ export async function requestPolicyDocumentDeletion(args: {
     // in-transaction, without a job framework. premium_records deletion
     // predates this checkpoint (app/api/policies/[id]/route.ts's original
     // behaviour) and is preserved unchanged.
-    // A premium read from this document goes, and so does one filed against it whose source is unknown (every premium
-    // is written with its source document; a missing one cannot be shown to come from elsewhere). One read from another
-    // document still on file (a renewal receipt) stays, unlinked from this policy (the foreign key's own ON DELETE SET NULL).
+    // A premium read from this document goes. So does one filed against it with no source: DearPolicy's own writers
+    // always record the source, so an empty one is a row from before source tracking, one whose source was hard-deleted,
+    // or a direct write; none can be shown to come from anywhere but this document, and keeping it could keep its
+    // figures (the existing whole-policy deletion test asserts this). One read from another document still on file (a
+    // renewal receipt) stays, unlinked from this policy (the foreign key's own ON DELETE SET NULL).
     await args.client.query(
       `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR (source_document_id IS NULL AND policy_id=$2))`,
       [args.accountId, args.policyId],

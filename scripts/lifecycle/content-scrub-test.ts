@@ -50,7 +50,7 @@ async function main() {
   const q = <T = Record<string, unknown>>(text: string, params: unknown[] = []) => run(text, params) as Promise<{ rows: T[]; rowCount: number }>;
 
   const { requestPolicyDocumentDeletion, finishPolicyDocumentDeletion } = await import("@/lib/lifecycle/coordinator");
-  const { scrubDeletedDocuments, DELETED_FILENAME } = await import("@/lib/lifecycle/content-scrub");
+  const { scrubDeletedDocuments, countDeletedDocumentLeftovers, DELETED_FILENAME } = await import("@/lib/lifecycle/content-scrub");
   const { drainStoragePurge } = await import("@/lib/storage/purge");
 
   // A made-up household: Rahman family, Kuala Lumpur.
@@ -302,6 +302,24 @@ async function main() {
     const scheduled = await scheduleDeferredReadForTest({ accountId, policyId: doc.id, familyMemberId: haziq, storageKey: doc.key, pdfPassword: "pw-fictitious" } as never);
     assert.equal(scheduled, false);
     assert.equal((await q(`SELECT 1 FROM background_jobs WHERE idempotency_key=$1`, [doc.id + ":retry-read"])).rows.length, 0, "no job carrying the password is created");
+  });
+
+  await t("a document scrubbed long ago with late writes is left by the ordinary pass, counted by the dry run, and cleaned by the one-off pass", async () => {
+    const doc = await upload(haziq, { filename: "Old-Travel-Haziq.pdf", insurer: "Voyage Cover (fictitious)", product: "Voyage", policyNo: "VC-2", hash: "h-voyage", pages: ["Baggage £1,500."], amount: 1500, currency: "GBP" });
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-old" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    // Late writes from before this fix, on a tombstone scrubbed three days ago.
+    await q(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES ($1,$2,1,'Policyholder: Haziq Rahman')`, [accountId, doc.id]);
+    await q(`UPDATE policies SET insurer='Voyage Cover (fictitious)', updated_at=now()-interval '3 days' WHERE id=$1`, [doc.id]);
+    const baseline = await countDeletedDocumentLeftovers();
+    assert.ok(baseline >= 1, "the dry run counts it");
+    assert.equal((await scrubDeletedDocuments({ pinecone: pineconeSpy([]) })).scrubbed, 0, "the ordinary pass leaves documents outside its window");
+    assert.equal(await contentCount(doc.id), 1);
+    const r = await scrubDeletedDocuments({ pinecone: pineconeSpy([]), leftoverWindowHours: null });
+    assert.ok(r.scrubbed >= 1);
+    assert.equal(await contentCount(doc.id), 0);
+    assert.equal((await q<{ insurer: string | null }>(`SELECT insurer FROM policies WHERE id=$1`, [doc.id])).rows[0].insurer, null);
+    assert.equal(await countDeletedDocumentLeftovers(), 0, "nothing left anywhere afterwards");
   });
 
   await t("the request drain and the daily job both run the scrub, so a failed cleanup is retried without anyone asking", async () => {

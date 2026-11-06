@@ -59,8 +59,9 @@ export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, col
 ];
 
 /**
- * Rows of another source (another document, or the household's own entry) that only point at the deleted document:
- * they stay on file and are unlinked from it. (A premium filed against it with no source is deleted first.) A premium from a renewal receipt filed against the
+ * Rows read from another document still on file that only point at the deleted document: they stay on file and are
+ * unlinked from it. (A premium filed against it with no source is deleted first: DearPolicy always records the source,
+ * so an empty one cannot be shown to come from anywhere but the deleted document.) A premium from a renewal receipt filed against the
  * deleted policy still counts on Home.
  */
 export const DOCUMENT_LINK_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [["premium_records", "policy_id"]];
@@ -105,6 +106,9 @@ export type ScrubOptions = {
   /** Set by the deletion flows once their deletion request has completed: these documents' deletion is finished. */
   deletionFinished?: boolean;
   limit?: number;
+  /** How far back scrubbed documents are re-checked for late writes. Default LEFTOVER_WINDOW_HOURS; null checks every
+   * deleted document, whenever it was scrubbed (the one-off catch-up, scripts/lifecycle/deleted-leftovers-sweep.ts). */
+  leftoverWindowHours?: number | null;
 };
 export type ScrubResult = { finished: number; scrubbed: number; searchIndexPending: string[]; failed: number; forgottenKeys: number };
 
@@ -137,6 +141,30 @@ async function existingTables(db: Db): Promise<Set<string>> {
   return new Set(r.rows.map((x) => x.name));
 }
 
+/** SQL (on alias p) true when a scrubbed document has something read from it again, within the window (null: ever). */
+function leftoverSql(tables: Set<string>, columns: string[], windowHours: number | null): string {
+  const any = [
+    ...[...DOCUMENT_CONTENT_TABLES, ...DOCUMENT_LINK_COLUMNS].filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
+    ...columns.map((c) => `p.${c} IS NOT NULL`),
+  ];
+  if (!any.length) return "false";
+  const window = windowHours == null ? "" : `p.updated_at > now() - make_interval(hours => ${Math.max(0, Math.floor(windowHours))}) AND `;
+  return `(p.original_filename=$2 AND ${window}(${any.join(" OR ")}))`;
+}
+
+/**
+ * Read-only: how many deleted documents, already scrubbed at any time, still hold something read from them (the
+ * one-off catch-up's dry run). Documents not yet scrubbed are left to the ordinary pass and not counted.
+ */
+export async function countDeletedDocumentLeftovers(db: Db = pool as unknown as Db): Promise<number> {
+  const tables = await existingTables(db);
+  const columns = await presentContentColumns(db);
+  const r = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM policies p WHERE p.lifecycle_state=ANY($1::text[]) AND ${leftoverSql(tables, columns, null)}`,
+    [DELETED_STATES, DELETED_FILENAME]);
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<ScrubResult> {
   const db = opts.db ?? (pool as unknown as Db);
   const transaction = opts.transaction ?? defaultTransaction;
@@ -150,14 +178,11 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
     // Due: a deleted document not yet scrubbed, or one already scrubbed that has something read from it again. A
     // reading still running when the person deleted the document goes on writing pages, passages, benefit lines and
     // the document's own fields for a while (lib/rag/ingest.ts stops at its next step); scrubbing once is not enough.
-    const leftovers = [
-      ...[...DOCUMENT_CONTENT_TABLES, ...DOCUMENT_LINK_COLUMNS].filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
-      ...columns.map((c) => `p.${c} IS NOT NULL`),
-    ];
+    const leftovers = leftoverSql(tables, columns, opts.leftoverWindowHours === undefined ? LEFTOVER_WINDOW_HOURS : opts.leftoverWindowHours);
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
       `SELECT p.id::text AS id, p.account_id::text AS account_id, p.storage_key FROM policies p
         WHERE p.lifecycle_state=ANY($1::text[]) AND ($3::uuid[] IS NULL OR p.id=ANY($3::uuid[]))
-          AND (p.original_filename<>$2${leftovers.length ? ` OR (p.updated_at > now() - make_interval(hours => ${LEFTOVER_WINDOW_HOURS}) AND (${leftovers.join(" OR ")}))` : ""})
+          AND (p.original_filename<>$2 OR ${leftovers})
         ORDER BY p.updated_at LIMIT $4`,
       [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
     for (const doc of due.rows) {
