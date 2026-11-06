@@ -103,6 +103,10 @@ for (const [line, b, want] of [["Hospital cash per day S$100 or S$3,000 per year
   ["Hospital cash per person S$100 per day, S$3,000 per year", { pays: "up_to", value: 3000 }, 3000], ["Hospital cash Per day S$100, S$3,000 per year", { pays: "up_to", value: 3000 }, 3000],
   ["Hospital cash Per day S$100, S$3,000 per year", { pays: "per_day", value: 100 }, 100]] as [string, Record<string, unknown>, number][])
   check(`kept: "${line}" (${b.value})`, () => assert.equal(value(line, b), want));
+// Critic r376 R8: a unit phrase before the next figure is that figure's, so it does not part a cell from its run.
+check("plans, no column: two runs, each with its unit first (R8)", () => assert.equal(value("Delay Per trip: S$500 S$1,000, per day S$50 S$100", { pays: "up_to", value: 500 }), null));
+check("plans, no column: the second run (R8)", () => assert.equal(value("Delay Per trip: S$500 S$1,000, per day S$50 S$100", { pays: "per_day", value: 50 }), null));
+check("kept: a rate, then its yearly cap with the unit after (Critic p376c)", () => assert.equal(value("Hospital cash Per day S$100 per day and S$3,000 per year", { pays: "per_day", value: 100 }), 100));
 check("per person before a run of lump sums is still plans (Critic r376 P4)", () => assert.equal(value("Accidental death per person S$100,000 S$200,000", { pays: "amount", value: 100000 }), null));
 // Critic r376 P5-P7: real rows kept.
 check("kept: per insured person before, a month after (TE r376 Q9)", () => assert.equal(value("Disability income per insured person: S$2,000 a month", { pays: "per_period", period: "month", value: 2000 }), 2000));

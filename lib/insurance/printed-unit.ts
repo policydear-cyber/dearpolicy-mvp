@@ -75,7 +75,11 @@ export function runUnitsBefore(line: string, figures: FigureSpan[]): string[] {
     if (m && i > 0 && m[3] && CAP_AFTER_UNIT.test(m[3])) return run;
     const u = unitOf(m);
     if (u) { run = u; return u; }
-    const a = unitOf(line.slice(f.end, i < figures.length - 1 ? figures[i + 1].start : line.length).match(AFTER));
+    // A unit phrase that is all that stands before the next figure, and is that figure's own unit printed before it
+    // ("Per trip: S$500 S$1,000, per day S$50 S$100"), is the next figure's, not this one's (Critic r376 R8).
+    const tail = line.slice(f.end, i < figures.length - 1 ? figures[i + 1].start : line.length);
+    const nexts = i < figures.length - 1 && onlyUnitBetween(tail) && BEFORE.test(tail);
+    const a = nexts ? null : unitOf(tail.match(AFTER));
     if (a && a !== "person" && a !== "member") return a;
     return run;
   });
