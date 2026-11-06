@@ -278,23 +278,46 @@ export function namePrinted(person: string, text: string): boolean {
   const { want, word } = nameWords(person);
   return want.length > 0 && text.split(/\n|\f/).some((l) => word.every((r) => r.test(l)));
 }
-/** Whether the document gives positive evidence that a person it names is NOT its insured. It does only when a line prints
- * the person's whole name, and every line that prints any of the person's name words (a surname alone, "Mr Lim", "LIM W J",
- * a name split over two lines) is an example's or a story's:
- * - the line has an example or story word ("Example: Benjamin Foo ...", "Meet Mdm Lily Seah", "Case study: ...",
- *   "Rosalind Teo (illustrative)"); or
- * - the line sits right under a marker heading ("Example", "Meet our customers", "Real stories") or a sample banner.
- * Anything else is no evidence, and the cover is kept: a greeting, a plain sentence ("We confirm that Lim Wei Jie is
- * covered"), a name in mixed case ("Your name : Lim wei jie"), a portal printout that runs the name into its cells
- * ("Plan (XY1)Tan Mei Ling(S0000002B)25"), and a name the pages do not print at all. This fails open on purpose, so a
- * layout the check does not know never loses a cover (live regression on #377). */
+/** Whether a person the reading names is NOT the document's insured, so cover read for them is set aside. Built to keep:
+ * the person is set aside only when none of these holds.
+ * 1. A page prints them as its particulars the way main always recognised (personAsParticulars): this never sets aside a
+ *    cover main kept.
+ * 2. A line that names them (any of their name words: a surname, initials, a split name; in any case, run into other text
+ *    or not) and is no example's carries a particulars signal: an insured, holder or name label ("Your name : Lim wei jie",
+ *    "Life Assured: LIM W J"), an identity or policy number, a cell break, or the name run into brackets or digits
+ *    ("Plan (XY1)Tan Mei Ling(S0000002B)25"). This is the live regression on #377: such layouts keep their cover.
+ * 3. The document prints a policy, certificate or identity number of its own, and a line that names them is neither an
+ *    example's nor a greeting ("We confirm that Lim Wei Jie is covered", with the policy number on the page).
+ * 4. No line names any of their words at all (nothing to judge by).
+ * A line is an example's when it has an example or story word, runs on from such a line, sits under a marker heading or a
+ * sample banner, is an FAQ's Q:/A: line, introduces the person with an age on a line naming no cover or label, or names
+ * them on a brochure page that has only a weak label (Traveller, Covered member) and no number of its own.
+ * So a brochure's or a letter's person (a greeting, a story sentence, an FAQ answer) on a document with no particulars and
+ * no number of its own gets no cover, as on main (TE #384 L3, E9, E10, E13, E14, G5). */
 export function personOnlyInExample(person: string, pages: string[]): boolean {
   const { want, word } = nameWords(person);
   if (!want.length) return false;
+  if (pages.some((p) => personAsParticulars(person, p))) return false;
+  const ownNumber = (t: string) => OWN_NUMBER.test(t) || /\b[stfgm]\d{7}[a-z]\b/i.test(t)
+    || /\b(?:policy|certificate|cert)\b\.?\s*(?:no\.?|number|#|id)?\s*[:.]?\s*(?=[\w\/-]*\d)(?=[\w\/-]*[A-Za-z])[A-Za-z0-9][\w\/-]{5,}/i.test(t);
+  const docOwn = pages.some(ownNumber);
+  const LABEL = /\b(?:insured|assured|policy\s*holder|policy\s*owner|proposer|member|employee|names?|life|travell?er|person|dependants?|spouse|child|beneficiary|holder|owner)\b[^\n:]{0,25}?(?::|\t|\s[-–]\s)/i;
+  const GREETING = /^\W*(?:dear|hi|hello|hey|welcome|thank\s+you|thanks)\b/i;
+  const runIn = want.filter((w) => w.length >= 2).map((w) => new RegExp(`[\\d()\\[\\]](?:${escapeRe(w)})(?!\\p{L})|(?<!\\p{L})(?:${escapeRe(w)})[\\d()\\[\\]]`, "iu"));
+  // A line that opens with an insured or holder word and then the name, with no colon ("Policyholder Tan Mei", "Employee Lim
+  // Wei Jie is covered"), or a certifying phrase ("This certifies that ...").
+  const LEAD = new RegExp(`^\\W*(?:the\\s+)?(?:insured|assured|life\\s+assured|policy\\s*holder|policy\\s*owner|proposer|member|employee|travell?er|beneficiary|dependant)(?:'?s|\\(s\\))?(?:\\s+(?:person|name|names))?\\s+(?:(?:mr|mrs|ms|mdm|miss|dr|madam)\\.?\\s+)?(?:${want.filter((w) => w.length >= 2).map(escapeRe).join("|")})(?!\\p{L})`, "iu");
+  const signal = (l: string) => LEAD.test(l) || /\bcertif(?:y|ies|ied)\b[^.\n]{0,30}\bthat\b/i.test(l) || LABEL.test(l) || ownNumber(l) || /\t|\S\s{2,}\S|\|/.test(l) || runIn.some((r) => r.test(l));
+  let named = false;
   const whole = (l: string) => word.every((r) => r.test(l));
   const any = want.filter((w) => w.length >= 2).map((w) => new RegExp(`(?<!\\p{L})${escapeRe(w)}(?!\\p{L})`, "iu"));
   const QA = /^\s*(?:q|a|q\d+|question|answer)\s*[:.)]/i;
-  let seen = false;
+  // A brochure's person introduced with an age, on a line that names no cover, policy, label or number ("Ken Lau, 38, chose
+  // S$900 a month.", "Take Ken Lau, a 38-year-old teacher."): a schedule prints an age after a label or in a cell (Critic #384).
+  const nameRun = `${want.map(escapeRe).join("\\s+")}`;
+  const aged = new RegExp(`(?<!\\p{L})${nameRun}(?!\\p{L})\\s*,\\s*(?:\\d{1,2}\\s*(?:,|$|\\.)|aged\\s+\\d{1,2}\\b|an?\\s+\\d{1,2}[-\\s]year[-\\s]old\\b)`, "iu");
+  const agedStory = (l: string) => aged.test(l) && !/\t|\S\s{2,}\S|\|/.test(l) && !OWN_NUMBER.test(l) && !/\b[stfgm]\d{7}[a-z]\b/i.test(l)
+    && !/\b(?:insured|assured|policy|plan|cover(?:ed|age)?|certificate|member|employee|holder|owner|proposer|nric|fin|passport|name|traveller|dependant|spouse|child|relationship)\b/i.test(l);
   for (const text of pages) {
     const lines = text.split(/\n|\f/);
     // A question-and-answer page (an FAQ): its "Q:" and "A:" lines are worked answers, never particulars.
@@ -311,13 +334,14 @@ export function personOnlyInExample(person: string, pages: string[]): boolean {
       // "Lau, 40, buys S$300,000 of cover."); a marker heading or a sample banner right above.
       evidence[k] = EXAMPLE_WORD.test(raw) || (!!prevHead && (MARKER_HEADING.test(prevHead) || bannerLine(prevHead)))
         || (k > 0 && evidence[k - 1] && EXAMPLE_WORD.test(prev) && !/[.!?]["')\]]?$/.test(prev) && !/^\s*[^:\t]{2,40}?\s*(?::|\t|\s[-–]\s)/.test(raw))
-        || (faq && QA.test(raw)) || weakPage;
+        || (faq && QA.test(raw)) || weakPage || agedStory(raw);
       if (!any.some((r) => r.test(raw))) continue;
-      if (!evidence[k]) return false;
-      if (whole(raw) || (k > 0 && evidence[k - 1] && whole(`${prev} ${raw}`))) seen = true;
+      named = true;
+      if (evidence[k]) continue;
+      if (signal(raw) || (docOwn && !GREETING.test(raw))) return false;
     }
   }
-  return seen;
+  return named;
 }
 
 /** A label that introduces the insured person, a closed list ("Name of Life Assured", "Insured Child:", "Policyholder",
