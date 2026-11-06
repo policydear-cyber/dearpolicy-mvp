@@ -108,7 +108,9 @@ check("table: the private cover's own sum is kept", () => assert.deepEqual(cover
 check("table: a combined total is not the supplement's sum (item 4)", () => assert.deepEqual(covers(reading(SUPPLEMENT_SCHEDULE, "MARK LIEW KOK WAI", "GoldenCare Top-Up", 2140, "Total monthly payout with SilverYears Care: S$2,140")), [["MARK LIEW KOK WAI", null]]));
 check("table: a brochure's example person is no cover (item 2)", () => assert.deepEqual(covers(reading(BROCHURE, "Lily Seah", "SilverYears Care", 640, "She now gets S$640 a month from SilverYears Care.")), []));
 check("table: a sample statement is no cover (item 2)", () => assert.deepEqual(covers(reading(SAMPLE, "TEO AH BENG", "SilverYears Care", 640, "Monthly payout if severely disabled: S$640")), []));
-check("table: a generic letter's addressee is no cover (item 2)", () => assert.deepEqual(covers(reading("Care Support Office\nDear Mr Victor Ho\nThank you for asking about Care Support. Eligible persons get up to S$300 a month.", "Victor Ho", "Care Support", 300, "Eligible persons get up to S$300 a month.")), []));
+// Trade-off of failing open (Critic #384): a greeting is addressed to the policyholder, so a letter's addressee is no
+// evidence against cover; a generic letter's addressee keeps the cover read for them, as on main before #377.
+check("table: a letter's addressee is not set aside by the greeting alone (was #377 item 2)", () => assert.deepEqual(covers(reading("Care Support Office\nDear Mr Victor Ho\nThank you for asking about Care Support. Eligible persons get up to S$300 a month.", "Victor Ho", "Care Support", 300, "Eligible persons get up to S$300 a month.")), [["Victor Ho", 300]]));
 check("table: a wording's worked example is no cover (item 2)", () => assert.deepEqual(covers(reading("Hospital Prime policy wording\nHow we pay a claim\nExample: Mr Alan Goh is in hospital for 4 days and his bill is S$12,000. We pay S$9,000.", "Alan Goh", "Hospital Prime", 9000, "We pay S$9,000.")), []));
 check("table: a benefit figure that is the scheme's is kept without it (item 1)", () => {
   const r = reading(SUPPLEMENT_SCHEDULE, "MARK LIEW KOK WAI", "GoldenCare Top-Up", null, "Life assured: MARK LIEW KOK WAI", [{ benefit: "Scheme payout", pays: "per_period", period: "month", value: 640, quote: "This plan pays on top of SilverYears Care, which currently pays S$640 a month." }, { benefit: "Monthly benefit", pays: "per_period", period: "month", value: 1500, quote: "Monthly benefit: S$1,500" }]);
@@ -233,7 +235,19 @@ const KEPT: [string, string][] = [
   ["Thank you, Lim Wei Jie (S1234567D), for renewing your plan with us.", "Lim Wei Jie"],
   ["Coverage summary\nTAN MEI LING has been covered under this plan since 2019.", "Tan Mei Ling"],
   ["LimWeiJie AB-1234567 S$100,000", "Lim Wei Jie"],
-  ["Plan details\nTraveller: Rosalind Teo, 34", "Rosalind Teo"],
+  ["Plan details\nPolicy: TV7788123\nTraveller: Rosalind Teo, 34", "Rosalind Teo"],
+  // A greeting is addressed to the policyholder, and a plain sentence can be the particulars (Critic #384): no evidence.
+  ["Dear lim wei jie,\nHere is how our plan works.", "Lim Wei Jie"],
+  ["Dear Mr Victor Ho\nYour premium notice is enclosed.", "Victor Ho"],
+  ["We confirm that Kumar Rajan is covered under this travel plan from 1 March 2026.", "Kumar Rajan"],
+  ["Welcome aboard, Lim Wei Jie! Your cover starts today and lasts a year.", "Lim Wei Jie"],
+  ["Hi Lim Wei Jie, your trip to Tokyo is covered.", "Lim Wei Jie"],
+  ["Employee Lim Wei Jie is covered under Plan B.", "Lim Wei Jie"],
+  ["Ken Lau, 38, chose S$900 a month.", "Ken Lau"],
+  // A part of the name printed outside any example (initials, a surname, a split name) keeps the cover.
+  ["Dear Mr Lim Wei Jie\nThank you for your purchase.\fPOLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: LIM W J", "Lim Wei Jie"],
+  ["Example: how Lim Wei Jie would claim\nPolicyholder: Mr Lim", "Lim Wei Jie"],
+  ["Dear David Lim Wei Jie\nLife assured: LIM WEI JIE", "David Lim Wei Jie"],
   ["Insured Person(s): Siti Nurhaliza binti Ahmad; Ahmad bin Yusof", "Ahmad bin Yusof"],
   ["No person printed here at all.", "Lim Wei Jie"],
 ];
@@ -241,25 +255,32 @@ for (const [text, who] of KEPT) check(`fail open: ${who} keeps cover in "${text.
 // Set aside: every line naming the person is an example, a greeting or a sentence about them (negative controls).
 const SET_ASIDE: [string, string][] = [
   ["Meet Mdm Lily Seah, 61, who now gets a payout every month.", "Lily Seah"],
-  ["Dear Mr Victor Ho\nYour premium notice is enclosed.", "Victor Ho"],
-  ["Dear lim wei jie,\nHere is how our plan works.", "Lim Wei Jie"],
+  ["Meet Mdm Lily Seah, 61\nAfter her fall, Lily Seah could no longer bathe.", "Lily Seah"],
   ["Example: Benjamin Foo, born 1990, claims in 2030.", "Benjamin Foo"],
-  ["After her fall, Lily Seah could no longer bathe.", "Lily Seah"],
-  ["Ken Lau, 38, chose S$900 a month.", "Ken Lau"],
   ["Example: MR ALAN GOH is in hospital for 4 days.", "Alan Goh"],
   ["Example\nLim Wei Jie\tS$100,000", "Lim Wei Jie"],
-  ["Meet our customer\nRosalind Teo, 34, teacher", "Rosalind Teo"],
+  ["Meet our customers\nRosalind Teo, 34, teacher", "Rosalind Teo"],
   ["Case study: how tan mei ling got her claim paid quickly", "Tan Mei Ling"],
-  ["Page 1 of the guide\nDear Mr Victor Ho\nPage 2\nVictor Ho was glad he had bought cover early.", "Victor Ho"],
+  ["Covered person: Rosalind Teo (illustrative)", "Rosalind Teo"],
+  ["Real stories\nROSALIND TEO WAS HOSPITALISED FOR 5 DAYS AND GOT S$1,000.", "Rosalind Teo"],
+  ["SPECIMEN POLICY SCHEDULE\nLife Assured: John Sample\nSum Assured S$100,000", "John Sample"],
+  // A marker carries across a line break when its line runs on (TE #384 E5).
+  ["How it works\nExample: Mr Ken\nLau, 40, buys S$300,000 of cover.", "Ken Lau"],
+  // An FAQ's question and answer lines are worked answers (TE #384 E7).
+  ["Frequently asked questions\nQ: What if I die abroad?\nA: John Tan would receive S$100,000.", "John Tan"],
+  // A brochure page with a weak label and no number of its own: all its lines naming the person are the brochure's (TE F2).
+  ["GoldenCare Top-Up\nWhy top up?\nCovered member - Mdm Rose Lee\nRose was glad she topped up: she now gets S$800 a month.", "Rose Lee"],
+  ["How it works\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", "Rosalind Teo"],
 ];
 for (const [text, who] of SET_ASIDE) check(`set aside: ${who} in "${text.split("\n")[0]}"`, () => assert.equal(personOnlyInExample(who, [text]), true));
-check("set aside only when every page agrees: a greeting on one page, particulars on another", () => assert.equal(personOnlyInExample("Victor Ho", ["Dear Mr Victor Ho", "Policy owner: VICTOR HO\nPolicy number: AB-7654321"]), false));
+check("set aside only when every page agrees: an example on one page, particulars on another", () => assert.equal(personOnlyInExample("Victor Ho", ["Example: Victor Ho claims S$500.", "Policy owner: VICTOR HO\nPolicy number: AB-7654321"]), false));
+check("a real e-certificate with a policy number keeps its traveller", () => assert.equal(personOnlyInExample("Rose Lee", ["Travel e-certificate\nPolicy No. TV-7788123\nTraveller: Rose Lee\nRose Lee is covered from 1 March."]), false));
 // The live shapes through the table check: the stored cover is kept with its sum.
 const PORTAL = "My Policies\nPlan (XY1)Tan Mei Ling(S0000002B)25 0.00 Monthly\nSum assured S$150,000\nNext premium due 01/12/2026";
 check("table: a portal printout that runs the name into its cells keeps the cover (live #377)", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
 const MIXED = "Travel Certificate\nYour name : Lim wei jie\nPlan: Business\nCertificate no: TC-5566778\nTrip cancellation up to S$25,000";
 check("table: a name printed in mixed case keeps the cover (live #377)", () => assert.deepEqual(covers(reading(MIXED, "Lim Wei Jie", "Wayfarer Travel", null, "Plan: Business")), [["Lim Wei Jie", null]]));
-check("table: a brochure's example person still gets no cover", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), []));
+check("table: a brochure's example person still gets no cover", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nExample: Ken Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Example: Ken Lau, 38, chose S$900 a month.")), []));
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
