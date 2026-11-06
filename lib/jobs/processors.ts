@@ -29,6 +29,7 @@ import type { JobProcessor, WorkerJobTypeConfig } from "./worker-runtime";
 import { CHAT_ANALYSIS_JOB_TYPE, processChatAnalysisJob } from "@/lib/chat/jobs";
 import { SCAN_RETRY_JOB_TYPE } from "@/lib/scanning/retry";
 import { processScanRetryJob } from "@/lib/scanning/retry-processor";
+import { FIGURE_CHECK_JOB_TYPE } from "@/lib/benefit-table/figure-check-job";
 
 // Checkpoint 14i: re-exported so existing importers of
 // lib/jobs/processors.ts (scripts/worker.ts, the e2e stages, this
@@ -116,4 +117,6 @@ export const PRODUCTION_JOB_TYPES: WorkerJobTypeConfig[] = [
   { jobType: MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, process: processModelExecutionStalenessAuditJob },
   { jobType: CHAT_ANALYSIS_JOB_TYPE, process: processChatAnalysisJob },
   { jobType: SCAN_RETRY_JOB_TYPE, process: processScanRetryJob },
+  // The figure guards' continuation (lib/benefit-table/figure-check-job.ts): does nothing while the guards are off.
+  { jobType: FIGURE_CHECK_JOB_TYPE, process: async (job) => (await import("@/lib/benefit-table/app")).processFigureCheckJob(job) },
 ];

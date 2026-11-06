@@ -13,7 +13,6 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { annualisePremium } from "@/lib/insurance";
 import { SHORT_TERM_DAYS, samePolicyNumber, type PersonCover } from "@/lib/benefit-table/assemble";
 import { printedDay } from "@/lib/benefit-table/dates";
 import { longDate, printedStatus } from "@/lib/chat/policy-status";
@@ -91,22 +90,70 @@ const RECURRING = /month|quarter|semi|half.?year|6 month|week|fortnight|year|ann
 /** Words that a premium is paid once ("Single premium", "one-off", "one-time", "once", "lump sum", "per trip", "for the
  * period") (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). */
 const ONE_OFF_STRONG = /one[- ]?(?:off|time)|once[- ]?off|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey)|\bsingle\s+(?:premium|payment|trip)\b/i;
-/** Weaker words: a one-off on their own ("Single", "Once"); beside a recurring word, see RECURRING_WITH_WEAK. */
+/** Weaker words: a one-off on their own ("Single", "Once", "Paid once"); beside a period, the premium is unclear unless the
+ * whole frequency is a payment period PAYMENTS_PER_YEAR lists ("once a month", "single life, yearly"). */
 const ONE_OFF_WEAK = /\bsingle\b|\bonce\b|\bonly\b/i;
-/** The only shapes in which a weak word sits beside a recurring period and the premium is still recurring: "once a
- * month", "once every year", "once yearly", "single life". A recurring word is often the cover's length, not how often
- * it is paid ("Single, covers 12 months", "Once, for a 3-week trip", "Paid once for a 6 month term"), so any other mix
- * is unclear: named, never totalled (TE pr370 round 2). */
-const RECURRING_WITH_WEAK = /\bonce\s+(?:a|an|every|per|each)\s+(?:calendar\s+|policy\s+)?(?:month|quarter|year|week|fortnight|annum)\b|\bonce\s+(?:monthly|quarterly|yearly|annually|weekly|fortnightly)\b|\bsingle\s+life\b/gi;
+/** How many payments a year each printed payment period means: a closed list, matched whole (TE pr370: "Every 3 months"
+ * was read as monthly, S$100 as S$1,200 a year; "Twice a year" as yearly; and a cover's length, "For a 12-month term" or
+ * "Prepaid for 2 weeks", as a payment period). Anything not listed is not a payment period. */
+const PAYMENTS_PER_YEAR: [number, string[]][] = [
+  [12, ["monthly", "per month", "a month", "every month", "each month", "once a month", "once monthly", "once every month", "once per month", "bulanan"]],
+  [6, ["every 2 months", "every two months", "bi monthly", "bimonthly", "once every 2 months", "once every two months"]],
+  [4, ["quarterly", "per quarter", "a quarter", "every quarter", "each quarter", "once a quarter", "every 3 months", "every three months", "once every 3 months", "3 monthly", "three monthly"]],
+  [2, ["half yearly", "halfyearly", "semi annual", "semi annually", "semiannual", "semiannually", "every 6 months", "every six months", "once every 6 months", "twice a year", "twice yearly", "twice per year", "6 monthly", "six monthly"]],
+  [1, ["yearly", "year", "annual", "annually", "per annum", "pa", "p a", "a year", "per year", "every year", "each year", "once a year", "once yearly", "once annually", "once every year", "once per year", "one annual", "one yearly", "annual 12 months", "yearly 12 months", "annually 12 months", "tahunan"]],
+  [52, ["weekly", "per week", "a week", "every week", "each week", "once a week"]],
+  [26, ["fortnightly", "every 2 weeks", "every two weeks", "once a fortnight", "once every 2 weeks", "per fortnight"]],
+];
+const PERIOD_OF = new Map(PAYMENTS_PER_YEAR.flatMap(([n, names]) => names.map((name) => [name, n] as const)));
+/** Words around a payment period that do not change it ("Annual premium", "Payable monthly by GIRO", "Yearly (single
+ * life)", "Per policy year"): removed before the period is matched. A closed list too: any other word leaves the
+ * frequency unclear. */
+const PERIOD_NOISE = new RegExp(String.raw`\b(?:per policy(?! year)|single life|joint life|multi trip|in advance|in arrears|standing order|bank transfer|`
+  // how it is paid
+  + String.raw`credit|debit|card|direct|auto|giro|paynow|cheque|check|cash|cpf(?: oa| ordinary account)?|medisave|by|via|through|from|using|`
+  // what the amount includes, and what it is for
+  + String.raw`gst|tax|incl|inclusive|including|included|with|of|and|renewal|renewable|renew|level|riders?|basic|plan|`
+  // its currency
+  + String.raw`sgd|usd|myr|aud|gbp|eur|hkd|s|`
+  + String.raw`premiums?|paid|payable|payments?|pay|mode|frequency|policy|basis|the)\b`, "g");
+/** A count of payments printed beside the period ("Monthly, 12 instalments"). It must be the period's own count a year:
+ * "Annual, 12 instalments" says two things, so it is not a payment period. */
+const PAYMENT_COUNT = /\b(\d{1,2}|two|four|six|twelve)\s+(?:instalments?|installments?|payments?)\b/;
+const COUNT_WORDS: Record<string, number> = { two: 2, four: 4, six: 6, twelve: 12 };
+/** Two listed periods with the same count printed side by side ("Annual/Yearly"): that count; otherwise null. */
+function samePeriodTwice(f: string): number | null {
+  const words = f.split(" ");
+  for (let i = 1; i < words.length; i++) {
+    const a = PERIOD_OF.get(words.slice(0, i).join(" ")), b = PERIOD_OF.get(words.slice(i).join(" "));
+    if (a != null && a === b) return a;
+  }
+  return null;
+}
+/** Payments a year for a printed payment period (PAYMENTS_PER_YEAR), or null when the frequency is not one of them. */
+export function paymentsPerYear(frequency: string | null | undefined): number | null {
+  let f = (frequency ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  const count = f.match(PAYMENT_COUNT);
+  if (count) f = f.replace(PAYMENT_COUNT, " ");
+  f = f.replace(/\b(?:instalments?|installments?)\b/g, " ").replace(PERIOD_NOISE, " ").replace(/\s+/g, " ").trim();
+  const n = f ? PERIOD_OF.get(f) ?? samePeriodTwice(f) : null;
+  if (n == null || !count) return n;
+  return (COUNT_WORDS[count[1]] ?? Number(count[1])) === n ? n : null;
+}
 type FrequencyReading = "recurring" | "one_off" | "unclear" | "none";
+/** A printed frequency read against closed lists, failing closed:
+ * - none printed: "none" (yearly, unless its cover period is short: isShortPeriodPremium);
+ * - a plain one-off word ("one-time", "lump sum", "per trip"): one-off, or unclear beside a recurring word;
+ * - exactly a payment period PAYMENTS_PER_YEAR lists, with only PERIOD_NOISE around it: recurring;
+ * - a weak one-off word ("Single", "Once") with no period word: one-off;
+ * - anything else (a cover's length, "Regular", "As agreed", "Single, covers 12 months"): unclear, named, never totalled. */
 function readFrequency(frequency: string | null | undefined): FrequencyReading {
   const f = (frequency ?? "").trim();
   if (!f) return "none";
-  const recurring = RECURRING.test(f), strong = ONE_OFF_STRONG.test(f), weak = ONE_OFF_WEAK.test(f);
-  if (!recurring) return strong || weak ? "one_off" : "unclear";
-  if (strong) return "unclear";
-  // A weak word beside a recurring period: recurring only in RECURRING_WITH_WEAK's shapes.
-  return weak && ONE_OFF_WEAK.test(f.replace(RECURRING_WITH_WEAK, " ")) ? "unclear" : "recurring";
+  const recurring = RECURRING.test(f);
+  if (ONE_OFF_STRONG.test(f)) return recurring ? "unclear" : "one_off";
+  if (paymentsPerYear(f) != null) return "recurring";
+  return !recurring && ONE_OFF_WEAK.test(f) ? "one_off" : "unclear";
 }
 export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency">) {
   return readFrequency(row.frequency) === "one_off";
@@ -140,9 +187,11 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   for (const row of rows) if (!latest.has(component(row))) latest.set(component(row), row);
   return [...latest.values()].map((row) => {
     const amount = Number(row.amount), split = premiumSplit(amount, row.notes);
-    const annual = annualisePremium(split.total, row.frequency);
+    // A frequency no closed list reads is never multiplied: its item is left out of the totals (readFrequency).
+    const perYear = paymentsPerYear(row.frequency) ?? 1;
+    const annual = split.total * perYear;
     return { ...row, amount, currency: normalizeCurrencyCode(row.currency, "SGD"), currencyStated: !!statedCurrencyCode(row.currency), shared: row.family_member_id == null, cash: split.cash, medisave: split.medisave, total: split.total,
-      oneOff: isOneOffPremium(row), shortPeriod: isShortPeriodPremium(row), unclearFrequency: isUnclearFrequency(row), annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : annualisePremium(split.cash, row.frequency), medisaveAnnual: split.medisave == null ? null : annualisePremium(split.medisave, row.frequency) };
+      oneOff: isOneOffPremium(row), shortPeriod: isShortPeriodPremium(row), unclearFrequency: isUnclearFrequency(row), annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : split.cash * perYear, medisaveAnnual: split.medisave == null ? null : split.medisave * perYear };
   });
 }
 /** The parts of a benefit-table cover its printed premium needs (lib/benefit-table/check.ts). */
