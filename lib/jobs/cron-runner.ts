@@ -28,6 +28,7 @@ import { pool } from "@/lib/db/client";
 import { MIN_CRON_SECRET_LENGTH } from "@/lib/launch/guards";
 import { recoverExpiredLeases } from "./queue";
 import { claimAndProcessOne, type WorkerJobTypeConfig } from "./worker-runtime";
+import { withFunctionDeadline } from "./function-time";
 
 export const JOB_RUNNER_PATH = "/api/internal/jobs/run";
 export const DEFAULT_JOB_RUNNER_MAX_JOBS = 10;
@@ -79,6 +80,8 @@ export async function runJobBatch(params: {
   const claimBudgetMs = params.claimBudgetMs ?? DEFAULT_JOB_RUNNER_CLAIM_BUDGET_MS;
   const workerId = params.workerId ?? `cron-${randomUUID()}`;
 
+  // Jobs claimed here run inside this function: they know when it will be stopped (lib/jobs/function-time.ts).
+  return withFunctionDeadline(started, async () => {
   const recovery = await recoverExpiredLeases(pool);
   const byType: JobBatchSummary["byType"] = {};
   let claimed = 0;
@@ -107,4 +110,5 @@ export async function runJobBatch(params: {
     deadLetteredLeases: recovery.movedToDeadLetter.length,
     stoppedBy,
   };
+  });
 }
