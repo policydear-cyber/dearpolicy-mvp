@@ -65,15 +65,79 @@ function firstTitle(pages: string[]): { line: string; raw: string; amends: boole
  * (DATED_CHANGE) and prints the policy number it changes (OWN_POLICY_NUMBER), and it is not a form, an option, an illustration or a clause that applies only if shown
  * (NOT_A_CHANGE). pagesText: pages joined by "\f". */
 /** The first-title catch is off: each round of fresh documents found another quotation, brochure or form page with a
- * listed title, a policy number and a date (te-pr375-amend.ts E11, p375d.ts Q1-Q5). Off, amendment wording is main's,
- * and the change keeps only the empty-field veto and the contents fix. */
+ * listed title, a policy number and a date (te-pr375-amend.ts E11, p375d.ts Q1-Q5). Off, amendment wording is main's
+ * plus ownAmendment's closed list of whole titles, change titles with a change made, and sum-assured letters. */
 export const FIRST_TITLE_CATCH = false;
 export function amendmentWording(pagesText: string, o: { firstTitleCatch?: boolean } = {}): boolean {
   const text = String(pagesText ?? "");
-  if (AMENDS.test(text)) return true;
+  if (AMENDS.test(text) || ownAmendment(text)) return true;
   if (!(o.firstTitleCatch ?? FIRST_TITLE_CATCH) || !firstTitle(text.split("\f"))?.amends) return false;
   const flat = text.replace(/\s+/g, " ");
   return DATED_CHANGE.test(flat) && OWN_POLICY_NUMBER.test(flat) && !NOT_A_CHANGE.test(flat);
+}
+/** The whole titles only an amending document of a policy prints (a closed list; the line is the title and nothing else,
+ * a remark in brackets taken off). Each names a change already made to a policy. */
+const AMENDING_TITLE = /^(?:policy\s+)?(?:endorsement\s+(?:schedule|certificate)|rider\s+endorsement|alteration\s+(?:notice|schedule)|notice\s+of\s+(?:policy\s+)?(?:change|alteration|amendment|endorsement)s?|confirmation\s+of\s+(?:policy\s+)?(?:changes?|alterations?|amendments?)|confirmation\s+of\s+(?:the\s+)?change\s+(?:of|in)\s+(?:the\s+)?sum\s+(?:assured|insured)|amendments?\s+to\s+(?:the\s+|your\s+)?policy(?:\s+schedule)?|alterations?\s+(?:of|to)\s+(?:the\s+|your\s+)?policy)$/i;
+/** Titles an amending letter prints that a quotation, a brochure or an option page also prints: they amend only with a
+ * change the document says is made (CHANGE_MADE). */
+const CHANGE_TITLE = /^(?:changes?\s+to\s+your\s+policy|change\s+of\s+(?:the\s+)?sum\s+(?:assured|insured)|change\s+of\s+plan)$/i;
+/** A change the document says is made, in a closed shape: "we have reduced / increased / changed / amended / altered",
+ * "has been reduced", "your plan is changed to Gold", a new sum assured or premium with its figure, or a Before / After
+ * row of two figures. */
+const MONEY_AT = String.raw`(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d`;
+const CHANGE_MADE = new RegExp(String.raw`\b(?:we\s+have|has\s+been|have\s+been)\s+(?:reduced|increased|changed|amended|altered)\b|\bis\s+(?:now\s+)?(?:changed|reduced|increased)\s+to\b|\bnew\s+(?:sum\s+(?:assured|insured)|(?:annual\s+|monthly\s+|yearly\s+|rider\s+)?premium)\b[^\n]{0,20}?` + MONEY_AT, "i");
+/** A sentence, with no title needed, that says the policy's own sum assured was changed: "We have reduced your sum assured
+ * to S$500,000", "The sum assured has been reduced with effect from 1 March 2026". Never a condition ("if the sum assured
+ * has been reduced") and never a claim's. */
+const SUM_CHANGED = /\bwe\s+have\s+(?:reduced|increased)\s+(?:your|the)\s+sum\s+(?:assured|insured)\b|\b(?:your|the)\s+sum\s+(?:assured|insured)\s+(?:has|have)\s+been\s+(?:reduced|increased)\b/i;
+const CONDITION_WORDS = /\b(?:if|when|whenever|where|unless|once|after|should|any|claims?|may|will)\b/i;
+const dateOfIssue = () => new RegExp(String.raw`\b(?:date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on)\s*:?\s*` + DATE, "i");
+/** The document's first title line on its first two pages (as firstTitle reads them), sorted into an amending title, a
+ * title that amends only with a change made, another document's title, or none. */
+function ownTitle(pages: string[]): "amends" | "change" | "other" | null {
+  for (const page of pages.slice(0, 2)) {
+    const lines = page.split(/\r?\n/).filter((l) => l.trim())
+      .filter((l) => !/\.{3,}|…|\t\s*(?:p(?:age|g)\.?\s*)?\d+\s*$/i.test(l))
+      .map((l) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 25);
+    for (const l of lines) {
+      if (BODY_HEADING.test(l)) return null;
+      if (AMENDING_TITLE.test(l)) return "amends";
+      if (CHANGE_TITLE.test(l)) return "change";
+      if (/\b(?:you|we|our|us|may|must|will|shall|can|should)\b|\.$/i.test(l) || NO_VALUE.test(l)) continue;
+      if (OTHER_TITLE.test(l) || AMENDMENT_TITLE.some((re) => re.test(l))) return "other";
+    }
+  }
+  return null;
+}
+/** Whether a document says by itself that it amends its policy, beyond main's wording (AMENDS). All of:
+ *  - its first title is an amending title (AMENDING_TITLE), or a change title (CHANGE_TITLE) with a change it says is
+ *    made (CHANGE_MADE); or, with no other document's title first, a sentence saying the sum assured was changed
+ *    (SUM_CHANGED, never in a condition or a claim);
+ *  - it prints the policy number it changes (OWN_POLICY_NUMBER), or, under an amending title, its date of issue or the
+ *    date its change takes effect;
+ *  - it is not a quotation, proposal, form, option, illustration or brochure, nor a change still to be accepted
+ *    (NOT_A_CHANGE).
+ * Anything else reads as on main. */
+export function ownAmendment(pagesText: string): boolean {
+  const text = String(pagesText ?? "");
+  const pages = text.split("\f");
+  const flat = text.replace(/\s+/g, " ");
+  // "as you requested" says why a change was made; "requested effective date" is a form's.
+  if (NOT_A_CHANGE.test(flat.replace(/\b(?:as\s+(?:you\s+)?requested|at\s+your\s+request)\b/gi, " "))) return false;
+  const title = ownTitle(pages);
+  const numbered = OWN_POLICY_NUMBER.test(flat);
+  if (title === "amends") return numbered || dateOfIssue().test(flat) || DATED_CHANGE.test(flat);
+  if (!numbered) return false;
+  if (title === "change") return CHANGE_MADE.test(text) || beforeAfterRow(pages);
+  if (title === "other") return false;
+  return flat.split(/(?<=[.!?])\s+/).some((sentence) => SUM_CHANGED.test(sentence) && !CONDITION_WORDS.test(sentence));
+}
+function beforeAfterRow(pages: string[]): boolean {
+  return pages.some((page) => {
+    const lines = page.split(/\r?\n/);
+    const at = lines.findIndex((l) => /\bbefore\b[^\n]*\bafter\b/i.test(l));
+    return at >= 0 && lines.slice(at + 1).some((l) => (l.match(/(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) ?? []).length === 2);
+  });
 }
 /** Amendment evidence of a document's own: an "Endorsement No. <n>" line (n >= 1) on its first two pages, a word or
  * phrase of change ("reduced to", "previously", "was S$", "formerly", "now reads", "becomes", "supersedes", "replaces",
