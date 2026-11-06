@@ -320,6 +320,10 @@ async function main() {
     assert.equal(await contentCount(doc.id), 0);
     assert.equal((await q<{ insurer: string | null }>(`SELECT insurer FROM policies WHERE id=$1`, [doc.id])).rows[0].insurer, null);
     assert.equal(await countDeletedDocumentLeftovers(), 0, "nothing left anywhere afterwards");
+    // A document left out of a pass (the catch-up skips ones that failed in an earlier round) is not picked.
+    await q(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES ($1,$2,1,'late again')`, [accountId, doc.id]);
+    assert.equal((await scrubDeletedDocuments({ pinecone: pineconeSpy([]), leftoverWindowHours: null, skipPolicyIds: [doc.id] })).scrubbed, 0);
+    assert.equal((await scrubDeletedDocuments({ pinecone: pineconeSpy([]), leftoverWindowHours: null })).scrubbed, 1);
   });
 
   await t("the request drain and the daily job both run the scrub, so a failed cleanup is retried without anyone asking", async () => {

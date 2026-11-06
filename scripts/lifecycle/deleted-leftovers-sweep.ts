@@ -20,11 +20,16 @@ async function main() {
   const before = await countDeletedDocumentLeftovers();
   console.log(`deleted documents still holding content read from them: ${before}`);
   if (!apply) { console.log("dry run: nothing changed (add --apply to clean them)"); return; }
+  // A document that fails (or whose search passages could not be removed) is left out of later rounds, so a block of
+  // stuck ones never hides the rest; the final count still reports them.
+  const skip = new Set<string>();
   let total = 0, failed = 0, pending = 0;
   for (let round = 0; round < 1000; round++) {
-    const r = await scrubDeletedDocuments({ leftoverWindowHours: null, limit: 25 });
+    const r = await scrubDeletedDocuments({ leftoverWindowHours: null, limit: 25, skipPolicyIds: [...skip] });
     total += r.scrubbed; failed += r.failed; pending += r.searchIndexPending.length;
-    if (r.scrubbed === 0) break;
+    const stuck = [...r.failedIds, ...r.searchIndexPending];
+    stuck.forEach((id) => skip.add(id));
+    if (r.scrubbed === 0 && stuck.length === 0) break;
   }
   await purgeSoon();
   const after = await countDeletedDocumentLeftovers();

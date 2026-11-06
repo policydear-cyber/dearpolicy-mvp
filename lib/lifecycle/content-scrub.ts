@@ -109,8 +109,10 @@ export type ScrubOptions = {
   /** How far back scrubbed documents are re-checked for late writes. Default LEFTOVER_WINDOW_HOURS; null checks every
    * deleted document, whenever it was scrubbed (the one-off catch-up, scripts/lifecycle/deleted-leftovers-sweep.ts). */
   leftoverWindowHours?: number | null;
+  /** Documents to leave out of this pass (the catch-up skips ones that already failed in an earlier round). */
+  skipPolicyIds?: string[];
 };
-export type ScrubResult = { finished: number; scrubbed: number; searchIndexPending: string[]; failed: number; forgottenKeys: number };
+export type ScrubResult = { finished: number; scrubbed: number; searchIndexPending: string[]; failed: number; failedIds: string[]; forgottenKeys: number };
 
 const defaultPinecone: PineconeCleanup = { enabled: pineconeEnabled, deletePassages: deletePolicyPassages };
 const defaultTransaction = <T>(fn: (db: Db) => Promise<T>) => withServiceTransaction((client) => fn(client as unknown as Db));
@@ -169,7 +171,7 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
   const db = opts.db ?? (pool as unknown as Db);
   const transaction = opts.transaction ?? defaultTransaction;
   const pinecone = opts.pinecone ?? defaultPinecone;
-  const result: ScrubResult = { finished: 0, scrubbed: 0, searchIndexPending: [], failed: 0, forgottenKeys: 0 };
+  const result: ScrubResult = { finished: 0, scrubbed: 0, searchIndexPending: [], failed: 0, failedIds: [], forgottenKeys: 0 };
   try {
     result.finished = await finishDeletedDocuments(db, opts.policyIds, opts.deletionFinished === true);
     const tables = await existingTables(db);
@@ -182,9 +184,9 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
       `SELECT p.id::text AS id, p.account_id::text AS account_id, p.storage_key FROM policies p
         WHERE p.lifecycle_state=ANY($1::text[]) AND ($3::uuid[] IS NULL OR p.id=ANY($3::uuid[]))
-          AND (p.original_filename<>$2 OR ${leftovers})
+          AND (p.original_filename<>$2 OR ${leftovers}) AND NOT (p.id = ANY($5::uuid[]))
         ORDER BY p.updated_at LIMIT $4`,
-      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
+      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25, opts.skipPolicyIds ?? []]);
     for (const doc of due.rows) {
       if (pinecone.enabled()) {
         try { await pinecone.deletePassages({ accountId: doc.account_id, policyId: doc.id }); }
@@ -206,7 +208,7 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
         });
         result.scrubbed++;
       } catch (error) {
-        result.failed++;
+        result.failed++; result.failedIds.push(doc.id);
         console.warn("deleted document content scrub will be retried:", error instanceof Error ? error.name : "unknown");
       }
     }
