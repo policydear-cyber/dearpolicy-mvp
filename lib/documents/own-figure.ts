@@ -28,11 +28,18 @@ const NAMED_AT = new RegExp("^" + NAMED);
 /** A name that ends as this policy's own part ("the Hospital Cash Rider", "SilverCare Rider", "Family Plan") is not another
  * payer (Critic r377 F1, F2). */
 const OWN_PART = /\b(?:riders?|plans?|benefits?|supplements?|covers?|polic(?:y|ies))$/i;
-const namedAfter = (text: string, lead: RegExp) => [...text.matchAll(lead)].some((m) => {
+/** Whether a name is one of the document's own products ("SilverYears Care" on SilverYears Care's own statement). */
+const isOwn = (name: string, own: string[]) => { const n = name.replace(/^(?:the|your)\s+/i, "").toLowerCase(); return own.some((o) => { const w = o.trim().toLowerCase(); return !!w && (n.startsWith(w) || w.startsWith(n)); }); };
+const namedAfter = (text: string, lead: RegExp, own: string[] = []) => [...text.matchAll(lead)].some((m) => {
   const rest = m[m.length - 1];
   const name = NAMED_AT.exec(rest)?.[0].trim();
-  return (!!name && !OWN_PART.test(name)) || /^(?:(?:the|your)\s+)?(?:[\w-]+\s+){0,2}scheme\b/i.test(rest);
+  return (!!name && !OWN_PART.test(name) && !isOwn(name, own)) || /^(?:(?:the|your)\s+)?(?:[\w-]+\s+){0,2}scheme\b/i.test(rest);
 });
+/** A scheme sentence with no "works with" lead is about another payer only when it is not the document's own: never
+ * "Your <Name>, the national ... scheme, which pays", never "pays you", never a sentence naming the document's own
+ * product (TE r377 round 3: the person's own national scheme statement). */
+const otherScheme = (sentence: string, own: string[]) => SCHEME.test(sentence) && !/^\s*(?:\(?\w\)?\s*)?your\b/i.test(sentence) && !/\bpays?\s+you\b/i.test(sentence)
+  && !own.some((o) => o.trim() && sentence.toLowerCase().includes(o.trim().toLowerCase()));
 const WITH_LEAD = /\b(?:works?\s+(?:together\s+)?with|on\s+top\s+of|alongside|in\s+addition\s+to)\s+(.*)$/gi;
 const PAYS_NOW = /\b(?:which|that)\s+(?:currently\s+|now\s+|also\s+)?pays\b[^.;]{0,30}$|\b(?:currently|now)\s+pays\b[^.;]{0,30}$/i;
 const LESS_LEAD = /\b(?:less|minus|net\s+of|after\s+deducting|deducting|reduced\s+by|offset\s+(?:by|against))\b[^.;]{0,40}\b(?:payouts?|payments?|benefits?|amounts?)\s+(?:from|under|paid\s+by)\s+(.*)$/gi;
@@ -88,10 +95,11 @@ function wordsBefore(line: string, start: number) {
  * CarePledge Life (currently S$662)", "Total monthly payout with CarePledge Life: S$1,862"); the sentence for an example
  * or a projection ("Example: Ahmad ... receives S$717", "rises by 2% each year, to S$806"). `premium`: whether a premium
  * label makes it not cover (intake's cover amounts and the table's sums insured; not benefit rows). */
-export function figureContext(line: string, start: number, _end: number, o: { premium?: boolean } = {}): FigureContext | null {
+export function figureContext(line: string, start: number, _end: number, o: { premium?: boolean; own?: string[] } = {}): FigureContext | null {
   const b = wordsBefore(line, start);
-  if ((PAYS_NOW.test(b.clause) && (namedAfter(b.sentence, WITH_LEAD) || SCHEME.test(b.sentence))) || namedAfter(b.sentence, LESS_LEAD)) return "other_payer";
-  if (namedAfter(b.clause, COMBINED_LEAD)) return "combined_total";
+  const own = (o.own ?? []).filter((x) => x && x.trim().length >= 3);
+  if ((PAYS_NOW.test(b.clause) && (namedAfter(b.sentence, WITH_LEAD, own) || otherScheme(wholeSentence(line, start), own))) || namedAfter(b.sentence, LESS_LEAD, own)) return "other_payer";
+  if (namedAfter(b.clause, COMBINED_LEAD, own)) return "combined_total";
   if (EXAMPLE.test(sentenceStart(line, start))) return "example";
   if (PROJECTION.test(b.sentence)) return "projection";
   if (WILL_BE.test(b.sentence) && LATER.test(wholeSentence(line, start))) return "projection";
@@ -117,7 +125,7 @@ function amountSpans(text: string, amount: number): { line: string; start: numbe
 
 /** Why an amount is not the person's own cover on this text: it is printed, and every place that prints it is one of the
  * shapes above. Null when it is printed somewhere as it may be cover, or not printed at all (other checks decide that). */
-export function amountOnlyInContext(text: string, amount: number, o: { premium?: boolean } = {}): FigureContext | null {
+export function amountOnlyInContext(text: string, amount: number, o: { premium?: boolean; own?: string[] } = {}): FigureContext | null {
   const spans = amountSpans(text, amount);
   if (!spans.length) return null;
   let first: FigureContext | null = null;
@@ -129,27 +137,40 @@ export function amountOnlyInContext(text: string, amount: number, o: { premium?:
   return first;
 }
 
-/** A page that says it is a sample or specimen in a banner or heading line, a closed list: "SAMPLE STATEMENT", "Specimen
- * policy schedule", "SPECIMEN ONLY", "SPECIMEN - NOT VALID FOR CLAIMS", "Sample only - this is not an actual policy",
- * "DUMMY", "FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", or "This is a sample". A sentence that mentions
- * a sample ("We enclose a sample copy", "A specimen policy contract is available at ...") is not one (Critic r377 C2, TE
- * r377), nor a disclaimer such as "not a real policy" (made-up test documents print it). */
-/** One segment of a banner line: a closed list of markers, at its start. */
-const BANNER_SEGMENT = /^(?:specimen\b(?!\s+signature)|dummy\b|mock[\s-]?up\b|void\b|test\s+document\b|for\s+illustration(?:\s+purposes)?\s+only\b|(?:sample|example)\s+(?:only\b|copy\b|(?:[a-z]+\s+){0,2}(?:schedule|statement|certificate|policy|document|contract|letter|notice|card)\b))/i;
-/** A banner or heading line that marks a page as a sample: a short whole line with no figure, one of whose parts (split at
- * dashes, colons or bars) opens with a marker ("SAMPLE POLICY SCHEDULE", "Specimen Certificate of Insurance", "VOID -
- * SPECIMEN", "TEST DOCUMENT - NOT FOR ISSUE", "EXAMPLE ONLY", "MOCK-UP - NOT A REAL POLICY", "*** Sample schedule for
- * training ***", "Sample - not valid for claims"), or a line in capitals that holds SPECIMEN, DUMMY or MOCK-UP ("POLICY
- * SCHEDULE (SPECIMEN)"). */
+/** A page that says it is a sample or specimen. TE r377 round 3: a banner counts only in the page's heading block (its
+ * first five lines) or its footer (its last three), as a whole line that names the document itself: SAMPLE, SPECIMEN,
+ * DUMMY or MOCK-UP, alone or with document words or "only" ("SAMPLE POLICY SCHEDULE", "Specimen Certificate of
+ * Insurance", "POLICY SCHEDULE (SPECIMEN)", "*** Sample schedule for training ***"), and at most a disclaimer beside it
+ * ("SPECIMEN - NOT VALID FOR CLAIMS", "Sample only - this is not an actual policy", "VOID - SPECIMEN"). Never a body
+ * heading or note, never another noun after the marker ("Specimen signature", "SPECIMEN COLLECTION", "Sample statement of
+ * account enclosed"), never "Void if altered" or "Example only". */
+const BANNER_MARK = /^(?:sample|specimen|dummy|mock-?up)$/i;
+const BANNER_WORD = /^(?:policy|schedule|statement|certificate|of|insurance|document|contract|card|letter|notice|copy|only|coverage|cover|summary|for|training|void|a|an|the|this|illustration|illustrative|purposes|is)$/i;
+const DISCLAIMER = /\bnot\s+(?:valid|for|a\s+real|an\s+actual|to\s+be\s+used|an?\s+(?:policy|contract))\b/i;
 function bannerLine(line: string): boolean {
   const t = line.trim().replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, "");
   if (!t || /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d|\d{3,}/.test(t) || t.split(/\s+/).length > 10) return false;
-  const parts = t.split(/\s*[-–:|]\s+|\s+[-–:|]\s*/).map((x) => x.replace(/^[\s()[\]*]+|[\s()[\]*]+$/g, "")).filter(Boolean);
-  if (parts.some((x) => BANNER_SEGMENT.test(x))) return true;
-  if (parts.length > 1 && /^(?:sample|example)$/i.test(parts[0]) && parts.slice(1).some((x) => /\bnot\s+(?:valid|for|a\s+real|an\s+actual)\b/i.test(x))) return true;
-  return t === t.toUpperCase() && /\b(?:SPECIMEN|DUMMY|MOCK-?UP)\b/.test(t);
+  const parts = t.split(/\s*[-–:|]\s+|\s+[-–:|]\s*|\.\s+|[()[\]]/).map((x) => x.replace(/^[\s*.,!]+|[\s*.,!]+$/g, "")).filter(Boolean);
+  let marked = false;
+  for (const part of parts) {
+    const words = part.split(/\s+/);
+    if (words.some((w) => BANNER_MARK.test(w)) && words.every((w) => BANNER_MARK.test(w) || BANNER_WORD.test(w))) { marked = true; continue; }
+    if (DISCLAIMER.test(part) || words.every((w) => BANNER_WORD.test(w))) continue;
+    return false;
+  }
+  return marked;
 }
-export function specimenPage(text: string) { return /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/i.test(text) || text.split("\n").some(bannerLine); }
+export function specimenPage(text: string) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  // The heading block ends at the first particulars or figure line ("Life Assured: ...", "S$50"); the footer starts after
+  // the last figure line. A lone "Sample" between a label and its figure is a table cell, not a banner (Critic G4).
+  const body = (l: string) => /\S\s*:\s*\S|(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l);
+  const firstBody = lines.findIndex(body), lastMoney = lines.map((l) => /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l)).lastIndexOf(true);
+  const head = lines.slice(0, Math.min(5, firstBody < 0 ? lines.length : firstBody));
+  const foot = lines.slice(Math.max(head.length, lastMoney + 1, lines.length - 3));
+  const edge = [...head, ...foot];
+  return /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)(?:\s+(?:policy|schedule|statement|certificate|document|copy|contract))?\s*(?:only\b|[.!]|$)/im.test(text) || edge.some(bannerLine);
+}
 
 /** Lower-case words that are part of a name ("binti", "a/l", "van", "de"). */
 const NAME_PARTICLE = /^(?:bin|binti|binte|bte|bt|b\.|bint|ibn|d\/o|s\/o|a\/l|a\/p|ap|van|von|der|den|de|da|das|do|dos|du|del|della|di|la|le|al|el|y|e)$/i;
@@ -158,11 +179,15 @@ const HONORIFIC = /^(?:mr|mrs|ms|mdm|miss|dr|madam|mister|mx)\.?$/i;
 const ID_TOKEN = /^(?:[stfgm]\d{4,}[a-z]?|x{3,}\d*[a-z]?|\*{2,}\d*[a-z]?|\(.*\)|nric|fin|id|passport)$/i;
 /** A label that never introduces the page's own person ("Example:", "Dear", "Meet"). */
 // Word edges by letters of any script: "hi" is no word of "hiểm".
-const NOT_A_PERSON_LABEL = /(?<!\p{L})(?:example|e\.g|sample|specimen|illustration|dear|meet|hi|hello|story|case\s+study|testimonial)(?!\p{L})/iu;
+const NOT_A_PERSON_LABEL = /(?<!\p{L})(?:example|e\.g|sample|specimen|illustration|illustrative|hypothetical|dear|meet|hi|hello|story|case\s+study|testimonial)(?!\p{L})/iu;
 /** Whether the page prints this person as its particulars: a cell of the page (a line, or a part of one set off by a tab, a
  * colon or a run of spaces) that is the person's name and nothing else but an honorific or an identity number, and whose
  * label (the cell before it on its line) is not an example's or a greeting's. A name only inside a sentence ("Meet Mdm
  * Rosalind Teo, 58", "Dear Mr Daniel Ong", "Example: Ahmad bin Yusof claims in 2030") is not. */
+/** "Traveller" and "Covered member" also head a brochure's example ("Traveller: Rosalind Teo, 34"): they introduce the
+ * insured only on a page that prints its own policy or certificate number (TE and Critic r377 round 3). */
+const WEAK_LABEL = /^(?:travell?ers?|covered\s+members?)(?:'?s|\(s\))?(?:\s+names?)?$/i;
+const OWN_NUMBER = /\b(?:policy|certificate|cert\.?|member(?:ship)?)\s*(?:no\.?|number|#)\s*[:.]?\s*[A-Z]{0,6}[-\/]?\d[\w\/-]{3,}/i;
 export function personAsParticulars(person: string, pageText: string): boolean {
   const want = normalizePersonName(person).split(" ").filter((w) => w.length > 0 && !HONORIFIC.test(w));
   if (!want.length) return false;
@@ -178,7 +203,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
     const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
     if (!NOT_A_PERSON_LABEL.test(raw) && capitals.some((run) => { const n = normalizePersonName(run).split(" "); return want.every((w) => n.includes(w)) && n.length <= want.length + 2; })) return true;
-    if (afterInsuredLabel(raw, want, tableish)) return true;
+    if (afterInsuredLabel(raw, want, tableish, OWN_NUMBER.test(pageText))) return true;
     // Cells: parts of the line set off by a tab, a colon, a bar or a run of spaces, and names joined by "and" or "&"; a
     // bracket ("(NRIC S1234567A)", "(the Life Assured)") and an age, date of birth or identity number after a comma are
     // not part of a name.
@@ -214,12 +239,13 @@ const TRAIL_TOKEN = /^(?:\d[\d\/.,-]*|[stfg]\d{7}[a-z]|[stfg]\*+\d*[a-z]?|s\$[\d
 /** The person printed after an insured label (or a row number, or alone), with only particulars after the name on its line
  * (Critic r377 A1-A23: "Name of Life Assured Lim Wei Jie", "Insured Child: Tan Xiao Ming, 5 years", "1 Lee Mei Ling
  * Spouse S$100,000", "This is to certify that Lim Wei Jie is insured"). */
-function afterInsuredLabel(raw: string, want: string[], tableish: boolean): boolean {
+function afterInsuredLabel(raw: string, want: string[], tableish: boolean, numbered: boolean): boolean {
+  const labelOk = (l: string) => INSURED_LABEL.test(l) && (numbered || !WEAK_LABEL.test(l));
   if (NOT_A_PERSON_LABEL.test(raw)) return false;
   // A list after an insured label ("Insured persons: Tan Ah Kow, Lee Mei Ling and Tan Xiao Ming", "Insured: Lim Wei Jie,
   // born 3 Mar 1980", "Insured: Lee Mei Ling, Female, 45"): each item is a name with only particulars, or particulars.
   const listed = /^\s*([^:\t]{2,50}?)\s*(?::|\t|\s[-–]\s)\s*(.+)$/.exec(raw);
-  if (listed && listed[1].trim() && !/^\d/.test(listed[1].trim()) && INSURED_LABEL.test(listed[1].trim())
+  if (listed && listed[1].trim() && !/^\d/.test(listed[1].trim()) && labelOk(listed[1].trim())
       && listed[2].replace(/\([^)]*\)/g, " ").split(/\s*(?:,|;|&|\band\b|\t)\s*/).some((item) => nameWithParticulars(item, want))) return true;
   const tokens = [...raw.matchAll(/[^\s,;:()]+/g)].map((m) => ({ w: m[0], start: m.index!, end: m.index! + m[0].length }));
   for (let i = 0; i < tokens.length; i++) {
@@ -231,7 +257,7 @@ function afterInsuredLabel(raw: string, want: string[], tableish: boolean): bool
       const before = raw.slice(0, tokens[i].start).replace(/(?:\b(?:mr|mrs|ms|mdm|miss|dr|madam)\.?\s*)+$/i, "").replace(/[\s:\-–\t|]+$/, "").trim();
       // A certifying sentence names its insured, whatever follows ("We hereby certify that Lim Wei Jie, born ..., is insured").
       if (/\bcertif(?:y|ies|ied)\b[^.]{0,30}\bthat$/i.test(before)) return true;
-      if (!INSURED_LABEL.test(before)) continue;
+      if (!labelOk(before)) continue;
       // No label, or a row number: only on a table line (cell breaks) or a page with a name column (Critic r377 E2, E3).
       if ((!before || /^\d/.test(before)) && !tableish && !/\t|\s{2,}|\|/.test(raw)) continue;
       const after = raw.slice(tokens[i + len - 1].end);

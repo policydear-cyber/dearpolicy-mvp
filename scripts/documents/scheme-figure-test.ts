@@ -123,7 +123,7 @@ const A2: [string, string, boolean][] = [
   ["Meet Mdm Lily Seah, 61", "Lily Seah", false], ["Example: Benjamin Foo, born 1990, claims.", "Benjamin Foo", false], ["Ken Lau, 38, chose S$900 a month.", "Ken Lau", false], ["Dear Mr Victor Ho", "Victor Ho", false],
 ];
 for (const [t, w, want] of A2) check(`TE r377 particulars: ${w} in "${t}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
-const B2: [string, boolean][] = [["SPECIMEN ONLY", true], ["SPECIMEN - NOT VALID FOR CLAIMS", true], ["Sample only - this is not an actual policy", true], ["FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", true], ["DUMMY", true], ["*** SPECIMEN ***", true],
+const B2: [string, boolean][] = [["SPECIMEN ONLY", true], ["SPECIMEN - NOT VALID FOR CLAIMS", true], ["Sample only - this is not an actual policy", true], ["FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", false], ["DUMMY", true], ["*** SPECIMEN ***", true],
   ["A specimen policy contract is available at www.example.com", false], ["We enclose a sample copy of the wording.", false], ["Sample collection fee S$50", false], ["Sample tests: up to S$500", false], ["SYNTHETIC TEST DOCUMENT - fictional insurer and persons - not a real policy", false], ["Specimen signature", false]];
 for (const [t, want] of B2) check(`TE r377 sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
 const D2: [string, number, string | null][] = [["Rider premium waiver sum assured: S$100,000", 100000, null], ["Death benefit (including return of premiums): S$250,000", 250000, null], ["Accident rider, which pays S$50,000 on accidental death", 50000, null],
@@ -138,14 +138,51 @@ const D3: [string, number, string | null][] = [["This plan works with the Hospit
   ["We pay the benefit less any payout from MediCare Rider (currently S$500).", 500, null], ["Waiver of premium: S$100,000", 100000, null], ["Waiver of Premium Benefit S$50,000", 50000, null],
   ["Return of premium on death: S$12,000", 12000, null], ["This plan works with HealthBase, which pays up to S$120,000 a year.", 120000, "other_payer"]];
 for (const [t, n, want] of D3) check(`r377b context of ${n} in "${t}"`, () => assert.equal(amountOnlyInContext(t, n, { premium: true }), want));
-const B3: [string, boolean][] = [["SAMPLE POLICY SCHEDULE", true], ["Specimen Certificate of Insurance", true], ["MOCK-UP - NOT A REAL POLICY", true], ["EXAMPLE ONLY", true], ["VOID - SPECIMEN", true],
-  ["TEST DOCUMENT - NOT FOR ISSUE", true], ["*** Sample schedule for training ***", true], ["Specimen Policy Schedule", true],
-  ["Sample - Blood test: up to S$500", false], ["Sample Collection Benefit", false], ["Sample", false], ["Example: a 40-year-old receives S$700 a month.", false]];
+const B3: [string, boolean][] = [["SAMPLE POLICY SCHEDULE", true], ["Specimen Certificate of Insurance", true], ["MOCK-UP - NOT A REAL POLICY", true], ["EXAMPLE ONLY", false], ["VOID - SPECIMEN", true],
+  ["TEST DOCUMENT - NOT FOR ISSUE", false], ["*** Sample schedule for training ***", true], ["Specimen Policy Schedule", true],
+  ["Sample - Blood test: up to S$500", false], ["Sample Collection Benefit", false], ["Sample", true], ["Example: a 40-year-old receives S$700 a month.", false]];
 for (const [t, want] of B3) check(`r377b sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
 check("r377b a lab-sample benefit line keeps the schedule real", () => assert.equal(specimenPage("Policy Schedule\nLife assured: OWEN TAY\nSample - Blood test: up to S$500\nSum assured S$100,000"), false));
 const A3: [string, string, boolean][] = [["Covered person - Lim Wei Jie", "Lim Wei Jie", true], ["Covered persons: Tan Ah Kow, Lee Mei Ling", "Lee Mei Ling", true], ["Insured traveller: Lee Mei Ling", "Lee Mei Ling", true],
-  ["Traveller(s): Tan Ah Kow, Lee Mei Ling", "Tan Ah Kow", true], ["Covered member: Tan Xiao Ming, 5", "Tan Xiao Ming", true]];
+  ["Certificate No: TRV-204411\nTraveller(s): Tan Ah Kow, Lee Mei Ling", "Tan Ah Kow", true], ["Policy number: GH-55012\nCovered member: Tan Xiao Ming, 5", "Tan Xiao Ming", true]];
 for (const [t, w, want] of A3) check(`r377b particulars: ${w} in "${t}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
+
+// Critic r377c: notes, conditions and signature stamps on real schedules are no banner; an "illustrative" person is no one's.
+const B4: [string, boolean][] = [["Void if altered", false], ["VOID IF NOT SIGNED", false], ["SPECIMEN SIGNATURE OF AUTHORISED OFFICER", false], ["Specimen signature: ____", false],
+  ["Example only - see policy wording for full terms", false], ["Example: how a claim is paid", false], ["Previous policy: VOID", false], ["Mock-up of your member card below", false],
+  ["Sample statement of account enclosed", false], ["VOID", false], ["DUMMY", true]];
+for (const [t, want] of B4) check(`r377c banner "${t}" on a real schedule: ${want}`, () => assert.equal(specimenPage("POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\n" + t), want));
+check("r377c an illustrative covered person is no one's", () => assert.equal(personAsParticulars("Rosalind Teo", "Covered person: Rosalind Teo (illustrative)"), false));
+check("r377c a covered-persons table keeps its row", () => assert.equal(personAsParticulars("Lee Mei Ling", "Covered Persons\tRelationship\nLee Mei Ling\tSpouse"), true));
+
+// TE r377 round 3: a banner names the document itself and sits in the heading block or footer; the person's own scheme is
+// never "another payer"; "Traveller" and "Covered member" count only on a page with its own policy or certificate number.
+const REAL = "POLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\nNotes\nPlease keep this schedule with your policy.\nYour cover starts on the date shown.\n";
+const B5: [string, string, boolean][] = [
+  ["EXAMPLE ONLY above a worked example in the notes", REAL + "EXAMPLE ONLY\nIf you are in hospital for 4 days we pay S$400.\nClaims must be made within 90 days.\nCall us any time.\nThank you.", false],
+  ["VOID IF ALTERED footer", REAL + "VOID IF ALTERED", false],
+  ["SPECIMEN COLLECTION heading on a health schedule", "HEALTH SCHEDULE\nPolicy No. HS-22019\nInsured: Lim Wei Jie\nSPECIMEN COLLECTION\nUp to S$50 a visit", false],
+  ["a body line SAMPLE far from the heading", REAL + "SAMPLE\nLab tests are covered.\nOne more line.\nAnother line.\nLast line.", false],
+  ["a lone SAMPLE under the title", "POLICY SCHEDULE\nSAMPLE\nPolicy No. TL-000000\nLife Assured: Tan Ah Kow\nSum Assured S$500,000", true],
+  ["SPECIMEN banner in the footer", REAL + "SPECIMEN - NOT VALID FOR CLAIMS", true],
+  ["POLICY SCHEDULE (SPECIMEN) title", "POLICY SCHEDULE (SPECIMEN)\nLife Assured: Tan Ah Kow\nSum Assured S$500,000", true],
+  ["VOID - SPECIMEN title", "VOID - SPECIMEN\nPolicy Schedule\nLife Assured: Tan Ah Kow", true],
+  ["a lone Sample cell between a label and its figure", "Life Assured: Lim Wei Jie\nSample\nS$50", false],
+];
+for (const [n, t, want] of B5) check(`r377 round 3 sample page: ${n}: ${want}`, () => assert.equal(specimenPage(t), want));
+const D4: [string, number, string[], string | null][] = [
+  ["Your SilverYears Care, the national long-term care scheme, which pays up to S$1,200 a month.", 1200, [], null],
+  ["SilverYears Care, the national long-term care scheme, currently pays you S$640 a month.", 640, [], null],
+  ["SilverYears Care, the national long-term care scheme, which currently pays S$640 a month.", 640, ["SilverYears Care"], null],
+  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, ["SilverYears Care"], null],
+  ["This plan works with SilverYears Care, which currently pays S$640 a month.", 640, ["GoldenCare Top-Up"], "other_payer"],
+  ["This plan works with HealthBase, the public hospital scheme, which pays up to S$120,000 a year.", 120000, ["Brightwater Hospital Prime"], "other_payer"]];
+for (const [t, n, own, want] of D4) check(`r377 round 3 own scheme: ${n} in "${t}" (own ${own.join(",") || "none"})`, () => assert.equal(amountOnlyInContext(t, n, { premium: true, own }), want));
+const A4: [string, string, boolean][] = [["How it works\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", "Rosalind Teo", false],
+  ["Family plan explained\nCovered member - Rosalind Teo", "Rosalind Teo", false], ["Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo, 34", "Rosalind Teo", true],
+  ["Group Health\nPolicy No: GH-55012\nCovered member - Rosalind Teo", "Rosalind Teo", true]];
+for (const [t, w, want] of A4) check(`r377 round 3 weak label: ${w} in "${t.split("\n")[0]}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
+check("table: the person's own scheme statement keeps its payout (round 3)", () => assert.deepEqual(covers(reading("Elder Care Fund Board\nSilverYears Care\nStatement of Coverage\nName of insured: NADIA BINTE HASSAN\nPolicy number: SY-40917733\nYour SilverYears Care, the national long-term care scheme, which pays S$640 a month if severely disabled.", "NADIA BINTE HASSAN", "SilverYears Care", 640, "which pays S$640 a month if severely disabled")), [["NADIA BINTE HASSAN", 640]]));
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

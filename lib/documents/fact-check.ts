@@ -369,7 +369,8 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const hint = person.relationshipHint && hintNearName(pages, person.name, person.relationshipHint) ? person.relationshipHint : null;
     const coverages = person.coverages.map((c) => checkCoverage({ ...c,
       productName: c.productName && namePrinted(fullText, c.productName) ? c.productName : null,
-      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText));
+      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText,
+      [c.productName, raw.productName].filter((n): n is string => !!n && namePrinted(fullText, n))));
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
   }
@@ -545,7 +546,7 @@ function hintNearName(pages: Page[], name: string, hint: string) {
  * page, and the amount is printed as money in the evidence (or on the line
  * that carries it). Anything less is kept as unverified, which the chat never
  * states as a figure. */
-function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>): C {
+function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, own: string[] = []): C {
   const text = coverage.sourcePage != null ? pageText.get(coverage.sourcePage) ?? "" : "";
   const evidence = String(coverage.evidenceText ?? "");
   let ok = !!text && evidence.trim().length >= 3 && !looksLikeInjectedInstruction(evidence) && personPrinted(text, person);
@@ -561,7 +562,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
   // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
   if (coverage.amount != null && text) {
-    const why = specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true });
+    const why = specimenPage(text) ? "a sample page" : amountOnlyInContext(text, Number(coverage.amount), { premium: true, own });
     if (why) return { ...coverage, amount: null, notes: [notes, "Not shown as cover: the page prints this figure only as " + (why === "a sample page" ? why : figureContextWords(why)) + "."].filter(Boolean).join(" · "), evidenceVerified: false };
   }
   // A sum on a page that says its sum insured is not what is paid (a bonus base, lib/documents/notional-sum) is kept as a

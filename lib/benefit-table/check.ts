@@ -700,7 +700,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     let sumInsured = num(c.sumInsured);
     // A sum its page prints only as what another scheme pays, a total with another plan, an example, a projection or a
     // premium is not this cover's sum: the cover is kept without it.
-    const sumWhy = sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
+    const sumWhy = sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true, own: [product, out.product ?? ""] }) : null;
     if (sumWhy) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} is printed only as ${figureContextWords(sumWhy)}; kept the cover without it` }); sumInsured = null; }
     if (sumInsured != null && !printedIn(source, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
     let premium = num(c.premium);
@@ -810,7 +810,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     // A figure its quote prints only as what another scheme or plan pays, a total with another plan, an example or a
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
-    const valueWhy = value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value) : null;
+    const valueWhy = value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { own: [out.product ?? ""] }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
