@@ -464,9 +464,15 @@ export const CELLS_THEN_LINE_BINDING=false;
  *    with CELLS_THEN_LINE_BINDING, the explaining line right below a row of cells alone, with another row of cells alone
  *    (or the row itself, or a benefit-group title then a row) next below it.
  * No other page is read. Known limit: two tables printed one under the other with nothing between them and the second's
- * header lost read as one table. */
+ * header lost read as one table.
+ * titled: also lets title lines sit between the header and the row (TITLED_LINE), as a plan table prints its benefit
+ * groups under one header ("Section 1 Medical", "Delays and cancellations", "We pay for:"): a line with no amount and
+ * no run of cells, that is no other header (of any width), no label heading alone, no sub-heading caption, no "Part"
+ * or "Table" line, no line of two or more non-amount cells, no line naming one of the header's plans and no line
+ * repeating the start of the row's own name. A row of the same width between them must not be a
+ * premium line. Live 6 Nov: requiring every such title to be on GROUP_TITLE dropped 7 travel rows' figures. */
 export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:{run:string;name:string},
-  o:{cellsThenLine?:boolean}={}):{at:number;cells:string[]}|null{
+  o:{cellsThenLine?:boolean;titled?:boolean}={}):{at:number;cells:string[]}|null{
   const cellsThenLine=o.cellsThenLine??CELLS_THEN_LINE_BINDING;
   const want=headingKey(column);
   if(pageText==null||!want||!row.name)return null;
@@ -478,11 +484,14 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   if(own.length!==1)return null;
   const ownText=lines[own[0]].text;
   const wide=ownText.match(WIDE_ROW)?.[0];
-  const cells=(wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[];
-  const n=cells.length;
+  let cells:string[]=[...((wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[])];
+  let n=cells.length;
   if(n<2)return null;
-  let h=-1;
-  for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,n)){h=i;break;}
+  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width))return i;return -1;};
+  let h=findHeader(n);
+  // A dash printed between the row's name and its cells ("Trip curtailment  -  S$500  S$1,000") is a separator, not a
+  // plan's cell, when no header of the wider count is above it and one of the narrower count is (TE r6 W8).
+  if(h<0&&n>2&&/^[-–—]$/.test(cells[0]??"")){const narrower=findHeader(n-1);if(narrower>=0){h=narrower;cells=cells.slice(1);n-=1;}}
   if(h<0)return null;
   const plans=headerPlans(lines[h].raw,n)!;
   const isRow=(i:number)=>i===own[0]||cellCount(lines[i].text)===n;
@@ -495,7 +504,9 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   let rowSeen=false;
   for(let k=0;k<body.length-1;k++){
     const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
+    if(o.titled&&i!==own[0]&&cellCount(text)===n&&PREMIUM_LINE.test(text))return null;
     if(isRow(i)){rowSeen=true;continue;}
+    if(o.titled&&titledLine(lines[i].raw,plans,row.name))continue;
     if(wraps.has(i))continue;
     if(!rowSeen&&body.slice(0,k).every(j=>TABLE_SUBHEADING.test(lines[j].text))&&TABLE_SUBHEADING.test(text))continue;
     if(GROUP_TITLE.test(text)&&isRow(next))continue;
@@ -506,12 +517,29 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   const at=placeIn(plans,want);
   return at==null?null:{at,cells};
 }
+/** A premium line printed as a row of cells ("Premium\tS$38\tS$52\tS$71"): never a benefit row of the plan table. */
+const PREMIUM_LINE=/^(?:(?:annual|single[- ]trip|total|your)\s+)?(?:premiums?|prices?|costs? of cover)\b/i;
+/** A title line inside one plan table (rowHeaderIndex titled): no amount, no run of cells, no other header of any width,
+ * no label heading alone, no sub-heading caption, no "Part"/"Table" line, and not two or more cells without amounts. */
+function titledLine(raw:string,plans:string[],rowName:string):boolean{
+  const text=spaced(raw);
+  // A line naming one of the header's plans, or repeating the start of the row's own name, is no group title.
+  const words=` ${labelKey(text).replace(/[^a-z0-9]+/g," ")} `;
+  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  if(rowName.toLowerCase().startsWith(text.toLowerCase().replace(/:$/,"")))return false;
+  if(!text||cellCount(text)>0||PRINTS_AMOUNT.test(text.replace(/\((?:s\$|us\$|\$|sgd|usd)\)/gi," ")))return false;
+  if(raw.split(/\t|\s{2,}/).map(c=>c.trim()).filter(Boolean).length>=2)return false;
+  for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  const key=labelKey(text.replace(/:$/,""));
+  if(LABEL_HEADING.test(key)||TABLE_SUBHEADING.test(text)||/^(?:part|table)\b/i.test(text))return false;
+  return true;
+}
 /** A price printed after a plan's name in its heading cell ("Standard S$38", "Plus SGD 52.00"): letters, then one amount. */
-const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?$/i;
-/** pageText: the text of the row's page. A reading's figure is taken only when it is the cell at its column's place in
- * the plan header nearest above the row's own line (rowHeaderIndex): a reading that names one plan but gives another
- * plan's cell gives none (TE pr373 W1). Without the page's text, or with no such header on the page, none: the readings
- * never place a plan. */
+const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:\(\s*)?(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?(?:\s*\))?$/i;
+/** pageText: the text of the row's page. A reading's figure is taken only when it is one of the row's own cells and the
+ * cell at its column's place in the plan header nearest above the row's own line (rowHeaderIndex): a reading that names
+ * one plan but gives another plan's cell gives none (TE pr373 W1). Title lines may sit between that header and the row
+ * (rowHeaderIndex titled). Without the page's text, or with no such header on the page, none. */
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
   o:{runIsUnique?:boolean;pageText?:string|null}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
@@ -525,6 +553,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
   const code=codes.size===1?[...codes][0]:null;
   if(!code)return null;
+  const cells=money.map(cellAmount);
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
   // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
   // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
@@ -550,9 +579,9 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
     // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
-    const placed=column?rowHeaderIndex(o.pageText,column,{run,name}):null;
+    const placed=column?rowHeaderIndex(o.pageText,column,{run,name})??rowHeaderIndex(o.pageText,column,{run,name},{titled:true}):null;
     const own=placed==null?null:placed.cells[placed.at];
-    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
+    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";
   }));
   if(picks.size!==1||picks.has("none"))return null;
