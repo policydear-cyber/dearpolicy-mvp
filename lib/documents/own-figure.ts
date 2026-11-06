@@ -93,15 +93,19 @@ export function amountOnlyInContext(text: string, amount: number, o: { premium?:
   return first;
 }
 
-/** A page that says it is a sample or specimen ("SAMPLE STATEMENT", "Specimen policy schedule", "This is a sample"). */
-const SPECIMEN = /\b(?:sample|specimen|dummy)\s+(?:statement|schedule|certificate|policy|letter|document|copy|notice|card)\b|^\s*(?:sample|specimen)\s*$|\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b|\bnot\s+(?:a\s+real|an\s+actual|your\s+(?:own|actual))\s+(?:policy|statement|schedule|certificate)\b/im;
+/** A page that says it is a sample or specimen ("SAMPLE STATEMENT", "Specimen policy schedule", "This is a sample"). Only
+ * the words sample, specimen and dummy: a disclaimer such as "not a real policy" is not one (made-up test documents print it). */
+const SPECIMEN = /\b(?:sample|specimen|dummy)\s+(?:statement|schedule|certificate|policy|letter|document|copy|notice|card)\b|^\s*(?:sample|specimen)\s*$|\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)\b/im;
 export function specimenPage(text: string) { return SPECIMEN.test(text); }
 
+/** Lower-case words that are part of a name ("binti", "a/l", "van", "de"). */
+const NAME_PARTICLE = /^(?:bin|binti|binte|bte|bt|b\.|bint|ibn|d\/o|s\/o|a\/l|a\/p|ap|van|von|der|den|de|da|das|do|dos|du|del|della|di|la|le|al|el|y|e)$/i;
 const HONORIFIC = /^(?:mr|mrs|ms|mdm|miss|dr|madam|mister|mx)\.?$/i;
 /** Words that may sit in a name cell without being part of the name: an identity number or a date of birth label. */
 const ID_TOKEN = /^(?:[stfgm]\d{4,}[a-z]?|x{3,}\d*[a-z]?|\*{2,}\d*[a-z]?|\(.*\)|nric|fin|id|passport)$/i;
 /** A label that never introduces the page's own person ("Example:", "Dear", "Meet"). */
-const NOT_A_PERSON_LABEL = /\b(?:example|e\.g|sample|specimen|illustration|dear|meet|hi|hello|story|case\s+study|testimonial)\b/i;
+// Word edges by letters of any script: "hi" is no word of "hiểm".
+const NOT_A_PERSON_LABEL = /(?<!\p{L})(?:example|e\.g|sample|specimen|illustration|dear|meet|hi|hello|story|case\s+study|testimonial)(?!\p{L})/iu;
 /** Whether the page prints this person as its particulars: a cell of the page (a line, or a part of one set off by a tab, a
  * colon or a run of spaces) that is the person's name and nothing else but an honorific or an identity number, and whose
  * label (the cell before it on its line) is not an example's or a greeting's. A name only inside a sentence ("Meet Mdm
@@ -112,7 +116,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
   for (const raw of pageText.split("\n")) {
     // A name printed in capitals is how a schedule or certificate prints its insured, even inside a sentence ("This is
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
-    const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTE|BTE|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
+    const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
     if (!NOT_A_PERSON_LABEL.test(raw) && capitals.some((run) => { const n = normalizePersonName(run).split(" "); return want.every((w) => n.includes(w)) && n.length <= want.length + 2; })) return true;
     // Cells: parts of the line set off by a tab, a colon, a bar or a run of spaces, and names joined by "and" or "&"; a
     // bracket ("(NRIC S1234567A)", "(the Life Assured)") and an age, date of birth or identity number after a comma are
@@ -129,7 +133,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
       // The cell holds the name and at most two more name words (a middle name the reading left out); no digits, no
       // lower-case word other than a name particle ("bin", "binte", "d/o", "van").
       const extra = name.filter((w) => !want.includes(normalizePersonName(w)));
-      if (extra.length > 2 || name.some((w) => /\d/.test(w)) || name.some((w) => /^[a-z]/.test(w) && !/^(?:bin|binte|bte|b\.|d\/o|s\/o|a\/l|a\/p|van|von|de|da|del|la|le|al|el)$/i.test(w))) continue;
+      if (extra.length > 2 || name.some((w) => /\d/.test(w)) || name.some((w) => /^[a-z]/.test(w) && !NAME_PARTICLE.test(w))) continue;
       if (NOT_A_PERSON_LABEL.test(words[0] ?? "")) continue;
       const label = cells.slice(0, i).filter(Boolean).pop() ?? "";
       if (NOT_A_PERSON_LABEL.test(label)) continue;
