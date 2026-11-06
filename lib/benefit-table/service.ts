@@ -360,10 +360,14 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   // Whatever happens in the check, the paid reading is stored (Critic R389-1); a check that failed outright leaves every
   // figure unchecked, for the continuation job.
   if (guards) {
-    try { stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS }); }
+    // The spend limit is per document (DC's US$3): what earlier checks of this document spent counts too (Critic R389b-3).
+    const before = await db("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [doc.id, accountId]).catch(() => []);
+    const old = before.length ? (typeof before[0].reading === "string" ? JSON.parse(before[0].reading) : before[0].reading) as StoredReading : null;
+    const spentBefore = Number(old?.guards?.spentUsd ?? 0) || 0;
+    try { stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, spentBefore }); }
     catch (error) {
       console.error(`Figure check failed for ${doc.id}:`, error instanceof Error ? error.message : String(error));
-      stored.guards = { version: GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: 0, calls: 0, stopped: "error" };
+      stored.guards = { version: GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: spentBefore, calls: 0, stopped: "error" };
     }
   }
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
@@ -542,7 +546,7 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
   const [doc] = await documents(db, accountId, policyId);
   if (!doc || !doc.readable) return { checked: false, why: "no readable current document" };
-  const rows = await db("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
+  const rows = await db("SELECT reading, read_at::text AS read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
   if (!rows.length) return { checked: false, why: "the document has no table reading" };
   const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
   if (continuing != null) {
@@ -551,7 +555,10 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   }
   // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
   const record = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
-  await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2", [policyId, accountId, JSON.stringify(record)]);
+  // Only onto the reading this check was made on: a Read again stored meanwhile keeps its own check (Critic R389b-2).
+  const saved = await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2 AND read_at::text=$4 RETURNING 1 AS ok",
+    [policyId, accountId, JSON.stringify(record), String(rows[0].read_at)]);
+  if (!saved.length) return { checked: false, why: "the document was read again while this check ran; its own check stands", record };
   return { checked: true, record };
 }
 

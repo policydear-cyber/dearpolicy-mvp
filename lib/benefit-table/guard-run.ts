@@ -20,7 +20,8 @@ export type GuardReader = { model: TableModel; prompt: GuardPrompt; onUsage?: On
 /** previous: an earlier run's record on this same stored reading (a run cut off by its time limit): its settled and
  * confirm verdicts are kept, and only the figures it left "checking" or never reached are checked. Never pass a record
  * made on another reading of the document. */
-export type GuardOptions = { capUsd: number; callTime?: () => number | null; minCallMs?: number; now?: () => Date; previous?: GuardRecord | null };
+/** spentBefore: what earlier checks of this document spent (a check of a reading it replaced), counted against capUsd. */
+export type GuardOptions = { capUsd: number; callTime?: () => number | null; minCallMs?: number; now?: () => Date; previous?: GuardRecord | null; spentBefore?: number };
 
 export const READERS = 5;
 export const BATCH_CLAIMS = 30;
@@ -66,7 +67,7 @@ export async function runGuards(doc: SourceDoc, checked: CheckedReading, readers
   // A resumed check keeps its start time (what a continuation job checks it is still on the same reading) and counts what
   // was spent before, so the spend limit holds for the reading as a whole, not per run.
   const record: GuardRecord = { version: GUARDS_VERSION, at: o.previous?.at ?? (o.now?.() ?? new Date()).toISOString(), verdicts: {},
-    spentUsd: o.previous?.spentUsd ?? 0, calls: o.previous?.calls ?? 0, stopped: null };
+    spentUsd: o.previous?.spentUsd ?? o.spentBefore ?? 0, calls: o.previous?.calls ?? 0, stopped: null };
   const all = claimsOf(checked);
   for (const c of all) {
     const v = o.previous?.verdicts?.[c.key];

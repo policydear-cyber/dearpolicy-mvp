@@ -268,9 +268,10 @@ async function main() {
 
   // ---- Through the service, with an in-memory database. ----
   const A = "acct-a";
+  let stamp = 0;
   function fakeDb(opts: { figureTable?: boolean } = {}) {
     const s = {
-      readings: new Map<string, { account_id: string; reading: string }>(),
+      readings: new Map<string, { account_id: string; reading: string; read_at?: string }>(),
       figures: new Map<string, { account_id: string; policy_id: string; claim_key: string; value: number }>(),
     };
     const db: Db = async (sql, p) => {
@@ -282,12 +283,14 @@ async function main() {
         return p[0] === A && (p.length < 2 || p[1] === DOC.id) ? [{ id: DOC.id, account_id: A, original_filename: "Example Travel Policy.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null, reading_live: true }] : [];
       if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages"))
         return p[0] === A ? PAGES.map((x) => ({ policy_id: DOC.id, page_number: x.page, text: x.text })) : [];
-      if (q.startsWith("INSERT INTO benefit_readings")) { s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string }); return []; }
+      if (q.startsWith("INSERT INTO benefit_readings")) { s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string, read_at: `t${++stamp}` }); return []; }
+      if (q.startsWith("SELECT reading, read_at::text AS read_at FROM benefit_readings WHERE policy_id=$1")) { const r = s.readings.get(p[0] as string); return r && r.account_id === p[1] ? [{ reading: r.reading, read_at: r.read_at }] : []; }
       if (q.startsWith("SELECT reading FROM benefit_readings WHERE policy_id=$1")) { const r = s.readings.get(p[0] as string); return r && r.account_id === p[1] ? [{ reading: r.reading }] : []; }
       if (q.startsWith("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}'")) {
         const r = s.readings.get(p[0] as string);
-        if (r && r.account_id === p[1]) r.reading = JSON.stringify({ ...JSON.parse(r.reading), guards: JSON.parse(p[2] as string) });
-        return [];
+        if (!r || r.account_id !== p[1] || r.read_at !== p[3]) return [];
+        r.reading = JSON.stringify({ ...JSON.parse(r.reading), guards: JSON.parse(p[2] as string) });
+        return [{ ok: 1 }];
       }
       if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
         return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
@@ -413,6 +416,30 @@ async function main() {
     assert.ok(Object.values(g.verdicts).every((v) => v.status === "checking"));
   });
 
+  await test("a confirmation binds to its exact row: two tables with the same row label and column never swap figures (Critic R389b)", () => {
+    const doc: SourceDoc = { id: "two-tables", name: "Example Travel with add-on", readable: true, pages: [
+      { page: 1, text: "Section 1 Medical\nBenefit\tClassic\tPremier\nMedical expenses\tS$250,000\tS$500,000" },
+      { page: 2, text: "Winter sports add-on\nBenefit\tClassic\tPremier\nMedical expenses\tS$20,000\tS$50,000" }] };
+    const main = { section: "Section 1 Medical", column: "Premier", benefit: "Medical expenses", pays: "up_to", value: 500000, period: null, basis: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 1, quote: "Medical expenses\tS$250,000\tS$500,000" };
+    const addOn = { ...main, section: "Winter sports add-on", value: 50000, page: 2, quote: "Medical expenses\tS$20,000\tS$50,000" };
+    const read = (benefits: unknown[]) => checkReading(doc, { document: { kind: "policy_wording", product: "Example Travel", namedPeople: [], plan: null }, covers: [], benefits });
+    const first = read([main, addOn]);
+    assert.equal(first.benefits.length, 2);
+    const addOnKey = claimsOf(first).find((c) => c.page === 2)!.key;
+    const confirmations = [{ documentId: doc.id, claimKey: addOnKey, value: 50000 }];
+    const fresh = read([addOn, main]);
+    const shown = applyGuards(fresh, null, confirmations);
+    const at = (page: number) => shown.benefits.find((b) => b.source.page === page)!.value;
+    assert.equal(at(2), 50000, "the add-on keeps its confirmed figure");
+    assert.equal(at(1), null, "the main row is not given the add-on's figure (it waits for its own check)");
+    // Two rows printing the very same words: told apart by page, heading and order, or asked again.
+    const twin: SourceDoc = { ...doc, id: "twins", pages: [{ page: 1, text: "Part A\nMedical expenses\tS$500,000" }, { page: 2, text: "Part B\nMedical expenses\tS$500,000" }] };
+    const t = (benefits: unknown[]) => checkReading(twin, { document: { kind: "policy_wording", product: "Example Travel", namedPeople: [], plan: null }, covers: [], benefits });
+    const rowA = { ...main, section: "Part A", column: null, quote: "Medical expenses\tS$500,000", page: 1 }, rowB = { ...rowA, section: "Part B", page: 2 };
+    const keys = claimsOf(t([rowA, rowB])).map((c) => c.key);
+    assert.equal(new Set(keys).size, 2);
+  });
+
   await test("the household's figure stays with its row when a fresh reading cites another page or words the heading differently", () => {
     const r = checked(), key = businessTripKey(r);
     const moved = structuredClone(r);
@@ -434,6 +461,37 @@ async function main() {
       assert.equal("effort" in (sent[0].output_config as object), false);
       assert.equal((sent[1].output_config as { effort?: string }).effort, "medium", "main's reading call is unchanged");
     });
+  });
+
+  await test("a continuation never writes its check onto a newer reading stored by Read again meanwhile", async () => {
+    envOff();
+    const f = fakeDb(), r1 = readerModel(reading());
+    await readDocument(f.db, r1.model, A, DOC.id, undefined, {}, setup(r1.model, five()));
+    const stored = JSON.parse(f.s.readings.get(DOC.id)!.reading);
+    for (const k of Object.keys(stored.guards.verdicts)) stored.guards.verdicts[k] = { ...stored.guards.verdicts[k], status: "checking", value: null };
+    f.s.readings.get(DOC.id)!.reading = JSON.stringify(stored);
+    // While the continuation's guards are reading, the household's Read again stores a new reading with no guards.
+    const newer = JSON.stringify({ ...stored, guards: undefined, marker: "newer" });
+    const sneaky = reader("g1", (_q, _c, n) => { if (n === 1) { f.s.readings.set(DOC.id, { account_id: A, reading: newer, read_at: "t-newer" }); } return null; });
+    const fakes = five({ 1: sneaky });
+    const res = await guardStoredReading(f.db, A, DOC.id, setup(fakes[0].model, fakes), {}, stored.guards.at);
+    assert.equal(res.checked, false);
+    assert.equal(f.s.readings.get(DOC.id)!.reading, newer, "the newer reading is untouched");
+  });
+
+  await test("the spend limit is per document: a Read again counts what earlier checks of the document spent", async () => {
+    envOff();
+    const f = fakeDb(), r1 = readerModel(reading());
+    await readDocument(f.db, r1.model, A, DOC.id, undefined, {}, setup(r1.model, five()));
+    const stored = JSON.parse(f.s.readings.get(DOC.id)!.reading);
+    stored.guards.spentUsd = 2.9999;
+    f.s.readings.get(DOC.id)!.reading = JSON.stringify(stored);
+    const again = readerModel(reading()), fakes = five();
+    await readDocument(f.db, again.model, A, DOC.id, undefined, {}, { ...setup(again.model, fakes), capUsd: 3 });
+    assert.equal(calls(fakes), 0, "no guard call fits in what is left of the document's US$3");
+    const g = JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord;
+    assert.equal(g.spentUsd, 2.9999);
+    assert.ok(Object.values(g.verdicts).every((v) => v.status === "confirm"));
   });
 
   await test("continuation jobs: one attempt each, idempotent per reading and run, at most MAX_FIGURE_CHECK_RUNS", async () => {

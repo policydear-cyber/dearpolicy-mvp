@@ -37,7 +37,8 @@ export type Answer = { amount: number | null; per: Per | null; line?: string | n
 /** seen: for a figure not settled, what each reader answered in each round ([amount, per], reader 1 first), for audit. */
 export type Verdict = { status: "agreed" | "corrected" | "confirm" | "checking"; value: number | null; per: Per | null; page: number; line: string;
   candidates: number[]; rounds: number; seen?: [number | null, Per | null][][] };
-/** at: when this reading's check began (kept when a cut-off check is resumed); spentUsd and calls: the whole check's. */
+/** at: when this reading's check began (kept when a cut-off check is resumed); spentUsd: what checks of this document have
+ * spent in all, earlier readings' included (the per-document limit); calls: this reading's check's. */
 export type GuardRecord = { version: string; at: string; verdicts: Record<string, Verdict>; spentUsd: number; calls: number; stopped?: string | null };
 /** How many figures a record left "checking" (stopped by a time limit): what a continuation job still has to do. */
 export const checkingCount = (g: GuardRecord | null | undefined) => Object.values(g?.verdicts ?? {}).filter((v) => v.status === "checking").length;
@@ -79,37 +80,46 @@ function coverWhere(c: CheckedCover, page: number): string {
   return `Page ${page}: ${quote(c.person)}'s cover ${quote(c.cover)}${c.product && norm(c.product) !== norm(c.cover) ? ` (${quote(c.product)})` : ""}${c.plan ? `, plan ${quote(c.plan)}` : ""}`;
 }
 
-/** Every figure a checked reading uses, as claims with stable keys. The key is the row's own label and column (or the
- * person and cover), never the figure, its page or its section heading, so a household's confirmation stays with the row
- * when a fresh reading cites another page or words the heading differently (Critic R389-2). Two rows with the same label
- * and column get an occurrence number, in reading order. */
+/** Every figure a checked reading uses, as claims with stable keys. A key binds to exactly one printed row: the row's
+ * label and column (or the person and cover) and the row's own printed words (the excerpt found on the page), never the
+ * figure the reader gave, its page or the heading's wording. So a household's confirmation stays with its row when a fresh
+ * reading cites another page or words the heading differently (Critic R389-2), and never moves to another table's row
+ * with the same label (Critic R389b: an add-on's "Medical expenses" printed with other figures). Two rows that print the
+ * very same words under the same label and column also need the same page, heading and order to match, so a reading that
+ * cannot tell them apart asks the household again rather than guess. */
 export function claimsOf(r: CheckedReading): Claim[] {
   const out: Claim[] = [];
-  const seen = new Map<string, number>();
-  const add = (field: Field, place: unknown[], c: Omit<Claim, "key" | "field">) => {
-    const base = JSON.stringify([r.documentId, field, ...place]);
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    out.push({ key: hash([base, n]), field, ...c });
+  const drafts: { base: string; strict: unknown[]; claim: Omit<Claim, "key"> }[] = [];
+  const add = (field: Field, place: unknown[], strict: unknown[], c: Omit<Claim, "key" | "field">) => {
+    drafts.push({ base: JSON.stringify([r.documentId, field, ...place, norm(c.excerpt)]), strict, claim: { field, ...c } });
   };
   for (const b of r.benefits) {
     const place = [norm(b.benefit), norm(b.column)];
     const where = benefitWhere(b);
     if (b.value != null)
-      add("value", place, { page: b.source.page, where, ask: b.pays === "percent" ? "the percentage this row pays (25 for 25%)" : "the figure this row pays or holds",
+      add("value", place, [b.source.page, norm(b.section)], { page: b.source.page, where, ask: b.pays === "percent" ? "the percentage this row pays (25 for 25%)" : "the figure this row pays or holds",
         value: b.value, per: perOfBenefit(b), excerpt: b.source.excerpt });
     if (b.cap != null && b.capSource)
-      add("cap", place, { page: b.capSource.page, where, ask: "the most this row pays in money (its upper limit, as printed next to it)", value: b.cap, per: null, excerpt: b.capSource.excerpt });
+      add("cap", place, [b.capSource.page, norm(b.section)], { page: b.capSource.page, where, ask: "the most this row pays in money (its upper limit, as printed next to it)", value: b.cap, per: null, excerpt: b.capSource.excerpt });
   }
   for (const c of r.covers) {
     const place = [norm(c.person), norm(c.product), norm(c.cover), norm(c.plan)];
     if (c.sumInsured != null)
-      add("sum_insured", place, { page: c.source.page, where: coverWhere(c, c.source.page), ask: "the sum insured or sum assured printed for this person's cover", value: c.sumInsured, per: "once", excerpt: c.source.excerpt });
+      add("sum_insured", place, [c.source.page], { page: c.source.page, where: coverWhere(c, c.source.page), ask: "the sum insured or sum assured printed for this person's cover", value: c.sumInsured, per: "once", excerpt: c.source.excerpt });
     if (c.premium != null) {
       const src: Source = c.premiumSource ?? c.source;
-      add("premium", place, { page: src.page, where: coverWhere(c, src.page), ask: "the premium printed for this person's cover, and how often it is paid", value: c.premium,
+      add("premium", place, [src.page], { page: src.page, where: coverWhere(c, src.page), ask: "the premium printed for this person's cover, and how often it is paid", value: c.premium,
         per: perOfFrequency(c.premiumFrequency), excerpt: src.excerpt });
     }
+  }
+  const count = new Map<string, number>();
+  for (const d of drafts) count.set(d.base, (count.get(d.base) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  for (const d of drafts) {
+    if (count.get(d.base) === 1) { out.push({ key: hash([d.base]), ...d.claim }); continue; }
+    const n = (seen.get(d.base) ?? 0) + 1;
+    seen.set(d.base, n);
+    out.push({ key: hash([d.base, ...d.strict, n]), ...d.claim });
   }
   return out;
 }
