@@ -163,7 +163,9 @@ async function main() {
   await t("the chat keeps only what the person typed (their own facts and question); what came from the document goes; the other chat keeps its own", async () => {
     const c1 = (await q<{ state: unknown; last_answer: unknown; revision: string }>(`SELECT state,last_answer,revision::text FROM chat_conversations WHERE id=$1`, [conv1])).rows[0];
     assert.deepEqual(c1.state, { subjects: { [ana]: { nights, bill } }, intent: "claim", activeClaimQuery: "I was in hospital for 3 nights" });
-    assert.ok(!JSON.stringify(c1.state).includes("500") && !JSON.stringify(c1.state).includes(vida), "no figure or reference from the deleted document");
+    // The person's own id is a key in the state, and a random id can hold "500"; look for figures with ids taken out.
+    const said = JSON.stringify(c1.state).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>");
+    assert.ok(!said.includes("500") && !JSON.stringify(c1.state).includes(vida), "no figure or reference from the deleted document");
     assert.equal(c1.last_answer, null); assert.equal(c1.revision, "1", "a stale save of the old state is refused");
     const c2 = (await q<{ state: unknown; last_answer: unknown }>(`SELECT state,last_answer FROM chat_conversations WHERE id=$1`, [conv2])).rows[0];
     assert.match(text(c2.state), new RegExp(kranken)); assert.match(text(c2.last_answer), /Krankenhaustagegeld/);
