@@ -194,6 +194,7 @@
     "security:active-read-scopes-test": "node --import tsx scripts/active-read-scopes-regressions.ts",
     "security:policy-deletion-test": "node --import tsx scripts/policy-deletion-regressions.ts",
     "lifecycle:content-scrub-test": "node --import tsx scripts/lifecycle/content-scrub-test.ts",
+    "lifecycle:deleted-leftovers-sweep": "node --import tsx scripts/lifecycle/deleted-leftovers-sweep.ts",
     "security:claim-evidence-deletion-test": "node --import tsx scripts/claim-evidence-deletion-regressions.ts",
     "security:family-member-deletion-test": "node --import tsx scripts/family-member-deletion-regressions.ts",
     "security:household-membership-deletion-test": "node --import tsx scripts/household-membership-deletion-regressions.ts",

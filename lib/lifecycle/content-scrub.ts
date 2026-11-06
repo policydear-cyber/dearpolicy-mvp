@@ -35,6 +35,10 @@ export const DELETED_FILENAME = "(deleted document)";
 const DELETED_STATES = ["soft_deleted", "permanently_deleted", "audit_tombstone"];
 /** How long a document may sit in pending_deletion before its deletion counts as finished anyway (a crashed request). */
 export const STUCK_PENDING_MINUTES = 60;
+/** How long after its scrub a deleted document is still checked for late writes. A reading stops at its next step
+ * once the document is deleted (lib/rag/ingest.ts) and no reading runs anywhere near this long; each re-scrub restarts
+ * the window. Keeps the per-pass check to recently deleted documents. */
+export const LEFTOVER_WINDOW_HOURS = 24;
 
 /**
  * Every table holding rows read from a document, with the column naming the document. Each is deleted for a scrubbed
@@ -47,7 +51,20 @@ export const DOCUMENT_CONTENT_TABLES: ReadonlyArray<readonly [table: string, col
   ["policy_corrections", "policy_id"], ["policy_name_dismissals", "policy_id"], ["policy_member_exclusions", "policy_id"],
   ["policy_members", "policy_id"], ["claim_cause_definition_matches", "contract_id"],
   ["claim_ci_definition_matches", "contract_id"], ["claim_disability_definition_matches", "contract_id"],
+  // Raw failure detail kept for support (lib/diagnostics/processing-failures.ts): a reading service's own error text,
+  // which can name the stored file. Its resource_id is the document's id for document and scan failures.
+  ["processing_failure_diagnostics", "resource_id"],
+  // Premiums read from it (counted on Home); the deletion request removes them at once, a late reading can add more.
+  ["premium_records", "source_document_id"],
 ];
+
+/**
+ * Rows read from another document still on file that only point at the deleted document: they stay on file and are
+ * unlinked from it. (A premium filed against it with no source is deleted first: DearPolicy always records the source,
+ * so an empty one cannot be shown to come from anywhere but the deleted document.) A premium from a renewal receipt filed against the
+ * deleted policy still counts on Home.
+ */
+export const DOCUMENT_LINK_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [["premium_records", "policy_id"]];
 
 /**
  * The tombstone keeps ids, kind, states and timestamps; every column read from the document is cleared. A column this
@@ -58,12 +75,15 @@ export const DOCUMENT_CONTENT_COLUMNS = [
   "processing_error", "processing_message", "review_reason", "scan_result_detail", "document_authority_label", "file_hash",
   "effective_date", "renewal_or_expiry_date", "document_date",
 ];
-async function scrubPolicyRowSql(db: Db): Promise<string> {
+async function presentContentColumns(db: Db): Promise<string[]> {
   const r = await db.query<{ name: string }>(
     `SELECT column_name AS name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='policies' AND column_name=ANY($1::text[])`,
     [DOCUMENT_CONTENT_COLUMNS]);
   const present = new Set(r.rows.map((x) => x.name));
-  const cleared = DOCUMENT_CONTENT_COLUMNS.filter((c) => present.has(c)).map((c) => c + "=NULL");
+  return DOCUMENT_CONTENT_COLUMNS.filter((c) => present.has(c));
+}
+function scrubPolicyRowSql(columns: string[]): string {
+  const cleared = columns.map((c) => c + "=NULL");
   return `UPDATE policies SET original_filename=$3, storage_key='deleted/'||id::text, ${[...cleared, "updated_at=now()"].join(", ")}
     WHERE id=$1 AND account_id=$2 AND lifecycle_state=ANY($4::text[])`;
 }
@@ -86,8 +106,13 @@ export type ScrubOptions = {
   /** Set by the deletion flows once their deletion request has completed: these documents' deletion is finished. */
   deletionFinished?: boolean;
   limit?: number;
+  /** How far back scrubbed documents are re-checked for late writes. Default LEFTOVER_WINDOW_HOURS; null checks every
+   * deleted document, whenever it was scrubbed (the one-off catch-up, scripts/lifecycle/deleted-leftovers-sweep.ts). */
+  leftoverWindowHours?: number | null;
+  /** Documents to leave out of this pass (the catch-up skips ones that already failed in an earlier round). */
+  skipPolicyIds?: string[];
 };
-export type ScrubResult = { finished: number; scrubbed: number; searchIndexPending: string[]; failed: number; forgottenKeys: number };
+export type ScrubResult = { finished: number; scrubbed: number; searchIndexPending: string[]; failed: number; failedIds: string[]; forgottenKeys: number };
 
 const defaultPinecone: PineconeCleanup = { enabled: pineconeEnabled, deletePassages: deletePolicyPassages };
 const defaultTransaction = <T>(fn: (db: Db) => Promise<T>) => withServiceTransaction((client) => fn(client as unknown as Db));
@@ -113,25 +138,55 @@ export async function finishDeletedDocuments(db: Db, policyIds?: string[], delet
 }
 
 async function existingTables(db: Db): Promise<Set<string>> {
-  const names = [...DOCUMENT_CONTENT_TABLES.map(([t]) => t), "policy_document_audit_log"];
+  const names = [...DOCUMENT_CONTENT_TABLES.map(([t]) => t), ...DOCUMENT_LINK_COLUMNS.map(([t]) => t), "policy_document_audit_log"];
   const r = await db.query<{ name: string }>(`SELECT n AS name FROM unnest($1::text[]) n WHERE to_regclass('public.'||n) IS NOT NULL`, [names]);
   return new Set(r.rows.map((x) => x.name));
+}
+
+/** SQL (on alias p) true when a scrubbed document has something read from it again, within the window (null: ever). */
+function leftoverSql(tables: Set<string>, columns: string[], windowHours: number | null): string {
+  const any = [
+    ...[...DOCUMENT_CONTENT_TABLES, ...DOCUMENT_LINK_COLUMNS].filter(([t]) => tables.has(t)).map(([t, c]) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.${c}=p.id)`),
+    ...columns.map((c) => `p.${c} IS NOT NULL`),
+  ];
+  if (!any.length) return "false";
+  const window = windowHours == null ? "" : `p.updated_at > now() - make_interval(hours => ${Math.max(0, Math.floor(windowHours))}) AND `;
+  return `(p.original_filename=$2 AND ${window}(${any.join(" OR ")}))`;
+}
+
+/**
+ * Read-only: how many deleted documents, already scrubbed at any time, still hold something read from them (the
+ * one-off catch-up's dry run). Documents not yet scrubbed are left to the ordinary pass and not counted.
+ */
+export async function countDeletedDocumentLeftovers(db: Db = pool as unknown as Db): Promise<number> {
+  const tables = await existingTables(db);
+  const columns = await presentContentColumns(db);
+  const r = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM policies p WHERE p.lifecycle_state=ANY($1::text[]) AND ${leftoverSql(tables, columns, null)}`,
+    [DELETED_STATES, DELETED_FILENAME]);
+  return Number(r.rows[0]?.n ?? 0);
 }
 
 export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<ScrubResult> {
   const db = opts.db ?? (pool as unknown as Db);
   const transaction = opts.transaction ?? defaultTransaction;
   const pinecone = opts.pinecone ?? defaultPinecone;
-  const result: ScrubResult = { finished: 0, scrubbed: 0, searchIndexPending: [], failed: 0, forgottenKeys: 0 };
+  const result: ScrubResult = { finished: 0, scrubbed: 0, searchIndexPending: [], failed: 0, failedIds: [], forgottenKeys: 0 };
   try {
     result.finished = await finishDeletedDocuments(db, opts.policyIds, opts.deletionFinished === true);
+    const tables = await existingTables(db);
+    const columns = await presentContentColumns(db);
+    const scrubRow = scrubPolicyRowSql(columns);
+    // Due: a deleted document not yet scrubbed, or one already scrubbed that has something read from it again. A
+    // reading still running when the person deleted the document goes on writing pages, passages, benefit lines and
+    // the document's own fields for a while (lib/rag/ingest.ts stops at its next step); scrubbing once is not enough.
+    const leftovers = leftoverSql(tables, columns, opts.leftoverWindowHours === undefined ? LEFTOVER_WINDOW_HOURS : opts.leftoverWindowHours);
     const due = await db.query<{ id: string; account_id: string; storage_key: string }>(
-      `SELECT id::text AS id, account_id::text AS account_id, storage_key FROM policies
-        WHERE lifecycle_state=ANY($1::text[]) AND original_filename<>$2 AND ($3::uuid[] IS NULL OR id=ANY($3::uuid[]))
-        ORDER BY updated_at LIMIT $4`,
-      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25]);
-    const tables = due.rows.length ? await existingTables(db) : new Set<string>();
-    const scrubRow = due.rows.length ? await scrubPolicyRowSql(db) : "";
+      `SELECT p.id::text AS id, p.account_id::text AS account_id, p.storage_key FROM policies p
+        WHERE p.lifecycle_state=ANY($1::text[]) AND ($3::uuid[] IS NULL OR p.id=ANY($3::uuid[]))
+          AND (p.original_filename<>$2 OR ${leftovers}) AND NOT (p.id = ANY($5::uuid[]))
+        ORDER BY p.updated_at LIMIT $4`,
+      [DELETED_STATES, DELETED_FILENAME, opts.policyIds?.length ? opts.policyIds : null, opts.limit ?? 25, opts.skipPolicyIds ?? []]);
     for (const doc of due.rows) {
       if (pinecone.enabled()) {
         try { await pinecone.deletePassages({ accountId: doc.account_id, policyId: doc.id }); }
@@ -143,20 +198,44 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
           for (const [table, column] of DOCUMENT_CONTENT_TABLES) {
             if (tables.has(table)) await tx.query(`DELETE FROM ${table} WHERE ${column}=$1`, [doc.id]);
           }
+          // A premium of unknown source filed against it goes (it cannot be shown to come from another document).
+          if (tables.has("premium_records")) await tx.query(`DELETE FROM premium_records WHERE policy_id=$1 AND source_document_id IS NULL`, [doc.id]);
+          for (const [table, column] of DOCUMENT_LINK_COLUMNS) {
+            if (tables.has(table)) await tx.query(`UPDATE ${table} SET ${column}=NULL WHERE ${column}=$1`, [doc.id]);
+          }
           if (tables.has("policy_document_audit_log")) await tx.query(SCRUB_AUDIT, [doc.account_id, doc.id, STATUS_KEYS]);
           await tx.query(scrubRow, [doc.id, doc.account_id, DELETED_FILENAME, DELETED_STATES]);
         });
         result.scrubbed++;
       } catch (error) {
-        result.failed++;
+        result.failed++; result.failedIds.push(doc.id);
         console.warn("deleted document content scrub will be retried:", error instanceof Error ? error.name : "unknown");
       }
     }
+    await stopDeletedDocumentJobs(db);
     result.forgottenKeys = await forgetPurgedKeys(db);
   } catch (error) {
     console.warn("deleted document content scrub pass failed:", error instanceof Error ? error.name : "unknown");
   }
   return result;
+}
+
+/**
+ * Every pass: a deleted document's reading jobs (its own, keyed by its id, and its later re-read, "<id>:retry-read")
+ * keep no PDF password, file key or error text, and stay stopped. The deletion strips them once; a reading that was
+ * running can schedule its re-read again afterwards, which brings the job back with the password.
+ */
+export async function stopDeletedDocumentJobs(db: Db): Promise<number> {
+  const r = await db.query(
+    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true,
+            status=CASE WHEN j.status IN ('queued','failed_retryable') THEN 'cancelled' ELSE j.status END, updated_at=now()
+       FROM policies p
+      WHERE j.job_type='policy_processing' AND j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
+        AND p.lifecycle_state=ANY($1::text[])
+        AND (j.payload ?| ARRAY['pdfPassword','storageKey'] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
+             OR j.status IN ('queued','failed_retryable'))`,
+    [DELETED_STATES]).catch(() => ({ rowCount: 0 }));
+  return r.rowCount ?? 0;
 }
 
 /**
