@@ -112,14 +112,15 @@ export function claimsOf(r: CheckedReading): Claim[] {
         per: perOfFrequency(c.premiumFrequency), excerpt: src.excerpt });
     }
   }
-  const count = new Map<string, number>();
-  for (const d of drafts) count.set(d.base, (count.get(d.base) ?? 0) + 1);
+  // A key is "<row>.<exact>": <row> names the printed row (label, column, printed words); <exact> adds its page and
+  // heading and its order among identical rows on that page and heading. Confirmations match on <exact> first and fall
+  // back to <row> (see confirmationFor), so a row that becomes unique or moves page keeps its household figure.
   const seen = new Map<string, number>();
   for (const d of drafts) {
-    if (count.get(d.base) === 1) { out.push({ key: hash([d.base]), ...d.claim }); continue; }
-    const n = (seen.get(d.base) ?? 0) + 1;
-    seen.set(d.base, n);
-    out.push({ key: hash([d.base, ...d.strict, n]), ...d.claim });
+    const at = JSON.stringify([d.base, ...d.strict]);
+    const n = (seen.get(at) ?? 0) + 1;
+    seen.set(at, n);
+    out.push({ key: `${hash([d.base])}.${hash([d.base, ...d.strict, n])}`, ...d.claim });
   }
   return out;
 }
@@ -233,14 +234,40 @@ type Marked = { figureCheck?: GuardNote[] };
  * - any other figure (not settled, still being checked, or never checked, such as one a later code change reads afresh)
  *   is taken out of the row so no total or calculation uses it, and the row keeps its printed words with a note.
  * guards null (the document was read before the guards, or with them off): every figure is "never checked". */
+const rowOf = (key: string) => key.split(".")[0];
+
+/** Which household figure applies to each claim. An exact key wins. Otherwise a confirmation stored for the same printed
+ * row (a fresh reading cited another page, or identical rows became one) applies when this reading has just one claim
+ * for that row; with several, and no exact match, the household is asked again. A confirmation that exactly matches
+ * another claim of this reading belongs to that claim. */
+export function confirmationFor(claims: Claim[], confirmations: FigureConfirmation[]): (c: Claim) => { value: number | null; ambiguous: number[] } {
+  const keys = new Set(claims.map((c) => c.key));
+  const exact = new Map(confirmations.map((c) => [c.claimKey, c.value]));
+  const loose = new Map<string, number[]>();
+  for (const c of confirmations) if (!keys.has(c.claimKey)) loose.set(rowOf(c.claimKey), [...(loose.get(rowOf(c.claimKey)) ?? []), c.value]);
+  const perRow = new Map<string, number>();
+  for (const c of claims) perRow.set(rowOf(c.key), (perRow.get(rowOf(c.key)) ?? 0) + 1);
+  return (c) => {
+    if (exact.has(c.key)) return { value: exact.get(c.key)!, ambiguous: [] };
+    const found = loose.get(rowOf(c.key)) ?? [];
+    if (found.length === 1 && perRow.get(rowOf(c.key)) === 1) return { value: found[0], ambiguous: [] };
+    return { value: null, ambiguous: found };
+  };
+}
+
 export function applyGuards(r: CheckedReading, guards: GuardRecord | null | undefined, confirmations: FigureConfirmation[] = []): CheckedReading {
   const out: CheckedReading = structuredClone(r);
-  const confirmed = new Map(confirmations.filter((c) => c.documentId === r.documentId).map((c) => [c.claimKey, c.value]));
   const list = claimsOf(r);
+  const confirmedFor = confirmationFor(list, confirmations.filter((c) => c.documentId === r.documentId));
   let i = 0;
   const next = () => list[i++];
   const settle = (claim: Claim): { value: number | null; note: GuardNote | null } => {
-    if (confirmed.has(claim.key)) return { value: confirmed.get(claim.key)!, note: null };
+    const own = confirmedFor(claim);
+    if (own.value != null) return { value: own.value, note: null };
+    // The household confirmed this row but the reading cannot say which of its identical rows it was: ask again,
+    // never show a guard's figure over a household's (Critic R389c).
+    if (own.ambiguous.length) return { value: null, note: { status: "confirm", field: claim.field, claimKey: claim.key, page: claim.page, line: claim.excerpt,
+      candidates: [...new Set([...own.ambiguous, claim.value])], note: NEEDS_CONFIRMATION } };
     const v = guards?.verdicts?.[claim.key];
     if (v && (v.status === "agreed" || v.status === "corrected") && v.value != null && rowPrints(claim.excerpt, v.value)) return { value: v.value, note: null };
     const status = v?.status === "confirm" ? "confirm" : "checking";

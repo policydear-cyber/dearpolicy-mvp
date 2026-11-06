@@ -4,7 +4,7 @@
  *   npm run benefit-table:figure-guards-test */
 import assert from "node:assert/strict";
 import { checkReading, type CheckedReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { MAX_REREADS, applyGuards, claimsOf, judge, renderQuestions, type GuardRecord, type Per } from "@/lib/benefit-table/guards";
+import { MAX_REREADS, applyGuards, claimsOf, judge, renderQuestions, type GuardNote, type GuardRecord, type Per, type Verdict } from "@/lib/benefit-table/guards";
 import { BATCH_CLAIMS, batches, runGuards, type GuardReader } from "@/lib/benefit-table/guard-run";
 import { DEFAULT_GUARDS, figureGuardsEnabled, guardCapUsd, guardRoster, supportsEffort } from "@/lib/benefit-table/guard-flag";
 import { anthropicTableModel, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
@@ -440,11 +440,47 @@ async function main() {
     assert.equal(new Set(keys).size, 2);
   });
 
+  await test("identical rows in two tables: the household's figure is never replaced by a guard's figure (Critic R389c)", () => {
+    const line = "Medical expenses\tS$20,000\tS$50,000";
+    const doc: SourceDoc = { id: "twin-tables", name: "Example Travel with add-on", readable: true, pages: [
+      { page: 1, text: "Cover\nExample Travel" },
+      { page: 2, text: `Section 1 Medical\nBenefit\tClassic\tPremier\n${line}` },
+      { page: 3, text: `Winter sports add-on\nBenefit\tClassic\tPremier\n${line}` }] };
+    const main = { section: "Section 1 Medical", column: "Premier", benefit: "Medical expenses", pays: "up_to", value: 50000, period: null, basis: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 2, quote: line };
+    const addOn = { ...main, section: "Winter sports add-on", page: 3 };
+    const read = (benefits: unknown[]) => checkReading(doc, { document: { kind: "policy_wording", product: "Example Travel", namedPeople: [], plan: null }, covers: [], benefits });
+    // Every guard agrees on 50,000 for every row: the household's 20,000 must still win wherever it applies.
+    const agreed = (x: CheckedReading): GuardRecord => ({ version: "t", at: "t", spentUsd: 0, calls: 0, verdicts: Object.fromEntries(claimsOf(x).map((c) =>
+      [c.key, { status: "agreed", value: 50000, per: "once", page: c.page, line: c.excerpt, candidates: [50000], rounds: 0 } as Verdict])) });
+    const first = read([main, addOn]);
+    assert.equal(first.benefits.length, 2);
+    const confirmations = [{ documentId: doc.id, claimKey: claimsOf(first).find((c) => c.page === 3)!.key, value: 20000 }];
+    const show = (x: CheckedReading) => applyGuards(x, agreed(x), confirmations);
+    const at = (x: CheckedReading, page: number) => x.benefits.find((b) => b.source.page === page);
+    const only = show(read([addOn]));
+    assert.equal(at(only, 3)!.value, 20000, "add-on read alone keeps the household's figure");
+    const swapped = show(read([addOn, main]));
+    assert.equal(at(swapped, 3)!.value, 20000, "add-on listed first keeps the household's figure");
+    assert.equal(at(swapped, 2)!.value, 50000, "the main table keeps its own agreed figure");
+    const back = show(read([main, addOn]));
+    assert.equal(at(back, 3)!.value, 20000);
+    // Both rows cited on a page the household never confirmed: the reading cannot tell them apart, so ask again.
+    const moved = read([main, addOn]);
+    for (const b of moved.benefits) b.source = { ...b.source, page: 1 };
+    const asked = applyGuards(moved, agreed(moved), confirmations);
+    for (const b of asked.benefits) {
+      assert.equal(b.value, null, "no guard figure over the household's");
+      const note = (b as { figureCheck?: GuardNote[] }).figureCheck?.[0];
+      assert.equal(note?.status, "confirm");
+      assert.ok(note!.candidates.includes(20000));
+    }
+  });
+
   await test("the household's figure stays with its row when a fresh reading cites another page or words the heading differently", () => {
     const r = checked(), key = businessTripKey(r);
     const moved = structuredClone(r);
     for (const b of moved.benefits) { b.section = "SECTION 2 - TRAVEL INCONVENIENCE BENEFITS"; b.source = { ...b.source, page: 3 }; }
-    assert.equal(businessTripKey(moved), key);
+    assert.equal(businessTripKey(moved).split(".")[0], key.split(".")[0], "the same printed row");
     const pick = (x: CheckedReading) => x.benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")!.value;
     assert.equal(pick(applyGuards(moved, null, [{ documentId: DOC.id, claimKey: key, value: 1000 }])), 1000);
   });
