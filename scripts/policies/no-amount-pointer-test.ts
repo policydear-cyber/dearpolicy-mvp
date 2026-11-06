@@ -113,13 +113,15 @@ test("a sum-insured row whose amount could not be read gets it only when Coverag
   assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The passage on page 3 pays this in advance from the death benefit, so its amount follows the death benefit, within any limit the policy sets."), false);
   assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The amount on page 3 could not be read. Ask your insurer."), false);
 });
-test("/api/benefits sets foundSum from each shown person's own cover with a written currency, and sends no figure with it", () => {
+test("/api/benefits sets foundSum from each shown person's own cover that Coverage shows, and sends no figure with it", () => {
   const route = readFileSync("app/api/benefits/route.ts", "utf8");
   const block = route.slice(route.indexOf("const foundSum="), route.indexOf("})():false;") + 11);
   assert.match(block, /attention==="unreadable"/);
   assert.match(block, /filter\(contract=>!member\|\|contract\.ownerId===member\)/);
   assert.match(block, /people\.length>0&&people\.every\(/);
-  assert.match(block, /kinds\.has\(normalizeCoverageCategory\(cover\.category\)\)&&cover\.amount!=null&&cover\.amount>0&&!!cover\.currency&&cover\.currencyVerified===true/);
+  assert.match(block, /kinds\.has\(normalizeCoverageCategory\(cover\.category\)\)&&cover\.amount!=null&&cover\.amount>0&&!!cover\.currency\)/);
+  // The pointer carries no figure: a sum Coverage shows counts whether or not its currency is proven on the page.
+  assert.doesNotMatch(block, /currencyVerified/);
   assert.match(block, /const kinds=new Set\(sumKindsOf\(row\.benefit_name\)\);\s*return kinds\.size>0&&/);
   assert.match(route, /wholeSum,foundSum,/);
 });
@@ -146,6 +148,17 @@ test("the pointer adds no figure", () => {
 test("Benefits shows it under the row's own line, linking to Coverage", () => {
   const page = readFileSync("app/schedule/page.tsx", "utf8");
   assert.match(page, /\{pointsToScheduleSum\(benefit,line\.text\)&&<small className="pays-basis" data-testid="schedule-sum-pointer">\{SCHEDULE_SUM_POINTER\} <Link className="text-link" href="\/ledger">See Coverage →<\/Link><\/small>\}/);
+});
+test("a schedule line that prints the sum with its currency only in a heading still gets the pointer (live check 5 Nov, after #365)", () => {
+  // Made-up schedules: the figure is on the line, the currency only in the table's heading, so the sum's currency is not
+  // proven against the page. foundSum no longer waits for that proof; the row itself still adds no figure.
+  const line = "The amount on page 3 could not be read.";
+  for (const [benefitName, quote] of [["Death Benefit", "Death Benefit\t5,000.00"], ["Comprehensive Critical Illness Benefit", "Comprehensive Critical Illness Benefit\t120,000.00"],
+    ["TPD Benefit", "TPD Benefit    80,000"], ["Terminal Illness Benefit", "Terminal Illness Benefit : 45,500.00"]] as const)
+    assert.equal(pointsToScheduleSum(row({ attention: "unreadable", foundSum: true, benefitName, quote }), line), true, quote);
+  // The same benefit described as paying less than the sum still gets none.
+  assert.equal(pointsToScheduleSum(row({ attention: "unreadable", foundSum: true, benefitName: "Death Benefit",
+    quote: "If the Life Assured dies, We will pay the Death Benefit in one lump sum, less any amounts owing to Us." }), line), false);
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`no-amount-pointer: ${passed} passed, fetches 0`);
