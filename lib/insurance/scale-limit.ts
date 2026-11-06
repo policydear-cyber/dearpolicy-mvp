@@ -495,7 +495,10 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
     while(k>=0&&cellsOf(lines[k].raw).length===width&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"after"))k--;
     return k>=0&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"first");
   };
-  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width)&&!(o.titled&&pieceOfRow(i)))return i;return -1;};
+  // With titled, a row of whole word cells ("Unlimited  Unlimited  Unlimited") is a row of the table, not its header, and
+  // so is a line with a cell starting in lower case ("six-hour delay"): plan names are printed capitalised.
+  const wordsOnly=(i:number)=>cellsOf(lines[i].raw).every(c=>new RegExp(`^${WORD_CELL}$`).test(c));
+  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width)&&!(o.titled&&(pieceOfRow(i)||wordsOnly(i)||cellsOf(lines[i].raw).some(c=>/^[a-z]/.test(c)))))return i;return -1;};
   let h=findHeader(n);
   // A dash printed between the row's name and its cells ("Trip curtailment  -  S$500  S$1,000") is a separator, not a
   // plan's cell, when no header of the wider count is above it and one of the narrower count is (TE r6 W8).
@@ -509,6 +512,17 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   const wraps=new Set<number>();
   if(named(ownText)&&!ownText.startsWith(row.name))
     for(let k=body.length-2;k>=0;k--){const t=lines[body[k]].text;if(/\d/.test(t)||!row.name.includes(t))break;wraps.add(body[k]);}
+  // A block of lines between rows whose cells wrap unevenly ("S$100 for every" / "If your flight is delayed  six-hour
+  // delay  three-hour delay" / "up to  up to"): every line of it is of this table by its shape (looseLine), and one of
+  // its cells prints an amount followed by words, as a wrapped cell does.
+  const loose=(i:number)=>i!==own[0]&&!isRow(i)&&looseLine(lines[i].raw,n,plans);
+  const wrappedBlock=(i:number)=>{
+    if(!loose(i))return false;
+    const at=body.indexOf(i);let a=at,b=at;
+    while(a>0&&loose(body[a-1]))a--;
+    while(b<body.length-1&&loose(body[b+1]))b++;
+    return body.slice(a,b+1).some(j=>cellsOf(lines[j].raw).some(c=>WRAPPED_CELL.test(c)));
+  };
   let rowSeen=false,piece=-2;
   for(let k=0;k<body.length-1;k++){
     const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
@@ -517,7 +531,8 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
     if(o.titled&&titledLine(lines[i].raw,plans,row.name))continue;
     // Another row of the table printed in words only ("Unlimited  Unlimited  Unlimited"), or a row whose cells wrap
     // over several lines ("Travel delay  S$100 for every  S$50 for every" / "  six-hour delay  three-hour delay").
-    if(o.titled&&wordRow(text,n))continue;
+    if(o.titled&&(wordRow(text,n)||(wordsOnly(i)&&cellsOf(lines[i].raw).length===n)))continue;
+    if(o.titled&&wrappedBlock(i))continue;
     if(o.titled&&(rowPiece(lines[i].raw,n,plans,"first")||(piece===k-1&&rowPiece(lines[i].raw,n,plans,"after")))){piece=k;continue;}
     if(wraps.has(i))continue;
     if(!rowSeen&&body.slice(0,k).every(j=>TABLE_SUBHEADING.test(lines[j].text))&&TABLE_SUBHEADING.test(text))continue;
@@ -554,6 +569,23 @@ function rowPiece(raw:string,n:number,plans:string[],at:"first"|"after"):boolean
   if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
   if(at==="first")return !indented&&cells.some(c=>new RegExp(MONEY_CELL).test(c));
   return true;
+}
+/** A cell that prints an amount then words, as a cell wrapped over lines does ("S$100 for every", "S$300 only"). */
+const WRAPPED_CELL=new RegExp(`^${MONEY_CELL}\\s+[A-Za-z]`);
+/** A line that could be part of a row of an n-plan table by its shape (rowHeaderIndex titled, wrapped blocks): at most n+1
+ * cells, no header of any width, no cell naming one of the header's plans, no run of cells of another width, and no
+ * label heading alone, sub-heading caption, "Part"/"Table" line or premium line. */
+function looseLine(raw:string,n:number,plans:string[]):boolean{
+  const text=spaced(raw);
+  if(!text||cellsOf(raw).length>n+1)return false;
+  const width=cellCount(text);
+  if(width>0&&width!==n)return false;
+  // A line of headings is another table's header unless one of its cells starts in lower case ("six-hour delay"): plan
+  // names are printed capitalised.
+  if(!cellsOf(raw).some(c=>/^[a-z]/.test(c)))for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  const words=` ${labelKey(text).replace(/[^a-z0-9]+/g," ")} `;
+  if(plans.some(p=>words.includes(` ${p.replace(/[^a-z0-9]+/g," ").trim()} `)))return false;
+  return !LABEL_HEADING.test(labelKey(text.replace(/:$/,"")))&&!TABLE_SUBHEADING.test(text)&&!/^(?:part|table)\b/i.test(text)&&!PREMIUM_LINE.test(text);
 }
 const cellsOf=(raw:string)=>raw.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean);
 /** A note of the table's currency on its own line ("All amounts in SGD", "Amounts shown in S$", "(S$)"). */

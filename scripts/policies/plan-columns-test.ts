@@ -540,12 +540,32 @@ test("rows whose cells wrap over lines, rows of word cells and a currency note s
     assert.deepEqual(planColumnFigure(row, [read(right)], { runIsUnique: true, pageText }), { plan: "Business", figureText: "up to S$" + right.toLocaleString("en-SG") }, why);
     assert.equal(planColumnFigure(row, [read(misread)], { runIsUnique: true, pageText }), null, why + ": first plan's cell");
   }
+  // A header of plan names alone; a delay row wrapped unevenly between other rows (cells of amounts then words, a line of
+  // the row's words then three cells, lines of one or two cells); a row of word cells alone above a long benefit name.
+  const H3 = ["Silver", "Gold", "Platinum"].join(T);
+  const uneven = [H3, ["Medical expenses overseas", "S$150,000", "S$300,000", "S$600,000"].join(T), "for up to 90 days after you return",
+    ["S$500", "S$1,000", "S$1,500"].join(T), ["S$100 for every", "S$100 for every", "S$100 for every"].join(T),
+    ["If your flight is delayed", "six-hour delay", "three-hour delay", "three-hour delay"].join(T), ["S$300 only", "up to"].join(T),
+    ["up to", "up to"].join(T), ["maximum", "of S$600"].join(T), cap].join("\n");
+  const longName = "Legal liability to third parties for accidental injury or damage to their property while on your trip abroad";
+  const liability = [H3, "Emergency medical evacuation and repatriation", ["Unlimited", "Unlimited", "Unlimited"].join(T),
+    "Bringing you home if medically necessary to do so", "Personal liability while on your trip", [longName, "S$500,000", "S$750,000", "S$1,000,000"].join(T)].join("\n");
+  for (const [why, pageText, name, cells, right, misread] of [["an unevenly wrapped row above", uneven, "Overall limit^", "S$300 S$800 S$1,500", 800, 300],
+    ["a row of word cells alone above a long name", liability, longName, "S$500,000 S$750,000 S$1,000,000", 750000, 500000]] as [string, string, string, string, number, number][]) {
+    const quote = `${name} ${cells}`, row = { policyId: "docW", sourcePage: 5, quote, benefitName: name };
+    const read = (amount: number) => ({ documentId: "docW", page: 5, excerpt: quote, column: "Gold", qualifier: null,
+      figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG"), benefit: name });
+    assert.deepEqual(planColumnFigure(row, [read(right)], { runIsUnique: true, pageText }), { plan: "Gold", figureText: "up to S$" + right.toLocaleString("en-SG") }, why);
+    assert.equal(planColumnFigure(row, [read(misread)], { runIsUnique: true, pageText }), null, why + ": first plan's cell");
+  }
   // Still closed: a piece naming a plan, a line of headings with no wrapped row above it, and a piece printing too few cells.
   const capRow = { policyId: "docW", sourcePage: 5, quote: "Overall limit^ S$300 S$800 S$1,500", benefitName: "Overall limit^" };
   const capRead = { documentId: "docW", page: 5, excerpt: "Overall limit^ S$300 S$800 S$1,500", column: "Business", qualifier: null,
     figure: { kind: "printed", amount: 800, currency: "SGD" }, figureText: "up to S$800", benefit: "Overall limit^" };
   for (const [why, lines] of [["a piece naming a plan", [delay(T)[0], T + ["Business only", "three-hour delay", "three-hour delay"].join(T)]],
     ["headings with no wrapped row above", [T + ["six-hour delay", "three-hour delay", "three-hour delay"].join(T)]],
-    ["a piece of two cells", [delay(T)[0], T + ["six-hour delay", "three-hour delay"].join(T)]]] as [string, string[]][])
+    ["another header inside a wrapped block", [delay(T)[0], ["Benefits", "Elite", "Prestige"].join(T)]],
+    ["a run of another width inside a wrapped block", [delay(T)[0], ["Golf cover", "S$300", "S$600"].join(T)]],
+    ["a piece of five cells", [delay(T)[0], ["a", "b", "c", "d", "e"].join(T)]]] as [string, string[]][])
     assert.equal(planColumnFigure(capRow, [capRead], { runIsUnique: true, pageText: [H, medical, ...lines, cap].join("\n") }), null, why);
 });
