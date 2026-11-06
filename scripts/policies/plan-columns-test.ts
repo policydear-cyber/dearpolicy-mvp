@@ -308,9 +308,9 @@ test("a reading's figure is taken only when it is the cell at its plan's place i
     assert.equal(planColumnFigure(row, [reading(excerpt, amount(0))], { pageText: header + "\n" + row.quote }), null, name + ": first plan's cell");
     assert.equal(planColumnFigure(row, [reading(excerpt, amount(2))], { pageText: header + "\n" + row.quote }), null, name + ": last plan's cell");
     // No page text, or a page whose header does not place the plan: none.
-    assert.deepEqual(planColumnFigure(row, [reading(excerpt, amount(1))]), below ? null : { plan: "Voyager", figureText: "up to S$" + amount(1).toLocaleString("en-SG") }, name + ": no page" + " (as 3c8f1521)");
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))]), null, name + ": no page");
     assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: "Explorer\tNomad\tVoyager\n" + row.quote }), null, name + ": other order");
-    assert.deepEqual(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: "Trip delay\n" + row.quote }), below ? null : { plan: "Voyager", figureText: "up to S$" + amount(1).toLocaleString("en-SG") }, name + ": no header" + " (as 3c8f1521)");
+    assert.equal(planColumnFigure(row, [reading(excerpt, amount(1))], { pageText: "Trip delay\n" + row.quote }), null, name + ": no header");
   }
   // A "Not covered" cell keeps its place: Voyager's cell is the second cell, not the second figure.
   const row = { policyId: "docH", sourcePage: 3, quote: "Golf equipment Not covered S$500 S$800", benefitName: "Golf equipment" };
@@ -371,7 +371,7 @@ test("prices in the header, the header nearest above the row's own line, and no 
   assert.equal(planColumnFigure(row, [reading(500)], { pageText: priced }), null, "priced header: first plan's cell");
   // A three-cell line of notes headings naming Plus first is no plan header, above the row or below it.
   assert.equal(planHeaderIndex("Plus\tAdd-on\tDetails", "Plus", 3), null);
-  assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText: `Plus\tAdd-on\tDetails\n${name}\t${cells.join("\t")}` }), { plan: "Plus", figureText: "up to S$500" }, "notes line above" + " (as 3c8f1521)");
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: `Plus\tAdd-on\tDetails\n${name}\t${cells.join("\t")}` }), null, "notes line above");
   // Multi-word plan names under "Your plan" (the label keeps its last word).
   assert.equal(planHeaderIndex("Your plan\tTravel Lite\tTravel Plus\tTravel Max", "Travel Plus", 3), 1);
   assert.equal(planHeaderIndex("Your plan\tTravel Lite\tTravel Plus\tTravel Max", "Travel Max", 3), 2);
@@ -379,7 +379,7 @@ test("prices in the header, the header nearest above the row's own line, and no 
   const strayBelow = `Benefits\tStandard\tPlus\tMax\n${name}\t${cells.join("\t")}\nPlus\tAdd-on\tDetails`;
   assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: strayBelow }), { plan: "Plus", figureText: "up to S$1,000" });
   assert.equal(planColumnFigure(row, [reading(500)], { pageText: strayBelow }), null, "stray line below: first cell");
-  assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText: `${name}\t${cells.join("\t")}\nPlus\tAdd-on\tDetails` }), { plan: "Plus", figureText: "up to S$500" }, "only a stray line below" + " (as 3c8f1521)");
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: `${name}\t${cells.join("\t")}\nPlus\tAdd-on\tDetails` }), null, "only a stray line below");
   // Only the header nearest above the row's own line places the plan, and no other page is read (TE and Critic r373).
   const rows = `${name}\t${cells.join("\t")}\nReplacing travel documents stolen while you are away\tS$200\tS$400\tS$600`;
   // G10: an earlier table on the page prints the same cells in another order; the row's own header is the nearer one.
@@ -389,30 +389,30 @@ test("prices in the header, the header nearest above the row's own line, and no 
   // F3/F4: a new section on the row's page with its header lost: none, whatever the page before prints.
   for (const top of ["Section 5 Baggage and personal belongings\nBenefits", "Section 5 Trip disruption"]) {
     const pageText = `Benefits\tPlus\tStandard\tMax\nMedical expenses\tS$250,000\tS$100,000\tS$500,000\n${top}\n${rows}`;
-    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), { plan: "Plus", figureText: "up to S$500" }, top + ": misread" + " (as 3c8f1521)");
+    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), top === "Section 5 Trip disruption" ? { plan: "Plus", figureText: "up to S$500" } : null, top + ": misread" + " (titled table, as 3c8f1521)");
     assert.equal(planColumnFigure(row, [reading(1000)], { pageText }), null, top + ": the earlier table's header is not this one's");
   }
   // F5 and a table carried over: the row's page prints no header, so no figure (the page before is never read).
-  assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText: rows }), { plan: "Plus", figureText: "up to S$500" }, "F5 no header on the page" + " (as 3c8f1521)");
-  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: rows }), { plan: "Plus", figureText: "up to S$1,000" }, "carried over: no figure" + " (as 3c8f1521)");
-  assert.deepEqual(planColumnFigure(row, [reading(1000), reading(1000), reading(1000)], { pageText: rows }), { plan: "Plus", figureText: "up to S$1,000" }, "readings alone" + " (as 3c8f1521)");
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: rows }), null, "F5 no header on the page");
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: rows }), null, "carried over: no figure");
+  assert.equal(planColumnFigure(row, [reading(1000), reading(1000), reading(1000)], { pageText: rows }), null, "readings alone");
   // A multi-word plan named in a single-spaced line that is not read as a header stops the scan (Critic r373 H).
   const planA = { ...row }, readA = (amount: number) => ({ ...reading(amount, "Plan A") });
   const spacedPlans = `Benefits\tPlan C\tPlan B\tPlan A\nMedical expenses\tS$250,000\tS$100,000\tS$500,000\nBenefits Plan A Plan B Plan C extra\n${rows}`;
-  assert.deepEqual(planColumnFigure(planA, [readA(1500)], { pageText: spacedPlans }), { plan: "Plan A", figureText: "up to S$1,500" }, "plan named in an unread line" + " (as 3c8f1521)");
+  assert.equal(planColumnFigure(planA, [readA(1500)], { pageText: spacedPlans }), null, "plan named in an unread line");
   // The row's own line is found once: the same cells after another benefit's words do not count as it.
-  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: `Benefits\tStandard\tPlus\tMax\n${rows}\n${rows}` }), { plan: "Plus", figureText: "up to S$1,000" }, "row printed twice" + " (as 3c8f1521)");
+  assert.equal(planColumnFigure(row, [reading(1000)], { pageText: `Benefits\tStandard\tPlus\tMax\n${rows}\n${rows}` }), null, "row printed twice");
   // Cells then the explaining line: the cells line is the row's own when the next line starts with its words.
   const belowPage = `Benefits\tStandard\tPlus\tMax\n${cells.join("\t")}\n${name}`;
-  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: belowPage }), { plan: "Plus", figureText: "up to S$1,000" }, "cells then line (as 3c8f1521)");
-  assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText: belowPage }), { plan: "Plus", figureText: "up to S$500" }, "cells then line: first plan's cell" + " (as 3c8f1521)");
+  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: belowPage }), CELLS_THEN_LINE_BINDING ? { plan: "Plus", figureText: "up to S$1,000" } : null, "cells then line");
+  assert.equal(planColumnFigure(row, [reading(500)], { pageText: belowPage }), null, "cells then line: first plan's cell");
   // Every line between the header and the row must belong to the same table (a closed list), else none (TE r4 A3-A6).
   const other = "Benefits\tPlus\tStandard\tMax\nMedical expenses\tS$250,000\tS$100,000\tS$500,000";
   for (const [why, between] of [["A3 a title", "Trip disruption benefits"], ["A4 a numbered table title", "Table 2 - Travel inconvenience"],
     ["A5 a bare label line", "Optional benefits\nBenefits"], ["A6 a two-plan table", "Benefits\tElite\tPrestige\nGolf cover\tS$300\tS$600"],
     ["A7 a part heading", "Part B Travel inconvenience"]] as [string, string][]) {
     const pageText = `${other}\n${between}\n${rows}`;
-    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), { plan: "Plus", figureText: "up to S$500" }, why + ": misread" + " (as 3c8f1521)");
+    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), why.startsWith("A3") ? { plan: "Plus", figureText: "up to S$500" } : null, why + ": misread" + " (titled table, as 3c8f1521)");
     assert.equal(planColumnFigure(row, [reading(1000)], { pageText }), null, why + ": another table's header");
   }
   // Allowed between: other rows of n cells, a cells-alone row's explaining line, the row's own wrapped name, a sub-heading.
@@ -421,7 +421,7 @@ test("prices in the header, the header nearest above the row's own line, and no 
   ok(`Benefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$250,000\tS$500,000\n${rows}`, 1000, "a row between");
   const explained = `Benefits\tStandard\tPlus\tMax\nS$100,000\tS$250,000\tS$500,000\nIf you need treatment overseas\n${cells.join("\t")}\n${name}`;
   if (CELLS_THEN_LINE_BINDING) ok(explained, 1000, "an explaining line between");
-  else assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: explained }), { plan: "Plus", figureText: "up to S$1,000" }, "an explaining line between, binding off" + " (as 3c8f1521)");
+  else assert.equal(planColumnFigure(row, [reading(1000)], { pageText: explained }), null, "an explaining line between, binding off");
   ok(`Benefits\tStandard\tPlus\tMax\nMaximum limits per trip\n${rows}`, 1000, "A11 a sub-heading");
   const wrapped = { ...row, quote: `Costs if you have to come home early because a close relative is seriously ill ${cells.join(" ")}`, benefitName: "Costs if you have to come home early" };
   const wrappedReading = (amount: number) => ({ ...reading(amount), excerpt: `relative is seriously ill\t${cells.join("\t")}` });
@@ -429,14 +429,14 @@ test("prices in the header, the header nearest above the row's own line, and no 
   assert.deepEqual(planColumnFigure(wrapped, [wrappedReading(1000)], { pageText: wrapPage }), { plan: "Plus", figureText: "up to S$1,000" }, "A10 the name wraps");
   assert.equal(planColumnFigure(wrapped, [wrappedReading(500)], { pageText: wrapPage }), null, "A10 misread");
   // An explaining line is allowed only right below a row of cells alone: below a row with its name it is a title.
-  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: `Benefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$250,000\tS$500,000\nTrip disruption\n${rows}` }), { plan: "Plus", figureText: "up to S$1,000" }, "a title after a named row" + " (as 3c8f1521)");
+  assert.deepEqual(planColumnFigure(row, [reading(1000)], { pageText: `Benefits\tStandard\tPlus\tMax\nMedical expenses\tS$100,000\tS$250,000\tS$500,000\nTrip disruption\n${rows}` }), { plan: "Plus", figureText: "up to S$1,000" }, "a title after a named row" + " (titled table, as 3c8f1521)");
   // TE r5: a title repeating the row's first words is no wrapped name when the row's line prints the whole name (C1);
   // a sub-heading counts only directly under the header (C3, C4); an explaining line needs a row of cells alone below it
   // (C6, name-then-cells layout).
   for (const [why, between] of [["C1", "Trip postponement"], ["C3", "Maximum benefit limits"], ["C4", "\nLimits of cover per journey (S$)"],
     ["C6", null]] as [string, string | null][]) {
     const pageText = between == null ? `Benefits\tPlus\tStandard\tMax\nS$250,000\tS$100,000\tS$500,000\nTrip disruption benefits\n${rows}` : `${other}\n${between}\n${rows}`;
-    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), { plan: "Plus", figureText: "up to S$500" }, why + ": misread" + " (as 3c8f1521)");
+    assert.deepEqual(planColumnFigure(row, [reading(500)], { pageText }), why === "C6" ? { plan: "Plus", figureText: "up to S$500" } : null, why + ": misread" + " (titled table, as 3c8f1521)");
     assert.equal(planColumnFigure(row, [reading(1000)], { pageText }), null, why + ": another table's header");
   }
   // Critic r373 M1: a whole worded cell ("Unlimited", "As charged") counts as a cell, in the rows between and in the row.
@@ -460,8 +460,8 @@ test("prices in the header, the header nearest above the row's own line, and no 
     assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 500)], { pageText: page }), null, title + ": first plan's cell");
   }
   for (const title of ["Section 2", "Section 2 Trip disruption", "Part B Travel inconvenience", "Table 2 - Travel inconvenience", "Travel inconvenience benefits for families", "Section 2 Travel inconvenience extras"])
-    assert.deepEqual(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\n${title}\n${pp}`) }), { plan: "Business", figureText: "up to S$1,000" }, title + " (as 3c8f1521)");
-  assert.deepEqual(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\nTravel inconvenience\nBenefits\tElite\tPrestige\n${pp}`) }), { plan: "Business", figureText: "up to S$1,000" }, "a group title with no row below it" + " (as 3c8f1521)");
+    assert.deepEqual(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\n${title}\n${pp}`) }), /^(?:Part|Table)\b/.test(title) ? null : { plan: "Business", figureText: "up to S$1,000" }, title + " (titled table, as 3c8f1521)");
+  assert.equal(planColumnFigure(tRow("Trip postponement S$500 S$1,000 S$1,500"), [tRead("Trip postponement S$500 S$1,000 S$1,500", 1000)], { pageText: travel(`${evac}\nTravel inconvenience\nBenefits\tElite\tPrestige\n${pp}`) }), null, "a group title with no row below it");
   // The route reads only the row's own page.
   const { readFileSync } = await import("node:fs");
   const route = readFileSync(new URL("../../app/api/benefits/route.ts", import.meta.url), "utf8");
@@ -497,4 +497,21 @@ test("a header never costs a figure the row's cells give: titles, explaining lin
     // A figure that is none of the row's cells never binds.
     assert.equal(planColumnFigure(row, [read(amount(1) + 1)], { runIsUnique: true, pageText }), null, `${why}: ${name}: not a cell`);
   }
+  // A closed allowance: these lines between the header and the row still give no figure (main's blocking).
+  const cancelRow = { policyId: "docF", sourcePage: 5, quote: cancel.split(T).join(" "), benefitName: "If you have to cancel your entire trip" };
+  const cancelRead = { documentId: "docF", page: 5, excerpt: cancel, column: "Business", qualifier: null,
+    figure: { kind: "printed", amount: 10000, currency: "SGD" }, figureText: "up to S$10,000", benefit: "If you have to cancel your entire trip" };
+  assert.deepEqual(planColumnFigure(cancelRow, [cancelRead], { runIsUnique: true, pageText: [head, fam, "Delays", cancel].join("\n") }), { plan: "Business", figureText: "up to S$10,000" }, "control: a title alone");
+  for (const [why, between] of [["a premium line", ["Premium (per trip)", "S$38", "S$52", "S$71"].join(T)], ["another header of two plans", ["Benefits", "Elite", "Prestige"].join(T)],
+    ["a label heading alone", "Benefits"], ["a part line", "Part B Optional cover"], ["a table line", "Table 2 Trip disruption"], ["a sub-heading caption", "Maximum benefit limits"],
+    ["a line of two non-amount cells", ["Optional cover", "Add-on"].join(T)], ["a line naming a plan", "Business travellers also get:"], ["a row of another width", ["Golf cover", "S$300", "S$600"].join(T)],
+    ["a line printing an amount", "Excess of S$100 applies"]] as [string, string][])
+    assert.equal(planColumnFigure(cancelRow, [cancelRead], { runIsUnique: true, pageText: [head, fam, "Delays", between, cancel].join("\n") }), null, why);
+  // A dash between a row's name and its cells is a separator when only a header of the narrower count is above (TE r6 W8).
+  const w8 = { policyId: "docF", sourcePage: 5, quote: "Trip curtailment - S$500 S$1,000", benefitName: "Trip curtailment" };
+  const w8Read = (amount: number, column: string) => ({ documentId: "docF", page: 5, excerpt: "Trip curtailment\t-\tS$500\tS$1,000", column, qualifier: null,
+    figure: { kind: "printed", amount, currency: "SGD" }, figureText: "up to S$" + amount.toLocaleString("en-SG"), benefit: "Trip curtailment" });
+  const w8Page = ["Benefits\tPlus\tMax", "Trip curtailment\t-\tS$500\tS$1,000"].join("\n");
+  assert.deepEqual(planColumnFigure(w8, [w8Read(1000, "Max")], { pageText: w8Page }), { plan: "Max", figureText: "up to S$1,000" }, "W8 dash separator");
+  assert.equal(planColumnFigure(w8, [w8Read(500, "Max")], { pageText: w8Page }), null, "W8 dash separator: the other plan's cell");
 });
