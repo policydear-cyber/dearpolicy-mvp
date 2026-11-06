@@ -5,7 +5,7 @@ import { scheduleRequestDrain, startJobNow } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
+import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,restartWaitingPolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { appendJobAudit, recordJobEvent, recoverExpiredLeases, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
         pdfPassword: body.pdfPassword || undefined,
         linkUploadMember: true,
       });
+      await restartWaitingPolicyJob(body.policyId);
       if (stalled) await makePolicyJobDueNow(body.policyId);
       await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId });
     });

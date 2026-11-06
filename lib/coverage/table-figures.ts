@@ -631,6 +631,23 @@ const onlyPaysDeathBenefit = (t: string) => t.toLowerCase().replace(/[’]/g, "'
   .every((w) => SAYS_ONLY_WORDS.has(w) || /^accelerat/.test(w));
 /** Words that something is paid on death (a second payment beside the plan's death benefit). */
 const SECOND_DEATH_PAYMENT = /\b(?:payable|paid|pay|pays)\b[^.;]*\b(?:on|upon)\s+(?:the\s+)?death\b|\b(?:on|upon)\s+(?:the\s+)?death\b[^.;]*\b(?:payable|paid|pay|pays)\b|\bdibayar\b[^.;]*\bkematian\b/i;
+/** A document's kind printed at the end of its title ("Travel insurance summary", "Policy schedule"): not part of a
+ * product's name. */
+const DOCUMENT_WORDS = /(?:\s+(?:summary|schedule|certificate|wording|booklet|brochure|document|contract|endorsement|statement|of\s+insurance))+\s*$/i;
+/** A cover named only by its plan ("Business", the plan of a travel summary) is named with its product and as a plan:
+ * "Travel insurance, Business plan", never "Business" alone, which says nothing of what the cover is (5 Nov: Home read
+ * "Not included: Business (no fixed sum, see Coverage)"). Null when the cover has a name of its own. */
+export function planCoverName(cover: string | null | undefined, plan: string | null | undefined, product: string | null | undefined): string | null {
+  const key = (n: string | null | undefined) => (n ?? "").toLowerCase().replace(/\bplan\b/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (!cover?.trim() || !plan?.trim() || key(cover) !== key(plan)) return null;
+  const planName = /\bplan\b/i.test(plan) ? plan.trim() : plan.trim() + " plan";
+  let productName = (product ?? "").replace(DOCUMENT_WORDS, "").trim();
+  // What is left of a document's title is no product ("Policy schedule", "Your insurance certificate").
+  if (/^(?:(?:your|the|policy|insurance)\s*)*$/i.test(productName)) productName = "";
+  if (!productName || key(productName) === key(plan)) return planName;
+  // A product whose name holds the plan's ("Business Single Trip") already says both.
+  return (" " + key(productName) + " ").includes(" " + key(plan) + " ") ? productName : productName + ", " + planName;
+}
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
 const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
@@ -681,7 +698,7 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
       earlyName: [list[0].cover, ...own.map((h) => h.name)].filter((n): n is string => !!n).every(earlyPayRiderName) && !!(list[0].cover || own[0]?.name),
       paysPlanDeath: paysPlanDeathBenefit([...list.flatMap((r) => [r.benefit, r.section, r.cover, (r as { source?: { excerpt?: string } | null }).source?.excerpt, ...r.conditions]),
         ...own.flatMap((h) => [h.name, ...(h.words ?? [])])]),
-      plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || list[0].cover || list[0].product || "Policy"),
+      plainSums: [...sums.values()], insured, heldCurrency, heldDocs: new Set(own.map((h) => h.documentId).filter((d): d is string => !!d)), part: { name: partName(own[0]?.name || planCoverName(list[0].cover, list[0].plan, list[0].product) || list[0].cover || list[0].product || "Policy"),
       amount: fits ? one!.amount : null, currency: fits ? one!.currency : null, ...(accelerates ? { accelerates } : {}), ...(fits && conditional ? { conditional } : {}) } as TilePart };
   });
   // One policy read under two names on two of its documents: its wording names the person's cover after the plan itself
