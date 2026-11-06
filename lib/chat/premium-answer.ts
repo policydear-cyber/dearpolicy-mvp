@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/format/currency";
 import { amountAppears, amountPrintedWith } from "./assertions";
 import { attachOperand, boundOperand, citeLine, differenceOperands, documentHashes, figuresIn, perPeriodOperand, printedRowFor, productOperand, rowBenefit, sumOperands } from "./answer-verification";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
-import { summarisePremiums, type PremiumItem, type PremiumSummaryMemo } from "@/lib/policies/premium-summary";
+import { paymentsPerYear, summarisePremiums, type PremiumItem, type PremiumSummaryMemo } from "@/lib/policies/premium-summary";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding, FigurePeriod } from "@/types";
 import { documentsByPerson, noPoliciesSentence, personName } from "./household-status";
@@ -45,10 +45,13 @@ type Line = { item: PremiumItem; docId: string | null; docName: string | null; p
   ops?: LineOps };
 type LineOps = { printed: ComputationOperand | null; total: ComputationOperand | null; annual: ComputationOperand | null; cashAnnual: ComputationOperand | null; medisaveAnnual: ComputationOperand | null };
 
-/** Gate R17: the period a premium record's frequency states (the same reading as annualisePremium; none stated is yearly). */
+/** Gate R17: the period a premium record's frequency states, as the premium summary reads it (paymentsPerYear; none
+ * stated is yearly). A period with no FigurePeriod (every two months, fortnightly) is "event": no yearly figure is
+ * worked out from it, so none is shown as verified. */
 function periodOf(frequency: string | null | undefined): FigurePeriod {
-  const f = (frequency ?? "").toLowerCase();
-  return /month/.test(f) ? "month" : /quarter/.test(f) ? "quarter" : /semi|half.?year|6 month/.test(f) ? "half_year" : /week/.test(f) ? "week" : "year";
+  if (!(frequency ?? "").trim()) return "year";
+  const n = paymentsPerYear(frequency);
+  return n === 12 ? "month" : n === 4 ? "quarter" : n === 2 ? "half_year" : n === 52 ? "week" : n === 1 ? "year" : "event";
 }
 /** Gate R17: a binding for `value` on the printed row of `pageText` that prints it beside `currency` -- the row `want`
  * names first, then a premium row. Null when the page prints no such row. */

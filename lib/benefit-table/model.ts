@@ -21,7 +21,8 @@ export function stoppedOutputTokens(reported: number | null | undefined, streame
   return Math.max(reported ?? 0, Math.ceil(streamedChars / 3));
 }
 
-export function anthropicTableModel(choice: ModelChoice, client?: Client): TableModel {
+/** opts.effort false: the request carries no effort setting, for a model that refuses one (a figure guard on an older model). */
+export function anthropicTableModel(choice: ModelChoice, client?: Client, opts: { effort?: boolean } = {}): TableModel {
   return {
     choice,
     async call(c) {
@@ -35,7 +36,7 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client): Table
       // within 5 minutes (a document's page re-reads, the next upload). The document itself comes after it, uncached.
       const system = [{ type: "text" as const, text: c.system, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } }];
       const stream = api.messages.stream({ model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user", content: c.user }],
-        output_config: { effort: "medium", format: { type: "json_schema", schema: c.schema } } });
+        output_config: { ...(opts.effort === false ? {} : { effort: "medium" as const }), format: { type: "json_schema", schema: c.schema } } });
       let timedOut = false, streamedChars = 0;
       stream.on?.("text", (delta) => { streamedChars += delta.length; });
       const timer = c.timeoutMs != null && stream.abort ? setTimeout(() => { timedOut = true; stream.abort!(); }, Math.max(0, c.timeoutMs)) : null;

@@ -14,6 +14,9 @@ import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePa
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
+import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
+import { runGuards, type GuardReader } from "./guard-run";
+import { figureGuardsEnabled } from "./guard-flag";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
@@ -64,7 +67,10 @@ export function pageParts<T extends { page: number; text: string }>(pages: T[], 
 
 type Row = Record<string, unknown>;
 export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
-export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[] };
+/** guards: the figure guards' verdicts on this reading (guards.ts), stored only when the guards ran (switch on). */
+export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[]; guards?: GuardRecord };
+/** The figure guards for one reading (guard-run.ts): five readers, reader 1 first, and the most the check may spend. */
+export type GuardSetup = { readers: GuardReader[]; capUsd: number };
 export type OnUsage = (what: string, reply: TableReply) => Promise<void> | void;
 
 /** Once the tables exist they stay: a yes is remembered for this server instance, a no is checked again next time. */
@@ -243,7 +249,7 @@ export function holdReason(file: Pick<DocumentFile, "quarantine" | "scan_detail"
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
-export function checkStored(doc: SourceDoc, stored: StoredReading): CheckedReading {
+export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "document" | "pages">): CheckedReading {
   let reading = checkReading(doc, stored.document);
   for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json));
   return reading;
@@ -286,7 +292,7 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string }> {
   const now = time.now ?? Date.now;
   // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
@@ -350,12 +356,27 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     await onUsage?.("page reading", reply);
     if (reply.json != null) stored.pages.push({ page: f.page, json: reply.json });
   }
+  // The figure guards (switch on only): every figure of the finished reading is checked by five readers before it is used.
+  // Whatever happens in the check, the paid reading is stored (Critic R389-1); a check that failed outright leaves every
+  // figure unchecked, for the continuation job.
+  if (guards) {
+    // The spend limit is per document (DC's US$3): what earlier checks of this document spent counts too (Critic R389b-3).
+    const before = await db("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [doc.id, accountId]).catch(() => []);
+    const old = before.length ? (typeof before[0].reading === "string" ? JSON.parse(before[0].reading) : before[0].reading) as StoredReading : null;
+    const spentBefore = Number(old?.guards?.spentUsd ?? 0) || 0;
+    try { stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, spentBefore }); }
+    catch (error) {
+      console.error(`Figure check failed for ${doc.id}:`, error instanceof Error ? error.message : String(error));
+      stored.guards = { version: GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: spentBefore, calls: 0, stopped: "error" };
+    }
+  }
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
     ON CONFLICT (policy_id) DO UPDATE SET reading=EXCLUDED.reading, model=EXCLUDED.model, prompt_version=EXCLUDED.prompt_version, read_at=now()
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
   await clearUnreadTableNote(db, accountId, doc.id);
-  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}) };
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}),
+    ...(stored.guards ? { figuresChecking: unfinishedCount(checkStored(doc, stored), stored.guards), guardsAt: stored.guards.at } : {}) };
 }
 
 type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
@@ -424,8 +445,29 @@ export async function noteUnreadTable(db: Db, accountId: string, policyId: strin
   } catch (error) { console.warn("Benefit table: could not note the unread table for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
 
+/** A figure the guards did not settle (guards.ts GuardNote), with the document it is printed in. */
+export type FigureCheck = GuardNote & { documentId: string; document: string };
+/** checked: the readings before the figure guards were applied; figureChecks: the figures the household is asked about.
+ * Both are set only when the guards are on (guard-flag.ts). */
 type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (SectionLink & { chosenBy: "model" | "household" })[]; confirmations: Confirmation[];
-  documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[] };
+  documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[]; checked?: CheckedReading[]; figureChecks?: FigureCheck[] };
+
+/** The household's own figures for checks the guards did not settle (benefit_figure_confirmations): final. None before the
+ * table is applied. */
+async function figureConfirmationsOf(db: Db, accountId: string): Promise<FigureConfirmation[]> {
+  const ok = await db("SELECT to_regclass('public.benefit_figure_confirmations') IS NOT NULL AS ok", []);
+  if (ok[0]?.ok !== true) return [];
+  return (await db("SELECT policy_id, claim_key, value FROM benefit_figure_confirmations WHERE account_id=$1", [accountId]))
+    .map((r) => ({ documentId: String(r.policy_id), claimKey: String(r.claim_key), value: Number(r.value) }))
+    .filter((c) => Number.isFinite(c.value));
+}
+/** Every figure the guards left for the household, document by document. */
+export function figureChecksOf(readings: CheckedReading[]): FigureCheck[] {
+  const out: FigureCheck[] = [];
+  for (const r of readings) for (const row of [...r.benefits, ...r.covers])
+    for (const n of (row as { figureCheck?: GuardNote[] }).figureCheck ?? []) out.push({ ...n, documentId: r.documentId, document: r.document });
+  return out;
+}
 
 async function load(db: Db, accountId: string): Promise<Loaded> {
   const storedOnce = db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId])
@@ -453,7 +495,11 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   })]);
   const people = await withDocumentLinks(db, accountId, members);
   const stored = await storedOnce;
-  const readings = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
+  const checked = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
+  // The figure guards (switch on only): a figure is used only when five readers agreed on it or the household confirmed it.
+  const guarded = figureGuardsEnabled(process.env, accountId);
+  const figureConfirmations = guarded ? await figureConfirmationsOf(db, accountId) : [];
+  const readings = guarded ? checked.map((r) => applyGuards(r, stored.get(r.documentId)?.guards, figureConfirmations)) : checked;
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));
@@ -461,17 +507,59 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .filter((r) => ids.has(String(r.family_member_id)))
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
-  return { family: people, readings, links, confirmations,
+  return { family: people, readings, links, confirmations, ...(guarded ? { checked, figureChecks: figureChecksOf(readings) } : {}),
     documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: fetched.has(d.id) ? d.pages.length : counts.get(d.id) ?? 0, live: d.live, scanLive: d.scanLive,
       misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id)), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
-export async function tableFor(db: Db, accountId: string): Promise<{ table: BenefitTable; documents: Loaded["documents"]; links: Loaded["links"] }> {
+export async function tableFor(db: Db, accountId: string): Promise<{ table: BenefitTable; documents: Loaded["documents"]; links: Loaded["links"]; figureChecks?: FigureCheck[] }> {
   const l = await load(db, accountId);
   // No confirmations: people never confirm or correct amounts (DC, 22 Oct 2026), so the table always uses the printed
-  // figures, even where an older build stored a correction (TE #99).
-  return { table: assembleTable(l.readings, l.family, l.links), documents: l.documents, links: l.links };
+  // figures, even where an older build stored a correction (TE #99). The one exception is a figure the guards could not
+  // settle, which the household confirms (DC, 6 Nov 2026); that is applied in load().
+  return { table: assembleTable(l.readings, l.family, l.links), documents: l.documents, links: l.links, ...(l.figureChecks ? { figureChecks: l.figureChecks } : {}) };
+}
+
+/** The household gives the figure for one check the guards did not settle, or takes it back (value null). Final: no
+ * re-read or check overwrites it; only the household changes it. Only for a figure the document's current reading uses. */
+export async function setFigureConfirmation(db: Db, accountId: string, userId: string | null, documentId: string, claimKey: string, value: number | null): Promise<void> {
+  if (!figureGuardsEnabled(process.env, accountId)) throw new TableInputError("Figure checks are not switched on.");
+  const ok = await db("SELECT to_regclass('public.benefit_figure_confirmations') IS NOT NULL AS ok", []);
+  if (ok[0]?.ok !== true) throw new TableInputError("Figure checks are not set up yet.");
+  if (value == null) { await db("DELETE FROM benefit_figure_confirmations WHERE account_id=$1 AND policy_id=$2 AND claim_key=$3", [accountId, documentId, claimKey]); return; }
+  if (!Number.isFinite(value) || value <= 0) throw new TableInputError("Give the figure as a number more than 0.");
+  const l = await load(db, accountId);
+  const reading = (l.checked ?? []).find((r) => r.documentId === documentId);
+  if (!reading || !claimsOf(reading).some((c) => c.key === claimKey)) throw new TableInputError("That figure is not in your documents any more.");
+  await db(`INSERT INTO benefit_figure_confirmations(account_id, policy_id, claim_key, value, updated_by, updated_at) VALUES($1,$2,$3,$4,$5,now())
+    ON CONFLICT (account_id, policy_id, claim_key) DO UPDATE SET value=EXCLUDED.value, updated_by=EXCLUDED.updated_by, updated_at=now()`,
+    [accountId, documentId, claimKey, value, userId]);
+}
+
+/** Runs the figure guards on a document's stored reading without reading it again: a document read before the guards were
+ * switched on, or one whose check was cut off by its time limit (figures left "checking"). Paid: the caller decides when. The stored reading itself is kept; only its guards are replaced. */
+/** continuing: the start time of the check a continuation job is finishing (GuardRecord.at). The job does nothing (and pays
+ * nothing) when the document's reading has since been replaced or its check has nothing left "checking". */
+export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
+  const now = time.now ?? Date.now;
+  const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
+  const [doc] = await documents(db, accountId, policyId);
+  if (!doc || !doc.readable) return { checked: false, why: "no readable current document" };
+  const rows = await db("SELECT reading, read_at::text AS read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
+  if (!rows.length) return { checked: false, why: "the document has no table reading" };
+  const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
+  if (continuing != null) {
+    if (stored.guards?.at !== continuing) return { checked: false, why: "the document was read again since; its own check runs instead" };
+    if (!unfinishedCount(checkStored(doc, stored), stored.guards)) return { checked: false, why: "nothing is left to check" };
+  }
+  // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
+  const record = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
+  // Only onto the reading this check was made on: a Read again stored meanwhile keeps its own check (Critic R389b-2).
+  const saved = await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2 AND read_at::text=$4 RETURNING 1 AS ok",
+    [policyId, accountId, JSON.stringify(record), String(rows[0].read_at)]);
+  if (!saved.length) return { checked: false, why: "the document was read again while this check ran; its own check stands", record };
+  return { checked: true, record };
 }
 
 /** Asks the model which cover each section is paid under, for every section the household has not linked itself. The
