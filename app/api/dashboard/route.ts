@@ -22,9 +22,10 @@ import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote, unownedNotFullyRead } 
 import { readingCacheReady } from "@/lib/policies/read-failures";
 import { coverVerdict } from "@/lib/coverage/cover-verdict";
 import { documentName } from "@/lib/policies/document-name";
+import { onFileDocumentName } from "@/lib/coverage/on-file-note";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
-type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null};
-const ON_FILE_DOC_COLUMNS="p.product_name AS doc_product,p.original_filename,p.insurer AS doc_insurer,p.document_role,p.policy_number";
+type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null;doc_type:string|null};
+const ON_FILE_DOC_COLUMNS="p.product_name AS doc_product,p.original_filename,p.insurer AS doc_insurer,p.document_role,p.policy_number,p.policy_type AS doc_type";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -174,7 +175,10 @@ export async function GET(request:NextRequest){
   const referenceOnly=new Map<string,number>();
   // The documents each on-file tile names, so its "Open it to check" says which one (lib/coverage/on-file-note.ts).
   const onFileDocs=new Map<string,Set<string>>();
-  const noteDoc=(category:string,doc:OnFileDoc)=>onFileDocs.set(category,(onFileDocs.get(category)??new Set()).add(documentName({product_name:doc.doc_product,original_filename:doc.original_filename,insurer:doc.doc_insurer,document_role:doc.document_role,policy_number:doc.policy_number})));
+  // A travel, home or motor policy is named with its kind on another cover's tile, so travel wording on Hospitalisation
+  // reads as travel cover (lib/coverage/on-file-note.ts).
+  const noteDoc=(category:string,doc:OnFileDoc)=>onFileDocs.set(category,(onFileDocs.get(category)??new Set()).add(onFileDocumentName({type:doc.doc_type,product:doc.doc_product,
+    name:documentName({product_name:doc.doc_product,original_filename:doc.original_filename,insurer:doc.doc_insurer,document_role:doc.document_role,policy_number:doc.policy_number})},category)));
   for(const ref of refs.rows){
     const category=normalizeCoverageCategory(ref.category); if(coverageMap.has(category))continue;
     const owner=selected.find(x=>wordingDescribes(x,{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}))??null; if(!owner){referenceOnly.set(category,(referenceOnly.get(category)??0)+1);noteDoc(category,ref);continue;}

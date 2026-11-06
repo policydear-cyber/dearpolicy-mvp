@@ -25,7 +25,10 @@ import type { ClaimPerson } from "@/lib/claims/person";
 export type PremiumRecordRow = { id: string; policy_id: string | null; family_member_id: string | null; insurer: string | null; product_name: string | null; policy_number: string | null;
   amount: string; currency: string | null; frequency: string | null; payment_date: string | null; period_start: string | null; period_end?: string | null; created_at: string; notes?: string | null;
   /** The document_role of the current document the record was read from (null: unknown, or that document is no longer current). */
-  source_role?: string | null };
+  source_role?: string | null;
+  /** The cover period its own document prints (policies.effective_date and renewal_or_expiry_date), for a record that
+   * prints no period of its own: a trip's premium read from its schedule (5 Nov). */
+  document_start?: string | null; document_end?: string | null };
 export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amount: number; currency: string; shared: boolean;
   /** Round 16: the record states its currency (false: `currency` is only this summary's display default, never a fact to total or show). */
   currencyStated: boolean;
@@ -36,6 +39,8 @@ export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amou
   /** The record prints no payment frequency, only a short cover period: it may be a trip's one-off premium or one month of a
    * monthly plan, so it is never annualised or totalled, and the total says it leaves it out (Critic R264). */
   shortPeriod: boolean;
+  /** The record prints a frequency that names neither a recurring period nor a one-off: never totalled (isUnclearFrequency). */
+  unclearFrequency?: boolean;
   /** Read from the premium line the policy's own document prints (its benefit table), not from a premium record. */
   fromTable?: boolean;
   /** Said with the premium: a first-year premium, and the premium from the next policy year. */
@@ -48,6 +53,9 @@ export type PremiumSummary = { monthly: number; annual: number; cashAnnual: numb
   oneOff: PremiumItem[];
   /** Premiums for a short period with no frequency (PremiumItem.shortPeriod): left out of the totals, and named in the note. */
   shortPeriod: PremiumItem[];
+  /** Premiums whose printed frequency names neither a recurring period nor a one-off (PremiumItem.unclearFrequency): left
+   * out of the totals, and named in the note. */
+  unclear: PremiumItem[];
   /** Policies on file with no premium evidence: the total leaves them out. */
   missing: string[]; complete: boolean; note: string | null };
 
@@ -80,18 +88,51 @@ function component(row: PremiumRecordRow) {
   return (normalizedIdentifier(row.policy_number) || row.policy_id || (row.insurer ?? "")) + "|" + product;
 }
 const RECURRING = /month|quarter|semi|half.?year|6 month|week|fortnight|year|annum|annual|\bp\.?\s*a\b\.?|bulanan|tahunan/i;
-/** A premium the record says is paid once ("Single premium", "one-off", "for the period") is a one-off premium. */
+/** Words that a premium is paid once ("Single premium", "one-off", "one-time", "once", "lump sum", "per trip", "for the
+ * period") (5 Nov: a trip schedule's "one-time" S$73.17 was counted as S$6.10 a month). */
+const ONE_OFF_STRONG = /one[- ]?(?:off|time)|once[- ]?off|lump[- ]?sum|non[- ]?recurring|for the (?:period|trip|journey)|per (?:trip|journey)|\bsingle\s+(?:premium|payment|trip)\b/i;
+/** Weaker words: a one-off on their own ("Single", "Once"); beside a recurring word, see RECURRING_WITH_WEAK. */
+const ONE_OFF_WEAK = /\bsingle\b|\bonce\b|\bonly\b/i;
+/** The only shapes in which a weak word sits beside a recurring period and the premium is still recurring: "once a
+ * month", "once every year", "once yearly", "single life". A recurring word is often the cover's length, not how often
+ * it is paid ("Single, covers 12 months", "Once, for a 3-week trip", "Paid once for a 6 month term"), so any other mix
+ * is unclear: named, never totalled (TE pr370 round 2). */
+const RECURRING_WITH_WEAK = /\bonce\s+(?:a|an|every|per|each)\s+(?:calendar\s+|policy\s+)?(?:month|quarter|year|week|fortnight|annum)\b|\bonce\s+(?:monthly|quarterly|yearly|annually|weekly|fortnightly)\b|\bsingle\s+life\b/gi;
+type FrequencyReading = "recurring" | "one_off" | "unclear" | "none";
+function readFrequency(frequency: string | null | undefined): FrequencyReading {
+  const f = (frequency ?? "").trim();
+  if (!f) return "none";
+  const recurring = RECURRING.test(f), strong = ONE_OFF_STRONG.test(f), weak = ONE_OFF_WEAK.test(f);
+  if (!recurring) return strong || weak ? "one_off" : "unclear";
+  if (strong) return "unclear";
+  // A weak word beside a recurring period: recurring only in RECURRING_WITH_WEAK's shapes.
+  return weak && ONE_OFF_WEAK.test(f.replace(RECURRING_WITH_WEAK, " ")) ? "unclear" : "recurring";
+}
 export function isOneOffPremium(row: Pick<PremiumRecordRow, "frequency">) {
-  return /single|one[- ]?off|for the period/i.test(row.frequency ?? "");
+  return readFrequency(row.frequency) === "one_off";
+}
+/** A printed frequency whose payment period is not plain: it names neither a recurring period nor a one-off ("Regular",
+ * "As agreed"), or it mixes the two outside the closed shapes above ("Single premium, yearly", "Single, covers 12
+ * months"). It is never totalled, never taken for a one-off, and named in the note. */
+export function isUnclearFrequency(row: Pick<PremiumRecordRow, "frequency">) {
+  return readFrequency(row.frequency) === "unclear";
 }
 /** A premium with no payment frequency whose record prints a cover period of at most SHORT_TERM_DAYS (29 Sep to 4 Oct) is
  * not known to be yearly: S$73.17 for a six-day trip is not S$73.17 a year (Home tile showed "S$6.10/month", 27 Oct), and
  * a monthly plan's statement for October is not a year's premium either (Critic R264). A year's renewal (1 Jan to 31 Dec)
  * or an end date alone stays yearly, as before (Critic R263). */
-export function isShortPeriodPremium(row: Pick<PremiumRecordRow, "frequency" | "period_start" | "period_end">) {
-  if (isOneOffPremium(row) || RECURRING.test(row.frequency ?? "") || !row.period_start || !row.period_end) return false;
-  const days = (Date.parse(row.period_end.slice(0, 10)) - Date.parse(row.period_start.slice(0, 10))) / 86_400_000;
+export function isShortPeriodPremium(row: Pick<PremiumRecordRow, "frequency" | "period_start" | "period_end" | "document_start" | "document_end">) {
+  if (isOneOffPremium(row) || isUnclearFrequency(row) || RECURRING.test(row.frequency ?? "")) return false;
+  const [start, end] = coverPeriod(row);
+  if (!start || !end) return false;
+  const days = (Date.parse(end.slice(0, 10)) - Date.parse(start.slice(0, 10))) / 86_400_000;
   return Number.isFinite(days) && days >= 0 && days <= SHORT_TERM_DAYS;
+}
+/** The record's own period, else the one its document prints (both ends from one source, never mixed). */
+function coverPeriod(row: Pick<PremiumRecordRow, "period_start" | "period_end" | "document_start" | "document_end">): [string | null, string | null] {
+  if (row.period_start && row.period_end) return [row.period_start, row.period_end];
+  if (!row.period_start && !row.period_end && row.document_start && row.document_end) return [row.document_start, row.document_end];
+  return [null, null];
 }
 export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   // rows arrive newest first: the latest record of each premium component.
@@ -101,7 +142,7 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
     const amount = Number(row.amount), split = premiumSplit(amount, row.notes);
     const annual = annualisePremium(split.total, row.frequency);
     return { ...row, amount, currency: normalizeCurrencyCode(row.currency, "SGD"), currencyStated: !!statedCurrencyCode(row.currency), shared: row.family_member_id == null, cash: split.cash, medisave: split.medisave, total: split.total,
-      oneOff: isOneOffPremium(row), shortPeriod: isShortPeriodPremium(row), annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : annualisePremium(split.cash, row.frequency), medisaveAnnual: split.medisave == null ? null : annualisePremium(split.medisave, row.frequency) };
+      oneOff: isOneOffPremium(row), shortPeriod: isShortPeriodPremium(row), unclearFrequency: isUnclearFrequency(row), annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : annualisePremium(split.cash, row.frequency), medisaveAnnual: split.medisave == null ? null : annualisePremium(split.medisave, row.frequency) };
   });
 }
 /** The parts of a benefit-table cover its printed premium needs (lib/benefit-table/check.ts). */
@@ -373,8 +414,10 @@ function filedPremiums(accountId: string): Promise<FiledPremium[]> {
 }
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }, memo?: PremiumSummaryMemo): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
-    `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role
+    `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role,
+            pd.effective_date::text AS document_start,pd.renewal_or_expiry_date::text AS document_end
        FROM premium_records pr LEFT JOIN policies sd ON sd.id=pr.source_document_id AND sd.account_id=pr.account_id AND ${activePredicate("sd")}
+       LEFT JOIN policies pd ON pd.id=coalesce(pr.source_document_id,pr.policy_id) AND pd.account_id=pr.account_id AND ${activePredicate("pd")}
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
   let fromTable: PremiumItem[] = [], tableLeftOut: TableLeftOut[] = [];
@@ -390,8 +433,8 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
       lapsedOrEnded: ["lapsed"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }
-  const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod);
-  const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod);
+  const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod && !i.unclearFrequency);
+  const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod), unclear = all.filter((i) => i.unclearFrequency);
   const annual = items.reduce((sum, item) => sum + item.annual, 0);
   const cashAnnual = items.some((i) => i.cashAnnual != null) ? items.reduce((sum, i) => sum + (i.cashAnnual ?? i.annual), 0) : null;
   const medisaveAnnual = items.some((i) => i.medisaveAnnual != null) ? items.reduce((sum, i) => sum + (i.medisaveAnnual ?? 0), 0) : null;
@@ -444,8 +487,12 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
     : null;
   const shortNote = shortPeriod.length
-    ? "The total " + (missingNote ? "also " : "") + "leaves out " + shortPeriod.slice(0, 4).map((i) => (i.product_name ?? i.insurer ?? "a policy") + " (" + (i.currencyStated ? formatMoney(i.amount, i.currency) : formatMoney(i.amount, null)) + " for " + longDate(i.period_start!) + " to " + longDate(i.period_end!) + ")").join(", ") +
+    ? "The total " + (missingNote ? "also " : "") + "leaves out " + shortPeriod.slice(0, 4).map((i) => { const [start, end] = coverPeriod(i); return (i.product_name ?? i.insurer ?? "a policy") + " (" + (i.currencyStated ? formatMoney(i.amount, i.currency) : formatMoney(i.amount, null)) + " for " + longDate(start!) + " to " + longDate(end!) + ")"; }).join(", ") +
       ": the record prints no payment frequency, so it may be a one-off premium and is not counted as a yearly one."
+    : null;
+  const unclearNote = unclear.length
+    ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " + unclear.slice(0, 4).map((i) => (i.product_name ?? i.insurer ?? "a policy") + " (" + (i.currencyStated ? formatMoney(i.amount, i.currency) : formatMoney(i.amount, null)) + ", \u201c" + (i.frequency ?? "").trim() + "\u201d)").join(", ") +
+      ": how often " + (unclear.length === 1 ? "it is" : "they are") + " paid is not plain, so " + (unclear.length === 1 ? "it is" : "they are") + " not counted as a recurring cost."
     : null;
   const WHY: Record<TableLeftOut["why"], [string, string]> = {
     not_current: ["the premium its document prints may not be what is paid now", "the premiums their documents print may not be what is paid now"],
@@ -458,7 +505,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const tableNote = (Object.keys(WHY) as TableLeftOut["why"][]).map((why) => {
     const names = [...new Set(tableLeftOut.filter((x) => x.why === why).map((x) => x.name))];
     return names.length ? names.slice(0, 4).join(", ") + ": " + WHY[why][names.length === 1 ? 0 : 1] : null;
-  }).filter(Boolean).map((part, i) => (i === 0 ? "The total " + (missingNote || shortNote ? "also " : "") + "leaves out " : "It also leaves out ") + part + ".").join(" ") || null;
-  const note = [missingNote, shortNote, tableNote, elsewhereNote].filter(Boolean).join(" ") || null;
-  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, missing, countedElsewhere, complete: missing.length === 0 && shortPeriod.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
+  }).filter(Boolean).map((part, i) => (i === 0 ? "The total " + (missingNote || shortNote || unclearNote ? "also " : "") + "leaves out " : "It also leaves out ") + part + ".").join(" ") || null;
+  const note = [missingNote, shortNote, unclearNote, tableNote, elsewhereNote].filter(Boolean).join(" ") || null;
+  return { monthly: annual / 12, annual, cashAnnual, medisaveAnnual, items, oneOff, shortPeriod, unclear, missing, countedElsewhere, complete: missing.length === 0 && shortPeriod.length === 0 && unclear.length === 0 && tableLeftOut.length === 0 && items.length > 0, note };
 }

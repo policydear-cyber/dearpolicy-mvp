@@ -27,14 +27,36 @@ export const MAX_PAGE_REREADS = 12;
  * nothing (FWD re-read 5 Nov: 40,651 tokens in, the 24,000-token cap reached, the whole reading lost and paid for). A part
  * this size leaves room for every row of its pages. A document under it is read in one call, as before. */
 export const PART_MAX_CHARS = 40_000;
+/** Time kept back at the end of a time limit to save the reading or its "could not be read" note. */
+export const SAVE_MARGIN_MS = 20_000;
+/** No reading call is started with less time than this left: it could not finish, and would only be paid for. */
+export const MIN_CALL_MS = 45_000;
+/** A time limit for one reading: the moment (ms since 1970) by which it must have saved, and the clock (tests pass their own). */
+export type ReadTime = { deadline?: number; now?: () => number };
 
-/** Consecutive runs of pages, each at most `limit` characters of text, in page order. */
-export function pageParts<T extends { page: number; text: string }>(pages: T[], limit = PART_MAX_CHARS): T[][] {
+/** The output a part is planned to need, at most: half the cap, so a part is never cut off by it (5 Nov: pages 1-9 of a
+ * 47-page wording, 13,400 characters with a plan table of 189 figures, ran out of 24,000 output tokens twice; each call
+ * took about two minutes and was paid for in full, and the reading was lost). */
+export const PART_MAX_OUTPUT = 12_000;
+/** Planning figures, from that run: a figure on the page costs about 130 output tokens to list (its row for each plan,
+ * the quote, the fields and the reader's reasoning; that part's 189 figures needed more than 24,000), and other text
+ * about 0.3 tokens a character (pages 10-17, about 20,000 characters of wording and 11 figures, needed 5,763). */
+export const TOKENS_PER_FIGURE = 130;
+export const TOKENS_PER_CHAR = 0.3;
+const FIGURE = /(?:S\$|US\$|A\$|HK\$|NZ\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s?\d[\d,]*(?:\.\d+)?|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
+/** The output tokens a page is expected to need when read (TOKENS_PER_FIGURE, TOKENS_PER_CHAR). */
+export function expectedOutput(text: string): number {
+  return Math.ceil((text.match(FIGURE)?.length ?? 0) * TOKENS_PER_FIGURE + text.length * TOKENS_PER_CHAR);
+}
+/** Consecutive runs of pages in page order, each at most `limit` characters of text and `outputLimit` expected output
+ * tokens (expectedOutput); a page over either is a part on its own. */
+export function pageParts<T extends { page: number; text: string }>(pages: T[], limit = PART_MAX_CHARS, outputLimit = PART_MAX_OUTPUT): T[][] {
   const parts: T[][] = [];
-  let part: T[] = [], size = 0;
+  let part: T[] = [], size = 0, output = 0;
   for (const p of [...pages].sort((a, b) => a.page - b.page)) {
-    if (part.length && size + p.text.length > limit) { parts.push(part); part = []; size = 0; }
-    part.push(p); size += p.text.length;
+    const need = expectedOutput(p.text);
+    if (part.length && (size + p.text.length > limit || output + need > outputLimit)) { parts.push(part); part = []; size = 0; output = 0; }
+    part.push(p); size += p.text.length; output += need;
   }
   if (part.length) parts.push(part);
   return parts;
@@ -264,12 +286,15 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number }> {
+  const now = time.now ?? Date.now;
+  // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
+  const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
   const [doc] = await documents(db, accountId, policyId);
   if (!doc) return { read: false, why: "no such current document", pagesReread: 0 };
   if (!doc.readable || !doc.pages.length) return { read: false, why: "the document could not be read", pagesReread: 0 };
-  let limit = PART_MAX_CHARS;
-  let queue = pageParts(doc.pages, limit);
+  let limit = PART_MAX_CHARS, outputLimit = PART_MAX_OUTPUT;
+  let queue = pageParts(doc.pages, limit, outputLimit);
   const maxCalls = 2 * queue.length + 4;
   const whole = queue.length === 1;
   const done: { pages: number[]; json: unknown; model: string }[] = [];
@@ -279,19 +304,26 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     if (calls >= maxCalls) return fail(`the reading did not finish (more than ${maxCalls} calls for this document)`);
     const part = queue.shift()!;
     const pages = part.map((p) => p.page);
+    // A serverless run is stopped at its time limit, and then neither the reading nor its note is saved (5 Nov: two parts of
+    // a 47-page wording ran out of output, about two minutes each, and the run ended before any note was written). A call
+    // that cannot finish in the time left is not started; one still running at the limit is stopped, and the note is saved.
+    const left = callTime();
+    if (left != null && left < MIN_CALL_MS) return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
     const before = done.length ? doc.pages.filter((p) => p.page < pages[0]).at(-1) : undefined;
     const user = whole && done.length === 0 && pages.length === doc.pages.length
       ? renderDocument({ name: doc.name, pages: part })
       : renderDocument({ name: doc.name, pages: before ? [before, ...part] : part }) + partReadingNote(pages, doc.pages.length, headings, columns, before?.page ?? null);
     calls++;
-    const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
+    const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT, ...(left != null ? { timeoutMs: left } : {}) });
     await onUsage?.("reading", reply);
     if (reply.json == null) {
+      if (reply.stopReason === "timeout") return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
       if (reply.stopReason === "max_tokens" && part.length > 1) {
         // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
         limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
+        outputLimit = Math.max(1, Math.floor(part.reduce((n, p) => n + expectedOutput(p.text), 0) / 2));
         const half = Math.ceil(part.length / 2);
-        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit)];
+        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit, outputLimit)];
         continue;
       }
       return fail(`the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`);
@@ -307,8 +339,14 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
   const first = checkStored(doc, stored);
   for (const f of pagesToReread(doc, first).slice(0, MAX_PAGE_REREADS)) {
+    // A page read again only adds rows: with too little time left the reading is saved without it.
+    const left = callTime();
+    if (left != null && left < MIN_CALL_MS) break;
     const page = { name: doc.name, pages: doc.pages.filter((p) => p.page === f.page) };
-    const reply = await model.call({ system: READING_PROMPT, user: renderDocument(page) + pageReadingNote(f.page, headings), schema: READING_SCHEMA, maxTokens: PAGE_MAX_OUTPUT });
+    // Room for twice what the page is expected to need (expectedOutput), within PAGE_MAX_OUTPUT and READ_MAX_OUTPUT: a page
+    // of a plan table can need more than PAGE_MAX_OUTPUT, and a call that runs out gives nothing.
+    const maxTokens = Math.min(READ_MAX_OUTPUT, Math.max(PAGE_MAX_OUTPUT, 2 * page.pages.reduce((n, p) => n + expectedOutput(p.text), 0)));
+    const reply = await model.call({ system: READING_PROMPT, user: renderDocument(page) + pageReadingNote(f.page, headings), schema: READING_SCHEMA, maxTokens, ...(left != null ? { timeoutMs: left } : {}) });
     await onUsage?.("page reading", reply);
     if (reply.json != null) stored.pages.push({ page: f.page, json: reply.json });
   }
@@ -356,24 +394,30 @@ const pageRange = (pages: number[]) => pages.length === 1 ? String(pages[0]) : `
 /** What a document says when its table could not be read this time: the table keeps the earlier reading, if any, and says
  * from when. Added once to the document's notes and its message on the Documents page (as lib/rag/ingest.ts adds its notes). */
 export const UNREAD_TABLE_PREFIX = "The table of benefits could not be read";
+/** A table reading that was not tried (a retried job never pays for one): the document says so and how to read it. */
+export const NOT_READ_TABLE_PREFIX = "The table of benefits was not read";
+export const NOT_READ_TABLE_NOTE = (when: string | null) => when
+  ? `The table of benefits was not read again this time, so it still shows the reading from ${when}. Choose Read again to read it.`
+  : "The table of benefits was not read this time. Choose Read again to read it.";
 export const UNREAD_TABLE_NOTE = (when: string | null) => when
   ? `The table of benefits could not be read again this time, so it still shows the reading from ${when}.`
   : "The table of benefits could not be read this time, so it has no rows from this document yet.";
 /** Takes away the "could not be read" note once a reading of the document finishes. */
 async function clearUnreadTableNote(db: Db, accountId: string, policyId: string) {
   try {
-    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits could not be read[^.]*\\.', '', 'g')), ''),
-        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3),'[]'::jsonb)),updated_at=now()
+    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits (?:could not be read[^.]*\\.|was not read[^.]*\\. Choose Read again to read it\\.)', '', 'g')), ''),
+        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3 AND n #>> '{}' NOT LIKE $4),'[]'::jsonb)),updated_at=now()
       WHERE id=$1 AND account_id=$2 AND jsonb_typeof(extracted_json->'documentNotes')='array'
-        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%"]);
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3 OR n #>> '{}' LIKE $4)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%", NOT_READ_TABLE_PREFIX + "%"]);
   } catch (error) { console.warn("Benefit table: could not clear the unread-table note for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
-async function noteUnreadTable(db: Db, accountId: string, policyId: string) {
+/** notTried: the reading was not tried (a retried job), so the note says so and points to Read again. */
+export async function noteUnreadTable(db: Db, accountId: string, policyId: string, notTried = false) {
   try {
     const earlier = await db("SELECT read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
     const at = earlier[0]?.read_at;
     const when = at == null ? null : new Date(String(at instanceof Date ? at.toISOString() : at)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-    const note = UNREAD_TABLE_NOTE(when);
+    const note = notTried ? NOT_READ_TABLE_NOTE(when) : UNREAD_TABLE_NOTE(when);
     await db(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
         extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
       WHERE id=$1 AND account_id=$2 AND NOT (coalesce(extracted_json->'documentNotes','[]'::jsonb) ? $3::text)`, [policyId, accountId, note]);
@@ -432,15 +476,17 @@ export async function tableFor(db: Db, accountId: string): Promise<{ table: Bene
 
 /** Asks the model which cover each section is paid under, for every section the household has not linked itself. The
  * model's earlier links are replaced; the household's are never touched. */
-export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage): Promise<{ proposed: number }> {
+export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number): Promise<{ proposed: number }> {
   const l = await load(db, accountId);
   const fixed = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
   const sections = sectionsOf(l.readings).filter((s) => !fixed.has(s.key));
   const { types } = coversOf(l.readings, l.family);
   let links: SectionLink[] = [];
   if (sections.length && types.length) {
-    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT });
+    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(timeoutMs != null ? { timeoutMs } : {}) });
     await onUsage?.("linking", reply);
+    // Stopped at the time limit: the links already in place are kept, not replaced by none.
+    if (reply.stopReason === "timeout") return { proposed: 0 };
     const keys = new Set(sections.map((s) => s.key)), covers = new Set(types.map((t) => t.key));
     links = ((reply.json as { links?: SectionLink[] } | null)?.links ?? []).filter((x) => keys.has(x.section) && (x.cover == null || covers.has(x.cover)));
   }
