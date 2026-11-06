@@ -76,12 +76,17 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
       // A bracket, dash, colon, slash or pipe then a capitalised word or a plan word names a plan ("in ICU - Plan B", "in ICU
       // (Plan B)"), so it ends no clause; a full stop, comma or semicolon does. "overseas", "abroad", a bracketed day range
       // ("(Day 1 to 30)") and a closing "ward", "room" or "bed" ("in an ICU ward") keep the setting (Critic LOW p374b/c).
-      const clauseEnd = /^(?:\s*$|\s*[.,)\]](?!\s*(?:[(:–—-]\s*)?(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)|\s*;(?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)[^\d\n;]*(?:;|$))|\s*[(:|/–—-](?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s*\(\s*[Dd]ays?\s+\d[^()]*\)(?=\s*$|\s*[.,;]|\s+[a-z])|\s+(?:only|for|up to|subject to|from|per|each|during|while|until|overseas|abroad)\b(?:\s+(?![A-Z])|$|(?=\s*[.,;)]))|\s+(?:ward|room|bed)\b(?=\s*$|\s*[.,;)]))/;
+      const clauseEnd = /^(?:\s*$|\s*[.)\]](?!\s*(?:[(:–—-]\s*)?(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)|\s*,(?!\s*(?:(?!S\$|US\$|SGD|RM)[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s*;(?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b)[^\d\n;]*(?:;|$))|\s*[(:|/–—-](?!\s*(?:[A-Z]|(?:[Pp]lans?|[Cc]overs?|[Oo]ptions?|[Tt]iers?)\b))|\s+(?:only|for|up to|subject to|from|per|each|during|while|until)\b(?:\s+(?![A-Z])|$))/;
+      // Words that only qualify the unit ("overseas", "abroad", a closing "ward", "room" or "bed", a bracketed day range
+      // and nothing else, "(Day 1 to 30)"); the clause must still end after them, by the same rule, so a plan word or a
+      // capitalised name after them still holds the row ("in ICU overseas (Plan B)", "in an ICU bed, Plan B").
+      const qualifier = /^(?:\s+(?:overseas|abroad|ward|room|bed)\b|\s*\(\s*[Dd]ays?\s+\d+(?:\s*(?:-|–|to)\s*\d+)?\s*\))/;
       const unitEnds = (text: string, depth = 0): boolean => {
         // Longest spelling first: "intensive care unit" is never read as "intensive care" followed by "unit".
         const unit = careUnit.exec(text);
         if (!unit) return false;
-        const rest = text.slice(unit[0].length);
+        let rest = text.slice(unit[0].length);
+        for (let q = qualifier.exec(rest); q; q = qualifier.exec(rest)) rest = rest.slice(q[0].length);
         if (clauseEnd.test(rest)) return true;
         if (depth >= 2) return false;
         // The unit's own spelling in brackets ("ICU (Intensive Care Unit)"), then the clause's end.
