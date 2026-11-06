@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
-import { pointsToScheduleSum, SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
+import { pointsToScheduleSum, SCHEDULE_SUM_POINTER, sumKindsOf } from "@/lib/policies/no-amount-pointer";
 import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
@@ -15,7 +15,7 @@ let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
 
 const none = { formulaKind: "none" as const, formulaValue: null, currency: null, factKey: null, offsetDays: null, maximumDays: null };
-type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null }>;
+type Extra = Partial<{ formulaKind: string; attention: string | null; needsConfirmation: boolean; planColumns: boolean; benefitName: string; quote: string | null; foundSum: boolean; productName: string | null }>;
 const row = (extra: Extra = {}) => ({ formulaKind: "none", attention: null, needsConfirmation: false, benefitName: "Critical Illness II", quote: "Critical Illness II is included in this plan.", ...extra });
 const named = "Named in the policy; no amount is printed beside it here";
 
@@ -61,6 +61,80 @@ test("lines that already say where the amount comes from, or ask the household, 
     "The amount on page 3 could not be read.", "As stated in the document."])
     assert.equal(pointsToScheduleSum(row({ attention: "unreadable", benefitName: "Death Benefit" }), line), false, line);
 });
+test("a sum-insured row whose amount could not be read gets it only when Coverage holds a sum for it (live check, 5 Nov)", () => {
+  const quote = "Death Benefit RM 5,0O0 payable on death of the life assured.";
+  const line = unreadAmountLine(3, quote, "Death Benefit");
+  assert.equal(line, "The amount on page 3 could not be read.");
+  const unread = (extra: Extra = {}) => row({ attention: "unreadable", benefitName: "Death Benefit", quote, ...extra });
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), line), true);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The amount on the page could not be read."), true, "no page number");
+  for (const benefitName of ["Comprehensive Critical Illness Benefit", "Terminal Illness Benefit", "TPD Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName }), line), true, benefitName);
+  // No sum on Coverage for the person and policy, or not known: nothing, as before.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: false }), line), false);
+  assert.equal(pointsToScheduleSum(unread(), line), false);
+  // A benefit that pays something other than the sum insured, or a waiver, never gets it, whatever Coverage holds.
+  for (const benefitName of ["Hospital Cash", "Funeral Expenses", "Death Funeral Grant", "Waiver of Premium on Death", "Emergency Medical Evacuation", "Main Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName }), line), false, benefitName);
+  // A share, a multiple or a cap of the sum is not the whole sum on Coverage, in the passage or in the name (TE #365 EXTRA 1-5).
+  for (const [benefitName, q] of [["Early Critical Illness", "Early critical illness: 25% of the sum assured, up to S$250,000"],
+    ["Accidental Death Benefit", "Accidental death: double the sum assured (200%)"], ["Critical Illness Booster", "An extra 50% of the sum assured"],
+    ["Death Benefit", "Death benefit: 105% of the sum assured"], ["Juvenile Critical Illness", "Juvenile critical illness: 20 per cent of the sum assured, max S$25,000"],
+    ["Death Benefit", "We pay twice the sum assured on accidental death."], ["Terminal Illness Benefit", "Half of the sum assured is paid in advance."],
+    ["Critical Illness Benefit", "One third of the sum assured, not exceeding S$100,000"], ["Death Benefit", "We pay the sum assured, limited to S$1,000,000 per life."],
+    ["Double Indemnity Death Benefit", "Payable on accidental death."], ["Additional Death Benefit", "Payable on death within 90 days of an accident."]])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: q }), line), false, `${benefitName}: ${q}`);
+  // A closed list of names: any word that pays part of the sum is left out without being named (Critic #365).
+  for (const benefitName of ["Early critical illness benefit", "Early stage critical illness", "Minor critical illness", "Advance payment of death benefit",
+    "Accelerated critical illness", "Juvenile critical illness", "Special critical illness", "Partial total and permanent disability", "Accidental Death Benefit"])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: null }), line), false, benefitName);
+  // The policy's own product name, "benefit", "(lump sum)" and a word that only says which cover it is do not count.
+  for (const [benefitName, productName] of [["Death benefit", null], ["Terminal illness benefit", null], ["Death Benefit (lump sum)", null], ["Basic TPD Cover", null],
+    ["Comprehensive Critical Illness Benefit", null], ["Lotus Shield Death Benefit", "Lotus Shield"], ["Death or TPD Benefit", null]] as const)
+    assert.equal(pointsToScheduleSum({ ...unread({ foundSum: true, benefitName, quote: null }), productName }, line), true, benefitName);
+  assert.equal(pointsToScheduleSum({ ...unread({ foundSum: true, benefitName: "Lotus Shield Early Death Benefit", quote: null }), productName: "Lotus Shield" }, line), false);
+  // A passage that changes the sum (a multiple, a bonus, a loan, an earlier claim, a condition), whatever its name (TE #365 R2).
+  for (const q of ["Death benefit: 1.5x the sum assured if death is due to an accident, item 3.", "Death benefit: the sum assured plus any bonuses declared, item 3.",
+    "Death benefit: the sum assured less any outstanding policy loan, item 3.", "Death benefit: the sum assured, reduced by any earlier early-stage claim, item 4.",
+    "Death benefit: the sum assured or the surrender value, whichever is higher.", "Death benefit (item 3), subject to the limit of liability clause."])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, quote: q }), line), false, q);
+  // Where it is printed, and the age the cover lasts to, do not change the sum (TE #365 R2).
+  for (const [benefitName, q] of [["Death Benefit", "Death benefit, payable on death before age 99 (item 3)."], ["Terminal Illness Benefit", "Terminal illness benefit: see item 5 of your schedule."],
+    ["Total and Permanent Disability", "TPD covered up to age 65, item 7."], ["Death Benefit", "Death benefit: the amount in Table 4.2(b) applies."],
+    ["Terminal Illness Benefit", "Terminal illness: as per item 3 of the schedule (S$ see schedule)."], ["Dread Disease Benefit", "Dread disease benefit, item 2.4."]])
+    assert.equal(pointsToScheduleSum(unread({ foundSum: true, benefitName, quote: q }), line), true, q);
+  // The plain death or illness passage still gets it.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, quote: "The sum assured is payable on death of the life assured." }), line), true);
+  // Only an unreadable row, and only the plain "could not be read" line: an amount awaiting a check, or a line that already
+  // says where its amount comes from, gets none.
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, attention: "confirm" }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, attention: null }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true, planColumns: true }), line), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The passage on page 3 pays this in advance from the death benefit, so its amount follows the death benefit, within any limit the policy sets."), false);
+  assert.equal(pointsToScheduleSum(unread({ foundSum: true }), "The amount on page 3 could not be read. Ask your insurer."), false);
+});
+test("/api/benefits sets foundSum from each shown person's own cover that Coverage shows, and sends no figure with it", () => {
+  const route = readFileSync("app/api/benefits/route.ts", "utf8");
+  const block = route.slice(route.indexOf("const foundSum="), route.indexOf("})():false;") + 11);
+  assert.match(block, /attention==="unreadable"/);
+  assert.match(block, /filter\(contract=>!member\|\|contract\.ownerId===member\)/);
+  assert.match(block, /people\.length>0&&people\.every\(/);
+  assert.match(block, /kinds\.has\(normalizeCoverageCategory\(cover\.category\)\)&&cover\.amount!=null&&cover\.amount>0&&!!cover\.currency\)/);
+  // The pointer carries no figure: a sum Coverage shows counts whether or not its currency is proven on the page.
+  assert.doesNotMatch(block, /currencyVerified/);
+  assert.match(block, /const kinds=new Set\(sumKindsOf\(row\.benefit_name\)\);\s*return kinds\.size>0&&/);
+  assert.match(route, /wholeSum,foundSum,/);
+});
+test("only a cover of the kind the row pays counts as Coverage's sum for it (Critic #365 follow-up)", () => {
+  assert.deepEqual(sumKindsOf("Death Benefit"), ["Death"]);
+  assert.deepEqual(sumKindsOf("Terminal Illness Benefit"), ["Death"]);
+  assert.deepEqual(sumKindsOf("TPD Benefit"), ["Total Permanent Disability"]);
+  assert.deepEqual(sumKindsOf("Total and Permanent Disability"), ["Total Permanent Disability"]);
+  assert.deepEqual(sumKindsOf("Comprehensive Critical Illness Benefit"), ["Critical Illness"]);
+  assert.deepEqual(sumKindsOf("Dread Disease Cover"), ["Critical Illness"]);
+  assert.deepEqual(sumKindsOf("Death or TPD Benefit"), ["Death", "Total Permanent Disability"]);
+  for (const name of ["Hospital Cash", "Main Benefit", "Emergency Medical Evacuation", "Outpatient"]) assert.deepEqual(sumKindsOf(name), [], name);
+});
 test("a row with an amount, a plan table, or one awaiting a check gets none", () => {
   assert.equal(pointsToScheduleSum(row({ formulaKind: "fixed" }), describeBenefitFormula({ ...none, formulaKind: "fixed", formulaValue: 5000, currency: "MYR", quote: "RM 5,000" })), false);
   assert.equal(pointsToScheduleSum(row({ formulaKind: "sum_insured" }), "50% of the sum insured on your schedule"), false);
@@ -74,6 +148,17 @@ test("the pointer adds no figure", () => {
 test("Benefits shows it under the row's own line, linking to Coverage", () => {
   const page = readFileSync("app/schedule/page.tsx", "utf8");
   assert.match(page, /\{pointsToScheduleSum\(benefit,line\.text\)&&<small className="pays-basis" data-testid="schedule-sum-pointer">\{SCHEDULE_SUM_POINTER\} <Link className="text-link" href="\/ledger">See Coverage →<\/Link><\/small>\}/);
+});
+test("a schedule line that prints the sum with its currency only in a heading still gets the pointer (live check 5 Nov, after #365)", () => {
+  // Made-up schedules: the figure is on the line, the currency only in the table's heading, so the sum's currency is not
+  // proven against the page. foundSum no longer waits for that proof; the row itself still adds no figure.
+  const line = "The amount on page 3 could not be read.";
+  for (const [benefitName, quote] of [["Death Benefit", "Death Benefit\t5,000.00"], ["Comprehensive Critical Illness Benefit", "Comprehensive Critical Illness Benefit\t120,000.00"],
+    ["TPD Benefit", "TPD Benefit    80,000"], ["Terminal Illness Benefit", "Terminal Illness Benefit : 45,500.00"]] as const)
+    assert.equal(pointsToScheduleSum(row({ attention: "unreadable", foundSum: true, benefitName, quote }), line), true, quote);
+  // The same benefit described as paying less than the sum still gets none.
+  assert.equal(pointsToScheduleSum(row({ attention: "unreadable", foundSum: true, benefitName: "Death Benefit",
+    quote: "If the Life Assured dies, We will pay the Death Benefit in one lump sum, less any amounts owing to Us." }), line), false);
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`no-amount-pointer: ${passed} passed, fetches 0`);

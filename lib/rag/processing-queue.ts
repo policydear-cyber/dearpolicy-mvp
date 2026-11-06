@@ -8,6 +8,16 @@ export { livePolicyJob, POLICY_PROCESSING_JOB_TYPE, policyJobLive, UNCLAIMED_STA
 /** Try again on a stalled document: its job, waiting out a retry delay (a lapsed lease is recovered into one), is made due
  * now, so the start that follows claims it instead of finding nothing claimable (Critic R213-1). Never a job a worker
  * holds, or one being cancelled. */
+/** Read again on a document whose job waits to be retried: the household asked for a fresh reading, so the job starts again
+ * at attempt 1, as a job revived from dead letter does (lib/jobs/queue.ts). A retry (attempt 2 or later) never pays for a
+ * table reading (lib/benefit-table/app.ts); only an attempt the household started does. */
+export async function restartWaitingPolicyJob(policyId: string, jobType = POLICY_PROCESSING_JOB_TYPE): Promise<void> {
+  await pool.query(
+    `UPDATE background_jobs SET attempt_count=0, updated_at=now()
+      WHERE job_type=$1 AND idempotency_key=$2 AND status='failed_retryable' AND NOT cancel_requested`,
+    [jobType, policyId],
+  );
+}
 export async function makePolicyJobDueNow(policyId: string, jobType = POLICY_PROCESSING_JOB_TYPE): Promise<void> {
   await pool.query(
     `UPDATE background_jobs SET available_at=now(), updated_at=now()
