@@ -562,29 +562,55 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   return { checked: true, record };
 }
 
-/** Asks the model which cover each NEW section is paid under: a section with no link yet, of any kind. A link already in
- * place, the household's or the model's, is never sent again, never changed and never removed, so reading one document
- * cannot move or drop another document's rows (live, 7 Nov: a new upload re-sorted every section and dropped two rows of
- * an unrelated document). A link to a section that is no longer read is left in place; it shows nothing. */
+/** Asks the model which cover each section is paid under, without ever undoing a link that works.
+ * - The household's links are never sent, changed or removed.
+ * - A model link that works (its cover is one of the household's current covers and the table accepts it) stays as it
+ *   is: reading one document can no longer move or drop another document's rows (live, 7 Nov: a new upload re-sorted
+ *   every section and moved one to no cover).
+ * - A section with no link, or a model link that does not work (no cover, a cover that is gone, or one the table
+ *   refuses), is asked again and takes the model's answer (Critic R391 S3b, S6, S7b).
+ * - When a cover appears that no section is linked to yet (a new certificate), the working model links are asked again
+ *   too, but the only change taken is a move ONTO that new cover: never to no cover, never between older covers
+ *   (Critic R391 S4b: a hospital wording first linked to the only cover, then one person's hospital certificate).
+ * Every finished run also marks the household's links as checked (updated_at), so the dashboard stops showing the
+ * document as still reading even when no link changed. */
 export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number): Promise<{ proposed: number }> {
   const l = await load(db, accountId);
-  const placed = new Set(l.links.map((x) => x.section));
-  const sections = sectionsOf(l.readings).filter((s) => !placed.has(s.key));
   const { types } = coversOf(l.readings, l.family);
-  let links: SectionLink[] = [];
+  const coverKeys = new Set(types.map((t) => t.key));
+  const refused = new Set(assembleTable(l.readings, l.family, l.links).refusedLinks.map((x) => x.link.section));
+  const household = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
+  const working = new Map(l.links.filter((x) => x.chosenBy === "model" && x.cover != null && coverKeys.has(x.cover) && !refused.has(x.section)).map((x) => [x.section, x.cover!]));
+  const linkedCovers = new Set(l.links.filter((x) => x.cover != null && (x.chosenBy === "household" || working.has(x.section))).map((x) => x.cover!));
+  const newCovers = new Set([...coverKeys].filter((k) => !linkedCovers.has(k)));
+  const all = sectionsOf(l.readings).filter((s) => !household.has(s.key));
+  const open = new Set(all.filter((s) => !working.has(s.key)).map((s) => s.key));
+  const sections = newCovers.size ? all : all.filter((s) => open.has(s.key));
+  const existing = new Set(l.links.map((x) => x.section));
+  const taken: SectionLink[] = [];
   if (sections.length && types.length) {
     const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(timeoutMs != null ? { timeoutMs } : {}) });
     await onUsage?.("linking", reply);
     // Stopped at the time limit: the links already in place are kept, not replaced by none.
     if (reply.stopReason === "timeout") return { proposed: 0 };
-    const keys = new Set(sections.map((s) => s.key)), covers = new Set(types.map((t) => t.key));
-    links = ((reply.json as { links?: SectionLink[] } | null)?.links ?? []).filter((x) => keys.has(x.section) && (x.cover == null || covers.has(x.cover)));
+    const keys = new Set(sections.map((s) => s.key));
+    const seen = new Set<string>();
+    for (const x of (reply.json as { links?: SectionLink[] } | null)?.links ?? []) {
+      if (!keys.has(x.section) || seen.has(x.section) || (x.cover != null && !coverKeys.has(x.cover))) continue;
+      seen.add(x.section);
+      if (open.has(x.section) || (x.cover != null && newCovers.has(x.cover) && working.get(x.section) !== x.cover)) taken.push(x);
+    }
   }
-  // Insert only: ON CONFLICT DO NOTHING keeps any link written meanwhile (the household's, or a parallel reading's).
-  for (const x of links)
-    await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,$4,'model',now())
-      ON CONFLICT (account_id, section_key) DO NOTHING`, [accountId, x.section, x.cover, x.why.slice(0, 300)]);
-  return { proposed: links.length };
+  for (const x of taken) {
+    if (existing.has(x.section))
+      await db(`UPDATE benefit_links SET cover_key=$3, why=$4, updated_at=now() WHERE account_id=$1 AND section_key=$2 AND chosen_by='model'`,
+        [accountId, x.section, x.cover, x.why.slice(0, 300)]);
+    else
+      await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,$4,'model',now())
+        ON CONFLICT (account_id, section_key) DO NOTHING`, [accountId, x.section, x.cover, x.why.slice(0, 300)]);
+  }
+  await db(`UPDATE benefit_links SET updated_at=now() WHERE account_id=$1`, [accountId]);
+  return { proposed: taken.length };
 }
 
 export class TableInputError extends Error { constructor(message: string) { super(message); this.name = "TableInputError"; } }
