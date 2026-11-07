@@ -1,6 +1,6 @@
 /** The benefit table wired to the app's database, model key and usage ledger. service.ts takes these as arguments so
  * its tests run with fakes; this file is the only place the real ones are passed in. */
-import { query } from "@/lib/db/client";
+import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { recordUsage } from "@/lib/ai/ledger";
 import type { ModelChoice } from "@/lib/ai/providers";
@@ -9,7 +9,10 @@ import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { MIN_CALL_MS, SAVE_MARGIN_MS, noteUnreadTable, readDocument, relink, tableReady, type Db, type OnUsage } from "./service";
+import { MIN_CALL_MS, SAVE_MARGIN_MS, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage } from "./service";
+import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
+import { checkingCount } from "./guards";
+import { figureGuardsEnabled, guardCapUsd, guardRoster, supportsEffort } from "./guard-flag";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -79,7 +82,28 @@ async function markTableReading(db: Db, accountId: string, policyId: string, sta
  *   finish). */
 export async function readIntoBenefitTable(accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean } = {}) {
   const model = anthropicTableModel(benefitTableModel());
-  return readIntoTable(appDb, model, accountId, policyId, opts, usage(accountId, model.choice));
+  const onUsage = usage(accountId, model.choice);
+  const guarded = figureGuardsEnabled(process.env, accountId);
+  const result = await readIntoTable(appDb, model, accountId, policyId, { ...opts, ...(guarded ? { guards: guardSetup(accountId, model, onUsage) } : {}) }, onUsage);
+  // A figure check the time limit cut off is finished by a background job (figure-check-job.ts).
+  if (guarded && result.figuresChecking && result.guardsAt) await enqueueFigureCheck(pool, accountId, policyId, result.guardsAt, 1);
+  return result;
+}
+/** The figure check's continuation job (figure-check-job.ts): checks what the last run left "checking", and queues the next
+ * run while anything is left. With the guards or the table off, or the reading replaced, it makes no model call. */
+export const processFigureCheckJob = async (job: { account_id: string | null; payload: unknown }) => {
+  const p = figureCheckPayload(job.payload);
+  const accountId = job.account_id;
+  if (!accountId || !figureGuardsEnabled(process.env, accountId) || !(await benefitTableLive(accountId))) return;
+  const model = anthropicTableModel(benefitTableModel());
+  const { functionDeadline } = await import("@/lib/jobs/function-time");
+  const r = await guardStoredReading(appDb, accountId, p.policyId, guardSetup(accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at);
+  if (r.record && checkingCount(r.record) > 0) await enqueueFigureCheck(pool, accountId, p.policyId, p.at, p.run + 1);
+};
+/** The figure guards (guard-flag.ts): reader 1 is the reading model, then the four guards, each booked at its own price. */
+export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
+  const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice, undefined, { effort: supportsEffort(g.choice.model) }); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
+  return { readers: [{ model: reader, prompt: "direct", onUsage }, ...guards], capUsd: guardCapUsd(env) };
 }
 /** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
  * reading-service failure schedules (a fresh job at attempt 1, lib/rag/ingest.ts). Neither pays for a table reading. */
@@ -87,7 +111,7 @@ export function tableReadingRetry(args: { attempt?: { number: number } | null; d
   return (args.attempt?.number ?? 1) > 1 || args.deferredRetry === true;
 }
 /** readIntoBenefitTable with its database and model passed in (tests pass fakes). */
-export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number } = {}, onUsage?: OnUsage) {
+export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number; guards?: GuardSetup } = {}, onUsage?: OnUsage) {
   // A retry of a job (attempt 2 or later) never calls the table model, whatever happened to the attempt before it: only a
   // fresh job (an upload, or the household's Read again) pays for a reading. It keeps the reading already stored; when
   // there is none, or the earlier attempt's reading was cut off, the document says its table could not be read.
@@ -103,7 +127,7 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
   // point in between (an API error, a database error while saving, the time limit during the re-link) leaves it set, so
   // a retry of the job never pays for the whole reading again by itself.
   await markTableReading(db, accountId, policyId, true);
-  const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now });
+  const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now }, opts.guards);
   const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
   const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined) : { proposed: 0 };
   await markTableReading(db, accountId, policyId, false);

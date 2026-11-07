@@ -8,7 +8,9 @@ import { verifiedExtraction } from "../../lib/rag/ingest";
 import { printedDocumentRole, documentAuthority } from "../../lib/documents/intelligence";
 import { checkReading } from "../../lib/benefit-table/check";
 import { factCheckExtraction } from "../../lib/documents/fact-check";
-import { amountOnlyInContext, personAsParticulars, specimenPage } from "../../lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenPage } from "../../lib/documents/own-figure";
+// These are the shapes for the own-figure checks, which ship OFF (lib/documents/own-figure OWN_FIGURE_CHECKS); they run with it on.
+OWN_FIGURE_CHECKS.on = true;
 import type { PolicyExtraction } from "../../lib/ai/extract-policy";
 
 let pass = 0, fail = 0;
@@ -216,6 +218,91 @@ for (const head of ["Example", "Example:", "Example 2", "Sample", "Example (for 
   check(`round 6: a "${head}" heading sets aside the person under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nMember: Ahmad Yusof\nPremium S$1,200"), false));
 for (const head of ["Sample collection benefit included", "Example of how we pay is on page 3", "Specimen collection at clinics"])
   check(`round 6: a "${head}" line does not set aside the insured under it`, () => assert.equal(personAsParticulars("Ahmad Yusof", head + "\nInsured person: Ahmad Yusof"), true));
+
+
+// ---- live regression on #377: a person is set aside only on positive evidence (fails open) ----
+// Kept: layouts the check does not know never lose a cover (mixed case, run-in printouts, split or reordered names).
+const KEPT: [string, string][] = [
+  ["Insured: Ken Lau, 38\nSum assured S$100,000", "Ken Lau"],
+  ["Ken Lau, 38\tMale\tS$100,000", "Ken Lau"],
+  ["Policy Schedule\nYour name : Lim wei jie\nPolicy number: AB-1234567\nSum assured: S$100,000", "Lim Wei Jie"],
+  ["My Policies - printout\nPlan (XY1)Tan Mei Ling(S0000002B)25 0.00 Monthly\nNext due 01/12/2026", "Tan Mei Ling"],
+  ["Certificate of insurance\ninsured: lim wei jie\nPlan: Business", "Lim Wei Jie"],
+  ["Policyholder Tan Mei\nLing\nSum insured S$50,000", "Tan Mei Ling"],
+  ["Life assured NG HUI MIN CHARLOTTE\nSum assured S$200,000", "Charlotte Ng Hui Min"],
+  ["Lim Wei Jie\tS$100,000\tS$250.00", "Lim Wei Jie"],
+  ["Dear Mr Lim Wei Jie\nThank you for choosing us.\nLife assured: LIM WEI JIE\nSum assured S$100,000", "Lim Wei Jie"],
+  ["Mr Lim Wei Jie\n8 Cedar Walk\nSingapore 654321\nYour policy is in force.", "Lim Wei Jie"],
+  ["This certifies that Lim wei jie is covered under this plan.", "Lim Wei Jie"],
+  ["Thank you, Lim Wei Jie (S1234567D), for renewing your plan with us.", "Lim Wei Jie"],
+  ["Coverage summary\nTAN MEI LING has been covered under this plan since 2019.", "Tan Mei Ling"],
+  ["LimWeiJie AB-1234567 S$100,000", "Lim Wei Jie"],
+  ["Plan details\nPolicy: TV7788123\nTraveller: Rosalind Teo, 34", "Rosalind Teo"],
+  // A greeting or a plain sentence keeps the cover on a document that prints its own policy, certificate or identity number.
+  ["Dear lim wei jie,\nPolicy No. TL-100245\nYour plan for lim wei jie has been renewed.", "Lim Wei Jie"],
+  ["We confirm that Kumar Rajan is covered under this travel plan from 1 March 2026.\nCertificate number: TC-5566778", "Kumar Rajan"],
+  ["Policy: HL2026X0042\nWelcome aboard!\nLim Wei Jie is covered from today.", "Lim Wei Jie"],
+  ["Lim Wei Jie, 38, is covered under Plan B.\nPolicy number GH-778812", "Lim Wei Jie"],
+  ["Employee Lim Wei Jie is covered under Plan B.", "Lim Wei Jie"],
+  // A part of the name printed outside any example (initials, a surname, a split name) keeps the cover.
+  ["Dear Mr Lim Wei Jie\nThank you for your purchase.\fPOLICY SCHEDULE\nPolicy No. TL-100245\nLife Assured: LIM W J", "Lim Wei Jie"],
+  ["Example: how Lim Wei Jie would claim\nPolicyholder: Mr Lim", "Lim Wei Jie"],
+  ["Dear David Lim Wei Jie\nLife assured: LIM WEI JIE", "David Lim Wei Jie"],
+  ["Insured Person(s): Siti Nurhaliza binti Ahmad; Ahmad bin Yusof", "Ahmad bin Yusof"],
+  ["No person printed here at all.", "Lim Wei Jie"],
+];
+for (const [text, who] of KEPT) check(`fail open: ${who} keeps cover in "${text.split("\n").find((l) => l.toLowerCase().includes(who.split(" ")[0].toLowerCase())) ?? text.split("\n")[0]}"`, () => assert.equal(personOnlyInExample(who, [text]), false));
+// Set aside: every line naming the person is an example, a greeting or a sentence about them (negative controls).
+const SET_ASIDE: [string, string][] = [
+  ["Meet Mdm Lily Seah, 61, who now gets a payout every month.", "Lily Seah"],
+  ["Meet Mdm Lily Seah, 61\nAfter her fall, Lily Seah could no longer bathe.", "Lily Seah"],
+  ["Example: Benjamin Foo, born 1990, claims in 2030.", "Benjamin Foo"],
+  ["Example: MR ALAN GOH is in hospital for 4 days.", "Alan Goh"],
+  // A person introduced with an age on a line naming no cover, label or number (Critic #384).
+  ["Ken Lau, 38, chose S$900 a month.", "Ken Lau"],
+  ["Take Ken Lau, a 38-year-old teacher.", "Ken Lau"],
+  ["Example\nLim Wei Jie\tS$100,000", "Lim Wei Jie"],
+  ["Meet our customers\nRosalind Teo, 34, teacher", "Rosalind Teo"],
+  ["Case study: how tan mei ling got her claim paid quickly", "Tan Mei Ling"],
+  ["Covered person: Rosalind Teo (illustrative)", "Rosalind Teo"],
+  ["Real stories\nROSALIND TEO WAS HOSPITALISED FOR 5 DAYS AND GOT S$1,000.", "Rosalind Teo"],
+  ["SPECIMEN POLICY SCHEDULE\nLife Assured: John Sample\nSum Assured S$100,000", "John Sample"],
+  // A marker carries across a line break when its line runs on (TE #384 E5).
+  ["How it works\nExample: Mr Ken\nLau, 40, buys S$300,000 of cover.", "Ken Lau"],
+  // A greeting, a welcome or a plain sentence on a document with no particulars and no number of its own: as on main
+  // (TE #384 L3, N15; Critic #384 D2, D8, D14 are set aside on main too).
+  ["Dear Mr Benjamin Yeo\nThe scheme pays S$662 a month if you are severely disabled.", "Benjamin Yeo"],
+  ["Welcome aboard, Lim Wei Jie! Your cover starts today and lasts a year.", "Lim Wei Jie"],
+  ["Hi Lim Wei Jie, your trip to Tokyo is covered.", "Lim Wei Jie"],
+  // A greeting is never the particulars, even on a numbered letter.
+  ["Dear Mr Benjamin Yeo\nAccount no. 4400123987\nThe scheme pays S$662 a month if you are severely disabled.", "Benjamin Yeo"],
+  ['"I am so glad I signed up," says Mdm Lily Seah, who received S$1,200 a month.', "Lily Seah"],
+  ["Illustration for: Mr Ben Foo (sample customer)\nMonthly payout S$900", "Ben Foo"],
+  ["For example, Mr\nKen\nLau buys S$300,000 of cover.", "Ken Lau"],
+  ["What would John Tan get if he died abroad?\nJohn Tan would receive S$100,000.", "John Tan"],
+  ["Jason Koh, 45, chose S$1,200 a month for S$38.90 a month.", "Jason Koh"],
+  // An FAQ's question and answer lines are worked answers (TE #384 E7).
+  ["Frequently asked questions\nQ: What if I die abroad?\nA: John Tan would receive S$100,000.", "John Tan"],
+  // A brochure page with a weak label and no number of its own: all its lines naming the person are the brochure's (TE F2).
+  ["GoldenCare Top-Up\nWhy top up?\nCovered member - Mdm Rose Lee\nRose was glad she topped up: she now gets S$800 a month.", "Rose Lee"],
+  ["How it works\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", "Rosalind Teo"],
+];
+for (const [text, who] of SET_ASIDE) check(`set aside: ${who} in "${text.split("\n")[0]}"`, () => assert.equal(personOnlyInExample(who, [text]), true));
+check("set aside only when every page agrees: an example on one page, particulars on another", () => assert.equal(personOnlyInExample("Victor Ho", ["Example: Victor Ho claims S$500.", "Policy owner: VICTOR HO\nPolicy number: AB-7654321"]), false));
+check("a real e-certificate with a policy number keeps its traveller", () => assert.equal(personOnlyInExample("Rose Lee", ["Travel e-certificate\nPolicy No. TV-7788123\nTraveller: Rose Lee\nRose Lee is covered from 1 March."]), false));
+// The live shapes through the table check: the stored cover is kept with its sum.
+const PORTAL = "My Policies\nPlan (XY1)Tan Mei Ling(S0000002B)25 0.00 Monthly\nSum assured S$150,000\nNext premium due 01/12/2026";
+check("table: a portal printout that runs the name into its cells keeps the cover (live #377)", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
+const MIXED = "Travel Certificate\nYour name : Lim wei jie\nPlan: Business\nCertificate no: TC-5566778\nTrip cancellation up to S$25,000";
+check("table: a name printed in mixed case keeps the cover (live #377)", () => assert.deepEqual(covers(reading(MIXED, "Lim Wei Jie", "Wayfarer Travel", null, "Plan: Business")), [["Lim Wei Jie", null]]));
+check("table: a brochure's example person still gets no cover", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), []));
+
+// ---- shipped: the switch is off, and every caller behaves as before #377 ----
+OWN_FIGURE_CHECKS.on = false;
+check("off: a brochure's example person keeps the cover read for them, as before #377", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), [["Ken Lau", 900]]));
+check("off: a portal printout keeps its cover", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
+check("off: a sample page's cover is kept, as before #377", () => assert.deepEqual(covers(reading(SAMPLE, "TEO AH BENG", "SilverYears Care", 640, "Monthly payout if severely disabled: S$640")).length, 1));
+OWN_FIGURE_CHECKS.on = true;
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
