@@ -30,7 +30,7 @@ import { pool } from "@/lib/db/client";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { answerPolicyQuestion, readPage, printedAmount, tierApplies } from "@/lib/chat/policy-answer";
 import { assessCurrentness, consolidateActiveStatus } from "@/lib/policies/currentness";
-import { isOneOffPremium, isShortPeriodPremium, isUnclearFrequency, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
+import { isOneOffPremium, isShortPeriodPremium, isUnclearFrequency, paymentsPerYear, premiumSplit, summarisePremiums } from "@/lib/policies/premium-summary";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { whoIsCovered } from "@/lib/chat/household-status";
 import { singaporeDay } from "@/lib/benefit-table/dates";
@@ -288,6 +288,20 @@ async function main() {
       assert.equal(isShortPeriodPremium({ frequency: null, period_start: null, period_end: null, document_start: "2026-01-01", document_end: "2026-12-31" }), false, "a year's document stays yearly");
       assert.equal(isShortPeriodPremium({ frequency: null, period_start: "2026-03-10", period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), false, "never one end from the record and one from the document");
       assert.equal(isShortPeriodPremium({ frequency: "Monthly", period_start: null, period_end: null, document_start: "2026-03-10", document_end: "2026-03-17" }), false, "a stated monthly premium stays monthly");
+      // A payment period is read from a closed list, whole; a cover's length is not one (TE pr370 follow-up).
+      const perYear: [string, number][] = [["Monthly", 12], ["Monthly (GIRO)", 12], ["Once a month", 12], ["Bulanan", 12], ["Every 2 months", 6], ["Bi-monthly", 6],
+        ["Every 3 months", 4], ["Quarterly", 4], ["Twice a year", 2], ["Half-yearly", 2], ["Semi-annual", 2], ["Every 6 months", 2], ["Annual", 1], ["Payable yearly in advance", 1],
+        ["Per policy year", 1], ["Once per policy year", 1], ["ONCE A YEAR", 1], ["Annual, single life", 1], ["p.a.", 1], ["Tahunan", 1], ["Weekly", 52], ["Fortnightly", 26], ["Every 2 weeks", 26],
+        ["Monthly by credit card", 12], ["Monthly, 12 instalments", 12], ["Quarterly, 4 payments", 4], ["Annual multi-trip", 1], ["One annual payment", 1], ["Annual (MediSave)", 1], ["Yearly via CPF", 1], ["Monthly through GIRO", 12],
+        // Critic #372: payment sources, GST, renewal, level, rider, plan and currency words around a period.
+        ["Annual - Cash & MediSave", 1], ["Annual (Cash/Medisave)", 1], ["Annual Premium (inclusive of GST)", 1], ["Annual premium incl. GST", 1], ["Annual (with GST)", 1],
+        ["Annual renewal", 1], ["Yearly renewable", 1], ["Annual (auto-renew)", 1], ["Yearly (Level)", 1], ["Level annual premium", 1], ["Annual (Rider)", 1],
+        ["Annual - basic plan", 1], ["Annual (SGD)", 1], ["Annually by cheque", 1], ["Monthly by Direct Debit", 12], ["Monthly via PayNow", 12], ["Yearly by credit card", 1], ["Annual/Yearly", 1], ["Annual (12 months)", 1]];
+      for (const [f, n] of perYear) { assert.equal(paymentsPerYear(f), n, f); assert.equal(isUnclearFrequency({ frequency: f }), false, f); }
+      for (const f of ["For a 12-month term", "Prepaid for 2 weeks", "Paid upfront, 6 months cover", "Paid in full for 3 months", "12 months", "Every 18 months", "Every 2 years", "Biennial", "Bi-weekly", "Twice a month", "once a year once a month", "Annual, 12 instalments", "Paid in 3 instalments", "One payment", "Monthly/Yearly", "Bi-annual", "Biannually", "First year", "Year 1"]) {
+        assert.equal(paymentsPerYear(f), null, f);
+        assert.equal(isUnclearFrequency({ frequency: f }), true, f);
+      }
       const TRIP = id(171), TOUR = id(172), REG = id(173);
       await addDoc(TRIP, "Wanderlight Single Trip", "WL-TRIP-4410", [{ pageNumber: 1, text: "Wanderlight Single Trip\nPolicy Schedule\nInsured: Tan Mei Ling\nPeriod of insurance: 10/03/2026 to 17/03/2026\nTotal premium: S$58.40" }], "2026-03-10", "2026-03-17", null, "personal_schedule");
       await addDoc(TOUR, "Roamwell Tour Cover", "RW-5521", [{ pageNumber: 1, text: "Roamwell Tour Cover\nPolicy Schedule\nInsured: Tan Mei Ling\nPeriod of insurance: 02/05/2026 to 12/05/2026\nPremium: S$41.20" }], "2026-05-02", "2026-05-12", null, "personal_schedule");
@@ -316,6 +330,20 @@ async function main() {
         for (const d of [TRIP, TOUR, REG]) for (const t of ["policy_chunks", "policy_pages", "policy_members"]) await db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [d]);
         await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])", [[TRIP, TOUR, REG]]);
       }
+    });
+
+    await check("P4c an interval is counted as often as it says: every 3 months is 4 a year, twice a year is 2, a cover's length is never a payment period (TE pr370 follow-up)", async () => {
+      const rows = await db.query<{ id: string }>(`INSERT INTO premium_records(account_id,policy_id,source_document_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,notes) VALUES
+        ($1,NULL,NULL,$2,'Quill Assurance','Quill Dental Plan','QD-101',100,'SGD','Every 3 months',NULL),
+        ($1,NULL,NULL,$2,'Quill Assurance','Quill Eye Plan','QE-102',100,'SGD','Twice a year',NULL),
+        ($1,NULL,NULL,$2,'Quill Assurance','Quill Hearing Plan','QH-103',100,'SGD','Bi-monthly',NULL),
+        ($1,NULL,NULL,$2,'Quill Assurance','Quill Trip Plan','QT-104',100,'SGD','For a 12-month term',NULL) RETURNING id`, [H, mei.id]);
+      try {
+        const s = await summarisePremiums(H, mei);
+        assert.equal(Math.round(s.annual * 100) / 100, 2170 + 400 + 200 + 600, "annual " + s.annual);
+        assert.deepEqual(s.unclear.map((i) => i.product_name), ["Quill Trip Plan"]);
+        assert.match(s.note ?? "", /Quill Trip Plan \(S\$100\.00, \u201cFor a 12-month term\u201d\): how often it is paid is not plain/);
+      } finally { await db.query("DELETE FROM premium_records WHERE id=ANY($1::uuid[])", [rows.rows.map((r) => r.id)]); }
     });
 
     await check("P5 a policy with no premium record is counted on Home from the premium its own schedule prints (CI II S$470.85, 28 Oct)", async () => {

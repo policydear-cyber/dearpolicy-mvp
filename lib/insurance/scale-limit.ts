@@ -464,9 +464,15 @@ export const CELLS_THEN_LINE_BINDING=false;
  *    with CELLS_THEN_LINE_BINDING, the explaining line right below a row of cells alone, with another row of cells alone
  *    (or the row itself, or a benefit-group title then a row) next below it.
  * No other page is read. Known limit: two tables printed one under the other with nothing between them and the second's
- * header lost read as one table. */
+ * header lost read as one table.
+ * titled: also lets title lines sit between the header and the row (TITLED_LINE), as a plan table prints its benefit
+ * groups under one header ("Section 1 Medical", "Delays and cancellations", "We pay for:"): a line with no amount and
+ * no run of cells, that is no other header (of any width), no label heading alone, no sub-heading caption, no "Part"
+ * or "Table" line, no line of two or more non-amount cells, no line naming one of the header's plans and no line
+ * repeating the start of the row's own name. A row of the same width between them must not be a
+ * premium line. Live 6 Nov: requiring every such title to be on GROUP_TITLE dropped 7 travel rows' figures. */
 export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:{run:string;name:string},
-  o:{cellsThenLine?:boolean}={}):{at:number;cells:string[]}|null{
+  o:{cellsThenLine?:boolean;titled?:boolean}={}):{at:number;cells:string[]}|null{
   const cellsThenLine=o.cellsThenLine??CELLS_THEN_LINE_BINDING;
   const want=headingKey(column);
   if(pageText==null||!want||!row.name)return null;
@@ -478,11 +484,25 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   if(own.length!==1)return null;
   const ownText=lines[own[0]].text;
   const wide=ownText.match(WIDE_ROW)?.[0];
-  const cells=(wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[];
-  const n=cells.length;
+  let cells:string[]=[...((wide&&wide.includes(row.run)?wide:row.run).match(new RegExp(WIDE_CELL,"g"))??[])];
+  let n=cells.length;
   if(n<2)return null;
-  let h=-1;
-  for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,n)){h=i;break;}
+  // With titled, a line of headings that continues a row whose cells wrap (rowPiece) is that row's next piece, not a
+  // header: the line above it prints the row's words then n cells with an amount that are no plain run of cells.
+  const pieceOfRow=(i:number)=>{
+    const width=cellsOf(lines[i].raw).length;
+    let k=i-1;
+    while(k>=0&&cellsOf(lines[k].raw).length===width&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"after"))k--;
+    return k>=0&&cellCount(lines[k].text)===0&&rowPiece(lines[k].raw,width,[],"first");
+  };
+  // With titled, a row of whole word cells ("Unlimited  Unlimited  Unlimited") is a row of the table, not its header, and
+  // so is a line with a cell starting in lower case ("six-hour delay"): plan names are printed capitalised.
+  const wordsOnly=(i:number)=>cellsOf(lines[i].raw).every(c=>new RegExp(`^${WORD_CELL}$`).test(c));
+  const findHeader=(width:number)=>{for(let i=own[0]-1;i>=0;i--)if(headerPlans(lines[i].raw,width)&&!(o.titled&&(pieceOfRow(i)||wordsOnly(i)||cellsOf(lines[i].raw).some(c=>/^[a-z]/.test(c)))))return i;return -1;};
+  let h=findHeader(n);
+  // A dash printed between the row's name and its cells ("Trip curtailment  -  S$500  S$1,000") is a separator, not a
+  // plan's cell, when no header of the wider count is above it and one of the narrower count is (TE r6 W8).
+  if(h<0&&n>2&&/^[-–—]$/.test(cells[0]??"")){const narrower=findHeader(n-1);if(narrower>=0){h=narrower;cells=cells.slice(1);n-=1;}}
   if(h<0)return null;
   const plans=headerPlans(lines[h].raw,n)!;
   const isRow=(i:number)=>i===own[0]||cellCount(lines[i].text)===n;
@@ -492,10 +512,28 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   const wraps=new Set<number>();
   if(named(ownText)&&!ownText.startsWith(row.name))
     for(let k=body.length-2;k>=0;k--){const t=lines[body[k]].text;if(/\d/.test(t)||!row.name.includes(t))break;wraps.add(body[k]);}
-  let rowSeen=false;
+  // A block of lines between rows whose cells wrap unevenly ("S$100 for every" / "If your flight is delayed  six-hour
+  // delay  three-hour delay" / "up to  up to"): every line of it is of this table by its shape (looseLine), and one of
+  // its cells prints an amount followed by words, as a wrapped cell does.
+  const loose=(i:number)=>i!==own[0]&&!isRow(i)&&looseLine(lines[i].raw,n,plans);
+  const wrappedBlock=(i:number)=>{
+    if(!loose(i))return false;
+    const at=body.indexOf(i);let a=at,b=at;
+    while(a>0&&loose(body[a-1]))a--;
+    while(b<body.length-1&&loose(body[b+1]))b++;
+    return body.slice(a,b+1).some(j=>cellsOf(lines[j].raw).some(c=>WRAPPED_CELL.test(c)));
+  };
+  let rowSeen=false,piece=-2;
   for(let k=0;k<body.length-1;k++){
     const i=body[k],text=lines[i].text,next=body[k+1],prev=k>0?body[k-1]:h;
+    if(o.titled&&i!==own[0]&&cellCount(text)===n&&PREMIUM_LINE.test(text))return null;
     if(isRow(i)){rowSeen=true;continue;}
+    if(o.titled&&titledLine(lines[i].raw,plans,row.name))continue;
+    // Another row of the table printed in words only ("Unlimited  Unlimited  Unlimited"), or a row whose cells wrap
+    // over several lines ("Travel delay  S$100 for every  S$50 for every" / "  six-hour delay  three-hour delay").
+    if(o.titled&&(wordRow(text,n)||(wordsOnly(i)&&cellsOf(lines[i].raw).length===n)))continue;
+    if(o.titled&&wrappedBlock(i))continue;
+    if(o.titled&&(rowPiece(lines[i].raw,n,plans,"first")||(piece===k-1&&rowPiece(lines[i].raw,n,plans,"after")))){piece=k;continue;}
     if(wraps.has(i))continue;
     if(!rowSeen&&body.slice(0,k).every(j=>TABLE_SUBHEADING.test(lines[j].text))&&TABLE_SUBHEADING.test(text))continue;
     if(GROUP_TITLE.test(text)&&isRow(next))continue;
@@ -506,12 +544,79 @@ export function rowHeaderIndex(pageText:string|null|undefined,column:string,row:
   const at=placeIn(plans,want);
   return at==null?null:{at,cells};
 }
+/** A premium line printed as a row of cells ("Premium\tS$38\tS$52\tS$71"): never a benefit row of the plan table. */
+const PREMIUM_LINE=/^(?:(?:annual|single[- ]trip|total|your)\s+)?(?:premiums?|prices?|costs? of cover)\b/i;
+/** A title line inside one plan table (rowHeaderIndex titled): no amount, no run of cells, no other header of any width,
+ * no label heading alone, no sub-heading caption, no "Part"/"Table" line, and not two or more cells without amounts. */
+/** A table row whose cells are all whole worded cells (WORD_CELL), n of them after its words: "Emergency evacuation
+ * Unlimited Unlimited Unlimited". */
+const wordRow=(text:string,n:number)=>{
+  const run=text.match(WIDE_ROW)?.[0];
+  return !!run&&!new RegExp(MONEY_CELL).test(run)&&(run.match(new RegExp(WIDE_CELL,"g"))?.length??0)===n&&text.length>run.length;
+};
+/** A piece of a row whose cells wrap over lines, printed cell by cell: exactly n non-empty cells split by tabs or wide
+ * spaces, after the row's words ("Travel delay  S$100 for every  S$50 for every  S$50 for every") or after an empty first
+ * column ("  six-hour delay  three-hour delay  three-hour delay"). No cell names one of the header's plans; the first piece
+ * is no header of any width (a later piece may read like one: rowHeaderIndex then does not take it as the header). The first piece prints an amount in a cell; a later piece follows another piece. */
+function rowPiece(raw:string,n:number,plans:string[],at:"first"|"after"):boolean{
+  const parts=raw.split(/\t|\s{2,}/).map(c=>spaced(c));
+  const indented=/^\s/.test(raw)||parts[0]==="";
+  // A later piece is n cells, after an empty first column or alone on its line; the first is the row's words then n cells.
+  const cells=(indented||(at==="after"&&parts.filter(Boolean).length===n)?parts:parts.slice(1)).filter(Boolean);
+  if(cells.length!==n||cells.some(c=>c.length>40))return false;
+  if(at==="first")for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  if(namesPlan(raw,plans))return false;
+  if(at==="first")return !indented&&cells.some(c=>new RegExp(MONEY_CELL).test(c));
+  return true;
+}
+/** Whether a line names one of the header's plans as a plan is printed: capitalised or in capitals ("First",
+ * "FIRST", "Travel Plus"). The same word in lower case is a word of a sentence ("after the first six hours"). */
+function namesPlan(raw:string,plans:string[]):boolean{
+  return plans.some(p=>{
+    const words=p.split(/[^a-z0-9]+/).filter(Boolean);
+    if(!words.length)return false;
+    const cap=words.map(w=>w[0].toUpperCase()+w.slice(1)).join("\\s+"),upper=words.map(w=>w.toUpperCase()).join("\\s+");
+    return new RegExp(`(?<![A-Za-z0-9])(?:${cap}|${upper})(?![A-Za-z0-9])`).test(raw);
+  });
+}
+/** A cell that prints an amount then words, as a cell wrapped over lines does ("S$100 for every", "S$300 only"). */
+const WRAPPED_CELL=new RegExp(`^${MONEY_CELL}\\s+[A-Za-z]`);
+/** A line that could be part of a row of an n-plan table by its shape (rowHeaderIndex titled, wrapped blocks): at most n+1
+ * cells, no header of any width, no cell naming one of the header's plans, no run of cells of another width, and no
+ * label heading alone, sub-heading caption, "Part"/"Table" line or premium line. */
+function looseLine(raw:string,n:number,plans:string[]):boolean{
+  const text=spaced(raw);
+  if(!text||cellsOf(raw).length>n+1)return false;
+  const width=cellCount(text);
+  if(width>0&&width!==n)return false;
+  // A line of headings is another table's header unless one of its cells starts in lower case ("six-hour delay"): plan
+  // names are printed capitalised.
+  if(!cellsOf(raw).some(c=>/^[a-z]/.test(c)))for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  if(namesPlan(raw,plans))return false;
+  return !LABEL_HEADING.test(labelKey(text.replace(/:$/,"")))&&!TABLE_SUBHEADING.test(text)&&!/^(?:part|table)\b/i.test(text)&&!PREMIUM_LINE.test(text);
+}
+const cellsOf=(raw:string)=>raw.split(/\t|\s{2,}/).map(c=>spaced(c)).filter(Boolean);
+/** A note of the table's currency on its own line ("All amounts in SGD", "Amounts shown in S$", "(S$)"). */
+const CURRENCY_NOTE=/^(?:\(\s*(?:s\$|sgd|us\$|usd)\s*\)|(?:all\s+)?(?:amounts?|figures?|limits?|benefits?)\s+(?:are\s+)?(?:shown\s+|stated\s+|payable\s+)?in\s+(?:s\$|sgd|singapore dollars?|us\$|usd)\.?)$/i;
+function titledLine(raw:string,plans:string[],rowName:string):boolean{
+  const text=spaced(raw);
+  // A line naming one of the header's plans, or repeating the start of the row's own name, is no group title.
+  if(namesPlan(raw,plans))return false;
+  if(rowName.toLowerCase().startsWith(text.toLowerCase().replace(/:$/,"")))return false;
+  if(CURRENCY_NOTE.test(text))return true;
+  if(!text||cellCount(text)>0||PRINTS_AMOUNT.test(text.replace(/\((?:s\$|us\$|\$|sgd|usd)\)/gi," ")))return false;
+  if(raw.split(/\t|\s{2,}/).map(c=>c.trim()).filter(Boolean).length>=2)return false;
+  for(let k=2;k<=6;k++)if(headerPlans(raw,k))return false;
+  const key=labelKey(text.replace(/:$/,""));
+  if(LABEL_HEADING.test(key)||TABLE_SUBHEADING.test(text)||/^(?:part|table)\b/i.test(text))return false;
+  return true;
+}
 /** A price printed after a plan's name in its heading cell ("Standard S$38", "Plus SGD 52.00"): letters, then one amount. */
-const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?$/i;
-/** pageText: the text of the row's page. A reading's figure is taken only when it is the cell at its column's place in
- * the plan header nearest above the row's own line (rowHeaderIndex): a reading that names one plan but gives another
- * plan's cell gives none (TE pr373 W1). Without the page's text, or with no such header on the page, none: the readings
- * never place a plan. */
+const PRICE_AFTER_NAME=/(?<=[A-Za-z)])\s+(?:\(\s*)?(?:S\$|US\$|HK\$|A\$|\$|£|€|RM|SGD|USD|MYR|GBP|EUR|HKD|AUD)\s?\d[\d,]*(?:\.\d+)?(?:\s*\))?$/i;
+/** pageText: the text of the row's page. A reading's figure is taken only when it is one of the row's own cells and the
+ * cell at its column's place in the plan header nearest above the row's own line (rowHeaderIndex): a reading that names
+ * one plan but gives another plan's cell gives none (TE pr373 W1). Title lines may sit between that header and the row
+ * (rowHeaderIndex titled). Without the page's text, or with no such header on the page, none. */
 export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quote:string|null;benefitName?:string|null},readings:PlanColumnReading[],
   o:{runIsUnique?:boolean;pageText?:string|null}={}):{plan:string;figureText:string}|null{
   const quote=spaced(String(row.quote??""));
@@ -525,6 +630,7 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const codes=new Set(money.map(c=>CELL_CODE[c.trim().match(SIGN)?.[0]??""]??null));
   const code=codes.size===1?[...codes][0]:null;
   if(!code)return null;
+  const cells=money.map(cellAmount);
   const onPage=readings.filter(r=>r.documentId===row.policyId&&r.page===row.sourcePage);
   // The words of the row before its cells: when the row is exactly those words then its cells, a reading may also quote
   // the cells first and the same words on the line below them (a plan table printing each benefit's name, its cells, then
@@ -550,9 +656,9 @@ export function planColumnFigure(row:{policyId:string;sourcePage:number|null;quo
   const picks=new Set(found.map(r=>{
     const column=(r.column??"").trim();
     // Every cell of the run counts for its place, a "Not covered" cell too; the plan's own cell must print a figure.
-    const placed=column?rowHeaderIndex(o.pageText,column,{run,name}):null;
+    const placed=column?rowHeaderIndex(o.pageText,column,{run,name})??rowHeaderIndex(o.pageText,column,{run,name},{titled:true}):null;
     const own=placed==null?null:placed.cells[placed.at];
-    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
+    return column&&own!=null&&/\d/.test(own)&&!r.qualifier&&r.figure.kind==="printed"&&r.figure.amount!=null&&cells.includes(r.figure.amount)&&cellAmount(own)===r.figure.amount&&r.figure.currency===code
       ?JSON.stringify([column,r.figureText]):"none";
   }));
   if(picks.size!==1||picks.has("none"))return null;
