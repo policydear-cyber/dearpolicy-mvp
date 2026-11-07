@@ -550,9 +550,31 @@ test("one field per line: a field that limits the daily row stays with it, so th
     const page = `SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}`;
     assert.equal(stayBlock(page, page.indexOf("Ward cash")).text, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", next);
   }
-  // The block ends at the next heading: what is printed under another heading is another benefit's.
-  const headed = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00\n\nSECTION B: OUTPATIENT\nOverall limit: S$2,000";
-  assert.deepEqual(fieldStay(headed, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150", "S$450"]);
+  // No line ends the block (Critic P392 round 4): a heading, a capitals line, a bullet, a numbered item or a tabbed lump sum
+  // may all be followed by, or be, a limit on this row. Was (round 3): a heading ended it, so a limit under it was missed.
+  const ROW = "Ward cash: S$150 per day from the 3rd day, maximum 30 days";
+  for (const below of [["Annual premium: S$2,412.00", "", "SECTION B: OUTPATIENT", "Overall limit: S$2,000"], ["NOTES", "subject to an overall limit of S$2,000"],
+    ["HALF RATE AFTER DAY 20"], ["• Overall limit S$2,000 per policy year"], ["1. Payable for at most S$2,000 in all"], ["Overall limit\tS$2,000"],
+    ["Plafond\tS$2,000"], ["Thereafter\tS$75 per day"], ["Intensive care\tS$300 per day"], ["IMPORTANT", "", "", "Limited to S$2,000 a year"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // A line that only repeats the row's own first paid day or most days is no new rule (Critic P392 round 4).
+  for (const below of [["Payable from: day 3"], ["Maximum: 30 days"], ["Payable from: day 3", "Annual premium: S$2,412.00"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 5).amounts, ["S$150", "S$450"], below.join(" / "));
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  }
+  // A repeat with a rule word, or another number, is a rule: no total.
+  for (const below of [["Payable from: day 4"], ["Not payable for the first 3 days"], ["Maximum: 20 days"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // The next table row that is plainly another benefit's rate, or a table's heading row, ends the block as before.
+  for (const below of [["Hospital cash\tS$100 per day, maximum 30 days", "Overall limit: S$2,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 5).amounts, ["S$150", "S$450"], below.join(" / "));
+  }
   // A table row (tab-separated) reads its block the same way: the premium under it is left out, a limit is not.
   const tab = "SCHEDULE\nWard cash\tS$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00";
   assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150", "S$450"]);

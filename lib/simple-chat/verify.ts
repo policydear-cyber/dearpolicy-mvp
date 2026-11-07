@@ -343,30 +343,50 @@ export function rowWithContinuation(pageText: string, offset: number): string {
   return [row.text, ...more].join(" ");
 }
 
-/** A heading that starts the next part of a page: a line in capitals ("SCHEDULE OF BENEFITS", "SECTION B"), or one that
- * names a benefit, section, part or schedule by number ("Benefit 2: Group Personal Accident"). */
-const HEADING_LINE = /^\s*(?:(?=[^a-z]*[A-Z]{3})[^a-z\d$€£¥]*(?:\b\d{1,2}\b[^a-z\d$€£¥]*)?|(?:benefit|section|part|schedule|table)\s+[\dA-Z]{1,3}\b.*)$/;
-/** Words that, anywhere below a daily row and before the next heading, may change what a stay pays: a limit, an
+/** Words that, anywhere below a daily row on its page, may change what a stay pays: a limit, an
  * aggregate, a day rule or a condition on the stay (TE #392 layouts, Critic P392). Any day word left once the row's own
  * day cap field is taken out is a day rule ("Plan: Basic (days 1 to 3 not covered)", TE #392). Unsure means no total. */
 export const STAY_BLOCK_WORDS = /\b(?:limits?|limited|limitation|sub-?limits?|aggregate|overall|totals?|in\s+all|ceiling|caps?|capped|capping|plafond|restricted|not\s+more|no\s+more|not\s+exceed\w*|excess|deductible|elimination|deferred|deferment|deferral|waiting|excluding|exclud\w*|except|unless|reduced|reduction|half|thereafter|only|once|frequency|sum\s+(?:insured|assured)|per\s+(?:admission|confinement|disability|year|annum|policy\s+year|lifetime)|annual(?:ly)?|lifetime|whichever|subject|balance|co-?pay\w*|co-?insurance|intensive|icu|first\s+\d+|after\s+(?:the\s+)?\d+|minimum|at\s+least|less\s+than|(?:a|each|every|per)\s+(?:year|month|week|quarter)|days?|unpaid|not\s+(?:covered|paid|payable)|non-?payable|no\s+benefit)\b/i;
-/** A daily row and every line under it, up to the next heading, table row, bullet or numbered item, or the end of the page (no fixed number of lines, and a
- * blank line does not end it), with each non-benefit field left out (premium, policy number, person, plan, dates,
- * currency, payment, agent: nonBenefitField). What a stay pays is worked out from this block only when nothing in it
- * below the row's own line could change it (Critic P392, TE #392). tail: the block below the row's own line. */
+/** The row's own day numbers: its first paid day and its most days ("from the 3rd day", "maximum 30 days"). */
+const ROW_DAYS = /\b(?:after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b|\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*(?:continuous\s+)?days?\b/gi;
+/** A daily row and every line under it to the end of its page: no line ends it (a heading, a blank line, a table row, a
+ * bullet or a numbered item may all be followed by a limit on this row: Critic P392 rounds 3 and 4). Left out of it:
+ * - each non-benefit field (premium, policy number, person, plan, dates, currency, payment, agent: nonBenefitField);
+ * - a line that only repeats the row's own first paid day or most days ("Payable from: day 3" under "from the 3rd day",
+ *   Critic P392 round 4): no money, every number one of the row's own day numbers, and no other limiting word.
+ * What a stay pays is worked out only when nothing else is left below the row's own line that could change it.
+ * tail: the block below the row's own line. */
 export function stayBlock(pageText: string, offset: number): { text: string; tail: string } {
   const row = rowLine(pageText, offset);
+  const own = new Set([...row.text.matchAll(ROW_DAYS)].map((m) => Number(m[1] ?? m[2])));
   const kept: string[] = [];
   for (const l of pageText.slice(row.end + 1).split("\n")) {
     if (!l.trim()) continue;
-    // The next table row (tab-separated), bullet or numbered item is the next row, as in rowWithContinuation.
-    if (HEADING_LINE.test(l) || /^\s*(?:[•●▪*#^\-–]|\(?[a-z0-9]{1,3}[.)]\s)/i.test(l) || /\t/.test(l)) break;
+    if (nextTableRow(l)) break;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
+    const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));
+    const rest = l.replace(/\b\d+\s*(?:st|nd|rd|th)?\b|\bdays?\b/gi, " ");
+    if (numbers.length && numbers.every((n) => own.has(n)) && !MONEY_IN_VALUE.test(l) && !STAY_BLOCK_WORDS.test(rest) && !CAP_OR_RULE.test(rest)) continue;
     kept.push(l);
   }
   return { text: [row.text, ...kept].join(" "), tail: kept.join(" ") };
 }
+/** The one kind of line that ends a daily row's block: the next row of a table, printed with tabs, that is plainly
+ * another benefit and no limit or rule. Either it prints its own rate ("Hospital cash\tS$100 per day, maximum 30 days")
+ * and, once its rate and day cap are taken out, no limiting word; or it is a table's heading row ("Travel\tClassic\tBusiness":
+ * two or more tabs, no figure, no limiting word). A tabbed lump sum ("Overall limit\tS$2,000", "Plafond\tS$2,000") never
+ * ends the block, nor does any line with a limit or rule word (Critic P392 round 4; keeps main's totals on the fixtures). */
+function nextTableRow(line: string): boolean {
+  if (!/\t/.test(line)) return false;
+  const rate = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?\s*(?:per|a|each)\s+(?:day|week|month)\b/gi;
+  const words = line.replace(rate, " ").replace(MAX_DAY_FIELD, " ");
+  if (STAY_BLOCK_WORDS.test(words) || CAP_OR_RULE.test(words)) return false;
+  if (rate.test(line)) return !MONEY_IN_VALUE.test(words);
+  return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line);
+}
+/** Words beside a repeated day number that make it a rule of its own, never a repeat ("up to", "first", "after"). */
+const CAP_OR_RULE = /\b(?:up\s+to|first|after|within|before|until|following|last|each|every|per|not|no|except|only|less|more|minimum|at\s+least|continuous(?:ly)?|consecutive)\b/i;
 /** The sum a percentage row is a percentage of (Critic round 50), read only above the row's own line on its page:
  * - the nearest "% of S$5,000" or "Limit: S$5,000" heading gives that sum;
  * - the nearest table heading "(% of Sum Insured)" (in parentheses, as a column heading prints it) gives "sum_insured";
