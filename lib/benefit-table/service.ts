@@ -562,12 +562,14 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   return { checked: true, record };
 }
 
-/** Asks the model which cover each section is paid under, for every section the household has not linked itself. The
- * model's earlier links are replaced; the household's are never touched. */
+/** Asks the model which cover each NEW section is paid under: a section with no link yet, of any kind. A link already in
+ * place, the household's or the model's, is never sent again, never changed and never removed, so reading one document
+ * cannot move or drop another document's rows (live, 7 Nov: a new upload re-sorted every section and dropped two rows of
+ * an unrelated document). A link to a section that is no longer read is left in place; it shows nothing. */
 export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number): Promise<{ proposed: number }> {
   const l = await load(db, accountId);
-  const fixed = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
-  const sections = sectionsOf(l.readings).filter((s) => !fixed.has(s.key));
+  const placed = new Set(l.links.map((x) => x.section));
+  const sections = sectionsOf(l.readings).filter((s) => !placed.has(s.key));
   const { types } = coversOf(l.readings, l.family);
   let links: SectionLink[] = [];
   if (sections.length && types.length) {
@@ -578,7 +580,7 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
     const keys = new Set(sections.map((s) => s.key)), covers = new Set(types.map((t) => t.key));
     links = ((reply.json as { links?: SectionLink[] } | null)?.links ?? []).filter((x) => keys.has(x.section) && (x.cover == null || covers.has(x.cover)));
   }
-  await db("DELETE FROM benefit_links WHERE account_id=$1 AND chosen_by='model'", [accountId]);
+  // Insert only: ON CONFLICT DO NOTHING keeps any link written meanwhile (the household's, or a parallel reading's).
   for (const x of links)
     await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,$4,'model',now())
       ON CONFLICT (account_id, section_key) DO NOTHING`, [accountId, x.section, x.cover, x.why.slice(0, 300)]);
@@ -594,6 +596,24 @@ export async function setLink(db: Db, accountId: string, section: string, cover:
   if (cover != null && !coversOf(l.readings, l.family).types.some((t) => t.key === cover)) throw new TableInputError("That cover is not in your documents.");
   await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,'Set by you','household',now())
     ON CONFLICT (account_id, section_key) DO UPDATE SET cover_key=EXCLUDED.cover_key, why=EXCLUDED.why, chosen_by='household', updated_at=now()`, [accountId, section, cover]);
+}
+
+/** Puts one section back under a cover after a link was lost (live, 7 Nov: a new upload re-sorted every section and moved
+ * one section of an unrelated document to no cover). Read-only unless apply: it reports the section's current link and
+ * how many rows each person shows now and would show after, so the owner approves on a count. With apply it writes the
+ * link as the household's own (setLink), which no later reading or re-link changes. */
+export async function restoreLink(db: Db, accountId: string, section: string, cover: string, apply = false): Promise<{
+  current: { cover: string | null; chosenBy: string } | null; rowsNow: Record<string, number>; rowsAfter: Record<string, number>; added: number; applied: boolean }> {
+  const l = await load(db, accountId);
+  if (!sectionsOf(l.readings).some((s) => s.key === section)) throw new TableInputError("That part of a document is not in this household's table.");
+  if (!coversOf(l.readings, l.family).types.some((t) => t.key === cover)) throw new TableInputError("That cover is not in this household's documents.");
+  const was = l.links.find((x) => x.section === section);
+  const count = (links: SectionLink[]) => Object.fromEntries(assembleTable(l.readings, l.family, links).people.map((p) => [p.name, p.rows.length]));
+  const rowsNow = count(l.links);
+  const rowsAfter = count([...l.links.filter((x) => x.section !== section), { section, cover, why: "Restored" }]);
+  const added = Object.keys(rowsAfter).reduce((n, k) => n + (rowsAfter[k] - (rowsNow[k] ?? 0)), 0);
+  if (apply) await setLink(db, accountId, section, cover);
+  return { current: was ? { cover: was.cover, chosenBy: was.chosenBy } : null, rowsNow, rowsAfter, added, applied: apply };
 }
 
 /** The household confirms a person's headline amount, corrects it, or takes their word back (status null). */

@@ -7,7 +7,7 @@ import { parseAmount } from "@/lib/benefit-table/amount";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import { anthropicTableModel, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
 import { ledgerUsage } from "@/lib/simple-chat/model";
-import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
+import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, restoreLink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
 import { benefitTableEnabled } from "@/lib/benefit-table/flag";
 
 let passed = 0;
@@ -194,6 +194,50 @@ async function main() {
     assert.equal(again.calls.length, 0, "a section the household placed is not sent again");
     assert.equal(f.s.links.get(`${A}|${accident}`)!.chosen_by, "household");
     assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!.rows.length, 0);
+  });
+  await test("a second upload links only its own new sections: no section already linked is moved, unlinked or asked about again", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    const rows = async () => (await tableFor(f.db, A)).table.people.map((p) => [p.id, p.rows.map((r) => [r.benefit, JSON.stringify(r.figure)]).sort()]);
+    const linksBefore = JSON.stringify([...f.s.links.values()]), rowsBefore = await rows();
+    assert.ok(rowsBefore.some(([, r]) => (r as unknown[]).length > 0), "the household has linked rows to lose");
+    // A new document arrives and is read; the linker would re-sort everything if it were asked (moves the accident section away).
+    f.s.policies.push({ id: "extra", account_id: A, original_filename: "Hospital cash.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+    f.s.pages.push({ policy_id: "extra", account_id: A, page_number: 1, text: "Hospital cash S$30 a day" });
+    await readDocument(f.db, scriptedModel([() => doc("scheme_terms", [], [benefit({ section: "Hospital", benefit: "Hospital cash", pays: "per_day", value: 30, quote: "Hospital cash S$30 a day" })])]).model, A, "extra");
+    const hospital = sectionKeyOf("extra", { section: "Hospital", column: null });
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: null, why: "re-sorted" }, { section: hospital, cover: gpa, why: "new" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A), { proposed: 1 });
+    assert.ok(m.calls[0].user.includes(hospital) || m.calls[0].user.includes("Hospital"), "the new section is asked about");
+    assert.ok(!m.calls[0].user.includes(accident), "a section already linked is not sent again");
+    assert.equal(f.s.links.get(`${A}|${accident}`)!.cover_key, gpa, "the existing link is unchanged");
+    assert.equal(f.s.links.get(`${A}|${hospital}`)!.cover_key, gpa, "the new section is linked");
+    assert.deepEqual(JSON.parse(linksBefore), [...f.s.links.values()].filter((l) => l.section_key !== hospital), "every earlier link is exactly as it was");
+    const after = await rows();
+    for (const [id, r] of rowsBefore) for (const row of r as unknown[]) assert.ok((after.find(([x]) => x === id)![1] as unknown[]).some((y) => JSON.stringify(y) === JSON.stringify(row)), `${id} keeps ${JSON.stringify(row)}`);
+    // Nothing new to link: no model call at all.
+    const none = scriptedModel([]);
+    assert.deepEqual(await relink(f.db, none.model, A), { proposed: 0 });
+    assert.equal(none.calls.length, 0);
+  });
+  await test("restoring a lost link: the dry run counts the rows and changes nothing; apply links it as the household's own", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: null, why: "lost" }] })]).model, A);
+    const before = JSON.stringify([...f.s.links.values()]);
+    const dry = await restoreLink(f.db, A, accident, gpa);
+    assert.equal(dry.applied, false);
+    assert.deepEqual(dry.current, { cover: null, chosenBy: "model" });
+    assert.ok(dry.added > 0, "the dry run says how many rows come back");
+    assert.equal(JSON.stringify([...f.s.links.values()]), before, "a dry run writes nothing");
+    const done = await restoreLink(f.db, A, accident, gpa, true);
+    assert.equal(done.added, dry.added);
+    assert.deepEqual(f.s.links.get(`${A}|${accident}`), { account_id: A, section_key: accident, cover_key: gpa, why: "Set by you", chosen_by: "household" });
+    const rows = (await tableFor(f.db, A)).table.people.reduce((n, p) => n + p.rows.length, 0);
+    assert.equal(rows, Object.values(done.rowsAfter).reduce((a, b) => a + b, 0));
+    await assert.rejects(restoreLink(f.db, A, "terms|nothing|", gpa), TableInputError);
+    await assert.rejects(restoreLink(f.db, B, accident, gpa), TableInputError, "only the household's own sections");
   });
   await test("the household can only link a section and a cover its own documents show", async () => {
     const f = household();
