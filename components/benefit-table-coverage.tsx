@@ -24,7 +24,10 @@ export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;
   unmatchedCovers:Other[];illustrationCovers:Other[];
   /** A cover printed for a name several people in the family share, not yet placed under one of them. Optional: an older server sends none. */
   ambiguousCovers?:{cover:Other;documentId:string;candidates:{id:string;name:string}[];sameName?:boolean}[];
-  unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[]};
+  unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[];
+  /** Figures the figure guards could not settle (lib/benefit-table/guards.ts). Sent only with the guards switched on. */
+  figureChecks?:FigureCheck[]};
+type FigureCheck={status:"confirm"|"checking";field:string;claimKey:string;page:number;line:string;candidates:number[];note:string;documentId:string;document:string};
 
 const coverName=(c:{product:string;cover:string;plan:string|null;riderOf?:string|null})=>
   [c.product,c.plan&&!c.product.toLowerCase().includes(c.plan.toLowerCase())?`Plan ${c.plan}`:null].filter(Boolean).join(" · ");
@@ -101,6 +104,43 @@ function TellUs({person}:{person:Person}){
   </form>;
 }
 
+const FIELD_NAME:Record<string,string>={value:"Amount",cap:"Most it pays",sum_insured:"Sum insured",premium:"Premium"};
+/** One figure the readers did not agree on: the printed line and page, the figures they read, and the household's answer.
+ * What the household gives is final (DC, 6 Nov 2026). */
+function FigureToConfirm({check,done}:{check:FigureCheck;done:()=>void}){
+  const [typed,setTyped]=useState(""),[state,setState]=useState<"idle"|"sending"|"error">("idle"),[error,setError]=useState<string|null>(null);
+  const send=async(value:number)=>{
+    setState("sending");setError(null);
+    const r=await fetch("/api/benefit-table/figure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({documentId:check.documentId,claimKey:check.claimKey,value})}).catch(()=>null);
+    if(r?.ok){done();return;}
+    const body=await r?.json().catch(()=>null) as {error?:string}|null;
+    setState("error");setError(body?.error??"That didn’t save. Please try again.");
+  };
+  const n=Number(typed.replace(/[^\d.]/g,""));
+  return <li data-testid="figure-check">
+    <span><strong>{FIELD_NAME[check.field]??"Figure"}</strong> in {check.document}: &ldquo;{check.line}&rdquo; <PageLink source={{documentId:check.documentId,document:check.document,page:check.page,excerpt:check.line}}/></span>
+    <div className="schedule-controls">
+      {check.candidates.map(c=><button key={c} type="button" className="button secondary compact" disabled={state==="sending"} onClick={()=>void send(c)}>It&rsquo;s {plainFigure(c)}</button>)}
+      <input id={`fig-${check.claimKey}`} aria-label="Type the figure the page prints" inputMode="decimal" placeholder="Or type it" value={typed} onChange={e=>setTyped(e.target.value)} size={10}/>
+      <button type="button" className="mini-button" disabled={!(n>0)||state==="sending"} onClick={()=>void send(n)}>Save</button>
+    </div>
+    {error?<p className="alert error" role="alert">{error}</p>:null}
+  </li>;
+}
+/** The figures five readers could not agree on, document by document: shown to check, never used until the household
+ * answers. Figures still being checked are counted, with nothing to do. */
+function FigureChecks({checks,reload}:{checks:FigureCheck[];reload?:()=>Promise<void>}){
+  const [hidden,setHidden]=useState<string[]>([]);
+  const ask=checks.filter(c=>c.status==="confirm"&&!hidden.includes(c.documentId+c.claimKey)),checking=checks.filter(c=>c.status==="checking");
+  if(!ask.length&&!checking.length)return null;
+  return <section className="cov-person" data-testid="figure-checks">
+    {ask.length?<><div className="cov-person-head"><h2>{ask.length===1?"One figure needs your check":`${ask.length} figures need your check`}</h2></div>
+      <p className="muted">Five separate readings didn&rsquo;t agree on {ask.length===1?"this figure":"these figures"}, often because the print is unclear. {ask.length===1?"It isn’t":"They aren’t"} used anywhere until you say what the page prints. What you choose is kept.</p>
+      <ul className="cov-also">{ask.map(c=><FigureToConfirm key={c.documentId+c.claimKey} check={c} done={()=>{setHidden(h=>[...h,c.documentId+c.claimKey]);void reload?.();}}/>)}</ul></>:null}
+    {checking.length?<p className="muted" role="status" data-testid="figure-checking">{checking.length===1?"One figure is":`${checking.length} figures are`} still being checked, so {checking.length===1?"it isn’t":"they aren’t"} used yet.</p>:null}
+  </section>;
+}
+
 /** A person in the family with no cover on this page: listed with their name, never silently left out. Asked to upload
  * only when nothing they may already have uploaded is on its way here: no document of the household is still being read,
  * stalled, on hold or not yet read into this table, and Home counts no schedule line of theirs (Critic #359 M1, the same
@@ -114,7 +154,7 @@ function NoCoverShown({person,pending}:{person:Person;pending:boolean}){
   </section>;
 }
 
-export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>Promise<void>}){
+export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload?:()=>Promise<void>}){
   // "waiting" is only a document DearPolicy is reading now; it needs nothing from the household. A document the table
   // never reads, or whose table reading was not stored, is "no_table": said not to be shown here, which claims nothing
   // about what it holds (it may well have benefits), never as unread or sent to Read again. The chat reads every ready
@@ -148,6 +188,7 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
     {tableUnread.length?<div className="unread-documents stalled" role="status" data-testid="table-unread"><div><strong>{tableUnread.length===1?"One document’s benefits couldn’t":`${tableUnread.length} documents’ benefits couldn’t`} be read for Coverage yet.</strong>
       <span>{tableUnread.map(d=>d.name).join(", ")}. You can use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
+    {data.figureChecks?.length?<FigureChecks checks={data.figureChecks} reload={reload}/>:null}
     {noTable.length?<p className="muted" data-testid="table-not-shown">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"isn’t shown on this page. You can still ask about it in chat.":"aren’t shown on this page. You can still ask about them in chat."}</p>:null}
     {/* "Upload one" only when nothing that could hold cover is on file: a household whose schedule is uploaded but not yet
         in this table is never told to upload a schedule. */}
