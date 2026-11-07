@@ -296,14 +296,26 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
 /** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. "Greater
  * than 8%" on a burns row is a row label, not a limit (R52-2); "whichever is the greater" is. */
 export const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+/** A line that is one labelled field of its own ("Hospital cash: S$150 per day", "Annual premium: S$2,412.00"): a short
+ * label of words, a colon, then its value. */
+const FIELD_LINE = /^\s*([A-Za-z][A-Za-z ()'&/-]{0,48}?)\s*:\s*\S/;
+/** Label words that make a field part of the row above it: a limit, a cap, a count of days or a condition on what the
+ * row pays ("Maximum: 30 days", "Overall limit: S$2,000", "Subject to: ..."). Such a line is always kept with the row, so
+ * whatever limits a figure is never cut off from it; any other labelled field is a field of its own. */
+const LIMITING_LABEL = /\b(?:limits?|sub-?limits?|max(?:imum)?|min(?:imum)?|caps?|capped|aggregate|overall|totals?|in\s+all|subject|whichever|balance|excess|deductibles?|co-?pay(?:ment)?|co-?insurance|up\s+to|per|each|any\s+one|lifetime|days?|weeks?|months?|years?|stays?|admissions?|conditions?|notes?|exclusions?|except|unless|provided|payable|paid|benefits?|amounts?|of)\b/i;
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
- * up to the next row, bullet or numbered item (R52-1). */
+ * up to the next row, bullet or numbered item (R52-1). On a schedule that prints one labelled field per line, the next
+ * labelled field ("Annual premium: S$2,412.00" under "Hospital cash: S$150 per day") is the next row, not part of this one
+ * (TE overnight F1), unless its label limits what the row pays. */
 export function rowWithContinuation(pageText: string, offset: number): string {
   const row = rowLine(pageText, offset);
   const rest = pageText.slice(row.end + 1).split("\n");
+  const fieldRow = FIELD_LINE.test(row.text) && !/\t/.test(row.text);
   const more: string[] = [];
   for (const l of rest.slice(0, 3)) {
     if (!l.trim() || /^\s*(?:[•●▪*#^\-–]|\(?[a-z0-9]{1,3}[.)]\s)/i.test(l) || /\t/.test(l)) break;
+    const field = fieldRow ? FIELD_LINE.exec(l) : null;
+    if (field && !LIMITING_LABEL.test(field[1])) break;
     more.push(l);
   }
   return [row.text, ...more].join(" ");

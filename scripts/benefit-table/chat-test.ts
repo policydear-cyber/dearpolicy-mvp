@@ -490,6 +490,35 @@ test("the stay is refused when the table read other most days, or none, for that
   assert.equal(misread.rows.find((x) => /Hospital Cash/.test(x.benefit))!.fromDay, 11);
   assert.deepEqual(misread.amounts, ["S$30", "S$900"]);
 });
+// A schedule that prints one labelled field per line (TE overnight F1): the field under the daily row is its own row.
+const FIELDS = "aaaaaaaa-0000-0000-0000-000000000031";
+function fieldStay(page: string, quote: string, stayDays: number) {
+  const house: Household = { ...HOUSE2, documents: [HOUSE2.documents[0], doc(FIELDS, "Hospital plan schedule.pdf", [{ page: 1, text: page }])] };
+  const cash = checkReading(src(house.documents[1]), reading("scheme_terms", "Group Scheme", [], [
+    b({ section: "Hospital", benefit: "Ward cash", pays: "per_day", value: 150, page: 1, quote, maxDays: 30 })]));
+  const ci = coverKeyOf({ product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null });
+  const t = assembleTable([schedR(), cash, lifeCert], family, [{ section: sectionKeyOf(FIELDS, { section: "Hospital", column: null }), cover: ci, why: "hospital cash" }]);
+  const rs = chatRows(t, house);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "Hospital cash.", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: { stayDays }, ofBill: null, row: rs.find((r) => r.benefit === "Ward cash")!.id }] };
+  const fromRows = amountsFromRows(raw, rs, house);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, [`I was in hospital ${stayDays} days`], new Set(fromRows.report.labels));
+  const { kept, refused } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  return { amounts: kept.filter((s) => s.amount).map((s) => s.amount!.text), refused: refused.length };
+}
+test("one field per line: the premium printed under a daily row is not part of it, so the stay is worked out (TE overnight F1)", () => {
+  const page = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00\nPolicy number: HX-55120";
+  assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 5), { amounts: ["S$150", "S$450"], refused: 0 });
+});
+test("one field per line: a field that limits the daily row stays with it, so the stay is still not worked out past it", () => {
+  for (const next of ["Overall limit: S$2,000", "Maximum payable per year: S$2,000", "Subject to: S$2,000 in total"]) {
+    const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
+  }
+  // A table row (tab-separated) keeps the old rule: an untabbed line under it continues it.
+  const tab = "SCHEDULE\nWard cash\tS$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00";
+  assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150"]);
+});
 test("a stay statement is never kept without its labelled daily row", () => {
   const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30, alone: true }] } };
   const st = [{ id: "s1", text: "Cash (Y).", amount: { text: "S$30" } }, { id: "s1-stay", text: "For a 12-day stay, this works out to 2 days of the daily benefit.", amount: { text: "S$60" }, basis: "S$30 a day, paid from day 11, for at most 30 days (2 × S$30)" }];
