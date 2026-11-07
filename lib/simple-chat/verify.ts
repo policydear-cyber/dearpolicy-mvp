@@ -346,7 +346,7 @@ export function rowWithContinuation(pageText: string, offset: number): string {
 /** Words that, anywhere below a daily row on its page, may change what a stay pays: a limit, an
  * aggregate, a day rule or a condition on the stay (TE #392 layouts, Critic P392). Any day word left once the row's own
  * day cap field is taken out is a day rule ("Plan: Basic (days 1 to 3 not covered)", TE #392). Unsure means no total. */
-export const STAY_BLOCK_WORDS = /\b(?:limits?|limited|limitation|sub-?limits?|aggregate|overall|totals?|in\s+all|ceiling|caps?|capped|capping|plafond|restricted|not\s+more|no\s+more|not\s+exceed\w*|excess|deductible|elimination|deferred|deferment|deferral|waiting|excluding|exclud\w*|except|unless|reduced|reduction|half|thereafter|only|once|frequency|sum\s+(?:insured|assured)|per\s+(?:admission|confinement|disability|year|annum|policy\s+year|lifetime)|annual(?:ly)?|lifetime|whichever|subject|balance|co-?pay\w*|co-?insurance|intensive|icu|first\s+\d+|after\s+(?:the\s+)?\d+|minimum|at\s+least|less\s+than|(?:a|each|every|per)\s+(?:year|month|week|quarter)|days?|unpaid|not\s+(?:covered|paid|payable)|non-?payable|no\s+benefit)\b/i;
+export const STAY_BLOCK_WORDS = /\b(?:limits?|limited|limitation|sub-?limits?|aggregate|overall|totals?|in\s+all|ceiling|caps?|capped|capping|plafond|restricted|not\s+more|no\s+more|not\s+exceed\w*|excess|deductible|elimination|deferred|deferment|deferral|waiting|excluding|exclud\w*|except|unless|reduced|reduction|half|thereafter|only|once|frequency|sum\s+(?:insured|assured)|per\s+(?:admission|confinement|disability|year|annum|policy\s+year|lifetime)|annual(?:ly)?|lifetime|whichever|subject|balance|co-?pay\w*|co-?insurance|intensive|icu|first\s+\d+|after\s+(?:the\s+)?\d+|minimum|at\s+least|less\s+than|(?:a|each|every|per)\s+(?:year|month|week|quarter)|days?|unpaid|not\s+(?:covered|paid|payable)|non-?payable|no\s+benefit|wards?|paid\s+(?:for|in|if|when|only)|payable\s+(?:for|in|if|when|only)|if|provided|eligib\w*|conditions?|stops?|together|combined|shared|most\s+(?:paid|payable))\b/i;
 /** The row's own day numbers: its first paid day and its most days ("from the 3rd day", "maximum 30 days"). */
 const ROW_DAYS = /\b(?:after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b|\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*(?:continuous\s+)?days?\b/gi;
 /** A daily row and every line under it to the end of its page: no line ends it (a heading, a blank line, a table row, a
@@ -362,7 +362,7 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
   const kept: string[] = [];
   for (const l of pageText.slice(row.end + 1).split("\n")) {
     if (!l.trim()) continue;
-    if (nextTableRow(l)) break;
+    if (nextTableRow(l)) continue;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
     const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));

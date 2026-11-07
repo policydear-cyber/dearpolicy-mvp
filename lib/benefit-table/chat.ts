@@ -1330,7 +1330,8 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
   // The row with every line under it up to the next heading, non-benefit fields left out (stayBlock): a limit, aggregate,
   // day rule or condition anywhere below the row gives no total (Critic P392, TE #392).
   const block = stayBlock(page.text, found.offset);
-  if (STAY_BLOCK_WORDS.test(block.tail.replace(MAX_DAY_FIELD, " "))) return false;
+  const below = block.tail.replace(MAX_DAY_FIELD, " ");
+  if (STAY_BLOCK_WORDS.test(below)) return false;
   const words = `${block.text}\n${found.excerpt}`;
   const daily = row.figure.amount;
   if (moneyFiguresIn(words).some((f) => Math.abs(f.value - daily) > 0.005)) return false;
