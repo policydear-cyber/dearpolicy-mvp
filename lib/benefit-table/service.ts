@@ -570,7 +570,7 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
  * - A section with no link, or a model link that does not work (no cover, a cover that is gone, or one the table
  *   refuses), is asked again and takes the model's answer (Critic R391 S3b, S6, S7b).
  * - A working model link moves only onto a cover printed in the document just read (justRead) that no section is linked
- *   to yet, and only when the section's own document names that cover's product (or is the document just read). The
+ *   to yet, and only when the section's own document prints that cover's product as its own whole product name (or is the document just read). The
  *   model's word alone never moves it, never to no cover, never between older covers (Critic R391 S4b: a hospital wording
  *   first linked to the only cover, then one person's hospital certificate of the same product; TE S1x: a medical section
  *   is not moved onto a travel cover of another product; Critic S10: a cover read earlier with no section linked is not
@@ -589,12 +589,13 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
   const newCovers = types.filter((t) => justReadCovers.has(t.key) && !linkedCovers.has(t.key));
   const all = sectionsOf(l.readings).filter((s) => !household.has(s.key));
   const productOf = new Map(l.readings.map((r) => [r.documentId, words(r.product)]));
-  // The section's own document is the evidence: it is the document just read, or its product names the cover's product.
+  // The section's own document is the evidence: it is the document just read, or its product is the cover's product, name for name.
   const backs = (section: string, cover: { product: string }) => {
     const docId = section.slice(0, section.indexOf("|"));
     if (docId === justRead) return true;
     const named = words(cover.product);
-    return !!named && ` ${productOf.get(docId) ?? ""} `.includes(` ${named} `);
+    // The whole name, not a word inside it: a generic product ("Health", "Plan", "Scheme") of another insurer is no evidence (Critic S11).
+    return !!named && (productOf.get(docId) ?? "") === named;
   };
   const movesTo = new Map(all.filter((s) => working.has(s.key)).map((s) => [s.key, new Set(newCovers.filter((t) => backs(s.key, t)).map((t) => t.key))]));
   const open = new Set(all.filter((s) => !working.has(s.key)).map((s) => s.key));
