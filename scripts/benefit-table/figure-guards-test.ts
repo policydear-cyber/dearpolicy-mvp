@@ -234,9 +234,18 @@ async function main() {
     left = 0;
   });
 
-  await test("with the guards on, a reading never checked uses no figure (it is 'still being checked')", () => {
-    const shown = applyGuards(checked(), undefined);
-    assert.ok(shown.benefits.every((b) => b.value == null && (b as { figureCheck?: { status: string }[] }).figureCheck?.[0].status === "checking"));
+  await test("with the guards on, a reading stored before they were switched on keeps every figure as read (never checked, so nothing disagreed)", () => {
+    // Expectation changed (live regression, 7 Nov): before, every figure of such a reading was hidden as "still being checked".
+    const r = checked();
+    assert.deepEqual(applyGuards(r, undefined), r);
+    assert.deepEqual(applyGuards(r, null), r);
+    assert.ok(applyGuards(r, undefined).benefits.every((b) => !(b as { figureCheck?: unknown }).figureCheck));
+  });
+
+  await test("a reading a check actually ran on but did not finish still holds its unsettled figures back", () => {
+    const r = checked();
+    const shown = applyGuards(r, { version: "x", at: "t", verdicts: {}, spentUsd: 0, calls: 0, stopped: "error" });
+    assert.ok(shown.benefits.filter((b, i) => r.benefits[i].value != null).every((b) => b.value == null && (b as { figureCheck?: { status: string }[] }).figureCheck?.[0].status === "checking"));
   });
 
   await test("a long table is checked in batches of at most 30 figures", () => {
@@ -332,6 +341,25 @@ async function main() {
     await readDocument(withGuards.db, r1.model, A, DOC.id, undefined, {}, setup(r1.model, fakes));
     assert.ok("guards" in JSON.parse(withGuards.s.readings.get(DOC.id)!.reading));
     assert.deepEqual(JSON.stringify(await tableFor(withGuards.db, A)), JSON.stringify(await tableFor(plain.db, A)));
+  });
+
+  await test("switching the guards on over an existing household loses no figure: every page shows what it showed with them off", async () => {
+    envOff();
+    const f = fakeDb(), r1 = readerModel(reading(500));
+    await readDocument(f.db, r1.model, A, DOC.id);
+    assert.equal("guards" in JSON.parse(f.s.readings.get(DOC.id)!.reading), false, "read with the switch off: no guard record");
+    const off = await tableFor(f.db, A);
+    const calls = r1.calls.length;
+    envOn();
+    try {
+      const on = await tableFor(f.db, A);
+      assert.deepEqual(JSON.stringify(on.table), JSON.stringify(off.table), "the table is byte-identical");
+      assert.deepEqual(on.figureChecks, [], "nothing is listed as still being checked or to confirm");
+      assert.equal(r1.calls.length, calls, "opening the table calls no model");
+      const figures = (t: typeof off) => t.table.people.flatMap((p) => p.rows.map((x) => JSON.stringify(x.figure)));
+      assert.ok(figures(off).some((x) => x.includes("printed")), "the household has printed figures to lose");
+      assert.deepEqual(figures(on), figures(off));
+    } finally { envOff(); }
   });
 
   await test("switch on, end to end: reader 1's wrong column is corrected on Coverage; an unsettled figure is listed to confirm, and the household's answer is final", async () => {
@@ -431,7 +459,12 @@ async function main() {
     const shown = applyGuards(fresh, null, confirmations);
     const at = (page: number) => shown.benefits.find((b) => b.source.page === page)!.value;
     assert.equal(at(2), 50000, "the add-on keeps its confirmed figure");
-    assert.equal(at(1), null, "the main row is not given the add-on's figure (it waits for its own check)");
+    // Expectation changed (7 Nov): with no guard record this reading was never checked, so the main row keeps its own figure
+    // as read (was null, "waits for its own check"). It is still never given the add-on's figure.
+    assert.equal(at(1), 500000, "the main row keeps its own figure and is not given the add-on's");
+    const checkedFresh = applyGuards(fresh, { version: "x", at: "t", verdicts: {}, spentUsd: 0, calls: 0 }, confirmations);
+    assert.equal(checkedFresh.benefits.find((b) => b.source.page === 1)!.value, null, "on a reading a check ran on, the main row waits for its own verdict");
+    assert.equal(checkedFresh.benefits.find((b) => b.source.page === 2)!.value, 50000);
     // Two rows printing the very same words: told apart by page, heading and order, or asked again.
     const twin: SourceDoc = { ...doc, id: "twins", pages: [{ page: 1, text: "Part A\nMedical expenses\tS$500,000" }, { page: 2, text: "Part B\nMedical expenses\tS$500,000" }] };
     const t = (benefits: unknown[]) => checkReading(twin, { document: { kind: "policy_wording", product: "Example Travel", namedPeople: [], plan: null }, covers: [], benefits });
