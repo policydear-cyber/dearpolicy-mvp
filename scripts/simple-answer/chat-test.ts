@@ -897,6 +897,8 @@ async function main() {
       [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
       [["Plan type: Deductible plan, the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
       [["Policy number: ML-4471209-HC", PREM], [750, 1200, 4500]],
+      [["Plan: Basic (days 1 to 3 not covered)", PREM], [300, 750, 4500]],
+      [["Payable from: day 3", PREM], [450, 900, 4500]],
     ];
     const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
     for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
@@ -905,6 +907,14 @@ async function main() {
       const shown = r59(R59("Cash392.pdf", page), [s], [`in hospital ${days} days`]).answer.statements!.filter((x) => x.kind === "calculation").map((x) => x.amount?.text ?? null);
       assert.ok(shown.length === 0 || (shown.length === 1 && shown[0] === money(truth[i])), `${after[0] ?? "(last line)"}, ${days} days: ${shown}`);
       if (after.length <= 1) assert.deepEqual(shown, [money(truth[i])], `${after[0] ?? "(last line)"} is worked out`);
+    }
+    // No fixed window and no stop at a blank line (Critic P392 round 3): a limit further down still holds the total back.
+    for (const after of [[PREM, "Policy number: HX-55120", "Effective date: 01/01/2026", "Overall limit: S$2,000"], [PREM, "", "Overall limit: S$2,000"],
+      ["Effective date: 01/01/2026", "Expiry date: 31/12/2026", "Currency: SGD", "Overall limit: S$2,000"]]) {
+      const page = ["SCHEDULE", "Insured: Ah Kow", CAPPED_LINE, ...after].join("\n");
+      const s = st({ kind: "amount", text: "Daily cash.", person: "Ah Kow", document: "D7", quote: CAPPED_LINE, amount: "S$150", perDay: { stayDays: 20 } });
+      const shown = r59(R59("Cash392.pdf", page), [s], ["in hospital 20 days"]).answer.statements!.filter((x) => x.kind === "calculation");
+      assert.deepEqual(shown, [], after.join(" / "));
     }
     // An uncapped line with its day cap printed as the next field, then the premium: worked out as on main (TE #392 D).
     for (const [i, days] of [5, 8, 40].entries()) {

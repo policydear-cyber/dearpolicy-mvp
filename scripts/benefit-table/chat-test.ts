@@ -7,7 +7,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type Family
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, rowWithContinuation, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayBlock, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -524,16 +524,21 @@ test("one field per line: a field that limits the daily row stays with it, so th
     "Payment: S$75 a day after day 10", "Age: up to 65 only", "Term: S$2,000 in all"]) {
     const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
     assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
-    assert.ok(rowWithContinuation(page, page.indexOf("Ward cash")).includes(next), next);
+    assert.ok(stayBlock(page, page.indexOf("Ward cash")).text.includes(next), next);
   }
-  // A field is left out only before any other line is joined: after a condition line, the lines are read as before.
-  const after = "SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nWard type: B2 only\nAnnual premium: S$2,412.00";
-  assert.ok(rowWithContinuation(after, after.indexOf("Ward cash")).includes("Annual premium"));
+  // A condition under the row still holds the total back when a premium follows it.
+  const after = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nWard type: B2 only\nAnnual premium: S$2,412.00";
+  assert.deepEqual(fieldStay(after, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"]);
   // A non-benefit field is left out, never the end of the row: a limit under it still counts; and an allowed label whose
   // value prints money or a limit or day word stays with the row (Critic P392B).
   for (const lines of [["Effective date: 01/01/2026", "Overall limit: S$2,000"], ["Policy number: HX-55120", "Ceiling: S$2,000"],
     ["Plan type: S$2,000 limit"], ["Coverage period: up to 10 days"], ["Policy term: 10 days per admission"], ["Plan: Gold, S$2,000 in all"],
-    ["Currency: SGD", "Overall limit: S$2,000"], ["Annual premium: S$2,412.00", "Overall limit: S$2,000"]]) {
+    ["Currency: SGD", "Overall limit: S$2,000"], ["Annual premium: S$2,412.00", "Overall limit: S$2,000"],
+    // No fixed window and no stop at a blank line: the block runs to the next heading (Critic P392 round 3).
+    ["Annual premium: S$2,412.00", "Policy number: HX-55120", "Effective date: 01/01/2026", "Overall limit: S$2,000"],
+    ["Annual premium: S$2,412.00", "", "Overall limit: S$2,000"],
+    ["Effective date: 01/01/2026", "Expiry date: 31/12/2026", "Currency: SGD", "Overall limit: S$2,000"],
+    ["Annual premium: S$2,412.00", "", "", "Agent: Jane Ong", "", "Limited to: S$2,000 a year"]]) {
     const page = ["SCHEDULE", "Insured: Lim Ah Kow", "Ward cash: S$150 per day from the 3rd day, maximum 30 days", ...lines, "Policy number: HX-55120"].join("\n");
     assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], lines.join(" / "));
   }
@@ -543,11 +548,15 @@ test("one field per line: a field that limits the daily row stays with it, so th
     "Period of cover: 1 Jan 2026 to 31 Dec 2026", "Policy term: 20 years", "Effective date: 1 Jan 2026", "Currency: SGD",
     "Payment mode: Monthly", "Mode of payment: GIRO", "Agent: Jane Ong", "Servicing adviser code: A12"]) {
     const page = `SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}`;
-    assert.equal(rowWithContinuation(page, page.indexOf("Ward cash")), "Ward cash: S$150 per day from the 3rd day, maximum 30 days", next);
+    assert.equal(stayBlock(page, page.indexOf("Ward cash")).text, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", next);
   }
-  // A table row (tab-separated) keeps the old rule: an untabbed line under it continues it.
+  // The block ends at the next heading: what is printed under another heading is another benefit's.
+  const headed = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00\n\nSECTION B: OUTPATIENT\nOverall limit: S$2,000";
+  assert.deepEqual(fieldStay(headed, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150", "S$450"]);
+  // A table row (tab-separated) reads its block the same way: the premium under it is left out, a limit is not.
   const tab = "SCHEDULE\nWard cash\tS$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00";
-  assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150"]);
+  assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150", "S$450"]);
+  assert.deepEqual(fieldStay(`${tab}\nOverall limit: S$2,000`, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"]);
 });
 test("one field per line: every TE #392 layout shows the true total for a stay or none, never another (table on)", () => {
   const CAPPED_LINE = "Hospital Cash rider: S$150 per day of hospitalisation from the 1st day, up to a maximum of 30 days", PREM = "Annual premium: S$2,412.00";
@@ -563,6 +572,8 @@ test("one field per line: every TE #392 layout shows the true total for a stay o
     [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
     [["Plan type: Deductible plan, the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
     [["Policy number: ML-4471209-HC", PREM], [750, 1200, 4500]],
+    [["Plan: Basic (days 1 to 3 not covered)", PREM], [300, 750, 4500]],
+    [["Payable from: day 3", PREM], [450, 900, 4500]],
   ];
   const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
   for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
