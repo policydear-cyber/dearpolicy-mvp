@@ -65,9 +65,9 @@ import { recordEvent } from "@/lib/telemetry";
  * Two stores are keyed by the document's id rather than FK-linked to it, so
  * nothing else ever cleans them: policy_analysis_cache (chat analysis and
  * catalogue checkpoints for the document) and the document's durable
- * background_jobs row, whose payload can hold the PDF password the person
+ * background_jobs rows, whose payload can hold the PDF password the person
  * typed at upload. This sweep deletes the cache rows, strips the password
- * from the job payload immediately and asks any in-flight run to stop
+ * (and the stored file's key) from the job payloads immediately and asks any in-flight run to stop
  * (cooperative cancel); the job row itself stays, password-free, as part of
  * the operational record. It runs on the TRUSTED connection because both
  * tables are service-only (browser roles cannot touch them -- see
@@ -88,9 +88,12 @@ async function sweepDeletedDocumentSideChannels(accountId: string, policyId: str
       );
     }
     if (present.rows[0]?.jobs) {
+      // Every reading job of the document: its own (keyed by its id) and the one later re-read scheduled after a
+      // reading service failed (keyed "<id>:retry-read", lib/rag/ingest.ts scheduleDeferredRead), which carries the
+      // same password. The stored file's key (which holds the original filename) and the last error text go too.
       await pool.query(
-        `UPDATE background_jobs SET payload=payload-'pdfPassword', cancel_requested=true, updated_at=now()
-          WHERE account_id=$1 AND job_type='policy_processing' AND idempotency_key=$2`,
+        `UPDATE background_jobs SET payload=payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true, updated_at=now()
+          WHERE account_id=$1 AND job_type='policy_processing' AND (idempotency_key=$2 OR idempotency_key=$2||':retry-read')`,
         [accountId, policyId],
       );
     }
@@ -232,8 +235,17 @@ export async function requestPolicyDocumentDeletion(args: {
     // in-transaction, without a job framework. premium_records deletion
     // predates this checkpoint (app/api/policies/[id]/route.ts's original
     // behaviour) and is preserved unchanged.
+    // A premium read from this document goes. So does one filed against it with no source: DearPolicy's own writers
+    // always record the source, so an empty one is a row from before source tracking, one whose source was hard-deleted,
+    // or a direct write; none can be shown to come from anywhere but this document, and keeping it could keep its
+    // figures (the existing whole-policy deletion test asserts this). One read from another document still on file (a
+    // renewal receipt) stays, unlinked from this policy (the foreign key's own ON DELETE SET NULL).
     await args.client.query(
-      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
+      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR (source_document_id IS NULL AND policy_id=$2))`,
+      [args.accountId, args.policyId],
+    );
+    await args.client.query(
+      `UPDATE premium_records SET policy_id=NULL WHERE account_id=$1 AND policy_id=$2`,
       [args.accountId, args.policyId],
     );
     await sweepDeletedDocumentSideChannels(args.accountId, args.policyId);
@@ -837,8 +849,14 @@ export async function requestPolicyDeletion(args: {
     // 'active'. premium_records is the one exception (it predates the
     // lifecycle column and is still hard-deleted here, same as
     // requestPolicyDocumentDeletion).
+    // Same rule as requestPolicyDocumentDeletion: premiums read from this document (or of unknown source) go; one read
+    // from another document is unlinked.
     await args.client.query(
-      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
+      `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR (source_document_id IS NULL AND policy_id=$2))`,
+      [args.accountId, row.id],
+    );
+    await args.client.query(
+      `UPDATE premium_records SET policy_id=NULL WHERE account_id=$1 AND policy_id=$2`,
       [args.accountId, row.id],
     );
     await sweepDeletedDocumentSideChannels(args.accountId, row.id);

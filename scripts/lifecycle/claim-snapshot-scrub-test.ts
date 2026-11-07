@@ -114,7 +114,12 @@ async function main() {
       assert.deepEqual(r.coverage_versions, []);
       assert.equal(r.calculation_id, s.calc);
       const all = JSON.stringify(r);
-      for (const w of [vida, "Vida Plena", "2,500", "10000", "Sofía", "muerte accidental", "c-" + vida, "Room and board", "1200"]) assert.ok(!all.includes(w), w + " left in a redacted calculation");
+      for (const w of [vida, "c-" + vida]) assert.ok(!all.includes(w), w + " left in a redacted calculation");
+      // The row's own random ids and timestamps can hold any digits ("…-1200-…", ".10000Z"), so figures and words are
+      // looked for with those taken out: what is left is everything the calculation could still say.
+      const said = all.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>")
+        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?/g, "<time>");
+      for (const w of ["Vida Plena", "2,500", "10000", "Sofía", "muerte accidental", "Room and board", "1200"]) assert.ok(!said.includes(w), w + " left in a redacted calculation");
     }
   });
   await t("the person's own facts about the event stay; a fact tied to the deleted document goes", async () => {
