@@ -351,7 +351,7 @@ async function main() {
       row("Medical expenses", 100_000, lines[12]), row("Overall limit", 200_000, lines[13]), row("Personal liability", 250_000, lines[14]),
       row("Hospital cash", 100, lines[15]),
       // Rate cells laid out as columns are plans, whatever follows; only "and"/"or"/a comma before a raised rate for a
-      // setting (ICU, ward, hospital) keeps the first (TE and Critic, pr367 r4).
+      // setting (ICU, HDU, a private ward; never bare "hospital" or "ward") keeps the first (TE and Critic, pr367 r4, r8).
       row("Hospital cash", 100, lines[16]), row("Hospital cash", 100, lines[17]), row("Hospital cash", 100, lines[18]),
       row("Hospital cash", 100, lines[19]), row("Hospital cash", 100, lines[20]),
     ] });
@@ -569,6 +569,21 @@ async function main() {
     const inner = await withFunctionDeadline(5_000, () => withFunctionDeadline(90_000, async () => functionDeadline(200_000, { VERCEL: "1" } as never), { VERCEL: "1" } as never), { VERCEL: "1" } as never);
     assert.equal(inner, 5_000 + FUNCTION_LIMIT_MS, "a job batch inside an earlier function keeps that function's limit");
     assert.equal(await withFunctionDeadline(5_000, async () => functionDeadline(7_000, {} as never), {} as never), undefined);
+  });
+  await test("L16 a raised rate 'in hospital' or 'in a ward' is no setting: every hospital-cash rate is paid there, so the two rates are plans; a special-care setting keeps the first (TE pr367 r8)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const plans = ["Hospital cash S$100 per day and S$200 per day in hospital", "Hospital cash S$100 per day, S$200 per day while in a hospital ward",
+      "Hospital cash S$100 per day or S$200 per day in a ward", "Hospital cash S$100 a day and S$200 a day if admitted to hospital"];
+    const settings = ["Hospital cash S$100 per day and S$200 per day in the intensive care unit", "Hospital cash S$100 a day, S$160 a day if warded in high dependency",
+      "Hospital cash S$100 per day and S$300 per day in a private ward", "Hospital cash S$100 per day and S$250 per day in isolation",
+      "Hospital cash S$100 per day or S$200 per day in CCU"];
+    const lines = [...plans, ...settings];
+    const doc = { id: "doc", name: "riverbend-health.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
+    const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: 100, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 4, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [],
+      benefits: lines.map(row) } as never);
+    assert.deepEqual(read.benefits.map((b) => b.quote), settings);
   });
 
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
