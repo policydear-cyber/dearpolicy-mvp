@@ -298,15 +298,28 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
 export const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
 /** A line that is one labelled field of its own ("Hospital cash: S$150 per day", "Annual premium: S$2,412.00"): a short
  * label of words, a colon, then its value. */
-const FIELD_LINE = /^\s*([A-Za-z][A-Za-z ()'&/-]{0,48}?)\s*:\s*\S/;
-/** Label words that make a field part of the row above it: a limit, a cap, a count of days or a condition on what the
- * row pays ("Maximum: 30 days", "Overall limit: S$2,000", "Subject to: ..."). Such a line is always kept with the row, so
- * whatever limits a figure is never cut off from it; any other labelled field is a field of its own. */
-const LIMITING_LABEL = /\b(?:limits?|sub-?limits?|max(?:imum)?|min(?:imum)?|caps?|capped|aggregate|overall|totals?|in\s+all|subject|whichever|balance|excess|deductibles?|co-?pay(?:ment)?|co-?insurance|up\s+to|per|each|any\s+one|lifetime|days?|weeks?|months?|years?|stays?|admissions?|conditions?|notes?|exclusions?|except|unless|provided|payable|paid|benefits?|amounts?|of)\b/i;
+const FIELD_LINE = /^\s*([A-Za-z][A-Za-z ()'&/.#-]{0,48}?)\s*:\s*\S/;
+/** The labels of fields that are never part of what a benefit pays, matched as the whole label (an allow-list): the
+ * premium, the policy's number, the person, the plan's name, its period and dates, its currency, how it is paid, the
+ * agent. A field with any other label ("Ceiling", "Sum insured", "Waiting period", "Thereafter", "Ward type") stays with
+ * the row above it, as before, so a limit or condition is never cut off from its figure (Critic P392). */
+const PERIODIC = String.raw`(?:annual|annualised|annualized|yearly|monthly|quarterly|half[- ]?yearly|semi[- ]?annual|single|regular|modal|instalment|installment|total|basic|first[- ]year|renewal|gross|net)`;
+const NON_BENEFIT_LABELS = [
+  String.raw`(?:${PERIODIC}\s+)*premiums?(?:\s+(?:amount|payable|due|paid|frequency|mode|term|(?:\(?(?:incl|including|inclusive\s+of|excl|excluding|exclusive\s+of)\.?\s+)?(?:gst|tax|vat)\)?))*`,
+  String.raw`(?:policy|certificate|contract|member(?:ship)?|plan|account|reference|ref\.?|proposal|application)\s*(?:no\.?|number|#|id)`,
+  String.raw`(?:name\s+of\s+)?(?:(?:the\s+)?(?:life\s+)?(?:insured|assured)(?:\s+person)?|policy\s*(?:holder|owner)|policyholder|policyowner|owner|proposer|member|employee|name|full\s+name|nric|nric\s+no\.?|date\s+of\s+birth|dob|gender|sex|occupation|address|relationship)(?:\s+name)?`,
+  String.raw`(?:plan|product)(?:\s+(?:name|type|code))?`,
+  String.raw`(?:policy|cover(?:age)?|insurance)\s+(?:period|term)|period\s+of\s+(?:cover|coverage|insurance)`,
+  String.raw`(?:(?:policy|cover(?:age)?|commencement|effective|start|end|expiry|issue|inception|renewal|maturity|print(?:ed)?|due|next\s+due|billing)\s+)?date`,
+  String.raw`(?:policy\s+)?currency`,
+  String.raw`(?:payment|premium\s+payment|billing)\s+(?:mode|method|frequency|term)|(?:mode|method|frequency)\s+of\s+payment`,
+  String.raw`(?:servicing\s+|financial\s+)?(?:agent|adviser|advisor|consultant|representative)(?:\s+(?:name|code|no\.?))?|agency|branch`,
+];
+const NON_BENEFIT_LABEL = new RegExp(String.raw`^(?:${NON_BENEFIT_LABELS.join("|")})$`, "i");
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
  * up to the next row, bullet or numbered item (R52-1). On a schedule that prints one labelled field per line, the next
  * labelled field ("Annual premium: S$2,412.00" under "Hospital cash: S$150 per day") is the next row, not part of this one
- * (TE overnight F1), unless its label limits what the row pays. */
+ * (TE overnight F1), but only when its label is one of a few fields that are never about what a row pays. */
 export function rowWithContinuation(pageText: string, offset: number): string {
   const row = rowLine(pageText, offset);
   const rest = pageText.slice(row.end + 1).split("\n");
@@ -314,8 +327,10 @@ export function rowWithContinuation(pageText: string, offset: number): string {
   const more: string[] = [];
   for (const l of rest.slice(0, 3)) {
     if (!l.trim() || /^\s*(?:[•●▪*#^\-–]|\(?[a-z0-9]{1,3}[.)]\s)/i.test(l) || /\t/.test(l)) break;
-    const field = fieldRow ? FIELD_LINE.exec(l) : null;
-    if (field && !LIMITING_LABEL.test(field[1])) break;
+    // Only the line right under the row can end it this way: once another line is joined (a condition such as "Ward
+    // type: B2 only"), every line after is read as before, so a condition never reads as the whole of the row.
+    const field = fieldRow && !more.length ? FIELD_LINE.exec(l) : null;
+    if (field && NON_BENEFIT_LABEL.test(field[1].trim().replace(/\s+/g, " "))) break;
     more.push(l);
   }
   return [row.text, ...more].join(" ");
@@ -967,6 +982,10 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   if (OTHER_DAY_RULE.test(rule)) return null;
   const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
   if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
+  // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
+  // S$3,000", TE #392 E): no total is worked out past it, as the benefit table already refuses (dailyRateAlone).
+  if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
+  if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
   const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b/gi)];
   const maxes = [...rule.matchAll(/\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/gi)];
   if (starts.length !== 1 || maxes.length !== 1) return null;

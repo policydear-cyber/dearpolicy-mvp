@@ -883,6 +883,29 @@ async function main() {
     assert.deepEqual(calc(ok, 15, ["after a 15-day stay"]), ["S$1,200"]);
   });
 
+  await check("TE #392 layouts, table off: a stay is worked out only to its true total, never past a limit or rule printed under it", () => {
+    const CAPPED_LINE = "Hospital Cash rider: S$150 per day of hospitalisation from the 1st day, up to a maximum of 30 days", PREM = "Annual premium: S$2,412.00";
+    // The line after the hospital line, and what a 5, 8 and 40-day stay truly pays (TE #392 layouts, made up).
+    const LAYOUTS: [string[], [number, number, number]][] = [
+      [[PREM], [750, 1200, 4500]], [[], [750, 1200, 4500]],
+      [["Overall annual limit: S$3,000", PREM], [750, 1200, 3000]],
+      [["Elimination period: the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
+      [["Deferred period: 2 days", PREM], [450, 900, 4500]],
+      [["Excess: first 2 days of each stay", PREM], [450, 900, 4500]],
+      [["Intensive care: S$300 per day, up to a maximum of 10 days", PREM], [750, 1200, 4500]],
+      [["Reduced rate: half the daily amount after the 10th day", PREM], [750, 1200, 3000]],
+      [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
+    ];
+    const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
+    for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
+      const page = ["SCHEDULE", "Insured: Ah Kow", CAPPED_LINE, ...after].join("\n");
+      const s = st({ kind: "amount", text: "Daily cash.", person: "Ah Kow", document: "D7", quote: CAPPED_LINE, amount: "S$150", perDay: { stayDays: days } });
+      const shown = r59(R59("Cash392.pdf", page), [s], [`in hospital ${days} days`]).answer.statements!.filter((x) => x.kind === "calculation").map((x) => x.amount?.text ?? null);
+      assert.ok(shown.length === 0 || (shown.length === 1 && shown[0] === money(truth[i])), `${after[0] ?? "(last line)"}, ${days} days: ${shown}`);
+      if (after.length <= 1) assert.deepEqual(shown, [money(truth[i])], `${after[0] ?? "(last line)"} is worked out`);
+    }
+  });
+
   await check("R59-4: conditions never travel between lettered sub-benefits; a repeated closing line counts where it is printed", () => {
     const house = R59("Benefits2.pdf", "BENEFIT 2: GROUP PERSONAL ACCIDENT\nD. Comatose State\nYou must be confined to a Hospital for the duration of the Comatose state.\nE. Simple Fracture\nSimple Fracture Benefit Limit: S$5,000\nHip\t75%\nThis Benefit can only be claimed once.\nF. Ambulance\nAmbulance\tUp to S$500\nThis Benefit can only be claimed once.");
     const once = { text: "Once only.", quote: "This Benefit can only be claimed once." };

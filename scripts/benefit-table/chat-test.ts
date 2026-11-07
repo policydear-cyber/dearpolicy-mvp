@@ -7,7 +7,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type Family
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, rowWithContinuation, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -515,9 +515,52 @@ test("one field per line: a field that limits the daily row stays with it, so th
     const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
     assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
   }
+  // Any label that is not one of the few fields never about what a row pays stays with the row (Critic P392): a deny-list
+  // of limit words leaked, so the split is an allow-list.
+  for (const next of ["Limitation: S$2,000 per policy year", "Limited to: S$2,000 in all", "Ceiling: S$2,000", "Sum insured: S$2,000",
+    "Restricted to: S$2,000 per year", "Not more than: S$2,000", "Annual limitation: S$2,000", "Plafond: S$2,000", "Capping: S$2,000",
+    "Benefit ceiling: S$2,000", "Excluding: the first 5 days", "Waiting period: 7 days", "Deferment: 7 days", "Reduced to: S$75 after day 10",
+    "Thereafter: S$75 a day", "Only in: a government ward", "Ward type: B2 only", "Frequency: once a year", "Period: 30 days a year",
+    "Payment: S$75 a day after day 10", "Age: up to 65 only", "Term: S$2,000 in all"]) {
+    const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
+    assert.ok(rowWithContinuation(page, page.indexOf("Ward cash")).includes(next), next);
+  }
+  // A field that ends the row does so only right under it: after a condition line, the lines are read as before.
+  const after = "SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nWard type: B2 only\nAnnual premium: S$2,412.00";
+  assert.ok(rowWithContinuation(after, after.indexOf("Ward cash")).includes("Annual premium"));
+  // The fields that end the row: premium, numbers, the person, the plan, its period and dates, currency, payment, agent.
+  for (const next of ["Annual premium: S$2,412.00", "Premium payable (incl. GST): S$2,412.00", "Monthly instalment premium: S$201.00", "Policy No.: HX-55120",
+    "Certificate number: 88120", "Life assured: Lim Ah Kow", "Name of insured: Lim Ah Kow", "Plan: Ward Plus", "Plan type: Hospital",
+    "Period of cover: 1 Jan 2026 to 31 Dec 2026", "Policy term: 20 years", "Effective date: 1 Jan 2026", "Currency: SGD",
+    "Payment mode: Monthly", "Mode of payment: GIRO", "Agent: Jane Ong", "Servicing adviser code: A12"]) {
+    const page = `SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}`;
+    assert.equal(rowWithContinuation(page, page.indexOf("Ward cash")), "Ward cash: S$150 per day from the 3rd day, maximum 30 days", next);
+  }
   // A table row (tab-separated) keeps the old rule: an untabbed line under it continues it.
   const tab = "SCHEDULE\nWard cash\tS$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00";
   assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150"]);
+});
+test("one field per line: every TE #392 layout shows the true total for a stay or none, never another (table on)", () => {
+  const CAPPED_LINE = "Hospital Cash rider: S$150 per day of hospitalisation from the 1st day, up to a maximum of 30 days", PREM = "Annual premium: S$2,412.00";
+  // The line after the hospital line, and what a 5, 8 and 40-day stay truly pays (TE #392 layouts, made up).
+  const LAYOUTS: [string[], [number, number, number]][] = [
+    [[PREM], [750, 1200, 4500]], [[], [750, 1200, 4500]],
+    [["Overall annual limit: S$3,000", PREM], [750, 1200, 3000]],
+    [["Elimination period: the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
+    [["Deferred period: 2 days", PREM], [450, 900, 4500]],
+    [["Excess: first 2 days of each stay", PREM], [450, 900, 4500]],
+    [["Intensive care: S$300 per day, up to a maximum of 10 days", PREM], [750, 1200, 4500]],
+    [["Reduced rate: half the daily amount after the 10th day", PREM], [750, 1200, 3000]],
+    [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
+  ];
+  const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
+  for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", CAPPED_LINE, ...after].join("\n");
+    const shown = fieldStay(page, CAPPED_LINE, days).amounts.filter((a) => a !== "S$150");
+    assert.ok(shown.length === 0 || (shown.length === 1 && shown[0] === money(truth[i])), `${after[0] ?? "(last line)"}, ${days} days: ${shown}`);
+    if (after.length <= 1) assert.deepEqual(shown, [money(truth[i])], `${after[0] ?? "(last line)"} is worked out`);
+  }
 });
 test("a stay statement is never kept without its labelled daily row", () => {
   const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30, alone: true }] } };
