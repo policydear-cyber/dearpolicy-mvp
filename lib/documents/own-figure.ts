@@ -153,6 +153,7 @@ export function amountOnlyInContext(text: string, amount: number, o: { premium?:
  * account enclosed"), never "Void if altered" or "Example only". */
 const BANNER_MARK = /^(?:sample|specimen|dummy|mock-?up)$/i;
 const BANNER_WORD = /^(?:policy|schedule|statement|certificate|of|insurance|document|contract|card|letter|notice|copy|only|coverage|cover|summary|for|training|void|a|an|the|this|illustration|illustrative|purposes|is)$/i;
+const PHRASE_MARK = /^(?:for\s+illustrat(?:ion|ive)\s+(?:purposes\s+)?only|test\s+document(?:\s+only)?)$/i;
 const DISCLAIMER = /\bnot\s+(?:valid|for|a\s+real|an\s+actual|to\s+be\s+used|an?\s+(?:policy|contract))\b/i;
 function bannerLine(line: string): boolean {
   // Words in brackets inside a title are never its banner ("Policy Schedule (sample collection included)", TE round 4).
@@ -162,6 +163,10 @@ function bannerLine(line: string): boolean {
   let marked = false;
   for (const part of parts) {
     const words = part.split(/\s+/);
+    // Two whole-part markers that name the document as not real: "FOR ILLUSTRATION PURPOSES ONLY", "TEST DOCUMENT" (never
+    // with another word before it, as made-up test packs print "SYNTHETIC TEST DOCUMENT").
+    if (PHRASE_MARK.test(part)) { marked = true; continue; }
+    if (/^page\s+\d+(?:\s+of\s+\d+)?$/i.test(part)) continue;
     if (words.some((w) => BANNER_MARK.test(w)) && words.every((w) => BANNER_MARK.test(w) || BANNER_WORD.test(w))) { marked = true; continue; }
     if (DISCLAIMER.test(part) || words.every((w) => BANNER_WORD.test(w))) continue;
     return false;
@@ -175,26 +180,30 @@ function pageEdges(text: string) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const body = (l: string) => /\S\s*:\s*\S|(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l);
   const firstBody = lines.findIndex(body), lastMoney = lines.map((l) => /(?:S\$|US\$|\$|RM|SGD|£|€)\s?\d/.test(l)).lastIndexOf(true);
-  const head = lines.slice(0, Math.min(5, firstBody < 0 ? lines.length : firstBody));
-  const foot = lines.slice(Math.max(head.length, lastMoney + 1, lines.length - 3));
-  return { head, foot };
+  const head = lines.slice(0, Math.min(8, firstBody < 0 ? lines.length : firstBody));
+  // A whole banner (a marker with document words or a disclaimer, not a lone word) also counts anywhere in the page's
+  // first eight lines, after a label line too ("Policy No: ...", then "SPECIMEN POLICY SCHEDULE").
+  const upper = lines.slice(0, 8);
+  const foot = lines.slice(Math.max(lastMoney + 1, lines.length - 3));
+  return { head, upper, foot };
 }
 const THIS_IS_A_SAMPLE = /\bthis\s+is\s+(?:a|an)\s+(?:sample|specimen)(?:\s+(?:policy|schedule|statement|certificate|document|copy|contract))?\s*(?:only\b|[.!]|$)/im;
-/** Whether the page's heading block marks it a sample ("SAMPLE POLICY SCHEDULE", a lone "SAMPLE" under the title). */
-export function specimenHeading(text: string) {
-  const first = text.includes("\f") ? text.split("\f").find((p) => p.trim()) ?? "" : text;
-  const { head } = pageEdges(first);
-  return head.some(bannerLine) || THIS_IS_A_SAMPLE.test(head.join("\n"));
-}
 export function specimenPage(text: string) {
-  // A whole document's text (pages joined by form feeds) is a sample when its first page says so: an appendix page's
-  // "SPECIMEN COPY" does not make the schedule one (Critic r377d K4).
-  if (text.includes("\f")) return specimenPage(text.split("\f").find((p) => p.trim()) ?? "");
-  const { head, foot } = pageEdges(text);
-  // A lone marker word ("Sample", "Specimen") is a banner only in the heading block; in the footer it may be a table's
-  // last row label (Critic r377d K3).
+  // A whole document's text (pages joined by form feeds) is judged as a document (Critic r377d K4).
+  if (text.includes("\f")) return specimenDocument(text.split("\f"));
+  const { head, upper, foot } = pageEdges(text);
+  // A lone marker word ("Sample", "Specimen") is a banner only in the heading block, before any label or figure line; in
+  // the footer or under a label it may be a table's row label (Critic r377d K3, G4).
   const lone = (l: string) => BANNER_MARK.test(l.replace(/^[\s*#=_|~\-–()[\]]+|[\s*#=_|~\-–()[\]]+$/g, ""));
-  return THIS_IS_A_SAMPLE.test(text) || [...head, ...foot.filter((l) => !lone(l))].some(bannerLine);
+  return THIS_IS_A_SAMPLE.test(text) || head.some(bannerLine) || [...upper, ...foot].filter((l) => !lone(l)).some(bannerLine);
+}
+/** Whether a whole document is a sample, so that no page of it gives anyone cover: its first page is a sample page (a
+ * heading or footer banner). A later page that is itself a specimen or an illustration ("SPECIMEN POLICY CONTRACT", a
+ * benefit illustration's "FOR ILLUSTRATION PURPOSES ONLY", a sample member card) sets aside only that page: real policy
+ * packs end with such pages (Critic r378 L1-L5, TE r378). */
+export function specimenDocument(pages: string[]): boolean {
+  const first = pages.find((p) => p.trim());
+  return !!first && specimenPage(first);
 }
 /** The names a page's own heading block prints as its title or product ("SilverYears Care" on that scheme's own
  * statement), never a document-type line ("Policy Schedule"). The own scheme is taken from these only, never from a
@@ -224,6 +233,10 @@ const MARKER_HEADING = /^\W*(?:(?:example|e\.g|sample|specimen|illustration|illu
 /** "Traveller" and "Covered member" also head a brochure's example ("Traveller: Rosalind Teo, 34"): they introduce the
  * insured only on a page that prints its own policy or certificate number (TE and Critic r377 round 3). */
 const WEAK_LABEL = /^(?:travell?ers?|covered\s+members?)(?:'?s|\(s\))?(?:\s+names?)?$/i;
+/** A brochure's story: a line that tells what a person did ("She claims S$5,000 for a cancelled trip"). */
+/** A story line also prints a money figure or a claim verb; a certificate's condition ("They must depart from and return
+ * to Singapore together", "Their cover starts on the departure date") is no story (Critic r378 N1, N2). */
+const NARRATIVE = /^\s*(?:she|he|they|her|his|their)\b[^\n]*(?:(?:S\$|US\$|\$|SGD|RM)\s?\d|\b(?:claim(?:s|ed)?|receive[sd]?|paid|was|were|needed|got|gets)\b)/im;
 const OWN_NUMBER = /\b(?:policy|certificate|cert\.?|member(?:ship)?)\s*(?:no\.?|number|#)\s*[:.]?\s*[A-Z]{0,6}[-\/]?\d[\w\/-]{3,}/i;
 export function personAsParticulars(person: string, pageText: string): boolean {
   const want = normalizePersonName(person).split(" ").filter((w) => w.length > 0 && !HONORIFIC.test(w));
@@ -243,7 +256,7 @@ export function personAsParticulars(person: string, pageText: string): boolean {
     // to certify that LIM WEI JIE is insured"); a brochure's example person is printed in ordinary case.
     const capitals = raw.match(/\b[A-Z][A-Z'.-]+(?:[ \t]+(?:[A-Z][A-Z'.-]+|BIN|BINTI|BINTE|BTE|BT|D\/O|S\/O|A\/L|A\/P))+\b/g) ?? [];
     if (!NOT_A_PERSON_LABEL.test(raw) && capitals.some((run) => { const n = normalizePersonName(run).split(" "); return want.every((w) => n.includes(w)) && n.length <= want.length + 2; })) return true;
-    if (afterInsuredLabel(raw, want, tableish, OWN_NUMBER.test(pageText))) return true;
+    if (afterInsuredLabel(raw, want, tableish, OWN_NUMBER.test(pageText) && !NARRATIVE.test(pageText))) return true;
     // Cells: parts of the line set off by a tab, a colon, a bar or a run of spaces, and names joined by "and" or "&"; a
     // bracket ("(NRIC S1234567A)", "(the Life Assured)") and an age, date of birth or identity number after a comma are
     // not part of a name.

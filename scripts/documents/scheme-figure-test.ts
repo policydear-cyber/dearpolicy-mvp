@@ -8,7 +8,7 @@ import { verifiedExtraction } from "../../lib/rag/ingest";
 import { printedDocumentRole, documentAuthority } from "../../lib/documents/intelligence";
 import { checkReading } from "../../lib/benefit-table/check";
 import { factCheckExtraction } from "../../lib/documents/fact-check";
-import { OWN_FIGURE_CHECKS, amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenPage } from "../../lib/documents/own-figure";
+import { OWN_FIGURE_CHECKS, amountOnlyInContext, personAsParticulars, personOnlyInExample, specimenDocument, specimenPage } from "../../lib/documents/own-figure";
 // These are the shapes for the own-figure checks, which ship OFF (lib/documents/own-figure OWN_FIGURE_CHECKS); they run with it on.
 OWN_FIGURE_CHECKS.on = true;
 import type { PolicyExtraction } from "../../lib/ai/extract-policy";
@@ -126,7 +126,7 @@ const A2: [string, string, boolean][] = [
   ["Meet Mdm Lily Seah, 61", "Lily Seah", false], ["Example: Benjamin Foo, born 1990, claims.", "Benjamin Foo", false], ["Ken Lau, 38, chose S$900 a month.", "Ken Lau", false], ["Dear Mr Victor Ho", "Victor Ho", false],
 ];
 for (const [t, w, want] of A2) check(`TE r377 particulars: ${w} in "${t}": ${want}`, () => assert.equal(personAsParticulars(w, t), want));
-const B2: [string, boolean][] = [["SPECIMEN ONLY", true], ["SPECIMEN - NOT VALID FOR CLAIMS", true], ["Sample only - this is not an actual policy", true], ["FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", false], ["DUMMY", true], ["*** SPECIMEN ***", true],
+const B2: [string, boolean][] = [["SPECIMEN ONLY", true], ["SPECIMEN - NOT VALID FOR CLAIMS", true], ["Sample only - this is not an actual policy", true], ["FOR ILLUSTRATION PURPOSES ONLY. This document is not a policy.", true], ["DUMMY", true], ["*** SPECIMEN ***", true],
   ["A specimen policy contract is available at www.example.com", false], ["We enclose a sample copy of the wording.", false], ["Sample collection fee S$50", false], ["Sample tests: up to S$500", false], ["SYNTHETIC TEST DOCUMENT - fictional insurer and persons - not a real policy", false], ["Specimen signature", false]];
 for (const [t, want] of B2) check(`TE r377 sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
 const D2: [string, number, string | null][] = [["Rider premium waiver sum assured: S$100,000", 100000, null], ["Death benefit (including return of premiums): S$250,000", 250000, null], ["Accident rider, which pays S$50,000 on accidental death", 50000, null],
@@ -142,7 +142,7 @@ const D3: [string, number, string | null][] = [["This plan works with the Hospit
   ["Return of premium on death: S$12,000", 12000, null], ["This plan works with HealthBase, which pays up to S$120,000 a year.", 120000, "other_payer"]];
 for (const [t, n, want] of D3) check(`r377b context of ${n} in "${t}"`, () => assert.equal(amountOnlyInContext(t, n, { premium: true }), want));
 const B3: [string, boolean][] = [["SAMPLE POLICY SCHEDULE", true], ["Specimen Certificate of Insurance", true], ["MOCK-UP - NOT A REAL POLICY", true], ["EXAMPLE ONLY", false], ["VOID - SPECIMEN", true],
-  ["TEST DOCUMENT - NOT FOR ISSUE", false], ["*** Sample schedule for training ***", true], ["Specimen Policy Schedule", true],
+  ["TEST DOCUMENT - NOT FOR ISSUE", true], ["*** Sample schedule for training ***", true], ["Specimen Policy Schedule", true],
   ["Sample - Blood test: up to S$500", false], ["Sample Collection Benefit", false], ["Sample", true], ["Example: a 40-year-old receives S$700 a month.", false]];
 for (const [t, want] of B3) check(`r377b sample banner "${t}": ${want}`, () => assert.equal(specimenPage(t), want));
 check("r377b a lab-sample benefit line keeps the schedule real", () => assert.equal(specimenPage("Policy Schedule\nLife assured: OWEN TAY\nSample - Blood test: up to S$500\nSum assured S$100,000"), false));
@@ -302,6 +302,55 @@ OWN_FIGURE_CHECKS.on = false;
 check("off: a brochure's example person keeps the cover read for them, as before #377", () => assert.deepEqual(covers(reading("SilverYears Care\nHow it works\nKen Lau, 38, chose S$900 a month.", "Ken Lau", "SilverYears Care", 900, "Ken Lau, 38, chose S$900 a month.")), [["Ken Lau", 900]]));
 check("off: a portal printout keeps its cover", () => assert.deepEqual(covers(reading(PORTAL, "Tan Mei Ling", "Brightwater Life Plus", 150000, "Sum assured S$150,000")), [["Tan Mei Ling", 150000]]));
 check("off: a sample page's cover is kept, as before #377", () => assert.deepEqual(covers(reading(SAMPLE, "TEO AH BENG", "SilverYears Care", 640, "Monthly payout if severely disabled: S$640")).length, 1));
+OWN_FIGURE_CHECKS.on = true;
+// Specimen leftovers (TE r377 follow-up): a whole banner after a label line, a sample first page or a last page ending
+// "not valid", "FOR ILLUSTRATION ONLY" and "TEST DOCUMENT" banners, and brochure traveller stories. Real schedules and
+// made-up test packs keep their cover.
+const SCHED = "POLICY SCHEDULE\nPolicy No: TL-100245\nLife Assured: Lim Wei Jie\nSum Assured S$500,000";
+const S1: [string, string, boolean][] = [
+  ["a whole banner after the first label line", "POLICY SCHEDULE\nPolicy No: TL-100245\nSPECIMEN POLICY SCHEDULE\nLife Assured: Lim Wei Jie\nSum Assured S$500,000", true],
+  ["a lone marker after a label line stays a cell", "POLICY SCHEDULE\nPolicy No: TL-100245\nSample\nLife Assured: Lim Wei Jie\nSum Assured S$500,000", false],
+  ["a lone SPECIMEN at line 6 under a letterhead", "Insurer Ltd\nPOLICY SCHEDULE\nDuplicate\nIssued 1 Jan\nBranch 01\nSPECIMEN\n" + SCHED, true],
+  ["FOR ILLUSTRATION ONLY under the title", "POLICY SCHEDULE\nFOR ILLUSTRATION ONLY\nLife Assured: Lim Wei Jie\nSum Assured S$500,000", true],
+  ["For illustrative purposes only, page footer", SCHED + "\nFor illustrative purposes only - Page 1 of 2", true],
+  ["TEST DOCUMENT banner", "TEST DOCUMENT\n" + SCHED, true],
+  ["a made-up test pack's SYNTHETIC TEST DOCUMENT line is no banner", "Hospital Plan Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nInsured person: Lim Wei Jie\nSum Assured S$500,000", false],
+  ["a 'not a real policy' footer alone is no banner", SCHED + "\nnot a real policy", false],
+  ["an illustration sentence is no banner", SCHED + "\nThis illustration is only valid when all pages are included.", false],
+];
+for (const [n, t, want] of S1) check(`leftovers: ${n}: ${want}`, () => assert.equal(specimenPage(t), want));
+const S2: [string, string[], boolean][] = [
+  ["page-1 banner with the figures on page 2", ["SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie", "Sum Assured S$500,000"], true],
+  ["page-1 footer banner", [SCHED + "\nSPECIMEN - NOT VALID FOR CLAIMS", "General Conditions"], true],
+  // A later page that is itself a specimen, an illustration or a sample card sets aside only that page (Critic r378 L1-L5).
+  ["a last-page specimen contract ending SPECIMEN - NOT VALID FOR CLAIMS", [SCHED, "General Conditions\nClaims must be made within 90 days.\nSPECIMEN - NOT VALID FOR CLAIMS"], false],
+  ["a last-page benefit illustration ending FOR ILLUSTRATION PURPOSES ONLY", [SCHED, "Benefit illustration\nProjected value at age 65 S$48,200\nFOR ILLUSTRATION PURPOSES ONLY"], false],
+  ["a last-page member card ending SAMPLE CARD - NOT VALID FOR CLAIMS", [SCHED, "Your member card\nSAMPLE CARD - NOT VALID FOR CLAIMS"], false],
+  ["a last-page worked claim example ending For illustrative purposes only", ["Harbour Assurance\nHospital Plan Schedule\nInsured person: Rosalind Teo\nPolicy number: HA-77120\nAnnual limit S$250,000", "How a claim is paid\nA 5-day stay costing S$8,000 is paid in full.\nFor illustrative purposes only"], false],
+  ["a one-page sample", ["SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie\nSum Assured S$500,000"], true],
+  ["a later SPECIMEN POLICY CONTRACT appendix", [SCHED, "SPECIMEN POLICY CONTRACT\nGeneral Conditions"], false],
+  ["a last page ending SPECIMEN COPY", [SCHED, "General Conditions\nThe policy pays S$1\nSPECIMEN COPY"], false],
+  ["a real two-page schedule", [SCHED, "General Conditions\nClaims must be made within 90 days."], false],
+];
+for (const [n, ps, want] of S2) check(`leftovers document: ${n}: ${want}`, () => assert.equal(specimenDocument(ps), want));
+check("leftovers table: a page-1 banner sets aside cover read from page 2", () => assert.deepEqual(checkReading({ id: "cccccccc-0000-0000-0000-000000000005", name: "doc.pdf", readable: true, pages: [{ page: 1, text: "SAMPLE POLICY SCHEDULE\nLife Assured: LIM WEI JIE" }, { page: 2, text: "Life Assured: LIM WEI JIE\nSum Assured S$500,000" }] }, { document: { kind: "personal_proof", product: "Term Life", insurer: null, namedPeople: ["LIM WEI JIE"], plan: null, periodFrom: null, periodTo: null }, covers: [{ person: "LIM WEI JIE", product: "Term Life", cover: "Death", plan: null, riderOf: null, policyNumber: null, sumInsured: 500000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 2, quote: "Sum Assured S$500,000" }], benefits: [] } as never).covers.length, 0));
+// TE r378: a real two-page policy whose page 2 is a benefit illustration keeps its sum assured, in both engines.
+const PACK2 = ["Northwind Life\nPolicy Schedule\nLife Assured: Lim Wei Jie\nPolicy number: NW-300218\nSum Assured S$400,000", "Benefit illustration\nProjected value at age 65 S$61,500\nFor illustration purposes only"];
+check("leftovers intake: a last-page illustration keeps the schedule's cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 400000, "Sum Assured S$400,000"]]]] }), pages(...PACK2)), [400000]));
+check("leftovers table: a last-page illustration keeps the schedule's cover", () => assert.deepEqual(checkReading({ id: "cccccccc-0000-0000-0000-000000000006", name: "doc.pdf", readable: true, pages: PACK2.map((text, i) => ({ page: i + 1, text })) }, { document: { kind: "personal_proof", product: "Northwind Life", insurer: null, namedPeople: ["Lim Wei Jie"], plan: null, periodFrom: null, periodTo: null }, covers: [{ person: "Lim Wei Jie", product: "Northwind Life", cover: "Death", plan: null, riderOf: null, policyNumber: null, sumInsured: 400000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: "Sum Assured S$400,000" }], benefits: [] } as never).covers.map((c) => c.sumInsured), [400000]));
+check("leftovers intake: a page-1 banner with the figure on page 2 shows no cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] }), pages("SAMPLE POLICY SCHEDULE\nLife Assured: Lim Wei Jie", "Life Assured: Lim Wei Jie\nSum Assured S$500,000")), []));
+check("leftovers intake: a real two-page schedule keeps its cover amount", () => assert.deepEqual(shown(raw({ role: "personal_schedule", people: [["Lim Wei Jie", [["Life", 500000, "Sum Assured S$500,000"]]]] }), pages(SCHED, "General Conditions\nClaims must be made within 90 days.")), [500000]));
+const S3: [string, string, boolean][] = [
+  ["a brochure traveller story with a certificate number", "Travel Guard brochure\nSample certificate no. TRV-88123 shown on page 4\nTraveller: Rosalind Teo, 34\nShe claims S$5,000 for a cancelled trip.", false],
+  ["a covered-member story", "Policy No: GH-55012\nCovered member - Rosalind Teo\nHer son needed surgery last year.", false],
+  ["a real certificate keeps its traveller", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo, 34\nPlan: Gold", true],
+  ["a real certificate's 'They must depart ... together' is no story", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller(s): Lim Wei Jie, Rosalind Teo\nThey must depart from and return to Singapore together.", true],
+  ["a real certificate's 'Their cover starts on the departure date' is no story", "Certificate of Insurance\nCertificate No. TRV-88123\nTraveller: Rosalind Teo\nTheir cover starts on the departure date.", true],
+  ["a story with a received payout", "Policy No: GH-55012\nCovered member - Rosalind Teo\nShe received a payout within a week.", false],
+];
+for (const [n, t, want] of S3) check(`leftovers traveller: ${n}: ${want}`, () => assert.equal(personAsParticulars("Rosalind Teo", t), want));
+OWN_FIGURE_CHECKS.on = false;
+check("off: a page-1 sample banner keeps the cover read from page 2, as before #377", () => assert.equal(checkReading({ id: "cccccccc-0000-0000-0000-000000000007", name: "doc.pdf", readable: true, pages: [{ page: 1, text: "SAMPLE POLICY SCHEDULE\nLife Assured: LIM WEI JIE" }, { page: 2, text: "Life Assured: LIM WEI JIE\nSum Assured S$500,000" }] }, { document: { kind: "personal_proof", product: "Term Life", insurer: null, namedPeople: ["LIM WEI JIE"], plan: null, periodFrom: null, periodTo: null }, covers: [{ person: "LIM WEI JIE", product: "Term Life", cover: "Death", plan: null, riderOf: null, policyNumber: null, sumInsured: 500000, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 2, quote: "Sum Assured S$500,000" }], benefits: [] } as never).covers.length, 1));
 OWN_FIGURE_CHECKS.on = true;
 
 console.log(`scheme-figure: ${pass} passed, ${fail} failed`);
