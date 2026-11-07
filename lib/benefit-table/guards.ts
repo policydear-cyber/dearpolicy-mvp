@@ -248,10 +248,16 @@ export function confirmationFor(claims: Claim[], confirmations: FigureConfirmati
   return (c) => exact.has(c.key) ? { value: exact.get(c.key)!, ambiguous: [] } : { value: null, ambiguous: loose.get(rowOf(c.key)) ?? [] };
 }
 
+/** A reading with no guard record was stored before the switch was turned on (or with it off): the guards never ran on it,
+ * so nothing disagreed and every figure stays as read. Only the household's own figures, if any, apply. Only a reading a
+ * check actually ran on (a new upload or Read again with the switch on) has figures held back (live regression, 7 Nov:
+ * switching the guards on blanked 330 figures already shown on 10 documents). */
 export function applyGuards(r: CheckedReading, guards: GuardRecord | null | undefined, confirmations: FigureConfirmation[] = []): CheckedReading {
+  const household = confirmations.filter((c) => c.documentId === r.documentId);
+  if (!guards && !household.length) return structuredClone(r);
   const out: CheckedReading = structuredClone(r);
   const list = claimsOf(r);
-  const confirmedFor = confirmationFor(list, confirmations.filter((c) => c.documentId === r.documentId));
+  const confirmedFor = confirmationFor(list, household);
   let i = 0;
   const next = () => list[i++];
   const settle = (claim: Claim): { value: number | null; note: GuardNote | null } => {
@@ -261,7 +267,8 @@ export function applyGuards(r: CheckedReading, guards: GuardRecord | null | unde
     // never show a guard's figure over a household's (Critic R389c).
     if (own.ambiguous.length) return { value: null, note: { status: "confirm", field: claim.field, claimKey: claim.key, page: claim.page, line: claim.excerpt,
       candidates: [...new Set([...own.ambiguous, claim.value])], note: NEEDS_CONFIRMATION } };
-    const v = guards?.verdicts?.[claim.key];
+    if (!guards) return { value: claim.value, note: null };
+    const v = guards.verdicts?.[claim.key];
     if (v && (v.status === "agreed" || v.status === "corrected") && v.value != null && rowPrints(claim.excerpt, v.value)) return { value: v.value, note: null };
     const status = v?.status === "confirm" ? "confirm" : "checking";
     return { value: null, note: { status, field: claim.field, claimKey: claim.key, page: v?.page ?? claim.page, line: v?.line ?? claim.excerpt,
