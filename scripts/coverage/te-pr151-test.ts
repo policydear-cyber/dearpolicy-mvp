@@ -233,8 +233,13 @@ async function main() {
         // Grader correction (logged): first cut asserted r2 === 0. An empty relink deletes every model link, so EVERY
         // document of the household read in the last 10 minutes waits again (r1 = 5 here), not only this one; each is still
         // bounded by its own 10 minutes. Original grade (FAIL) kept in pr151-results.md.
-        notes.push(`G3: relink wrote no link: reading=${r1} right after (every document read in the last 10 min), ${r2} once this one passes its bound`);
-        assert.equal(r2, r1! - 1, "this document's bound ends its own wait");
+        // Grader correction 2 (#391, 7 Nov; was: assert.equal(r2, r1! - 1)): relink no longer deletes any link, and every
+        // finished relink marks the household's links as checked, even one that writes none. So nothing waits right after
+        // it (r1 = 0) and nothing waits later (r2 = 0). The old r2 = r1 - 1 described the deleting relink that dropped
+        // linked sections on live (7 Nov), which #391 removes.
+        notes.push(`G3: relink wrote no link: reading=${r1} right after, ${r2} once this one passes its bound`);
+        assert.equal(r1, 0, "a finished relink ends the wait, even one that writes no link");
+        assert.equal(r2, 0, "and nothing waits later");
       } finally {
         for (const [k, v] of saved) links.set(k, v);
         await relink(appDb, model(null), SG);
