@@ -316,6 +316,18 @@ const NON_BENEFIT_LABELS = [
   String.raw`(?:servicing\s+|financial\s+)?(?:agent|adviser|advisor|consultant|representative)(?:\s+(?:name|code|no\.?))?|agency|branch`,
 ];
 const NON_BENEFIT_LABEL = new RegExp(String.raw`^(?:${NON_BENEFIT_LABELS.join("|")})$`, "i");
+/** Words in a field's value that may limit what a row pays: a limit, a cap, a count of days or a stay. */
+const LIMIT_IN_VALUE = /\b(?:limits?|limited|max(?:imum)?|min(?:imum)?|up\s+to|caps?|capped|ceiling|aggregate|overall|total|in\s+all|not\s+more|no\s+more|excess|deductible|reduced|half|thereafter|after|from|per|each|days?|weeks?|admissions?|stays?|confinements?|benefits?)\b/i;
+/** A money figure in a field's value ("S$2,000", "USD 500", "2,000.00"). */
+const MONEY_IN_VALUE = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\b)\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d{2}\b/i;
+/** Whether a labelled field is one that is never part of what a row pays: an allowed label (NON_BENEFIT_LABEL) whose value
+ * prints no limit or day words, and, except for a premium (which is money by nature), no money figure ("Plan type: S$2,000
+ * limit" and "Coverage period: up to 10 days" stay with the row: Critic P392B). */
+function nonBenefitField(label: string, value: string): boolean {
+  const name = label.trim().replace(/\s+/g, " ");
+  if (!NON_BENEFIT_LABEL.test(name) || LIMIT_IN_VALUE.test(value)) return false;
+  return /\bpremiums?\b/i.test(name) || !MONEY_IN_VALUE.test(value);
+}
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
  * up to the next row, bullet or numbered item (R52-1). On a schedule that prints one labelled field per line, the next
  * labelled field ("Annual premium: S$2,412.00" under "Hospital cash: S$150 per day") is the next row, not part of this one
@@ -327,10 +339,11 @@ export function rowWithContinuation(pageText: string, offset: number): string {
   const more: string[] = [];
   for (const l of rest.slice(0, 3)) {
     if (!l.trim() || /^\s*(?:[•●▪*#^\-–]|\(?[a-z0-9]{1,3}[.)]\s)/i.test(l) || /\t/.test(l)) break;
-    // Only the line right under the row can end it this way: once another line is joined (a condition such as "Ward
-    // type: B2 only"), every line after is read as before, so a condition never reads as the whole of the row.
+    // A non-benefit field is left out of the row, and the lines after it are still read (a limit printed under an
+    // "Effective date" line stays with the row: Critic P392B). Only before any other line is joined: once a condition
+    // such as "Ward type: B2 only" is joined, every line after is read as before.
     const field = fieldRow && !more.length ? FIELD_LINE.exec(l) : null;
-    if (field && NON_BENEFIT_LABEL.test(field[1].trim().replace(/\s+/g, " "))) break;
+    if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
     more.push(l);
   }
   return [row.text, ...more].join(" ");
@@ -969,6 +982,9 @@ function stayDaysWritten(asked: string[], days: number): boolean {
 /** "An 8-day", "an 11-day", "an 18-day", otherwise "A 12-day" (TE T4). */
 const aDay = (n: number) => `${n === 11 || n === 18 || String(n).startsWith("8") ? "An" : "A"} ${n}`;
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
+/** A premium field as it reads inside a joined row: its label, a colon and one money figure ("Annual Premium (incl. GST):
+ * S$2,412.00"). */
+const PREMIUM_FIELD = new RegExp(String.raw`\b(?:${PERIODIC}\s+)*premiums?(?:\s+(?:amount|payable|due|paid|\(?(?:incl|including|excl|excluding)\.?\s+(?:gst|tax|vat)\)?))*\s*:\s*(?:[A-Z]{1,3}\$|\$|£|€|(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)?\s?\d[\d,]*(?:\.\d+)?(?:\s+(?:a|per)\s+(?:year|month|quarter)|\s+(?:monthly|yearly|annually|quarterly))?`, "gi");
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
   // again" after "hospitalised for 15 days").
@@ -984,7 +1000,9 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
   // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
   // S$3,000", TE #392 E): no total is worked out past it, as the benefit table already refuses (dailyRateAlone).
-  if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
+  // A premium printed as its own field under the row ("Annual premium: S$2,412.00") is what the policy costs, never a
+  // limit on it: it is left out of this check, so a day cap on the line between still applies as on main (TE #392 D).
+  if (moneyFiguresIn(rule.replace(PREMIUM_FIELD, " ")).some((f) => !sameValue(f.value, amount.value))) return null;
   if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
   const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b/gi)];
   const maxes = [...rule.matchAll(/\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/gi)];

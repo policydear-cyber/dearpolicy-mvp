@@ -526,9 +526,17 @@ test("one field per line: a field that limits the daily row stays with it, so th
     assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
     assert.ok(rowWithContinuation(page, page.indexOf("Ward cash")).includes(next), next);
   }
-  // A field that ends the row does so only right under it: after a condition line, the lines are read as before.
+  // A field is left out only before any other line is joined: after a condition line, the lines are read as before.
   const after = "SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nWard type: B2 only\nAnnual premium: S$2,412.00";
   assert.ok(rowWithContinuation(after, after.indexOf("Ward cash")).includes("Annual premium"));
+  // A non-benefit field is left out, never the end of the row: a limit under it still counts; and an allowed label whose
+  // value prints money or a limit or day word stays with the row (Critic P392B).
+  for (const lines of [["Effective date: 01/01/2026", "Overall limit: S$2,000"], ["Policy number: HX-55120", "Ceiling: S$2,000"],
+    ["Plan type: S$2,000 limit"], ["Coverage period: up to 10 days"], ["Policy term: 10 days per admission"], ["Plan: Gold, S$2,000 in all"],
+    ["Currency: SGD", "Overall limit: S$2,000"], ["Annual premium: S$2,412.00", "Overall limit: S$2,000"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", "Ward cash: S$150 per day from the 3rd day, maximum 30 days", ...lines, "Policy number: HX-55120"].join("\n");
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], lines.join(" / "));
+  }
   // The fields that end the row: premium, numbers, the person, the plan, its period and dates, currency, payment, agent.
   for (const next of ["Annual premium: S$2,412.00", "Premium payable (incl. GST): S$2,412.00", "Monthly instalment premium: S$201.00", "Policy No.: HX-55120",
     "Certificate number: 88120", "Life assured: Lim Ah Kow", "Name of insured: Lim Ah Kow", "Plan: Ward Plus", "Plan type: Hospital",
@@ -553,6 +561,8 @@ test("one field per line: every TE #392 layout shows the true total for a stay o
     [["Intensive care: S$300 per day, up to a maximum of 10 days", PREM], [750, 1200, 4500]],
     [["Reduced rate: half the daily amount after the 10th day", PREM], [750, 1200, 3000]],
     [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
+    [["Plan type: Deductible plan, the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
+    [["Policy number: ML-4471209-HC", PREM], [750, 1200, 4500]],
   ];
   const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
   for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
