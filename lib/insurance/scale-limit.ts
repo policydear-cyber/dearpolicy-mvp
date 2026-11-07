@@ -1,3 +1,4 @@
+import { printedUnits, unitsBeforeFigures } from "./printed-unit";
 import { formatMoney } from "@/lib/format/currency";
 import type { CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
@@ -314,11 +315,16 @@ const ADVERB_UNIT:Record<string,string>={daily:"day",weekly:"week",monthly:"mont
 export function termFiguresDifferByPlan(quote:string|null|undefined):boolean{
   const text=String(quote??"");
   if(figuresDifferByPlan(text))return true;
-  const figures=[...text.matchAll(SIGNED_FIGURE)].flatMap(m=>{
+  const found=[...text.matchAll(SIGNED_FIGURE)];
+  // A term that prints its units before its figures ("Per trip S$300 per trip S$500") gives each figure the unit before
+  // it (lib/insurance/printed-unit); read after the figure, each unit would be the next figure's.
+  const spans=found.map(m=>({start:m.index!,end:m.index!+m[0].length}));
+  const unitsFirst=unitsBeforeFigures(text,spans)?printedUnits(text,spans):null;
+  const figures=found.flatMap((m,i)=>{
     const start=m.index!,end=start+m[0].length;
     if(PART_OF_FIRST_BEFORE.test(text.slice(0,start)))return [];
     const u=text.slice(end).match(OWN_UNIT_AFTER);
-    const unit=u?(u[1]??u[2]??ADVERB_UNIT[u[3].toLowerCase()]).toLowerCase().replace(/^policy\s+/,"").replace(/\s+/g," "):"";
+    const unit=unitsFirst?unitsFirst[i]:u?(u[1]??u[2]??ADVERB_UNIT[u[3].toLowerCase()]).toLowerCase().replace(/^policy\s+/,"").replace(/\s+/g," "):"";
     return [{key:`${CURRENCY_OF[m[1]]??m[1]}|${unit}`,value:m[2].replace(/,/g,"").replace(/\.0+$/,"")}];
   });
   const values=new Map<string,Set<string>>();

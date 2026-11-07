@@ -301,7 +301,8 @@ async function main() {
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
       row("Medical expenses", 250_000, lines[0]), row("Trip cancellation", 10_000, lines[1]), row("Curtailment", 5_000, lines[2]),
-      row("Hospital cash", 200, lines[3]), row("Hospital allowance", 8_000, lines[4]), row("Hospital allowance", 200, lines[4]),
+      // A daily rate is read as one: shown as "up to S$200" it would lose its unit (unit-before-test).
+      row("Hospital cash", 200, lines[3]), row("Hospital allowance", 8_000, lines[4]), { ...row("Hospital allowance", 200, lines[4]), pays: "per_day" },
       row("Accidental death", 100_000, lines[5]),
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital allowance", 8_000], ["Hospital allowance", 200], ["Accidental death", 100_000]]);
@@ -318,8 +319,8 @@ async function main() {
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
-      row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), row("Hospital income", 200, lines[2]), row("Hospital income", 20_000, lines[2]),
-      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]), row("Trip cancellation", 10_000, lines[5]), row("Curtailment", 5_000, lines[6]), row("Baggage", 1_000, lines[7]), row("Kennel fees", 40, lines[8]), row("Lost item", 200, lines[9]), row("Lost item", 1_000, lines[9]), row("Course fees", 2_000, lines[10]), row("Hospital cash", 100, lines[11]),
+      row("Hospital cash", 100, lines[0]), row("Hotel stay", 50, lines[1]), { ...row("Hospital income", 200, lines[2]), pays: "per_day" }, row("Hospital income", 20_000, lines[2]),
+      row("Medical expenses", 100_000, lines[3]), row("Travel delay", 100, lines[4]), row("Travel delay", 1_000, lines[4]), row("Trip cancellation", 10_000, lines[5]), row("Curtailment", 5_000, lines[6]), row("Baggage", 1_000, lines[7]), row("Kennel fees", 40, lines[8]), row("Lost item", 200, lines[9]), row("Lost item", 1_000, lines[9]), row("Course fees", 2_000, lines[10]), { ...row("Hospital cash", 100, lines[11]), pays: "per_day" },
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 200], ["Hospital income", 20_000], ["Travel delay", 100], ["Travel delay", 1_000],
       ["Lost item", 200], ["Lost item", 1_000], ["Course fees", 2_000], ["Hospital cash", 100]]);
@@ -342,18 +343,18 @@ async function main() {
     const row = (benefit: string, value: number, quote: string) => ({ section: null, column: null, benefit, pays: "up_to", value, period: null, basis: null, percentOf: null,
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 11, quote });
     const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [], benefits: [
-      row("Trip cancellation", 5_000, lines[0]), row("Hospital cash", 200, lines[1]), row("Baggage", 500, lines[2]), row("Medical expenses", 100_000, lines[3]),
+      row("Trip cancellation", 5_000, lines[0]), { ...row("Hospital cash", 200, lines[1]), pays: "per_day" }, row("Baggage", 500, lines[2]), row("Medical expenses", 100_000, lines[3]),
       row("Accidental death", 100_000, lines[4]), row("Accidental death", 25_000, lines[5]), row("Personal accident", 100_000, lines[6]),
-      row("Hospital income", 100, lines[7]),
+      { ...row("Hospital income", 100, lines[7]), pays: "per_day" },
       // A qualifier after the last cell applies to the whole row (TE pr367 r2).
       row("Trip cancellation", 5_000, lines[8]), row("Medical expenses", 150_000, lines[9]), row("Baggage", 1_000, lines[10]), row("Travel delay", 100, lines[11]),
       // Bare figures joined by "and"/"or" with a trailing qualifier stay held; a rate and a raised rate keep the first (TE pr367 r3).
       row("Medical expenses", 100_000, lines[12]), row("Overall limit", 200_000, lines[13]), row("Personal liability", 250_000, lines[14]),
-      row("Hospital cash", 100, lines[15]),
+      { ...row("Hospital cash", 100, lines[15]), pays: "per_day" },
       // Rate cells laid out as columns are plans, whatever follows; only "and"/"or"/a comma before a raised rate for a
       // setting (ICU, HDU, a private ward; never bare "hospital" or "ward") keeps the first (TE and Critic, pr367 r4, r8).
-      row("Hospital cash", 100, lines[16]), row("Hospital cash", 100, lines[17]), row("Hospital cash", 100, lines[18]),
-      row("Hospital cash", 100, lines[19]), row("Hospital cash", 100, lines[20]),
+      { ...row("Hospital cash", 100, lines[16]), pays: "per_day" }, { ...row("Hospital cash", 100, lines[17]), pays: "per_day" }, { ...row("Hospital cash", 100, lines[18]), pays: "per_day" },
+      { ...row("Hospital cash", 100, lines[19]), pays: "per_day" }, { ...row("Hospital cash", 100, lines[20]), pays: "per_day" },
     ] });
     assert.deepEqual(read.benefits.map((b) => [b.benefit, b.value]), [["Hospital income", 100], ["Hospital cash", 100]]);
   });

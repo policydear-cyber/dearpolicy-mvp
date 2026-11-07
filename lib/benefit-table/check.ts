@@ -19,6 +19,7 @@ import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
+import { printedUnits, RATE_UNITS, runUnitsBefore, unitsBeforeFigures, withoutUnitBefore } from "@/lib/insurance/printed-unit";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -28,6 +29,19 @@ const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-
 const UNIT_AFTER = String.raw`(?:\s*(?:\/\s*(day|night|week|month|year|trip)s?\b|(?:per|every)\s+(?:\d+\s+)?([a-z]+)|(each(?:\s+(?:day|night|week|month|year|trip|visit))?)\b|(daily|weekly|monthly|yearly|annually)\b|a\s+(day|night|week|month|year)\b))?`;
 const MONEY_WITH_UNIT = new RegExp("(" + MONEY + ")" + UNIT_AFTER, "gi");
 const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", yearly: "year", annually: "year", annum: "year", annual: "year", each: "item", item: "item" };
+/** The units printed with each place the excerpt prints this money figure (lib/insurance/printed-unit), leaving out the
+ * places that print none. */
+function printedUnitsOf(excerpt: string, value: number, label: string): string[] {
+  // The lines that print the figure; of those, the ones that carry the row's own label when any does ("Hospital cash
+  // S$100 per day" and not "Excess S$100 per claim" below it), else the first, where the quote starts.
+  const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
+  const own = lines.filter((l) => label.trim() && flat(l).includes(flat(label)));
+  return (own.length ? own : lines.slice(0, 1)).flatMap((line) => {
+    const found = [...line.matchAll(new RegExp(MONEY, "gi"))];
+    const units = printedUnits(line, found.map((m) => ({ start: m.index!, end: m.index! + m[0].length })));
+    return found.flatMap((m, i) => Math.abs(Number(m[0].replace(/^[^\d]*/, "").replace(/,/g, "")) - value) < 0.005 && units[i] ? [units[i]] : []);
+  });
+}
 /** Whether the excerpt's line that prints this figure is a row of plan figures (Critic R364, TE pr364): the figure is
  * one of two or more different figures in one unit ("S$5,000 S$10,000", "S$100 per day | S$200 per day", "S$50/night or
  * S$80/night"), however the cells are separated. Figures in different units are a rate and its cap ("S$200 per day up
@@ -36,9 +50,16 @@ const UNIT_NAME: Record<string, string> = { daily: "day", weekly: "week", monthl
 function plansOnValueLine(excerpt: string, value: number): boolean {
   const lines = excerpt.split("\n").filter((l) => printsNumber(l, value));
   return (lines.length ? lines : [excerpt]).some((line) => {
-    const cells = [...line.matchAll(MONEY_WITH_UNIT)].map((m) => {
+    const found = [...line.matchAll(MONEY_WITH_UNIT)];
+    // A line that prints its units before its figures ("Per day S$100 per day S$200") gives each figure the unit before
+    // it; read after the figure, each unit would be the next cell's, and plan cells would look like a rate and its cap. A
+    // later cell with no unit of its own takes the run's ("Per day S$100 for Plan A, S$200 for Plan B"), before the
+    // cells are compared, so the plan and care-setting checks below run as they do on a line with units after (TE r376).
+    const spans = found.map((m) => ({ start: m.index!, end: m.index! + m[1].length }));
+    const before = unitsBeforeFigures(line, spans) ? runUnitsBefore(line, spans) : null;
+    const cells = found.map((m, i) => {
       // "each night" is a nightly rate; "each" alone is per item.
-      const unit = (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/^each\s+/, "").replace(/s$/, "");
+      const unit = before ? before[i] : (m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? "").toLowerCase().replace(/^each\s+/, "").replace(/s$/, "");
       // A figure after "up to" or "maximum" is a cap, whatever its unit.
       const cap = /\b(?:up to|maximum(?: of)?|max\.?|capped at|limit of)\s*$/i.test(line.slice(0, m.index));
       return { text: m[1], start: m.index!, end: m.index! + m[0].length, amount: Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, "")), unit: cap ? "cap" : UNIT_NAME[unit] ?? unit };
@@ -51,7 +72,8 @@ function plansOnValueLine(excerpt: string, value: number): boolean {
     // Two caps in one unit side by side ("up to S$500 up to S$1,000") are two plans' caps too.
     // A cell followed by a condition ("S$200 per day in ICU", "... if hospitalised overseas") is that condition's figure,
     // never another plan's (TE pr367).
-    const trail = (i: number) => line.slice(cells[i].end, cells[i + 1]?.start ?? line.length);
+    // On a line that prints its units before its figures, the next cell's unit phrase is part of that cell.
+    const trail = (i: number) => { const t = line.slice(cells[i].end, cells[i + 1]?.start ?? line.length); return before && cells[i + 1] ? withoutUnitBefore(t) : t; };
     const conditionWord = (i: number) => /^\s*,?\s*(in|if|for|when|while|during|after|where|under|upon|on)\b/i.exec(trail(i))?.[1].toLowerCase() ?? null;
     const apart = (i: number) => {
       const between = trail(i);
@@ -837,6 +859,24 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
     const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
+    // The unit the page prints with the figure, before it or after it, must be the one it is shown with: a figure printed
+    // as a rate ("S$100 per day", "Per day S$100") is never shown as a whole amount or a cap, and a daily or periodic
+    // payment is never one printed per trip, per disability or per another period. A closed list of unit words; a figure
+    // printed with none keeps the reading's kind, as before.
+    // A payment with no period is dropped below, as before.
+    const knownPeriod = (PERIODS as readonly string[]).includes(b.period as string);
+    if (value != null && (pays === "amount" || pays === "up_to" || pays === "per_day" || (pays === "per_period" && knownPeriod))) {
+      const units = printedUnitsOf(source.excerpt, value, benefit);
+      const period = pays === "per_period" ? String(b.period) : "";
+      const wrong = units.find((u) => u === "?"
+        || (pays === "per_day" && u !== "day" && u !== "night")
+        || (pays === "per_period" && u !== period)
+        || ((pays === "amount" || pays === "up_to") && RATE_UNITS.has(u)));
+      if (wrong) {
+        out.dropped.push({ what: label, why: `figure ${value} is printed ${wrong === "?" ? "with two different units" : `per ${wrong}`}, not as a "${pays}" figure; kept the row without it` });
+        pays = "words"; value = null;
+      }
+    }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
     if (!FIGURED.includes(pays)) value = null;
