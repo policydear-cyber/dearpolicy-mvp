@@ -586,6 +586,61 @@ async function main() {
     assert.deepEqual(read.benefits.map((b) => b.quote), settings);
   });
 
+  await test("L17 a named care unit keeps its spelling variants (hyphens, NICU, critical care, burns unit); 'the isolation of' and ward classes stay held (Critic LOW r374)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const plans = ["Hospital cash S$100 per day and S$300 per day in the isolation of", "Hospital cash S$100 per day and S$300 per day in a single room",
+      "Hospital cash S$100 per day and S$300 per day in a Class A ward", "Hospital cash S$100 per day and S$300 per day in a private wardrobe"];
+    const settings = ["Hospital cash S$100 per day and S$300 per day in an intensive-care unit", "Hospital cash S$100 per day and S$300 per day in a high-dependency unit",
+      "Hospital cash S$100 per day and S$300 per day in a critical care unit", "Hospital cash S$100 per day and S$300 per day in a neonatal intensive care unit",
+      "Hospital cash S$120 a day, S$240 a day if admitted to NICU", "Hospital cash S$100 per day and S$300 per day in a burns unit",
+      "Hospital cash S$100 per day or S$250 per day in a coronary-care unit", "Hospital cash S$100 per day and S$300 per day in an isolation room"];
+    const lines = [...plans, ...settings];
+    const doc = { id: "doc", name: "harbour-care.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
+    const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: Number(/S\$(\d+)/.exec(quote)![1]), period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 4, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [],
+      benefits: lines.map(row) } as never);
+    assert.deepEqual(read.benefits.map((b) => b.quote), settings);
+  });
+
+  await test("L18 a care unit is a setting only when it ends its clause: a unit word starting a plan's name, or followed by another word, is no setting (TE pr380)", async () => {
+    const { checkReading } = await import("@/lib/benefit-table/check");
+    const plans = ["Hospital cash S$100 per day or S$200 per day in Critical Care Plan", "Hospital cash S$100 per day or S$200 per day in the NICU Plan",
+      "Hospital cash S$100 per day and S$200 per day in Burns Unit Cover", "Hospital cash S$100 per day and S$200 per day in intensive care Plus",
+      "Hospital cash S$100 per day or S$200 per day in ICU Shield", "Hospital cash S$100 per day and S$300 per day in the intensive care unit of a hospital",
+      "Hospital cash S$100 per day and S$300 per day in the ICU of any hospital", "Hospital cash S$100 per day or S$200 per day in HDU Essential",
+      "Hospital cash S$100 per day and S$200 per day in the coronary care unit Premier plan", "Hospital cash S$100 a day, S$200 a day if admitted to ICU Max",
+      "Hospital cash S$100 per day or S$200 per day in ICU - Plan B", "Hospital cash S$100 per day or S$200 per day in ICU (Plan B)", "Hospital cash S$100 per day and S$200 per day in NICU: Gold",
+      "Hospital cash S$100 per day and S$200 per day in ICU – plan 2", "Hospital cash S$100 per day and S$200 per day in HDU (Essential plan)", "Hospital cash S$100 per day and S$200 per day in ICU) plan B", "Hospital cash S$100 per day and S$200 per day in ICU) Plan B",
+      "Hospital cash S$100 per day or S$200 per day in ICU; Gold", "Hospital cash S$100 per day or S$200 per day in ICU; plan B only", "Hospital cash S$100 per day or S$200 per day in ICU/Gold",
+      "Hospital cash S$100 per day or S$200 per day in ICU (Gold Plan)", "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit) Plan B",
+      "Hospital cash S$100 per day or S$200 per day in ICU overseas Plan", "Hospital cash S$100 per day or S$200 per day in an ICU ward Gold", "Hospital cash S$100 per day or S$200 per day in ICU (Day 1 to 30) Plan B",
+      "Hospital cash S$100 per day or S$200 per day in ICU overseas; Gold", "Hospital cash S$100 per day or S$200 per day in ICU overseas - Plan B", "Hospital cash S$100 per day or S$200 per day in ICU (days 1-30) / Premier",
+      "Hospital cash S$100 per day or S$200 per day in an ICU ward (Plan B)",
+      // Critic p374e: a plan word or a name after a qualifier, inside its bracket, or after a comma.
+      ...["in ICU overseas plan B", "in ICU overseas (Plan B)", "in ICU overseas - Gold", "in an ICU ward Plan B", "in an ICU ward (Gold)", "in ICU (Days 1-30, Plan B)",
+        "in ICU (Day 1 to 30) for Gold", "in a private ward abroad Premier", "in an ICU bed, Plan B", "in ICU overseas cover", "in an ICU room under Plan B", "in ICU, Gold"]
+        .map((tail) => "Hospital cash S$100 per day and S$300 per day " + tail)];
+    const settings = ["Hospital cash S$100 per day and S$300 per day in ICU.", "Hospital cash S$100 per day and S$300 per day in ICU, for up to 30 days",
+      "Hospital cash S$100 per day and S$300 per day in ICU for up to 30 days", "Hospital cash S$100 per day or S$200 per day in ICU or HDU",
+      "Hospital cash S$100 per day and S$300 per day in the intensive care unit (max 10 days)", "Hospital cash S$100 per day and S$300 per day in a critical care unit only",
+      "Hospital cash S$100 per day and S$300 per day in NICU; S$50 per day for a parent",
+      "Hospital cash S$100 per day and S$300 per day in ICU (up to 30 days)", "Hospital cash S$100 per day and S$300 per day in ICU - for up to 30 days",
+      "Hospital cash S$100 per day or S$200 per day in ICU/CCU", "Hospital cash S$100 per day or S$200 per day in ICU / HDU", "Hospital cash S$100 per day or S$200 per day in ICU | HDU.",
+      "Hospital cash S$100 per day or S$200 per day in ICU (Intensive Care Unit)", "Hospital cash S$100 per day or S$200 per day in HDU (high dependency unit), for up to 10 days",
+      "Hospital cash S$100 per day or S$300 per day in ICU overseas", "Hospital cash S$100 per day or S$300 per day in a private ward overseas.", "Hospital cash S$100 per day or S$300 per day in an ICU ward",
+      "Hospital cash S$100 per day or S$300 per day in ICU (Day 1 to 30)", "Hospital cash S$100 per day or S$300 per day in ICU (days 1-30)",
+      "Hospital cash S$100 per day or S$300 per day in an ICU ward (up to 30 days)", "Hospital cash S$100 per day or S$300 per day in ICU overseas, for up to 30 days", "Hospital cash S$100 per day or S$300 per day in ICU overseas (Day 1 to 30)",
+      "Hospital cash S$100 per day or S$300 per day in ICU, up to 30 days", "Hospital cash S$100 per day or S$300 per day in ICU, S$50 per day for a parent"];
+    const lines = [...plans, ...settings];
+    const doc = { id: "doc", name: "lakeside-care.pdf", readable: true, people: [], pages: [{ page: 4, text: lines.join("\n") }] };
+    const row = (quote: string) => ({ section: null, column: null, benefit: "Hospital cash", pays: "up_to", value: 100, period: null, basis: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 4, quote });
+    const read = checkReading(doc as never, { document: { kind: "policy_wording", product: null, insurer: null, namedPeople: [], plan: null }, covers: [],
+      benefits: lines.map(row) } as never);
+    assert.deepEqual(read.benefits.map((b) => b.quote), settings);
+  });
+
   console.log(`benefit-table long document: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);
