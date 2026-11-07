@@ -65,15 +65,124 @@ function firstTitle(pages: string[]): { line: string; raw: string; amends: boole
  * (DATED_CHANGE) and prints the policy number it changes (OWN_POLICY_NUMBER), and it is not a form, an option, an illustration or a clause that applies only if shown
  * (NOT_A_CHANGE). pagesText: pages joined by "\f". */
 /** The first-title catch is off: each round of fresh documents found another quotation, brochure or form page with a
- * listed title, a policy number and a date (te-pr375-amend.ts E11, p375d.ts Q1-Q5). Off, amendment wording is main's,
- * and the change keeps only the empty-field veto and the contents fix. */
+ * listed title, a policy number and a date (te-pr375-amend.ts E11, p375d.ts Q1-Q5). Off, amendment wording is main's. */
 export const FIRST_TITLE_CATCH = false;
-export function amendmentWording(pagesText: string, o: { firstTitleCatch?: boolean } = {}): boolean {
+/** ownAmendment ships off: three review rounds of fresh documents each found new pages it took for amendments (offers,
+ * refusals, reversals, another policy's change, examples; TE r381, Critic p381/p381b). Off, amendment wording is main's. */
+export const OWN_AMENDMENT = false;
+export function amendmentWording(pagesText: string, o: { firstTitleCatch?: boolean; ownAmendment?: boolean } = {}): boolean {
   const text = String(pagesText ?? "");
-  if (AMENDS.test(text)) return true;
+  if (AMENDS.test(text) || ((o.ownAmendment ?? OWN_AMENDMENT) && ownAmendment(text))) return true;
   if (!(o.firstTitleCatch ?? FIRST_TITLE_CATCH) || !firstTitle(text.split("\f"))?.amends) return false;
   const flat = text.replace(/\s+/g, " ");
   return DATED_CHANGE.test(flat) && OWN_POLICY_NUMBER.test(flat) && !NOT_A_CHANGE.test(flat);
+}
+/** The whole titles only an amending document of a policy prints (a closed list; the line is the title and nothing else,
+ * a remark in brackets taken off). */
+const AMENDING_TITLE = /^(?:policy\s+endorsement|(?:policy\s+)?(?:endorsement\s+(?:schedule|certificate)|rider\s+endorsement|alteration\s+(?:notice|schedule)|notice\s+of\s+(?:policy\s+)?(?:change|alteration|amendment|endorsement)s?|confirmation\s+of\s+(?:policy\s+)?(?:changes?|alterations?|amendments?)|confirmation\s+of\s+(?:the\s+)?change\s+(?:of|in)\s+(?:the\s+)?sum\s+(?:assured|insured)|amendments?\s+to\s+(?:the\s+|your\s+)?policy(?:\s+schedule)?|alterations?\s+(?:of|to)\s+(?:the\s+|your\s+)?policy))$/i;
+/** Titles an amending letter prints that a quotation, a brochure or an option page also prints. */
+const CHANGE_TITLE = /^(?:changes?\s+to\s+your\s+policy|change\s+of\s+(?:the\s+)?sum\s+(?:assured|insured)|change\s+of\s+plan)$/i;
+const MONEY_AT = String.raw`(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d`;
+/** What a change is made to: a figure, a named plan or rider ("to Gold", "to Premier Plus"), or a clause that now
+ * includes or covers something. */
+const CHANGED_TO = String.raw`\bto\s+(?:` + MONEY_AT + String.raw`|[A-Z][\w&'-]*|include\b|cover\b)`;
+/** A closed, positive statement that a change HAS BEEN made, in the past or present tense, and nothing else:
+ *  - "we have reduced / increased / changed / amended / altered / updated ... to <figure or item>";
+ *  - "... has been / have been / was / is reduced / increased / changed / amended / altered (from X) to <figure or item>";
+ *  - "... is now <figure>", "... are now <figure>";
+ *  - "<a rider or benefit> has been added to / removed from your policy".
+ * A Before / After row of two figures is the other statement (beforeAfterRow). */
+const made = () => new RegExp([
+  String.raw`\b[Ww]e\s+have\s+(?:reduced|increased|changed|amended|altered|updated)\b[^.;]{0,60}?` + CHANGED_TO,
+  String.raw`\b(?:has|have)\s+been\s+(?:reduced|increased|changed|amended|altered|updated)\s+(?:from\s+[^.;]{1,40}?\s+)?` + CHANGED_TO,
+  String.raw`\b(?:is|are|was|were)\s+(?:reduced|increased|changed|amended|altered|updated)\s+(?:from\s+[^.;]{1,40}?\s+)?` + CHANGED_TO,
+  String.raw`\b(?:is|are)\s+now\s+` + MONEY_AT,
+  String.raw`\b(?:has|have)\s+been\s+(?:added\s+to|removed\s+from|attached\s+to)\s+(?:your|the)\s+policy\b`,
+].join("|"));
+/** A page that says a change was not made, was reversed, or is about another policy: never an amendment of this one
+ * (TE r381). An endorsement's closing "all other terms remain unchanged" is stripped first. */
+const PAGE_VETO = /\b(?:unchanged|revers\w*|revert\w*|cancel\w*|rescind\w*|void\w*|not\s+been\s+(?:made|changed|approved|accepted)|not\s+changed|no\s+changes?|remains?|another\s+polic(?:y|ies)|other\s+polic(?:y|ies)|previous|earlier|former|free[\s-]look|in\s+error|mistake\w*|provisional\w*|temporar\w*|suppose\w*|imagine|hypothetical\w*|standard\s+(?:endorsements?|clauses?|wordings?|terms|conditions)|later|back\s+to|renewal|anniversary|asked|go\s+ahead|accept\w*|reply|respond|here\s+is|looks?\s+like|compare\w*|spouse\w*|partner\w*)\b/i;
+/** A word that makes a statement not a change already made: the future, a condition, a request, an option, a refusal,
+ * an example or a question. Any one in the sentence and the sentence says nothing (fails closed). */
+const NOT_MADE = /\b(?:will|would|shall|might|can|could|should|must|once|if|when|whenever|after|upon|unless|until|pending|subject|request(?:s|ed)?|application|apply|applied|approv\w*|declin\w*|reject\w*|unable|not|no|never|cannot|example|e\.g|instance|illustrat\w*|withdraw\w*|cancel\w*|propos\w*|quot\w*|options?|wish|sign|please|tick|next)\b|\?/i;
+/** A sentence saying the policy's own sum assured was changed, with no title needed: "We have reduced your sum assured to
+ * S$500,000", "The sum assured has been reduced to S$400,000", "... has been reduced with effect from 1 March 2026",
+ * "Your sum assured was increased to S$300,000 on 1 May 2026". */
+const sumChanged = () => new RegExp(String.raw`\bwe\s+have\s+(?:reduced|increased)\s+(?:your|the)\s+sum\s+(?:assured|insured)\s+to\s+` + MONEY_AT
+  + String.raw`|\b(?:your|the)\s+sum\s+(?:assured|insured)\s+(?:(?:has|have)\s+been|was)\s+(?:reduced|increased)\s+(?:to\s+` + MONEY_AT + String.raw`|with\s+effect\s+from\s+` + DATE + ")", "i");
+const dateOfIssue = () => new RegExp(String.raw`\b(?:date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on)\s*:?\s*` + DATE, "i");
+/** The page's sentences that state a change made: one MADE statement and no NOT_MADE word. "As you requested" and "at your
+ * request" say why it was made, and an endorsement's closing "all other terms remain unchanged" says nothing either way. */
+function statedChanges(page: string, statement: RegExp): string[] {
+  // Lines are joined only where a sentence wraps onto a line that starts in lower case, so a letterhead or a title line
+  // never runs into the sentence below it.
+  const flat = page.replace(/\r/g, "").replace(/\n(?=[ \t]*[a-z(S$])/g, " ").replace(/[ \t]+/g, " ")
+    // A "No." label is no sentence end and no "no".
+    .replace(/\b(policy|proposal|certificate|endorsement|reference|ref)\s+no\b\.?/gi, "$1 number")
+    .replace(/\b(?:as\s+(?:you\s+)?requested|at\s+your\s+request)\b/gi, " ")
+    .replace(/\b(?:all\s+)?other\s+(?:terms|conditions|benefits|details|provisions)[^.]*?\b(?:remain|are|stay)\s+unchanged\b[^.]*\.?/gi, " ");
+  // "may" is a modal; "May" is a modal only when it opens the sentence and no day or year follows ("1 May 2026").
+  const modalMay = (s: string) => /\bmay\b/.test(s) || /^\s*May\b(?!\s+\d)/.test(s);
+  return flat.split(/(?<=[.!?])\s+(?=[A-Z])|\n+/).filter((s) => statement.test(s) && !NOT_MADE.test(s) && !modalMay(s));
+}
+function pageVetoed(page: string): boolean {
+  const flat = page.replace(/\s+/g, " ").replace(/\b(?:all\s+)?other\s+(?:terms|conditions|benefits|details|provisions)[^.]*?\b(?:remain|are|stay)\s+unchanged\b[^.]*\.?/gi, " ");
+  if (PAGE_VETO.test(flat)) return true;
+  // Two different policy numbers on the page: the change may be another policy's.
+  const ids = new Set([...flat.matchAll(/\bpolicy\s+(?:no\.?|number|#)\s*:?\s*([A-Z0-9][A-Z0-9\-\/]{2,})|\bpolicy\s+([A-Z]{1,5}-[A-Z0-9\-\/]{2,})/gi)]
+    .map((m) => (m[1] ?? m[2]).toUpperCase()).filter((id) => /\d/.test(id)));
+  return ids.size > 1;
+}
+/** The document's first title line on its first two pages (as firstTitle reads them), sorted into an amending title, a
+ * change title, another document's title, or none, with its page. */
+function ownTitle(pages: string[]): { kind: "amends" | "change" | "other"; page: number } | null {
+  for (const [index, page] of pages.slice(0, 2).entries()) {
+    const lines = page.split(/\r?\n/).filter((l) => l.trim())
+      .filter((l) => !/\.{3,}|…|\t\s*(?:p(?:age|g)\.?\s*)?\d+\s*$/i.test(l))
+      .map((l) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 25);
+    for (const l of lines) {
+      if (BODY_HEADING.test(l)) return null;
+      if (AMENDING_TITLE.test(l)) return { kind: "amends", page: index };
+      if (CHANGE_TITLE.test(l)) return { kind: "change", page: index };
+      if (/\b(?:you|we|our|us|may|must|will|shall|can|should)\b|\.$/i.test(l) || NO_VALUE.test(l)) continue;
+      if (OTHER_TITLE.test(l) || AMENDMENT_TITLE.some((re) => re.test(l))) return { kind: "other", page: index };
+    }
+  }
+  return null;
+}
+/** Whether a document says by itself that it amends its policy, beyond main's wording (AMENDS). A closed, positive rule;
+ * anything else fails closed and reads as on main:
+ *  - its first title is on the amending list (AMENDING_TITLE) or the change list (CHANGE_TITLE), and the SAME page states
+ *    a change made (statedChanges with MADE) or prints a Before / After row; or, with no title on any list and no other
+ *    document's title first, a sentence on its first two pages says the sum assured was changed (sumChanged);
+ *  - it prints the policy number it changes (OWN_POLICY_NUMBER), or, under an amending title, its date of issue or the
+ *    date its change takes effect;
+ *  - it is not a quotation, proposal, form, option, illustration or brochure (NOT_A_CHANGE), and no line of the page says
+ *    the change was not made, reversed, provisional, hypothetical, an offer or about another policy (pageVetoed). */
+export function ownAmendment(pagesText: string): boolean {
+  const text = String(pagesText ?? "");
+  const pages = text.split("\f");
+  const flat = text.replace(/\s+/g, " ");
+  // "as you requested" says why a change was made; "requested effective date" is a form's.
+  if (NOT_A_CHANGE.test(flat.replace(/\b(?:as\s+(?:you\s+)?requested|at\s+your\s+request)\b/gi, " "))) return false;
+  const title = ownTitle(pages);
+  const numbered = OWN_POLICY_NUMBER.test(flat);
+  if (title?.kind === "amends" || title?.kind === "change") {
+    const page = pages[title.page] ?? "";
+    if (pageVetoed(page)) return false;
+    const stated = statedChanges(page, made()).length > 0 || beforeAfterRow([page]);
+    if (!stated) return false;
+    return numbered || (title.kind === "amends" && (dateOfIssue().test(flat) || DATED_CHANGE.test(flat)));
+  }
+  if (title || !numbered) return false;
+  return pages.slice(0, 2).some((page) => !pageVetoed(page) && statedChanges(page, sumChanged()).length > 0);
+}
+function beforeAfterRow(pages: string[]): boolean {
+  return pages.some((page) => {
+    const lines = page.split(/\r?\n/);
+    const at = lines.findIndex((l) => /\bbefore\b[^\n]*\bafter\b/i.test(l));
+    return at >= 0 && lines.slice(at + 1).some((l) => (l.match(/(?:S\$|SGD\s?|US\$|USD\s?|\$)\s?\d[\d,]*(?:\.\d+)?/g) ?? []).length === 2);
+  });
 }
 /** Amendment evidence of a document's own: an "Endorsement No. <n>" line (n >= 1) on its first two pages, a word or
  * phrase of change ("reduced to", "previously", "was S$", "formerly", "now reads", "becomes", "supersedes", "replaces",
