@@ -570,16 +570,36 @@ test("one field per line: a field that limits the daily row stays with it, so th
     const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
     assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
   }
-  // The next table row that is plainly another benefit's rate, or a table's heading row, is left out, never the end of
-  // the block: a shared cap under it still holds this row back (Critic P392 E). Was (round 4): it ended the block (S$450).
-  for (const below of [["Hospital cash\tS$100 per day, maximum 30 days", "Overall limit: S$2,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"],
+  // The next table row that is plainly another benefit's rate is left out, never the end of the block: a shared cap
+  // under it still holds this row back (Critic P392 E). Was (round 4): it ended the block (S$450).
+  for (const below of [["Hospital cash\tS$100 per day, maximum 30 days", "Overall limit: S$2,000"],
     ["Convalescence cash\tS$50 per day", "Combined limit for all cash benefits: S$2,000"], ["Convalescence cash\tS$50 per day, maximum 10 days", "Overall limit for the benefits above: S$2,000"],
     ["Home nursing\tS$80 per day", "All daily benefits together: not more than S$2,000 a year"], ["Convalescence cash\tS$50 per day", "The benefits in this table are paid for at most 60 days in all"],
-    ["Convalescence cash\tS$50 per day", "AGGREGATE S$2,000"], ["Benefit\tPlan A\tPlan B", "Overall limit S$2,000"],
+    ["Convalescence cash\tS$50 per day", "AGGREGATE S$2,000"],
     ["Parent accommodation\tS$40 per day", "Note: cash benefits stop once S$2,000 has been paid"], ["Convalescence cash\tS$50 per day", "S$2,000 is the most paid under this section"],
     ["Convalescence cash\tS$50 per day", "Paid for B2 or C wards"], ["Up to 30 days"], ["30 days per year"], ["Surgical: up to S$5,000"], ["Outpatient: S$50 per visit"]]) {
     const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below, "Policy number: HX-55120"].join("\n");
     assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // A table's heading row (two or more tabs, no figure) ENDS the block: a new table starts there, so what is under it is
+  // that table's, as on main (Critic P392 round 5). Was (round 4): ["Travel..."] and ["Benefit\tPlan A\tPlan B",
+  // "Overall limit S$2,000"] expected ["S$150"] (no total).
+  for (const below of [["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"], ["Benefit\tPlan A\tPlan B", "Overall limit S$2,000"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  }
+  // A limit printed before the next table's heading row still holds the row back.
+  const limitThenTable = ["SCHEDULE", ROW, "Overall limit: S$2,000", "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"].join("\n");
+  assert.deepEqual(fieldStay(limitThenTable, ROW, 20).amounts, ["S$150"]);
+  // A ward field that names no ward ("Ward: any", "Ward: all") is no condition on the stay, as on main (Critic P392 round 5);
+  // a ward field that names one is.
+  for (const ward of ["Ward: any", "Ward: all", "Ward: Any.", "Ward type: all wards"]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ward].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], ward);
+  }
+  for (const ward of ["Ward: B1 or above", "Ward: any, except A ward", "Ward: all, after day 10"]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ward].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], ward);
   }
   // Another benefit's own tabbed rate row with nothing after it does not hold this row back.
   const alone = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, "Convalescence cash\tS$50 per day"].join("\n");

@@ -349,9 +349,11 @@ export function rowWithContinuation(pageText: string, offset: number): string {
 export const STAY_BLOCK_WORDS = /\b(?:limits?|limited|limitation|sub-?limits?|aggregate|overall|totals?|in\s+all|ceiling|caps?|capped|capping|plafond|restricted|not\s+more|no\s+more|not\s+exceed\w*|excess|deductible|elimination|deferred|deferment|deferral|waiting|excluding|exclud\w*|except|unless|reduced|reduction|half|thereafter|only|once|frequency|sum\s+(?:insured|assured)|per\s+(?:admission|confinement|disability|year|annum|policy\s+year|lifetime)|annual(?:ly)?|lifetime|whichever|subject|balance|co-?pay\w*|co-?insurance|intensive|icu|first\s+\d+|after\s+(?:the\s+)?\d+|minimum|at\s+least|less\s+than|(?:a|each|every|per)\s+(?:year|month|week|quarter)|days?|unpaid|not\s+(?:covered|paid|payable)|non-?payable|no\s+benefit|wards?|paid\s+(?:for|in|if|when|only)|payable\s+(?:for|in|if|when|only)|if|provided|eligib\w*|conditions?|stops?|together|combined|shared|most\s+(?:paid|payable))\b/i;
 /** The row's own day numbers: its first paid day and its most days ("from the 3rd day", "maximum 30 days"). */
 const ROW_DAYS = /\b(?:after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b|\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*(?:continuous\s+)?days?\b/gi;
-/** A daily row and every line under it to the end of its page: no line ends it (a heading, a blank line, a table row, a
- * bullet or a numbered item may all be followed by a limit on this row: Critic P392 rounds 3 and 4). Left out of it:
+/** A daily row and every line under it to the end of its page or the next table's heading row (a new table starts there,
+ * Critic P392 round 5). No other line ends it (a heading, a blank line, a table row, a bullet or a numbered item may all
+ * be followed by a limit on this row: Critic P392 rounds 3 and 4). Left out of it:
  * - each non-benefit field (premium, policy number, person, plan, dates, currency, payment, agent: nonBenefitField);
+ * - another benefit's tabbed rate row (nextTableRow), and a ward field naming no ward ("Ward: any", ANY_WARD);
  * - a line that only repeats the row's own first paid day or most days ("Payable from: day 3" under "from the 3rd day",
  *   Critic P392 round 4): no money, every number one of the row's own day numbers, and no other limiting word.
  * What a stay pays is worked out only when nothing else is left below the row's own line that could change it.
@@ -362,7 +364,10 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
   const kept: string[] = [];
   for (const l of pageText.slice(row.end + 1).split("\n")) {
     if (!l.trim()) continue;
-    if (nextTableRow(l)) continue;
+    const table = nextTableRow(l);
+    if (table === "heading") break;
+    if (table === "rate") continue;
+    if (ANY_WARD.test(l)) continue;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
     const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));
@@ -372,19 +377,22 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
   }
   return { text: [row.text, ...kept].join(" "), tail: kept.join(" ") };
 }
-/** The one kind of line that ends a daily row's block: the next row of a table, printed with tabs, that is plainly
- * another benefit and no limit or rule. Either it prints its own rate ("Hospital cash\tS$100 per day, maximum 30 days")
- * and, once its rate and day cap are taken out, no limiting word; or it is a table's heading row ("Travel\tClassic\tBusiness":
- * two or more tabs, no figure, no limiting word). A tabbed lump sum ("Overall limit\tS$2,000", "Plafond\tS$2,000") never
- * ends the block, nor does any line with a limit or rule word (Critic P392 round 4; keeps main's totals on the fixtures). */
-function nextTableRow(line: string): boolean {
-  if (!/\t/.test(line)) return false;
+/** A tabbed table row with no limit or rule word in it:
+ * - "rate": another benefit's own rate row ("Hospital cash\tS$100 per day, maximum 30 days"), left out of the block but
+ *   never its end, so a shared cap under it still holds this row back (Critic P392 E);
+ * - "heading": a table's heading row ("Travel\tClassic\tBusiness": two or more tabs, no figure), which ENDS the block,
+ *   since a new table starts there (Critic P392 round 5; keeps main's total on the travel fixture).
+ * A tabbed lump sum ("Overall limit\tS$2,000", "Plafond\tS$2,000") is neither, nor is any line with a limit or rule word. */
+function nextTableRow(line: string): "rate" | "heading" | null {
+  if (!/\t/.test(line)) return null;
   const rate = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?\s*(?:per|a|each)\s+(?:day|week|month)\b/gi;
   const words = line.replace(rate, " ").replace(MAX_DAY_FIELD, " ");
-  if (STAY_BLOCK_WORDS.test(words) || CAP_OR_RULE.test(words)) return false;
-  if (rate.test(line)) return !MONEY_IN_VALUE.test(words);
-  return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line);
+  if (STAY_BLOCK_WORDS.test(words) || CAP_OR_RULE.test(words)) return null;
+  if (rate.test(line)) return MONEY_IN_VALUE.test(words) ? null : "rate";
+  return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line) ? "heading" : null;
 }
+/** A ward field that names no ward at all ("Ward: any", "Ward type: all wards"): no condition on the stay. */
+const ANY_WARD = /^\s*wards?(?:\s+(?:type|class))?\s*:\s*(?:any|all)(?:\s+wards?)?\s*\.?\s*$/i;
 /** Words beside a repeated day number that make it a rule of its own, never a repeat ("up to", "first", "after"). */
 const CAP_OR_RULE = /\b(?:up\s+to|first|after|within|before|until|following|last|each|every|per|not|no|except|only|less|more|minimum|at\s+least|continuous(?:ly)?|consecutive)\b/i;
 /** The sum a percentage row is a percentage of (Critic round 50), read only above the row's own line on its page:
