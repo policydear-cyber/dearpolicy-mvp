@@ -1343,3 +1343,10 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .getting-started strong .icon { width: 18px; height: 18px; color: var(--brand-ink); margin-right: 6px; }
 @media (pointer: coarse), (max-width: 760px) { .icon-only { min-width: 44px; min-height: 44px; } [data-tip]::after { display: none; } }
 .premium-breakdown-list > :not(.premium-breakdown-row), .payment-list > :not(.payment-row), .claims-list > :not(.claim-session-entry), .document-list > :not(.document-card) { grid-column: 1 / -1; }
+
+/* One short trust line, always visible (the tooltip is a desktop extra). */
+.trust-line { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--muted); font-size: var(--fs-sm); }
+.trust-line .icon { width: 16px; height: 16px; color: var(--good-text); }
+.sidebar-footer .trust-line { font-size: var(--fs-xs); }
+.mobile-privacy { display: none; }
+@media (max-width: 900px) { .mobile-privacy { display: flex; justify-content: center; padding: 8px 16px 16px; font-size: var(--fs-xs); } }
