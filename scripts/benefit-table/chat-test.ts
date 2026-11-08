@@ -587,6 +587,34 @@ test("one field per line: a field that limits the daily row stays with it, so th
   // "Overall limit S$2,000"] expected ["S$150", "S$2,700"]; it is a shared cap under a heading, so no total now.
   const travel = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Baggage\tS$500\tS$1,000"].join("\n");
   assert.deepEqual(fieldStay(travel, ROW, 20).amounts, ["S$150", "S$2,700"]);
+  // Critic P396 I: a heading whose first cell names no other cover (generic words, or a hospital stay) keeps a stay row
+  // under it as a possible cap; another cover's table keeps main's total, even when its rows share this row's stay words.
+  for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", "Daily hospital income\tS$150 per day from the 3rd day, maximum 30 days"]) {
+    const at = (below: string[]) => fieldStay(["SCHEDULE", "Insured: Lim Ah Kow", tabbed, ...below, "Policy number: HX-55120"].join("\n"), tabbed, 20).amounts;
+    for (const h of ["Benefit description", "Benefits payable", "Type of benefit", "Hospital benefits", "Hospitalisation benefits", "In-patient benefits",
+      "Description", "Item", "Plan benefits", "Benefits (S$)", "Benefit / Plan", "BENEFITS", "Schedule of Benefits", "Benefit continued"])
+      for (const c of ["Hospital confinement\tS$2,000\tS$4,000", "In-patient\tS$2,000\tS$4,000", "Hospitalisation\tS$2,000\tS$4,000"])
+        assert.deepEqual(at([`${h}\tPlan A\tPlan B`, c]), ["S$150"], `${tabbed} / ${h} / ${c}`);
+    for (const k of [["Travel\tClassic\tBusiness", "Overseas hospital expenses\tS$200,000\tS$500,000"], ["Personal accident\tPlan A\tPlan B", "Hospital cash due to accident\tS$100 per day\tS$200 per day"],
+      ["Maximum age\tPlan A\tPlan B", "Entry\t65\t70"], ["Critical illness\tPlan A\tPlan B", "Intensive care lump sum\tS$10,000\tS$20,000"]])
+      assert.deepEqual(at(k), ["S$150", "S$2,700"], `${tabbed} / ${k.join(" / ")}`);
+  }
+  // TE #396 AD, AF, AH, AJ, AL: a hospital stay in a travel table and an inpatient room-and-board table keep main's
+  // total; another cover's combined cap on hospital stays, and a "Yearly cap" or "Aggregate limit" heading, hold it back.
+  {
+    const hc = "Hospital Cash rider: S$150 per day of hospitalisation from the 1st day, up to a maximum of 30 days";
+    const at = (after: string[], days: number) => fieldStay(["SCHEDULE", hc, ...after, "Annual premium: S$2,412.00"].join("\n"), hc, days).amounts;
+    for (const [after, d5, d40] of [
+      [["Travel\tClassic\tBusiness", "Hospital stay abroad\tS$5,000\tS$10,000"], ["S$150", "S$750"], ["S$150", "S$4,500"]],
+      [["Inpatient\tStandard\tPlus", "Room and board\tS$300\tS$500"], ["S$150", "S$750"], ["S$150", "S$4,500"]],
+      [["Accident\tPlan A\tPlan B", "Hospital stays, all covers combined\tS$3,000 per year\tS$5,000 per year"], ["S$150"], ["S$150"]],
+      [["Yearly cap\tPlan A\tPlan B", "All benefits\tS$3,000\tS$5,000"], ["S$150"], ["S$150"]],
+      [["Aggregate limit\tPlan A\tPlan B", "All covers\tS$3,000\tS$5,000"], ["S$150"], ["S$150"]],
+    ] as const) {
+      assert.deepEqual(at([...after], 5), d5, after.join(" / "));
+      assert.deepEqual(at([...after], 40), d40, after.join(" / "));
+    }
+  }
   // Critic P396 G: another benefit's table (its own rate rows, outpatient or lump-sum rows) keeps main's total.
   for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days"]) for (const below of [
     ["Travel\tClassic\tBusiness", "Overseas hospital cash\tS$50 per day\tS$100 per day"], ["Outpatient\tPlan A\tPlan B", "GP visit\tS$30\tS$50", "Specialist\tS$80\tS$120"],

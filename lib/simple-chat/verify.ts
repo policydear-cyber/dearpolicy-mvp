@@ -385,7 +385,7 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
     if (table === "heading") {
       const first = l.split("\t")[0];
       inLaterTable = true;
-      genericHeading = GENERIC_HEADING.test(first);
+      genericHeading = genericHeadingCell(first);
       // Only the first cell: a plan tier column named "Max" is not one (Critic P396 H).
       limitHeading = HEADING_LIMIT.test(first) ? l : null;
       continue;
@@ -394,7 +394,7 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
     if (table === "rate") continue;
     // Under a later table's heading, a tabbed row that names none of this row's words and prints no limit or rule word is
     // that table's own row ("Trip cancellation\tS$5,000\tS$10,000" under "Travel\tClassic\tBusiness"): left out.
-    if (inLaterTable && /\t/.test(l) && !(genericHeading && STAY_WORD.test(l)) && !names.some((w) => new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test((genericHeading ? l : l.replace(CARE_LEVEL, " ")).replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
+    if (inLaterTable && /\t/.test(l) && !(genericHeading && STAY_WORD.test(l)) && !names.some((w) => (genericHeading || !STAY_WORD.test(w)) && new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test((genericHeading ? l : l.replace(CARE_LEVEL, " ")).replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
     if (ANY_WARD.test(l)) continue;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
@@ -424,14 +424,16 @@ function nextTableRow(line: string): "rate" | "heading" | null {
 const HEADING_LIMIT = /\b(?:max(?:imum|ima)?|highest|most\s+(?:paid|payable|amounts?|benefits?)|upper\s+limits?)\b/i;
 /** Money or a number of days in a line: what makes a row under a "Maximum ..." heading a limit (TE #396 AC). */
 const MONEY_OR_DAYS = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d|\b\d+\s*(?:days?|nights?)\b/i;
-/** The first cell of a heading row that names no cover of its own: blank, "Benefit(s)", "Plan", "Section 2", "Schedule",
- * "Cover(age)", "... continued" (Critic P396 H). */
-const GENERIC_HEADING = /^\s*(?:(?:benefits?|plans?|section(?:\s+\w+)?|schedule(?:\s+of\s+benefits)?|cover(?:age)?)\s*|.*\bcontinued\s*)?$/i;
+const GENERIC_HEADING_WORD = /^(?:benefits?|description|type|of|item|plans?|payable|section|schedule|cover(?:age)?|details|summary|continued|[a-z]|sgd|usd|myr|rm|gbp|eur|aud|hkd)$/;
+/** A heading is another cover's table ("Travel", "Personal accident", "Maximum age") only when its first cell has a word
+ * outside GENERIC_HEADING_WORD and no word of a hospital stay; otherwise ("Benefit description", "Benefits (S$)",
+ * "Hospital benefits", "In-patient benefits", blank) its rows may be this stay's (Critic P396 H, I). */
+const genericHeadingCell = (first: string) => STAY_WORD.test(first) || (first.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => GENERIC_HEADING_WORD.test(w));
 /** A level of hospital care ("ICU", "intensive care"): under a heading that names another cover ("Critical illness\tPlan
  * A\tPlan B"), a row that says one ("Admitted to ICU lump sum\tS$10,000") is that cover's own row, not a rule on this stay
  * (Critic P396 H). */
 const CARE_LEVEL = /\b(?:intensive(?:\s+care)?|icu)\b/gi;
-/** Words of a hospital stay: under a generic heading (GENERIC_HEADING), a row that says one ("Hospital
+/** Words of a hospital stay: under a generic heading (genericHeadingCell), a row that says one ("Hospital
  * confinement\tS$2,000") may cap this stay row, so it is never taken for that table's own row (Critic P396 G, H). */
 const STAY_WORD = /\b(?:hospital\w*|confine\w*|in-?patient|admission|admitted|warded|wards?|stays?)\b/i;
 /** Words of a benefit's name that do not tell one benefit from another ("Daily ... Benefit"). */
