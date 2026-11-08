@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
@@ -157,8 +158,7 @@ function LedgerCoveragePage(){
 
   return <div className="page">
     <header className="page-header"><div>
-      <div className="eyebrow">COVERAGE</div>
-      <h1>Who is covered for what.</h1>
+      <h1><span className="title-icon"><Icon name="ledger"/></span>Who is covered for what</h1>
       <p className="lead">For each person: what their plans pay, and the main kinds of cover not found in your documents. Amounts are as your documents print them, not a payment or an insurer&rsquo;s decision.</p>
       <p className="muted">Looking for everything one policy pays, with its exclusions? <Link className="text-link" href="/schedule">See Benefits, by policy →</Link></p>
     </div></header>

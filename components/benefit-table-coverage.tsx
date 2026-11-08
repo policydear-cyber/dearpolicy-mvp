@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
 import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
@@ -175,8 +176,7 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
   const listed=people.length?data.people:[];
   return <div className="page cov">
     <header className="page-header"><div>
-      <div className="eyebrow">COVERAGE</div>
-      <h1>Who is covered for what.</h1>
+      <h1><span className="title-icon"><Icon name="ledger"/></span>Who is covered for what</h1>
       <p className="lead">Read from your documents. Tap a page number to see where it&rsquo;s printed.</p>
     </div></header>
     {waiting.length?<div className="unread-documents" role="status"><div><strong>{waiting.length===1?"One document is":`${waiting.length} documents are`} still being read.</strong>

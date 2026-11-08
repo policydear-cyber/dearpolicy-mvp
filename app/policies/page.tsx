@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { lineFigure, linePeriodWords } from "@/lib/coverage/line-period";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -410,7 +411,7 @@ export default function PoliciesPage() {
 
 
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule, summary, renewal notice or receipt. DearPolicy reads it, works out who it covers and finds any premium paid.</p></div></header>
+    <header className="page-header compact"><div><h1>Your documents</h1><p className="lead">Any policy, certificate, schedule, renewal notice or receipt your insurer sent you.</p></div></header>
 
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
@@ -424,23 +425,23 @@ export default function PoliciesPage() {
         <div className="field upload-pick">
           <input id="up-file" ref={fileInput} type="file" className="upload-file-input" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => { const next = e.target.files?.[0] ?? null; setFile(next); if (!next || !isPdf(next)) setPdfPassword(""); }}/>
           <label htmlFor="up-file" className={`upload-drop${file ? " chosen" : ""}`} data-testid="upload-drop">
-            <span className="upload-drop-title">Insurance document</span>
+            <span className="upload-drop-title"><Icon name="upload"/> Insurance document</span>
             {file
               ? <><span className="upload-drop-file">{file.name}</span><span className="upload-drop-hint">{fileSize(file.size)} · choose another</span></>
-              : <><span className="upload-drop-cta">Choose a file or take a photo</span><span className="upload-drop-hint">A PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL}</span></>}
+              : <><span className="upload-drop-cta"><Icon name="camera"/> Choose a file or take a photo</span><span className="upload-drop-hint">A PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL}</span></>}
           </label>
         </div>
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
-        <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
+        <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload &amp; analyse</>}</button>
         {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
       </form>
     </section>
 
-    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Reads it</strong><small>Policy, schedule, wording, brochure or receipt</small></span></div><div><b>2</b><span><strong>Finds who it covers</strong><small>From the names printed in it</small></span></div><div><b>3</b><span><strong>Shows the page</strong><small>Every answer says where it comes from</small></span></div></section>
+    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b><Icon name="documents"/></b><span><strong>Reads it</strong><small>Any policy, wording or receipt</small></span></div><div><b><Icon name="family"/></b><span><strong>Finds who it covers</strong><small>From the names printed in it</small></span></div><div><b><Icon name="eye"/></b><span><strong>Shows the page</strong><small>Every answer cites its source</small></span></div></section>
 
     <section className="section">
-      <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
+      <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Library</h2></div></div>
       <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Your policies <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>General wording <b>{counts.reference}</b></button></div>
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
@@ -464,7 +465,7 @@ export default function PoliciesPage() {
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy)].join(" · ")}</span>}
-              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? "Read in part" : "Ready") : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
+              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? <><Icon name="alert"/> Read in part</> : <><Icon name="check"/> Ready</>) : policy.processing_status === "failed" ? <><Icon name="fileOff"/> {stageLabel(policy.processing_stage, policy.processing_status)}</> : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}
@@ -536,7 +537,7 @@ export default function PoliciesPage() {
           })()}
 
           {/* Its numbers and the actions on it come last. */}
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => { if (confirmRereadId === policy.id) { setConfirmRereadId(null); void retryReading(policy); } else setConfirmRereadId(policy.id); }}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? "Confirm read again" : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">Coverage for this document is unavailable for a minute while it&rsquo;s read again.</small></>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => { if (confirmRereadId === policy.id) { setConfirmRereadId(null); void retryReading(policy); } else setConfirmRereadId(policy.id); }}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? "Confirm read again" : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">Coverage for this document is unavailable for a minute while it&rsquo;s read again.</small></>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
@@ -551,7 +552,7 @@ export default function PoliciesPage() {
 function PreviewLink({ policy }: { policy: Named & Pick<Policy, "id"> }) {
   const word = /\.docx$/i.test(policy.original_filename ?? "");
   return <a className="mini-button" href={`/api/policies/${policy.id}/file`} target="_blank" rel="noopener noreferrer"
-    aria-label={`${word ? "Download" : "Preview"} ${documentName(policy)}`}>{word ? "Download" : "Preview"}</a>;
+    aria-label={`${word ? "Download" : "Preview"} ${documentName(policy)}`}><Icon name={word ? "download" : "eye"}/>{word ? "Download" : "Preview"}</a>;
 }
 
 /** A locked PDF already in the library: enter its password here and it is

@@ -1287,3 +1287,59 @@ div.answer-point { display: grid; gap: 4px; }
 .section + .profile-add-panel { margin-top: 20px; }
 .profile-add-panel > h3 { margin: 0 0 12px; font-size: 1rem; }
 .section-heading .premium-cost-line { margin-top: 4px; font-size: var(--fs-sm); }
+
+/* --------------------------------------------------------------------------
+   Wide desktop and the one icon set (components/icons.tsx)
+   Desktop pages use most of the window; reading text keeps its own measure
+   (.lead, h1). Icons stand in for labels the eye can read faster; every
+   icon-only control carries an accessible name and a tooltip (data-tip).
+   -------------------------------------------------------------------------- */
+.icon { width: 1.15em; height: 1.15em; flex: none; display: inline-block; vertical-align: -0.2em; }
+.nav-icon .icon { width: 20px; height: 20px; }
+.page { max-width: 1760px; padding: 36px clamp(24px, 3vw, 56px) 72px; }
+.chat-page { max-width: 1440px; }
+.message { max-width: min(920px, 100%); }
+@media (min-width: 1280px) {
+  .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .document-list { grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); align-items: start; }
+  .premium-breakdown-list, .payment-list, .claims-list { grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); }
+}
+@media (min-width: 1500px) {
+  .app-shell { grid-template-columns: 232px minmax(0, 1fr); }
+}
+
+/* Headings carry an icon instead of an uppercase label above them. */
+.title-icon { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--brand-tint); color: var(--brand-ink); margin-right: 12px; vertical-align: middle; flex: none; }
+.title-icon .icon { width: 20px; height: 20px; }
+h1 .title-icon { width: 44px; height: 44px; vertical-align: -6px; }
+h1 .title-icon .icon { width: 24px; height: 24px; }
+.icon-heading { display: flex; align-items: center; }
+.text-link .icon, .button .icon, .mini-button .icon { width: 16px; height: 16px; }
+.text-link { gap: 6px; }
+.mini-button { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Icon-only controls: a name for screen readers, a tooltip for the eye. */
+.icon-only { justify-content: center; padding: 6px; min-width: 36px; }
+.icon-only .icon { width: 18px; height: 18px; }
+[data-tip] { position: relative; }
+[data-tip]::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 60; width: max-content; max-width: 240px; padding: 6px 9px; border-radius: var(--r-sm); background: var(--ink); color: var(--bg); font-size: var(--fs-xs); font-weight: 500; line-height: 1.35; text-align: left; white-space: normal; pointer-events: none; opacity: 0; transition: opacity var(--t-hover) var(--ease); }
+[data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; }
+.sidebar-controls { display: flex; gap: 8px; }
+.sidebar-footer .privacy-pill { display: inline-flex; align-items: center; gap: 6px; }
+.sidebar-footer [data-tip]::after { left: 0; transform: none; }
+.mobile-bar-actions { display: flex; gap: 8px; }
+.mobile-bar [data-tip]::after { left: auto; right: 0; top: calc(100% + 8px); bottom: auto; transform: none; }
+
+/* Status words get a matching mark, so the state reads at a glance. */
+.coverage-icon .icon { width: 20px; height: 20px; }
+.coverage-status { display: inline-flex; align-items: center; gap: 6px; }
+.coverage-status .icon { width: 18px; height: 18px; }
+.reminder-icon .icon, .incident-mark .icon, .claim-session-icon .icon { width: 18px; height: 18px; }
+.trust-strip > div > b .icon { width: 16px; height: 16px; }
+.summary-label { display: inline-flex; align-items: center; gap: 6px; }
+.summary-label .icon { width: 16px; height: 16px; color: var(--brand-ink); }
+.member-strip-title .icon { width: 20px; height: 20px; color: var(--brand-ink); }
+.document-for .icon, .document-found .icon { width: 16px; height: 16px; color: var(--brand-ink); vertical-align: -3px; margin-right: 4px; }
+.getting-started strong .icon { width: 18px; height: 18px; color: var(--brand-ink); margin-right: 6px; }
+@media (pointer: coarse), (max-width: 760px) { .icon-only { min-width: 44px; min-height: 44px; } [data-tip]::after { display: none; } }
+.premium-breakdown-list > :not(.premium-breakdown-row), .payment-list > :not(.payment-row), .claims-list > :not(.claim-session-entry), .document-list > :not(.document-card) { grid-column: 1 / -1; }

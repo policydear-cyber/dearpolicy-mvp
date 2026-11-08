@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { FormEvent,Suspense,useCallback,useEffect,useRef,useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -81,9 +82,9 @@ function ChatWelcome({library}:{library:Library|null}){
   return <div className="chat-empty" data-testid="chat-welcome"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
     {library&&library.total===0?<>
       <p><strong>Upload a policy first.</strong> DearPolicy answers only from the documents you upload, so there is nothing to answer from yet.</p>
-      <Link className="button primary" href="/policies">Upload a document</Link>
+      <Link className="button primary" href="/policies"><Icon name="upload"/>Upload a document</Link>
     </>:<>
-      <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what. DearPolicy answers from your uploaded documents and shows the page each answer comes from.</p>
+      <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what.</p>
       {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
       {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
     </>}
@@ -343,8 +344,8 @@ function ChatContent(){
 
   return <div className="page chat-page">
     <header className="chat-header">
-      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask anything, in your own words. Answers come only from the documents you uploaded.</p></div>
-      <div className="chat-head-actions"><div className="auto-context"><strong>Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
+      <div><h1><span className="title-icon"><Icon name="ask"/></span>Ask DearPolicy</h1></div>
+      <div className="chat-head-actions"><div className="auto-context"><strong><Icon name="person"/> Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
     {history.length||historyCursor?<details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
@@ -471,7 +472,7 @@ function ChatContent(){
     <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask anything about your policies…" rows={2}/>
       <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")+(question.length>=MAX_QUESTION_LENGTH*0.8?" visible":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
       {busy&&question.trim()?<small className="chat-wait-hint" role="status">You can send this once the answer above arrives.</small>:null}
-      <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
+      <button disabled={busy||!question.trim()} className="button primary" type="submit">Send<Icon name="arrowRight"/></button></form>
     <p className="chat-disclaimer">DearPolicy answers only from your uploaded documents. Your insurer decides any claim.</p>
   </div>;
 }
