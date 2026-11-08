@@ -33,45 +33,77 @@ const norm = (s: string) => baseName(s).normalize("NFKC").toLowerCase().replace(
 const wordsOf = (s: string) => s.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
 
 /** Words that mean the question may be about someone other than one named member, or more than one person (closed list):
- * the speaker, several people, a relative, a comparison or an addition. Any of them sends everything. */
-const NOT_ONE_PERSON = /\b(?:i|me|my|mine|myself|i'm|im|i've|i'd|i'll|we|us|our|ours|ourselves|both|all|each|every|everyone|everybody|either|neither|anyone|anybody|someone|somebody|whoever|who|whose|whom|people|persons|members?|family|families|household|together|too|also|as\s+well|compare\w*|comparison|versus|vs|than|same|other|others|else|between|wife|husband|spouse|partner|hubby|wifey|son|sons|daughter|daughters|child|children|kid|kids|baby|babies|mother|father|mum|mom|dad|mummy|daddy|parents?|brother|brothers|sister|sisters|sibling|siblings|grandma|grandpa|grandmother|grandfather|grandparents?|aunt|uncle|cousin|nephew|niece|helper|maid|employee|dependants?|dependents?)\b/i;
+ * the speaker, several people, a relative, a comparison or an addition. Any of them sends everything. A relative not in
+ * the list is caught by the possessive or the joining word that comes with it ("Jane Doe's missus", "Jane Doe and his
+ * ..."): JOINS_ANOTHER. */
+const NOT_ONE_PERSON = /\b(?:i|me|my|mine|myself|i'm|im|i've|i'd|i'll|we|us|our|ours|ourselves|both|all|each|every|everyone|everybody|either|neither|anyone|anybody|someone|somebody|whoever|who|whose|whom|people|persons|members?|family|families|household|together|too|also|as\s+well|compare\w*|comparison|versus|vs|than|same|other|others|else|between|wife|husband|spouse|partner|hubby|wifey|missus|missis|mrs|fianc\w*|girlfriends?|boyfriends?|little\s+ones?|son|sons|daughter|daughters|child|children|kid|kids|baby|babies|boy|boys|girl|girls|toddler|infant|mother|father|mum|mom|dad|mummy|daddy|mama|papa|parents?|brother|brothers|sister|sisters|sibling|siblings|grand\w*|step\w*|in-?laws?|aunt|uncle|cousin|nephew|niece|helper|maid|employee|dependants?|dependents?|lao\s*po|lao\s*gong|ah\s*(?:ma|gong|pa|ba|mah|kong|po)|relatives?)\b/i;
+/** A possessive, or a word that joins a second person to the one named, or points at someone by pronoun: "Jane Doe's ...",
+ * "Jane Doe and ...", "... or ...", "... with ...", "his", "her", "their" (Critic P395 H). Any of them sends everything. */
+const JOINS_ANOTHER = /(?:\p{L}['\u2019]s\b|\p{L}s['\u2019](?!\p{L}))|\b(?:and|or|with|his|her|hers|him|their|theirs|them|plus|&)\b|&|\+/iu;
 
 /** The one member the message names, or null. Only a member's whole name, or whole recorded preferred name, of two words or
- * more, said as written ("Jane Doe", any case), names them: never one word of it, since a name word is often an
- * ordinary word ("max", "low", "bill", "may": Critic P393 B) or shared by two members. Null when no whole name is
- * said, when two are, when any other word of any member's name is also said ("Jane Doe and Ann"), or when any
- * NOT_ONE_PERSON word is. */
+ * more, said as written ("Jane Doe") with each word capitalised, names them: never one word of it, since a name word is
+ * often an ordinary word ("max", "low", "bill", "may": Critic P393 B), and never in lower case, where a whole name may be
+ * ordinary words too ("the bill may be high", "is max low": Critic P395 J). Null when no whole name is said, when two
+ * are, when a name said is also part of another member's name (a preferred name "Ann Lee" equal to another member's given
+ * names, or "Doe Ann" inside "Doe Ann Lee": Critic P395 G), when any other word of any member's name is also said, when
+ * most other words are capitalised too (no sign the capitals mark a name), or when a NOT_ONE_PERSON or JOINS_ANOTHER word
+ * is. */
 export function onePersonNamed(message: string, household: Household): string | null {
-  const text = message.normalize("NFKC").replace(/[’`]/g, "'");
-  if (NOT_ONE_PERSON.test(text)) return null;
+  const text = message.normalize("NFKC").replace(/[`]/g, "'");
+  if (NOT_ONE_PERSON.test(text) || JOINS_ANOTHER.test(text)) return null;
+  // The words said, each with what stands between it and the word before: a name's words must follow one another with only
+  // spaces or a hyphen between them ("Doe Ann, Lee" is not "Doe Ann Lee": Critic P395 G7).
+  const tokens = [...text.matchAll(/([^\p{L}\p{N}]*)([\p{L}\p{N}]+)/gu)].filter((t) => t[2].length >= 2);
+  const said = tokens.map((t) => t[2]);
+  const joined = tokens.map((t) => /^[\s-]*$/u.test(t[1]));
+  const lower = said.map((w) => w.toLowerCase());
+  const used = new Array<boolean>(said.length).fill(false);
   const named = new Set<string>();
-  let rest = ` ${wordsOf(text).join(" ")} `;
-  for (const m of household.members) {
+  const memberWords = household.members.map((m) => new Set(wordsOf(m.name)));
+  for (const [i, m] of household.members.entries()) {
     for (const whole of namesOf(m.name)) {
-      if (!rest.includes(` ${whole} `)) continue;
-      named.add(m.name);
-      rest = rest.split(` ${whole} `).join("  ");
+      const ws = whole.split(" ");
+      // A name all of whose words are in another member's name may be that member: unsure.
+      if (memberWords.some((other, j) => j !== i && ws.every((w) => other.has(w)))) continue;
+      for (let k = 0; k + ws.length <= lower.length; k++) {
+        if (!ws.every((w, n) => lower[k + n] === w && /^\p{Lu}/u.test(said[k + n]) && (n === 0 || joined[k + n]))) continue;
+        named.add(m.name);
+        for (let n = 0; n < ws.length; n++) used[k + n] = true;
+      }
     }
   }
   if (named.size !== 1) return null;
+  const left = said.filter((_, k) => !used[k]);
   // Any word of any member's name left over may name someone else (or be an ordinary word): unsure, so everything.
-  const left = new Set(rest.split(" ").filter(Boolean));
-  if (household.members.some((m) => wordsOf(m.name).some((w) => left.has(w)))) return null;
+  if (left.some((w) => memberWords.some((ws) => ws.has(w.toLowerCase())))) return null;
+  // Most other words capitalised too ("Will The Bill May Be Covered"): the capitals say nothing; unsure.
+  const capped = left.filter((w) => /^\p{Lu}/u.test(w)).length;
+  if (left.length && capped * 2 > left.length) return null;
   return [...named][0];
 }
 /** A member's whole name and whole recorded preferred name, as lower-case words, when two words or more. */
 const namesOf = (name: string) => [baseName(name), /\(([^)]*)\)\s*$/.exec(name)?.[1] ?? ""].map((n) => wordsOf(n).join(" ")).filter((n) => n.includes(" "));
-/** Whether a document's pages name the person (every word of their name or of a preferred name, in any order, as words,
- * "DOE JANE" for "Jane Doe"), or print words for people covered beside the policyholder (dependants, a spouse,
- * children, family members, insured persons): a dependant named only in a plan's text is never cut off (Critic P393 A). */
-const COVERS_OTHERS = /\b(?:dependants?|dependents?|spouses?|wife|husband|child|children|son|daughter|famil(?:y|ies)|insured\s+persons|persons\s+insured|lives\s+(?:assured|insured)|members?\s+covered|covered\s+members?)\b/i;
-function pagesName(d: HouseholdDocument, person: string): boolean {
-  const names = [baseName(person), /\(([^)]*)\)\s*$/.exec(person)?.[1] ?? ""].map(wordsOf).filter((w) => w.length);
-  return d.pages.some((p) => {
-    if (COVERS_OTHERS.test(p.text)) return true;
-    const heard = new Set(wordsOf(p.text));
-    return names.some((n) => n.every((w) => heard.has(w)));
-  });
+/** Wording that may cover someone besides the policyholder, or several people, or a cover tier (Critic P393 A, P395 F; TE
+ * #395). It decides what is KEPT, so it is wide on purpose: any word for a person other than "you" or "the insured", a
+ * relative, a group, a second life, a tier, a title. A word here that is not about anyone else only keeps a document in
+ * full, as on main. */
+const COVERS_OTHERS = new RegExp(String.raw`\b(?:dependants?|dependents?|spouses?|wi(?:fe|ves)|husbands?|partners?|child\w*|kids?|kiddies|sons?|daughters?|famil(?:y|ies)|parents?|mothers?|fathers?|mum|mom|dad|grand\w*|step\w*|siblings?|brothers?|sisters?|in-?laws?|relatives?|relations?|kin|kinsfolk|issue|offspring|descendants?|heirs?|infants?|bab(?:y|ies)|toddlers?|newborns?|minors?|juveniles?|youths?|teen\w*|students?|adults?|elderly|seniors?|persons?|people|individuals?|members?|lives|life\s+assured|second|2nd|third|3rd|additional|joint\w*|co-?(?:insured|assured|holders?|owners?|applicants?|policyholders?|life|lives)|insureds|policyholders|holders|travell?ers?|companions?|passengers?|employees?|staff|workers?|payors?|payers?|proposers?|nominees?|beneficiar(?:y|ies)|guardians?|wards?\s+of|household\w*|domestic|helpers?|maids?|civil|de\s+facto|fianc\w*|girlfriends?|boyfriends?|couples?|both|each|everyone|anyone|whoever|named|tier|ee|sp|ch|mr|mrs|ms|mdm|miss|madam|sir)\b|\+\s*\d|\d\s*\+`, "iu");
+/** Nouns that may follow "your", "his", "her", "their" or "...'s" without naming another person: a closed list. Any other
+ * noun after a possessive ("your partner", "his issue", "the policyholder's kids", "her little one") keeps the document
+ * (TE #395: an allow-list, so a relative word nobody listed still keeps it). */
+const OWN_THING = /^(?:own|policy|policies|plan|plans|certificate|cover|coverage|benefits?|claims?|premiums?|hospital|hospitalisation|hospitalization|stay|bills?|treatments?|surgery|operation|condition|conditions|illness|injury|injuries|death|disability|accident|doctor|physician|specialist|schedule|sum|limit|deductible|excess|rider|riders|card|account|application|details|address|age|health|medical|behalf|request|consent|information|notice|contract|renewal|payment|payments|expenses?|costs?|charges?|fees?|insurer|agent|employer|company|job|occupation|income|salary|home|car|vehicle|trip|travel|journey|baggage|luggage|passport|country|residence|records?|receipts?|documents?|statement|option|options|choice|attention|discretion|request|first|name|signature|consultation|admission|discharge|recovery|life|body|death|estate|bank|period|cancellation)$/i;
+const POSSESSED = /\b(?:your|his|her|their|\p{L}+['\u2019]s|\p{L}+s['\u2019])\s+(\p{L}[\p{L}-]*)/giu;
+const coversOthers = (text: string) => COVERS_OTHERS.test(text) || [...text.matchAll(POSSESSED)].some((m) => !OWN_THING.test(m[1]));
+/** Whether a document may be about the person: its pages say any word of their name or preferred name ("Doe J A", "Mrs
+ * Doe", "Jane Ann" for "Doe Jane Ann"), their initials ("J.A."), or a word for people covered beside the policyholder or a
+ * cover tier; or its name or product says such a word (Critic P395 F). Any of them keeps it. */
+function mayCover(d: HouseholdDocument, person: string): boolean {
+  if (coversOthers(`${d.name} ${d.productName ?? ""}`)) return true;
+  const words = new Set([baseName(person), /\(([^)]*)\)\s*$/.exec(person)?.[1] ?? ""].flatMap(wordsOf));
+  const initials = [baseName(person), /\(([^)]*)\)\s*$/.exec(person)?.[1] ?? ""].map((n) => wordsOf(n).map((w) => w[0])).filter((w) => w.length >= 2);
+  const pairs = initials.flatMap((ins) => ins.slice(1).map((c, k) => new RegExp(`(?:^|[^\\p{L}])${ins[k]}\\.?\\s*${c}(?:\\.|[^\\p{L}]|$)`, "iu")));
+  return d.pages.some((p) => coversOthers(p.text) || wordsOf(p.text).some((w) => words.has(w)) || pairs.some((r) => r.test(p.text)));
 }
 
 /** The people a document is for: those linked to it and the one it was uploaded for. */
@@ -95,7 +127,7 @@ export function scopeFor(message: string, household: Household, rows: readonly S
     const other = people.size === 1 ? [...people][0] : null;
     // Left out only when it is one other member's alone: one person, a household member, not the person asked about, and
     // every row the table prints from it is that person's.
-    const othersAlone = other !== null && other !== me && memberNames.has(other) && [...rowsFor].every((p) => p === other) && !pagesName(d, person);
+    const othersAlone = other !== null && other !== me && memberNames.has(other) && [...rowsFor].every((p) => p === other) && !mayCover(d, person);
     if (!othersAlone) keep.add(d.policyId);
   }
   return { person, keep };

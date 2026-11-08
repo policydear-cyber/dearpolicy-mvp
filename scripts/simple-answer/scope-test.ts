@@ -44,12 +44,14 @@ async function main() {
   await check("exactly one member named, by their whole name or whole preferred name: that member; anything else: nobody", () => {
     for (const [q, who] of [
       ["What does Lim Wei get for an ambulance?", "Lim Wei"], ["Is LIM WEI covered for ambulance?", "Lim Wei"], ["How much hospital cash for Lim Ah Kow?", "Lim Ah Kow (Ken Lim)"],
-      ["Ken Lim broke his arm, how much?", "Lim Ah Kow (Ken Lim)"], ["Tan Mei Ling's ambulance limit?", "Tan Mei Ling"], ["Actually it is for Tan Mei Ling.", "Tan Mei Ling"],
+      ["Ken Lim broke an arm, how much?", "Lim Ah Kow (Ken Lim)"], ["Tan Mei Ling ambulance limit?", "Tan Mei Ling"], ["Actually it is for Tan Mei Ling.", "Tan Mei Ling"],
     ] as const) assert.equal(onePersonNamed(q, HOUSE), who, q);
     for (const q of [
       // One word of a name never scopes (Critic P393 B: name words are often ordinary words, or shared).
       "What does Wei get for an ambulance?", "Mei Ling's ambulance limit?", "How much hospital cash for Ah Kow?", "What does Lim get?", "Ken broke his arm",
       "Tan Mei Ling and Wei, ambulance?", "Lim Wei's ambulance, and Ah Kow's?",
+      // A possessive or a joining word may bring in someone else (Critic P395 H); a whole name in lower case may be ordinary words (P395 J).
+      "Ken Lim broke his arm, how much?", "Tan Mei Ling's ambulance limit?", "tan mei ling ambulance limit?",
       "What about Wei and Mei Ling?", "Ambulance cover for Wei and Ken", // two members
       "What does my wife get?", "My son Wei broke his arm", "Can I claim for Wei's ambulance?", "We were in an accident, what about Wei?",
       "Does Wei have the same cover?", "What about Mei Ling too?", "Compare Wei's cover with Ken's", "Is Wei covered as well?", "Anyone covered for ambulance?",
@@ -59,12 +61,13 @@ async function main() {
 
   await check("the documents kept for one person: their own, shared, unlinked, and any that hold a row of theirs", () => {
     const keep = (q: string, rows: Parameters<typeof scopeFor>[2] = null) => [...(scopeFor(q, HOUSE, rows)?.keep ?? ALL)].sort();
-    assert.deepEqual(keep("What does Lim Wei get for an ambulance?"), [WEI, FAM, RCPT].sort());
-    // Uploaded for Mei Ling alone: left out for Wei, unless the table prints a row of Wei's from it.
+    // Uploaded for Mei Ling alone, but its name says it is a family rider: kept for Wei (Critic P395 F: a word for others
+    // covered, in a document's name or pages, keeps it). It is kept, too, when the table prints a row of Wei's from it.
+    assert.deepEqual(keep("What does Lim Wei get for an ambulance?"), [WEI, FAM, RCPT, MLW].sort());
     assert.deepEqual(keep("What does Lim Wei get for an ambulance?", [{ person: "Lim Wei", source: { documentId: MLW } }]), [WEI, FAM, RCPT, MLW].sort());
     // A row of another person's in a document for one member keeps it in too (it is not that member's alone).
-    assert.deepEqual(keep("Hospital cash for Ken Lim?", [{ person: "Lim Wei", source: { documentId: ML } }]), [AK, ML, FAM, RCPT].sort());
-    assert.deepEqual(keep("Tan Mei Ling's ambulance limit?"), [ML, FAM, RCPT, MLW].sort());
+    assert.deepEqual(keep("Hospital cash for Ken Lim?", [{ person: "Lim Wei", source: { documentId: ML } }]), [AK, ML, FAM, RCPT, MLW].sort());
+    assert.deepEqual(keep("Tan Mei Ling ambulance limit?"), [ML, FAM, RCPT, MLW].sort());
     for (const q of ["What does my wife get?", "What about Wei and Mei Ling?", "What is the waiting period?"]) assert.equal(scopeFor(q, HOUSE), null, q);
   });
 
@@ -103,14 +106,79 @@ async function main() {
     assert.equal(scopeFor("Max Lee ward cash?", B)?.person, "Max Lee");
   });
 
+  // Critic P395 (made-up households).
+  const M: [string, string][] = [["Lim Ah Kow", "self"], ["Tan Mei Ling", "spouse"], ["Lim Wei", "child"]];
+  const own = [doc("ml", "Mei Ling shield", ["Tan Mei Ling"], ["Ambulance up to S$300"]), doc("lw", "Lim Wei accident", ["Lim Wei"], ["Fracture S$1,000"])];
+  await check("Critic P395 F: a plan linked to one member that covers another by given name, initials, a title or a tier is never left out", () => {
+    for (const [tag, text] of [
+      ["EE+1", "Plan: Employee + 1\nInsured: Lim Ah Kow; Tan M L\nWard cash S$100 per day"], ["initials", "Insured Person 1: Lim Ah Kow\nInsured Person 2: Tan M.L.\nHospital cash S$100 per day"],
+      ["travel", "Travellers: Lim Ah Kow, Mei Ling\nOverseas medical S$200,000"], ["joint", "Second Life Assured: Mrs Tan\nDeath S$200,000"],
+      ["co-ins", "Named insured: Lim Ah Kow. Co-insured: Mei Ling Tan (wife)\nWard cash S$90 per day"], ["persons", "Insured Person(s): Lim Ah Kow, Mei Ling\nWard cash S$80 per day"],
+      ["payor", "Life insured: Lim Wei\nPayor: Mr Lim\nPayor benefit: premiums waived on payor's critical illness"], ["EE+SP", "Coverage tier: EE + SP\nWard cash S$70 per day"],
+      ["firstname", "Insured: Lim Ah Kow and Mei Ling\nWard cash S$60 per day"], ["initials only", "Insured 1: Lim Ah Kow\nInsured 2: M.L.\nWard cash S$50 per day"],
+    ]) {
+      const h = mk(M, [doc("p", `Ah Kow ${tag} plan`, ["Lim Ah Kow"], [text]), ...own]);
+      assert.equal(scopeFor("Is Tan Mei Ling covered for a hospital stay?", h)?.person, "Tan Mei Ling", tag);
+      assert.deepEqual(leftOut(h, "Is Tan Mei Ling covered for a hospital stay?"), ["lw"], tag);
+    }
+    // A plain plan of another member's alone, that says nothing of anyone else, is still left out.
+    assert.deepEqual(leftOut(mk(M, [doc("p", "Ah Kow plan", ["Lim Ah Kow"], ["Ward cash S$100 per day"]), ...own]), "Is Tan Mei Ling covered for a hospital stay?"), ["p", "lw"]);
+  });
+  await check("TE #395: a plan linked to the holder alone that may cover anyone else, in any wording, is kept; an unsure word keeps it", () => {
+    for (const text of ["Cover under this certificate extends to the policyholder's kids.", "Your partner is covered for ward cash.", "Your parents are covered too.",
+      "Immediate relatives of the insured are covered.", "Next of kin: covered for hospital cash.", "Co-insured: covered for ward cash.", "Joint life: second life covered.",
+      "The insured and his issue are covered.", "Grandchildren are covered.", "A civil partner is covered.", "A de facto partner is covered.",
+      "Household members living with the insured are covered.", "Infants are covered from 15 days old.", "Any insured member may claim.",
+      "Cover extends to your little one.", "Cover extends to the insured's ward.", "Cover extends to your nephew.", "Ward cash for each insured.",
+      "Plan type: individual + 2.", "Stepchildren are covered."]) {
+      for (const q of ["Is Tan Mei Ling covered for a hospital stay?", "Does Lim Wei get ward cash?"]) {
+        const h = mk(M, [doc("p", "Ah Kow hospital plan", ["Lim Ah Kow"], ["Ward cash S$100 per day", text]), ...own]);
+        assert.ok(scopeFor(q, h), q);
+        assert.ok(!leftOut(h, q).includes("p"), `${text} / ${q}`);
+      }
+    }
+    // Wording only about "you", "your" plan, stay or bill, and nobody else: left out for another member.
+    const plain = mk(M, [doc("p", "Ah Kow hospital plan", ["Lim Ah Kow"], ["You will be paid ward cash of S$100 per day for your hospital stay.", "We pay your bills after your claim is approved."]), ...own]);
+    assert.deepEqual(leftOut(plain, "Is Tan Mei Ling covered for a hospital stay?"), ["p", "lw"]);
+    // The question detector: a relative or partner by any word sends everything (TE #395 item 5).
+    for (const q of ["Lim Ah Kow boy warded", "Lim Ah Kow girlfriend warded", "Lim Ah Kow missus warded", "Lim Ah Kow little one warded"]) assert.equal(scopeFor(q, mk(M, own)), null, q);
+  });
+  await check("Critic P395 G: a name said that is also part of another member's name, or split by a comma, never scopes", () => {
+    const G = mk([["Lim Wei Jie (Wei Jie)", "self"], ["Tan Wei Jie", "brother"]], [doc("a", "Lim plan", ["Lim Wei Jie (Wei Jie)"], ["Ward cash S$100 per day"]),
+      doc("b", "Tan plan", ["Tan Wei Jie"], ["Ward cash S$50 per day"]), doc("b2", "Tan plan no name", ["Tan Wei Jie"], ["Dental S$500"])]);
+    for (const q of ["Wei Jie dental?", "Does Wei Jie Tan have dental?"]) assert.equal(scopeFor(q, G), null, q);
+    assert.equal(scopeFor("Lim Wei Jie dental?", G)?.person, "Lim Wei Jie (Wei Jie)");
+    const G5 = mk([["Lim Wei", "self"], ["Lim Wei Jie", "son"]], [doc("a", "Lim Wei plan", ["Lim Wei"], ["x"]), doc("b", "Wei Jie plan", ["Lim Wei Jie"], ["Dental S$500"])]);
+    for (const q of ["Lim Wei dental?", "Lim Wei, Jie dental?"]) assert.equal(scopeFor(q, G5), null, q);
+    assert.equal(scopeFor("Lim Wei Jie dental?", G5)?.person, "Lim Wei Jie");
+  });
+  await check("Critic P395 H, I: a possessive, a joining word or a relative's word sends everything", () => {
+    const H = mk(M.concat([["Lim Boon Hock", "grandson"]]), [doc("ak", "Ah Kow hospital", ["Lim Ah Kow"], ["Ward cash S$100 per day"]), ...own,
+      doc("bh", "Boon Hock child plan", ["Lim Boon Hock"], ["Hospital cash S$50 per day"])]);
+    for (const q of ["Lim Ah Kow's grandson hospital, can claim?", "Tan Mei Ling's stepson broke his arm, covered?", "Lim Ah Kow's granddaughter dental?",
+      "Lim Ah Kow's boy got admitted, how much?", "Lim Ah Kow's fiancée hospital cash?", "Lim Ah Kow's in-laws covered?", "Lim Ah Kow's toddler warded",
+      "Lim Ah Kow's grandchild warded", "Lim Ah Kow and his missus, ward cash?", "Lim Ah Kow or Tan Mei Ling, who has ward cash?", "Lim Ah Kow's spouse ward cash?",
+      "Is Lim Ah Kow the payor for Lim Wei?", "Lim Ah Kow paid for his wife's surgery, claim?", "Lim Ah Kow's lao po warded, can claim?", "Lim Ah Kow's ah ma warded",
+      "Lim Ah Kow lao po warded", "Lim Ah Kow missus warded", "Lim Ah Kow grandson warded", "Lim Ah Kow with Lim Boon Hock, ward cash?",
+      "tan mei ling's hospital cash leh", "Mei Ling Tan ward cash?", "Ah Kow can claim or not ah", "Lim Ah Kow’s ward cash?", "Lim Ah Kows' ward cash?"])
+      assert.equal(scopeFor(q, H), null, q);
+    for (const q of ["TAN MEI LING — ward cash?", "Tan-Mei-Ling ward cash?", "Lim Ah Kow lah, ward cash"]) assert.ok(scopeFor(q, H), q);
+  });
+  await check("Critic P395 J: a whole name made of ordinary words scopes only when written as a name", () => {
+    const J = mk([["Bill May", "self"], ["Max Low", "spouse"]], [doc("bm", "Bill May plan", ["Bill May"], ["Ward cash S$100 per day"]), doc("ml", "Max Low plan", ["Max Low"], ["Ward cash S$80 per day"])]);
+    for (const q of ["Will the hospital bill May be covered?", "What is the max low ward cash for Bill May?", "Is max low?", "The bill may be high, is Max Low covered?",
+      "Will The Hospital Bill May Be Covered?"]) assert.equal(scopeFor(q, J), null, q);
+    assert.equal(scopeFor("Is Max Low covered for ward cash?", J)?.person, "Max Low");
+  });
+
   await check("a scoped library lists every document but sends only the kept ones' pages; an unscoped one is unchanged", () => {
     const scope = scopeFor("What does Lim Wei get for an ambulance?", HOUSE)!;
     const lib = renderLibrary(HOUSE, undefined, scope);
-    for (const kept of ["WEIPAGE", "WEIRULE", "FAMPAGE", "RCPTPAGE"]) assert.match(lib, new RegExp(kept));
-    for (const out of ["AKPAGE", "MLPAGE", "MLWPAGE"]) assert.doesNotMatch(lib, new RegExp(out));
+    for (const kept of ["WEIPAGE", "WEIRULE", "FAMPAGE", "RCPTPAGE", "MLWPAGE"]) assert.match(lib, new RegExp(kept));
+    for (const out of ["AKPAGE", "MLPAGE"]) assert.doesNotMatch(lib, new RegExp(out));
     // Every document is still listed by name, with its pages counted as left out.
     for (const d of HOUSE.documents) assert.ok(lib.includes(`name="${d.name}"`), d.name);
-    assert.equal(lib.split(SCOPED_OUT).length - 1, 3);
+    assert.equal(lib.split(SCOPED_OUT).length - 1, 2);
     assert.match(lib, /<scope_note>This question names only Lim Wei\./);
     assert.equal(renderLibrary(HOUSE, undefined, null), renderLibrary(HOUSE));
     assert.doesNotMatch(renderLibrary(HOUSE), /scope_note|belongs to another household member/);
@@ -143,10 +211,11 @@ async function main() {
   });
   await check("a scoped library more than half the whole one is not sent: the whole library goes, cached", async () => {
     // Mei Ling's own plan is most of this household's pages: scoped, it would be more than half.
-    const scoped = renderLibrary(HOUSE, undefined, scopeFor("Tan Mei Ling's ambulance limit?", HOUSE));
+    const scoped = renderLibrary(HOUSE, undefined, scopeFor("Tan Mei Ling ambulance limit?", HOUSE));
+    assert.ok(scopeFor("Tan Mei Ling ambulance limit?", HOUSE));
     const full = await ask("What is the waiting period?", [], false);
     assert.ok(scoped.length > SCOPED_SHARE_MAX * full.library.length);
-    const t = await ask("Tan Mei Ling's ambulance limit?", []);
+    const t = await ask("Tan Mei Ling ambulance limit?", []);
     assert.equal(t.library, full.library);
     assert.notEqual(t.cache, false);
   });
