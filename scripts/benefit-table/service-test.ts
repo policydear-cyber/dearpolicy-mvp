@@ -7,7 +7,7 @@ import { parseAmount } from "@/lib/benefit-table/amount";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import { anthropicTableModel, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
 import { ledgerUsage } from "@/lib/simple-chat/model";
-import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
+import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, restoreLink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
 import { benefitTableEnabled } from "@/lib/benefit-table/flag";
 
 let passed = 0;
@@ -26,6 +26,7 @@ function fakeDb(opts: { tables?: boolean } = {}) {
     readings: new Map<string, { account_id: string; reading: string; model: string; prompt_version: string }>(),
     links: new Map<string, { account_id: string; section_key: string; cover_key: string | null; why: string; chosen_by: string }>(),
     confirmations: new Map<string, { account_id: string; family_member_id: string; cover_key: string; status: string; sum_insured: number | null; updated_by: string | null; updated_at: string }>(),
+    touched: 0 as number | undefined,
   };
   const db: Db = async (sql, p) => {
     const q = sql.replace(/\s+/g, " ").trim();
@@ -46,6 +47,8 @@ function fakeDb(opts: { tables?: boolean } = {}) {
     if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
       return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
     if (q.startsWith("SELECT section_key, cover_key, why, chosen_by FROM benefit_links")) return [...s.links.values()].filter((l) => l.account_id === p[0]);
+    if (q.startsWith("UPDATE benefit_links SET cover_key=$3")) { const k = `${p[0]}|${p[1]}`, l = s.links.get(k); if (l && l.chosen_by === "model") s.links.set(k, { ...l, cover_key: p[2] as string | null, why: p[3] as string }); return []; }
+    if (q.startsWith("UPDATE benefit_links SET updated_at=now() WHERE account_id=$1")) { s.touched = (s.touched ?? 0) + 1; return []; }
     if (q.startsWith("DELETE FROM benefit_links")) { for (const [k, l] of s.links) if (l.account_id === p[0] && l.chosen_by === "model") s.links.delete(k); return []; }
     if (q.startsWith("INSERT INTO benefit_links")) {
       const k = `${p[0]}|${p[1]}`, household = q.includes("'household'");
@@ -194,6 +197,157 @@ async function main() {
     assert.equal(again.calls.length, 0, "a section the household placed is not sent again");
     assert.equal(f.s.links.get(`${A}|${accident}`)!.chosen_by, "household");
     assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!.rows.length, 0);
+  });
+  await test("a second upload links only its own new sections: no section already linked is moved, unlinked or asked about again", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    const rows = async () => (await tableFor(f.db, A)).table.people.map((p) => [p.id, p.rows.map((r) => [r.benefit, JSON.stringify(r.figure)]).sort()]);
+    const linksBefore = JSON.stringify([...f.s.links.values()]), rowsBefore = await rows();
+    assert.ok(rowsBefore.some(([, r]) => (r as unknown[]).length > 0), "the household has linked rows to lose");
+    // A new document arrives and is read; the linker would re-sort everything if it were asked (moves the accident section away).
+    f.s.policies.push({ id: "extra", account_id: A, original_filename: "Hospital cash.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+    f.s.pages.push({ policy_id: "extra", account_id: A, page_number: 1, text: "Hospital cash S$30 a day" });
+    await readDocument(f.db, scriptedModel([() => doc("scheme_terms", [], [benefit({ section: "Hospital", benefit: "Hospital cash", pays: "per_day", value: 30, quote: "Hospital cash S$30 a day" })])]).model, A, "extra");
+    const hospital = sectionKeyOf("extra", { section: "Hospital", column: null });
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: null, why: "re-sorted" }, { section: hospital, cover: gpa, why: "new" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A), { proposed: 1 });
+    assert.ok(m.calls[0].user.includes(hospital) || m.calls[0].user.includes("Hospital"), "the new section is asked about");
+    assert.ok(!m.calls[0].user.includes(accident), "a section already linked is not sent again");
+    assert.equal(f.s.links.get(`${A}|${accident}`)!.cover_key, gpa, "the existing link is unchanged");
+    assert.equal(f.s.links.get(`${A}|${hospital}`)!.cover_key, gpa, "the new section is linked");
+    assert.deepEqual(JSON.parse(linksBefore), [...f.s.links.values()].filter((l) => l.section_key !== hospital), "every earlier link is exactly as it was");
+    const after = await rows();
+    for (const [id, r] of rowsBefore) for (const row of r as unknown[]) assert.ok((after.find(([x]) => x === id)![1] as unknown[]).some((y) => JSON.stringify(y) === JSON.stringify(row)), `${id} keeps ${JSON.stringify(row)}`);
+    // Nothing new to link: no model call at all.
+    const none = scriptedModel([]);
+    assert.deepEqual(await relink(f.db, none.model, A), { proposed: 0 });
+    assert.equal(none.calls.length, 0);
+  });
+  const linkOf = (f: ReturnType<typeof household>) => f.s.links.get(`${A}|${accident}`);
+  const rowCount = async (f: ReturnType<typeof household>, id: string) => (await tableFor(f.db, A)).table.people.find((p) => p.id === id)!.rows.length;
+  await test("S3b: a section first linked to no cover (its certificate not read yet) is asked again and placed once a cover fits", async () => {
+    const f = household();
+    await readBoth(f);
+    f.s.links.set(`${A}|${accident}`, { account_id: A, section_key: accident, cover_key: null, why: "no held cover yet", chosen_by: "model" });
+    assert.equal(await rowCount(f, "p1"), 0);
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A), { proposed: 1 });
+    assert.ok(m.calls[0].user.includes("Accident"), "the unplaced section is asked again");
+    assert.equal(linkOf(f)!.cover_key, gpa);
+    assert.ok(await rowCount(f, "p1") > 0, "its rows now show");
+  });
+  await test("S6/S7b: a model link to a cover that is gone (renamed on a re-read or re-upload) is asked again", async () => {
+    const f = household();
+    await readBoth(f);
+    f.s.links.set(`${A}|${accident}`, { account_id: A, section_key: accident, cover_key: "group scheme|old cover name|", why: "before the re-read", chosen_by: "model" });
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A), { proposed: 1 });
+    assert.equal(linkOf(f)!.cover_key, gpa);
+    assert.ok(await rowCount(f, "p1") > 0);
+  });
+  await test("S4b: when a new cover arrives, a working link may move onto it, but never to no cover or to another old cover", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the only cover" }] })]).model, A);
+    assert.ok(await rowCount(f, "p2") > 0, "both people show the section under the shared cover");
+    // A certificate arrives for one person only, with a cover nobody's section is linked to yet.
+    f.s.policies.push({ id: "hosp", account_id: A, original_filename: "Hospital certificate.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+    f.s.pages.push({ policy_id: "hosp", account_id: A, page_number: 1, text: "HOSPITAL PLAN CERTIFICATE\nLim Wei Jie\tS$50,000" });
+    await readDocument(f.db, scriptedModel([() => doc("personal_proof", [{ ...cover("Lim Wei Jie", 50000, "Lim Wei Jie S$50,000"), cover: "Hospital Plan" }], [])]).model, A, "hosp");
+    const hospital = coverKeyOf({ product: "Group Scheme", cover: "Hospital Plan", plan: null });
+    // Asked again, the model wants to drop the section to no cover: refused, the working link stays.
+    const toNone = scriptedModel([() => ({ links: [{ section: accident, cover: null, why: "unsure" }] })]);
+    assert.deepEqual(await relink(f.db, toNone.model, A, undefined, undefined, "hosp"), { proposed: 0 });
+    assert.ok(toNone.calls[0].user.includes("Accident"), "with a new cover present, working links are asked again");
+    assert.equal(linkOf(f)!.cover_key, gpa, "never moved to no cover");
+    // Asked again, the model moves it onto the new cover: taken.
+    const toNew = scriptedModel([() => ({ links: [{ section: accident, cover: hospital, why: "belongs to the hospital plan" }] })]);
+    assert.deepEqual(await relink(f.db, toNew.model, A, undefined, undefined, "hosp"), { proposed: 1 });
+    assert.equal(linkOf(f)!.cover_key, hospital);
+    assert.equal(await rowCount(f, "p2"), 0, "the person without the hospital cover no longer shows its rows");
+    assert.ok(await rowCount(f, "p1") > 0, "the person who holds it does");
+    // The household's own link is never sent or changed, even with a new cover present.
+    await setLink(f.db, A, accident, gpa);
+    const again = scriptedModel([]);
+    await relink(f.db, again.model, A, undefined, undefined, "hosp");
+    assert.equal(again.calls.length, 0, "the household's link is not sent");
+    assert.equal(linkOf(f)!.chosen_by, "household");
+    assert.equal(linkOf(f)!.cover_key, gpa);
+  });
+  // A one-person certificate of another product (a travel policy) for Lim Wei Jie, read after the scheme is linked.
+  const travelUpload = async (f: ReturnType<typeof household>, id: string, product = "Fjord Travel") => {
+    f.s.policies.push({ id, account_id: A, original_filename: `Travel ${id}.pdf`, processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+    f.s.pages.push({ policy_id: id, account_id: A, page_number: 1, text: "FJORD TRAVEL CERTIFICATE\nLim Wei Jie\tS$20,000" });
+    const travelDoc = { ...doc("personal_proof", [{ ...cover("Lim Wei Jie", 20000, "Lim Wei Jie S$20,000"), product, cover: "Travel Accident" }], []), document: { ...doc("personal_proof", [], []).document, product } };
+    await readDocument(f.db, scriptedModel([() => travelDoc]).model, A, id);
+    return coverKeyOf({ product, cover: "Travel Accident", plan: null });
+  };
+  await test("TE S1x: a new cover of another product never takes a working section, whatever the model says", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    const p2 = await rowCount(f, "p2");
+    assert.ok(p2 > 0);
+    const travel = await travelUpload(f, "trip");
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: travel, why: "re-sorted" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "trip"), { proposed: 0 });
+    assert.equal(m.calls.length, 0, "no section's document names the travel product, so nothing is asked or paid for");
+    assert.equal(linkOf(f)!.cover_key, gpa, "the working link stays");
+    assert.equal(await rowCount(f, "p2"), p2, "the person without the travel cover keeps every row");
+  });
+  await test("Critic S11: a generic product name that is only a word of the section's product is no evidence", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    const p2 = await rowCount(f, "p2");
+    const other = await travelUpload(f, "other", "Scheme");
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: other, why: "re-sorted" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "other"), { proposed: 0 });
+    assert.equal(m.calls.length, 0, "\"Scheme\" is not \"Group Scheme\": nothing is asked");
+    assert.equal(linkOf(f)!.cover_key, gpa);
+    assert.equal(await rowCount(f, "p2"), p2);
+  });
+  await test("Critic S10: a cover read earlier that no section links to is not new on a later upload", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    await travelUpload(f, "trip");
+    await relink(f.db, scriptedModel([]).model, A, undefined, undefined, "trip");
+    // Another upload with nothing new to link: the unlinked travel cover from before does not re-open working links.
+    f.s.policies.push({ id: "letter", account_id: A, original_filename: "Letter.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+    f.s.pages.push({ policy_id: "letter", account_id: A, page_number: 1, text: "Thank you for your payment" });
+    await readDocument(f.db, scriptedModel([() => doc("scheme_terms", [], [])]).model, A, "letter");
+    const m = scriptedModel([() => ({ links: [{ section: accident, cover: coverKeyOf({ product: "Fjord Travel", cover: "Travel Accident", plan: null }), why: "x" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "letter"), { proposed: 0 });
+    assert.equal(m.calls.length, 0, "no paid call");
+    assert.equal(linkOf(f)!.cover_key, gpa);
+  });
+  await test("every finished re-link marks the household's links as checked, even when nothing changes (dashboard stops showing 'reading')", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "x" }] })]).model, A);
+    const before = f.s.touched ?? 0;
+    await relink(f.db, scriptedModel([]).model, A);
+    assert.equal(f.s.touched, before + 1);
+  });
+  await test("restoring a lost link: the dry run counts the rows and changes nothing; apply links it as the household's own", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: null, why: "lost" }] })]).model, A);
+    const before = JSON.stringify([...f.s.links.values()]);
+    const dry = await restoreLink(f.db, A, accident, gpa);
+    assert.equal(dry.applied, false);
+    assert.deepEqual(dry.current, { cover: null, chosenBy: "model" });
+    assert.ok(dry.added > 0, "the dry run says how many rows come back");
+    assert.equal(JSON.stringify([...f.s.links.values()]), before, "a dry run writes nothing");
+    const done = await restoreLink(f.db, A, accident, gpa, true);
+    assert.equal(done.added, dry.added);
+    assert.deepEqual(f.s.links.get(`${A}|${accident}`), { account_id: A, section_key: accident, cover_key: gpa, why: "Set by you", chosen_by: "household" });
+    const rows = (await tableFor(f.db, A)).table.people.reduce((n, p) => n + p.rows.length, 0);
+    assert.equal(rows, Object.values(done.rowsAfter).reduce((a, b) => a + b, 0));
+    await assert.rejects(restoreLink(f.db, A, "terms|nothing|", gpa), TableInputError);
+    await assert.rejects(restoreLink(f.db, B, accident, gpa), TableInputError, "only the household's own sections");
   });
   await test("the household can only link a section and a cover its own documents show", async () => {
     const f = household();

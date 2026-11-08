@@ -5,7 +5,7 @@
  * Only the model's reading, the links and the confirmations are stored. Every time a table is shown it is checked again
  * against the stored pages and assembled from scratch (check.ts, completeness.ts, assemble.ts), so a change to the
  * checks, a re-read, a removed document or a removed person shows at once, and no stored row can go stale. */
-import { assembleTable, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
+import { assembleTable, coverKeyOf, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
 import { createHash } from "node:crypto";
 import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
@@ -562,28 +562,73 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   return { checked: true, record };
 }
 
-/** Asks the model which cover each section is paid under, for every section the household has not linked itself. The
- * model's earlier links are replaced; the household's are never touched. */
-export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number): Promise<{ proposed: number }> {
+/** Asks the model which cover each section is paid under, without ever undoing a link that works.
+ * - The household's links are never sent, changed or removed.
+ * - A model link that works (its cover is one of the household's current covers and the table accepts it) stays as it
+ *   is: reading one document can no longer move or drop another document's rows (live, 7 Nov: a new upload re-sorted
+ *   every section and moved one to no cover).
+ * - A section with no link, or a model link that does not work (no cover, a cover that is gone, or one the table
+ *   refuses), is asked again and takes the model's answer (Critic R391 S3b, S6, S7b).
+ * - A working model link moves only onto a cover printed in the document just read (justRead) that no section is linked
+ *   to yet, and only when the section's own document prints that cover's product as its own whole product name (or is the document just read). The
+ *   model's word alone never moves it, never to no cover, never between older covers (Critic R391 S4b: a hospital wording
+ *   first linked to the only cover, then one person's hospital certificate of the same product; TE S1x: a medical section
+ *   is not moved onto a travel cover of another product; Critic S10: a cover read earlier with no section linked is not
+ *   "new" on every later upload). Only such sections are sent again, so other uploads pay for nothing more.
+ * Every finished run also marks the household's links as checked (updated_at), so the dashboard stops showing the
+ * document as still reading even when no link changed. */
+export async function relink(db: Db, model: TableModel, accountId: string, onUsage?: OnUsage, timeoutMs?: number, justRead?: string): Promise<{ proposed: number }> {
   const l = await load(db, accountId);
-  const fixed = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
-  const sections = sectionsOf(l.readings).filter((s) => !fixed.has(s.key));
   const { types } = coversOf(l.readings, l.family);
-  let links: SectionLink[] = [];
+  const coverKeys = new Set(types.map((t) => t.key));
+  const refused = new Set(assembleTable(l.readings, l.family, l.links).refusedLinks.map((x) => x.link.section));
+  const household = new Set(l.links.filter((x) => x.chosenBy === "household").map((x) => x.section));
+  const working = new Map(l.links.filter((x) => x.chosenBy === "model" && x.cover != null && coverKeys.has(x.cover) && !refused.has(x.section)).map((x) => [x.section, x.cover!]));
+  const linkedCovers = new Set(l.links.filter((x) => x.cover != null && (x.chosenBy === "household" || working.has(x.section))).map((x) => x.cover!));
+  const justReadCovers = new Set((l.readings.find((r) => r.documentId === justRead)?.covers ?? []).map((c) => coverKeyOf(c)));
+  const newCovers = types.filter((t) => justReadCovers.has(t.key) && !linkedCovers.has(t.key));
+  const all = sectionsOf(l.readings).filter((s) => !household.has(s.key));
+  const productOf = new Map(l.readings.map((r) => [r.documentId, words(r.product)]));
+  // The section's own document is the evidence: it is the document just read, or its product is the cover's product, name for name.
+  const backs = (section: string, cover: { product: string }) => {
+    const docId = section.slice(0, section.indexOf("|"));
+    if (docId === justRead) return true;
+    const named = words(cover.product);
+    // The whole name, not a word inside it: a generic product ("Health", "Plan", "Scheme") of another insurer is no evidence (Critic S11).
+    return !!named && (productOf.get(docId) ?? "") === named;
+  };
+  const movesTo = new Map(all.filter((s) => working.has(s.key)).map((s) => [s.key, new Set(newCovers.filter((t) => backs(s.key, t)).map((t) => t.key))]));
+  const open = new Set(all.filter((s) => !working.has(s.key)).map((s) => s.key));
+  const sections = all.filter((s) => open.has(s.key) || (movesTo.get(s.key)?.size ?? 0) > 0);
+  const existing = new Set(l.links.map((x) => x.section));
+  const taken: SectionLink[] = [];
   if (sections.length && types.length) {
     const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(timeoutMs != null ? { timeoutMs } : {}) });
     await onUsage?.("linking", reply);
     // Stopped at the time limit: the links already in place are kept, not replaced by none.
     if (reply.stopReason === "timeout") return { proposed: 0 };
-    const keys = new Set(sections.map((s) => s.key)), covers = new Set(types.map((t) => t.key));
-    links = ((reply.json as { links?: SectionLink[] } | null)?.links ?? []).filter((x) => keys.has(x.section) && (x.cover == null || covers.has(x.cover)));
+    const keys = new Set(sections.map((s) => s.key));
+    const seen = new Set<string>();
+    for (const x of (reply.json as { links?: SectionLink[] } | null)?.links ?? []) {
+      if (!keys.has(x.section) || seen.has(x.section) || (x.cover != null && !coverKeys.has(x.cover))) continue;
+      seen.add(x.section);
+      if (open.has(x.section) || (x.cover != null && working.get(x.section) !== x.cover && !!movesTo.get(x.section)?.has(x.cover))) taken.push(x);
+    }
   }
-  await db("DELETE FROM benefit_links WHERE account_id=$1 AND chosen_by='model'", [accountId]);
-  for (const x of links)
-    await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,$4,'model',now())
-      ON CONFLICT (account_id, section_key) DO NOTHING`, [accountId, x.section, x.cover, x.why.slice(0, 300)]);
-  return { proposed: links.length };
+  for (const x of taken) {
+    if (existing.has(x.section))
+      await db(`UPDATE benefit_links SET cover_key=$3, why=$4, updated_at=now() WHERE account_id=$1 AND section_key=$2 AND chosen_by='model'`,
+        [accountId, x.section, x.cover, x.why.slice(0, 300)]);
+    else
+      await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,$4,'model',now())
+        ON CONFLICT (account_id, section_key) DO NOTHING`, [accountId, x.section, x.cover, x.why.slice(0, 300)]);
+  }
+  await db(`UPDATE benefit_links SET updated_at=now() WHERE account_id=$1`, [accountId]);
+  return { proposed: taken.length };
 }
+
+/** A name's words for comparing one printed name with another: lower case, letters and digits only. */
+const words = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 export class TableInputError extends Error { constructor(message: string) { super(message); this.name = "TableInputError"; } }
 
@@ -594,6 +639,24 @@ export async function setLink(db: Db, accountId: string, section: string, cover:
   if (cover != null && !coversOf(l.readings, l.family).types.some((t) => t.key === cover)) throw new TableInputError("That cover is not in your documents.");
   await db(`INSERT INTO benefit_links(account_id, section_key, cover_key, why, chosen_by, updated_at) VALUES($1,$2,$3,'Set by you','household',now())
     ON CONFLICT (account_id, section_key) DO UPDATE SET cover_key=EXCLUDED.cover_key, why=EXCLUDED.why, chosen_by='household', updated_at=now()`, [accountId, section, cover]);
+}
+
+/** Puts one section back under a cover after a link was lost (live, 7 Nov: a new upload re-sorted every section and moved
+ * one section of an unrelated document to no cover). Read-only unless apply: it reports the section's current link and
+ * how many rows each person shows now and would show after, so the owner approves on a count. With apply it writes the
+ * link as the household's own (setLink), which no later reading or re-link changes. */
+export async function restoreLink(db: Db, accountId: string, section: string, cover: string, apply = false): Promise<{
+  current: { cover: string | null; chosenBy: string } | null; rowsNow: Record<string, number>; rowsAfter: Record<string, number>; added: number; applied: boolean }> {
+  const l = await load(db, accountId);
+  if (!sectionsOf(l.readings).some((s) => s.key === section)) throw new TableInputError("That part of a document is not in this household's table.");
+  if (!coversOf(l.readings, l.family).types.some((t) => t.key === cover)) throw new TableInputError("That cover is not in this household's documents.");
+  const was = l.links.find((x) => x.section === section);
+  const count = (links: SectionLink[]) => Object.fromEntries(assembleTable(l.readings, l.family, links).people.map((p) => [p.name, p.rows.length]));
+  const rowsNow = count(l.links);
+  const rowsAfter = count([...l.links.filter((x) => x.section !== section), { section, cover, why: "Restored" }]);
+  const added = Object.keys(rowsAfter).reduce((n, k) => n + (rowsAfter[k] - (rowsNow[k] ?? 0)), 0);
+  if (apply) await setLink(db, accountId, section, cover);
+  return { current: was ? { cover: was.cover, chosenBy: was.chosenBy } : null, rowsNow, rowsAfter, added, applied: apply };
 }
 
 /** The household confirms a person's headline amount, corrects it, or takes their word back (status null). */

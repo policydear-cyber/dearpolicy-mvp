@@ -464,7 +464,7 @@ async function main() {
         if (q.startsWith("UPDATE policies SET extracted_json=jsonb_set(") && q.includes(TABLE_READING_MARK)) { mark = true; log.push("mark"); return []; }
         if (q.startsWith("UPDATE policies SET extracted_json=extracted_json -")) { mark = false; log.push("clear"); return []; }
         // The re-link after a full reading: no household, so nothing to link (and no call).
-        if (q.startsWith("DELETE FROM benefit_links")) return [];
+        if (q.startsWith("DELETE FROM benefit_links") || q.startsWith("UPDATE benefit_links")) return [];
         try { return await f.db(sql, p); } catch (error) { if (q.startsWith("SELECT")) return []; throw error; }
       };
       return { db, s: f.s, log, marked: () => mark };

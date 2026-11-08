@@ -129,7 +129,7 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
   await markTableReading(db, accountId, policyId, true);
   const read = await readDocument(db, model, accountId, policyId, onUsage, { deadline: opts.deadline, now }, opts.guards);
   const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
-  const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined) : { proposed: 0 };
+  const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined, policyId) : { proposed: 0 };
   await markTableReading(db, accountId, policyId, false);
   return { ...read, linked: linked.proposed };
 }
