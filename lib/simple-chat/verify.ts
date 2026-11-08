@@ -296,8 +296,42 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
 /** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. "Greater
  * than 8%" on a burns row is a row label, not a limit (R52-2); "whichever is the greater" is. */
 export const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+/** A line that is one labelled field of its own ("Hospital cash: S$150 per day", "Annual premium: S$2,412.00"): a short
+ * label of words, a colon, then its value. */
+const FIELD_LINE = /^\s*([A-Za-z][A-Za-z ()'&/.#-]{0,48}?)\s*:\s*\S/;
+/** The labels of fields that are never part of what a benefit pays, matched as the whole label (an allow-list): the
+ * premium, the policy's number, the person, the plan's name, its period and dates, its currency, how it is paid, the
+ * agent. A field with any other label ("Ceiling", "Sum insured", "Waiting period", "Thereafter", "Ward type") stays with
+ * the row above it, as before, so a limit or condition is never cut off from its figure (Critic P392). */
+const PERIODIC = String.raw`(?:annual|annualised|annualized|yearly|monthly|quarterly|half[- ]?yearly|semi[- ]?annual|single|regular|modal|instalment|installment|total|basic|first[- ]year|renewal|gross|net)`;
+const NON_BENEFIT_LABELS = [
+  String.raw`(?:${PERIODIC}\s+)*premiums?(?:\s+(?:amount|payable|due|paid|frequency|mode|term|(?:\(?(?:incl|including|inclusive\s+of|excl|excluding|exclusive\s+of)\.?\s+)?(?:gst|tax|vat)\)?))*`,
+  String.raw`(?:policy|certificate|contract|member(?:ship)?|plan|account|reference|ref\.?|proposal|application)\s*(?:no\.?|number|#|id)`,
+  String.raw`(?:name\s+of\s+)?(?:(?:the\s+)?(?:life\s+)?(?:insured|assured)(?:\s+person)?|policy\s*(?:holder|owner)|policyholder|policyowner|owner|proposer|member|employee|name|full\s+name|nric|nric\s+no\.?|date\s+of\s+birth|dob|gender|sex|occupation|address|relationship)(?:\s+name)?`,
+  String.raw`(?:plan|product)(?:\s+(?:name|type|code))?`,
+  String.raw`(?:policy|cover(?:age)?|insurance)\s+(?:period|term)|period\s+of\s+(?:cover|coverage|insurance)`,
+  String.raw`(?:(?:policy|cover(?:age)?|commencement|effective|start|end|expiry|issue|inception|renewal|maturity|print(?:ed)?|due|next\s+due|billing)\s+)?date`,
+  String.raw`(?:policy\s+)?currency`,
+  String.raw`(?:payment|premium\s+payment|billing)\s+(?:mode|method|frequency|term)|(?:mode|method|frequency)\s+of\s+payment`,
+  String.raw`(?:servicing\s+|financial\s+)?(?:agent|adviser|advisor|consultant|representative)(?:\s+(?:name|code|no\.?))?|agency|branch`,
+];
+const NON_BENEFIT_LABEL = new RegExp(String.raw`^(?:${NON_BENEFIT_LABELS.join("|")})$`, "i");
+/** Words in a field's value that may limit what a row pays: a limit, a cap, a count of days or a stay. */
+const LIMIT_IN_VALUE = /\b(?:limits?|limited|max(?:imum)?|min(?:imum)?|up\s+to|caps?|capped|ceiling|aggregate|overall|total|in\s+all|not\s+more|no\s+more|excess|deductible|reduced|half|thereafter|after|from|per|each|days?|weeks?|admissions?|stays?|confinements?|benefits?)\b/i;
+/** A money figure in a field's value ("S$2,000", "USD 500", "2,000.00"). */
+const MONEY_IN_VALUE = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\b)\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d{2}\b/i;
+/** Whether a labelled field is one that is never part of what a row pays: an allowed label (NON_BENEFIT_LABEL) whose value
+ * prints no limit or day words, and, except for a premium (which is money by nature), no money figure ("Plan type: S$2,000
+ * limit" and "Coverage period: up to 10 days" stay with the row: Critic P392B). */
+function nonBenefitField(label: string, value: string): boolean {
+  const name = label.trim().replace(/\s+/g, " ");
+  if (!NON_BENEFIT_LABEL.test(name) || LIMIT_IN_VALUE.test(value)) return false;
+  return /\bpremiums?\b/i.test(name) || !MONEY_IN_VALUE.test(value);
+}
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
- * up to the next row, bullet or numbered item (R52-1). */
+ * up to the next row, bullet or numbered item (R52-1). On a schedule that prints one labelled field per line, the next
+ * labelled field ("Annual premium: S$2,412.00" under "Hospital cash: S$150 per day") is the next row, not part of this one
+ * (TE overnight F1), but only when its label is one of a few fields that are never about what a row pays. */
 export function rowWithContinuation(pageText: string, offset: number): string {
   const row = rowLine(pageText, offset);
   const rest = pageText.slice(row.end + 1).split("\n");
@@ -308,6 +342,59 @@ export function rowWithContinuation(pageText: string, offset: number): string {
   }
   return [row.text, ...more].join(" ");
 }
+
+/** Words that, anywhere below a daily row on its page, may change what a stay pays: a limit, an
+ * aggregate, a day rule or a condition on the stay (TE #392 layouts, Critic P392). Any day word left once the row's own
+ * day cap field is taken out is a day rule ("Plan: Basic (days 1 to 3 not covered)", TE #392). Unsure means no total. */
+export const STAY_BLOCK_WORDS = /\b(?:limits?|limited|limitation|sub-?limits?|aggregate|overall|totals?|in\s+all|ceiling|caps?|capped|capping|plafond|restricted|not\s+more|no\s+more|not\s+exceed\w*|excess|deductible|elimination|deferred|deferment|deferral|waiting|excluding|exclud\w*|except|unless|reduced|reduction|half|thereafter|only|once|frequency|sum\s+(?:insured|assured)|per\s+(?:admission|confinement|disability|year|annum|policy\s+year|lifetime)|annual(?:ly)?|lifetime|whichever|subject|balance|co-?pay\w*|co-?insurance|intensive|icu|first\s+\d+|after\s+(?:the\s+)?\d+|minimum|at\s+least|less\s+than|(?:a|each|every|per)\s+(?:year|month|week|quarter)|days?|unpaid|not\s+(?:covered|paid|payable)|non-?payable|no\s+benefit|wards?|paid\s+(?:for|in|if|when|only)|payable\s+(?:for|in|if|when|only)|if|provided|eligib\w*|conditions?|stops?|together|combined|shared|most\s+(?:paid|payable))\b/i;
+/** The row's own day numbers: its first paid day and its most days ("from the 3rd day", "maximum 30 days"). */
+const ROW_DAYS = /\b(?:after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b|\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*(?:continuous\s+)?days?\b/gi;
+/** A daily row and every line under it to the end of its page or the next table's heading row (a new table starts there,
+ * Critic P392 round 5). No other line ends it (a heading, a blank line, a table row, a bullet or a numbered item may all
+ * be followed by a limit on this row: Critic P392 rounds 3 and 4). Left out of it:
+ * - each non-benefit field (premium, policy number, person, plan, dates, currency, payment, agent: nonBenefitField);
+ * - another benefit's tabbed rate row (nextTableRow), and a ward field naming no ward ("Ward: any", ANY_WARD);
+ * - a line that only repeats the row's own first paid day or most days ("Payable from: day 3" under "from the 3rd day",
+ *   Critic P392 round 4): no money, every number one of the row's own day numbers, and no other limiting word.
+ * What a stay pays is worked out only when nothing else is left below the row's own line that could change it.
+ * tail: the block below the row's own line. */
+export function stayBlock(pageText: string, offset: number): { text: string; tail: string } {
+  const row = rowLine(pageText, offset);
+  const own = new Set([...row.text.matchAll(ROW_DAYS)].map((m) => Number(m[1] ?? m[2])));
+  const kept: string[] = [];
+  for (const l of pageText.slice(row.end + 1).split("\n")) {
+    if (!l.trim()) continue;
+    const table = nextTableRow(l);
+    if (table === "heading") break;
+    if (table === "rate") continue;
+    if (ANY_WARD.test(l)) continue;
+    const field = FIELD_LINE.exec(l);
+    if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
+    const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));
+    const rest = l.replace(/\b\d+\s*(?:st|nd|rd|th)?\b|\bdays?\b/gi, " ");
+    if (numbers.length && numbers.every((n) => own.has(n)) && !MONEY_IN_VALUE.test(l) && !STAY_BLOCK_WORDS.test(rest) && !CAP_OR_RULE.test(rest)) continue;
+    kept.push(l);
+  }
+  return { text: [row.text, ...kept].join(" "), tail: kept.join(" ") };
+}
+/** A tabbed table row with no limit or rule word in it:
+ * - "rate": another benefit's own rate row ("Hospital cash\tS$100 per day, maximum 30 days"), left out of the block but
+ *   never its end, so a shared cap under it still holds this row back (Critic P392 E);
+ * - "heading": a table's heading row ("Travel\tClassic\tBusiness": two or more tabs, no figure), which ENDS the block,
+ *   since a new table starts there (Critic P392 round 5; keeps main's total on the travel fixture).
+ * A tabbed lump sum ("Overall limit\tS$2,000", "Plafond\tS$2,000") is neither, nor is any line with a limit or rule word. */
+function nextTableRow(line: string): "rate" | "heading" | null {
+  if (!/\t/.test(line)) return null;
+  const rate = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?\s*(?:per|a|each)\s+(?:day|week|month)\b/gi;
+  const words = line.replace(rate, " ").replace(MAX_DAY_FIELD, " ");
+  if (STAY_BLOCK_WORDS.test(words) || CAP_OR_RULE.test(words)) return null;
+  if (rate.test(line)) return MONEY_IN_VALUE.test(words) ? null : "rate";
+  return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line) ? "heading" : null;
+}
+/** A ward field that names no ward at all ("Ward: any", "Ward type: all wards"): no condition on the stay. */
+const ANY_WARD = /^\s*wards?(?:\s+(?:type|class))?\s*:\s*(?:any|all)(?:\s+wards?)?\s*\.?\s*$/i;
+/** Words beside a repeated day number that make it a rule of its own, never a repeat ("up to", "first", "after"). */
+const CAP_OR_RULE = /\b(?:up\s+to|first|after|within|before|until|following|last|each|every|per|not|no|except|only|less|more|minimum|at\s+least|continuous(?:ly)?|consecutive)\b/i;
 /** The sum a percentage row is a percentage of (Critic round 50), read only above the row's own line on its page:
  * - the nearest "% of S$5,000" or "Limit: S$5,000" heading gives that sum;
  * - the nearest table heading "(% of Sum Insured)" (in parentheses, as a column heading prints it) gives "sum_insured";
@@ -942,19 +1029,30 @@ function stayDaysWritten(asked: string[], days: number): boolean {
 /** "An 8-day", "an 11-day", "an 18-day", otherwise "A 12-day" (TE T4). */
 const aDay = (n: number) => `${n === 11 || n === 18 || String(n).startsWith("8") ? "An" : "A"} ${n}`;
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
+/** A day cap printed as its own field under the row ("Maximum: 30 days", "Up to a maximum of 30 days"): read by the day
+ * rules below (one cap only), never a limit word by itself (TE #392 D). */
+export const MAX_DAY_FIELD = /\b(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+)?days?\b/gi;
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
   // again" after "hospitalised for 15 days").
   const stay = st.perDay?.stayDays ?? stayDaysSaid(asked.slice(0, 1));
   if (!stay || !Number.isInteger(stay) || stay < 1 || stay > 366 || !stayDaysWritten(asked, stay)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!;
-  // The row with its own continuing lines, or the quote when it reaches further; each rule is read once.
-  const row = rowWithContinuation(page.text, found.offset).replace(/\s+/g, " ");
+  // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
+  // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total.
+  const block = stayBlock(page.text, found.offset);
+  const row = block.text.replace(/\s+/g, " ");
   const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
-  const rule = squash(row).text.includes(squash(quoted).text) ? row : quoted;
+  const tail = block.tail.replace(/\s+/g, " ").replace(MAX_DAY_FIELD, " ");
+  if (STAY_BLOCK_WORDS.test(tail)) return null;
+  const rule = squash(row).text.includes(squash(quoted).text) ? row : `${quoted} ${block.tail.replace(/\s+/g, " ")}`;
   if (OTHER_DAY_RULE.test(rule)) return null;
   const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
   if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
+  // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
+  // S$3,000", TE #392 E): no total is worked out past it, as the benefit table already refuses (dailyRateAlone).
+  if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
+  if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
   const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b/gi)];
   const maxes = [...rule.matchAll(/\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/gi)];
   if (starts.length !== 1 || maxes.length !== 1) return null;

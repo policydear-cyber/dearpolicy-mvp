@@ -11,7 +11,7 @@ import { figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
@@ -1327,7 +1327,12 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
   const found = locateQuote(household, row.source.excerpt, row.docIndex);
   const page = found && household.documents[found.docIndex].pages.find((p) => p.page === found.page);
   if (!found || !page) return false;
-  const words = `${rowWithContinuation(page.text, found.offset)}\n${found.excerpt}`;
+  // The row with every line under it up to the next heading, non-benefit fields left out (stayBlock): a limit, aggregate,
+  // day rule or condition anywhere below the row gives no total (Critic P392, TE #392).
+  const block = stayBlock(page.text, found.offset);
+  const below = block.tail.replace(MAX_DAY_FIELD, " ");
+  if (STAY_BLOCK_WORDS.test(below)) return false;
+  const words = `${block.text}\n${found.excerpt}`;
   const daily = row.figure.amount;
   if (moneyFiguresIn(words).some((f) => Math.abs(f.value - daily) > 0.005)) return false;
   const rest = words.replace(MAX_DAYS, " ");

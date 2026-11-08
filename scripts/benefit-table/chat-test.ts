@@ -7,7 +7,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type Family
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayBlock, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -489,6 +489,155 @@ test("the stay is refused when the table read other most days, or none, for that
   const misread = answer2({ ...CASH_ROW, fromDay: 30 }, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
   assert.equal(misread.rows.find((x) => /Hospital Cash/.test(x.benefit))!.fromDay, 11);
   assert.deepEqual(misread.amounts, ["S$30", "S$900"]);
+});
+// A schedule that prints one labelled field per line (TE overnight F1): the field under the daily row is its own row.
+const FIELDS = "aaaaaaaa-0000-0000-0000-000000000031";
+function fieldStay(page: string, quote: string, stayDays: number) {
+  const house: Household = { ...HOUSE2, documents: [HOUSE2.documents[0], doc(FIELDS, "Hospital plan schedule.pdf", [{ page: 1, text: page }])] };
+  const cash = checkReading(src(house.documents[1]), reading("scheme_terms", "Group Scheme", [], [
+    b({ section: "Hospital", benefit: "Ward cash", pays: "per_day", value: 150, page: 1, quote, maxDays: 30 })]));
+  const ci = coverKeyOf({ product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null });
+  const t = assembleTable([schedR(), cash, lifeCert], family, [{ section: sectionKeyOf(FIELDS, { section: "Hospital", column: null }), cover: ci, why: "hospital cash" }]);
+  const rs = chatRows(t, house);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "Hospital cash.", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: { stayDays }, ofBill: null, row: rs.find((r) => r.benefit === "Ward cash")!.id }] };
+  const fromRows = amountsFromRows(raw, rs, house);
+  const { answer: a } = verifyAnswer(house, readModelAnswer(fromRows.json)!, [`I was in hospital ${stayDays} days`], new Set(fromRows.report.labels));
+  const { kept, refused } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  return { amounts: kept.filter((s) => s.amount).map((s) => s.amount!.text), refused: refused.length };
+}
+test("one field per line: the premium printed under a daily row is not part of it, so the stay is worked out (TE overnight F1)", () => {
+  const page = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00\nPolicy number: HX-55120";
+  assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 5), { amounts: ["S$150", "S$450"], refused: 0 });
+});
+test("one field per line: a field that limits the daily row stays with it, so the stay is still not worked out past it", () => {
+  for (const next of ["Overall limit: S$2,000", "Maximum payable per year: S$2,000", "Subject to: S$2,000 in total"]) {
+    const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
+  }
+  // Any label that is not one of the few fields never about what a row pays stays with the row (Critic P392): a deny-list
+  // of limit words leaked, so the split is an allow-list.
+  for (const next of ["Limitation: S$2,000 per policy year", "Limited to: S$2,000 in all", "Ceiling: S$2,000", "Sum insured: S$2,000",
+    "Restricted to: S$2,000 per year", "Not more than: S$2,000", "Annual limitation: S$2,000", "Plafond: S$2,000", "Capping: S$2,000",
+    "Benefit ceiling: S$2,000", "Excluding: the first 5 days", "Waiting period: 7 days", "Deferment: 7 days", "Reduced to: S$75 after day 10",
+    "Thereafter: S$75 a day", "Only in: a government ward", "Ward type: B2 only", "Frequency: once a year", "Period: 30 days a year",
+    "Payment: S$75 a day after day 10", "Age: up to 65 only", "Term: S$2,000 in all"]) {
+    const page = `SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}\nAnnual premium: S$2,412.00`;
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], next);
+    assert.ok(stayBlock(page, page.indexOf("Ward cash")).text.includes(next), next);
+  }
+  // A condition under the row still holds the total back when a premium follows it.
+  const after = "SCHEDULE\nInsured: Lim Ah Kow\nWard cash: S$150 per day from the 3rd day, maximum 30 days\nWard type: B2 only\nAnnual premium: S$2,412.00";
+  assert.deepEqual(fieldStay(after, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"]);
+  // A non-benefit field is left out, never the end of the row: a limit under it still counts; and an allowed label whose
+  // value prints money or a limit or day word stays with the row (Critic P392B).
+  for (const lines of [["Effective date: 01/01/2026", "Overall limit: S$2,000"], ["Policy number: HX-55120", "Ceiling: S$2,000"],
+    ["Plan type: S$2,000 limit"], ["Coverage period: up to 10 days"], ["Policy term: 10 days per admission"], ["Plan: Gold, S$2,000 in all"],
+    ["Currency: SGD", "Overall limit: S$2,000"], ["Annual premium: S$2,412.00", "Overall limit: S$2,000"],
+    // No fixed window and no stop at a blank line: the block runs to the next heading (Critic P392 round 3).
+    ["Annual premium: S$2,412.00", "Policy number: HX-55120", "Effective date: 01/01/2026", "Overall limit: S$2,000"],
+    ["Annual premium: S$2,412.00", "", "Overall limit: S$2,000"],
+    ["Effective date: 01/01/2026", "Expiry date: 31/12/2026", "Currency: SGD", "Overall limit: S$2,000"],
+    ["Annual premium: S$2,412.00", "", "", "Agent: Jane Ong", "", "Limited to: S$2,000 a year"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", "Ward cash: S$150 per day from the 3rd day, maximum 30 days", ...lines, "Policy number: HX-55120"].join("\n");
+    assert.deepEqual(fieldStay(page, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"], lines.join(" / "));
+  }
+  // The fields that end the row: premium, numbers, the person, the plan, its period and dates, currency, payment, agent.
+  for (const next of ["Annual premium: S$2,412.00", "Premium payable (incl. GST): S$2,412.00", "Monthly instalment premium: S$201.00", "Policy No.: HX-55120",
+    "Certificate number: 88120", "Life assured: Lim Ah Kow", "Name of insured: Lim Ah Kow", "Plan: Ward Plus", "Plan type: Hospital",
+    "Period of cover: 1 Jan 2026 to 31 Dec 2026", "Policy term: 20 years", "Effective date: 1 Jan 2026", "Currency: SGD",
+    "Payment mode: Monthly", "Mode of payment: GIRO", "Agent: Jane Ong", "Servicing adviser code: A12"]) {
+    const page = `SCHEDULE\nWard cash: S$150 per day from the 3rd day, maximum 30 days\n${next}`;
+    assert.equal(stayBlock(page, page.indexOf("Ward cash")).text, "Ward cash: S$150 per day from the 3rd day, maximum 30 days", next);
+  }
+  // No line ends the block (Critic P392 round 4): a heading, a capitals line, a bullet, a numbered item or a tabbed lump sum
+  // may all be followed by, or be, a limit on this row. Was (round 3): a heading ended it, so a limit under it was missed.
+  const ROW = "Ward cash: S$150 per day from the 3rd day, maximum 30 days";
+  for (const below of [["Annual premium: S$2,412.00", "", "SECTION B: OUTPATIENT", "Overall limit: S$2,000"], ["NOTES", "subject to an overall limit of S$2,000"],
+    ["HALF RATE AFTER DAY 20"], ["• Overall limit S$2,000 per policy year"], ["1. Payable for at most S$2,000 in all"], ["Overall limit\tS$2,000"],
+    ["Plafond\tS$2,000"], ["Thereafter\tS$75 per day"], ["Intensive care\tS$300 per day"], ["IMPORTANT", "", "", "Limited to S$2,000 a year"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // A line that only repeats the row's own first paid day or most days is no new rule (Critic P392 round 4).
+  for (const below of [["Payable from: day 3"], ["Maximum: 30 days"], ["Payable from: day 3", "Annual premium: S$2,412.00"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 5).amounts, ["S$150", "S$450"], below.join(" / "));
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  }
+  // A repeat with a rule word, or another number, is a rule: no total.
+  for (const below of [["Payable from: day 4"], ["Not payable for the first 3 days"], ["Maximum: 20 days"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // The next table row that is plainly another benefit's rate is left out, never the end of the block: a shared cap
+  // under it still holds this row back (Critic P392 E). Was (round 4): it ended the block (S$450).
+  for (const below of [["Hospital cash\tS$100 per day, maximum 30 days", "Overall limit: S$2,000"],
+    ["Convalescence cash\tS$50 per day", "Combined limit for all cash benefits: S$2,000"], ["Convalescence cash\tS$50 per day, maximum 10 days", "Overall limit for the benefits above: S$2,000"],
+    ["Home nursing\tS$80 per day", "All daily benefits together: not more than S$2,000 a year"], ["Convalescence cash\tS$50 per day", "The benefits in this table are paid for at most 60 days in all"],
+    ["Convalescence cash\tS$50 per day", "AGGREGATE S$2,000"],
+    ["Parent accommodation\tS$40 per day", "Note: cash benefits stop once S$2,000 has been paid"], ["Convalescence cash\tS$50 per day", "S$2,000 is the most paid under this section"],
+    ["Convalescence cash\tS$50 per day", "Paid for B2 or C wards"], ["Up to 30 days"], ["30 days per year"], ["Surgical: up to S$5,000"], ["Outpatient: S$50 per visit"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below, "Policy number: HX-55120"].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
+  }
+  // A table's heading row (two or more tabs, no figure) ENDS the block: a new table starts there, so what is under it is
+  // that table's, as on main (Critic P392 round 5). Was (round 4): ["Travel..."] and ["Benefit\tPlan A\tPlan B",
+  // "Overall limit S$2,000"] expected ["S$150"] (no total).
+  for (const below of [["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"], ["Benefit\tPlan A\tPlan B", "Overall limit S$2,000"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  }
+  // A limit printed before the next table's heading row still holds the row back.
+  const limitThenTable = ["SCHEDULE", ROW, "Overall limit: S$2,000", "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"].join("\n");
+  assert.deepEqual(fieldStay(limitThenTable, ROW, 20).amounts, ["S$150"]);
+  // A ward field that names no ward ("Ward: any", "Ward: all") is no condition on the stay, as on main (Critic P392 round 5);
+  // a ward field that names one is.
+  for (const ward of ["Ward: any", "Ward: all", "Ward: Any.", "Ward type: all wards"]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ward].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], ward);
+  }
+  for (const ward of ["Ward: B1 or above", "Ward: any, except A ward", "Ward: all, after day 10"]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ward].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], ward);
+  }
+  // Another benefit's own tabbed rate row with nothing after it does not hold this row back.
+  const alone = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, "Convalescence cash\tS$50 per day"].join("\n");
+  assert.deepEqual(fieldStay(alone, ROW, 20).amounts, ["S$150", "S$2,700"]);
+  // Lines that only restate the row's own days ("30 days", "Day 3 to day 30") are no new rule.
+  for (const below of [["30 days"], ["Day 3 to day 30"], ["3 to 30 days"]]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
+    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  }
+  // A table row (tab-separated) reads its block the same way: the premium under it is left out, a limit is not.
+  const tab = "SCHEDULE\nWard cash\tS$150 per day from the 3rd day, maximum 30 days\nAnnual premium: S$2,412.00";
+  assert.deepEqual(fieldStay(tab, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 5).amounts, ["S$150", "S$450"]);
+  assert.deepEqual(fieldStay(`${tab}\nOverall limit: S$2,000`, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days", 20).amounts, ["S$150"]);
+});
+test("one field per line: every TE #392 layout shows the true total for a stay or none, never another (table on)", () => {
+  const CAPPED_LINE = "Hospital Cash rider: S$150 per day of hospitalisation from the 1st day, up to a maximum of 30 days", PREM = "Annual premium: S$2,412.00";
+  // The line after the hospital line, and what a 5, 8 and 40-day stay truly pays (TE #392 layouts, made up).
+  const LAYOUTS: [string[], [number, number, number]][] = [
+    [[PREM], [750, 1200, 4500]], [[], [750, 1200, 4500]],
+    [["Overall annual limit: S$3,000", PREM], [750, 1200, 3000]],
+    [["Elimination period: the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
+    [["Deferred period: 2 days", PREM], [450, 900, 4500]],
+    [["Excess: first 2 days of each stay", PREM], [450, 900, 4500]],
+    [["Intensive care: S$300 per day, up to a maximum of 10 days", PREM], [750, 1200, 4500]],
+    [["Reduced rate: half the daily amount after the 10th day", PREM], [750, 1200, 3000]],
+    [["Annual maximum: 60 days in all stays", PREM], [750, 1200, 4500]],
+    [["Plan type: Deductible plan, the first 3 days of each stay are not paid", PREM], [300, 750, 4500]],
+    [["Policy number: ML-4471209-HC", PREM], [750, 1200, 4500]],
+    [["Plan: Basic (days 1 to 3 not covered)", PREM], [300, 750, 4500]],
+    [["Payable from: day 3", PREM], [450, 900, 4500]],
+  ];
+  const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
+  for (const [after, truth] of LAYOUTS) for (const [i, days] of [5, 8, 40].entries()) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", CAPPED_LINE, ...after].join("\n");
+    const shown = fieldStay(page, CAPPED_LINE, days).amounts.filter((a) => a !== "S$150");
+    assert.ok(shown.length === 0 || (shown.length === 1 && shown[0] === money(truth[i])), `${after[0] ?? "(last line)"}, ${days} days: ${shown}`);
+    if (after.length <= 1) assert.deepEqual(shown, [money(truth[i])], `${after[0] ?? "(last line)"} is worked out`);
+  }
 });
 test("a stay statement is never kept without its labelled daily row", () => {
   const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30, alone: true }] } };
