@@ -7,7 +7,10 @@ import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT, TABLE_ANSWER_SCHEMA } from 
 
 export type Turn = { role: "user" | "assistant"; text: string };
 /** `withRows`: the library carries the benefit table, and each statement names its row (lib/benefit-table/chat.ts). */
-export type SimpleModelCall = { library: string; history: Turn[]; question: string; withRows?: boolean };
+export type SimpleModelCall = { library: string; history: Turn[]; question: string; withRows?: boolean;
+  /** false: the library is not written to the prompt cache (a first question sent only one member's documents,
+   * lib/simple-chat/hook.ts: no later question reads that library). */
+  cache?: boolean };
 export type SimpleUsage = { input: number; cacheWrite: number; cacheRead: number; output: number };
 export type SimpleModelReply = { json: unknown; stopReason: string | null; model: string; usage: SimpleUsage };
 export type SimpleModel = { choice: ModelChoice; call(args: SimpleModelCall): Promise<SimpleModelReply> };
@@ -64,6 +67,12 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
   };
 }
 
+/** The request without its cache mark when the call asks for none (SimpleModelCall.cache false). */
+export function uncachedIfAsked(request: ReturnType<typeof anthropicRequest>, args: SimpleModelCall): ReturnType<typeof anthropicRequest> {
+  if (args.cache !== false) return request;
+  return { ...request, system: request.system.map((b) => ({ type: b.type, text: b.text })) as ReturnType<typeof anthropicRequest>["system"] };
+}
+
 type AnthropicLike = { beta: { messages: { stream(params: ReturnType<typeof anthropicRequest>): { finalMessage(): Promise<{ content: { type: string; text?: string }[]; stop_reason: string | null; model: string; usage: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } }> } } } };
 
 const parseJson = (text: string): unknown => {
@@ -79,7 +88,7 @@ export function anthropicModel(choice: ModelChoice, client?: AnthropicLike): Sim
         const { default: Anthropic } = await import("@anthropic-ai/sdk");
         c = new Anthropic({ apiKey: apiKeyFromEnv().key, baseURL: API_BASE_URL }) as unknown as AnthropicLike;
       }
-      const message = await c.beta.messages.stream(anthropicRequest(choice, args)).finalMessage();
+      const message = await c.beta.messages.stream(uncachedIfAsked(anthropicRequest(choice, args), args)).finalMessage();
       const text = message.content.flatMap((b) => (b.type === "text" && b.text ? [b.text] : [])).join("");
       return {
         json: message.stop_reason === "refusal" ? null : parseJson(text),

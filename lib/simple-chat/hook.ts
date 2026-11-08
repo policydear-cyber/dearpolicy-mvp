@@ -21,7 +21,8 @@ import type { ChatAnswer } from "@/types";
 import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
-import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
+import { alternating, LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
+import { scopeFor, SCOPED_SHARE_MAX } from "./scope";
 import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { amountsFromRows, asksForNobody, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
@@ -30,7 +31,9 @@ export type SimpleChatState = ConversationState & { simpleChat?: { turns: { mode
 type Save = typeof saveTurn;
 export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
   /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
-  table?: (accountId: string) => Promise<BenefitTable | null> };
+  table?: (accountId: string) => Promise<BenefitTable | null>;
+  /** false: send every document whoever the message names (tests compare a scoped turn with the whole library). */
+  scope?: boolean };
 
 /** The signed-in household's benefit table when DEARPOLICY_BENEFIT_TABLE is live, otherwise null. */
 async function liveTable(accountId: string): Promise<BenefitTable | null> {
@@ -260,7 +263,18 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   else try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now, claimWindows(household)) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
+    const pages = rows ? pagesToSend(rows, household) : undefined;
+    const whole = renderLibrary(household, pages) + (rows ? renderTable(rows) : "");
+    // A conversation's first question that names exactly one member is sent only that member's documents, and every
+    // shared one, in full (lib/simple-chat/scope.ts), uncached, when that is at most SCOPED_SHARE_MAX of the whole
+    // library. Every later question is sent the whole library, cached, so a conversation writes the cache at most once
+    // (TE #393: scoped and whole turns in turn wrote a new cache each time). A one-question chat then costs at most half
+    // the uncached library instead of a cache write of all of it; a longer one costs at most the scoped call more, less the
+    // cached read it replaces.
+    const scope = deps.scope === false || alternating(history).length ? null : scopeFor(message, household, rows);
+    const scoped = scope ? renderLibrary(household, pages, scope) + (rows ? renderTable(rows.filter((r) => scope.keep.has(r.source.documentId))) : "") : null;
+    const sendScoped = scoped !== null && scoped.length <= SCOPED_SHARE_MAX * whole.length;
+    reply = await model.call({ library: sendScoped ? scoped : whole, cache: !sendScoped, withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now, claimWindows(household)) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage, LIBRARY_CACHE_WRITE_RATE) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
