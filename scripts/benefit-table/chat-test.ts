@@ -440,54 +440,6 @@ async function integration() {
     assert.match(shown[0].text, /plan 300\)\.$/);
     assert.match(shown[0].basis ?? "", /^75% of .*sum insured/);
   });
-  // A question that names exactly one member (live 8 Nov cost fix, lib/simple-chat/scope.ts): the made-up household gets
-  // a plan of Ah Kow's alone and a plan of Mei Ling's alone; the scheme terms and certificate stay shared.
-  const MLPLAN = "aaaaaaaa-0000-0000-0000-000000000041";
-  const HOUSE3: Household = { ...HOUSE, documents: [...HOUSE.documents.map((d) => d.policyId === ILP ? { ...d, linkedPeople: ["Lim Ah Kow"] } : d),
-    doc(MLPLAN, "Mei Ling care plan.pdf", [{ page: 1, text: "Tan Mei Ling\tSum assured S$80,000\nHome nursing Up to S$2,000 a year" }, { page: 2, text: "Waiting period: no home nursing benefit is payable within 60 days of cover starting." }])
-      ].map((d) => d.policyId === MLPLAN ? { ...d, linkedPeople: ["Tan Mei Ling"] } : d) };
-  const mlR = checkReading(src(HOUSE3.documents[3]), reading("personal_proof", "CarePlan", [{ person: "Tan Mei Ling", product: "CarePlan", cover: "CarePlan", plan: null, sumInsured: 80000, asOf: null, page: 1, quote: "Tan Mei Ling Sum assured S$80,000" }],
-    [b({ section: null, benefit: "Home nursing", pays: "up_to", value: 2000, page: 1, quote: "Home nursing Up to S$2,000 a year" })]));
-  const table3 = assembleTable([certR, termsR, ilpR, mlR], family, [...links, { section: sectionKeyOf(MLPLAN, { section: null, column: null }), cover: coverKeyOf({ product: "CarePlan", cover: "CarePlan", plan: null }), why: "the plan" }]);
-  const rows3 = chatRows(table3, HOUSE3);
-  const turn3 = async (message: string, statements: (rs: typeof rows3) => Record<string, unknown>[], scope: boolean) => {
-    const calls: SimpleModelCall[] = [];
-    const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call(c) { calls.push(c); return { json: { bottomLine: "The amounts below.", nextSteps: [], question: null,
-      statements: statements(rows3).map((st) => ({ kind: "amount", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "no_event", waiting: null, period: null, ...st })) }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
-    const context = { request: { accountId: HOUSE.accountId, familyMemberId: null, question: message, submittedQuestion: message },
-      family: [{ id: "p1", display_name: "Lim Ah Kow", preferred_name: null, relationship: "self" }], people: [],
-      conversation: { id: "c1", account_id: HOUSE.accountId, family_member_id: null, title: "t", revision: 1, state: { subjects: {} } }, token: {}, holdings: [] } as unknown as ChatContext;
-    const saved: { answer: unknown }[] = [];
-    await runSimpleChat(context, {}, { model, household: async () => HOUSE3, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false,
-      table: async () => table3, today: () => new Date("2026-10-21T04:00:00Z"), scope });
-    return { call: calls[0], answer: saved[0].answer };
-  };
-  const rowsOf = (person: string) => rows3.filter((r) => r.person === person);
-  const lineOf = (lib: string, id: string) => new RegExp(`^${id} \\|`, "m").test(lib);
-  await atest("one member named: their rows, their documents and every shared one are sent; the answer is the same as with the whole library", async () => {
-    for (const [message, person, own, other] of [
-      ["What does Tan Mei Ling get for home nursing?", "Tan Mei Ling", "Home nursing Up to S$2,000", "Non-Guaranteed Surrender Value"],
-      ["What is Lim Ah Kow's surrender value?", "Lim Ah Kow", "Non-Guaranteed Surrender Value", "Home nursing Up to S$2,000"],
-    ] as const) {
-      const pick = (rs: typeof rows3) => rs.filter((r) => r.person === person).map((r) => ({ row: r.id, rowBenefit: r.benefit, person, text: `${r.benefit}.` }));
-      const scoped = await turn3(message, pick, true), whole = await turn3(message, pick, false);
-      // Every row of the person's, with its conditions, is in the table sent; and the cards and conditions saved are the same.
-      for (const r of rowsOf(person)) assert.ok(lineOf(scoped.call.library, r.id), `${person}: ${r.id} ${r.benefit}`);
-      assert.deepEqual(scoped.answer, whole.answer, message);
-      assert.ok(JSON.stringify(scoped.answer).includes("S$"), "the answer gives amounts");
-      // The person's own plan and the shared scheme pages are sent; the other member's own plan's pages are not.
-      assert.ok(scoped.call.library.includes(own) && whole.call.library.includes(other), message);
-      assert.ok(!scoped.call.library.includes(other), message);
-      assert.match(scoped.call.library, /Ambulance Cost/);
-      const pages = (lib: string) => lib.split("<page n=").length - 1;
-      assert.ok(pages(scoped.call.library) < pages(whole.call.library), `${pages(scoped.call.library)} of ${pages(whole.call.library)} pages`);
-    }
-  });
-  await atest("two people, the speaker, a relative, or nobody named: the whole library and every row are sent", async () => {
-    const whole = (await turn3("What does Tan Mei Ling get?", () => [], false)).call.library;
-    for (const m of ["What do Tan Mei Ling and Lim Ah Kow get?", "What does my wife get for home nursing?", "What do we get for an ambulance?", "What is the waiting period?", "Does Mei Ling get the same as me?"])
-      assert.equal((await turn3(m, () => [], true)).call.library, whole, m);
-  });
   await atest("in the app's chat turn, a made-up row is dropped and the household is told an amount was left out", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "amount", text: "made up", person: "Lim Ah Kow", document: null, quote: null, amount: "S$777", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: "R99" }] }), true);
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);

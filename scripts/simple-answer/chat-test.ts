@@ -153,8 +153,8 @@ async function main() {
   });
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
-    const r = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" }, { library: renderLibrary(HOUSE), history: [{ role: "assistant", text: "stray" }, { role: "user", text: "a" }, { role: "user", text: "b" }, { role: "assistant", text: "c" }], question: "q", cache: true });
-    // Was (before the 8 Nov cost fix): "1h", with no cache flag.
+    const r = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" }, { library: renderLibrary(HOUSE), history: [{ role: "assistant", text: "stray" }, { role: "user", text: "a" }, { role: "user", text: "b" }, { role: "assistant", text: "c" }], question: "q" });
+    // Was (before the 8 Nov cost fix): "1h".
     assert.equal(r.system[1].cache_control?.ttl, "5m");
     assert.match(r.system[1].text, /<page n="13">/);
     assert.equal(r.output_config.format.schema, SIMPLE_ANSWER_SCHEMA);
@@ -343,8 +343,6 @@ async function main() {
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
     // Was (#337): input 100100, "booked at the 1-hour cache price, 2x". The cache is now 5 minutes (8 Nov cost fix).
     assert.deepEqual(state.simpleChat.turns[0].usage, { input: 62600, output: 400, cached: 0 }, "the 50,000-token library write is booked at the 5-minute cache price, 1.25x");
-    // This turn has earlier questions, so the library is cached; a first question's is not (scripts/simple-answer/scope-test.ts).
-    assert.equal((call as { cache?: boolean }).cache, true);
   });
 
   await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
@@ -1289,19 +1287,13 @@ async function main() {
   });
   // Was (#337): "the household's library is cached for an hour, and the chat books its cache writes at the 1-hour 2x price",
   // with ttl "1h", LIBRARY_CACHE_WRITE_RATE 2, ledger input 1210 and callUsd 2. Changed by the 8 Nov cost fix: every live
-  // simple chat was one question, so the 1-hour write was never read and doubled each question's cost.
-  await check("the library is cached only when asked (from a conversation's second question), for 5 minutes, booked at 1.25x", () => {
-    const req = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" } as never, { library: "LIB", history: [], question: "q", cache: true });
+  // simple chat was one question, so the 1-hour write was never read and nearly doubled each question's cost.
+  await check("the household's library is cached for 5 minutes, and the chat books its cache writes at the 5-minute 1.25x price", () => {
+    const req = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" } as never, { library: "LIB", history: [], question: "q" });
     const cached = req.system.filter((b) => "cache_control" in b && b.cache_control);
     assert.equal(cached.length, 1);
     assert.equal(cached[0].text, "LIB");
     assert.deepEqual(cached[0].cache_control, { type: "ephemeral", ttl: "5m" });
-    // A first question writes no cache: it is paid at the plain input price.
-    for (const cache of [false, undefined]) {
-      const first = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" } as never, { library: "LIB", history: [], question: "q", cache });
-      assert.equal(first.system.filter((b) => "cache_control" in b).length, 0, String(cache));
-      assert.equal(first.system[1].text, "LIB");
-    }
     assert.equal(LIBRARY_CACHE_WRITE_RATE, 1.25);
     assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }, LIBRARY_CACHE_WRITE_RATE), { input: 1135, output: 5, cached: 1000 });
     assert.equal(callUsd({ input: 1, output: 0, cachedInput: 0.1 }, { input: 0, cacheWrite: 1e6, cacheRead: 0, output: 0 }), 1.25);

@@ -9,7 +9,6 @@ import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { failedDocumentChatAdvice, type FailedDocumentChatAdvice } from "@/lib/documents/failure-advice";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
-import { SCOPED_OUT, scopeNote, type ChatScope } from "./scope";
 
 export type HouseholdPage = { page: number; text: string };
 export type HouseholdDocument = {
@@ -194,8 +193,7 @@ export const readInPart = (doc: HouseholdDocument) => {
     part.length ? `some amounts on ${pageList(part)} could not be checked against the page image and show as "[amount not checked]"; they are not used` : null].filter(Boolean).join("; ");
 };
 
-/** leftOutNote: said on the pages left out (PAGES_LEFT_OUT, or the scope's SCOPED_OUT for another member's document). */
-export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>, leftOutNote: string = PAGES_LEFT_OUT): string {
+export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>): string {
   const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
@@ -210,20 +208,17 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
     : [...sent.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`),
-      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length + (doc.unreadablePages?.length ?? 0)}" note="${leftOutNote}"/>`] : [])].join("\n");
+      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length + (doc.unreadablePages?.length ?? 0)}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
   return `${head}\n${pages}\n</document>`;
 }
 
 /** pagesSent: with the benefit table, only the pages its rows cite and those documents' rule pages are sent (keys
  * `${policyId}#${page}`, pagesToSend in lib/benefit-table/chat.ts), about half the whole library; every document's details
  * are still sent. */
-/** scope: a question that names exactly one member (lib/simple-chat/scope.ts): a document not in scope.keep is listed with
- * its details and none of its pages. */
-export function renderLibrary(household: Household, pagesSent?: Set<string>, scope?: ChatScope | null): string {
+export function renderLibrary(household: Household, pagesSent?: Set<string>): string {
   const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
-  const note = (pagesSent ? `\n<pages_note>${PAGES_NOTE}</pages_note>` : "") + (scope ? `\n<scope_note>${escapeText(scopeNote(scope.person))}</scope_note>` : "");
-  const render = (d: HouseholdDocument, i: number) => scope && !scope.keep.has(d.policyId) ? renderDocument(d, i, new Set(), SCOPED_OUT) : renderDocument(d, i, pagesSent);
-  return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map(render).join("\n")}\n</documents>`;
+  const note = pagesSent ? `\n<pages_note>${PAGES_NOTE}</pages_note>` : "";
+  return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent)).join("\n")}\n</documents>`;
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 
