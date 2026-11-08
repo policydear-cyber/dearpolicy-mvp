@@ -44,8 +44,11 @@ export function alternating(history: Turn[]): Turn[] {
 }
 
 /** How long the household's library stays cached, and what writing it costs as a multiple of the input price
- * (Anthropic: 1.25x for 5 minutes, 2x for 1 hour). The ledger and the spend cap book the chat's writes at this rate. */
-export const LIBRARY_CACHE_TTL = "1h" as const;
+ * (Anthropic: 1.25x for 5 minutes, 2x for 1 hour). The ledger and the spend cap book the chat's writes at this rate.
+ * 5 minutes (live 3 to 8 Nov: every simple chat was one question, so the 1-hour write at 2x was never read and nearly
+ * doubled each question's cost). A first question now costs 1.25x, and a follow-up within 5 minutes reads the library at
+ * the cached price, as before. */
+export const LIBRARY_CACHE_TTL = "5m" as const;
 export const CACHE_WRITE_RATE = { "5m": 1.25, "1h": 2 } as const;
 export const LIBRARY_CACHE_WRITE_RATE = CACHE_WRITE_RATE[LIBRARY_CACHE_TTL];
 
@@ -53,8 +56,8 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
   return {
     model: choice.model,
     max_tokens: MAX_OUTPUT_TOKENS,
-    // The library is the same for every question of a household, so it is cached after the first request. It is kept
-    // for an hour (LIBRARY_CACHE_TTL), so a household that comes back within the hour reads it at the cached price.
+    // The library is the same for every question of a household, so it is cached after the first request, for
+    // LIBRARY_CACHE_TTL: a follow-up within that time reads it at the cached price.
     system: [
       { type: "text" as const, text: SIMPLE_SYSTEM_PROMPT },
       { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: LIBRARY_CACHE_TTL } },
