@@ -591,6 +591,17 @@ test("one field per line: a field that limits the daily row stays with it, so th
   for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days"]) for (const below of [
     ["Travel\tClassic\tBusiness", "Overseas hospital cash\tS$50 per day\tS$100 per day"], ["Outpatient\tPlan A\tPlan B", "GP visit\tS$30\tS$50", "Specialist\tS$80\tS$120"],
     ["Critical illness\tPlan A\tPlan B", "Lump sum\tS$50,000\tS$100,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Baggage\tS$500\tS$1,000"],
+    // Critic P396 H: a hospital word in another cover's own table, a plan tier column named "Max", or a heading that only
+    // starts with "Most" is not a cap on this row.
+    ["Travel\tClassic\tBusiness", "Overseas medical and hospital expenses\tS$200,000\tS$500,000"], ["Travel\tClassic\tBusiness", "Hospital visit by a relative\tS$5,000\tS$10,000"],
+    ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Post-hospitalisation in Singapore\tS$10,000\tS$20,000"],
+    ["Personal accident\tPlan A\tPlan B", "Accidental death\tS$100,000\tS$200,000", "Hospitalisation due to accident\tS$5,000\tS$10,000"],
+    ["Maternity\tPlan A\tPlan B", "Hospital delivery\tS$3,000\tS$5,000"], ["Critical illness\tPlan A\tPlan B", "Admitted to ICU lump sum\tS$10,000\tS$20,000"],
+    ["Outpatient\tPlan A\tPlan B", "Pre-hospital consultation\tS$500\tS$800"], ["Most popular\tPlan A\tPlan B", "Trip cancellation\tS$5,000\tS$10,000"],
+    ["Travel\tClassic\tMax", "Trip cancellation\tS$5,000\tS$10,000"], ["Benefit\tBasic\tPremier", "Dental\tS$500\tS$1,000"],
+    // TE #396 AC, AD: an age table under "Maximum age", and a hospital stay in a travel table.
+    ["Maximum age\tEntry\tRenewal", "Life assured\t65\t75"], ["Travel\tClassic\tBusiness", "Hospital stay abroad\tS$5,000\tS$10,000"],
+    ["Optional riders\tMost popular\tAlso available", "Dental rider\tYes\tNo"],
   ]) assert.deepEqual(fieldStay(["SCHEDULE", "Insured: Lim Ah Kow", tabbed, ...below, "Policy number: HX-55120"].join("\n"), tabbed, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
   // Critic P392 F: a cap for this row printed under a heading row, tabbed or not, or a row of the later table that names
   // this row, holds the total back.

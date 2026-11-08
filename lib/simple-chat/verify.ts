@@ -369,6 +369,12 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
   const label = /^[^\t:]*/.exec(row.text.trim())![0];
   const names = (label.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !GENERIC_NAME_WORD.test(w));
   let inLaterTable = false;
+  // Whether the later table's heading names no cover of its own ("Benefit\tPlan A\tPlan B", "Section 2", blank): only
+  // then may a row under it that names a hospital stay be this row's cap (Critic P396 H).
+  let genericHeading = false;
+  // A later heading whose first cell says its rows are most amounts ("Maximum benefit\tPlan A\tPlan B"): a limit line once
+  // a row under it prints money or days (Critic P396 G); an age table under "Maximum age" is not one (TE #396 AC).
+  let limitHeading: string | null = null;
   for (const l of pageText.slice(row.end + 1).split("\n")) {
     if (!l.trim()) continue;
     const table = nextTableRow(l);
@@ -376,12 +382,19 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
     // P392 F). Was (round 5): it ended the block.
     // A heading row whose own words say it prints most amounts ("Maximum benefit\tPlan A\tPlan B", "Yearly maximum", "Max.
     // payable", "Highest amount paid") is a limit line: the rows under it may cap this one (Critic P396 G).
-    if (table === "heading" && HEADING_LIMIT.test(l)) { kept.push(l); inLaterTable = true; continue; }
-    if (table === "heading") { inLaterTable = true; continue; }
+    if (table === "heading") {
+      const first = l.split("\t")[0];
+      inLaterTable = true;
+      genericHeading = GENERIC_HEADING.test(first);
+      // Only the first cell: a plan tier column named "Max" is not one (Critic P396 H).
+      limitHeading = HEADING_LIMIT.test(first) ? l : null;
+      continue;
+    }
+    if (limitHeading && /\t/.test(l) && MONEY_OR_DAYS.test(l)) { kept.push(limitHeading, l); limitHeading = null; continue; }
     if (table === "rate") continue;
     // Under a later table's heading, a tabbed row that names none of this row's words and prints no limit or rule word is
     // that table's own row ("Trip cancellation\tS$5,000\tS$10,000" under "Travel\tClassic\tBusiness"): left out.
-    if (inLaterTable && /\t/.test(l) && !STAY_WORD.test(l) && !names.some((w) => new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test(l.replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
+    if (inLaterTable && /\t/.test(l) && !(genericHeading && STAY_WORD.test(l)) && !names.some((w) => new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test((genericHeading ? l : l.replace(CARE_LEVEL, " ")).replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
     if (ANY_WARD.test(l)) continue;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
@@ -406,10 +419,20 @@ function nextTableRow(line: string): "rate" | "heading" | null {
   if (rate.test(line)) return MONEY_IN_VALUE.test(words) ? null : "rate";
   return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line) ? "heading" : null;
 }
-/** A table's heading row that says its rows are most amounts: "max", "max.", "maximum", "highest", "most" (Critic P396 G). */
-const HEADING_LIMIT = /\b(?:max(?:imum|ima)?|highest|most|upper)\b/i;
-/** Words of a hospital stay: a row under a later table's heading that says one ("Hospital confinement\tS$2,000") may cap
- * this stay row, so it is never taken for that table's own row (Critic P396 G). */
+/** The first cell of a table's heading row that says its rows are most amounts: "Max.", "Maximum benefit", "Yearly
+ * maximum", "Highest amount paid", "Most payable" (Critic P396 G); never "Most popular" (P396 H). */
+const HEADING_LIMIT = /\b(?:max(?:imum|ima)?|highest|most\s+(?:paid|payable|amounts?|benefits?)|upper\s+limits?)\b/i;
+/** Money or a number of days in a line: what makes a row under a "Maximum ..." heading a limit (TE #396 AC). */
+const MONEY_OR_DAYS = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d|\b\d+\s*(?:days?|nights?)\b/i;
+/** The first cell of a heading row that names no cover of its own: blank, "Benefit(s)", "Plan", "Section 2", "Schedule",
+ * "Cover(age)", "... continued" (Critic P396 H). */
+const GENERIC_HEADING = /^\s*(?:(?:benefits?|plans?|section(?:\s+\w+)?|schedule(?:\s+of\s+benefits)?|cover(?:age)?)\s*|.*\bcontinued\s*)?$/i;
+/** A level of hospital care ("ICU", "intensive care"): under a heading that names another cover ("Critical illness\tPlan
+ * A\tPlan B"), a row that says one ("Admitted to ICU lump sum\tS$10,000") is that cover's own row, not a rule on this stay
+ * (Critic P396 H). */
+const CARE_LEVEL = /\b(?:intensive(?:\s+care)?|icu)\b/gi;
+/** Words of a hospital stay: under a generic heading (GENERIC_HEADING), a row that says one ("Hospital
+ * confinement\tS$2,000") may cap this stay row, so it is never taken for that table's own row (Critic P396 G, H). */
 const STAY_WORD = /\b(?:hospital\w*|confine\w*|in-?patient|admission|admitted|warded|wards?|stays?)\b/i;
 /** Words of a benefit's name that do not tell one benefit from another ("Daily ... Benefit"). */
 const GENERIC_NAME_WORD = /^(?:benefits?|daily|the|and|for|per|day|days|plan|cover|amount|payable|paid)$/;
