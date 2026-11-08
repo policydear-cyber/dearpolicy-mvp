@@ -587,6 +587,11 @@ test("one field per line: a field that limits the daily row stays with it, so th
   // "Overall limit S$2,000"] expected ["S$150", "S$2,700"]; it is a shared cap under a heading, so no total now.
   const travel = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Baggage\tS$500\tS$1,000"].join("\n");
   assert.deepEqual(fieldStay(travel, ROW, 20).amounts, ["S$150", "S$2,700"]);
+  // Critic P396 G: another benefit's table (its own rate rows, outpatient or lump-sum rows) keeps main's total.
+  for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days"]) for (const below of [
+    ["Travel\tClassic\tBusiness", "Overseas hospital cash\tS$50 per day\tS$100 per day"], ["Outpatient\tPlan A\tPlan B", "GP visit\tS$30\tS$50", "Specialist\tS$80\tS$120"],
+    ["Critical illness\tPlan A\tPlan B", "Lump sum\tS$50,000\tS$100,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Baggage\tS$500\tS$1,000"],
+  ]) assert.deepEqual(fieldStay(["SCHEDULE", "Insured: Lim Ah Kow", tabbed, ...below, "Policy number: HX-55120"].join("\n"), tabbed, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
   // Critic P392 F: a cap for this row printed under a heading row, tabbed or not, or a row of the later table that names
   // this row, holds the total back.
   for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days"]) for (const below of [
@@ -596,6 +601,16 @@ test("one field per line: a field that limits the daily row stays with it, so th
     ["Benefit\tPlan A\tPlan B", "Ward cash is paid for at most 10 days"], ["Notes\tApplies to\tPlans", "Ward cash: S$2,000 most per year"],
     ["Travel\tClassic\tBusiness", "Ward cash\tS$2,000\tS$4,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Overall limit S$2,000"],
     ["Ward: any (B2 only)"], ["Ward: all except private"],
+    // Critic P396 G: a heading row that says its rows are most amounts, or a row under a later heading that names a
+    // hospital stay, may cap this row.
+    ["Maximum benefit\tPlan A\tPlan B", "Daily benefits\tS$2,000\tS$4,000"], ["Yearly maximum\tPlan A\tPlan B", "Daily benefits\tS$2,000\tS$4,000"],
+    ["Maximum amounts\tPlan A\tPlan B", "In-patient\tS$2,000\tS$4,000"], ["Max. benefit\tPlan A\tPlan B", "Hospitalisation\tS$2,000\tS$4,000"],
+    ["Maximum benefit\tPlan A\tPlan B", "Hospital income\tS$2,000\tS$4,000"], ["Max payable\tPlan A\tPlan B", "W/cash\tS$2,000\tS$4,000"],
+    ["Highest amount paid\tPlan A\tPlan B", "Cash benefits\tS$2,000\tS$4,000"], ["Benefit\tPlan A\tPlan B", "Ward\tS$2,000\tS$4,000"],
+    ["Benefit\tPlan A\tPlan B", "WARD CASH\tS$2,000\tS$4,000"], ["Benefit\tPlan A\tPlan B", "Wardcash\tS$2,000\tS$4,000"],
+    ["Benefit\tPlan A\tPlan B", "Total payable\tS$2,000\tS$4,000"], ["Benefit\tPlan A\tPlan B", "Hospital confinement\tS$2,000\tS$4,000"],
+    ["Benefit\tPlan A\tPlan B", "In-hospital cash (max)\tS$2,000\tS$4,000"], ["Benefit\tPlan A\tPlan B", "Ward cash (yearly)\tS$2,000\tS$4,000"],
+    ["Section 2\tPlan A\tPlan B", "Total hospital benefits\tS$2,000\tS$4,000"], ["Travel\tClassic\tBusiness", "Cash for each day in hospital overseas\tS$2,000\tS$4,000"],
   ]) {
     const page = ["SCHEDULE", "Insured: Lim Ah Kow", tabbed, ...below, "Policy number: HX-55120"].join("\n");
     assert.deepEqual(fieldStay(page, tabbed, 20).amounts, ["S$150"], `${tabbed} / ${below.join(" / ")}`);

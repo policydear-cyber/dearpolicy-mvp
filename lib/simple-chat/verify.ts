@@ -374,11 +374,14 @@ export function stayBlock(pageText: string, offset: number): { text: string; tai
     const table = nextTableRow(l);
     // A table's heading row is left out, never the end of the block: a cap printed under it may be this row's (Critic
     // P392 F). Was (round 5): it ended the block.
+    // A heading row whose own words say it prints most amounts ("Maximum benefit\tPlan A\tPlan B", "Yearly maximum", "Max.
+    // payable", "Highest amount paid") is a limit line: the rows under it may cap this one (Critic P396 G).
+    if (table === "heading" && HEADING_LIMIT.test(l)) { kept.push(l); inLaterTable = true; continue; }
     if (table === "heading") { inLaterTable = true; continue; }
     if (table === "rate") continue;
     // Under a later table's heading, a tabbed row that names none of this row's words and prints no limit or rule word is
     // that table's own row ("Trip cancellation\tS$5,000\tS$10,000" under "Travel\tClassic\tBusiness"): left out.
-    if (inLaterTable && /\t/.test(l) && !names.some((w) => new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test(l.replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
+    if (inLaterTable && /\t/.test(l) && !STAY_WORD.test(l) && !names.some((w) => new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test(l.replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
     if (ANY_WARD.test(l)) continue;
     const field = FIELD_LINE.exec(l);
     if (field && nonBenefitField(field[1], l.slice(field[0].length - 1))) continue;
@@ -403,6 +406,11 @@ function nextTableRow(line: string): "rate" | "heading" | null {
   if (rate.test(line)) return MONEY_IN_VALUE.test(words) ? null : "rate";
   return (line.match(/\t/g) ?? []).length >= 2 && !/\d/.test(line) ? "heading" : null;
 }
+/** A table's heading row that says its rows are most amounts: "max", "max.", "maximum", "highest", "most" (Critic P396 G). */
+const HEADING_LIMIT = /\b(?:max(?:imum|ima)?|highest|most|upper)\b/i;
+/** Words of a hospital stay: a row under a later table's heading that says one ("Hospital confinement\tS$2,000") may cap
+ * this stay row, so it is never taken for that table's own row (Critic P396 G). */
+const STAY_WORD = /\b(?:hospital\w*|confine\w*|in-?patient|admission|admitted|warded|wards?|stays?)\b/i;
 /** Words of a benefit's name that do not tell one benefit from another ("Daily ... Benefit"). */
 const GENERIC_NAME_WORD = /^(?:benefits?|daily|the|and|for|per|day|days|plan|cover|amount|payable|paid)$/;
 /** A ward field that names no ward at all ("Ward: any", "Ward type: all wards"): no condition on the stay. */
