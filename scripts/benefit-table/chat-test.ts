@@ -581,12 +581,24 @@ test("one field per line: a field that limits the daily row stays with it, so th
     const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below, "Policy number: HX-55120"].join("\n");
     assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150"], below.join(" / "));
   }
-  // A table's heading row (two or more tabs, no figure) ENDS the block: a new table starts there, so what is under it is
-  // that table's, as on main (Critic P392 round 5). Was (round 4): ["Travel..."] and ["Benefit\tPlan A\tPlan B",
-  // "Overall limit S$2,000"] expected ["S$150"] (no total).
-  for (const below of [["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"], ["Benefit\tPlan A\tPlan B", "Overall limit S$2,000"]]) {
-    const page = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, ...below].join("\n");
-    assert.deepEqual(fieldStay(page, ROW, 20).amounts, ["S$150", "S$2,700"], below.join(" / "));
+  // A table's heading row (two or more tabs, no figure) is left out, never the end of the block; under it, a tabbed row
+  // that names none of this row's words and prints no limit word is that table's own row, left out too, so the travel
+  // table keeps main's total (Critic P392 F). Was (round 5): the heading ended the block, and ["Benefit\tPlan A\tPlan B",
+  // "Overall limit S$2,000"] expected ["S$150", "S$2,700"]; it is a shared cap under a heading, so no total now.
+  const travel = ["SCHEDULE", "Insured: Lim Ah Kow", ROW, "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Baggage\tS$500\tS$1,000"].join("\n");
+  assert.deepEqual(fieldStay(travel, ROW, 20).amounts, ["S$150", "S$2,700"]);
+  // Critic P392 F: a cap for this row printed under a heading row, tabbed or not, or a row of the later table that names
+  // this row, holds the total back.
+  for (const tabbed of [ROW, "Ward cash\tS$150 per day from the 3rd day, maximum 30 days"]) for (const below of [
+    ["Benefit\tPlan A\tPlan B", "Overall limit S$2,000"], ["Maximum benefit\tPlan A\tPlan B", "All cash benefits\tS$2,000\tS$4,000"],
+    ["Cash benefits\tPlan A\tPlan B", "Combined limit\tS$2,000\tS$4,000"], ["\tPlan A\tPlan B", "Overall limit for all benefits in this table: S$2,000"],
+    ["Ward cash\tPlan A\tPlan B", "S$2,000 in all"], ["Hospital benefits continued\tPlan A\tPlan B", "Aggregate for ward cash: S$2,000"],
+    ["Benefit\tPlan A\tPlan B", "Ward cash is paid for at most 10 days"], ["Notes\tApplies to\tPlans", "Ward cash: S$2,000 most per year"],
+    ["Travel\tClassic\tBusiness", "Ward cash\tS$2,000\tS$4,000"], ["Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000", "Overall limit S$2,000"],
+    ["Ward: any (B2 only)"], ["Ward: all except private"],
+  ]) {
+    const page = ["SCHEDULE", "Insured: Lim Ah Kow", tabbed, ...below, "Policy number: HX-55120"].join("\n");
+    assert.deepEqual(fieldStay(page, tabbed, 20).amounts, ["S$150"], `${tabbed} / ${below.join(" / ")}`);
   }
   // A limit printed before the next table's heading row still holds the row back.
   const limitThenTable = ["SCHEDULE", ROW, "Overall limit: S$2,000", "Travel\tClassic\tBusiness", "Trip cancellation\tS$5,000\tS$10,000"].join("\n");
