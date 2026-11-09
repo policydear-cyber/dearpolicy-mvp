@@ -106,11 +106,16 @@ async function main() {
       line(["50,000.0060,000.00"], [300]), line(["Premium", "Sum Assured"], [500, 100])];
     held(await check("Benefit\tSum Assured\tPremium\nDeath\t100.00\t50,000.00\nTotal Disability\t200.00\t60,000.00\nPremium\tSum Assured", lines), "50,000.00");
   });
-  await test("the same labels in two tables: the table that agrees is kept, the one swapped in the image is held (Critic P398 C1)", async () => {
+  await test("the same labels printed in two tables: a run found in two places could be either table's, so both are held (Critic P398 C1, E2)", async () => {
     const lines = [line(["DeathTotal Disability"], [40]), line(["100,000.00200,000.00"], [300]), line(["Accident"], [40]), line(["DeathTotal Disability"], [40]), line(["5,000.0010,000.00"], [300])];
     const out = await check("Death\t100,000.00\nTotal Disability\t200,000.00\nAccident\nDeath\t10,000.00\nTotal Disability\t5,000.00", lines);
-    assert.ok(out.text.split("\n").includes("Death\t100,000.00"), out.text);
+    held(out, "100,000.00");
     held(out, "5,000.00");
+  });
+  await test("a word column the image prints in another row order (statuses swapped): held (Critic P398 E6)", async () => {
+    const lines = [line(["DeathTotal Disability"], [40]), line(["In ForceLapsed"], [150]), line(["100,000.00200,000.00"], [300])];
+    held(await check("Death\tLapsed\t100,000.00\nTotal Disability\tIn Force\t200,000.00", lines), "100,000.00");
+    kept(await check("Death\tIn Force\t100,000.00\nTotal Disability\tLapsed\t200,000.00", lines));
   });
 
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);

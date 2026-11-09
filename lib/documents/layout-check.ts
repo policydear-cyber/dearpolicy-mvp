@@ -249,7 +249,9 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
     if (best) matches.push(best);
   }
   if (!matches.length) return null;
-  const labelsInOrder = (m: Match) => { const run = m.rows.map((k) => squash(iCells[k][0] ?? "")).join(""); return !!run && textCells.some((tc) => tc.s.includes(run)); };
+  // A run (cells of one column joined in row order) stands somewhere only when exactly one text cell holds it: printed in
+  // two places it could be either table's (Critic P398 E2), and the row is held.
+  const runAt = (run: string) => { const at = textCells.filter((tc) => tc.s.includes(run)); return at.length === 1 ? at[0].x : undefined; };
   // Where a word cell stands: the text cells that hold it, all at one left edge. A cell that holds a longer cell of the
   // same line (the "Component" of "Component Premium") is not counted for it; cells at different places, or none, are no
   // evidence and the row is held (Critic P398 C5: a footer repeating the headings).
@@ -268,16 +270,28 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
     return h !== undefined && iCells[h].length >= 2 && iCells[h].length === iCells[k].length && !figureRow(h) ? h : null;
   };
   const kept = new Map<number, boolean>();
+  // Every column of the rows a figure run covers, words as well as figures, joined in the same row order, must be one run
+  // in exactly one text cell (Critic P398 E6: a status column swapped between two rows); each column's place must be the
+  // same for every run that covers the row, and the columns must stand left to right as the image prints them.
   const rowKept = (k: number) => {
     if (kept.has(k)) return kept.get(k)!;
-    const spots: number[][] = [];
+    const place = new Map<number, number>();
     let ok = true;
     for (let c = 0; c < iCells[k].length && ok; c++) {
-      const cell = iCells[k][c];
-      if (!squash(cell)) continue;
-      const xs = hasDigit(cell) ? [...new Set(matches.filter((m) => m.c === c && m.rows.includes(k) && labelsInOrder(m)).map((m) => m.x))] : wordAt(cell, iCells[k]);
-      if (!xs.length) ok = false; else spots.push(xs);
+      if (!hasDigit(iCells[k][c])) continue;
+      const covering = matches.filter((m) => m.c === c && m.rows.includes(k));
+      if (!covering.length) ok = false;
+      for (const m of covering) {
+        if (runAt(squash(tCells[m.t][m.ci])) !== m.x) ok = false;
+        for (let d = 0; d < iCells[k].length && ok; d++) {
+          if (!squash(iCells[k][d])) continue;
+          const run = m.rows.map((r) => squash(iCells[r][d] ?? "")).join("");
+          const x = d === c ? m.x : runAt(run);
+          if (x === undefined || (place.has(d) && Math.abs(place.get(d)! - x) >= 0.5)) ok = false; else place.set(d, x);
+        }
+      }
     }
+    const spots = [...place.entries()].sort((p, q) => p[0] - q[0]).map(([, x]) => [x]);
     const h = headingOf(k);
     ok &&= leftToRight(spots) && (h === null || leftToRight(iCells[h].filter((c) => squash(c)).map((c) => wordAt(c, iCells[h]))));
     kept.set(k, ok);
