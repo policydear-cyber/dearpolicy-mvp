@@ -190,8 +190,117 @@ const described = (xs: Seen[]) => (xs.length ? `${xs.length} (${tally(xs.map((x)
  * line confirms one text line). A figure line with no label confirms nothing. `text` is the page as it may be stored: null
  * when no figure line was confirmed (the whole page is unchecked), otherwise every unconfirmed line with its figures shown
  * as NOT_CHECKED. `log` says what kind of difference it was, in counts and fixed words only (Critic plan step 1). */
-export function checkLines(textReading: string, imageReading: string, pageNumber?: number):
-  { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string } {
+/** A cell as both readings can compare it: lower case, letters and digits only, thousands marks dropped, a decimal point
+ * kept between digits, currency marks left out. "Sum Assured: S$100,000.00" is "sumassured100000.00". */
+const squash = (cell: string) => cell.normalize("NFKC").replace(CURRENCY_MARK, " ").toLowerCase()
+  .replace(/(\d)[,'’](?=\d)/g, "$1").replace(/(\d)\.(?=\d)/g, "$1\u0001").replace(/[^\p{L}\p{N}\u0001]/gu, "").replace(/\u0001/g, ".");
+const hasDigit = (s: string) => /\d/.test(s);
+
+/** A page whose text layer gives each table column as one run, top to bottom, with nothing between the cells ("In
+ * ForceIn ForceIn Force", "100,000.002,000.00500.00", "17-Nov-201617-Nov-2016"), while the image reading gives the rows
+ * (a household's PruLink schedule, 9 Nov: every amount on pages 3 and 4 held back since October). Line by line nothing
+ * can agree, but the two readings can still be checked against each other column by column:
+ *
+ * - a text cell is matched to the cells one column of the image prints on consecutive lines, joined in that order, when
+ *   joined they are exactly its figures (words before or after them, such as the column's own heading, are allowed);
+ *   two figures may only meet where the first ends a complete decimal amount or a date's year, so a figure is never
+ *   split or joined differently from how the image prints it;
+ * - the row labels of those lines, joined in the same order, are printed as one run in the text too, so each figure is
+ *   in the same row in both readings;
+ * - the text cells that hold a row's label, words and figures stand left to right on the page (the page geometry) in
+ *   the order the image prints the row, and so do its heading's cells: each figure is under the same heading in both.
+ *
+ * A row is kept only when every cell of it passes, and a text line only when every cell of it that prints a figure is
+ * matched to rows that are all kept. Such a line is stored as the image's rows it holds, every figure of which the text
+ * prints in the same column order; anything else stays as the line check left it (held back). */
+function columnRows(textReading: string, imageReading: string, geometry: (number[] | undefined)[], held: Set<number>):
+  { text: string; confirmed: Set<number>; image: Set<number> } | null {
+  const tLines = textReading.split("\n");
+  if (geometry.length !== tLines.length) return null;
+  const tCells = tLines.map((l) => l.split("\t"));
+  const xOf = (t: number, c: number) => { const xs = geometry[t]; return xs && xs.length === tCells[t].length && Number.isFinite(xs[c]) ? xs[c] : undefined; };
+  const textCells = tCells.flatMap((cs, t) => cs.map((c, ci) => ({ s: squash(c), x: xOf(t, ci) }))).filter((c): c is { s: string; x: number } => !!c.s && c.x !== undefined);
+  const iLines = imageReading.split("\n");
+  const iCells = iLines.map((l) => l.split("\t").map((c) => c.trim()));
+  const filled = iLines.map((l, k) => (l.trim() ? k : -1)).filter((k) => k >= 0);
+  if (!filled.length) return null;
+  const widest = Math.max(...filled.map((k) => iCells[k].length));
+  type Match = { t: number; ci: number; x: number; c: number; rows: number[] };
+  const matches: Match[] = [];
+  for (const t of held) for (let ci = 0; ci < tCells[t].length; ci++) {
+    const x = xOf(t, ci), core = squash(tCells[t][ci]);
+    if (x === undefined || !hasDigit(core)) continue;
+    let best: Match | null = null;
+    for (let c = 0; c < widest; c++) for (let a = 0; a < filled.length; a++) {
+      let joined = "", last = "";
+      for (let b = a; b < filled.length && iCells[filled[b]].length > c; b++) {
+        const piece = squash(iCells[filled[b]][c]);
+        if (piece && /\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
+        if (piece) { joined += piece; last = piece; }
+        if (joined.length > core.length) break;
+        const at = hasDigit(joined) ? core.indexOf(joined) : -1;
+        if (at >= 0 && !hasDigit(core.slice(0, at) + core.slice(at + joined.length)) && (!best || b - a + 1 > best.rows.length)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
+      }
+    }
+    if (best) matches.push(best);
+  }
+  if (!matches.length) return null;
+  const labelsInOrder = (m: Match) => { const run = m.rows.map((k) => squash(iCells[k][0] ?? "")).join(""); return m.rows.length < 2 || !run || textCells.some((tc) => tc.s.includes(run)); };
+  const wordAt = (cell: string) => { const s = squash(cell); return textCells.filter((tc) => tc.s.includes(s)).map((tc) => tc.x); };
+  // One position per cell, each further right than the last (any of the text cells that could hold it).
+  const leftToRight = (spots: number[][]) => { let last = -Infinity; for (const xs of spots) { const next = xs.filter((x) => x > last + 0.5).sort((p, q) => p - q)[0]; if (next === undefined) return false; last = next; } return true; };
+  const figureRow = (k: number) => iCells[k].some(hasDigit);
+  const headingOf = (k: number) => {
+    let p = filled.indexOf(k) - 1;
+    while (p >= 0 && figureRow(filled[p]) && iCells[filled[p]].length === iCells[k].length) p--;
+    const h = filled[p];
+    return h !== undefined && iCells[h].length >= 2 && iCells[h].length === iCells[k].length && !figureRow(h) ? h : null;
+  };
+  const kept = new Map<number, boolean>();
+  const rowKept = (k: number) => {
+    if (kept.has(k)) return kept.get(k)!;
+    const spots: number[][] = [];
+    let ok = true;
+    for (let c = 0; c < iCells[k].length && ok; c++) {
+      const cell = iCells[k][c];
+      if (!squash(cell)) continue;
+      const xs = hasDigit(cell) ? matches.filter((m) => m.c === c && m.rows.includes(k) && labelsInOrder(m)).map((m) => m.x) : wordAt(cell);
+      if (!xs.length) ok = false; else spots.push(xs);
+    }
+    const h = headingOf(k);
+    ok &&= leftToRight(spots) && (h === null || leftToRight(iCells[h].filter((c) => squash(c)).map(wordAt)));
+    kept.set(k, ok);
+    return ok;
+  };
+  const sound = (m: Match) => m.rows.every((k) => !figureRow(k) || rowKept(k));
+  const replaced = [...held].filter((t) => {
+    const digitCells = tCells[t].map((c, ci) => (hasDigit(squash(c)) ? ci : -1)).filter((ci) => ci >= 0);
+    return digitCells.length > 0 && digitCells.every((ci) => matches.some((m) => m.t === t && m.ci === ci && sound(m)));
+  });
+  if (!replaced.length) return null;
+  const rows = new Set(matches.filter((m) => replaced.includes(m.t)).flatMap((m) => m.rows));
+  for (const k of [...rows]) { const h = figureRow(k) ? headingOf(k) : null; if (h !== null) rows.add(h); }
+  const emitted = [...rows].sort((p, q) => p - q).map((k) => iLines[k].trim());
+  const at = Math.min(...replaced);
+  const rest = tLines.map((l, t) => (replaced.includes(t) ? tCells[t].filter((c) => squash(c) && !hasDigit(c)).join("\t") : l));
+  const lines = [...rest.slice(0, at), ...emitted, ...rest.slice(at)];
+  return { text: lines.join("\n"), confirmed: new Set(emitted.map((_, n) => at + n)), image: rows };
+}
+
+export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string;
+  /** How many of the page's figure lines are held back (shown as not checked). */
+  held: number };
+export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[]): LineCheck {
+  const first = checkLinesOnce(textReading, imageReading, pageNumber);
+  if (first.agree || !geometry || !first.heldLines.size) return first;
+  // Lines held back on a page whose text layer gives each table column as one run: confirmed column by column (columnRows).
+  const zipped = columnRows(textReading, imageReading, geometry, first.heldLines);
+  if (!zipped) return first;
+  const second = checkLinesOnce(zipped.text, imageReading, pageNumber, zipped);
+  return second.agree || second.held < first.held ? second : first;
+}
+function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> }):
+  LineCheck & { heldLines: Set<number> } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
   const imageLinesAll = imageReading.split("\n");
   // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
@@ -201,7 +310,11 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const shared = new Set(textHeads.filter((h) => h && imageHeads.includes(h)));
   const under = (heads: (string | null)[]) => { let h = ""; return heads.map((x) => (x && shared.has(x) ? (h = x) : h)); };
   const textUnder = under(textHeads), imageUnder = under(imageHeads);
-  const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i], l })).filter((o) => figureLine(o.t));
+  // Image lines already confirmed column by column, and any line the image prints again with the same words and figures
+  // (a reader that gave the page twice), confirm nothing more.
+  const used = [...(pre?.image ?? [])].map((i) => lineTokens(imageLinesAll[i]));
+  const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i], l }))
+    .filter((o) => figureLine(o.t) && !used.some((u) => sameLine(u, o.t)));
   const imageLines = pool.length;
   const unconfirmed: number[] = [];
   // A label the text layer wraps or splits onto a line of its own, words only, right above or below the row ("Comprehensive
@@ -247,6 +360,7 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
+    if (pre?.confirmed.has(i)) return;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
@@ -315,15 +429,20 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
-  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log };
+  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: spread.size, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) ? "" : l));
   const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
-  return { agree: kind === null, kind, why, text, log };
+  return { agree: kind === null, kind, why, text, log, held: spread.size, heldLines: spread };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 
-type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string };
+type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string;
+  /** The page's lines as its geometry gave them: where each cell starts (lib/documents/layout.ts). */
+  lines?: { text: string; cells: string[]; xs?: number[] }[] };
+/** Where each cell of each text line starts on the page, when the stored text is still exactly the geometry's lines. */
+const geometryOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
+  ? p.lines.map((l) => (l.xs && l.xs.length === l.text.split("\t").length ? l.xs : undefined)) : undefined);
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
 export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && !p.partChecked && looksScrambled(p.text)).map((p) => p.pageNumber);
 /** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
@@ -339,12 +458,14 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     const check = !second ? { agree: false as const, kind: "image reading failed", text: null, log: undefined }
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
       : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
-      : checkLines(p.text, image.text, p.pageNumber);
+      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p));
     // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
     // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
     if (check.agree) return check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p;
-    // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
+    // Every figure line confirmed, and the image prints a line the text does not (or prints the page twice): nothing on
+    // the page is unconfirmed.
     if (check.text === p.text) return { ...p, checkLog: check.log };
+    if (check.text && "held" in check && check.held === 0) return { ...p, text: check.text, checkLog: check.log };
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
     if (check.text) return { ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
     return { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
