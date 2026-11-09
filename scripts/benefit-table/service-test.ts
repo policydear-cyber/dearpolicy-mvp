@@ -237,6 +237,34 @@ async function main() {
     assert.equal(linkOf(f)!.cover_key, gpa);
     assert.ok(await rowCount(f, "p1") > 0, "its rows now show");
   });
+  await test("live 9 Nov: a section the model placed at no cover is not asked again on a later upload, and never moves onto a cover other sections use", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    // A second document of the same product, whose section the model placed at no cover (a benefit nobody holds).
+    const upload = async (id: string, section: string, text: string) => {
+      f.s.policies.push({ id, account_id: A, original_filename: `${section}.pdf`, processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+      f.s.pages.push({ policy_id: id, account_id: A, page_number: 1, text });
+      await readDocument(f.db, scriptedModel([() => doc("scheme_terms", [], [benefit({ section, benefit: section, pays: "per_day", value: 30, quote: text })])]).model, A, id);
+      return sectionKeyOf(id, { section, column: null });
+    };
+    const income = await upload("income", "Disability income", "Disability income S$30 a day");
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: income, cover: null, why: "not held" }] })]).model, A, undefined, undefined, "income");
+    assert.equal(f.s.links.get(`${A}|${income}`)!.cover_key, null);
+    const before = { p1: await rowCount(f, "p1"), p2: await rowCount(f, "p2") };
+    // A later upload: the model, if asked, would move the no-cover section onto the cover the accident section uses.
+    const dental = await upload("dental", "Dental", "Dental S$30 a day");
+    const m = scriptedModel([() => ({ links: [{ section: income, cover: gpa, why: "re-sorted" }, { section: dental, cover: null, why: "not held" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "dental"), { proposed: 1 });
+    assert.ok(!m.calls[0].user.includes(income) && !m.calls[0].user.includes("Disability income"), "the no-cover section is not sent again");
+    assert.equal(f.s.links.get(`${A}|${income}`)!.cover_key, null, "it stays at no cover");
+    assert.equal(f.s.links.get(`${A}|${dental}`)!.cover_key, null, "the new section takes the model's answer");
+    assert.deepEqual({ p1: await rowCount(f, "p1"), p2: await rowCount(f, "p2") }, before, "nobody gains another benefit's rows");
+    // Nothing new: no call at all.
+    const none = scriptedModel([]);
+    assert.deepEqual(await relink(f.db, none.model, A), { proposed: 0 });
+    assert.equal(none.calls.length, 0, "no-cover sections are not paid for again");
+  });
   await test("S6/S7b: a model link to a cover that is gone (renamed on a re-read or re-upload) is asked again", async () => {
     const f = household();
     await readBoth(f);
