@@ -151,6 +151,9 @@ async function main() {
     // One row: kept only with its own heading glued before each figure; swapped headings are held.
     kept(await check("Sum Assured\tPremium\n100,000.00\t50.00", [line(["Sum Assured100,000.00"], [40]), line(["Premium50.00"], [300])]));
     held(await check("Sum Assured\tPremium\n50.00\t100,000.00", [line(["Sum Assured100,000.00"], [40]), line(["Premium50.00"], [300])]), "100,000.00");
+    // A glued heading ties its figure to the first row under it only (Critic P398 H1).
+    held(await check("Benefit\tSum Assured\nDeath\t100,000.00\nTotal Disability\t200,000.00",
+      [line(["BenefitDeath"], [40]), line(["Sum Assured200,000.00"], [300]), line(["Total Disability"], [40]), line(["100,000.00"], [300])]), "200,000.00");
   });
   await test("two tables whose last columns share a left edge, swapped by the image: each run is tied to its own table's text (TE P398 C25)", async () => {
     const lines = [line(["Benefit", "Plan A", "Plan B"], [40, 260, 420]), line(["Room and boardICU"], [40]), line(["300.00900.00"], [260]), line(["500.001,500.00"], [420]),
@@ -161,6 +164,12 @@ async function main() {
     const out = await check(image("40.00", "120.00", "500.00", "1,500.00"), lines);
     held(out, "500.00");
     held(out, "40.00");
+    // The image leaves out the second table's heading row and swaps the last columns: its rows would fall under the first
+    // table's headings, but the text's own heading over each run is not the image's (TE P398 C33).
+    const noSecondHeading = image("40.00", "120.00", "500.00", "1,500.00").replace("Service\tStandard\tPremier\n", "");
+    const out2 = await check(noSecondHeading, lines);
+    held(out2, "500.00");
+    held(out2, "40.00");
   });
 
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);

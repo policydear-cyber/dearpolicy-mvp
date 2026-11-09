@@ -231,7 +231,7 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   if (!filled.length) return null;
   const widest = Math.max(...filled.map((k) => iCells[k].length));
   type Match = { t: number; ci: number; x: number; c: number; rows: number[] };
-  type Spot = { x: number; t: number };
+  type Spot = { x: number; t: number; s: string };
   const figureRow = (k: number) => iCells[k].some(hasDigit);
   // The heading row of the table a line belongs to: the nearest line above, past rows of the same width, that prints no
   // figure and has as many cells.
@@ -269,14 +269,15 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
         // out would otherwise let the figures shift by a row (TE P398 C10, C14, C24).
         // One row is enough only when the text prints the column's own heading glued before it: the text itself then ties
         // the figure to its heading.
-        const glued = !!head && head + joined === core;
+        // The run must then start on the first row right under that heading (Critic P398 H1).
+        const glued = !!head && filled[a - 1] === h && head + joined === core;
         if ((pieces >= 2 || glued) && hasDigit(joined) && (joined === core || glued) && (!best || b - a + 1 > best.rows.length) && !besideGap(a, b, c)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
       }
     }
     if (best) matches.push(best);
   }
   if (!matches.length) return null;
-  const spots = (pick: (s: string) => boolean): Spot[] => tCells.flatMap((cs, t) => cs.flatMap((c, ci) => { const x = xOf(t, ci); return x !== undefined && squash(c) && pick(squash(c)) ? [{ x, t }] : []; }));
+  const spots = (pick: (s: string) => boolean): Spot[] => tCells.flatMap((cs, t) => cs.flatMap((c, ci) => { const x = xOf(t, ci); return x !== undefined && squash(c) && pick(squash(c)) ? [{ x, t, s: squash(c) }] : []; }));
   // A run (cells of one column joined in row order) stands somewhere only when exactly one text cell holds it: printed in
   // two places it could be either table's (Critic P398 E2), and the row is held.
   const runAt = (run: string): Spot | undefined => { const at = spots((s) => s.includes(run)); return at.length === 1 ? at[0] : undefined; };
@@ -301,6 +302,18 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
     ...matches.filter((m) => headingOf(m.rows[0]) === null).map((m) => labelsOf(m)?.t),
   ].filter((t): t is number => t !== undefined))].sort((p, q) => p - q);
   const within = (at: Spot, start: number) => at.t >= start && at.t < (starts.find((t) => t > start) ?? Infinity);
+  // The text's own heading over a run's cell is the image's heading over the run: glued right before the run in the same
+  // cell, or, failing that, the nearest text cell above it at the same left edge that prints no figure (TE P398 C33: an
+  // image that leaves out a second table's heading row must not hand that table's runs to the first table's headings).
+  const underOwnHeading = (at: Spot, head: string, run: string) => {
+    if (!head) return true;
+    if (at.s.includes(head + run)) return true;
+    for (let t = at.t - 1; t >= 0; t--) {
+      const above = tCells[t].map((c, ci) => ({ s: squash(c), x: xOf(t, ci) })).find((c) => c.s && c.x !== undefined && Math.abs(c.x - at.x) < 0.5);
+      if (above && !hasDigit(above.s)) return above.s === head;
+    }
+    return false;
+  };
   const kept = new Map<number, boolean>();
   // A row is kept when, for every figure run that covers it, each column of its rows (labels, words and figures, joined in
   // the same row order) is exactly one text cell (Critic P398 E6: a status column swapped between two rows), and that cell
@@ -325,7 +338,7 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
           if (!squash(iCells[k][d])) continue;
           const run = m.rows.map((r) => squash(iCells[r][d] ?? "")).join("");
           const at = d === c ? own : runAt(run);
-          const tied = !!at && start !== undefined && within(at, start);
+          const tied = !!at && start !== undefined && within(at, start) && (h === null || underOwnHeading(at, squash(iCells[h][d] ?? ""), run));
           if (!at || !tied || (place.has(d) && Math.abs(place.get(d)!.x - at.x) >= 0.5)) ok = false; else place.set(d, at);
         }
       }
