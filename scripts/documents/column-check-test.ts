@@ -139,6 +139,30 @@ async function main() {
     held(out, "500.00");
   });
 
+  // A plain schedule: headings on one line, then each column as one run.
+  const PLAN = (a = "200.005,000.00400.00", b = "300.008,000.00600.00") => [line(["Benefit", "Plan A", "Plan B"], [40, 260, 420]),
+    line(["Daily hospital allowanceSurgical benefitIntensive care"], [40]), line([a], [260]), line([b], [420])];
+  const PLAN_IMAGE = "Benefit\tPlan A\tPlan B\nDaily hospital allowance\t200.00\t300.00\nSurgical benefit\t5,000.00\t8,000.00\nIntensive care\t400.00\t600.00";
+  await test("a heading word inside a row label (Benefit, Surgical benefit) does not hold the table (TE P398 C20)", async () => {
+    kept(await check(PLAN_IMAGE, PLAN()));
+  });
+  await test("each column's heading glued before its run is that column's heading (TE P398 C24)", async () => {
+    kept(await check(PLAN_IMAGE, [line(["Benefit"], [40]), PLAN()[1], line(["Plan A200.005,000.00400.00"], [260]), line(["Plan B300.008,000.00600.00"], [420])]));
+    // One row: kept only with its own heading glued before each figure; swapped headings are held.
+    kept(await check("Sum Assured\tPremium\n100,000.00\t50.00", [line(["Sum Assured100,000.00"], [40]), line(["Premium50.00"], [300])]));
+    held(await check("Sum Assured\tPremium\n50.00\t100,000.00", [line(["Sum Assured100,000.00"], [40]), line(["Premium50.00"], [300])]), "100,000.00");
+  });
+  await test("two tables whose last columns share a left edge, swapped by the image: each run is tied to its own table's text (TE P398 C25)", async () => {
+    const lines = [line(["Benefit", "Plan A", "Plan B"], [40, 260, 420]), line(["Room and boardICU"], [40]), line(["300.00900.00"], [260]), line(["500.001,500.00"], [420]),
+      line(["Service", "Standard", "Premier"], [40, 260, 420]), line(["GP visitSpecialist"], [40]), line(["30.0080.00"], [260]), line(["40.00120.00"], [420])];
+    const image = (b1: string, b2: string, p1: string, p2: string) =>
+      `Benefit\tPlan A\tPlan B\nRoom and board\t300.00\t${b1}\nICU\t900.00\t${b2}\nService\tStandard\tPremier\nGP visit\t30.00\t${p1}\nSpecialist\t80.00\t${p2}`;
+    kept(await check(image("500.00", "1,500.00", "40.00", "120.00"), lines));
+    const out = await check(image("40.00", "120.00", "500.00", "1,500.00"), lines);
+    held(out, "500.00");
+    held(out, "40.00");
+  });
+
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);
