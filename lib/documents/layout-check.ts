@@ -195,6 +195,7 @@ const described = (xs: Seen[]) => (xs.length ? `${xs.length} (${tally(xs.map((x)
 const squash = (cell: string) => cell.normalize("NFKC").replace(CURRENCY_MARK, " ").toLowerCase()
   .replace(/(\d)[,'’](?=\d)/g, "$1").replace(/(\d)\.(?=\d)/g, "$1\u0001").replace(/[^\p{L}\p{N}\u0001]/gu, "").replace(/\u0001/g, ".");
 const hasDigit = (s: string) => /\d/.test(s);
+const SPACED_DIGITS = /\d\s+\d/;
 
 /** A page whose text layer gives each table column as one run, top to bottom, with nothing between the cells ("In
  * ForceIn ForceIn Force", "100,000.002,000.00500.00", "17-Nov-201617-Nov-2016"), while the image reading gives the rows
@@ -229,26 +230,36 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   const matches: Match[] = [];
   for (const t of held) for (let ci = 0; ci < tCells[t].length; ci++) {
     const x = xOf(t, ci), core = squash(tCells[t][ci]);
-    if (x === undefined || !hasDigit(core)) continue;
+    // Figures with only a space between them ("Option 2 500.00", "2 500") would squash into one: never matched (Critic P398 B).
+    if (x === undefined || !hasDigit(core) || SPACED_DIGITS.test(tCells[t][ci])) continue;
     let best: Match | null = null;
     for (let c = 0; c < widest; c++) for (let a = 0; a < filled.length; a++) {
-      let joined = "", last = "";
+      let joined = "", last = "", pieces = 0;
       for (let b = a; b < filled.length && iCells[filled[b]].length > c; b++) {
+        if (SPACED_DIGITS.test(iCells[filled[b]][c])) break;
         const piece = squash(iCells[filled[b]][c]);
         if (piece && /\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
-        if (piece) { joined += piece; last = piece; }
+        if (piece) { joined += piece; last = piece; pieces++; }
         if (joined.length > core.length) break;
-        const at = hasDigit(joined) ? core.indexOf(joined) : -1;
+        // Two rows or more: one cell alone says nothing about which row it belongs to (Critic P398 A1-A3, C7).
+        const at = pieces >= 2 && hasDigit(joined) ? core.indexOf(joined) : -1;
         if (at >= 0 && !hasDigit(core.slice(0, at) + core.slice(at + joined.length)) && (!best || b - a + 1 > best.rows.length)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
       }
     }
     if (best) matches.push(best);
   }
   if (!matches.length) return null;
-  const labelsInOrder = (m: Match) => { const run = m.rows.map((k) => squash(iCells[k][0] ?? "")).join(""); return m.rows.length < 2 || !run || textCells.some((tc) => tc.s.includes(run)); };
-  const wordAt = (cell: string) => { const s = squash(cell); return textCells.filter((tc) => tc.s.includes(s)).map((tc) => tc.x); };
-  // One position per cell, each further right than the last (any of the text cells that could hold it).
-  const leftToRight = (spots: number[][]) => { let last = -Infinity; for (const xs of spots) { const next = xs.filter((x) => x > last + 0.5).sort((p, q) => p - q)[0]; if (next === undefined) return false; last = next; } return true; };
+  const labelsInOrder = (m: Match) => { const run = m.rows.map((k) => squash(iCells[k][0] ?? "")).join(""); return !!run && textCells.some((tc) => tc.s.includes(run)); };
+  // Where a word cell stands: the text cells that hold it, all at one left edge. A cell that holds a longer cell of the
+  // same line (the "Component" of "Component Premium") is not counted for it; cells at different places, or none, are no
+  // evidence and the row is held (Critic P398 C5: a footer repeating the headings).
+  const wordAt = (cell: string, line: string[]) => {
+    const s = squash(cell), longer = line.map(squash).filter((o) => o !== s && o.includes(s));
+    const at = textCells.filter((tc) => tc.s.includes(s) && !longer.some((o) => tc.s.includes(o)));
+    return at.length && at.every((tc) => Math.abs(tc.x - at[0].x) < 0.5) ? [at[0].x] : [];
+  };
+  // Each cell further right than the last.
+  const leftToRight = (spots: number[][]) => { let last = -Infinity; for (const xs of spots) { if (xs.length !== 1 || !(xs[0] > last + 0.5)) return false; last = xs[0]; } return true; };
   const figureRow = (k: number) => iCells[k].some(hasDigit);
   const headingOf = (k: number) => {
     let p = filled.indexOf(k) - 1;
@@ -264,11 +275,11 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
     for (let c = 0; c < iCells[k].length && ok; c++) {
       const cell = iCells[k][c];
       if (!squash(cell)) continue;
-      const xs = hasDigit(cell) ? matches.filter((m) => m.c === c && m.rows.includes(k) && labelsInOrder(m)).map((m) => m.x) : wordAt(cell);
+      const xs = hasDigit(cell) ? [...new Set(matches.filter((m) => m.c === c && m.rows.includes(k) && labelsInOrder(m)).map((m) => m.x))] : wordAt(cell, iCells[k]);
       if (!xs.length) ok = false; else spots.push(xs);
     }
     const h = headingOf(k);
-    ok &&= leftToRight(spots) && (h === null || leftToRight(iCells[h].filter((c) => squash(c)).map(wordAt)));
+    ok &&= leftToRight(spots) && (h === null || leftToRight(iCells[h].filter((c) => squash(c)).map((c) => wordAt(c, iCells[h]))));
     kept.set(k, ok);
     return ok;
   };
@@ -462,10 +473,8 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
     // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
     if (check.agree) return check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p;
-    // Every figure line confirmed, and the image prints a line the text does not (or prints the page twice): nothing on
-    // the page is unconfirmed.
+    // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
     if (check.text === p.text) return { ...p, checkLog: check.log };
-    if (check.text && "held" in check && check.held === 0) return { ...p, text: check.text, checkLog: check.log };
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
     if (check.text) return { ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
     return { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };

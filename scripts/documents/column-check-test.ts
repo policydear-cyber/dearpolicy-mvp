@@ -20,8 +20,8 @@ const line = (cells: string[], xs?: number[]): Line => ({ text: cells.join("\t")
 
 // A made-up Harbour Life schedule as its text layer gives it: every column one run, at its own left edge.
 const TEXT_LINES: Line[] = [
-  line(["Policy DetailsPolicy Number:ComponentAccidental DeathHospital Cash RiderWaiver of Premium"], [40]),
-  line(["HL-5521"], [150]),
+  line(["Policy DetailsPolicy Number:Servicing Adviser:ComponentAccidental DeathHospital Cash RiderWaiver of Premium"], [40]),
+  line(["HL-5521Jane Doe [AD-778]"], [150]),
   line(["Plan Type:", "Harbour Shield Plus"], [300, 380]),
   line(["StatusIn ForceIn ForceIn Force"], [150]),
   line(["Sum Assured"], [230]),
@@ -34,6 +34,7 @@ const TEXT_LINES: Line[] = [
 ];
 const ROWS = [
   "Policy Number:\tHL-5521\tPlan Type:\tHarbour Shield Plus",
+  "Servicing Adviser:\tJane Doe [AD-778]",
   "Component\tStatus\tSum Assured\tComponent Premium\tCover Start Date",
   "Accidental Death\tIn Force\t200,000.00\t12.50\t01-Mar-2019",
   "Hospital Cash Rider\tIn Force\t150.00\t8.20\t01-Mar-2019",
@@ -91,6 +92,25 @@ async function main() {
   });
   await test("no page geometry: nothing is confirmed column by column", async () => {
     held(await check(IMAGE, TEXT_LINES, false), "200,000.00");
+  });
+
+  await test("rows read row by row whose amounts the image pairs the other way: held (Critic P398 A1, C7)", async () => {
+    held(await check("Death\t100,000.00\nTotal Disability\t200,000.00", [line(["Death", "200,000.00"], [40, 300]), line(["Total Disability", "100,000.00"], [40, 300])]), "100,000.00");
+    held(await check("Death\t100,000.00\nTotal Disability\t200,000.00", [line(["Death"], [40]), line(["200,000.00"], [300]), line(["Total Disability"], [40]), line(["100,000.00"], [300])]), "100,000.00");
+  });
+  await test("a digit word beside a figure is never joined to it (Critic P398 B1)", async () => {
+    held(await check("Hospital cash\t2,500.00\nICU cash\t300.00", [line(["Hospital cashICU cash"], [40]), line(["Option 2 500.00300.00"], [300])]), "2,500.00");
+  });
+  await test("headings printed again elsewhere on the page give no position: held (Critic P398 C5)", async () => {
+    const lines = [line(["DeathTotal Disability"], [40]), line(["Premium"], [200]), line(["100.00200.00"], [200]), line(["Sum Assured"], [300]),
+      line(["50,000.0060,000.00"], [300]), line(["Premium", "Sum Assured"], [500, 100])];
+    held(await check("Benefit\tSum Assured\tPremium\nDeath\t100.00\t50,000.00\nTotal Disability\t200.00\t60,000.00\nPremium\tSum Assured", lines), "50,000.00");
+  });
+  await test("the same labels in two tables: the table that agrees is kept, the one swapped in the image is held (Critic P398 C1)", async () => {
+    const lines = [line(["DeathTotal Disability"], [40]), line(["100,000.00200,000.00"], [300]), line(["Accident"], [40]), line(["DeathTotal Disability"], [40]), line(["5,000.0010,000.00"], [300])];
+    const out = await check("Death\t100,000.00\nTotal Disability\t200,000.00\nAccident\nDeath\t10,000.00\nTotal Disability\t5,000.00", lines);
+    assert.ok(out.text.split("\n").includes("Death\t100,000.00"), out.text);
+    held(out, "5,000.00");
   });
 
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);
