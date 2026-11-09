@@ -118,6 +118,27 @@ async function main() {
     kept(await check("Death\tIn Force\t100,000.00\nTotal Disability\tLapsed\t200,000.00", lines));
   });
 
+  // A travel schedule whose first benefit is not covered: the text column is "N.A." then two figures.
+  const TRAVEL = [line(["BenefitTrip cancellationOverseas medicalBaggage"], [40]), line(["Limit"], [300]), line(["N.A.150,000.003,000.00"], [300])];
+  await test("a word cell the image leaves out or blanks, so the figures shift a row: held (TE P398 C10, C11)", async () => {
+    kept(await check("Benefit\tLimit\nTrip cancellation\tN.A.\nOverseas medical\t150,000.00\nBaggage\t3,000.00", TRAVEL));
+    held(await check("Benefit\tLimit\nTrip cancellation\t150,000.00\nOverseas medical\t3,000.00\nBaggage\tN.A.", TRAVEL), "150,000.00");
+    held(await check("Benefit\tLimit\nTrip cancellation\t\nOverseas medical\t150,000.00\nBaggage\t3,000.00", TRAVEL.map((l) => (l.text.startsWith("N.A.") ? line(["150,000.003,000.00"], [300]) : l))), "150,000.00");
+    held(await check("Benefit\tLimit\nTrip cancellation\t\nOverseas medical\t150,000.00\nBaggage\t3,000.00", TRAVEL), "150,000.00");
+  });
+  await test("a run next to a row of the same table that prints no figure in that column could sit a row off: held (TE P398 C14)", async () => {
+    const lines = [line(["PlanBasic planAccident riderHospital rider"], [40]), line(["Premium"], [200]), line(["120.5015.208.00"], [200]),
+      line(["Start date"], [300]), line(["01-Mar-202101-Mar-2021"], [300]), line(["Not covered"], [300])];
+    held(await check("Plan\tPremium\tStart date\nBasic plan\t120.50\t\nAccident rider\t15.20\t01-Mar-2021\nHospital rider\t8.00\t01-Mar-2021", lines), "01-Mar-2021");
+  });
+  await test("two tables under the same headings, the image swapping a column between them: held (TE P398 C17)", async () => {
+    const lines = [line(["In-patientRoom and boardICU"], [40]), line(["Plan A"], [200]), line(["300.00900.00"], [200]), line(["Plan B"], [300]), line(["500.001,500.00"], [300]),
+      line(["Out-patientGP visitSpecialist"], [40]), line(["Plan A"], [200]), line(["30.0080.00"], [200]), line(["Plan B"], [300]), line(["40.00120.00"], [300])];
+    const out = await check("In-patient\tPlan A\tPlan B\nRoom and board\t300.00\t40.00\nICU\t900.00\t120.00\nOut-patient\tPlan A\tPlan B\nGP visit\t30.00\t500.00\nSpecialist\t80.00\t1,500.00", lines);
+    held(out, "40.00");
+    held(out, "500.00");
+  });
+
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);

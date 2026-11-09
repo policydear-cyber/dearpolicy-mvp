@@ -202,14 +202,14 @@ const SPACED_DIGITS = /\d\s+\d/;
  * (a household's PruLink schedule, 9 Nov: every amount on pages 3 and 4 held back since October). Line by line nothing
  * can agree, but the two readings can still be checked against each other column by column:
  *
- * - a text cell is matched to the cells one column of the image prints on consecutive lines, joined in that order, when
- *   joined they are exactly its figures (words before or after them, such as the column's own heading, are allowed);
- *   two figures may only meet where the first ends a complete decimal amount or a date's year, so a figure is never
- *   split or joined differently from how the image prints it;
- * - the row labels of those lines, joined in the same order, are printed as one run in the text too, so each figure is
- *   in the same row in both readings;
- * - the text cells that hold a row's label, words and figures stand left to right on the page (the page geometry) in
- *   the order the image prints the row, and so do its heading's cells: each figure is under the same heading in both.
+ * - a text cell that prints a figure is matched to the cells one column of the image prints on two or more consecutive
+ *   lines, none blank, when joined in that order they are exactly the cell (nothing before or after); two figures may
+ *   only meet where the first ends a complete decimal amount or a date's year, and no cell with digits apart by a space
+ *   is matched, so a figure is never split or joined differently from how the image prints it;
+ * - every column of those lines, labels and words as well as figures, joined in the same order, is held by exactly one
+ *   text cell, so each cell is in the same row in both readings; a run printed in two places is no evidence;
+ * - those text cells, and the one text cell of each heading cell above the rows, stand left to right on the page (the
+ *   page geometry) in the order the image prints them: each figure is under the same heading in both.
  *
  * A row is kept only when every cell of it passes, and a text line only when every cell of it that prints a figure is
  * matched to rows that are all kept. Such a line is stored as the image's rows it holds, every figure of which the text
@@ -227,6 +227,10 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   if (!filled.length) return null;
   const widest = Math.max(...filled.map((k) => iCells[k].length));
   type Match = { t: number; ci: number; x: number; c: number; rows: number[] };
+  // A row of the same table right above or below the run whose cell in that column prints no figure (blank, "N.A.", "Not
+  // covered"): the run could belong one row further up or down, so it is no evidence (TE P398 C14).
+  const besideGap = (a: number, b: number, c: number) => [filled[a - 1], filled[b + 1]].some((k) =>
+    k !== undefined && iCells[k].length === iCells[filled[a]].length && (!squash(iCells[k][c]) || (iCells[k].some(hasDigit) && !hasDigit(iCells[k][c]))));
   const matches: Match[] = [];
   for (const t of held) for (let ci = 0; ci < tCells[t].length; ci++) {
     const x = xOf(t, ci), core = squash(tCells[t][ci]);
@@ -238,12 +242,15 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
       for (let b = a; b < filled.length && iCells[filled[b]].length > c; b++) {
         if (SPACED_DIGITS.test(iCells[filled[b]][c])) break;
         const piece = squash(iCells[filled[b]][c]);
-        if (piece && /\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
-        if (piece) { joined += piece; last = piece; pieces++; }
+        // A blank cell inside the run: which row it belongs to is not known (TE P398 C11).
+        if (!piece) break;
+        if (/\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
+        joined += piece; last = piece; pieces++;
         if (joined.length > core.length) break;
-        // Two rows or more: one cell alone says nothing about which row it belongs to (Critic P398 A1-A3, C7).
-        const at = pieces >= 2 && hasDigit(joined) ? core.indexOf(joined) : -1;
-        if (at >= 0 && !hasDigit(core.slice(0, at) + core.slice(at + joined.length)) && (!best || b - a + 1 > best.rows.length)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
+        // Two rows or more: one cell alone says nothing about which row it belongs to (Critic P398 A1-A3, C7). Exactly the
+        // text cell, nothing before or after: a word cell ("N.A.", "Not covered") the image left out would otherwise let
+        // the figures shift by a row (TE P398 C10, C14).
+        if (pieces >= 2 && hasDigit(joined) && joined === core && (!best || b - a + 1 > best.rows.length) && !besideGap(a, b, c)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
       }
     }
     if (best) matches.push(best);
@@ -252,13 +259,14 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   // A run (cells of one column joined in row order) stands somewhere only when exactly one text cell holds it: printed in
   // two places it could be either table's (Critic P398 E2), and the row is held.
   const runAt = (run: string) => { const at = textCells.filter((tc) => tc.s.includes(run)); return at.length === 1 ? at[0].x : undefined; };
-  // Where a word cell stands: the text cells that hold it, all at one left edge. A cell that holds a longer cell of the
-  // same line (the "Component" of "Component Premium") is not counted for it; cells at different places, or none, are no
-  // evidence and the row is held (Critic P398 C5: a footer repeating the headings).
+  // Where a heading cell stands: the one text cell that holds it. A cell that holds a longer cell of the same line (the
+  // "Component" of "Component Premium") is not counted for it; two cells or none are no evidence and the rows are held
+  // (Critic P398 C5: a footer repeating the headings; TE P398 C17: two tables under the same headings).
   const wordAt = (cell: string, line: string[]) => {
     const s = squash(cell), longer = line.map(squash).filter((o) => o !== s && o.includes(s));
     const at = textCells.filter((tc) => tc.s.includes(s) && !longer.some((o) => tc.s.includes(o)));
-    return at.length && at.every((tc) => Math.abs(tc.x - at[0].x) < 0.5) ? [at[0].x] : [];
+    // Exactly one: a heading printed over two tables cannot tell them apart (TE P398 C17).
+    return at.length === 1 ? [at[0].x] : [];
   };
   // Each cell further right than the last.
   const leftToRight = (spots: number[][]) => { let last = -Infinity; for (const xs of spots) { if (xs.length !== 1 || !(xs[0] > last + 0.5)) return false; last = xs[0]; } return true; };
