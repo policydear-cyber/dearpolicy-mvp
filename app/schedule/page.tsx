@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
@@ -146,8 +147,7 @@ export default function BenefitsPage(){
 
   return <div className="page schedule-page">
     <header className="page-header compact"><div>
-      <div className="eyebrow">BENEFITS</div>
-      <h1>What your policies pay.</h1>
+      <h1><span className="title-icon"><Icon name="benefits"/></span>What your policies pay</h1>
       <p className="lead">Organised by policy: each benefit as the document states it, with the page it comes from, and the exclusions and limits that apply. Where a document does not make an amount clear, this page says so instead of guessing.</p>
       <p className="muted">Want to see what one person is covered for across all their plans? <Link className="text-link" href="/ledger">See Coverage, by person →</Link></p>
     </div></header>
