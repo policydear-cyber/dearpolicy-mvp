@@ -570,8 +570,8 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
  * - A section with no link yet, or a model link to a cover that is gone or that the table refuses, is asked again and
  *   takes the model's answer (Critic R391 S6, S7b).
  * - A section the model already placed at no cover stays there: it is asked again only when a cover arrives that no
- *   section is linked to yet and that the section's own document backs (below), and it moves only onto such a cover
- *   (Critic R391 S3b). Live, 9 Nov: re-asked on every upload, two "not held" sections of one product moved onto a cover
+ *   section is linked to yet and that the section's own document backs (below), or a cover of the document just read
+ *   that no section is linked to yet, and it moves only onto such a cover (Critic R391 S3b; P397 S3c, S3d, S12b/c). Live, 9 Nov: re-asked on every upload, two "not held" sections of one product moved onto a cover
  *   of that product that other sections already used, and showed another benefit's figures for two people.
  * - A working model link moves only onto a cover printed in the document just read (justRead) that no section is linked
  *   to yet, and only when the section's own document prints that cover's product as its own whole product name (or is the document just read). The
@@ -606,7 +606,9 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
   // own document backs (not only one of the document just read: its certificate may have been read before the section).
   const unusedCovers = types.filter((t) => !linkedCovers.has(t.key));
   const atNone = new Set(l.links.filter((x) => x.chosenBy === "model" && x.cover == null).map((x) => x.section));
-  for (const s of all) if (atNone.has(s.key)) movesTo.set(s.key, new Set(unusedCovers.filter((t) => backs(s.key, t)).map((t) => t.key)));
+  // Or any cover of the document just read that no section uses yet, whatever its product is printed as (a wording read
+  // before its certificate may print the product differently, or not at all: Critic P397 S3c, S3d, S12b/c).
+  for (const s of all) if (atNone.has(s.key)) movesTo.set(s.key, new Set([...unusedCovers.filter((t) => backs(s.key, t)), ...newCovers].map((t) => t.key)));
   const open = new Set(all.filter((s) => !working.has(s.key) && !atNone.has(s.key)).map((s) => s.key));
   const sections = all.filter((s) => open.has(s.key) || (movesTo.get(s.key)?.size ?? 0) > 0);
   const existing = new Set(l.links.map((x) => x.section));
