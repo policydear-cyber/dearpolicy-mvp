@@ -237,6 +237,64 @@ async function main() {
     assert.equal(linkOf(f)!.cover_key, gpa);
     assert.ok(await rowCount(f, "p1") > 0, "its rows now show");
   });
+  await test("live 9 Nov: a section the model placed at no cover is not asked again on a later upload, and never moves onto a cover other sections use", async () => {
+    const f = household();
+    await readBoth(f);
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+    // A second document of the same product, whose section the model placed at no cover (a benefit nobody holds).
+    const upload = async (id: string, section: string, text: string) => {
+      f.s.policies.push({ id, account_id: A, original_filename: `${section}.pdf`, processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+      f.s.pages.push({ policy_id: id, account_id: A, page_number: 1, text });
+      await readDocument(f.db, scriptedModel([() => doc("scheme_terms", [], [benefit({ section, benefit: section, pays: "per_day", value: 30, quote: text })])]).model, A, id);
+      return sectionKeyOf(id, { section, column: null });
+    };
+    const income = await upload("income", "Disability income", "Disability income S$30 a day");
+    await relink(f.db, scriptedModel([() => ({ links: [{ section: income, cover: null, why: "not held" }] })]).model, A, undefined, undefined, "income");
+    assert.equal(f.s.links.get(`${A}|${income}`)!.cover_key, null);
+    const before = { p1: await rowCount(f, "p1"), p2: await rowCount(f, "p2") };
+    // A later upload: the model, if asked, would move the no-cover section onto the cover the accident section uses.
+    const dental = await upload("dental", "Dental", "Dental S$30 a day");
+    const m = scriptedModel([() => ({ links: [{ section: income, cover: gpa, why: "re-sorted" }, { section: dental, cover: null, why: "not held" }] })]);
+    assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "dental"), { proposed: 1 });
+    assert.ok(!m.calls[0].user.includes(income) && !m.calls[0].user.includes("Disability income"), "the no-cover section is not sent again");
+    assert.equal(f.s.links.get(`${A}|${income}`)!.cover_key, null, "it stays at no cover");
+    assert.equal(f.s.links.get(`${A}|${dental}`)!.cover_key, null, "the new section takes the model's answer");
+    assert.deepEqual({ p1: await rowCount(f, "p1"), p2: await rowCount(f, "p2") }, before, "nobody gains another benefit's rows");
+    // Nothing new: no call at all.
+    const none = scriptedModel([]);
+    assert.deepEqual(await relink(f.db, none.model, A), { proposed: 0 });
+    assert.equal(none.calls.length, 0, "no-cover sections are not paid for again");
+  });
+  await test("Critic P397 S12b/c, S3c/d: a no-cover section takes a cover of the certificate read later, whatever product each prints, and stays there", async () => {
+    for (const product of ["Group Scheme", "Hospital Wording", ""]) {
+      const f = household();
+      await readBoth(f);
+      await relink(f.db, scriptedModel([() => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }] })]).model, A);
+      // The hospital wording arrives first, its product printed differently from the certificate's (or not at all): no cover yet.
+      f.s.policies.push({ id: "hterms", account_id: A, original_filename: "Hospital terms.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+      f.s.pages.push({ policy_id: "hterms", account_id: A, page_number: 1, text: "Hospital cash S$30 a day" });
+      const terms = doc("scheme_terms", [], [benefit({ section: "Hospital", benefit: "Hospital cash", pays: "per_day", value: 30, quote: "Hospital cash S$30 a day" })]);
+      await readDocument(f.db, scriptedModel([() => ({ ...terms, document: { ...terms.document, product } })]).model, A, "hterms");
+      const hospital = sectionKeyOf("hterms", { section: "Hospital", column: null });
+      await relink(f.db, scriptedModel([() => ({ links: [{ section: hospital, cover: null, why: "no hospital cover held" }] })]).model, A, undefined, undefined, "hterms");
+      assert.equal(f.s.links.get(`${A}|${hospital}`)!.cover_key, null, product);
+      // Its certificate arrives (product "Hospital Care"), with a cover no section uses yet: the section is asked and placed.
+      f.s.policies.push({ id: "hcert", account_id: A, original_filename: "Hospital cert.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+      f.s.pages.push({ policy_id: "hcert", account_id: A, page_number: 1, text: "Lim Wei Jie Hospital Plan S$10,000" });
+      await readDocument(f.db, scriptedModel([() => doc("personal_proof", [{ person: "Lim Wei Jie", product: "Hospital Care", cover: "Hospital Plan", plan: null, sumInsured: 10000, asOf: null, page: 1, quote: "Lim Wei Jie Hospital Plan S$10,000" }], [])]).model, A, "hcert");
+      const plan = coverKeyOf({ product: "Hospital Care", cover: "Hospital Plan", plan: null });
+      const m = scriptedModel([() => ({ links: [{ section: hospital, cover: plan, why: "the hospital plan" }] })]);
+      assert.deepEqual(await relink(f.db, m.model, A, undefined, undefined, "hcert"), { proposed: 1 }, product);
+      assert.equal(f.s.links.get(`${A}|${hospital}`)!.cover_key, plan, product);
+      const lim = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!.rows.map((r) => r.benefit);
+      assert.ok(lim.includes("Hospital cash"), `${product}: the holder shows the hospital row`);
+      // One more unrelated upload: nothing is asked again or moved.
+      const none = scriptedModel([]);
+      assert.deepEqual(await relink(f.db, none.model, A), { proposed: 0 });
+      assert.equal(none.calls.length, 0);
+      assert.equal(f.s.links.get(`${A}|${hospital}`)!.cover_key, plan);
+    }
+  });
   await test("S6/S7b: a model link to a cover that is gone (renamed on a re-read or re-upload) is asked again", async () => {
     const f = household();
     await readBoth(f);
