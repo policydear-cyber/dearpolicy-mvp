@@ -71,6 +71,21 @@ async function main() {
       assert.deepEqual(page.lines?.[1].cells, ROWS[1]);
     });
   }
+  await test("a footer added plainly to a page turned 90 degrees is its own block after the table, every row kept", async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([595, 842]);
+    page.setRotation(degrees(90));
+    ROWS.forEach((row, r) => row.forEach((text, c) => {
+      const y = 595 - 100 - r * 20;
+      page.drawText(text, { x: 595 - y, y: COLUMNS[c], size: 10, font, rotate: degrees(90) });
+    }));
+    page.drawText("Annual Premium", { x: 60, y: 60, size: 10, font }); page.drawText("1,234.00", { x: 300, y: 60, size: 10, font });
+    page.drawText("Next Due", { x: 60, y: 40, size: 10, font }); page.drawText("617.00", { x: 300, y: 40, size: 10, font });
+    const got = (await extractPdfPages(await doc.save()))[0];
+    assert.equal(got.text, `${expected}\nAnnual Premium\t1,234.00\nNext Due\t617.00`);
+    assert.ok(!looksScrambled(got.text));
+  });
   await test("the cells' left edges are the shown page's, the same whatever the turn", async () => {
     const upright = await turned(0);
     for (const turn of [90, 180, 270] as const) {

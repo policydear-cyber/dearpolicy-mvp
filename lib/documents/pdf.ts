@@ -94,12 +94,17 @@ export async function extractPdfPages(
       const readsAcross = (t: number[]) => t[0] > 0 && Math.abs(t[1]) <= Math.abs(t[0]) * 0.1;
       const turned = ((page.rotate ?? 0) % 360 + 360) % 360 !== 0;
       const asShown = turned && items.filter((i) => readsAcross(shownOf(i.stored))).length * 2 > items.length;
-      const positioned = items.map((i) => {
-        if (!asShown) return { text: i.text, x: Number(i.stored[4] ?? 0), y: Number(i.stored[5] ?? 0), w: i.w };
-        const shown = shownOf(i.stored);
-        return { text: i.text, x: Number(shown[4] ?? 0), y: viewport.height - Number(shown[5] ?? 0), w: i.w };
-      });
-      const layout = renderPageLayout(positioned, viewport.width);
+      const stored = (i: (typeof items)[number]) => ({ text: i.text, x: Number(i.stored[4] ?? 0), y: Number(i.stored[5] ?? 0), w: i.w });
+      const shown = (i: (typeof items)[number]) => { const t = shownOf(i.stored); return { text: i.text, x: Number(t[4] ?? 0), y: viewport.height - Number(t[5] ?? 0), w: i.w }; };
+      // On a turned page, text that runs across only in the other frame (a footer added plainly after the page was turned,
+      // or a line stamped upright on a page a viewer turned) is its own block, laid out in that frame and put after the
+      // rest, never glued into the main block's lines (Critic #401).
+      const apart = !turned ? [] : asShown ? items.filter((i) => !readsAcross(shownOf(i.stored)) && readsAcross(i.stored))
+        : items.filter((i) => !readsAcross(i.stored) && readsAcross(shownOf(i.stored)));
+      const rest = items.filter((i) => !apart.includes(i));
+      const main = renderPageLayout(rest.map(asShown ? shown : stored), viewport.width);
+      const extra = apart.length ? renderPageLayout(apart.map(asShown ? stored : shown), viewport.width) : null;
+      const layout = extra ? { text: [main.text, extra.text].filter(Boolean).join("\n"), lines: [...main.lines, ...extra.lines] } : main;
       const text = layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim();
       // A page with almost no text but one or more painted images is normally a
       // scan. Remembering that signal lets the ingestion pipeline OCR only the
