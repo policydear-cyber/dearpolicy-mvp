@@ -507,11 +507,20 @@ function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
   const rows:BenefitRow[]=[];
   for(let index=table.from+1;index<table.to;index++){
     const cells=lines[index].rawCells??lines[index].cells;
-    const label=(cells[table.labelCol]??"").replace(/\s+/g," ").trim();
+    // A row whose label cell is empty (the cell above spanned it, a held-back shared amount, a sideways table) takes
+    // its name from its first worded cell, when that comes before any value; that cell is then not read as a value.
+    // A row with no such cell is skipped as before (TE #410 T4: "\tChiropractic\tS$75" lost its own S$75).
+    let labelCol=table.labelCol;
+    if(!(cells[labelCol]??"").trim()){
+      const first=cells.findIndex((cell,col)=>col!==table.rowNumberCol&&!!cell.trim());
+      if(first>=0&&!valueLike(cells[first]))labelCol=first;
+    }
+    const label=(cells[labelCol]??"").replace(/\s+/g," ").trim();
     if(label.length<2||label.length>160)continue;
     if(PAYMENT_LABEL.test(label)||(PREMIUM_LABEL.test(label)&&!PREMIUM_BENEFIT.test(label)))continue;
     if(NOT_A_BENEFIT_LABEL.some(pattern=>pattern.test(label)))continue;
     for(const col of table.valueCols){
+      if(col===labelCol)continue;
       const value=(cells[col]??"").replace(/\s+/g," ").trim();
       // Round 10: a dash is how a table prints an empty cell, never a value.
       if(!value||/^[-–—]$/.test(value))continue;
