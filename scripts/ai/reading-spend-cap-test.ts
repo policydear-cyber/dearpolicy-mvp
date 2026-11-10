@@ -49,8 +49,21 @@ async function main() {
       assert.equal(outbound.length, before, "no chat request was sent");
     });
     await test("which operations read documents: intake, OCR and evidence, never answering", async () => {
-      for (const op of ["policy_extraction", "coverage_extraction", "benefit_extraction", "hosted_ocr", "catalog_building", "claim_evidence_extraction"]) assert.equal(readsDocument(op), true, op);
-      for (const op of ["chat_reply", "chat_fact_finding", "rag_answer", "relevance_judging", "claim_fact_finding"]) assert.equal(readsDocument(op), false, op);
+      for (const op of ["policy_extraction", "benefit_extraction", "hosted_ocr", "catalog_building", "claim_evidence_extraction"]) assert.equal(readsDocument(op), true, op);
+      // coverage_extraction is the chat's per-question reading of passages (analyzePolicyWindow): an answer, so capped (Critic #405).
+      for (const op of ["chat_reply", "chat_fact_finding", "rag_answer", "relevance_judging", "claim_fact_finding", "coverage_extraction"]) assert.equal(readsDocument(op), false, op);
+    });
+    await test("the chat's per-question reading of a policy (analyzePolicyWindow) is stopped at the spend limit, before any request", async () => {
+      const { analyzePolicyWindow } = await import("@/lib/chat/policy-analysis");
+      const { runWithModelHousehold } = await import("@/lib/ai/usage");
+      const before = outbound.length;
+      const contract = { ownerId: null, ownerName: "Test Person", name: "Made-up Plan", documents: [], coverages: [] } as unknown as Parameters<typeof analyzePolicyWindow>[0]["contract"];
+      // As the chat route runs it: inside its household's model context, which is what the spend limit is checked against.
+      const error = await runWithModelHousehold(account, () => analyzePolicyWindow({ accountId: account, contract, question: "What does this plan pay for a fracture?", intent: "coverage",
+        sources: [{ id: "s1", text: "Made-up passage: Simple Fracture S$1,000.", productScopes: [], pageStart: 1, pageEnd: 1 }] as unknown as Parameters<typeof analyzePolicyWindow>[0]["sources"] }))
+        .then(() => null, (e: unknown) => e);
+      assert.ok(error instanceof SpendCapReached || /model-spend limit/.test(error instanceof Error ? error.message : ""), `the chat reading was not stopped: ${error instanceof Error ? error.message : error}`);
+      assert.equal(outbound.length, before, "no request was sent");
     });
   } finally {
     delete process.env.PLAN_HARD_STOP_USD;

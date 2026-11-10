@@ -75,7 +75,7 @@ function modelMeter(event: ModelMeterEvent) { (globalThis as { __dpModelMeter?: 
 /** Operations that read a household's own documents (intake, its catalogues and ledgers, OCR, claim evidence). They are
  * not stopped by the household's spend limit (DC, 10 Nov: accuracy before cost); answering operations (chat, claim fact
  * finding, relevance judging, RAG answers) are. */
-export const DOCUMENT_READING_OPERATIONS: ReadonlySet<string> = new Set(["policy_extraction", "coverage_extraction", "benefit_extraction",
+export const DOCUMENT_READING_OPERATIONS: ReadonlySet<string> = new Set(["policy_extraction", "benefit_extraction",
   "condition_catalog_extraction", "catalog_building", "ledger_extraction", "hosted_ocr", "claim_evidence_extraction", "medical_evidence_extraction"]);
 export const readsDocument = (operation: string) => DOCUMENT_READING_OPERATIONS.has(operation);
 export async function structuredCompletion<T>(args: {
