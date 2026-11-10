@@ -147,7 +147,8 @@ export async function runKickedLink(params: { hop: number; chain: string | null;
     while (due != null && due > 0 && room() > 0) {
       const step = Math.min(due, room(), WAIT_SLICE_MS);
       await sleep(step); waitedMs += step;
-      await holdChainLease(chain, db);
+      // Another chain took the lease (this one's lapsed): this link ends, so only one chain ever runs.
+      if (!(await holdChainLease(chain, db))) return { waitedMs, summary: null, next: "ended" };
       due = await nextDueInMs(types, db);
     }
     if (due == null) return end(waitedMs, null);

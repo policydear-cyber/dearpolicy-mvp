@@ -163,6 +163,21 @@ async function main() {
     assert.equal(await holdChainLease(second), true, "the new chain still holds it");
     assert.equal(await holdChainLease(first), false);
     assert.equal(kickChain("not-a-uuid"), null);
+    // A link that loses the lease while it waits ends without running anything.
+    await pool.query("DELETE FROM background_jobs"); await enqueue("sk_due", 60_000);
+    const third = randomUUID();
+    await pool.query(`UPDATE storage_cleanup_locks SET holder=$1, acquired_at=now() WHERE lock_key=$2`, [third, CHAIN_LEASE_KEY]);
+    let sleeps = 0;
+    const waiting = await runKickedLink({ hop: 3, chain: second, startedAt: Date.now(), jobTypes: [{ jobType: "sk_due", process: async () => { ran++; } }] as never, env: VERCEL, fetchImpl: f,
+      sleep: async () => { sleeps++; } });
+    assert.equal(waiting.next, "ended"); assert.equal(ran, 0);
+    assert.equal(sleeps, 0, "a link without the lease does not even wait");
+    // ...and one that loses it during its wait ends at the next look.
+    const fourth = randomUUID();
+    await pool.query(`UPDATE storage_cleanup_locks SET holder=$1, acquired_at=now() WHERE lock_key=$2`, [fourth, CHAIN_LEASE_KEY]);
+    const lost = await runKickedLink({ hop: 3, chain: fourth, startedAt: Date.now(), jobTypes: [{ jobType: "sk_due", process: async () => { ran++; } }] as never, env: VERCEL, fetchImpl: f,
+      sleep: async () => { sleeps++; await pool.query(`UPDATE storage_cleanup_locks SET holder=$1 WHERE lock_key=$2`, [third, CHAIN_LEASE_KEY]); } });
+    assert.equal(lost.next, "ended"); assert.equal(sleeps, 1); assert.equal(ran, 0);
   });
 
   await test("M a queued job of a type the runner never takes starts no chain", async () => {
