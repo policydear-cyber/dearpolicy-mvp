@@ -197,6 +197,48 @@ const squash = (cell: string) => cell.normalize("NFKC").replace(CURRENCY_MARK, "
 const hasDigit = (s: string) => /\d/.test(s);
 const SPACED_DIGITS = /\d\s+\d/;
 
+/** The cells of an image line the reader printed with spaces only, no TAB between its cells ("Accidental Death In Force
+ * 200,000.00 12.50 01-Mar-2019"; a household's schedule, 10 Nov: the reader gave the whole page so, and no column could
+ * be compared). The line is split where the page's own text splits it: into the fewest runs of words that each stand
+ * inside one text cell, a word the text does not print being a cell of its own. A figure (a word with a digit, or a
+ * date) ends its cell: words may stand before it ("RM 200.00", "Jane Doe [AD-778]"), never after it, so two figures are
+ * never in one cell and a run glued across two rows in the text ("200.00RM 400.00") is not taken for one cell. Nothing
+ * is guessed:
+ * - two figures that could be one amount written with a space for thousands ("2 500", "Option 2 500.00") leave the line
+ *   whole;
+ * - a line that can be split into that fewest number of cells in more than one way stays whole.
+ * A line left whole, or split wrongly, matches no text cell, so its figures stay held back: the cells only say where the
+ * columns are, and every check below still has to pass on them. */
+const SPACE_THOUSANDS = (a: string, b: string) => /^\p{Sc}?\d{1,3}$/u.test(a) && /^\d{3}(?:[.,]\d+)?(?!\S)/.test(b);
+/** Exported for the column-check regressions. */
+export function spacedCells(line: string, vocab: string): string[] {
+  const words = line.trim().match(new RegExp(DATE + String.raw`|\S+`, "gi")) ?? [];
+  // A mark alone ("S$", ":", "-") goes with the word after it, or, at the end, the word before it.
+  const tokens: string[] = [];
+  for (const w of words) {
+    if (tokens.length && !squash(tokens[tokens.length - 1])) tokens[tokens.length - 1] += " " + w;
+    else tokens.push(w);
+  }
+  if (tokens.length > 1 && !squash(tokens[tokens.length - 1])) tokens[tokens.length - 2] += " " + tokens.pop();
+  const n = tokens.length;
+  if (n < 2) return [line.trim()];
+  for (let k = 1; k < n; k++) if (hasDigit(tokens[k - 1]) && hasDigit(tokens[k]) && SPACE_THOUSANDS(tokens[k - 1], tokens[k])) return [line.trim()];
+  const cell = (a: number, b: number) => b - a === 1
+    || (vocab.includes(tokens.slice(a, b).map(squash).join("")) && tokens.slice(a, b - 1).every((t) => !hasDigit(t)));
+  // fewest[a]: the fewest cells for tokens[a..]; ways[a]: how many splits give that many (counted to two).
+  const fewest = Array<number>(n + 1).fill(Infinity), ways = Array<number>(n + 1).fill(0), next = Array<number>(n + 1).fill(-1);
+  fewest[n] = 0; ways[n] = 1;
+  for (let a = n - 1; a >= 0; a--) for (let b = a + 1; b <= n; b++) {
+    if (!cell(a, b)) continue;
+    const cells = fewest[b] + 1;
+    if (cells < fewest[a]) { fewest[a] = cells; ways[a] = ways[b]; next[a] = b; } else if (cells === fewest[a]) ways[a] = Math.min(2, ways[a] + ways[b]);
+  }
+  if (ways[0] !== 1) return [line.trim()];
+  const out: string[] = [];
+  for (let a = 0; a < n; a = next[a]) out.push(tokens.slice(a, next[a]).join(" "));
+  return out;
+}
+
 /** A page whose text layer gives each table column as one run, top to bottom, with nothing between the cells ("In
  * ForceIn ForceIn Force", "100,000.002,000.00500.00", "17-Nov-201617-Nov-2016"), while the image reading gives the rows
  * (a household's PruLink schedule, 9 Nov: every amount on pages 3 and 4 held back since October). Line by line nothing
@@ -226,7 +268,10 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   const tCells = tLines.map((l) => l.split("\t"));
   const xOf = (t: number, c: number) => { const xs = geometry[t]; return xs && xs.length === tCells[t].length && Number.isFinite(xs[c]) ? xs[c] : undefined; };
   const iLines = imageReading.split("\n");
-  const iCells = iLines.map((l) => l.split("\t").map((c) => c.trim()));
+  const vocab = tCells.flat().map(squash).filter(Boolean).join("\u0000");
+  const iCells = iLines.map((l) => (l.includes("\t") ? l.split("\t").map((c) => c.trim()) : spacedCells(l, vocab)));
+  // Lines the reader printed with spaces only that hold more than one cell.
+  const spaced = new Set(iLines.map((l, k) => (!l.includes("\t") && iCells[k].length > 1 ? k : -1)).filter((k) => k >= 0));
   const filled = iLines.map((l, k) => (l.trim() ? k : -1)).filter((k) => k >= 0);
   if (!filled.length) return null;
   const widest = Math.max(...filled.map((k) => iCells[k].length));
@@ -243,8 +288,22 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   };
   // A row of the same table right above or below the run whose cell in that column prints no figure (blank, "N.A.", "Not
   // covered"): the run could belong one row further up or down, so it is no evidence (TE P398 C14).
+  // A row right above or below with another number of cells, whose label the text prints glued to the run's labels, is a
+  // row of the same table with a cell left out: a reader that prints cells with spaces only drops a blank cell without a
+  // trace ("Trip cancellation" over "Overseas medical 150,000.00"), so which row the figures belong to is not known.
+  const inOneCell = (s: string) => !!s && vocab.includes(s);
+  const spacedRun = (a: number, b: number) => filled.slice(a, b + 1).some((k) => spaced.has(k));
+  const labelRun = (rows: number[]) => rows.map((r) => squash(iCells[r][0] ?? "")).join("");
   const besideGap = (a: number, b: number, c: number) => [filled[a - 1], filled[b + 1]].some((k) =>
-    k !== undefined && iCells[k].length === iCells[filled[a]].length && (!squash(iCells[k][c]) || (iCells[k].some(hasDigit) && !hasDigit(iCells[k][c]))));
+    k !== undefined && (iCells[k].length === iCells[filled[a]].length
+      ? !squash(iCells[k][c]) || (iCells[k].some(hasDigit) && !hasDigit(iCells[k][c]))
+      : (spaced.has(k) || spacedRun(a, b)) && k !== headingOf(filled[a]) && !!squash(iCells[k][0] ?? "")
+        && inOneCell(k < filled[a] ? labelRun([k, ...filled.slice(a, b + 1)]) : labelRun([...filled.slice(a, b + 1), k]))));
+  // Rows printed with spaces only: the line right above the run, when it prints no figure, is the run's heading row or a
+  // title: a heading the text does not split the same way is not one cell of the text, and its rows are not compared
+  // without it.
+  // A title over the table ("Policy Details") is one line the text prints inside one cell, and is not a heading row.
+  const headed = (a: number) => { const p = filled[a - 1]; return p === undefined || figureRow(p) || headingOf(filled[a]) === p || (iCells[p].length === 1 && inOneCell(squash(iCells[p][0]))); };
   const matches: Match[] = [];
   for (const t of held) for (let ci = 0; ci < tCells[t].length; ci++) {
     const x = xOf(t, ci), core = squash(tCells[t][ci]);
@@ -262,6 +321,7 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
         // A blank cell inside the run: which row it belongs to is not known (TE P398 C11).
         if (!piece) break;
         if (/\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
+        if (spacedRun(a, b) && !headed(a)) break;
         joined += piece; last = piece; pieces++;
         if (joined.length > core.length) break;
         // Two rows or more: one cell alone says nothing about which row it belongs to (Critic P398 A1-A3, C7). Exactly the
@@ -356,7 +416,8 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
   if (!replaced.length) return null;
   const rows = new Set(matches.filter((m) => replaced.includes(m.t)).flatMap((m) => m.rows));
   for (const k of [...rows]) { const h = figureRow(k) ? headingOf(k) : null; if (h !== null) rows.add(h); }
-  const emitted = [...rows].sort((p, q) => p - q).map((k) => iLines[k].trim());
+  // A row the reader printed with spaces only is stored with its cells as checked, a TAB between them.
+  const emitted = [...rows].sort((p, q) => p - q).map((k) => (spaced.has(k) ? iCells[k].join("\t") : iLines[k].trim()));
   const at = Math.min(...replaced);
   const rest = tLines.map((l, t) => (replaced.includes(t) ? tCells[t].filter((c) => squash(c) && !hasDigit(c)).join("\t") : l));
   const lines = [...rest.slice(0, at), ...emitted, ...rest.slice(at)];
