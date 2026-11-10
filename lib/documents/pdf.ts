@@ -80,10 +80,11 @@ export async function extractPdfPages(
       // away the layout, which is where a benefit table lives.
       const positioned = content.items.flatMap((item) =>
         "str" in item && String(item.str).trim()
-          ? [{ text: String(item.str), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
+          ? [{ text: String(item.str).replace(/\u0000/g, ""), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
           : []);
       const layout = renderPageLayout(positioned, page.getViewport({ scale: 1 }).width);
-      const text = layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim();
+      // A NUL in a font's text (a glyph with no character) is never stored: the database refuses it.
+      const text = (layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim()).replace(/\u0000/g, "");
       // A page with almost no text but one or more painted images is normally a
       // scan. Remembering that signal lets the ingestion pipeline OCR only the
       // affected pages instead of reprocessing an otherwise healthy PDF.
@@ -116,11 +117,31 @@ export async function extractPdfPages(
 }
 
 /** Round 7 (port): the Title in the PDF's own document properties, when it
- * reads as one (not a generator's or a word processor's placeholder). */
-export async function pdfDocumentTitle(bytes: Uint8Array): Promise<string | null> {
+ * reads as one (not a generator's or a word processor's placeholder).
+ *
+ * A password-protected PDF keeps its properties encrypted. pdf-lib does not decrypt, so it gave the encrypted bytes as
+ * the title: a string of random characters, often with a NUL, which the database refuses ("invalid byte sequence for
+ * encoding UTF8: 0x00"), so every password-protected PDF failed after its password was entered correctly (10 Nov). Such
+ * a PDF's title is read by PDF.js with the same password, and a title holding a control character or a replacement
+ * character is never a title. */
+export async function pdfDocumentTitle(bytes: Uint8Array, password?: string): Promise<string | null> {
   const { PDFDocument } = await import("pdf-lib");
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-  const title = (doc.getTitle() ?? "").replace(/\s+/g, " ").trim();
+  const title = ((doc.isEncrypted ? await decryptedTitle(bytes, password) : doc.getTitle()) ?? "").replace(/\s+/g, " ").trim();
+  if (/[\u0000-\u001f\u007f-\u009f\ufffd]/.test(title)) return null;
   if (title.length < 4 || title.length > 120 || /^(?:untitled|document\d*|microsoft word|scan\d*|img[_-]?\d+)/i.test(title) || /\.(?:pdf|docx?|jpe?g|png)$/i.test(title)) return null;
   return title;
+}
+
+async function decryptedTitle(bytes: Uint8Array, password?: string): Promise<string | null> {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // PDF.js takes over the buffer it is given: its own copy, as in extractPdfPages.
+  const task = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0]);
+  try {
+    const { info } = await (await task.promise).getMetadata();
+    const title = (info as { Title?: unknown } | null)?.Title;
+    return typeof title === "string" ? title : null;
+  } finally {
+    await task.destroy();
+  }
 }
