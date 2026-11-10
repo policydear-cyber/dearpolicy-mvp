@@ -443,6 +443,8 @@ export function unreadPremiumCovers(covers: TablePremiumCover[], counted: Pick<P
   }
   return out;
 }
+/** Roles of general wording, which never print the household's own premium. */
+const WORDING_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "brochure"]);
 /** An insurer's name for matching: lower case, letters and digits, without "Ltd", "plc", "Berhad" and the like. */
 const insurerKey = (name: string | null | undefined) => String(name ?? "").toLowerCase().replace(/\b(?:ltd|limited|plc|pte|bhd|berhad|inc|co|company|insurance|assurance|the)\b/g, "").replace(/[^a-z0-9]+/g, "");
 type FiledPremium = { member_id: string; doc_id: string | null; policy_id_text: string | null; source_id: string | null; policy_number: string | null; owner: string; insurer: string | null };
@@ -494,8 +496,16 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   try {
     const inventory = await loadPolicyInventory(accountId, [member]);
     inventoryDocumentIds = new Set(inventory.contracts.flatMap((c) => [...c.documents, ...c.references].map((d) => d.id)));
+    // A premium the benefit table read from a document but could not count (no printed currency or frequency, maybe
+    // counted already, or not current) is printed: the note on what was left out says why, never "no premium is printed"
+    // (live test 10 Nov: two schedules printing their premium with no currency were said to print none).
+    const premiumRead = new Set((table?.covers ?? []).filter((c) => c.premium != null && c.premium > 0 && !c.ended && !!c.source?.documentId && documents.has(c.source.documentId)).map((c) => c.source.documentId));
     const unpaid = inventory.contracts.filter((c) => {
       const ids = new Set([...c.documents, ...c.references].map((d) => d.id));
+      if ([...ids].some((id) => premiumRead.has(id))) return false;
+      // A policy known only from general wording (a wording, product summary, benefit guide or brochure filed for someone)
+      // has no premium of its own to print: it is never said to be missing one.
+      if (c.documents.length && c.documents.every((d) => WORDING_ROLES.has(d.document_role ?? ""))) return false;
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
       return !all.some((i) => (i.policy_id && ids.has(i.policy_id)) || (normalizedIdentifier(i.policy_number) && numbers.has(normalizedIdentifier(i.policy_number))));
     });

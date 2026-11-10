@@ -417,6 +417,33 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
 }
 
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
+/** Why a row is under the cover whose own printed line it is (ownLineCovers). */
+export const OWN_LINE_WHY = "printed on this cover's own line";
+/** A benefit row whose printed line is the very line a cover of the same document was read from (the same page and the
+ * same words, spacing aside) belongs to that cover, whatever section the reading put it in: a rider's line in a schedule's
+ * "Component" or "Policy Schedule" block is the rider's own line, not a benefit of the section's base cover (live test
+ * 10 Nov: rider amounts shown under the base cover, or under no cover at all). Only when exactly one cover type of that
+ * document prints that line, and only for cover types someone in the family holds. Fixed for any document: it compares
+ * the reading's own quotes, never a product or benefit name. */
+export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<string>): Map<CheckedBenefit, string> {
+  const lineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
+  const out = new Map<CheckedBenefit, string>();
+  for (const r of readings) {
+    if (r.kind === "illustration") continue;
+    const byLine = new Map<string, Set<string>>();
+    for (const c of r.covers) {
+      if (c.source.documentId !== r.documentId || !c.source.excerpt.trim()) continue;
+      const k = lineKey(c.source);
+      byLine.set(k, new Set([...(byLine.get(k) ?? []), coverKeyOf(c)]));
+    }
+    for (const b of r.benefits) {
+      if (b.source.documentId !== r.documentId || !b.source.excerpt.trim()) continue;
+      const keys = byLine.get(lineKey(b.source));
+      if (keys?.size === 1) { const key = [...keys][0]; if (held.has(key)) out.set(b, key); }
+    }
+  }
+  return out;
+}
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
@@ -447,6 +474,17 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     linkOf.set(l.section, l);
   }
   const people = family.map((m) => ({ id: m.id, name: m.display_name, covers: covers.filter((c) => c.personId === m.id), rows: [] as TableRow[] }));
+  const ownLine = ownLineCovers(readings, new Set(types.map((t) => t.key)));
+  // A link the household chose is theirs: the own line never overrides it.
+  const householdChose = (l: SectionLink | undefined) => (l as { chosenBy?: string } | undefined)?.chosenBy === "household";
+  const placedOf = (sectionKey: string, b: CheckedBenefit): { cover: string; why: string } | null => {
+    const l = linkOf.get(sectionKey);
+    const own = householdChose(l) ? undefined : ownLine.get(b);
+    if (own) return { cover: own, why: OWN_LINE_WHY };
+    return l?.cover ? { cover: l.cover, why: l.why } : null;
+  };
+  // A section is said to be unlinked only for the rows its own line did not place.
+  const unplaced = new Set(readings.flatMap((r) => r.benefits.filter((b) => !placedOf(sectionKeyOf(r.documentId, b), b)).map((b) => sectionKeyOf(r.documentId, b))));
   const unlinkedSections: BenefitTable["unlinkedSections"] = [];
   // Where each section starts, so a part that is not on anyone's table can still be opened at its page.
   const firstSource = new Map<string, Source>();
@@ -454,11 +492,11 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const s of sections) {
     const l = linkOf.get(s.key);
     const refused = refusedLinks.find((x) => x.link.section === s.key);
-    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
+    if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
   for (const r of readings) for (const b of r.benefits) {
-    const l = linkOf.get(sectionKeyOf(r.documentId, b));
-    if (!l?.cover) continue;
+    const l = placedOf(sectionKeyOf(r.documentId, b), b);
+    if (!l) continue;
     for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover), r.documentId)) {
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
