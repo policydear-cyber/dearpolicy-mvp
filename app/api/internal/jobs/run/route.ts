@@ -4,7 +4,7 @@ import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 import { scrubDeletedDocuments } from "@/lib/lifecycle/content-scrub";
 import { purgeSoon } from "@/lib/storage/purge";
 import { requeueStuckTableWorkEverywhere } from "@/lib/benefit-table/app";
-import { kickHop, kickIfPending, KICK_HOP_HEADER, runKickedLink } from "@/lib/jobs/self-kick";
+import { kickChain, kickHop, kickIfPending, KICK_CHAIN_HEADER, KICK_HOP_HEADER, runKickedLink } from "@/lib/jobs/self-kick";
 import { withFunctionDeadline } from "@/lib/jobs/function-time";
 
 export const runtime = "nodejs";
@@ -58,12 +58,12 @@ export async function POST(request: NextRequest) {
       { status: auth.status, headers: NO_STORE },
     );
   }
-  const hop = kickHop(request.headers.get(KICK_HOP_HEADER));
+  const hop = kickHop(request.headers.get(KICK_HOP_HEADER)), chain = kickChain(request.headers.get(KICK_CHAIN_HEADER));
   const startedAt = Date.now();
   try {
     after(() => withFunctionDeadline(startedAt, async () => {
       await requeueStuckTableWorkEverywhere();
-      await runKickedLink({ hop, startedAt, jobTypes: PRODUCTION_JOB_TYPES });
+      await runKickedLink({ hop, chain, startedAt, jobTypes: PRODUCTION_JOB_TYPES });
     }));
   } catch { /* Outside a request scope (a suite calling the handler directly): nothing to run after. */ }
   return NextResponse.json({ ok: true, accepted: true }, { status: 202, headers: NO_STORE });
