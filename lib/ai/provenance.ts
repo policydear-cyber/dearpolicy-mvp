@@ -165,7 +165,11 @@ export type ModelExecutionRecord = RecordModelExecutionInput & {
  * from a FAILED attempt (the fallback that follows it is what actually
  * produced the usable output, if anything did) can never verify. This is
  * the one function every "can this unlock a monetary result" decision
- * ultimately reduces to -- see assertVerifiedForMonetaryUse() below. */
+ * ultimately reduces to -- see assertVerifiedForMonetaryUse() below.
+ *
+ * Documented exception (owner decision, 10 Nov 2026): a Baidu PaddleOCR job (lib/documents/ocr-baidu.ts) carries the
+ * exact versioned model it was submitted with plus Baidu's own job id, because Baidu's API does not report a model
+ * name. See BAIDU_IDENTITY_EXCEPTION there; no other provider may fill resolvedModel from the request. */
 export function computeVerified(status: "succeeded" | "failed", resolved: ResolvedModelIdentity | null): boolean {
   if (status !== "succeeded") return false;
   if (!resolved) return false;

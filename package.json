@@ -107,6 +107,7 @@
     "documents:amount-whole-test": "node --import tsx scripts/documents/amount-whole-test.ts",
     "documents:ocr-not-read-test": "node --import tsx --test scripts/documents/ocr-not-read-test.ts",
     "ocr:openai-test": "node --import tsx scripts/ocr-openai-regressions.ts",
+    "ocr:baidu-test": "node --import tsx scripts/documents/ocr-baidu-test.ts",
     "eval:extraction": "node --import tsx scripts/extraction-eval.ts",
     "system:test": "node --import tsx scripts/system-database-regressions.ts",
     "documents:reissued-schedule-test": "node --import tsx scripts/documents/reissued-schedule-test.ts",
