@@ -35,7 +35,9 @@ export const BAIDU_DEFAULT_BASE_URL = "https://paddleocr.aistudio-app.com";
 export const BAIDU_DEFAULT_MODEL = "PaddleOCR-VL-1.6";
 const JOBS_PATH = "/api/v2/ocr/jobs";
 const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
-const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
+// Only exact, versioned names: the bare "PaddleOCR-VL" is a family alias, and a Baidu job is recorded under the name it
+// was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
+const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
 const TEXT_VERSION = "baidu-md-v2";
 

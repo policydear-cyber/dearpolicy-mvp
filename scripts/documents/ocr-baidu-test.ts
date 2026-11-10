@@ -199,6 +199,7 @@ async function main() {
     ["malformed JSONL", baiduJob(["not json"])],
     ["plain-http result link", baiduJob([vlLine(["a", "b"])], { jsonUrl: "http://fake-baidu-bucket.test/r.jsonl" })],
     ["unknown model", baiduJob([vlLine([PAGE_A, PAGE_B])]), { BAIDU_PADDLEOCR_MODEL: "Not-A-Model" }],
+    ["unversioned family alias PaddleOCR-VL", baiduJob([vlLine([PAGE_A, PAGE_B])]), { BAIDU_PADDLEOCR_MODEL: "PaddleOCR-VL" }],
     ["result link on a host that is not Baidu's", baiduJob([vlLine([PAGE_A, PAGE_B])], { jsonUrl: "https://fake-elsewhere.test/r.jsonl" })],
     ["no time left in the function for Baidu", baiduJob([vlLine([PAGE_A, PAGE_B])]), { VERCEL: "1", __DEADLINE__: "1" }],
   ];
@@ -212,6 +213,7 @@ async function main() {
     assert.equal(out[1].text, "AI reading of page 2", `${label}: page 2 read by the AI reader`);
     assert.equal(out[2].text, "AI reading of page 3", `${label}: page 3 read by the AI reader`);
     assert.equal(aiCalls().length, 1, `${label}: one AI request`);
+    if (/model|alias/.test(label) && !/report/.test(label)) assert.equal(baiduCalls().length, 0, `${label}: refused before anything is sent to Baidu`);
   }
 
   // 5. The token never appears anywhere but the Authorization header to the Baidu host: not in a URL, a body, or an error.

@@ -125,7 +125,7 @@ export type Price={input:number;output:number;cachedInput?:number};
 const PRICES:Record<string,Price>={
   // Baidu AI Studio hosted PaddleOCR, free tier (about 3,000 pages a day per model): booked at $0, priced, so the ledger
   // shows each job (lib/documents/ocr-baidu.ts books the job's page count as its input).
-  "baidu:PaddleOCR-VL-1.6":{input:0,output:0},"baidu:PaddleOCR-VL-1.5":{input:0,output:0},"baidu:PaddleOCR-VL":{input:0,output:0},
+  "baidu:PaddleOCR-VL-1.6":{input:0,output:0},"baidu:PaddleOCR-VL-1.5":{input:0,output:0},
   "baidu:PP-StructureV3":{input:0,output:0},"baidu:PP-OCRv5":{input:0,output:0},"baidu:PP-OCRv5-latin":{input:0,output:0},"baidu:PP-OCRv6":{input:0,output:0},
   "anthropic:claude-haiku-4-5":{input:1,output:5,cachedInput:0.1},
   "anthropic:claude-sonnet-5":{input:2,output:10,cachedInput:0.2},
