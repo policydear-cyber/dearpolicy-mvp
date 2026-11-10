@@ -190,8 +190,193 @@ const described = (xs: Seen[]) => (xs.length ? `${xs.length} (${tally(xs.map((x)
  * line confirms one text line). A figure line with no label confirms nothing. `text` is the page as it may be stored: null
  * when no figure line was confirmed (the whole page is unchecked), otherwise every unconfirmed line with its figures shown
  * as NOT_CHECKED. `log` says what kind of difference it was, in counts and fixed words only (Critic plan step 1). */
-export function checkLines(textReading: string, imageReading: string, pageNumber?: number):
-  { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string } {
+/** A cell as both readings can compare it: lower case, letters and digits only, thousands marks dropped, a decimal point
+ * kept between digits, currency marks left out. "Sum Assured: S$100,000.00" is "sumassured100000.00". */
+const squash = (cell: string) => cell.normalize("NFKC").replace(CURRENCY_MARK, " ").toLowerCase()
+  .replace(/(\d)[,'’](?=\d)/g, "$1").replace(/(\d)\.(?=\d)/g, "$1\u0001").replace(/[^\p{L}\p{N}\u0001]/gu, "").replace(/\u0001/g, ".");
+const hasDigit = (s: string) => /\d/.test(s);
+const SPACED_DIGITS = /\d\s+\d/;
+
+/** A page whose text layer gives each table column as one run, top to bottom, with nothing between the cells ("In
+ * ForceIn ForceIn Force", "100,000.002,000.00500.00", "17-Nov-201617-Nov-2016"), while the image reading gives the rows
+ * (a household's PruLink schedule, 9 Nov: every amount on pages 3 and 4 held back since October). Line by line nothing
+ * can agree, but the two readings can still be checked against each other column by column:
+ *
+ * - a text cell that prints a figure is matched to the cells one column of the image prints on two or more consecutive
+ *   lines, none blank and never the heading row, when joined in that order they are exactly the cell, or the column's own
+ *   heading glued before them (then one line is enough: the text ties the figure to its heading); two figures may only
+ *   meet where the first ends a complete decimal amount or a date's year, and no cell with digits apart by a space is
+ *   matched, so a figure is never split or joined differently from how the image prints it; a run beside a row of the
+ *   same table that prints no figure in that column could sit a row off and is not matched;
+ * - every column of those lines, labels and words as well as figures, joined in the same order, is held by exactly one
+ *   text cell, so each cell is in the same row in both readings; a run printed in two places is no evidence;
+ * - each of those text cells lies in its own table's part of the text: from the table's first heading cell (or, with no
+ *   heading row, its labels' run) up to the next table's, so a run cannot be borrowed from another table at the same
+ *   left edge;
+ * - those text cells, and the one text cell of each heading cell (the whole cell, exactly, where there is one), stand left
+ *   to right on the page (the page geometry) in the order the image prints them: each figure is under the same heading.
+ *
+ * A row is kept only when every cell of it passes, and a text line only when every cell of it that prints a figure is
+ * matched to rows that are all kept. Such a line is stored as the image's rows it holds, every figure of which the text
+ * prints in the same column order; anything else stays as the line check left it (held back). */
+function columnRows(textReading: string, imageReading: string, geometry: (number[] | undefined)[], held: Set<number>):
+  { text: string; confirmed: Set<number>; image: Set<number> } | null {
+  const tLines = textReading.split("\n");
+  if (geometry.length !== tLines.length) return null;
+  const tCells = tLines.map((l) => l.split("\t"));
+  const xOf = (t: number, c: number) => { const xs = geometry[t]; return xs && xs.length === tCells[t].length && Number.isFinite(xs[c]) ? xs[c] : undefined; };
+  const iLines = imageReading.split("\n");
+  const iCells = iLines.map((l) => l.split("\t").map((c) => c.trim()));
+  const filled = iLines.map((l, k) => (l.trim() ? k : -1)).filter((k) => k >= 0);
+  if (!filled.length) return null;
+  const widest = Math.max(...filled.map((k) => iCells[k].length));
+  type Match = { t: number; ci: number; x: number; c: number; rows: number[] };
+  type Spot = { x: number; t: number; s: string };
+  const figureRow = (k: number) => iCells[k].some(hasDigit);
+  // The heading row of the table a line belongs to: the nearest line above, past rows of the same width, that prints no
+  // figure and has as many cells.
+  const headingOf = (k: number) => {
+    let p = filled.indexOf(k) - 1;
+    while (p >= 0 && figureRow(filled[p]) && iCells[filled[p]].length === iCells[k].length) p--;
+    const h = filled[p];
+    return h !== undefined && iCells[h].length >= 2 && iCells[h].length === iCells[k].length && !figureRow(h) ? h : null;
+  };
+  // A row of the same table right above or below the run whose cell in that column prints no figure (blank, "N.A.", "Not
+  // covered"): the run could belong one row further up or down, so it is no evidence (TE P398 C14).
+  const besideGap = (a: number, b: number, c: number) => [filled[a - 1], filled[b + 1]].some((k) =>
+    k !== undefined && iCells[k].length === iCells[filled[a]].length && (!squash(iCells[k][c]) || (iCells[k].some(hasDigit) && !hasDigit(iCells[k][c]))));
+  const matches: Match[] = [];
+  for (const t of held) for (let ci = 0; ci < tCells[t].length; ci++) {
+    const x = xOf(t, ci), core = squash(tCells[t][ci]);
+    // Figures with only a space between them ("Option 2 500.00", "2 500") would squash into one: never matched (Critic P398 B).
+    if (x === undefined || !hasDigit(core) || SPACED_DIGITS.test(tCells[t][ci])) continue;
+    let best: Match | null = null;
+    for (let c = 0; c < widest; c++) for (let a = 0; a < filled.length; a++) {
+      // A run never starts on a heading row: its heading is matched as the heading, glued before the run or not.
+      if (a + 1 < filled.length && headingOf(filled[a + 1]) === filled[a]) continue;
+      const h = headingOf(filled[a]), head = h === null ? "" : squash(iCells[h][c] ?? "");
+      let joined = "", last = "", pieces = 0;
+      for (let b = a; b < filled.length && iCells[filled[b]].length > c; b++) {
+        if (SPACED_DIGITS.test(iCells[filled[b]][c])) break;
+        const piece = squash(iCells[filled[b]][c]);
+        // A blank cell inside the run: which row it belongs to is not known (TE P398 C11).
+        if (!piece) break;
+        if (/\d$/.test(last) && /^\d/.test(piece) && !/\.\d{2}$|\p{L}\d{4}$/u.test(last)) break;
+        joined += piece; last = piece; pieces++;
+        if (joined.length > core.length) break;
+        // Two rows or more: one cell alone says nothing about which row it belongs to (Critic P398 A1-A3, C7). Exactly the
+        // text cell, or its own heading glued before it, nothing else: a word cell ("N.A.", "Not covered") the image left
+        // out would otherwise let the figures shift by a row (TE P398 C10, C14, C24).
+        // One row is enough only when the text prints the column's own heading glued before it: the text itself then ties
+        // the figure to its heading.
+        // The run must then start on the first row right under that heading (Critic P398 H1).
+        const glued = !!head && filled[a - 1] === h && head + joined === core;
+        if ((pieces >= 2 || glued) && hasDigit(joined) && (joined === core || glued) && (!best || b - a + 1 > best.rows.length) && !besideGap(a, b, c)) best = { t, ci, x, c, rows: filled.slice(a, b + 1) };
+      }
+    }
+    if (best) matches.push(best);
+  }
+  if (!matches.length) return null;
+  const spots = (pick: (s: string) => boolean): Spot[] => tCells.flatMap((cs, t) => cs.flatMap((c, ci) => { const x = xOf(t, ci); return x !== undefined && squash(c) && pick(squash(c)) ? [{ x, t, s: squash(c) }] : []; }));
+  // A run (cells of one column joined in row order) stands somewhere only when exactly one text cell holds it: printed in
+  // two places it could be either table's (Critic P398 E2), and the row is held.
+  const runAt = (run: string): Spot | undefined => { const at = spots((s) => s.includes(run)); return at.length === 1 ? at[0] : undefined; };
+  // Where a heading cell stands: the one text cell that is exactly it; failing that, the one that holds it, not counting a
+  // cell that holds a longer cell of the same heading (the "Component" of "Component Premium"). A heading word inside a
+  // row label ("Benefit" in "Surgical benefit") does not count against a cell that is exactly "Benefit" (TE P398 C20).
+  // Two places or none: no evidence, and the rows are held (Critic P398 C5, TE P398 C17).
+  const headingAt = (cell: string, line: string[]): Spot | undefined => {
+    const s = squash(cell), exact = spots((o) => o === s);
+    if (exact.length) return exact.length === 1 ? exact[0] : undefined;
+    const longer = line.map(squash).filter((o) => o !== s && o.includes(s));
+    const at = spots((o) => o.includes(s) && !longer.some((l) => o.includes(l)));
+    return at.length === 1 ? at[0] : undefined;
+  };
+  // Where each table starts in the text: the first text line holding one of its heading cells, or, for rows with no
+  // heading row, the line holding their labels' run. A table's text runs from its start to the next table's start.
+  const headsOf = (h: number) => iCells[h].map((c) => (squash(c) ? headingAt(c, iCells[h]) : undefined));
+  const startOf = (anchors: (Spot | undefined)[]) => { const ts = anchors.filter((a): a is Spot => !!a).map((a) => a.t); return ts.length ? Math.min(...ts) : undefined; };
+  const labelsOf = (m: Match) => runAt(m.rows.map((r) => squash(iCells[r][0] ?? "")).join(""));
+  const starts = [...new Set([
+    ...[...new Set(matches.map((m) => headingOf(m.rows[0])).filter((h): h is number => h !== null))].map((h) => startOf(headsOf(h))),
+    ...matches.filter((m) => headingOf(m.rows[0]) === null).map((m) => labelsOf(m)?.t),
+  ].filter((t): t is number => t !== undefined))].sort((p, q) => p - q);
+  const within = (at: Spot, start: number) => at.t >= start && at.t < (starts.find((t) => t > start) ?? Infinity);
+  // The text's own heading over a run's cell is the image's heading over the run: glued right before the run in the same
+  // cell, or, failing that, the nearest text cell above it at the same left edge that prints no figure (TE P398 C33: an
+  // image that leaves out a second table's heading row must not hand that table's runs to the first table's headings).
+  const underOwnHeading = (at: Spot, head: string, run: string) => {
+    if (!head) return true;
+    if (at.s.includes(head + run)) return true;
+    for (let t = at.t - 1; t >= 0; t--) {
+      const above = tCells[t].map((c, ci) => ({ s: squash(c), x: xOf(t, ci) })).find((c) => c.s && c.x !== undefined && Math.abs(c.x - at.x) < 0.5);
+      if (above && !hasDigit(above.s)) return above.s === head;
+    }
+    return false;
+  };
+  const kept = new Map<number, boolean>();
+  // A row is kept when, for every figure run that covers it, each column of its rows (labels, words and figures, joined in
+  // the same row order) is exactly one text cell (Critic P398 E6: a status column swapped between two rows), and that cell
+  // lies in the row's own table's text: from the table's start up to the next table's start (TE P398 C25: two tables whose
+  // last columns share a left edge). Each column keeps one place across runs, and the places, like the heading cells', go
+  // left to right as the image prints them.
+  const rowKept = (k: number) => {
+    if (kept.has(k)) return kept.get(k)!;
+    const h = headingOf(k);
+    const heads = h === null ? null : headsOf(h);
+    const place = new Map<number, Spot>();
+    let ok = !heads || iCells[h!].every((c, d) => !squash(c) || heads[d] !== undefined);
+    for (let c = 0; c < iCells[k].length && ok; c++) {
+      if (!hasDigit(iCells[k][c])) continue;
+      const covering = matches.filter((m) => m.c === c && m.rows.includes(k));
+      if (!covering.length) ok = false;
+      for (const m of covering) {
+        const own = runAt(squash(tCells[m.t][m.ci]));
+        if (!own || own.t !== m.t || own.x !== m.x) { ok = false; break; }
+        const labels = labelsOf(m), start = heads ? startOf(heads) : labels?.t;
+        for (let d = 0; d < iCells[k].length && ok; d++) {
+          if (!squash(iCells[k][d])) continue;
+          const run = m.rows.map((r) => squash(iCells[r][d] ?? "")).join("");
+          const at = d === c ? own : runAt(run);
+          const tied = !!at && start !== undefined && within(at, start) && (h === null || underOwnHeading(at, squash(iCells[h][d] ?? ""), run));
+          if (!at || !tied || (place.has(d) && Math.abs(place.get(d)!.x - at.x) >= 0.5)) ok = false; else place.set(d, at);
+        }
+      }
+    }
+    const rightward = (xs: number[]) => xs.every((x, n) => n === 0 || x > xs[n - 1] + 0.5);
+    ok &&= rightward([...place.entries()].sort((p, q) => p[0] - q[0]).map(([, s]) => s.x)) && (!heads || rightward(heads.filter((s): s is Spot => !!s).map((s) => s.x)));
+    kept.set(k, ok);
+    return ok;
+  };
+  const sound = (m: Match) => m.rows.every((k) => !figureRow(k) || rowKept(k));
+  const replaced = [...held].filter((t) => {
+    const digitCells = tCells[t].map((c, ci) => (hasDigit(squash(c)) ? ci : -1)).filter((ci) => ci >= 0);
+    return digitCells.length > 0 && digitCells.every((ci) => matches.some((m) => m.t === t && m.ci === ci && sound(m)));
+  });
+  if (!replaced.length) return null;
+  const rows = new Set(matches.filter((m) => replaced.includes(m.t)).flatMap((m) => m.rows));
+  for (const k of [...rows]) { const h = figureRow(k) ? headingOf(k) : null; if (h !== null) rows.add(h); }
+  const emitted = [...rows].sort((p, q) => p - q).map((k) => iLines[k].trim());
+  const at = Math.min(...replaced);
+  const rest = tLines.map((l, t) => (replaced.includes(t) ? tCells[t].filter((c) => squash(c) && !hasDigit(c)).join("\t") : l));
+  const lines = [...rest.slice(0, at), ...emitted, ...rest.slice(at)];
+  return { text: lines.join("\n"), confirmed: new Set(emitted.map((_, n) => at + n)), image: rows };
+}
+
+export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string;
+  /** How many of the page's figure lines are held back (shown as not checked). */
+  held: number };
+export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[]): LineCheck {
+  const first = checkLinesOnce(textReading, imageReading, pageNumber);
+  if (first.agree || !geometry || !first.heldLines.size) return first;
+  // Lines held back on a page whose text layer gives each table column as one run: confirmed column by column (columnRows).
+  const zipped = columnRows(textReading, imageReading, geometry, first.heldLines);
+  if (!zipped) return first;
+  const second = checkLinesOnce(zipped.text, imageReading, pageNumber, zipped);
+  return second.agree || second.held < first.held ? second : first;
+}
+function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> }):
+  LineCheck & { heldLines: Set<number> } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
   const imageLinesAll = imageReading.split("\n");
   // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
@@ -201,7 +386,11 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const shared = new Set(textHeads.filter((h) => h && imageHeads.includes(h)));
   const under = (heads: (string | null)[]) => { let h = ""; return heads.map((x) => (x && shared.has(x) ? (h = x) : h)); };
   const textUnder = under(textHeads), imageUnder = under(imageHeads);
-  const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i], l })).filter((o) => figureLine(o.t));
+  // Image lines already confirmed column by column, and any line the image prints again with the same words and figures
+  // (a reader that gave the page twice), confirm nothing more.
+  const used = [...(pre?.image ?? [])].map((i) => lineTokens(imageLinesAll[i]));
+  const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i], l }))
+    .filter((o) => figureLine(o.t) && !used.some((u) => sameLine(u, o.t)));
   const imageLines = pool.length;
   const unconfirmed: number[] = [];
   // A label the text layer wraps or splits onto a line of its own, words only, right above or below the row ("Comprehensive
@@ -247,6 +436,7 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
+    if (pre?.confirmed.has(i)) return;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
@@ -315,15 +505,20 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
-  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log };
+  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: spread.size, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) ? "" : l));
   const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
-  return { agree: kind === null, kind, why, text, log };
+  return { agree: kind === null, kind, why, text, log, held: spread.size, heldLines: spread };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 
-type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string };
+type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string;
+  /** The page's lines as its geometry gave them: where each cell starts (lib/documents/layout.ts). */
+  lines?: { text: string; cells: string[]; xs?: number[] }[] };
+/** Where each cell of each text line starts on the page, when the stored text is still exactly the geometry's lines. */
+const geometryOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
+  ? p.lines.map((l) => (l.xs && l.xs.length === l.text.split("\t").length ? l.xs : undefined)) : undefined);
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
 export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && !p.partChecked && looksScrambled(p.text)).map((p) => p.pageNumber);
 /** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
@@ -339,7 +534,7 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     const check = !second ? { agree: false as const, kind: "image reading failed", text: null, log: undefined }
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
       : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
-      : checkLines(p.text, image.text, p.pageNumber);
+      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p));
     // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
     // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
     if (check.agree) return check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p;
