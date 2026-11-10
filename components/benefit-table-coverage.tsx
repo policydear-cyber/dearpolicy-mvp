@@ -21,7 +21,7 @@ type Person={id:string;name:string;covers:Cover[];rows:Row[];
   /** The person's schedule lines (what Home's tiles count), from GET /api/benefit-table. Optional: an older server sends none. */
   scheduleLines?:{policyId:string;category:string}[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
-export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"stalled"|"held"|"table_unread"|"no_table"|"not_readable";hold?:string|null}[];
+export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"read_in_part"|"waiting"|"stalled"|"held"|"table_unread"|"no_table"|"not_readable";hold?:string|null;unreadPages?:number[]}[];
   unmatchedCovers:Other[];illustrationCovers:Other[];
   /** A cover printed for a name several people in the family share, not yet placed under one of them. Optional: an older server sends none. */
   ambiguousCovers?:{cover:Other;documentId:string;candidates:{id:string;name:string}[];sameName?:boolean}[];
@@ -155,6 +155,8 @@ function NoCoverShown({person,pending}:{person:Person;pending:boolean}){
   </section>;
 }
 
+/** "page 23", "pages 4 and 23", "pages 4, 9 and 23". */
+const pagesWord=(pages:number[])=>pages.length===1?`page ${pages[0]}`:`pages ${pages.slice(0,-1).join(", ")} and ${pages[pages.length-1]}`;
 export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload?:()=>Promise<void>}){
   // "waiting" is only a document DearPolicy is reading now; it needs nothing from the household. A document the table
   // never reads, or whose table reading was not stored, is "no_table": said not to be shown here, which claims nothing
@@ -169,7 +171,9 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
     held=data.documents.filter(d=>d.state==="held"),
     // The household's own schedule or certificate whose benefits were not read in: Read again on the Documents page reads
     // it into this page.
-    tableUnread=data.documents.filter(d=>d.state==="table_unread");
+    tableUnread=data.documents.filter(d=>d.state==="table_unread"),
+    // Read, but with pages DearPolicy could not read after several tries: the rest is shown, and those pages are named.
+    readInPart=data.documents.filter(d=>d.state==="read_in_part");
   const people=data.people.filter(p=>p.covers.length);
   // Once anyone has cover here, everyone in the family is listed, so a person with none (a child with only a premium
   // record, say) is said to have none shown instead of silently missing from the page.
@@ -187,6 +191,8 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
       <span>{held.map(d=>d.hold?`${d.name} (${d.hold})`:d.name).join(", ")}. The <Link className="text-link" href="/policies">Documents page</Link> shows {held.length===1?"its":"their"} status.</span></div></div>:null}
     {tableUnread.length?<div className="unread-documents stalled" role="status" data-testid="table-unread"><div><strong>{tableUnread.length===1?"One document’s benefits couldn’t":`${tableUnread.length} documents’ benefits couldn’t`} be read for Coverage yet.</strong>
       <span>{tableUnread.map(d=>d.name).join(", ")}. You can use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
+    {readInPart.length?<div className="unread-documents stalled" role="status" data-testid="table-read-in-part"><div><strong>{readInPart.length===1?"One document was":`${readInPart.length} documents were`} read only in part.</strong>
+      <span>{readInPart.map(d=>`${d.name} (${pagesWord(d.unreadPages??[])} not read)`).join(", ")}. Benefits on {readInPart.length===1&&(readInPart[0].unreadPages??[]).length===1?"that page aren’t":"those pages aren’t"} shown here. You can use Read again on the <Link className="text-link" href="/policies">Documents page</Link>.</span></div></div>:null}
     {unreadable.length?<div className="unread-documents stalled" role="status"><div><strong>{unreadable.length===1?"One document":"Some documents"} could not be read.</strong><span>{unreadable.map(d=>d.name).join(", ")}</span></div></div>:null}
     {data.figureChecks?.length?<FigureChecks checks={data.figureChecks} reload={reload}/>:null}
     {noTable.length?<p className="muted" data-testid="table-not-shown">{noTable.map(d=>d.name).join(", ")} {noTable.length===1?"isn’t shown on this page. You can still ask about it in chat.":"aren’t shown on this page. You can still ask about them in chat."}</p>:null}

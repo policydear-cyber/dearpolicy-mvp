@@ -3,6 +3,7 @@ import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
 import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 import { scrubDeletedDocuments } from "@/lib/lifecycle/content-scrub";
 import { purgeSoon } from "@/lib/storage/purge";
+import { requeueStuckTableWorkEverywhere } from "@/lib/benefit-table/app";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest) {
   // earlier: content scrubbed, files removed (both bounded, never throw).
   await scrubDeletedDocuments();
   await purgeSoon();
+  // A long policy's table reading (or its link run) whose run died is queued again before the batch runs, so the daily run
+  // goes on with it when the app is idle (lib/benefit-table/app.ts; bounded, never throws).
+  await requeueStuckTableWorkEverywhere();
   try {
     const summary = await runJobBatch({ jobTypes: PRODUCTION_JOB_TYPES });
     return NextResponse.json({ ok: true, ...summary }, { headers: NO_STORE });

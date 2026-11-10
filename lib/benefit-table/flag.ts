@@ -38,6 +38,17 @@ export function benefitTableStatus(env: NodeJS.ProcessEnv = process.env, account
 export const benefitTableEnabled = (env: NodeJS.ProcessEnv = process.env, accountId?: string | null) => benefitTableStatus(env, accountId).enabled;
 
 export const DEFAULT_TABLE_MODEL: ModelChoice = { provider: "anthropic", model: "claude-sonnet-5-5" };
+/** The stronger reader a page is tried with after its first try gave no reading, before it is ever read past (DC, 10 Nov:
+ * "do not limit cost for reading documents", accuracy first). DEARPOLICY_BENEFIT_TABLE_STRONG_MODEL picks it as
+ * "anthropic:<model>". */
+export const DEFAULT_TABLE_STRONG_MODEL: ModelChoice = { provider: "anthropic", model: "claude-opus-5-5" };
+export function benefitTableStrongModel(env: NodeJS.ProcessEnv = process.env): ModelChoice {
+  const raw = (env.DEARPOLICY_BENEFIT_TABLE_STRONG_MODEL ?? "").trim();
+  if (!raw) return DEFAULT_TABLE_STRONG_MODEL;
+  const m = /^anthropic:([\w.-]+)$/.exec(raw);
+  if (!m) throw new Error(`DEARPOLICY_BENEFIT_TABLE_STRONG_MODEL must be "anthropic:<model>", not "${raw}"`);
+  return { provider: "anthropic", model: m[1] };
+}
 export function benefitTableModel(env: NodeJS.ProcessEnv = process.env): ModelChoice {
   const raw = (env.DEARPOLICY_BENEFIT_TABLE_MODEL ?? "").trim();
   if (!raw) return DEFAULT_TABLE_MODEL;

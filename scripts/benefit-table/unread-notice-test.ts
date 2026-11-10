@@ -30,7 +30,7 @@ const ago = (ms: number) => new Date(NOW - ms).toISOString();
 const DAY = 24 * 3600_000;
 type Policy = { id: string; original_filename: string; processing_status: string; document_role: string | null; product_name: string | null;
   insurer: string | null; policy_number: string | null; processing_completed_at: string | null; quarantine_status: string | null;
-  created_at: string; updated_at: string; reading_live: boolean };
+  created_at: string; updated_at: string; reading_live: boolean; link_only?: boolean };
 const policy = (id: string, o: Partial<Policy>): Policy => ({ id, original_filename: `${id}.pdf`, processing_status: "ready", document_role: "personal_schedule",
   product_name: null, insurer: "Example Insurance", policy_number: null, processing_completed_at: ago(3 * DAY), quarantine_status: "scan_clean", created_at: ago(30 * DAY), updated_at: ago(3 * DAY), reading_live: false, ...o });
 
@@ -55,7 +55,10 @@ const policies: Policy[] = [
   policy("unclaimed", { product_name: "Example Maternity Plan", processing_status: "queued", processing_completed_at: null, updated_at: ago(60_000) }), // nothing claimed its job
   policy("scan", { product_name: "Example Blurry Scan", processing_status: "failed" }),                      // could not be read
   policy("unchecked", { product_name: "Example Unchecked Pages" }),                                          // ready, but no page could be checked
+  policy("linking", { product_name: "Example Long Wording" }), // its long reading is stored, the run that links its sections is still to come
 ];
+const LINKING = { ...policies.at(-1)!, link_only: true };
+policies[policies.length - 1] = LINKING;
 const pages = [
   ...policies.filter((p) => p.id !== "unchecked").map((p) => ({ policy_id: p.id, page_number: 1, text: "SCHEDULE\nLim Ah Kow\tS$100,000", extraction_method: "native" })),
   { policy_id: "unchecked", page_number: 1, text: "garbled", extraction_method: "unchecked" },
@@ -64,6 +67,7 @@ const readings = new Map<string, unknown>([
   ["schedule", reading([{ person: "Lim Ah Kow", product: "Example Shield", cover: "Hospital", plan: null, sumInsured: 100000, asOf: null, page: 1, quote: "Lim Ah Kow\tS$100,000" }])],
   ["empty-read", reading([])],
   ["scan", reading([])], // a reading kept from before the document failed
+  ["linking", reading([{ person: "Lim Ah Kow", product: "Example Long Wording", cover: "Death", plan: null, sumInsured: 500000, asOf: null, page: 1, quote: "Lim Ah Kow\tS$500,000" }])],
 ]);
 
 const db: service.Db = async (sql, p) => {
@@ -114,6 +118,11 @@ async function main() {
     assert.equal(state.schedule, "read");
     assert.equal(state["empty-read"], "read");
     assert.equal(table.people.find((p) => p.id === "p1")!.covers.length, 1);
+  });
+  await test("a long document whose reading is stored but whose sections are not linked yet is still being read, and shows none of its reading (TE #404)", () => {
+    assert.equal(state.linking, "waiting");
+    assert.ok(!table.people.flatMap((p) => p.covers).some((c) => /Long Wording|Death/.test(JSON.stringify(c))), "none of its covers or rows shown");
+    assert.ok(!JSON.stringify(table).includes("500000"), "no figure from it");
   });
   await test("controls: a document that failed, or has no page that could be checked, keeps 'not readable'", () => {
     assert.equal(state.scan, "not_readable");
@@ -182,9 +191,89 @@ async function main() {
         await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='policy_processing' AND idempotency_key=$1`, [id + ":retry-read"]);
         cases.push([file, "queued", null, null, want]);
       }
-      const got = await service.tableFor(async (sql, params) => (await client.query(sql, params as unknown[])).rows, acct);
+      // A long document whose reading is stored and whose link run (benefit_table_reading) is still to come, however long it
+      // waits and even when that run died (Coverage queues it again until it links, below): waiting, never "read" with
+      // nothing linked and never "could not be read" (TE #404; DC 10 Nov).
+      for (const [file, set, want] of [["link-waits-2h.pdf", "status='queued', available_at=now()-interval '2 hours'", "waiting"], ["link-dead.pdf", "status='dead_letter'", "waiting"]] as const) {
+        const id = randomUUID();
+        const progress = JSON.stringify({ benefitTableProgress: { id: "r1", fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true } });
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status,document_role,processing_completed_at,extracted_json)
+          VALUES($1,$2,$3,$4,$5,'ready','scan_clean','personal_schedule',now(),$6::jsonb)`, [id, acct, member, file, `test/${id}`, progress]);
+        await client.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'SCHEDULE Tan Mei Ling')", [acct, id]);
+        await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb)", [acct, `${id}:table-reading:r1:3`]);
+        await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='benefit_table_reading' AND idempotency_key=$1`, [`${id}:table-reading:r1:3`]);
+        cases.push([file, "ready", "personal_schedule", null, want]);
+      }
+      // A long document whose reading is carried over runs (not stored yet) and whose next run died: still being read, never
+      // "not read" (it is queued again below). One saved moments ago is not queued again yet: its run may be queuing the next.
+      const readingProgress = (at: string) => JSON.stringify({ benefitTableProgress: { id: "r2", fp: "x", queue: [[1]], done: [], headings: [], columns: [], calls: 1, limit: 1, outputLimit: 1, run: 4, at } });
+      const readDead = randomUUID(), readFresh = randomUUID();
+      for (const [id, file, at] of [[readDead, "read-dead.pdf", "2000-01-01T00:00:00.000Z"], [readFresh, "read-fresh.pdf", new Date().toISOString()]] as const) {
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status,document_role,processing_completed_at,extracted_json)
+          VALUES($1,$2,$3,$4,$5,'ready','scan_clean','personal_schedule',now(),$6::jsonb)`, [id, acct, member, file, `test/${id}`, readingProgress(at)]);
+        await client.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'SCHEDULE Tan Mei Ling')", [acct, id]);
+        cases.push([file, "ready", "personal_schedule", null, "waiting"]);
+      }
+      await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb,'dead_letter')", [acct, `${readDead}:table-reading:r2:5`]);
+      // A document read with a page read past (skippedPages): read in part, and the page is named (Critic and TE #404).
+      const inPart = randomUUID();
+      await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status,document_role,processing_completed_at)
+        VALUES($1,$2,$3,'read-in-part.pdf',$4,'ready','scan_clean','personal_schedule',now())`, [inPart, acct, member, `test/${inPart}`]);
+      await client.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'SCHEDULE Tan Mei Ling')", [acct, inPart]);
+      await client.query("INSERT INTO benefit_readings(policy_id,account_id,reading,model,prompt_version) VALUES($1,$2,$3::jsonb,'stand-in','t')",
+        [inPart, acct, JSON.stringify({ document: { kind: "schedule", namedPeople: [] }, covers: [], benefits: [], pages: [], skippedPages: [23] })]);
+      cases.push(["read-in-part.pdf", "ready", "personal_schedule", null, "read_in_part"]);
+      const realDb: service.Db = async (sql, params) => (await client.query(sql, params as unknown[])).rows;
+      const got = await service.tableFor(realDb, acct);
+      assert.deepEqual(got.documents.find((d) => d.name === "read-in-part.pdf")?.unreadPages, [23], "the page read past is named");
+      assert.equal(service.tableStateKey(got.documents.find((d) => d.name === "read-in-part.pdf")!), "read_in_part:23", "the chat is told which page");
       const by = Object.fromEntries(got.documents.map((d) => [d.name, d.state]));
       for (const [file, , , , want] of cases) assert.equal(by[file], want, file);
+
+      // A dead link run is queued again when Coverage opens (requeueStuckLinks), later each time, until it links: never given
+      // up on. A link run still queued is never queued twice. Queuing it reads nothing (the link run makes no reading call:
+      // long-document-test K10).
+      const { requeueStuckLinks } = await import("@/lib/benefit-table/app");
+      const queued: { policyId: string; id: string; attempt: number; delayMs: number }[] = [];
+      const later = async (policyId: string, id: string, attempt: number, delayMs: number) => { queued.push({ policyId, id, attempt, delayMs }); };
+      const deadId = (await client.query("SELECT id::text FROM policies WHERE account_id=$1 AND original_filename='link-dead.pdf'", [acct])).rows[0].id as string;
+      assert.equal(await requeueStuckLinks(realDb, acct, later), 1, "only the dead link run is queued again: the waiting one has its job");
+      assert.deepEqual(queued.map((q) => [q.policyId, q.id, q.attempt]), [[deadId, "r1", 2]]);
+      // Each time as if its last queuing were long ago (one queued moments ago may still be about to run).
+      const aged = () => client.query(`UPDATE policies SET extracted_json=jsonb_set(extracted_json,'{benefitTableProgress,at}','"2000-01-01T00:00:00.000Z"') WHERE id=$1`, [deadId]);
+      for (let i = 0; i < 8; i++) { await aged(); await requeueStuckLinks(realDb, acct, later); }
+      assert.equal(queued.length, 9, "queued again every time it is still not linked: never given up on");
+      assert.deepEqual(queued.map((q) => q.attempt), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.ok(queued.every((q, i) => i === 0 || q.delayMs >= queued[i - 1].delayMs) && queued.at(-1)!.delayMs <= 6 * 3600_000, "later each time, at most 6 hours");
+      const still = Object.fromEntries((await service.tableFor(realDb, acct)).documents.map((d) => [d.name, d.state]));
+      assert.equal(still["link-dead.pdf"], "waiting", "still being read, never 'could not be read'");
+      const notes = (await client.query("SELECT extracted_json->'documentNotes' AS n FROM policies WHERE id=$1", [deadId])).rows[0].n;
+      assert.ok(!JSON.stringify(notes ?? []).includes("could not"), "no 'could not be read' note");
+      // Its link job queued now: not queued again.
+      await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb)", [acct, `${deadId}:table-reading:r1:link-10`]);
+      assert.equal(await requeueStuckLinks(realDb, acct, later), 0);
+
+      // The whole sweep (requeueStuckTableWork): the dead reading's next run is queued again, numbered on from its last run,
+      // under a key of its own; the one saved moments ago and the ones with a job are not. Later each time; never given up on.
+      const { requeueStuckTableWork, requeueStuckTableWorkEverywhere } = await import("@/lib/benefit-table/app");
+      const reads: { policyId: string; id: string; run: number; again: number; delayMs: number }[] = [];
+      const sweep = { link: later, read: async (policyId: string, id: string, run: number, again: number, delayMs: number) => { reads.push({ policyId, id, run, again, delayMs }); } };
+      assert.equal(await requeueStuckTableWork(realDb, acct, sweep), 1);
+      assert.deepEqual(reads.map((q) => [q.policyId, q.id, q.run, q.again]), [[readDead, "r2", 5, 1]]);
+      for (let i = 0; i < 4; i++) {
+        await client.query(`UPDATE policies SET extracted_json=jsonb_set(extracted_json,'{benefitTableProgress,at}','"2000-01-01T00:00:00.000Z"') WHERE id=$1`, [readDead]);
+        await requeueStuckTableWork(realDb, acct, sweep);
+      }
+      assert.deepEqual(reads.map((q) => q.again), [1, 2, 3, 4, 5], "queued again every time: never given up on");
+      assert.ok(reads.every((q, i) => i === 0 || q.delayMs > reads[i - 1].delayMs), "later each time");
+      assert.equal((await service.tableFor(realDb, acct)).documents.find((d) => d.name === "read-dead.pdf")?.state, "waiting", "still being read");
+      // From the drain and the daily run: every household whose table is on.
+      const swept: string[] = [];
+      await requeueStuckTableWorkEverywhere(realDb, async () => true, async (a) => { swept.push(a); return 0; });
+      assert.ok(swept.includes(acct), "the drain's sweep reaches this household");
+      swept.length = 0;
+      await requeueStuckTableWorkEverywhere(realDb, async () => false, async (a) => { swept.push(a); return 0; });
+      assert.deepEqual(swept, [], "a household whose table is off is not swept");
     } finally {
       await client.query("ROLLBACK").catch(() => undefined);
       await client.end();
@@ -209,7 +298,7 @@ async function main() {
     assert.ok(!/0b6f3c1e/.test(text), "never the made-up file name");
   });
   await test("controls: documents being read and documents that could not be read keep their notices", () => {
-    assert.match(text, /3 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Home Cover\./);
+    assert.match(text, /4 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Home Cover, Example Long Wording\./);
     assert.match(text, /Some documents could not be read\. Example Rejected Upload, Example Blank Upload, Example Blurry Scan, Example Unchecked Pages/);
   });
 
