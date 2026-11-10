@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
 import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest, remainingModelTimeMs } from "./usage";
-import { assertUnderSpendCap, recordUsage, SpendCapReached, SpendCheckUnavailable } from "./ledger";
+import { assertUnderSpendCap, overSpendCap, recordUsage, SpendCapReached, SpendCheckUnavailable } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
@@ -72,6 +72,12 @@ export type ModelMeterEvent = { role: ModelRole; operation: string; promptChars:
 function modelMeter(event: ModelMeterEvent) { (globalThis as { __dpModelMeter?: (event: ModelMeterEvent) => void }).__dpModelMeter?.(event); }
 
 /** Structured extraction with bounded context/memory. */
+/** Operations that read a household's own documents (intake, its catalogues and ledgers, OCR, claim evidence). They are
+ * not stopped by the household's spend limit (DC, 10 Nov: accuracy before cost); answering operations (chat, claim fact
+ * finding, relevance judging, RAG answers) are. */
+export const DOCUMENT_READING_OPERATIONS: ReadonlySet<string> = new Set(["policy_extraction", "benefit_extraction",
+  "condition_catalog_extraction", "catalog_building", "ledger_extraction", "hosted_ocr", "claim_evidence_extraction", "medical_evidence_extraction"]);
+export const readsDocument = (operation: string) => DOCUMENT_READING_OPERATIONS.has(operation);
 export async function structuredCompletion<T>(args: {
   system: string;
   user: string;
@@ -144,7 +150,11 @@ export async function structuredCompletion<T>(args: {
     const rollout = resolveRollout(canaryConfigFor(operation), householdId ?? args.resourceId ?? null);
     const choice = rollout.target ?? modelFor(role);
     const attemptGroupId = randomUUID();
-    if (householdId) await assertUnderSpendCap(householdId);
+    // Reading a document is never stopped by the household's spend limit (DC, 10 Nov: "do not limit cost for reading
+    // documents"): only chat and other answering calls are. Every call is still booked in the usage ledger below, so a
+    // reading call still fails closed (SpendCheckUnavailable) when this month's usage cannot be read: nothing is ever
+    // sent that could not be booked (Critic #405).
+    if (householdId) { if (readsDocument(operation)) await overSpendCap(householdId); else await assertUnderSpendCap(householdId); }
       const call = async (target: typeof choice, attemptIndex: number) => {
         const started = Date.now();
         const requestedAt = new Date();

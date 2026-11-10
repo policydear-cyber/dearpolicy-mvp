@@ -671,8 +671,17 @@ export function tierLinesOf(pages: { text: string }[]): string {
   return lines.join("\n");
 }
 
+/** The page text reaches the model escaped as markup (reading.ts renderDocument: "&" as "&amp;"), and the model can copy
+ * the escape back ("Accident Death&amp;Dismemberment"). Every string it returns is read back as the page prints it. */
+function unescaped(v: unknown): unknown {
+  if (typeof v === "string") return v.includes("&") ? v.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&") : v;
+  if (Array.isArray(v)) return v.map(unescaped);
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, unescaped(x)]));
+  return v;
+}
+
 export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
-  const r = (raw ?? {}) as Partial<Reading>;
+  const r = (unescaped(raw) ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
   const kind = (DOCUMENT_KINDS as readonly string[]).includes(d.kind as string) ? d.kind! : "other";
   const out: CheckedReading = { documentId: doc.id, document: doc.name, kind, product: str(d.product), plan: str(d.plan),

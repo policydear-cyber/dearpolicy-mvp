@@ -28,7 +28,7 @@ type Benefit={
    *  "unreadable" = it could not read an amount here; nothing to answer. */
   attention:"confirm"|"unreadable"|null;
   calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
-  documentName:string;insurer:string|null;owners:string[];
+  documentName:string;insurer:string|null;owners:string[];documentOwners?:string[];
 };
 type Summary={total:number;needsYou:number;unreadable:number;usable:number;documents:number;unclaimed:number;
   conditions?:number;conditionsThatChangeAmounts?:number};
@@ -298,7 +298,7 @@ export default function OperatorBenefitExtractionPage(){
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
           <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
-            <small>{rows[0].owners.length?rows[0].owners.join(" · "):"Nobody has claimed this document yet"}</small></div>
+            <small>{(rows[0].documentOwners??rows[0].owners).length?(rows[0].documentOwners??rows[0].owners).join(" · "):"Nobody has claimed this document yet"}</small></div>
           <div className="schedule-table-scroll"><table className="schedule-table">
             <thead><tr><th>Person</th><th>Benefit</th><th>Pays</th><th>Page</th><th></th></tr></thead>
             <tbody>

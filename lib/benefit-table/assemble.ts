@@ -21,6 +21,7 @@ import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
+import { headingIsLife } from "./life-heading";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
   /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
@@ -398,7 +399,10 @@ const within = (a: string, b: string) => ` ${b} `.includes(` ${a} `);
 function planLists(readings: CheckedReading[], types: CoverType[]): Map<string, Set<string>> {
   const household = types.map((t) => headingWords(t.plan)).filter(Boolean);
   return new Map(readings.map((r) => {
-    const columns = [...new Set(r.benefits.map((b) => headingWords(b.column)).filter(Boolean))];
+    // A column headed with the full name of someone the document prints a cover for is that person's, never a plan
+    // (a joint schedule's "Jane Doe" and "John Roe" columns; whoseRows tells them apart).
+    const names = [...new Set([...r.covers.map((c) => c.person), ...r.namedPeople])].map((n) => headingWords(n)).filter((n) => n.includes(" "));
+    const columns = [...new Set(r.benefits.map((b) => headingWords(b.column)).filter((c) => c && !names.some((n) => within(n, c))))];
     return [r.documentId, new Set([...household, headingWords(r.plan), ...(columns.length >= 2 ? columns : [])].filter(Boolean))];
   }));
 }
@@ -520,7 +524,77 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
   return own.length ? own : list;
 }
 
+/** Why a section's rows are shown for no one when its document prints the cover for two or more people and the rows do
+ * not say whose they are (whoseRows). */
+export const NOT_TOLD_WHY = "printed for more than one person on this document, and these rows do not say whose they are: not shown for anyone";
+/** Whose a linked section's row is, by what its own document prints (joint schedule fix, 10 Nov: a section linked by cover
+ * type was shown for every holder of that type, so one life's amounts showed for the other life on a joint schedule).
+ * `undefined`: every holder of the cover type, as before (a wording or product summary, a document that prints no one's
+ * cover of that type). A heading that is one holder's life gives the row to that holder alone, wherever. Otherwise the people the row may be shown for: when the document prints the cover for exactly one
+ * holder, only that holder (never another holder whose own cover is printed elsewhere); when it prints it for two or more,
+ * only the one whose life the row's column or section heading is (headingIsLife; never its own line, which may name a payee);
+ * when no one life is the heading, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
+ * no figure of its own, or one worked out on each person's own sum insured, is every holder's. */
+function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[]): Set<string> | undefined {
+  // A block or column heading that is a holder's life (Critic #406 X1, J1): only that holder, wherever the document prints
+  // covers or none (a benefit summary with one column per person).
+  const holders = [...new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId))];
+  const namesOf = (id: string) => [...covers.filter((c) => c.personId === id).map((c) => c.person), family.find((m) => m.id === id)?.display_name ?? ""];
+  const headed = holders.filter((id) => [b.column, b.section].some((h) => headingIsLife(h, namesOf(id))));
+  if (headed.length === 1) return new Set(headed);
+  // A row whose figure is worked out on each person's own sum insured, or that prints none, is right for every holder (a
+  // scheme summary's "Death Benefit" for each member): only a row that prints its own figure can be one life's.
+  if (b.value == null || (b.pays === "percent" && b.percentOf === "sum_insured")) return undefined;
+  const onDoc = (c: PersonCover) => c.source.documentId === documentId || (c.copyDocuments ?? []).some((d) => d.documentId === documentId);
+  let printed = covers.filter((c) => c.coverKey === coverKey && onDoc(c));
+  // The cover type is not printed on this document, but its holders' other covers are (a personal schedule whose rider is
+  // printed only as a benefit section): those holders only.
+  if (!printed.length) printed = covers.filter((c) => holders.includes(c.personId) && onDoc(c));
+  const ids = new Set(printed.map((c) => c.personId));
+  if (!ids.size) return undefined;
+  if (ids.size === 1) return ids;
+  // No one life is the heading: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never
+  // anyone else: no one is shown an amount that is not theirs.
+  const own = (c: PersonCover) => c.confirmation ? c.confirmation.printed : c.sumInsured;
+  return new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
+    && (!c.currency || !b.currency || c.currency === b.currency))));
+}
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
+/** Why a row is under the cover whose own printed line it is (ownLineCovers). */
+export const OWN_LINE_WHY = "printed on this cover's own line";
+/** A benefit row whose printed line is the very line a cover of the same document was read from (the same page and the
+ * same words, spacing aside) belongs to that cover, whatever section the reading put it in: a rider's line in a schedule's
+ * "Component" or "Policy Schedule" block is the rider's own line, not a benefit of the section's base cover (live test
+ * 10 Nov: rider amounts shown under the base cover, or under no cover at all). Only when exactly one cover type of that
+ * document prints that line, and only for cover types someone in the family holds. The row is then shown only for the
+ * people whose own cover was read from that very line (Critic #405 F1: on a joint schedule, Jane's S$50,000 rider line is
+ * never shown for John, whose own line prints S$30,000). A cover's quote counts as its own line only when it is one printed
+ * line that holds no other cover's quote (Critic #405 F2: a basic plan quoted as a block that includes its rider's line
+ * never takes the rider's row). Fixed for any document: it compares the reading's own quotes, never a product or benefit
+ * name. */
+export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<string>): Map<CheckedBenefit, { cover: string; line: string }> {
+  const out = new Map<CheckedBenefit, { cover: string; line: string }>();
+  for (const r of readings) {
+    if (r.kind === "illustration") continue;
+    const own = r.covers.filter((c) => c.source.documentId === r.documentId && !!c.source.excerpt.trim());
+    const flat = (s: Source) => s.excerpt.toLowerCase().replace(/\s+/g, " ").trim();
+    const byLine = new Map<string, Set<string>>();
+    for (const c of own) {
+      if (c.source.excerpt.trim().includes("\n")) continue;
+      if (own.some((o) => o !== c && o.source.page === c.source.page && flat(o.source) !== flat(c.source) && flat(c.source).includes(flat(o.source)))) continue;
+      const k = ownLineKey(c.source);
+      byLine.set(k, new Set([...(byLine.get(k) ?? []), coverKeyOf(c)]));
+    }
+    for (const b of r.benefits) {
+      if (b.source.documentId !== r.documentId || !b.source.excerpt.trim()) continue;
+      const line = ownLineKey(b.source), keys = byLine.get(line);
+      if (keys?.size === 1) { const key = [...keys][0]; if (held.has(key)) out.set(b, { cover: key, line }); }
+    }
+  }
+  return out;
+}
+/** A printed line's place: its page and words, spacing aside. */
+export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
@@ -551,6 +625,21 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     linkOf.set(l.section, l);
   }
   const people = family.map((m) => ({ id: m.id, name: m.display_name, covers: covers.filter((c) => c.personId === m.id), rows: [] as TableRow[] }));
+  const ownLine = ownLineCovers(readings, new Set(types.map((t) => t.key)));
+  // Placed by its line only when someone's cover shown here was read from that line (a person's cover kept from another
+  // copy of the document is not): otherwise the row keeps the section's link, so it is never placed for no one.
+  const readFrom = new Set(covers.map((c) => `${c.coverKey}\u0001${c.source.documentId}\u0001${ownLineKey(c.source)}`));
+  for (const [b, o] of ownLine) if (!readFrom.has(`${o.cover}\u0001${b.source.documentId}\u0001${o.line}`)) ownLine.delete(b);
+  // A link the household chose is theirs: the own line never overrides it.
+  const householdChose = (l: SectionLink | undefined) => (l as { chosenBy?: string } | undefined)?.chosenBy === "household";
+  const placedOf = (sectionKey: string, b: CheckedBenefit): { cover: string; why: string; line?: string } | null => {
+    const l = linkOf.get(sectionKey);
+    const own = householdChose(l) ? undefined : ownLine.get(b);
+    if (own) return { cover: own.cover, why: OWN_LINE_WHY, line: own.line };
+    return l?.cover ? { cover: l.cover, why: l.why } : null;
+  };
+  // A section is said to be unlinked only for the rows its own line did not place.
+  const unplaced = new Set(readings.flatMap((r) => r.benefits.filter((b) => !placedOf(sectionKeyOf(r.documentId, b), b)).map((b) => sectionKeyOf(r.documentId, b))));
   const unlinkedSections: BenefitTable["unlinkedSections"] = [];
   // Where each section starts, so a part that is not on anyone's table can still be opened at its page.
   const firstSource = new Map<string, Source>();
@@ -558,14 +647,19 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const s of sections) {
     const l = linkOf.get(s.key);
     const refused = refusedLinks.find((x) => x.link.section === s.key);
-    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
+    if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
   const notForPerson: NonNullable<BenefitTable["notForPerson"]> = [];
   const isAgeTier = ageAlternatives(readings);
+  const notTold = new Set<string>();
   for (const r of readings) for (const b of r.benefits) {
-    const l = linkOf.get(sectionKeyOf(r.documentId, b));
-    if (!l?.cover) continue;
-    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover), r.documentId)) {
+    const l = placedOf(sectionKeyOf(r.documentId, b), b);
+    if (!l) continue;
+    // A row placed by its section's link is shown only for the people its own document says it is for (whoseRows).
+    const who = l.line ? undefined : whoseRows(r.documentId, b, l.cover, covers, family);
+    if (who && !who.size) { notTold.add(sectionKeyOf(r.documentId, b)); continue; }
+    // A row placed by its own line is shown only for the people whose cover was read from that line.
+    for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       // A row on the person's own schedule or certificate is theirs as printed ("Total Permanent Disability (below 65 years
       // of age)" is a condition of their own cover, not another tier's row): the rule is for wordings, summaries and terms.
       const tier = r.documentId === c.source.documentId ? null
@@ -586,6 +680,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
     }
   }
+  for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks, notForPerson };
 }
 

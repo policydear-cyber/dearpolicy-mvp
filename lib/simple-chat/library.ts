@@ -4,6 +4,7 @@
  *
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
+import { isCodeName } from "@/lib/policies/document-name";
 import { uncheckedText } from "@/lib/documents/layout-check";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
@@ -93,7 +94,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     documents: docs.map((d) => ({
       policyId: String(d.id),
       name: String(d.original_filename),
-      insurer: text(d.insurer), productName: text(d.product_name), policyNumber: text(d.policy_number),
+      insurer: text(d.insurer), productName: isCodeName(String(d.product_name ?? "")) ? null : text(d.product_name), policyNumber: text(d.policy_number),
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status), readingLive: d.reading_live === true,
