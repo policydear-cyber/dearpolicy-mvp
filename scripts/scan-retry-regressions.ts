@@ -221,6 +221,60 @@ async function main() {
       void ScanRetryExhaustedError;
     });
 
+    await t("a locked PDF uploaded while its scan is pending keeps its password only until the scan retry reads it, or the attempts run out (Critic #403)", async () => {
+      const { enqueueJob } = await import("@/lib/jobs/queue");
+      const { POLICY_PROCESSING_JOB_TYPE } = await import("@/lib/rag/processing-queue");
+      const { processPolicyProcessingJob } = await import("@/lib/jobs/processors");
+      const PW = "Made-up-Passw0rd";
+      const mainJob = async (id: string) => (await db.query<{ status: string; payload: Record<string, unknown> }>(
+        `SELECT status,payload FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`, [POLICY_PROCESSING_JOB_TYPE, id])).rows[0];
+      const upload = async (id: string, pdfPassword?: string) => {
+        await enqueueJob(pool, { jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: id, accountId: HOUSEHOLD,
+          payload: { policyId: id, familyMemberId: MEMBER, storageKey: `synthetic/${id}.pdf`, ...(pdfPassword ? { pdfPassword } : {}) } });
+        script = ["transient"];
+        assert.equal(await claimAndProcessOne({ jobType: POLICY_PROCESSING_JOB_TYPE, workerId: "w-upload", idempotencyKey: id, process: processPolicyProcessingJob }), "succeeded");
+        assert.equal((await getPolicyQuarantineRow(HOUSEHOLD, id))?.quarantine_status, "scan_pending");
+      };
+      // Read after a clean rescan: the password is there for the retry, and gone after it.
+      const a = await newPolicy();
+      await upload(a, PW);
+      let row = await mainJob(a);
+      assert.equal(row.status, "succeeded");
+      assert.equal(row.payload.pdfPassword, PW, "kept: the scan retry reads the document from this payload");
+      const [first] = await retryJobs("policy_document", a);
+      assert.doesNotMatch(JSON.stringify(first.payload), new RegExp(PW), "the scan retry's own payload carries ids only");
+      script = ["transient"]; await runRetry(first);
+      assert.equal((await mainJob(a)).payload.pdfPassword, PW, "still waiting for its scan: kept");
+      const second = (await retryJobs("policy_document", a)).find((j) => (j.payload as { attempt: number }).attempt === 2)!;
+      script = ["clean"]; await settle(runRetry(second));
+      assert.equal((await getPolicyQuarantineRow(HOUSEHOLD, a))?.quarantine_status, "scan_clean");
+      row = await mainJob(a);
+      assert.equal("pdfPassword" in row.payload || "heldForScan" in row.payload, false, "read: password gone");
+      assert.equal(row.payload.policyId, a, "the rest of the payload kept");
+      // The automatic attempts run out: the password goes with them.
+      const b = await newPolicy();
+      await upload(b, PW);
+      for (let attempt = 1; attempt <= retry.MAX_SCAN_RETRY_ATTEMPTS; attempt++) {
+        const job = (await retryJobs("policy_document", b)).find((j) => (j.payload as { attempt: number }).attempt === attempt)!;
+        script = ["transient"];
+        if (attempt < retry.MAX_SCAN_RETRY_ATTEMPTS) { await runRetry(job); assert.equal((await mainJob(b)).payload.pdfPassword, PW); }
+        else await assert.rejects(runRetry(job), ScanRetryExhaustedError);
+      }
+      assert.equal((await getPolicyQuarantineRow(HOUSEHOLD, b))?.quarantine_status, "scan_pending");
+      assert.equal("pdfPassword" in (await mainJob(b)).payload, false, "attempts used up: password gone");
+      // Deleted while waiting: the next retry drops it without rescanning.
+      const c = await newPolicy();
+      await upload(c, PW);
+      await db.query(`UPDATE policies SET superseded_at=now() WHERE id=$1`, [c]);
+      const before = calls; await runRetry((await retryJobs("policy_document", c))[0]);
+      assert.equal(calls, before, "never rescanned");
+      assert.equal("pdfPassword" in (await mainJob(c)).payload, false, "superseded: password gone");
+      // Control: a document without a password finishes with no marker.
+      const d = await newPolicy();
+      await upload(d);
+      assert.equal("heldForScan" in (await mainJob(d)).payload, false);
+    });
+
     await t("no hint, no automatic retry: no scanner configured, or a misconfigured scanner; a crashed call does retry (control)", async () => {
       const a = await newPolicy(); script = ["no_hint"];
       await runPolicyQuarantineGate({ accountId: HOUSEHOLD, policyId: a, readBytes: readBytes(a) });

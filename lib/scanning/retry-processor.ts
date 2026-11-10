@@ -23,6 +23,7 @@ import { processClaimEvidence } from "@/lib/claims/evidence/pipeline";
 import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { heartbeatJob } from "@/lib/jobs/queue";
+import { releaseHeldPassword } from "./held-password";
 import {
   isScanRetryPayload, MAX_SCAN_RETRY_ATTEMPTS, SCAN_RETRY_EXHAUSTED_ERROR, SCAN_RETRY_EXHAUSTED_MESSAGE, countScanRetries,
 } from "./retry";
@@ -70,12 +71,15 @@ export async function processScanRetryJob(job: BackgroundJobRow): Promise<void> 
   if (resourceType === "policy_document") {
     const row = await getPolicyQuarantineRow(accountId, resourceId);
     // Gone, deleted, superseded, rejected or already clean: never rescanned.
-    if (!row || row.superseded_at || row.quarantine_status !== "scan_pending") return;
+    if (!row || row.superseded_at || row.quarantine_status !== "scan_pending") { await releaseHeldPassword(accountId, resourceId); return; }
     const args = await policyArgs(accountId, resourceId, jobHeartbeat);
-    if (!args) return;
-    await processPolicy(args);
+    if (!args) { await releaseHeldPassword(accountId, resourceId); return; }
+    // The held password (lib/scanning/held-password.ts) is dropped once the
+    // document no longer waits for its scan, whether this read succeeded or not.
+    try { await processPolicy(args); } finally { await releaseHeldPassword(accountId, resourceId); }
     const after = await getPolicyQuarantineRow(accountId, resourceId);
     if (after && !after.superseded_at && after.quarantine_status === "scan_pending" && await exhausted(attempt, resourceType, resourceId)) {
+      await releaseHeldPassword(accountId, resourceId, true);
       await appendPolicyDocumentAudit(accountId, {
         actor: "system", action: "scan_retry_exhausted", policyId: resourceId,
         newValue: { attempts: attempt }, reason: SCAN_RETRY_EXHAUSTED_MESSAGE, reasonCode: "SCAN_RETRY_EXHAUSTED",
