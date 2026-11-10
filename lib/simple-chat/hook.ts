@@ -22,7 +22,7 @@ import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
 import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
-import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
+import { answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { amountsFromRows, asksForNobody, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -30,14 +30,17 @@ export type SimpleChatState = ConversationState & { simpleChat?: { turns: { mode
 type Save = typeof saveTurn;
 export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
   /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
-  table?: (accountId: string) => Promise<BenefitTable | null> };
+  table?: (accountId: string) => Promise<BenefitTable | null>;
+  /** Each document's benefit-table state (policy id to lib/benefit-table/service.ts documentState), read with the table. */
+  tableStates?: (accountId: string) => Promise<ReadonlyMap<string, string> | null> };
 
 /** The signed-in household's benefit table when DEARPOLICY_BENEFIT_TABLE is live, otherwise null. */
-async function liveTable(accountId: string): Promise<BenefitTable | null> {
+async function liveTable(accountId: string): Promise<{ table: BenefitTable; states: ReadonlyMap<string, string> } | null> {
   const { appDb, benefitTableLive } = await import("@/lib/benefit-table/app");
   if (!(await benefitTableLive(accountId))) return null;
   const { tableFor } = await import("@/lib/benefit-table/service");
-  return (await tableFor(appDb, accountId)).table;
+  const t = await tableFor(appDb, accountId);
+  return { table: t.table, states: new Map(t.documents.map((d) => [d.id, d.state])) };
 }
 
 /** Opens or continues the conversation; who the question is about is left to the model and the checks. */
@@ -242,12 +245,13 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const ledger = deps.ledger ?? !deps.model;
   const loadStarted = Date.now();
   // The spend check, the library, the conversation and the benefit table are read side by side: a person is waiting.
-  const [, household, history, table] = await Promise.all([
+  const [, household, history, live] = await Promise.all([
     ledger ? assertUnderSpendCap(request.accountId) : null,
     (deps.household ?? loadHousehold)(request.accountId),
     (deps.history ?? conversationTurns)(request.accountId, conversation.id),
-    (deps.table ?? liveTable)(request.accountId),
+    deps.table ? Promise.all([deps.table(request.accountId), deps.tableStates?.(request.accountId) ?? null]).then(([table, states]) => table ? { table, states: states ?? new Map<string, string>() } : null) : liveTable(request.accountId),
   ]);
+  const table = live?.table ?? null;
   if (household.accountId !== request.accountId) throw new Error("The library read is for another household; refusing to answer");
   const rows = table ? chatRows(table, household) : null;
   const now = (deps.today ?? (() => new Date()))();
@@ -283,6 +287,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     answer.statements = noteNarrowedPages(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
+  // Amounts shown while some of that person's documents gave nothing: never read as the person's whole cover.
+  noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []));
   // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
   // introduction to nothing. A bottom line that answers on its own stands alone (live run 23 Oct, E2).
   if (parsed?.statements.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
