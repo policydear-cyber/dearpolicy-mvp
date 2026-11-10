@@ -37,10 +37,10 @@ async function main() {
     const id = randomUUID(); accounts.push(id);
     await query("INSERT INTO accounts(id,name) VALUES($1,$2)", [id, name]);
     const person = async (n: string, rel: string) => ({ id: (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,$3) RETURNING id", [id, n, rel])).rows[0].id, display_name: n, preferred_name: null, relationship: rel });
-    async function policy(owner: string, members: string[], product: string, number: string | null, type: string, page: string, insurer = "Example Mutual Ltd") {
+    async function policy(owner: string, members: string[], product: string, number: string | null, type: string, page: string, insurer = "Example Mutual Ltd", role = "personal_schedule") {
       const pid = randomUUID();
       await query(`INSERT INTO policies(id,account_id,family_member_id,product_name,insurer,policy_number,policy_type,original_filename,storage_key,processing_status,quarantine_status,personal_coverage_confirmed,document_role,document_authority)
-        VALUES($1,$2,$3,$4,$8,$5,$6,$7,$7,'ready','scan_clean',true,'personal_schedule',95)`, [pid, id, owner, product, number, type, `${pid}.pdf`, insurer]);
+        VALUES($1,$2,$3,$4,$8,$5,$6,$7,$7,'ready','scan_clean',true,$9,95)`, [pid, id, owner, product, number, type, `${pid}.pdf`, insurer, role]);
       for (const m of members) await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [pid, m, id]);
       await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [id, pid, page]);
       return pid;
@@ -112,6 +112,25 @@ async function main() {
       const s = await summarisePremiums(uk2.id, kid);
       assert.deepEqual(s.countedElsewhere ?? [], []);
       assert.ok(s.missing.includes("Dental Plan"), JSON.stringify(s.missing));
+    });
+    // Live test 10 Nov: a schedule printing its premium with no currency, and a wording filed for someone, were each said
+    // to print no premium. Made-up household in NZ$.
+    const nz = await household("Test household premium printed NZ$");
+    const aroha = await nz.person("Aroha Smith", "self");
+    const sched = await nz.policy(aroha.id, [aroha.id], "Kiwi Term Cover", "KT-30318", "Life", "Kiwi Term Cover\nAroha Smith\nPremium 61.20 monthly");
+    await nz.policy(aroha.id, [aroha.id], "Kiwi Term Cover Policy Wording", null, "Life", "Policy wording: what we pay", "Example Mutual Ltd", "policy_wording");
+    const unclearCover = { product: "Kiwi Term Cover", cover: "Kiwi Term Cover", plan: null, policyNumber: "KT-30318", premium: 61.2, premiumFrequency: "monthly", currency: null, premiumCurrency: null,
+      premiumNote: null, firstYearPremium: null, firstYearFrom: null, startDate: null, endDate: null, documentPeriodFrom: null, documentPeriodTo: null, documentKind: "personal_proof" as const,
+      source: { documentId: sched, document: "Kiwi Term Cover", page: 1, excerpt: "Premium 61.20 monthly" }, premiumSource: null, ended: null };
+    await test("a premium printed with no currency is never called missing: it is left out as unclear (NZ$)", async () => {
+      const s = await summarisePremiums(nz.id, aroha, { covers: [unclearCover] as never, today: 20_000 });
+      assert.ok(!s.missing.includes("Kiwi Term Cover"), JSON.stringify(s.missing));
+      assert.doesNotMatch(s.note ?? "", /Kiwi Term Cover[^.]*no premium is printed/);
+    });
+    await test("a policy known only from its wording is never said to be missing a premium (NZ$)", async () => {
+      const s = await summarisePremiums(nz.id, aroha, { covers: [unclearCover] as never, today: 20_000 });
+      assert.ok(!s.missing.some((m) => /Wording/i.test(m)), JSON.stringify(s.missing));
+      assert.deepEqual(s.missing, []);
     });
     await test("the chat answer for the child says whose policy pays, never that no premium is printed", async () => {
       const a = await premiumAnswer({ accountId: gb.id, people: [son], question: "How much do we pay for Tobi's insurance?" });

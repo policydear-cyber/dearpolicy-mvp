@@ -55,7 +55,9 @@ function documentKind(role:string|null|undefined):string {
  * file name ("817d6e8b 874f 4527 ...", "Output 202609281146053") reads as broken in a sentence (Home premium note, 28 Oct). */
 export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   const product=doc.product_name?.trim();
-  if(product)return product;
+  // A system's code stored as the product ("SGGRP_COI_APP", from a PDF's own title) is not a name a person reads: one word
+  // joined by underscores. The document is then named as if it had none (re-upload check, 10 Nov).
+  if(product&&!isCodeName(product))return product;
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));
@@ -66,6 +68,10 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   const number=normalizedIdentifier(doc.policy_number),ending=/\d/.test(number)?number.slice(-4):"";
   return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
 }
+
+/** A code a system gives a file or template ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: no space, and its
+ * words joined by underscores. */
+export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
 
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
