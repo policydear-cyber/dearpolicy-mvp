@@ -406,7 +406,9 @@ async function main() {
 
     await testAsync("request drain: wired after authentication into every enqueueing and status-polling household route", async () => {
       const routes = ["app/api/policies/route.ts", "app/api/policies/upload/route.ts", "app/api/policies/reprocess/route.ts", "app/api/claims/evidence/route.ts",
-        "app/api/claims/evidence/upload/route.ts", "app/api/chat/route.ts", "app/api/chat/jobs/[id]/route.ts", "app/api/household/export/route.ts"];
+        "app/api/claims/evidence/upload/route.ts", "app/api/chat/route.ts", "app/api/chat/jobs/[id]/route.ts", "app/api/household/export/route.ts",
+        // Coverage, while a document is still being read: a long reading's next run or its link run starts now (TE #404).
+        "app/api/benefit-table/route.ts"];
       for (const r of routes) {
         const src = readFileSync(path.resolve(r), "utf8");
         assert.match(src, /export const ROUTE_AUTH = "household-(?:member|owner)" as const/, `${r} must be an authenticated household route`);

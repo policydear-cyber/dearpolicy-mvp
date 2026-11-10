@@ -4,6 +4,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
 import { figureText } from "@/lib/benefit-table/assemble";
 import { holdReason, tableFor } from "@/lib/benefit-table/service";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { documentName } from "@/lib/policies/inventory";
 import { maskShownText } from "@/lib/chat/identity-numbers";
@@ -19,6 +20,10 @@ export async function GET(request:NextRequest){
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
     const {table,documents,links,figureChecks}=await tableFor(appDb,accountId);
+    // A document still being read (a long reading's next run, or the run that links its sections) goes on now, after this
+    // response, rather than waiting for another page or the daily run (lib/jobs/request-drain.ts: bounded, throttled).
+    if(documents.some(d=>d.state==="waiting"))
+      scheduleRequestDrain();
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
     // Each person's schedule lines, the ones Home's tiles count, so Family lists the same kinds of cover (kindsOfTable). Optional.
     const lines=await scheduleLinesFor(accountId).catch(()=>[]);

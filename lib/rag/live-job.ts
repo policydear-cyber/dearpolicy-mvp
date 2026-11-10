@@ -35,3 +35,9 @@ export const TABLE_READING_JOB_TYPE = "benefit_table_reading";
 export const tableReadingJobLive = (p: string) =>
   `EXISTS (SELECT 1 FROM background_jobs tj WHERE tj.job_type='${TABLE_READING_JOB_TYPE}' AND tj.idempotency_key LIKE ${p}.id::text || ':table-reading:%'
      AND ${livePolicyJob("tj", String(UNCLAIMED_STALL_MINUTES))})`;
+/** SQL: true when the policy row (alias `p`) has a continuation of its table reading still to run (queued, running or
+ * to be retried), however long it has waited: a continuation waits for the next request or the daily run, so it can
+ * wait for hours. Only server constants are written into the text. */
+export const tableReadingJobPending = (p: string) =>
+  `EXISTS (SELECT 1 FROM background_jobs tp WHERE tp.job_type='${TABLE_READING_JOB_TYPE}' AND tp.idempotency_key LIKE ${p}.id::text || ':table-reading:%'
+     AND tp.status IN ('queued','processing','failed_retryable'))`;

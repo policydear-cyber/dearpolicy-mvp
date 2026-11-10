@@ -11,7 +11,7 @@ import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
-import { policyJobLive, scanJobLive, tableReadingJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, scanJobLive, tableReadingJobLive, tableReadingJobPending } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
@@ -147,17 +147,20 @@ export type DocumentFile = { original_filename: string; product_name: string | n
   policy_number: string | null; quarantine: string | null; scan_detail?: string | null };
 /** `live`: a live intake job is reading the document now (lib/rag/live-job.ts, the Documents page's own rule).
  * `scanLive`: a live automatic malware-scan retry is checking it (lib/rag/live-job.ts scanJobLive). */
-type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; file: DocumentFile };
+/** `linking`: its reading is stored, and the run that links its sections to covers is still to come (app.ts readIntoTable
+ * linkOnly): until then it is still being read, and none of its reading is shown. */
+type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; linking: boolean; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string, pick?: (docs: HouseholdDoc[]) => Promise<HouseholdDoc[]>): Promise<HouseholdDoc[]> {
   const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status, scan_result_detail,
-      (${policyJobLive("policies")} OR ${tableReadingJobLive("policies")}) AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
+      (${policyJobLive("policies")} OR ${tableReadingJobLive("policies")}) AS reading_live, ${scanJobLive("policies")} AS scan_live,
+      (COALESCE(extracted_json->'benefitTableProgress'->>'linkOnly','')='true' AND ${tableReadingJobPending("policies")}) AS linking FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
   const shaped = docs.map((d) => ({
-    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true, scanLive: d.scan_live === true,
+    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true || d.linking === true, scanLive: d.scan_live === true, linking: d.linking === true,
     pages: [] as { page: number; text: string }[], people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
       policy_number: text(d.policy_number), quarantine: text(d.quarantine_status), scan_detail: text(d.scan_result_detail) },
@@ -555,7 +558,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations, ...(guarded ? { checked, figureChecks: figureChecksOf(readings) } : {}),
     documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: fetched.has(d.id) ? d.pages.length : counts.get(d.id) ?? 0, live: d.live, scanLive: d.scanLive,
-      misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id)), file: d.file })) };
+      misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id) && !d.linking), file: d.file })) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
@@ -564,7 +567,11 @@ export async function tableFor(db: Db, accountId: string): Promise<{ table: Bene
   // No confirmations: people never confirm or correct amounts (DC, 22 Oct 2026), so the table always uses the printed
   // figures, even where an older build stored a correction (TE #99). The one exception is a figure the guards could not
   // settle, which the household confirms (DC, 6 Nov 2026); that is applied in load().
-  return { table: assembleTable(l.readings, l.family, l.links), documents: l.documents, links: l.links, ...(l.figureChecks ? { figureChecks: l.figureChecks } : {}) };
+  // A document still being read shows none of its reading: one whose reading is stored but whose sections are not linked
+  // yet (its link run is still to come) would show only one unlinked section and no rows (TE #404).
+  const waiting = new Set(l.documents.filter((d) => d.state === "waiting").map((d) => d.id));
+  const readings = l.readings.filter((r) => !waiting.has(r.documentId));
+  return { table: assembleTable(readings, l.family, l.links), documents: l.documents, links: l.links, ...(l.figureChecks ? { figureChecks: l.figureChecks.filter((f) => !waiting.has(f.documentId)) } : {}) };
 }
 
 /** The household gives the figure for one check the guards did not settle, or takes it back (value null). Final: no

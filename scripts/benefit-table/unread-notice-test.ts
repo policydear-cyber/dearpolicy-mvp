@@ -30,7 +30,7 @@ const ago = (ms: number) => new Date(NOW - ms).toISOString();
 const DAY = 24 * 3600_000;
 type Policy = { id: string; original_filename: string; processing_status: string; document_role: string | null; product_name: string | null;
   insurer: string | null; policy_number: string | null; processing_completed_at: string | null; quarantine_status: string | null;
-  created_at: string; updated_at: string; reading_live: boolean };
+  created_at: string; updated_at: string; reading_live: boolean; linking?: boolean };
 const policy = (id: string, o: Partial<Policy>): Policy => ({ id, original_filename: `${id}.pdf`, processing_status: "ready", document_role: "personal_schedule",
   product_name: null, insurer: "Example Insurance", policy_number: null, processing_completed_at: ago(3 * DAY), quarantine_status: "scan_clean", created_at: ago(30 * DAY), updated_at: ago(3 * DAY), reading_live: false, ...o });
 
@@ -55,7 +55,10 @@ const policies: Policy[] = [
   policy("unclaimed", { product_name: "Example Maternity Plan", processing_status: "queued", processing_completed_at: null, updated_at: ago(60_000) }), // nothing claimed its job
   policy("scan", { product_name: "Example Blurry Scan", processing_status: "failed" }),                      // could not be read
   policy("unchecked", { product_name: "Example Unchecked Pages" }),                                          // ready, but no page could be checked
+  policy("linking", { product_name: "Example Long Wording" }), // its long reading is stored, the run that links its sections is still to come
 ];
+const LINKING = { ...policies.at(-1)!, linking: true };
+policies[policies.length - 1] = LINKING;
 const pages = [
   ...policies.filter((p) => p.id !== "unchecked").map((p) => ({ policy_id: p.id, page_number: 1, text: "SCHEDULE\nLim Ah Kow\tS$100,000", extraction_method: "native" })),
   { policy_id: "unchecked", page_number: 1, text: "garbled", extraction_method: "unchecked" },
@@ -64,6 +67,7 @@ const readings = new Map<string, unknown>([
   ["schedule", reading([{ person: "Lim Ah Kow", product: "Example Shield", cover: "Hospital", plan: null, sumInsured: 100000, asOf: null, page: 1, quote: "Lim Ah Kow\tS$100,000" }])],
   ["empty-read", reading([])],
   ["scan", reading([])], // a reading kept from before the document failed
+  ["linking", reading([{ person: "Lim Ah Kow", product: "Example Long Wording", cover: "Death", plan: null, sumInsured: 500000, asOf: null, page: 1, quote: "Lim Ah Kow\tS$500,000" }])],
 ]);
 
 const db: service.Db = async (sql, p) => {
@@ -114,6 +118,11 @@ async function main() {
     assert.equal(state.schedule, "read");
     assert.equal(state["empty-read"], "read");
     assert.equal(table.people.find((p) => p.id === "p1")!.covers.length, 1);
+  });
+  await test("a long document whose reading is stored but whose sections are not linked yet is still being read, and shows none of its reading (TE #404)", () => {
+    assert.equal(state.linking, "waiting");
+    assert.ok(!table.people.flatMap((p) => p.covers).some((c) => /Long Wording|Death/.test(JSON.stringify(c))), "none of its covers or rows shown");
+    assert.ok(!JSON.stringify(table).includes("500000"), "no figure from it");
   });
   await test("controls: a document that failed, or has no page that could be checked, keeps 'not readable'", () => {
     assert.equal(state.scan, "not_readable");
@@ -182,6 +191,17 @@ async function main() {
         await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='policy_processing' AND idempotency_key=$1`, [id + ":retry-read"]);
         cases.push([file, "queued", null, null, want]);
       }
+      // A long document whose reading is stored and whose link run (benefit_table_reading) waits for the next request or the
+      // daily run, however long: waiting. Once that run is gone (dead), it is no longer said to be read now (TE #404).
+      for (const [file, set, want] of [["link-waits-2h.pdf", "status='queued', available_at=now()-interval '2 hours'", "waiting"], ["link-dead.pdf", "status='dead_letter'", "table_unread"]] as const) {
+        const id = randomUUID();
+        await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status,document_role,processing_completed_at,extracted_json)
+          VALUES($1,$2,$3,$4,$5,'ready','scan_clean','personal_schedule',now(),'{"benefitTableProgress":{"id":"r1","linkOnly":true}}'::jsonb)`, [id, acct, member, file, `test/${id}`]);
+        await client.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'SCHEDULE Tan Mei Ling')", [acct, id]);
+        await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb)", [acct, `${id}:table-reading:r1:3`]);
+        await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='benefit_table_reading' AND idempotency_key=$1`, [`${id}:table-reading:r1:3`]);
+        cases.push([file, "ready", "personal_schedule", null, want]);
+      }
       const got = await service.tableFor(async (sql, params) => (await client.query(sql, params as unknown[])).rows, acct);
       const by = Object.fromEntries(got.documents.map((d) => [d.name, d.state]));
       for (const [file, , , , want] of cases) assert.equal(by[file], want, file);
@@ -209,7 +229,7 @@ async function main() {
     assert.ok(!/0b6f3c1e/.test(text), "never the made-up file name");
   });
   await test("controls: documents being read and documents that could not be read keep their notices", () => {
-    assert.match(text, /3 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Home Cover\./);
+    assert.match(text, /4 documents are still being read\. Example Critical Care, Example Hospital Plan, Example Home Cover, Example Long Wording\./);
     assert.match(text, /Some documents could not be read\. Example Rejected Upload, Example Blank Upload, Example Blurry Scan, Example Unchecked Pages/);
   });
 
