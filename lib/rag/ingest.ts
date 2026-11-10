@@ -491,7 +491,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           await progress(args, "reading_pdf", pct, `Reading page ${completed} of ${total}…`, "extracting").catch(() => undefined);
         }
       }));
-      if (sniffed.format === "pdf") documentTitle = await pdfDocumentTitle(pdfBytes).catch(() => null);
+      if (sniffed.format === "pdf") documentTitle = await pdfDocumentTitle(pdfBytes, args.pdfPassword).catch(() => null);
     }
 
     const ocrPageNumbers = ocrSourceBytes ? pagesNeedingOcr(pages) : [];
