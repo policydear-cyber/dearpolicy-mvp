@@ -58,6 +58,16 @@ async function main() {
     assert.equal(sharedRowOwners(row("limit_percentage", 0.1, "Simple Fracture 10% of Benefit Limit S$5,000"), two), null);
     assert.equal(sharedRowOwners(row("limit_percentage", 0.1, "Simple Fracture 10% of Benefit Limit S$50,000"), two), null, "a limit equal to a holder's sum is still a limit");
     assert.deepEqual([...sharedRowOwners(row("sum_insured", 1, "Death 100% of Sum Assured (S$30,000)"), two)!], ["k"]);
+    assert.deepEqual([...sharedRowOwners(row("sum_insured", 1, "Death 100% of Sum Insured: S$50,000"), two)!], ["j"]);
+    assert.deepEqual([...sharedRowOwners(row("sum_insured", 1, "Death 100% of the Sum Assured of S$30,000"), two)!], ["k"]);
+    // Only a figure right after the sum's own label is a holder's base; every other wording of a cap leaves the row everyone's.
+    for (const words of ["up to a maximum aggregate of", "subject to an overall limit of", "limit of", "benefit limit of", "maximum amount payable",
+      "maximum amount payable is", "up to a total of", "not to exceed", "capped at a total of", "maximum benefit:", "at most", "less than or equal to",
+      "payable as", "for example", "aggregate"])
+      assert.equal(sharedRowOwners(row("sum_insured", 1, `Death Benefit 100% of Sum Assured, ${words} S$50,000`), two), null, words);
+    assert.equal(sharedRowOwners(row("limit_percentage", 0.1, "Fracture 10% of the limit, Sum Assured limit S$50,000"), two), null);
+    // An expense cap is a limit, never anyone's sum, even when it equals one: no one's.
+    assert.deepEqual([...sharedRowOwners(row("expense_cap", 30000, "Medical expenses up to S$30,000"), two)!], []);
     // A row with no formula that prints only a cap: not everyone's, and not matched to the holder whose sum it equals.
     assert.deepEqual([...sharedRowOwners(row("none", null, "Accidental Death up to S$50,000"), two)!], []);
   });
@@ -85,7 +95,7 @@ async function main() {
     assert.deepEqual(printedAmounts("Hospital cash S$200 a day up to 30 days"), [200]);
     assert.deepEqual(printedAmounts("Pays 25% of the sum insured"), []);
     assert.deepEqual(printedAmounts(null), []);
-    assert.deepEqual(printedFigures("Death US$50,000, maximum S$25,000"), [{ amount: 50000, currency: "USD", cap: false }, { amount: 25000, currency: "SGD", cap: true }]);
+    assert.deepEqual(printedFigures("Death US$50,000, maximum S$25,000"), [{ amount: 50000, currency: "USD", cap: false, base: false }, { amount: 25000, currency: "SGD", cap: true, base: false }]);
   });
   await query("INSERT INTO accounts(id,name) VALUES($1,'Shared row test household')", [ACCOUNT]);
   await query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner')", [ACCOUNT, USER]);
