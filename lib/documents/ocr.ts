@@ -3,6 +3,7 @@ import type { PdfPage } from "@/lib/documents/pdf";
 type BridgePage = { pageNumber: number; text: string };
 import { documentReaderFor } from "@/lib/ai/providers";
 import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
+import { baiduOcrConfigured, completePdfPagesWithBaidu } from "@/lib/documents/ocr-baidu";
 
 function usableCharacters(text: string) {
   return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
@@ -61,9 +62,17 @@ export async function completePdfPagesWithOcr(args: {
   // not called "no readable text" for a reason that is not the file's (new-household audit, 3 Nov).
   // Both flags: a document whose other pages carry enough text is still read, and its note names each scanned page
   // that was not read (Critic #323 M1: with scans switched off they were dropped without a word).
-  const unread = new Set(pageNumbers);
-  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || !documentReaderFor()) {
-    return args.pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
-  }
-  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages: args.pages, pageNumbers });
+  const notRead = (pages: PdfPage[], numbers: number[]) => {
+    const unread = new Set(numbers);
+    return pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
+  };
+  const baidu = baiduOcrConfigured();
+  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || (!baidu && !documentReaderFor())) return notRead(args.pages, pageNumbers);
+  // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
+  // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
+  let pages = args.pages, remaining = pageNumbers;
+  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers }));
+  if (!remaining.length) return pages;
+  if (!documentReaderFor()) return notRead(pages, remaining);
+  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers: remaining });
 }
