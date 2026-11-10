@@ -296,6 +296,10 @@ async function main() {
   assert.equal(grid('<tr><td>Death</td><td rowspan="2">One hundred thousand dollars</td></tr><tr><td>TPD</td></tr>'), "Death\tOne hundred thousand dollars\nTPD");
   assert.equal(grid('<tr><td>Hospital cash</td><td>S$100 per day</td><td rowspan="2">up to 30 days</td></tr><tr><td>ICU cash</td><td>S$200 per day</td></tr>'), "Hospital cash\tS$100 per day\tup to 30 days\nICU cash\tS$200 per day");
   assert.equal(grid('<tr><td>Physio</td><td>S$80 per visit</td><td rowspan="2">max 10 visits</td></tr><tr><td>Chiro</td><td>S$60 per visit</td></tr>'), "Physio\tS$80 per visit\tmax 10 visits\nChiro\tS$60 per visit");
+  // F5: column 0 still holds back a currency-marked amount (a sideways table), but names with numbers repeat.
+  assert.equal(grid('<tr><td rowspan="2">S$5,000 overall</td><td>Outpatient</td><td>S$200</td></tr><tr><td>Dental</td><td>S$300</td></tr>'), "S$5,000 overall\tOutpatient\tS$200\n\tDental\tS$300");
+  for (const [cell, kept] of [["RM 5000", false], ["SGD5000", false], ["1,000,000", false], ["80%", false], ["5000 EUR", false], ["Section 2 Accident", true], ["Plan 3 (age 66-75)", true], ["Table 1", true]] as const)
+    assert.equal(grid(`<tr><td rowspan="2">${cell}</td><td>A</td></tr><tr><td>B</td></tr>`).split("\n")[1].startsWith(cell), kept, cell);
   assert.equal(grid('<tr><td rowspan="2">Plan 1</td><td rowspan="2">Hospital</td><td>Room</td><td>S$300</td></tr><tr><td>ICU</td><td>S$600</td></tr>'), "Plan 1\tHospital\tRoom\tS$300\nPlan 1\tHospital\tICU\tS$600");
 
   // 13. Baidu unreachable (the first live run, 10 Nov: connection failures after ~10 s from Vercel): the AI reader reads the

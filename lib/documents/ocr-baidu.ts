@@ -129,9 +129,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const NUMBERISH = /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|lakh|crore|half|double|twice|once)\b/i;
 /** An HTML table as a grid of cell texts, with merged cells expanded so every row keeps its columns:
  * - colspan: the text in the first column it covers, the others left empty, so a value stays under its own column;
- * - rowspan: a LABEL (in column 0, or holding no number at all) is repeated on each
+ * - rowspan: a LABEL (in column 0 and not an amount, or holding no number at all) is repeated on each
  *   row it covers, so every row keeps its own name; any other cell with a number (a digit or a number word) is printed
  *   once, on its first row, and left empty below, so one shared amount (an overall limit beside several benefits) is never copied onto each row as if it were that row's own. */
+/** A currency-marked amount (a currency sign or code beside a number), a grouped number or a percentage: even in the
+ * label column such a cell is a shared figure, never a name (Critic #410 F5: a sideways "S$5,000 overall"). */
+const CUR = "(?:[$£€¥₹₩]|\\b(?:[A-Z]{1,3}\\$|RM|EUR|USD|SGD|HKD|GBP|MYR|AUD|NZD|CNY|RMB|JPY|IDR|THB|PHP|INR|Rp|Rs)(?![A-Za-z]))";
+const AMOUNT = new RegExp(`${CUR}\\s?\\d|\\d\\s?${CUR}|\\d{1,3}(?:[,.' ]\\d{3})+|\\d+(?:\\.\\d+)?\\s*%`);
 export function tableGrid(table: string, cellText: (html: string) => string): string[][] {
   const grid: string[][] = [];
   const pending: { col: number; rows: number; text: string }[] = [];
@@ -155,10 +159,10 @@ export function tableGrid(table: string, cellText: (html: string) => string): st
       col += cs;
     }
     // Decided by position, never by how a figure is written (Critic #410 F4): a rowspan cell in column 0 is the rows'
-    // name and repeats; anywhere else a cell with a number (a digit or a number word) is one shared figure, printed once.
+    // name and repeats, unless it is a currency-marked amount (F5); anywhere else a cell with a number (a digit or a number word) is one shared figure, printed once.
     // (A column left of the row's first number holds no number by definition, so it repeats under the same rule.)
     for (const sp of spans) {
-      const carried = sp.col === 0 || !NUMBERISH.test(sp.text) ? sp.text : "";
+      const carried = (sp.col === 0 ? !AMOUNT.test(sp.text) : !NUMBERISH.test(sp.text)) ? sp.text : "";
       for (let k = 0; k < sp.cs; k++) pending.push({ col: sp.col + k, rows: sp.rs - 1, text: k === 0 ? carried : "" });
     }
     for (let i = pending.length - 1; i >= 0; i--) if (pending[i].rows <= 0) pending.splice(i, 1);
