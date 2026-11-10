@@ -157,6 +157,8 @@ export type RequeueTableWork = { link: (policyId: string, id: string, attempt: n
   read?: (policyId: string, id: string, run: number, again: number, delayMs: number) => Promise<void> };
 /** At most this many documents are queued again by one sweep. */
 export const REQUEUE_MAX = 20;
+/** At most this many households are looked at by one sweep of every household. */
+const REQUEUE_SCAN_MAX = 500;
 /** A reading saved this recently may still be queuing its next run: it is not stuck yet. */
 const REQUEUE_AFTER = "2 minutes";
 /** A table reading carried over runs, or a stored reading waiting for its link run, that nothing will go on with: no table
@@ -215,12 +217,14 @@ export async function requeueStuckTableReadings(accountId: string): Promise<numb
 export async function requeueStuckTableWorkEverywhere(db: Db = appDb, live: (accountId: string) => Promise<boolean> = benefitTableLive,
   sweep: (accountId: string) => Promise<number> = requeueStuckTableReadings): Promise<number> {
   try {
+    // Households whose table is off are skipped before the limit counts, so their stale progress never crowds out the rest.
     const accounts = await db(`SELECT DISTINCT account_id FROM policies WHERE ${activePredicate()} AND superseded_at IS NULL AND extracted_json ? '${TABLE_PROGRESS_KEY}'
-        AND NOT (${tableReadingJobPending("policies")}) LIMIT ${REQUEUE_MAX}`, []);
-    let queued = 0;
+        AND NOT (${tableReadingJobPending("policies")}) ORDER BY account_id LIMIT ${REQUEUE_SCAN_MAX}`, []);
+    let queued = 0, swept = 0;
     for (const row of accounts) {
+      if (swept >= REQUEUE_MAX) break;
       const accountId = String(row.account_id);
-      try { if (await live(accountId)) queued += await sweep(accountId); }
+      try { if (await live(accountId)) { swept++; queued += await sweep(accountId); } }
       catch (error) { console.warn(`benefit table: could not queue stuck table work again (${error instanceof Error ? error.name : "unknown"})`); }
     }
     return queued;

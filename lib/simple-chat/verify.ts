@@ -2292,7 +2292,7 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * added, or null. */
 /** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
  * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
-const COVER_NOTE = /\s*(?:This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\.|The cover shown from [^.]{1,300}? may be incomplete \([^)]{1,200}\)\.)/g;
+const COVER_NOTE = /\s*(?:This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\.|The cover shown from [^.]{1,300}? may be incomplete \([^)]{1,200}\), so the amounts shown may not be a total\.)/g;
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
   // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
   const repeated = (answer.bottomLine ?? answer.summary ?? "");
@@ -2311,8 +2311,17 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
   const sayWho = named.length > 0 && !people.includes(null);
   const groups = sayWho ? named.map((p) => ({ who: p, docs: candidates.filter((d) => ownedBy(d, p)) })) : [{ who: null, docs: candidates }];
   for (const g of groups) {
-    const missing = g.docs.flatMap((d) => { if (readPastWords(d, tableStates)) return []; const why = notCountedWhy(d, tableStates); return why ? [`${labelFor(household, d)} ${why}`] : []; });
-    const partial = g.docs.flatMap((d) => { const words = readPastWords(d, tableStates); return words ? [`The cover shown from ${labelFor(household, d)} may be incomplete (${words}).`] : []; });
+    // A document read in part that an amount shown comes from: its cover shown may be incomplete. One no amount shown
+    // comes from is not counted here at all, like any other document not read (Critic #404 M: "may be incomplete" for a
+    // document nothing was shown from made another document's figure read as the whole cover).
+    const shownFrom = (d: HouseholdDocument) => amounts.some((s) => s.source && (s.source.policyName === docLabel(household, d)
+      || s.source.citationIds.some((id) => (answer.citations ?? []).some((c) => c.chunkId === id && c.policyId === d.policyId))));
+    const missing = g.docs.flatMap((d) => {
+      const past = readPastWords(d, tableStates);
+      if (past) return shownFrom(d) ? [] : [`${labelFor(household, d)} was read only in part (${past})`];
+      const why = notCountedWhy(d, tableStates); return why ? [`${labelFor(household, d)} ${why}`] : [];
+    });
+    const partial = g.docs.flatMap((d) => { const words = readPastWords(d, tableStates); return words && shownFrom(d) ? [`The cover shown from ${labelFor(household, d)} may be incomplete (${words}), so the amounts shown may not be a total.`] : []; });
     if (!missing.length && !partial.length) continue;
     const whose = g.who ? `${g.who}’s` : "your household’s";
     if (missing.length) notes.push(`This may not be all of ${whose} cover: ${andList(missing)}, so any cover in ${missing.length === 1 ? "it" : "them"} is not counted here and the amounts shown are not a total.`);

@@ -67,18 +67,27 @@ async function main() {
   });
   await check("a policy whose table reading read past a page names that page: never read as her whole cover (Critic and TE #404)", async () => {
     const { tableStateKey } = await import("@/lib/benefit-table/service");
-    const a = answer([{ person: JANE }]);
-    noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [23] })]]));
-    // Its other rows are in the answer: possibly incomplete, never "not counted" (TE #404).
-    assert.match(a.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(page 23 could not be read\)\.$/);
+    const states = (pages: number[]) => new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: pages })]]);
+    // An amount shown comes from the policy read in part: its cover shown may be incomplete, never "not counted" (TE #404).
+    const fromIt = (bottom?: string) => { const a = answer([{ person: JANE }], bottom); (a.statements![0] as { source: unknown }).source = { policyName: "Kestrel Whole Life", page: 3, citationIds: [] }; return a; };
+    const a = fromIt();
+    noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), states([23]));
+    assert.match(a.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(page 23 could not be read\), so the amounts shown may not be a total\.$/);
     assert.doesNotMatch(a.bottomLine!, /not counted/);
-    const b = answer([{ person: JANE }]);
-    noteCoverNotCounted(b, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [4, 23] })]]));
-    assert.match(b.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(pages 4 and 23 could not be read\)\./);
+    const b = fromIt();
+    noteCoverNotCounted(b, HOUSE([READ, UNREAD_TABLE]), states([4, 23]));
+    assert.match(b.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(pages 4 and 23 could not be read\)/);
     // Said once on the next turn too, when the model repeats it.
-    const c = answer([{ person: JANE }], b.bottomLine!);
-    noteCoverNotCounted(c, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [4, 23] })]]));
+    const c = fromIt(b.bottomLine!);
+    noteCoverNotCounted(c, HOUSE([READ, UNREAD_TABLE]), states([4, 23]));
     assert.equal(c.bottomLine!.match(/may be incomplete/g)?.length, 1);
+    // Critic #404 case M: the amount shown comes only from another policy; the one read in part gave nothing shown. Its cover
+    // is not counted, the pages are named, and the amount shown is never read as the whole cover.
+    const m = answer([{ person: JANE }]);
+    (m.statements![0] as { source: unknown }).source = { policyName: "Harbour Term Life", page: 1, citationIds: [] };
+    noteCoverNotCounted(m, HOUSE([READ, UNREAD_TABLE]), states([23]));
+    assert.match(m.bottomLine!, /This may not be all of Jane Doe’s cover: Kestrel Whole Life was read only in part \(page 23 could not be read\), so any cover in it is not counted here and the amounts shown are not a total\.$/);
+    assert.doesNotMatch(m.bottomLine!, /may be incomplete/);
   });
   await check("receipts, superseded copies and another person's documents are never named", () => {
     const a = answer([{ person: JANE }]);
