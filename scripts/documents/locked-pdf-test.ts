@@ -2,7 +2,8 @@
  * keeps its document properties encrypted; the title was read without decrypting, so it came out as random characters,
  * often with a NUL the database refuses ("invalid byte sequence for encoding UTF8: 0x00"), and the upload failed.
  * The fixtures are made-up one-page certificates locked with RC4-128, AES-128 and AES-256 (password "Harbour-2026").
- * Pure logic. No database, no network, no model.
+ * A page whose font maps a glyph to no character (NUL) is not read from its text either: dropping the NUL would make
+ * another amount (Critic #400). Pure logic. No database, no network, no model.
  *   npm run -s documents:locked-pdf-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -18,6 +19,28 @@ async function test(name: string, fn: () => unknown) {
 const PASSWORD = "Harbour-2026", TITLE = "Certificate of Insurance - Harbour Travel";
 const CONTROL = /[\u0000-\u001f\u007f-\u009f�]/;
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "fixtures", name)));
+
+/** A one-page PDF whose font maps one character code to the given Unicode value in its ToUnicode map (Critic #400 probe):
+ * "0000" makes that glyph a NUL, a character with no meaning. */
+function unmappedGlyphPdf(target: string, text: string, hit: string): Uint8Array {
+  const code = (parseInt(hit, 16) - 1).toString(16).toUpperCase(), next = (parseInt(hit, 16) + 1).toString(16).toUpperCase();
+  const cmap = `/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /X def
+1 begincodespacerange <00> <FF> endcodespacerange
+2 beginbfrange <20> <${code}> <0020> <${next}> <7E> <00${next}> endbfrange
+1 beginbfchar <${hit}> <${target}> endbfchar
+endcmap CMapName currentdict /CMap defineresource pop end end`;
+  const content = `BT /F1 12 Tf 50 700 Td (${text}) Tj ET`;
+  const objs = [`<< /Type /Catalog /Pages 2 0 R >>`, `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /ToUnicode 6 0 R >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, `<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`];
+  let out = "%PDF-1.4\n"; const offs: number[] = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Uint8Array(Buffer.from(out, "latin1"));
+}
 
 async function main() {
   const { pdfDocumentTitle, extractPdfPages } = await import("@/lib/documents/pdf");
@@ -50,6 +73,20 @@ async function main() {
     const { PDFDocument } = await import("pdf-lib");
     const doc = await PDFDocument.create(); doc.addPage(); doc.setTitle("Harbour\u0000Travel Policy");
     assert.equal(await pdfDocumentTitle(await doc.save()), null);
+  });
+
+  await test("a page whose font maps a digit to nothing is never read as another amount: its text is not used, and it goes to the image reader (Critic #400)", async () => {
+    const { pagesNeedingOcr } = await import("@/lib/documents/ocr");
+    for (const [hit, text] of [["30", "Sum Insured S$ 50,000.00 per year"], ["35", "Death Benefit S$ 150,000 and Hospital S$ 500 per day"]]) {
+      const pages = await extractPdfPages(unmappedGlyphPdf("0000", text, hit));
+      assert.equal(pages[0].text, "", `no figure of the page is used: ${JSON.stringify(pages[0].text)}`);
+      assert.equal(pages[0].unmappedText, true);
+      assert.deepEqual(pagesNeedingOcr(pages), [1]);
+    }
+    // The same font mapping its digits properly reads as before.
+    const [plain] = await extractPdfPages(unmappedGlyphPdf("0030", "Sum Insured S$ 50,000.00 per year", "30"));
+    assert.match(plain.text, /50,000\.00/);
+    assert.ok(!plain.unmappedText);
   });
 
   console.log(`locked-pdf: ${passed} passed, ${failures.length} failed`);

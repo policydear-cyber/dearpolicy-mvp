@@ -24,6 +24,9 @@ export type PdfPage = {
   /** OCR was needed but no reader looked at the page (none is configured, or reading scans is switched off): it is not
    * known whether anything is printed there, so the document is never called unreadable because of it. */
   notRead?: boolean;
+  /** The page's text held a character its font maps to nothing (NUL): no word or figure of it is used, and the page is
+   * read from its image instead. */
+  unmappedText?: boolean;
   /** Round 10: the reader said the page is hard to read (handwriting, a
    * smudged photo): only parts of it were transcribed with confidence. */
   legibility?: "poor";
@@ -80,11 +83,10 @@ export async function extractPdfPages(
       // away the layout, which is where a benefit table lives.
       const positioned = content.items.flatMap((item) =>
         "str" in item && String(item.str).trim()
-          ? [{ text: String(item.str).replace(/\u0000/g, ""), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
+          ? [{ text: String(item.str), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
           : []);
       const layout = renderPageLayout(positioned, page.getViewport({ scale: 1 }).width);
-      // A NUL in a font's text (a glyph with no character) is never stored: the database refuses it.
-      const text = (layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim()).replace(/\u0000/g, "");
+      const text = layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim();
       // A page with almost no text but one or more painted images is normally a
       // scan. Remembering that signal lets the ingestion pipeline OCR only the
       // affected pages instead of reprocessing an otherwise healthy PDF.
@@ -98,7 +100,11 @@ export async function extractPdfPages(
         (count, operation) => count + (imageOperations.has(operation) ? 1 : 0),
         0,
       );
-      pages.push({ pageNumber, text, imageCount, extractionMethod: "native", lines: layout.lines });
+      // A NUL is a glyph the font maps to no character: a digit of an amount may be one ("S$ 15<NUL>,000"). Dropping it
+      // would make another amount, and keeping it fails the upload (the database refuses it), so the page's text is not
+      // used at all: the page is read from its image, or said to be not read (Critic #400).
+      if (text.includes("\u0000")) pages.push({ pageNumber, text: "", imageCount, extractionMethod: "native", unmappedText: true });
+      else pages.push({ pageNumber, text, imageCount, extractionMethod: "native", lines: layout.lines });
       await onProgress?.(pageNumber, pdf.numPages);
     }
 
