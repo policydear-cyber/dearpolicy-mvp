@@ -18,7 +18,7 @@ type BridgePage = { pageNumber: number; text: string; orientation?: "upright" | 
  * the model, not the whole document. Round 10: `turn` turns a page by that
  * many degrees (clockwise) before it is sent -- a phone photo taken sideways
  * or a page fed into the scanner upside down is shown to the reader upright. */
-async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map()) {
+export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map()) {
   const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const out = await PDFDocument.create({ updateMetadata: false });
   const copied = await out.copyPages(source, pageNumbers.map((n) => n - 1));
