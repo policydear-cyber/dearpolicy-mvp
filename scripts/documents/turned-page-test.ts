@@ -3,6 +3,8 @@
  * column came out as one line ("StatusIn ForceIn Force", "Sum Assured100,000.002,000.00"), and the page-image check could
  * never confirm a figure: the household's schedules were "read in part" since October. Positions are now taken on the
  * page as it is shown. Made-up schedule, drawn on pages turned 0, 90, 180 and 270 degrees: every one reads the same rows.
+ * A page whose text runs plainly left to right in the stored coordinates and that a viewer only turned (saved with
+ * /Rotate) keeps the stored coordinates, as before: it reads the same rows too (Critic #401).
  * Pure logic. No database, no network, no model.
  *   npm run -s documents:turned-page-test */
 import assert from "node:assert/strict";
@@ -43,12 +45,29 @@ async function main() {
     return (await extractPdfPages(await doc.save()))[0];
   };
   const expected = ROWS.map((r) => r.join("\t")).join("\n");
+  /** The schedule drawn plainly (left to right in the stored page), on a page a viewer then turned by `turn` degrees. */
+  const viewerTurned = async (turn: 90 | 180 | 270) => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([595, 842]);
+    page.setRotation(degrees(turn));
+    ROWS.forEach((row, r) => row.forEach((text, c) => page.drawText(text, { x: COLUMNS[c], y: 842 - 100 - r * 20, size: 10, font })));
+    return (await extractPdfPages(await doc.save()))[0];
+  };
 
   for (const turn of [0, 90, 180, 270] as const) {
     await test(`a page stored turned ${turn} degrees reads row by row, each cell in its column`, async () => {
       const page = await turned(turn);
       assert.equal(page.text, expected);
       assert.ok(!looksScrambled(page.text), "nothing to check against the image");
+      assert.deepEqual(page.lines?.[1].cells, ROWS[1]);
+    });
+  }
+  for (const turn of [90, 180, 270] as const) {
+    await test(`plain text on a page a viewer turned ${turn} degrees still reads row by row, as on main`, async () => {
+      const page = await viewerTurned(turn);
+      assert.equal(page.text, expected);
+      assert.ok(!looksScrambled(page.text));
       assert.deepEqual(page.lines?.[1].cells, ROWS[1]);
     });
   }
