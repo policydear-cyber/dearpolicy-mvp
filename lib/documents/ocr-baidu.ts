@@ -1,6 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { PdfPage } from "@/lib/documents/pdf";
-import { assertUnderSpendCap } from "@/lib/ai/ledger";
+import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
+import { assertVerifiedForMonetaryUse, recordModelExecution } from "@/lib/ai/provenance";
+import { functionDeadline } from "@/lib/jobs/function-time";
+import { OCR_TEXT_BAR, usableCharacters } from "@/lib/documents/ocr";
 import { cachedReading } from "@/lib/documents/evidence";
 import { subsetPdf } from "@/lib/documents/ocr-hosted";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
@@ -34,7 +37,7 @@ const JOBS_PATH = "/api/v2/ocr/jobs";
 const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v1";
+const TEXT_VERSION = "baidu-md-v2";
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -61,7 +64,7 @@ export function baiduOcrSettings(env: Env = process.env) {
   };
 }
 
-export type BaiduFailureKind = "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format";
+export type BaiduFailureKind = "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format" | "unverified";
 /** A Baidu failure. Its message names the kind and the HTTP status only: never the token, never page text. */
 export class BaiduOcrError extends Error {
   kind: BaiduFailureKind; status?: number;
@@ -161,92 +164,180 @@ export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
   return pages;
 }
 
-/** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order. */
-export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env): Promise<string[]> {
+/** The model name Baidu itself reports for a job, when its reply carries one. Never taken from the request: the
+ * provenance gate only trusts a provider-reported identity (lib/ai/provenance.ts computeVerified). */
+function reportedModel(...sources: unknown[]): string | null {
+  for (const src of sources) {
+    if (!src || typeof src !== "object") continue;
+    const o = src as Record<string, unknown>;
+    for (const key of ["model", "modelName"]) {
+      const v = o[key];
+      if (typeof v === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(v)) return v;
+    }
+  }
+  return null;
+}
+
+/** Hosts a pre-signed result link may point at: Baidu's own domains (BOS object storage and AI Studio), the configured
+ * service's host, and any added in BAIDU_OCR_RESULT_HOSTS (comma-separated host suffixes). */
+export function resultHostAllowed(host: string, env: Env = process.env) {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  const baseHost = (() => { try { return new URL(baiduOcrSettings(env).baseUrl).hostname.toLowerCase(); } catch { return ""; } })();
+  const extra = (env.BAIDU_OCR_RESULT_HOSTS ?? "").split(",").map((x) => x.trim().toLowerCase().replace(/^\.+/, "")).filter(Boolean);
+  const suffixes = ["bcebos.com", "baidubce.com", "baidu.com", "aistudio-app.com", ...extra];
+  return h === baseHost || suffixes.some((sfx) => h === sfx || h.endsWith("." + sfx));
+}
+
+export type BaiduJobResult = { pages: string[]; jobId: string; model: string | null };
+
+/** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order.
+ * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
+export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number): Promise<BaiduJobResult> {
   const token = env.BAIDU_AISTUDIO_TOKEN?.trim();
   if (!token || !baiduOcrConfigured(env)) throw new BaiduOcrError("not_configured");
   const s = baiduOcrSettings(env);
   if (!OCR_MODELS.has(s.model) && !DOC_MODELS.has(s.model)) throw new BaiduOcrError("unsupported_model");
   const auth = { Authorization: `Bearer ${token}` };
   const jobsUrl = `${s.baseUrl}${JOBS_PATH}`;
+  const end = Math.min(deadline ?? Infinity, Date.now() + s.maxWaitMs);
+  const timeout = () => {
+    const left = end - Date.now();
+    if (left <= 0) throw new BaiduOcrError("timeout");
+    return Math.min(s.requestTimeoutMs, left);
+  };
 
   const form = new FormData();
   form.append("file", new Blob([Uint8Array.from(pdf)], { type: "application/pdf" }), "pages.pdf");
   form.append("model", s.model);
   // Pages photographed sideways or upside down are turned upright by Baidu's own orientation step.
   form.append("optionalPayload", JSON.stringify({ useDocOrientationClassify: true }));
-  const submitted = await apiData(await call(jobsUrl, { method: "POST", headers: auth, body: form }, s.requestTimeoutMs));
+  const submitted = await apiData(await call(jobsUrl, { method: "POST", headers: auth, body: form }, timeout()));
   const jobId = submitted.jobId;
   if (typeof jobId !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(jobId)) throw new BaiduOcrError("format");
 
-  const deadline = Date.now() + s.maxWaitMs;
   let interval = s.pollIntervalMs;
   for (;;) {
-    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, s.requestTimeoutMs));
+    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout()));
     const state = data.state;
     if (state === "done") {
       const jsonUrl = (data.resultUrl as { jsonUrl?: unknown } | undefined)?.jsonUrl;
       if (typeof jsonUrl !== "string") throw new BaiduOcrError("format");
       let url: URL;
       try { url = new URL(jsonUrl); } catch { throw new BaiduOcrError("format"); }
-      // The result link is pre-signed: fetched WITHOUT the token, and only over https (plain http only when the
-      // configured service itself is plain http, i.e. a local test double).
+      // The result link is pre-signed: fetched WITHOUT the token, only from Baidu's own hosts, and only over https
+      // (plain http only when the configured service itself is plain http, i.e. a local test double).
       if (url.protocol !== "https:" && !(url.protocol === "http:" && s.baseUrl.startsWith("http:"))) throw new BaiduOcrError("format");
-      const res = await call(url.href, { method: "GET" }, s.requestTimeoutMs);
+      if (!resultHostAllowed(url.hostname, env)) throw new BaiduOcrError("format");
+      const res = await call(url.href, { method: "GET" }, timeout());
       if (!res.ok) throw new BaiduOcrError(kindForStatus(res.status), res.status);
-      return baiduPagesFromJsonl(await res.text(), s.model);
+      const jsonl = await res.text();
+      let first: { model?: unknown; result?: { model?: unknown; dataInfo?: unknown } } | null = null;
+      try { first = JSON.parse(jsonl.split(/\r?\n/).find((l) => l.trim()) ?? "null"); } catch { /* parsed (and refused) below */ }
+      const pages = baiduPagesFromJsonl(jsonl, s.model);
+      return { pages, jobId, model: reportedModel(data, submitted, first, first?.result, first?.result?.dataInfo) };
     }
     if (state === "failed") throw new BaiduOcrError("job_failed");
     if (state !== "pending" && state !== "running") throw new BaiduOcrError("format");
-    const left = deadline - Date.now();
+    const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
     await sleep(Math.min(interval, left));
     interval = Math.min(Math.round(interval * 1.5), 15_000);
   }
 }
 
-const usable = (text: string) => (text.match(/[\p{L}\p{N}]/gu) ?? []).length > 0;
+/** Time kept back, inside the function's limit, for the AI reader to read whatever Baidu did not. */
+export const AI_FALLBACK_RESERVE_MS = 120_000;
+/** Below this much time, Baidu is not started at all: the AI reader gets all of it. */
+const MIN_BAIDU_MS = 5_000;
+
+/** A chunk with a page Baidu read too little of: used for this reading, never cached, so a later re-read asks again. */
+class WeakChunk extends Error {
+  pages: { pageNumber: number; text: string }[];
+  constructor(pages: { pageNumber: number; text: string }[]) { super("weak chunk"); this.name = "WeakChunk"; this.pages = pages; }
+}
 
 /** Reads the given scanned pages with Baidu. Returns the pages with Baidu's text filled in, and the page numbers Baidu
- * did not give text for (all of them when Baidu failed): those go to the AI reader. Spend-ledger failures are NOT
- * swallowed: reading fails closed when the ledger cannot be read, the same as every other reader. */
+ * did not give enough text for (all of them when Baidu failed): those go to the AI reader.
+ * Reading has no spend cap, but it fails closed when this month's spend cannot be read (overSpendCap throws
+ * SpendCheckUnavailable). Each job is booked to the ledger ($0, page count as input) and recorded as a provenance
+ * attempt; text is used only when that attempt is verified (Baidu reported which model served it). */
 export async function completePdfPagesWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; pages: PdfPage[]; pageNumbers: number[];
 }): Promise<{ pages: PdfPage[]; unread: number[] }> {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
-  await assertUnderSpendCap(args.accountId);
+  await overSpendCap(args.accountId);
   const s = baiduOcrSettings();
   const started = Date.now();
+  const fnDeadline = functionDeadline(started);
+  const deadline = Math.min(started + s.maxWaitMs, fnDeadline !== undefined ? fnDeadline - AI_FALLBACK_RESERVE_MS : Infinity);
   const texts = new Map<number, string>();
-  try {
-    const read = await cachedReading(
-      args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined,
-      "baidu_ocr", { bytes: createHash("sha256").update(args.bytes).digest("hex"), pages: args.pageNumbers, version: TEXT_VERSION },
-      `baidu:${s.model}`,
-      async () => {
-        const out: { pageNumber: number; text: string }[] = [];
-        for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
-          const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
-          const got = await readPdfWithBaidu(await subsetPdf(args.bytes, chunk));
-          // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
-          if (got.length !== chunk.length) throw new BaiduOcrError("format");
-          chunk.forEach((n, k) => out.push({ pageNumber: n, text: got[k] }));
-        }
-        return out;
-      });
-    for (const p of read) if (typeof p?.text === "string" && usable(p.text)) texts.set(p.pageNumber, p.text.trim());
-  } catch (error) {
-    const kind = error instanceof BaiduOcrError ? error.kind : "unexpected";
-    void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(error instanceof BaiduOcrError ? error.kind : "unavailable", error instanceof BaiduOcrError ? error.status : undefined),
-      extra: { pagesRequested: args.pageNumbers.length, kind, durationMs: Date.now() - started } });
-    if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
-      failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${args.pageNumbers.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
-    return { pages: args.pages, unread: [...args.pageNumbers] };
+  const failures: string[] = [];
+  const bytesHash = createHash("sha256").update(args.bytes).digest("hex");
+  const choice = { provider: "baidu" as const, model: s.model };
+  const accept = (got: { pageNumber: number; text: string }[]) => {
+    for (const p of got) if (typeof p?.text === "string" && usableCharacters(p.text) >= OCR_TEXT_BAR) texts.set(p.pageNumber, p.text.trim());
+  };
+
+  for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
+    const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
+    if (deadline - Date.now() < MIN_BAIDU_MS) { failures.push("timeout"); break; }
+    try {
+      const got = await cachedReading(
+        args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined,
+        "baidu_ocr", { bytes: bytesHash, pages: chunk, version: TEXT_VERSION }, `baidu:${s.model}`,
+        async () => {
+          const attemptGroupId = randomUUID();
+          const requestedAt = new Date();
+          const t0 = Date.now();
+          const requested = { provider: choice.provider, model: choice.model, capability: "reading" as const, inputArtifactType: "application/pdf" };
+          let job: BaiduJobResult;
+          try {
+            job = await readPdfWithBaidu(await subsetPdf(args.bytes, chunk), process.env, deadline);
+            // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
+            if (job.pages.length !== chunk.length) throw new BaiduOcrError("format");
+          } catch (error) {
+            const latencyMs = Date.now() - t0;
+            await recordUsage({ accountId: args.accountId, role: "reading", choice, input: chunk.length, output: 0, durationMs: latencyMs, ok: false });
+            await recordModelExecution({ correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+              householdId: args.accountId, resourceId: args.resourceId ?? null, requested, requestedAt, resolved: null,
+              status: "failed", errorCategory: "model_provider", latencyMs });
+            throw error;
+          }
+          const latencyMs = Date.now() - t0;
+          await recordUsage({ accountId: args.accountId, role: "reading", choice, input: chunk.length, output: 0, durationMs: latencyMs, ok: true });
+          const record = await recordModelExecution({ correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+            householdId: args.accountId, resourceId: args.resourceId ?? null, requested, requestedAt,
+            resolved: { resolvedModel: job.model, providerRequestId: job.jobId, finishReason: null, region: null, resolvedProvider: "baidu" },
+            status: "succeeded", usage: { input: chunk.length, output: 0 }, costUsd: 0, latencyMs });
+          // The same chokepoint as the AI reader (ocr-hosted.ts): text that feeds figures only from a verified attempt.
+          // A record that could not be saved (null) does not block, the same failure-isolation contract.
+          if (record && !record.verified) throw new BaiduOcrError("unverified");
+          if (record) assertVerifiedForMonetaryUse(record);
+          const out = chunk.map((n, k) => ({ pageNumber: n, text: job.pages[k] }));
+          if (out.some((p) => usableCharacters(p.text) < OCR_TEXT_BAR)) throw new WeakChunk(out);
+          return out;
+        });
+      accept(got);
+    } catch (error) {
+      if (error instanceof WeakChunk) { accept(error.pages); continue; }
+      failures.push(error instanceof BaiduOcrError ? error.kind : "unexpected");
+      // Pages after a failed job are not sent to Baidu again in this reading: the AI reader reads them.
+      break;
+    }
   }
+
   const unread = args.pageNumbers.filter((n) => !texts.has(n));
-  void recordEvent({ name: "documents.ocr_baidu.completed", correlationId, status: "success", householdRef,
-    extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, pagesToFallback: unread.length, durationMs: Date.now() - started } });
+  if (failures.length) {
+    const kind = failures.join(",");
+    void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0] as BaiduFailureKind),
+      extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, kind, durationMs: Date.now() - started } });
+    if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
+      failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
+  } else {
+    void recordEvent({ name: "documents.ocr_baidu.completed", correlationId, status: "success", householdRef,
+      extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, pagesToFallback: unread.length, durationMs: Date.now() - started } });
+  }
   return {
     pages: args.pages.map((page) => (texts.has(page.pageNumber) ? { ...page, text: texts.get(page.pageNumber)!, extractionMethod: "ocr" as const } : page)),
     unread,

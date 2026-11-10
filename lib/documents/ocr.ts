@@ -5,14 +5,17 @@ import { documentReaderFor } from "@/lib/ai/providers";
 import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 import { baiduOcrConfigured, completePdfPagesWithBaidu } from "@/lib/documents/ocr-baidu";
 
-function usableCharacters(text: string) {
+export function usableCharacters(text: string) {
   return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
 }
+/** Fewer letters and digits than this and a page's text does not count as read: the scan-detection bar, also the bar
+ * a Baidu reading must clear before it replaces a scanned page (lib/documents/ocr-baidu.ts). */
+export const OCR_TEXT_BAR = 24;
 
 /** Select image-backed pages whose embedded text layer is missing or useless. */
 export function pagesNeedingOcr(pages: PdfPage[]) {
   return pages
-    .filter((page) => page.unmappedText || (usableCharacters(page.text) < 24 && (page.imageCount ?? 0) > 0))
+    .filter((page) => page.unmappedText || (usableCharacters(page.text) < OCR_TEXT_BAR && (page.imageCount ?? 0) > 0))
     .map((page) => page.pageNumber);
 }
 

@@ -24,7 +24,9 @@ export function deterministicStandInRequested(env: NodeJS.ProcessEnv = process.e
  * company answered. Every call reports its tokens to the ledger, so a plan can
  * be priced from what a household actually costs. */
 export type ModelRole="reading"|"judgement"|"narration"|"chat";
-export type Provider="gemini"|"anthropic"|"openai"|"groq";
+/** "baidu" is Baidu AI Studio's hosted PaddleOCR (lib/documents/ocr-baidu.ts): a reading service recorded in the ledger and
+ * provenance, never a chat or reading MODEL -- it is not in PROVIDERS, so no *_MODEL setting can select it. */
+export type Provider="gemini"|"anthropic"|"openai"|"groq"|"baidu";
 export type ModelChoice={provider:Provider;model:string};
 
 const PROVIDERS:Provider[]=["gemini","anthropic","openai","groq"];
@@ -91,7 +93,7 @@ export function modelFor(role:ModelRole,env:NodeJS.ProcessEnv=process.env):Model
   return {provider:"gemini",model:DEFAULT_MODEL[role]};
 }
 export function describeChoice(choice:ModelChoice){
-  const names:Record<Provider,string>={gemini:"Google",anthropic:"Anthropic",openai:"OpenAI",groq:"Groq"};
+  const names:Record<Provider,string>={gemini:"Google",anthropic:"Anthropic",openai:"OpenAI",groq:"Groq",baidu:"Baidu"};
   return names[choice.provider]+" · "+choice.model;
 }
 /** A one-tier-down model to try when a role's primary is rate-limited, so a
@@ -121,6 +123,10 @@ export function fallbackModelFor(role:ModelRole):ModelChoice|null{
  * as accurate as this. Unknown models cost zero here and are flagged. */
 export type Price={input:number;output:number;cachedInput?:number};
 const PRICES:Record<string,Price>={
+  // Baidu AI Studio hosted PaddleOCR, free tier (about 3,000 pages a day per model): booked at $0, priced, so the ledger
+  // shows each job (lib/documents/ocr-baidu.ts books the job's page count as its input).
+  "baidu:PaddleOCR-VL-1.6":{input:0,output:0},"baidu:PaddleOCR-VL-1.5":{input:0,output:0},"baidu:PaddleOCR-VL":{input:0,output:0},
+  "baidu:PP-StructureV3":{input:0,output:0},"baidu:PP-OCRv5":{input:0,output:0},"baidu:PP-OCRv5-latin":{input:0,output:0},"baidu:PP-OCRv6":{input:0,output:0},
   "anthropic:claude-haiku-4-5":{input:1,output:5,cachedInput:0.1},
   "anthropic:claude-sonnet-5":{input:2,output:10,cachedInput:0.2},
   "anthropic:claude-opus-5":{input:5,output:25,cachedInput:0.5},
