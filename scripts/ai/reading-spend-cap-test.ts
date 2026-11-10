@@ -42,6 +42,16 @@ async function main() {
       assert.ok(!(error instanceof SpendCapReached), `reading was stopped by the spend limit: ${error instanceof Error ? error.message : error}`);
       assert.ok(outbound.length > before, "the reading call was attempted");
     });
+    await test("a reading call still fails closed when this month's usage cannot be read: nothing is sent unbooked", async () => {
+      const { SpendCheckUnavailable } = await import("@/lib/ai/ledger");
+      const before = outbound.length;
+      await query("ALTER TABLE model_usage RENAME TO model_usage_unreadable");
+      try {
+        const error = await ask("policy_extraction", "reading").then(() => null, (e: unknown) => e);
+        assert.ok(error instanceof SpendCheckUnavailable, `reading went on with the ledger unreadable: ${error instanceof Error ? error.message : error}`);
+        assert.equal(outbound.length, before, "no reading request was sent");
+      } finally { await query("ALTER TABLE model_usage_unreadable RENAME TO model_usage"); }
+    });
     await test("a chat call is still stopped at the spend limit, before any request", async () => {
       const before = outbound.length;
       const error = await ask("chat_reply", "chat").then(() => null, (e: unknown) => e);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
 import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest, remainingModelTimeMs } from "./usage";
-import { assertUnderSpendCap, recordUsage, SpendCapReached, SpendCheckUnavailable } from "./ledger";
+import { assertUnderSpendCap, overSpendCap, recordUsage, SpendCapReached, SpendCheckUnavailable } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
@@ -151,8 +151,10 @@ export async function structuredCompletion<T>(args: {
     const choice = rollout.target ?? modelFor(role);
     const attemptGroupId = randomUUID();
     // Reading a document is never stopped by the household's spend limit (DC, 10 Nov: "do not limit cost for reading
-    // documents"): only chat and other answering calls are. Every call is still booked in the usage ledger below.
-    if (householdId && !readsDocument(operation)) await assertUnderSpendCap(householdId);
+    // documents"): only chat and other answering calls are. Every call is still booked in the usage ledger below, so a
+    // reading call still fails closed (SpendCheckUnavailable) when this month's usage cannot be read: nothing is ever
+    // sent that could not be booked (Critic #405).
+    if (householdId) { if (readsDocument(operation)) await overSpendCap(householdId); else await assertUnderSpendCap(householdId); }
       const call = async (target: typeof choice, attemptIndex: number) => {
         const started = Date.now();
         const requestedAt = new Date();
