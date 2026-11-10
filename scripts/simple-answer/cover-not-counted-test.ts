@@ -112,7 +112,30 @@ async function main() {
     assert.ok(a.libraryNames?.includes("scan_20261101.pdf"));
   });
 
-  await check("chat turn: the saved answer's bottom line carries the note", async () => {
+  await check("the model repeats an earlier turn's note in its bottom line: the note is said once, as this turn has it (TE #402)", () => {
+    const first = answer([{ person: JANE }]);
+    const said = noteCoverNotCounted(first, HOUSE([READ, FAILED, IN_PART]));
+    assert.ok(said);
+    // Next turn: the model copies the whole earlier bottom line, note and all.
+    const again = answer([{ person: JANE }], first.bottomLine!);
+    noteCoverNotCounted(again, HOUSE([READ, FAILED, IN_PART]));
+    assert.equal(again.bottomLine!.split("This may not be all of").length - 1, 1, again.bottomLine!);
+    assert.equal(again.bottomLine, first.bottomLine);
+    // The earlier note named a document now read in full: only this turn's documents are named.
+    const later = answer([{ person: JANE }], first.bottomLine!);
+    noteCoverNotCounted(later, HOUSE([READ, FAILED]));
+    assert.doesNotMatch(later.bottomLine!, /Plover/);
+    assert.match(later.bottomLine!, /Osprey Critical Care could not be read, so any cover in it/);
+    // Everything now read: the repeated note goes, and nothing else of the bottom line.
+    const done = answer([{ person: JANE }], first.bottomLine!);
+    assert.equal(noteCoverNotCounted(done, HOUSE([READ])), null);
+    assert.equal(done.bottomLine, "Jane's Harbour Term Life shows a death benefit; the amount is below.");
+    // Its straight-apostrophe form too.
+    const straight = answer([{ person: JANE }], first.bottomLine!.replace(/’/g, "'"));
+    noteCoverNotCounted(straight, HOUSE([READ, FAILED, IN_PART]));
+    assert.equal(straight.bottomLine!.split("This may not be all of").length - 1, 1);
+  });
+  await check("chat turns: the saved answer's bottom line carries the note, once, on the next turn too", async () => {
     const house = HOUSE([READ, FAILED]);
     const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call() {
       return { json: { bottomLine: "Jane's Harbour Term Life shows a death benefit; the amount is below.", statements: [
@@ -131,6 +154,16 @@ async function main() {
     assert.ok(a.statements!.some((s) => s.amount?.text === "S$5,000"), "the amount card is shown");
     assert.match(a.bottomLine!, /This may not be all of Jane Doe’s cover: Osprey Critical Care could not be read/);
     assert.equal(a.summary, a.bottomLine);
+    // Turn two: the model repeats turn one's bottom line, which its history carries: the note is said once.
+    const echo: SimpleModel = { choice: model.choice, async call() {
+      return { json: { bottomLine: a.bottomLine, statements: [
+        { kind: "amount", person: JANE, text: "Death Benefit (Harbour Term Life).", amount: "S$5,000", quote: "Death Benefit S$5,000", document: "D1" }],
+      nextSteps: [], question: null }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
+    await runSimpleChat(context, {}, { model: echo, household: async () => house, history: async () => [{ role: "user", text: "How much death cover does Jane have?" }, { role: "assistant", text: a.bottomLine! }],
+      save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false, table: async () => null, today: () => new Date("2026-11-10T04:00:00Z") });
+    const b = saved[1].answer;
+    assert.equal(b.bottomLine!.split("This may not be all of").length - 1, 1, b.bottomLine!);
+    assert.equal(b.bottomLine, a.bottomLine);
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);

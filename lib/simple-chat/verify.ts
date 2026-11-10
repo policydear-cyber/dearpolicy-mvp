@@ -2281,7 +2281,14 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * `tableStates`: each document's benefit-table state (policy id to state), when the table is on; `charged`: the premium
  * rows' labels (RowReport.premiumLabels). Returns the sentence
  * added, or null. */
+/** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
+ * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
+const COVER_NOTE = /\s*This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\./g;
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
+  // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
+  const repeated = (answer.bottomLine ?? answer.summary ?? "");
+  const cleaned = repeated.replace(COVER_NOTE, "").trim();
+  if (cleaned !== repeated.trim()) { answer.bottomLine = cleaned; answer.summary = cleaned; }
   // A premium is charged, never claimed: an answer whose every amount is a premium row's own card is not about cover.
   const amounts = (answer.statements ?? []).filter((s) => s.amount && !charged.has(s.text));
   if (!amounts.length) return null;
