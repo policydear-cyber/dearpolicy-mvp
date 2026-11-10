@@ -70,6 +70,18 @@ async function main() {
     assert.equal(noteCoverNotCounted(a, HOUSE([READ, RECEIPT, OLD, JOHNS]), null), null);
     assert.equal(a.bottomLine, "Jane's Harbour Term Life shows a death benefit; the amount is below.");
   });
+  await check("a letter the table says is a misfiled pack (its cover still to read) is named; a plain letter is not (Critic #402 L)", () => {
+    const pack = doc(11, { productName: "Bittern Life Plan", documentRole: "insurer_letter", pages: [{ page: 1, text: "Cover letter" }, { page: 2, text: "Policy Schedule" }] });
+    const letter = doc(12, { productName: "Bittern Renewal Letter", documentRole: "insurer_letter", pages: [{ page: 1, text: "Letter" }] });
+    for (const state of ["table_unread", "waiting"]) {
+      const a = answer([{ person: JANE }]);
+      noteCoverNotCounted(a, HOUSE([READ, pack, letter]), new Map([[READ.policyId, "read"], [pack.policyId, state], [letter.policyId, "no_table"]]));
+      assert.match(a.bottomLine!, new RegExp(`This may not be all of Jane Doe’s cover: Bittern Life Plan ${state === "waiting" ? "is still being read" : "could not have its benefits read"}, so any cover in it`));
+      assert.doesNotMatch(a.bottomLine!, /Bittern Renewal Letter/);
+    }
+    const a = answer([{ person: JANE }]);
+    assert.equal(noteCoverNotCounted(a, HOUSE([READ, pack]), new Map([[READ.policyId, "read"], [pack.policyId, "no_table"]])), null, "no_table letter: not named");
+  });
   await check("a document linked to nobody may be anyone's: it is named for whoever the amounts are for", () => {
     const a = answer([{ person: JANE }, { person: JOHN, amount: "S$9,000" }]);
     noteCoverNotCounted(a, HOUSE([READ, NOBODYS, JOHNS]));

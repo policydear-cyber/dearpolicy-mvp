@@ -2255,6 +2255,8 @@ const TABLE_STATE_WORDS: Record<string, string> = {
   table_unread: "could not have its benefits read", no_table: "has not had its benefits read", not_readable: "could not be read",
   stalled: "stopped being read", held: "is on hold for its scan", waiting: "is still being read",
 };
+/** Table states in which a receipt or letter is a misfiled policy pack whose cover was not read (documentState). */
+const MISFILED_STATES = new Set(["table_unread", "waiting"]);
 /** Why a document's cover may be missing from an answer, or null when it was read in full. */
 function notCountedWhy(d: HouseholdDocument, tableStates: ReadonlyMap<string, string> | null): string | null {
   if (stillReading(d)) return "is still being read";
@@ -2275,7 +2277,7 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * in part, still being read, or whose benefits the table could not read) never reads as the person's whole cover: the
  * bottom line says the amounts may not be all of it, and names those documents (fresh-start run 10 Nov: a death answer
  * showed one policy's figure while another policy's benefits were unread). Documents that hold no cover (receipts,
- * letters) and superseded copies are not counted. With amounts for no named person, every such document counts.
+ * letters, unless the table says one is a misfiled pack still to read) and superseded copies are not counted. With amounts for no named person, every such document counts.
  * `tableStates`: each document's benefit-table state (policy id to state), when the table is on; `charged`: the premium
  * rows' labels (RowReport.premiumLabels). Returns the sentence
  * added, or null. */
@@ -2284,7 +2286,10 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
   const amounts = (answer.statements ?? []).filter((s) => s.amount && !charged.has(s.text));
   if (!amounts.length) return null;
   const people = [...new Set(amounts.map((s) => s.personName ?? null))];
-  const candidates = household.documents.filter((d) => !d.supersededAt && !NO_COVER_READING_ROLES.includes(d.documentRole ?? ""));
+  // A receipt or letter holds no cover, unless the table says it is a misfiled pack waiting for Read again or being read
+  // (lib/benefit-table/service.ts documentState): then its state decides, as everywhere else (Critic #402).
+  const coverHolding = (d: HouseholdDocument) => !NO_COVER_READING_ROLES.includes(d.documentRole ?? "") || MISFILED_STATES.has(tableStates?.get(d.policyId) ?? "");
+  const candidates = household.documents.filter((d) => !d.supersededAt && coverHolding(d));
   const notes: string[] = [];
   const named = people.filter((p): p is string => !!p);
   const sayWho = named.length > 0 && !people.includes(null);
