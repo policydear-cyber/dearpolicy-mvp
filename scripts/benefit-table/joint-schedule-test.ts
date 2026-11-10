@@ -138,6 +138,33 @@ test("a person's cover kept from another copy of the schedule still gets the cop
   assert.deepEqual(rowsFor(t, "p1"), ["Death Benefit 500000"]);
   assert.deepEqual(rowsFor(t, "p2"), [], "never John's: the schedule prints only Jane's cover");
 });
+test("a benefit summary with one column per person, printing no one's cover: each column only for its own person (Critic #406 X1)", () => {
+  const sched = read(doc(13), "personal_proof", [JANE, JOHN], [`POLICY SCHEDULE\nLife Assured: ${JANE}\n${PRODUCT}\tS$50,000`, `POLICY SCHEDULE\nLife Assured: ${JOHN}\n${PRODUCT}\tS$30,000`],
+    [cover(JANE, 50000, `${PRODUCT}\tS$50,000`), cover(JOHN, 30000, `${PRODUCT}\tS$30,000`, 2)], []);
+  const page = `BENEFIT SUMMARY\nBenefit\t${JANE}\t${JOHN}\nEarly Critical Illness\tS$12,500\tS$7,500`;
+  const summary = read(doc(14), "personal_proof", [JANE, JOHN], [page], [],
+    [row("Benefits", "Early Critical Illness", 12500, "Early Critical Illness\tS$12,500\tS$7,500", JANE), row("Benefits", "Early Critical Illness", 7500, "Early Critical Illness\tS$12,500\tS$7,500", JOHN)]);
+  const t = assembleTable([sched, summary], family, linkAll(summary));
+  assert.deepEqual(rowsFor(t, "p1"), ["Early Critical Illness 12500"]);
+  assert.deepEqual(rowsFor(t, "p2"), ["Early Critical Illness 7500"]);
+});
+test("a heading that names a person as payee or owner, not as the life, gives the row to no one by name (Critic #406 J1)", () => {
+  const page = `POLICY SCHEDULE\nPolicy Owner: ${JOHN}\nLife Assured: ${JANE}\n${PRODUCT}\tS$50,000\nLife Assured: ${JOHN}\n${PRODUCT}\tS$30,000\nBenefits payable to ${JOHN}\nEarly Critical Illness\tS$12,500`;
+  const r = read(doc(15), "personal_proof", [JANE, JOHN], [page], [cover(JANE, 50000, `${PRODUCT}\tS$50,000`), cover(JOHN, 30000, `${PRODUCT}\tS$30,000`)],
+    [row(`Benefits payable to ${JOHN}`, "Early Critical Illness", 12500, "Early Critical Illness\tS$12,500")]);
+  const t = assembleTable([r], family, linkAll(r));
+  assert.deepEqual(rowsFor(t, "p1"), []);
+  assert.deepEqual(rowsFor(t, "p2"), [], "never John's because a heading names him as payee");
+  assert.ok(t.unlinkedSections.some((u) => u.why === NOT_TOLD_WHY));
+});
+test("a heading that is the life, by label or possessive, gives the row to that life", () => {
+  for (const [h1, h2] of [[`Life Insured: ${JANE}`, `Life Insured: ${JOHN}`], [`${JANE}'s Benefits`, `${JOHN}'s Benefits`], [JANE, JOHN], [`Name of Insured: ${JANE}`, `Name of Insured: ${JOHN}`]]) {
+    const r = joint("S$", [h1, h2]);
+    const t = assembleTable([r], family, linkAll(r));
+    assert.deepEqual(rowsFor(t, "p1"), ["Death Benefit 500000", "Hospital Cash 200"], h1);
+    assert.deepEqual(rowsFor(t, "p2"), ["Death Benefit 300000", "Hospital Cash 100"], h2);
+  }
+});
 
 console.log(`benefit-table joint schedule: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);

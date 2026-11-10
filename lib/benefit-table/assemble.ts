@@ -21,6 +21,7 @@ import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
+import { headingIsLife } from "./life-heading";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
   /** The documents this person is linked to by their own record (policy_members: chosen at upload, ticked in the "who does
@@ -422,16 +423,21 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
 /** Why a section's rows are shown for no one when its document prints the cover for two or more people and the rows do
  * not say whose they are (whoseRows). */
 export const NOT_TOLD_WHY = "printed for more than one person on this document, and these rows do not say whose they are: not shown for anyone";
-const wholeName = (name: string) => { const n = norm(name); return n.includes(" ") ? n : null; };
 /** Whose a linked section's row is, by what its own document prints (joint schedule fix, 10 Nov: a section linked by cover
  * type was shown for every holder of that type, so one life's amounts showed for the other life on a joint schedule).
  * `undefined`: every holder of the cover type, as before (a wording or product summary, a document that prints no one's
- * cover of that type). Otherwise the people the row may be shown for: when the document prints the cover for exactly one
+ * cover of that type). A heading that is one holder's life gives the row to that holder alone, wherever. Otherwise the people the row may be shown for: when the document prints the cover for exactly one
  * holder, only that holder (never another holder whose own cover is printed elsewhere); when it prints it for two or more,
- * only the one whose full printed name the row's column or section heading names (never its own line, which may name a payee);
- * when no one life is named, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
+ * only the one whose life the row's column or section heading is (headingIsLife; never its own line, which may name a payee);
+ * when no one life is the heading, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
  * no figure of its own, or one worked out on each person's own sum insured, is every holder's. */
 function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[]): Set<string> | undefined {
+  // A block or column heading that is a holder's life (Critic #406 X1, J1): only that holder, wherever the document prints
+  // covers or none (a benefit summary with one column per person).
+  const holders = [...new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId))];
+  const namesOf = (id: string) => [...covers.filter((c) => c.personId === id).map((c) => c.person), family.find((m) => m.id === id)?.display_name ?? ""];
+  const headed = holders.filter((id) => [b.column, b.section].some((h) => headingIsLife(h, namesOf(id))));
+  if (headed.length === 1) return new Set(headed);
   // A row whose figure is worked out on each person's own sum insured, or that prints none, is right for every holder (a
   // scheme summary's "Death Benefit" for each member): only a row that prints its own figure can be one life's.
   if (b.value == null || (b.pays === "percent" && b.percentOf === "sum_insured")) return undefined;
@@ -439,26 +445,16 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   let printed = covers.filter((c) => c.coverKey === coverKey && onDoc(c));
   // The cover type is not printed on this document, but its holders' other covers are (a personal schedule whose rider is
   // printed only as a benefit section): those holders only.
-  if (!printed.length) {
-    const holders = new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId));
-    printed = covers.filter((c) => holders.has(c.personId) && onDoc(c));
-  }
+  if (!printed.length) printed = covers.filter((c) => holders.includes(c.personId) && onDoc(c));
   const ids = new Set(printed.map((c) => c.personId));
   if (!ids.size) return undefined;
   if (ids.size === 1) return ids;
-  const text = ` ${norm([b.column, b.section].filter(Boolean).join(" "))} `;
-  const named = [...ids].filter((id) => {
-    const names = [...printed.filter((c) => c.personId === id).map((c) => c.person), family.find((m) => m.id === id)?.display_name ?? ""];
-    return names.some((n) => { const w = wholeName(n); return !!w && text.includes(` ${w} `); });
-  });
-  if (named.length === 1) return new Set(named);
-  // No one life named: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never anyone
-  // else: no one is shown an amount that is not theirs.
+  // No one life is the heading: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never
+  // anyone else: no one is shown an amount that is not theirs.
   const own = (c: PersonCover) => c.confirmation ? c.confirmation.printed : c.sumInsured;
   return new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
     && (!c.currency || !b.currency || c.currency === b.currency))));
 }
-
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 /** Why a row is under the cover whose own printed line it is (ownLineCovers). */
 export const OWN_LINE_WHY = "printed on this cover's own line";
