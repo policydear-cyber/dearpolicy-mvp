@@ -307,9 +307,26 @@ async function main() {
     const t4 = grid('<tr><th>Overall limit</th><th>Benefit</th><th>Own limit</th></tr><tr><td rowspan="2">S$5,000 overall</td><td>Physiotherapy</td><td>S$60</td></tr><tr><td>Chiropractic</td><td>S$75</td></tr><tr><td rowspan="2">Outpatient group</td><td>Specialist visit</td><td>S$200</td></tr><tr><td>Blood test</td><td>S$80</td></tr>');
     const rows = benefitRowsFromText(t4).map((r) => `${r.label}=${r.value}`);
     assert.ok(rows.includes("Chiropractic=S$75"), rows.join(" | "));
-    assert.ok(rows.includes("Outpatient group=S$80") && rows.includes("Outpatient group=S$200"));
+    assert.ok(rows.includes("Blood test=S$80") && rows.includes("Specialist visit=S$200"), rows.join(" | "));
     assert.ok(!rows.some((r) => r.startsWith("Chiropractic=Chiropractic")));
     assert.deepEqual(benefitRowsFromText("Benefit\tPlan A\tPlan B\nRoom\tS$300\tS$500\n\tS$100\tS$200").map((r) => r.label), ["Room", "Room"]);
+    // Critic #410 F6: a shifted cell is a name only under a column headed as benefit names. Under people's names it
+    // belongs to nobody known, and the row is skipped (never TPD S$80,000 for John Roe).
+    const joint = benefitRowsFromText("Benefit\tJane Doe\tJohn Roe\nDeath\tS$100,000\tS$50,000\n\tTPD\tS$80,000").map((r) => `${r.label}=${r.value}`);
+    assert.deepEqual(joint, ["Death=S$100,000", "Death=S$50,000"], joint.join(" | "));
+    assert.ok(!benefitRowsFromText("Overall\tPlan A\tPlan B\nS$5,000 overall\tRoom\tS$300\n\tICU\tS$600").some((r) => r.label === "ICU"), "a plan heading is not a name column");
+    // TE #410 T5: under "Detail" a condition or footnote is never a benefit of its own.
+    const t5 = benefitRowsFromText("Benefit\tDetail\tLimit\nHospital cash\tPer day of stay\tS$100\n\tSubject to pre-approval\tS$500\n\t* Per policy year\tS$1,000\n\tAfter a 90-day waiting period\tS$2,000").map((r) => r.label);
+    assert.deepEqual([...new Set(t5)], ["Hospital cash"], t5.join(" | "));
+    // A repeated group name in column 0 under a non-name heading: each row is named by its own benefit cell.
+    const grouped = benefitRowsFromText("Overall limit\tBenefit\tOwn limit\nOutpatient group\tSpecialist visit\tS$200\nOutpatient group\tBlood test\tS$80").map((r) => `${r.label}=${r.value}`);
+    assert.deepEqual(grouped, ["Specialist visit=S$200", "Blood test=S$80"], grouped.join(" | "));
+    // A label column already headed as names keeps its name, even when a later column is headed as names too.
+    assert.deepEqual([...new Set(benefitRowsFromText("Benefit\tDescription\tLimit\nRoom and board\tWard A\tS$100").map((r) => r.label))], ["Room and board"]);
+    // "Injury | Benefit": the Benefit column holds the amounts, so the name stays in column 0.
+    assert.deepEqual(benefitRowsFromText("Injury\tBenefit\tNotes\nLoss of eye\t50%\tper eye\nLoss of limb\tS$10,000\t-").map((r) => `${r.label}=${r.value}`), ["Loss of eye=50%", "Loss of limb=S$10,000"]);
+    for (const head of ["Benefit", "Type of benefit", "Description", "Coverage", "Item"])
+      assert.ok(benefitRowsFromText(`Overall limit\t${head}\tOwn limit\nS$5,000 overall\tPhysiotherapy\tS$60\n\tChiropractic\tS$75`).some((r) => r.label === "Chiropractic" && r.value === "S$75"), head);
   }
   assert.equal(grid('<tr><td rowspan="2">Plan 1</td><td rowspan="2">Hospital</td><td>Room</td><td>S$300</td></tr><tr><td>ICU</td><td>S$600</td></tr>'), "Plan 1\tHospital\tRoom\tS$300\nPlan 1\tHospital\tICU\tS$600");
 
