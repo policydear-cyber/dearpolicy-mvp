@@ -29,6 +29,7 @@ import type { JobProcessor, WorkerJobTypeConfig } from "./worker-runtime";
 import { CHAT_ANALYSIS_JOB_TYPE, processChatAnalysisJob } from "@/lib/chat/jobs";
 import { SCAN_RETRY_JOB_TYPE } from "@/lib/scanning/retry";
 import { processScanRetryJob } from "@/lib/scanning/retry-processor";
+import { holdPasswordWhileScanPending } from "@/lib/scanning/held-password";
 import { FIGURE_CHECK_JOB_TYPE } from "@/lib/benefit-table/figure-check-job";
 import { TABLE_READING_JOB_TYPE } from "@/lib/benefit-table/table-reading-job";
 
@@ -85,6 +86,9 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
     attempt: { number: job.attempt_count, max: job.max_attempts },
   };
   await processPolicy(args);
+  // A locked PDF still waiting for its malware scan is read later by the scan
+  // retry, from this job's payload: keep its password until then.
+  if (args.pdfPassword) await holdPasswordWhileScanPending({ jobId: job.id, workerId, accountId: args.accountId, policyId: args.policyId });
 };
 
 export const processClaimEvidenceProcessingJob: JobProcessor = async (job) => {

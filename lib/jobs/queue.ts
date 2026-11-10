@@ -292,13 +292,24 @@ export async function heartbeatJob(
   return row;
 }
 
+/** SQL: the job's payload without the PDF password a household typed for a locked upload (lib/rag/processing-queue.ts).
+ * A job that has finished (succeeded, dead-lettered or cancelled) never needs it again: Read again sends a fresh payload
+ * with the password typed again (enqueueJob resurrectTerminal), so the password is kept only while the job can still run
+ * (queued, processing, failed_retryable). Before, it stayed in a finished job's row until the document was deleted
+ * (TE #400). A payload that is not an object is left as it is. */
+export const WITHOUT_PASSWORD_SQL = `CASE WHEN jsonb_typeof(payload)='object' THEN payload - 'pdfPassword' - 'heldForScan' ELSE payload END`;
+/** On success the password is dropped too, unless the run marked the job as
+ * waiting for its malware scan (lib/scanning/held-password.ts): the scan
+ * retry reads the document later from this payload and drops it then. */
+const SUCCEEDED_PAYLOAD_SQL = `CASE WHEN jsonb_typeof(payload)='object' AND payload->>'heldForScan' IS DISTINCT FROM 'true' THEN payload - 'pdfPassword' - 'heldForScan' ELSE payload END`;
+
 /** Marks a job successfully finished. CAS-guarded on (id, lease_owner,
  * status='processing') -- a worker that has lost its lease can never
  * record success. */
 export async function completeJob(db: DbClient, params: { jobId: string; workerId: string }): Promise<BackgroundJobRow> {
   const result = await db.query<BackgroundJobRow>(
     `UPDATE background_jobs
-        SET status='succeeded', completed_at=now(), lease_owner=NULL, lease_expires_at=NULL, updated_at=now()
+        SET status='succeeded', completed_at=now(), lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${SUCCEEDED_PAYLOAD_SQL}
       WHERE id=$1 AND lease_owner=$2 AND status='processing'
       RETURNING ${COLUMNS}`,
     [params.jobId, params.workerId],
@@ -325,6 +336,7 @@ export async function failJob(
   const result = await db.query<BackgroundJobRow>(
     `UPDATE background_jobs
         SET status = CASE WHEN $3 = 'non_retryable' OR attempt_count >= max_attempts THEN 'dead_letter' ELSE 'failed_retryable' END,
+            payload = CASE WHEN $3 = 'non_retryable' OR attempt_count >= max_attempts THEN ${WITHOUT_PASSWORD_SQL} ELSE payload END,
             available_at = CASE
               WHEN $3 = 'non_retryable' OR attempt_count >= max_attempts THEN available_at
               ELSE now() + (${BACKOFF_EXPR_SQL} || ' milliseconds')::interval
@@ -364,6 +376,7 @@ export async function recoverExpiredLeases(
   const result = await db.query<BackgroundJobRow>(
     `UPDATE background_jobs
         SET status = CASE WHEN attempt_count >= max_attempts THEN 'dead_letter' ELSE 'failed_retryable' END,
+            payload = CASE WHEN attempt_count >= max_attempts THEN ${WITHOUT_PASSWORD_SQL} ELSE payload END,
             available_at = CASE
               WHEN attempt_count >= max_attempts THEN available_at
               ELSE now() + (${BACKOFF_EXPR_SQL} || ' milliseconds')::interval
@@ -403,7 +416,7 @@ export async function recoverExpiredLeases(
  * JobNotFoundError only if the id doesn't exist at all. */
 export async function cancelJob(db: DbClient, params: { jobId: string }): Promise<BackgroundJobRow> {
   const immediate = await db.query<BackgroundJobRow>(
-    `UPDATE background_jobs SET status='cancelled', cancel_requested=true, updated_at=now()
+    `UPDATE background_jobs SET status='cancelled', cancel_requested=true, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
       WHERE id=$1 AND status IN ('queued','failed_retryable')
       RETURNING ${COLUMNS}`,
     [params.jobId],
@@ -435,7 +448,7 @@ export async function cancelJob(db: DbClient, params: { jobId: string }): Promis
 export async function finalizeCancelledJob(db: DbClient, params: { jobId: string; workerId: string }): Promise<BackgroundJobRow> {
   const result = await db.query<BackgroundJobRow>(
     `UPDATE background_jobs
-        SET status='cancelled', lease_owner=NULL, lease_expires_at=NULL, updated_at=now()
+        SET status='cancelled', lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
       WHERE id=$1 AND lease_owner=$2 AND status='processing' AND cancel_requested
       RETURNING ${COLUMNS}`,
     [params.jobId, params.workerId],
