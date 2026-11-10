@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
+import { appDb, benefitTableLive, requeueStuckTableLinks } from "@/lib/benefit-table/app";
 import { figureText } from "@/lib/benefit-table/assemble";
 import { holdReason, tableFor } from "@/lib/benefit-table/service";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
@@ -19,6 +19,8 @@ export async function GET(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
+    // A stored reading whose link run died is queued to link again (bounded; it reads nothing, so it pays for no reading).
+    await requeueStuckTableLinks(accountId).catch(()=>0);
     const {table,documents,links,figureChecks}=await tableFor(appDb,accountId);
     // A document still being read (a long reading's next run, or the run that links its sections) goes on now, after this
     // response, rather than waiting for another page or the daily run (lib/jobs/request-drain.ts: bounded, throttled).

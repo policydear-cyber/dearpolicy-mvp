@@ -30,7 +30,7 @@ const ago = (ms: number) => new Date(NOW - ms).toISOString();
 const DAY = 24 * 3600_000;
 type Policy = { id: string; original_filename: string; processing_status: string; document_role: string | null; product_name: string | null;
   insurer: string | null; policy_number: string | null; processing_completed_at: string | null; quarantine_status: string | null;
-  created_at: string; updated_at: string; reading_live: boolean; linking?: boolean };
+  created_at: string; updated_at: string; reading_live: boolean; link_only?: boolean };
 const policy = (id: string, o: Partial<Policy>): Policy => ({ id, original_filename: `${id}.pdf`, processing_status: "ready", document_role: "personal_schedule",
   product_name: null, insurer: "Example Insurance", policy_number: null, processing_completed_at: ago(3 * DAY), quarantine_status: "scan_clean", created_at: ago(30 * DAY), updated_at: ago(3 * DAY), reading_live: false, ...o });
 
@@ -57,7 +57,7 @@ const policies: Policy[] = [
   policy("unchecked", { product_name: "Example Unchecked Pages" }),                                          // ready, but no page could be checked
   policy("linking", { product_name: "Example Long Wording" }), // its long reading is stored, the run that links its sections is still to come
 ];
-const LINKING = { ...policies.at(-1)!, linking: true };
+const LINKING = { ...policies.at(-1)!, link_only: true };
 policies[policies.length - 1] = LINKING;
 const pages = [
   ...policies.filter((p) => p.id !== "unchecked").map((p) => ({ policy_id: p.id, page_number: 1, text: "SCHEDULE\nLim Ah Kow\tS$100,000", extraction_method: "native" })),
@@ -191,20 +191,44 @@ async function main() {
         await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='policy_processing' AND idempotency_key=$1`, [id + ":retry-read"]);
         cases.push([file, "queued", null, null, want]);
       }
-      // A long document whose reading is stored and whose link run (benefit_table_reading) waits for the next request or the
-      // daily run, however long: waiting. Once that run is gone (dead), it is no longer said to be read now (TE #404).
-      for (const [file, set, want] of [["link-waits-2h.pdf", "status='queued', available_at=now()-interval '2 hours'", "waiting"], ["link-dead.pdf", "status='dead_letter'", "table_unread"]] as const) {
+      // A long document whose reading is stored and whose link run (benefit_table_reading) is still to come, however long it
+      // waits and even when that run died (Coverage queues it again until it links, below): waiting, never "read" with
+      // nothing linked and never "could not be read" (TE #404; DC 10 Nov).
+      for (const [file, set, want] of [["link-waits-2h.pdf", "status='queued', available_at=now()-interval '2 hours'", "waiting"], ["link-dead.pdf", "status='dead_letter'", "waiting"]] as const) {
         const id = randomUUID();
+        const progress = JSON.stringify({ benefitTableProgress: { id: "r1", fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true } });
         await client.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,quarantine_status,document_role,processing_completed_at,extracted_json)
-          VALUES($1,$2,$3,$4,$5,'ready','scan_clean','personal_schedule',now(),'{"benefitTableProgress":{"id":"r1","linkOnly":true}}'::jsonb)`, [id, acct, member, file, `test/${id}`]);
+          VALUES($1,$2,$3,$4,$5,'ready','scan_clean','personal_schedule',now(),$6::jsonb)`, [id, acct, member, file, `test/${id}`, progress]);
         await client.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'SCHEDULE Tan Mei Ling')", [acct, id]);
         await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb)", [acct, `${id}:table-reading:r1:3`]);
         await client.query(`UPDATE background_jobs SET ${set} WHERE job_type='benefit_table_reading' AND idempotency_key=$1`, [`${id}:table-reading:r1:3`]);
         cases.push([file, "ready", "personal_schedule", null, want]);
       }
-      const got = await service.tableFor(async (sql, params) => (await client.query(sql, params as unknown[])).rows, acct);
+      const realDb: service.Db = async (sql, params) => (await client.query(sql, params as unknown[])).rows;
+      const got = await service.tableFor(realDb, acct);
       const by = Object.fromEntries(got.documents.map((d) => [d.name, d.state]));
       for (const [file, , , , want] of cases) assert.equal(by[file], want, file);
+
+      // A dead link run is queued again when Coverage opens (requeueStuckLinks), later each time, until it links: never given
+      // up on. A link run still queued is never queued twice. Queuing it reads nothing (the link run makes no reading call:
+      // long-document-test K10).
+      const { requeueStuckLinks } = await import("@/lib/benefit-table/app");
+      const queued: { policyId: string; id: string; attempt: number; delayMs: number }[] = [];
+      const later = async (policyId: string, id: string, attempt: number, delayMs: number) => { queued.push({ policyId, id, attempt, delayMs }); };
+      const deadId = (await client.query("SELECT id::text FROM policies WHERE account_id=$1 AND original_filename='link-dead.pdf'", [acct])).rows[0].id as string;
+      assert.equal(await requeueStuckLinks(realDb, acct, later), 1, "only the dead link run is queued again: the waiting one has its job");
+      assert.deepEqual(queued.map((q) => [q.policyId, q.id, q.attempt]), [[deadId, "r1", 2]]);
+      for (let i = 0; i < 8; i++) await requeueStuckLinks(realDb, acct, later);
+      assert.equal(queued.length, 9, "queued again every time it is still not linked: never given up on");
+      assert.deepEqual(queued.map((q) => q.attempt), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.ok(queued.every((q, i) => i === 0 || q.delayMs >= queued[i - 1].delayMs) && queued.at(-1)!.delayMs <= 6 * 3600_000, "later each time, at most 6 hours");
+      const still = Object.fromEntries((await service.tableFor(realDb, acct)).documents.map((d) => [d.name, d.state]));
+      assert.equal(still["link-dead.pdf"], "waiting", "still being read, never 'could not be read'");
+      const notes = (await client.query("SELECT extracted_json->'documentNotes' AS n FROM policies WHERE id=$1", [deadId])).rows[0].n;
+      assert.ok(!JSON.stringify(notes ?? []).includes("could not"), "no 'could not be read' note");
+      // Its link job queued now: not queued again.
+      await client.query("INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES($1,'benefit_table_reading',$2,'{}'::jsonb)", [acct, `${deadId}:table-reading:r1:link-10`]);
+      assert.equal(await requeueStuckLinks(realDb, acct, later), 0);
     } finally {
       await client.query("ROLLBACK").catch(() => undefined);
       await client.end();

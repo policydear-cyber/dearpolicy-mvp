@@ -6,26 +6,38 @@
  *   calls count against the one reading's limit;
  * - it does nothing, and pays nothing, when the table is off, the document is gone, or a fresh reading (Read again)
  *   replaced the one it goes on with;
- * - at most MAX_TABLE_READING_RUNS continuations per reading, one attempt each (a failed paid run is never retried by the
- *   queue). A reading still unfinished after that says its table could not be read, and Read again starts a fresh one.
+ * - one attempt per job (a failed paid run is never retried by the queue); the reading is never given up on (DC, 10 Nov): it
+ *   goes on run after run until the whole document is read, each run reading only what is left. A run that paid for a call
+ *   and read nothing makes the next one wait longer (service.ts readingRetryDelayMs), and after a few such runs in a row the
+ *   operator is told in the logs. MAX_TABLE_READING_RUNS is only where that telling starts for a slow reading.
  * SQL text and queue calls only: no model import. */
 import { enqueueJob } from "@/lib/jobs/queue";
 import type { pool } from "@/lib/db/client";
 import { TABLE_READING_JOB_TYPE } from "@/lib/rag/live-job";
 export { TABLE_READING_JOB_TYPE };
+/** Runs after which a reading still going on is reported to the operator (logs); it still goes on. */
 export const MAX_TABLE_READING_RUNS = 10;
 export type TableReadingPayload = { policyId: string; id: string; run: number };
 
 /** Queues continuation `run` (1-based) of the reading named `id`. Idempotent per reading and run. */
-export async function enqueueTableReading(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, run: number) {
-  // One run past the last: a reading finished by the last run with no time left to link its sections links them there.
-  if (run < 1 || run > MAX_TABLE_READING_RUNS + 1) return null;
+export async function enqueueTableReading(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, run: number, delayMs = 0) {
+  if (run < 1) return null;
   const payload: TableReadingPayload = { policyId, id, run };
-  return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:${run}`, payload, accountId, maxAttempts: 1 });
+  return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:${run}`, payload, accountId, maxAttempts: 1,
+    ...(delayMs > 0 ? { availableAt: new Date(Date.now() + delayMs) } : {}) });
 }
 
 export function tableReadingPayload(raw: unknown): TableReadingPayload {
   const p = (raw ?? {}) as Record<string, unknown>;
   if (typeof p.policyId !== "string" || !p.policyId || typeof p.id !== "string" || !p.id || !Number.isInteger(p.run)) throw new Error("table reading job payload is malformed");
   return { policyId: p.policyId, id: p.id, run: p.run as number };
+}
+
+/** Queues link run `attempt` (1-based) of the stored reading named `id`: it links the reading's sections to covers and reads
+ * nothing (app.ts readIntoTable, linkOnly). Its own key per attempt, so a link run queued again after one died is a new job,
+ * each one later than the last (linkRetryDelayMs); it is queued until the reading is linked. */
+export async function enqueueTableLink(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, attempt: number, delayMs = 0) {
+  const payload: TableReadingPayload = { policyId, id, run: 0 };
+  return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:link-${attempt}`, payload, accountId, maxAttempts: 1,
+    ...(delayMs > 0 ? { availableAt: new Date(Date.now() + delayMs) } : {}) });
 }

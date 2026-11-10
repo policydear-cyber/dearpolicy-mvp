@@ -631,16 +631,15 @@ async function main() {
     r = await readIntoTable(k4b.db, m4b.model, A, "doc", { retry: true, continueLater: async () => undefined });
     assert.equal(m4b.calls.length, 0, "K4: a retry with nothing carried: no call");
 
-    // K5: a reading still unfinished after the last run says so, and nothing more is queued.
+    // K5: a reading is never given up on (DC, 10 Nov): a run past MAX_TABLE_READING_RUNS still goes on with what is left and
+    // queues the next one; no "could not be read" note.
     const k5clock = { t: 0 }, k5 = carriedDb(pages), m5 = priced({ worse: 1.9, clock: k5clock }), q5: { id: string; run: number }[] = [];
     await readIntoTable(k5.db, m5.model, A, "doc", { deadline: 150_000, now: () => k5clock.t, continueLater: async (id, run) => { q5.push({ id, run }); } });
     r = await readIntoTable(k5.db, m5.model, A, "doc", { deadline: k5clock.t + 150_000, now: () => k5clock.t, continuation: { id: q5[0].id, run: MAX_TABLE_READING_RUNS }, continueLater: async (id, run) => { q5.push({ id, run }); } });
-    assert.equal(r.read, false, "K5: this run cannot finish the reading either");
-    {
-      assert.equal(q5.length, 1, "K5: no run after the last");
-      assert.deepEqual(k5.s.notes, [UNREAD_TABLE_NOTE("22 October 2026")]);
-      assert.equal(k5.st.progress, null);
-    }
+    assert.equal(r.carried, true, "K5: goes on past the tenth run");
+    assert.equal(q5.at(-1)!.run, MAX_TABLE_READING_RUNS + 1, "K5: the next run is queued");
+    assert.deepEqual(k5.s.notes, [], "K5: never 'could not be read'");
+    assert.ok(k5.st.progress, "K5: the reading so far is kept");
 
     // K6: a part cut off although its call had a whole run's time is read as two halves next run, not paid again whole.
     const k6clock = { t: 0 }, k6 = carriedDb(booklet(30, 10)), m6 = priced({ worse: 6, clock: k6clock }), q6: { id: string; run: number }[] = [];
@@ -692,12 +691,100 @@ async function main() {
     const { enqueueTableReading } = await import("@/lib/benefit-table/table-reading-job");
     const enq: unknown[] = [];
     const fakeQueue = { query: (async (_sql: string, params: unknown[]) => { enq.push(params); return { rows: [{ id: "j", status: "queued" }], rowCount: 1 }; }) } as never;
-    assert.equal(await enqueueTableReading(fakeQueue, A, "doc", "x", MAX_TABLE_READING_RUNS + 2), null, "K9: never more than one run past the last");
+    assert.ok(await enqueueTableReading(fakeQueue, A, "doc", "x", MAX_TABLE_READING_RUNS + 1), "K9: a run past the tenth is queued: never given up on");
+    assert.equal(await enqueueTableReading(fakeQueue, A, "doc", "x", 0), null);
+    // K10: a link run queued again after one died (requeueStuckLinks) links the stored reading and pays for no reading.
+    const k10 = carriedDb(pages), m10 = priced();
+    k10.st.progress = JSON.stringify({ id: "stored", fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true, linkAttempts: 2 });
+    r = await readIntoTable(k10.db, m10.model, A, "doc", { continuation: { id: "stored", run: MAX_TABLE_READING_RUNS + 1 }, continueLater });
+    assert.equal(r.relinked, true, "K10: linked");
+    assert.equal(m10.calls.filter((x) => x.maxTokens === READ_MAX_OUTPUT).length, 0, "K10: no reading paid");
+    assert.equal(k10.st.progress, null, "K10: nothing left carried");
+    // The first link run goes through linkLater (its own job key per attempt), never as a reading run.
+    const k10b = carriedDb(pages), k10clock = { t: 0 }, m10b = priced({ worse: 1.9, clock: k10clock });
+    const linkCalls: number[] = [];
+    for (let runMs = 100_000; runMs <= 290_000 && !linkCalls.length; runMs += 5_000) {
+      const kk = carriedDb(pages), clk = { t: 0 }, mm = priced({ worse: 1.9, clock: clk }), qq: { id: string; run: number }[] = [];
+      await readIntoTable(kk.db, mm.model, A, "doc", { deadline: runMs, now: () => clk.t, continueLater: async (id, run) => { qq.push({ id, run }); }, linkLater: async (_id, attempt) => { linkCalls.push(attempt); } });
+      for (let g = 0; qq.length && g < MAX_TABLE_READING_RUNS; g++) { const nx = qq.shift()!, st = clk.t; await readIntoTable(kk.db, mm.model, A, "doc", { deadline: st + runMs, now: () => clk.t, continuation: nx, continueLater: async (id, run) => { qq.push({ id, run }); }, linkLater: async (_id, attempt) => { linkCalls.push(attempt); } }); }
+    }
+    void k10b; void m10b; void k10clock;
+    assert.deepEqual(linkCalls, [1], "K10: the first link run is attempt 1, queued through linkLater");
+
+
+    // K11: a reading that needs more than MAX_TABLE_READING_RUNS runs (one part a run) finishes, and no part is paid twice.
+    {
+      const big = booklet(120, 40);
+      const one = carriedDb(big), om = priced();
+      assert.equal((await readIntoTable(one.db, om.model, A, "doc")).read, true);
+      const partsWhole = om.calls.filter((x) => x.maxTokens === READ_MAX_OUTPUT).length;
+      let best = 0;
+      for (const runMs of [150_000, 200_000, 290_000]) {
+        const k = carriedDb(big), clk = { t: 0 }, mm = priced({ clock: clk }), qq: { id: string; run: number; delayMs?: number }[] = [];
+        const later = async (id: string, run: number, delayMs?: number) => { qq.push({ id, run, delayMs }); };
+        let rr = await readIntoTable(k.db, mm.model, A, "doc", { deadline: runMs, now: () => clk.t, continueLater: later });
+        let runs11 = 1;
+        while (qq.length && runs11 < 200) { const nx = qq.shift()!, st = clk.t; rr = await readIntoTable(k.db, mm.model, A, "doc", { deadline: st + runMs, now: () => clk.t, continuation: nx, continueLater: later }); runs11++; }
+        assert.equal(rr.read, true, `K11 (${runMs} ms runs): finished after ${runs11} runs: ${rr.why}`);
+        const paid = mm.calls.filter((x) => x.maxTokens === READ_MAX_OUTPUT);
+        assert.equal(paid.length, partsWhole, `K11 (${runMs} ms runs): each part paid once over ${runs11} runs`);
+        assert.equal(new Set(paid.map((x) => x.pages.join(","))).size, paid.length, "K11: no part paid twice");
+        assert.deepEqual(k.s.notes, [], "K11: never 'could not be read'");
+        best = Math.max(best, runs11);
+      }
+      assert.ok(best > MAX_TABLE_READING_RUNS, `K11: some run length needs more than ${MAX_TABLE_READING_RUNS} runs (${best})`);
+    }
+    // K12: a reading call that fails (the service is down: no reply) is tried again next run, later each time, never given
+    // up on; a part read before is never paid again.
+    {
+      const k = carriedDb(pages), clk = { t: 0 }, base = priced({ worse: 1.9, clock: clk }), qq: { id: string; run: number; delayMs?: number }[] = [];
+      let down = 0;
+      const flaky: TableModel = { choice: base.model.choice, async call(c) { if (down > 0) { down--; clk.t += 1_000; return { json: null, stopReason: "error", model: "stand-in", input: 0, output: 0, ms: 1_000 }; } return base.model.call(c); } };
+      const later = async (id: string, run: number, delayMs?: number) => { qq.push({ id, run, delayMs }); };
+      let rr = await readIntoTable(k.db, flaky, A, "doc", { deadline: 150_000, now: () => clk.t, continueLater: later });
+      assert.equal(rr.carried, true);
+      down = 3; // the next three runs each fail their first call
+      const delays: number[] = [];
+      let n12 = 0;
+      while (qq.length && n12++ < 50) { const nx = qq.shift()!; delays.push(nx.delayMs ?? 0); const st = clk.t; rr = await readIntoTable(k.db, flaky, A, "doc", { deadline: st + 150_000, now: () => clk.t, continuation: nx, continueLater: later }); }
+      assert.equal(rr.read, true, `K12: finished: ${rr.why}`);
+      const stallDelays = delays.slice(1, 4);
+      assert.ok(stallDelays.every((d, i) => d > 0 && (i === 0 || d > stallDelays[i - 1])), `K12: later each time it fails: ${delays}`);
+      const paid = base.calls.filter((x) => x.maxTokens === READ_MAX_OUTPUT);
+      assert.equal(new Set(paid.map((x) => x.pages.join(","))).size, paid.length, "K12: no part paid twice");
+      assert.deepEqual(k.s.notes, []);
+    }
+    // K13: a single page that keeps running out of output is tried PAGE_MAX_TRIES times, then read past; the rest of the
+    // document is read and stored, never "could not be read".
+    {
+      const { PAGE_MAX_TRIES } = await import("@/lib/benefit-table/service");
+      const k = carriedDb(booklet(4, 10)), base = priced(), qq: { id: string; run: number }[] = [];
+      let bad = 0, stubbornAlone = 0;
+      const stubborn: TableModel = { choice: base.model.choice, async call(c) {
+        const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN);
+        const shown = [...c.user.matchAll(/<page n="(\d+)">/g)].map((m) => Number(m[1])).filter((n) => n !== context);
+        if (shown.includes(2)) { bad++; if (shown.length === 1) stubbornAlone++; return { json: null, stopReason: "max_tokens", model: "stand-in", input: 10, output: c.maxTokens, ms: 1 }; }
+        return base.model.call(c);
+      } };
+      const later = async (id: string, run: number) => { qq.push({ id, run }); };
+      // Parts of one page each, so page 2 is a part of its own.
+      k.st.progress = null;
+      let rr = await readIntoTable(k.db, stubborn, A, "doc", { deadline: 10_000_000, now: () => 0, continueLater: later });
+      let n13 = 0;
+      while (qq.length && n13++ < 20) rr = await readIntoTable(k.db, stubborn, A, "doc", { deadline: 10_000_000, now: () => 0, continuation: qq.shift()!, continueLater: later });
+      assert.equal(rr.read, true, `K13: the rest is read and stored: ${rr.why}`);
+      const alone = stubbornAlone;
+      assert.equal(alone, PAGE_MAX_TRIES, `K13: the stubborn page on its own is paid ${PAGE_MAX_TRIES} times, then read past (${alone} alone, ${bad} calls read it)`);
+      assert.deepEqual(k.s.notes, []);
+    }
 
     // K8: wired: the document job passes continueLater; the job is registered; ingest keeps the carried reading.
     const { readFileSync } = await import("node:fs");
     const app = readFileSync(new URL("../../lib/benefit-table/app.ts", import.meta.url), "utf8");
-    assert.match(app, /continueLater: \(id, run\) => enqueueTableReading\(pool, accountId, policyId, id, run\)/);
+    assert.match(app, /continueLater: \(id, run, delayMs\) => enqueueTableReading\(pool, accountId, policyId, id, run, delayMs\)/);
+    assert.match(app, /linkLater: \(id, attempt\) => enqueueTableLink\(pool, accountId, policyId, id, attempt\)/);
+    const route = readFileSync(new URL("../../app/api/benefit-table/route.ts", import.meta.url), "utf8");
+    assert.match(route, /await requeueStuckTableLinks\(accountId\)/, "K8: opening Coverage queues a dead link run again");
     const processors = readFileSync(new URL("../../lib/jobs/processors.ts", import.meta.url), "utf8");
     assert.match(processors, /jobType: TABLE_READING_JOB_TYPE, process: .*processTableReadingJob\(job\)/);
     const ingest = readFileSync(new URL("../../lib/rag/ingest.ts", import.meta.url), "utf8");
