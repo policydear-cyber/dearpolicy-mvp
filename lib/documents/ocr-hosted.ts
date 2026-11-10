@@ -1,4 +1,4 @@
-import { PDFDocument, concatTransformationMatrix, degrees, drawObject, popGraphicsState, pushGraphicsState } from "pdf-lib";
+import { PDFDocument, type PDFPage, concatTransformationMatrix, degrees, drawObject, popGraphicsState, pushGraphicsState } from "pdf-lib";
 import { randomUUID } from "node:crypto";
 import { costUsd, documentReaderFor, hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
@@ -23,14 +23,34 @@ type BridgePage = { pageNumber: number; text: string; orientation?: "upright" | 
  * cannot be copied page by page: pdf-lib does not decrypt, so the copied page kept its encrypted image and the reader
  * was sent noise (overnight check, 10 Nov: the copy would not even render). For such a file, each scanned page is
  * rebuilt from its decoded image (PDF.js opens the file with the household's password, or none for an owner-only
- * lock). A page that is not exactly one image is copied as before. The password is only handed to PDF.js. */
+ * lock). A page that is not exactly one image is copied as before. The password is only handed to PDF.js.
+ *
+ * A locked file saved with object streams (Acrobat and most PDF 1.5+ writers) cannot be opened by pdf-lib at all: the
+ * page tree sits inside an encrypted stream ("Expected instance of PDFDict", TE #410). Then every page is rebuilt from
+ * PDF.js alone; a page it cannot rebuild (not exactly one image) throws PageCopyUnavailable naming it, and the caller
+ * marks those pages as not read, so the document is never left waiting on a copy that can never be made. */
+export class PageCopyUnavailable extends Error {
+  readonly pages: number[];
+  constructor(pages: number[]) { super("page copy unavailable"); this.name = "PageCopyUnavailable"; this.pages = pages; }
+}
 export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map(), password?: string) {
-  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
-  const out = await PDFDocument.create({ updateMetadata: false });
-  const rebuilt = source.isEncrypted ? await decodedPageImages(bytes, pageNumbers, password) : new Map<number, DecodedPage>();
-  const copied = await out.copyPages(source, pageNumbers.map((n) => n - 1));
-  for (const [i, page] of copied.entries()) {
-    const n = pageNumbers[i];
+  let out = await PDFDocument.create({ updateMetadata: false });
+  let source: PDFDocument | null = null, copied: PDFPage[] | null = null;
+  try {
+    source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    copied = await out.copyPages(source, pageNumbers.map((n) => n - 1));
+  } catch {
+    // pdf-lib cannot read this file's structure: a fresh output, with nothing half-copied into it.
+    source = null; copied = null;
+    out = await PDFDocument.create({ updateMetadata: false });
+  }
+  const rebuilt = !copied || source?.isEncrypted ? await decodedPageImages(bytes, pageNumbers, password) : new Map<number, DecodedPage>();
+  if (!copied) {
+    const lost = pageNumbers.filter((n) => !rebuilt.has(n));
+    if (lost.length) throw new PageCopyUnavailable(lost);
+  }
+  for (const [i, n] of pageNumbers.entries()) {
+    const page = copied?.[i];
     const by = turn.get(n) ?? 0;
     const image = rebuilt.get(n);
     if (image) {
@@ -45,6 +65,7 @@ export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: 
       if (angle) fresh.setRotation(degrees(angle));
       continue;
     }
+    if (!page) throw new PageCopyUnavailable([n]);
     if (by) page.setRotation(degrees((((page.getRotation().angle + by) % 360) + 360) % 360));
     out.addPage(page);
   }

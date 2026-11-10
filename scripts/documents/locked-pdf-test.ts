@@ -128,6 +128,24 @@ async function main() {
     assert.equal(plain.rotate, 180);
     assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-aes256.pdf"), [1], turn, PASSWORD)), plain);
   });
+  // TE #410: saved with object streams (Acrobat, most PDF 1.5+ writers), pdf-lib cannot open a locked file at all; the
+  // page is rebuilt from PDF.js alone, the same as the plain one shows.
+  await test("a locked scan saved with object streams (open password) is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm.pdf"), [1], undefined, PASSWORD)), plainScan);
+  });
+  await test("an owner-only lock saved with object streams is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-owner-only-objstm.pdf"), [1])), plainScan);
+  });
+  await test("an object-stream locked scan turned for a second read turns like the plain one", async () => {
+    const turn = new Map([[1, 270]]);
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm.pdf"), [1], turn, PASSWORD)), await painted(await subsetPdf(fixture("scan-plain.pdf"), [1], turn)));
+  });
+  await test("a page PDF.js alone cannot rebuild is named (PageCopyUnavailable), never sent as noise", async () => {
+    const { PageCopyUnavailable } = await import("@/lib/documents/ocr-hosted");
+    await assert.rejects(subsetPdf(fixture("scan-locked-objstm-2p.pdf"), [1, 2], undefined, PASSWORD), (e: unknown) => e instanceof PageCopyUnavailable && e.pages.join() === "2");
+    await assert.rejects(subsetPdf(fixture("scan-locked-objstm.pdf"), [1]), (e: unknown) => e instanceof PageCopyUnavailable && e.pages.join() === "1"); // no password
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm-2p.pdf"), [1], undefined, PASSWORD)), plainScan);
+  });
   await test("a locked scan with no password is copied as before (never fails the read)", async () => {
     const out = await subsetPdf(fixture("scan-locked-aes256.pdf"), [1]);
     assert.ok(out.length > 0);

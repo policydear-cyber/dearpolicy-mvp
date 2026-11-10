@@ -311,6 +311,24 @@ async function main() {
   assert.equal(out[1].text, PAGE_A, "after the cool-down Baidu reads again");
   process.env.BAIDU_OCR_COOLDOWN_MS = "0";
 
+  // 14. TE #410: a locked file saved with object streams that pdf-lib cannot open. Page 1 (one image) is rebuilt by
+  // PDF.js and read; page 2 (two images) cannot be copied for any reader, so it is marked NOT READ (named to the person),
+  // and the document finishes instead of failing its job over and over.
+  {
+    const { readFileSync } = await import("node:fs");
+    const locked = new Uint8Array(readFileSync(require("node:path").join(__dirname, "fixtures", "scan-locked-objstm-2p.pdf")));
+    const blank = [1, 2].map((n) => ({ pageNumber: n, text: "" })) as unknown as Awaited<ReturnType<typeof extractPdfPages>>;
+    seen = []; baidu = baiduJob([vlLine(["Baidu page 1"])]);
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: locked, password: "Harbour-2026", pages: blank, pageNumbers: [1, 2] });
+    assert.equal(out[0].text, "AI reading of page 1", "the page PDF.js rebuilt is read");
+    assert.equal(out[1].notRead, true, "the page no reader can be sent is named as not read"); assert.equal(out[1].unreadable, true);
+    assert.equal(aiCalls().length, 1); assert.match(aiCalls()[0].body.messages[1].content[1].text, /in this order: 1\./);
+    // Without the password nothing can be rebuilt: every page is named, no reader is sent noise.
+    seen = [];
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: locked, pages: blank, pageNumbers: [1, 2] });
+    assert.deepEqual(out.map((p) => p.notRead), [true, true]); assert.equal(aiCalls().length, 0);
+  }
+
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
 
