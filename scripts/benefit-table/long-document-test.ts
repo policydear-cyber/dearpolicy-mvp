@@ -693,6 +693,9 @@ async function main() {
     const fakeQueue = { query: (async (_sql: string, params: unknown[]) => { enq.push(params); return { rows: [{ id: "j", status: "queued" }], rowCount: 1 }; }) } as never;
     assert.ok(await enqueueTableReading(fakeQueue, A, "doc", "x", MAX_TABLE_READING_RUNS + 1), "K9: a run past the tenth is queued: never given up on");
     assert.equal(await enqueueTableReading(fakeQueue, A, "doc", "x", 0), null);
+    // A run queued again after the one meant to go on died (requeueStuckTableWork) has a key of its own: a new job.
+    await enqueueTableReading(fakeQueue, A, "doc", "x", 5, 0, 3);
+    assert.ok(JSON.stringify(enq.at(-1)).includes("doc:table-reading:x:again-3"), "K9: queued again under its own key");
     // K10: a link run queued again after one died (requeueStuckLinks) links the stored reading and pays for no reading.
     const k10 = carriedDb(pages), m10 = priced();
     k10.st.progress = JSON.stringify({ id: "stored", fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true, linkAttempts: 2 });
@@ -775,6 +778,59 @@ async function main() {
       assert.equal(rr.read, true, `K13: the rest is read and stored: ${rr.why}`);
       const alone = stubbornAlone;
       assert.equal(alone, PAGE_MAX_TRIES, `K13: the stubborn page on its own is paid ${PAGE_MAX_TRIES} times, then read past (${alone} alone, ${bad} calls read it)`);
+      // Read past is never silent (Critic and TE #404): the stored reading names the page, and the document says so.
+      const { READ_PAST_TABLE_NOTE } = await import("@/lib/benefit-table/service");
+      assert.deepEqual(rr.skipped, [2]);
+      assert.deepEqual(JSON.parse(k.s.readings.get("doc")!.reading).skippedPages, [2], "K13: the page read past is stored");
+      assert.deepEqual(k.s.notes, [READ_PAST_TABLE_NOTE([2])], "K13: the document names the page it could not read, never 'could not be read' as a whole");
+    }
+    // K13b: any other call that gives no reading (a refusal, a reply that is not a valid reading) is bounded the same way: a
+    // part of several pages is read as halves, and a single page is tried PAGE_MAX_TRIES times, then read past.
+    for (const stop of ["refusal", "end_turn"]) {
+      const { PAGE_MAX_TRIES } = await import("@/lib/benefit-table/service");
+      const k = carriedDb(booklet(4, 10)), base = priced(), qq: { id: string; run: number }[] = [];
+      let alone = 0, calls = 0;
+      const refusing: TableModel = { choice: base.model.choice, async call(c) {
+        const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN);
+        const shown = [...c.user.matchAll(/<page n="(\d+)">/g)].map((m) => Number(m[1])).filter((n) => n !== context);
+        calls++;
+        if (shown.includes(3)) { if (shown.length === 1) alone++; return { json: null, stopReason: stop, model: "stand-in", input: 10, output: 5, ms: 1 }; }
+        return base.model.call(c);
+      } };
+      const later = async (id: string, run: number) => { qq.push({ id, run }); };
+      let rr = await readIntoTable(k.db, refusing, A, "doc", { deadline: 10_000_000, now: () => 0, continueLater: later });
+      let n = 0;
+      while (qq.length && n++ < 30) rr = await readIntoTable(k.db, refusing, A, "doc", { deadline: 10_000_000, now: () => 0, continuation: qq.shift()!, continueLater: later });
+      assert.equal(rr.read, true, `K13b (${stop}): the rest is read and stored: ${rr.why}`);
+      assert.equal(alone, PAGE_MAX_TRIES, `K13b (${stop}): the page on its own is paid ${PAGE_MAX_TRIES} times (${alone})`);
+      assert.ok(calls < 20, `K13b (${stop}): bounded (${calls} calls)`);
+      assert.deepEqual(JSON.parse(k.s.readings.get("doc")!.reading).skippedPages, [3]);
+    }
+    // K14: before a page is read past it is tried with the stronger reader and more room (DC, 10 Nov: accuracy before cost).
+    // Here the stronger reader reads it: nothing is read past, and the normal reader paid for the page alone once.
+    {
+      const { STRONG_MAX_OUTPUT } = await import("@/lib/benefit-table/service");
+      const k = carriedDb(booklet(4, 10)), base = priced(), strongBase = priced(), qq: { id: string; run: number }[] = [];
+      let alone = 0;
+      const pageOf = (c: { user: string }) => { const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN); return [...c.user.matchAll(/<page n="(\d+)">/g)].map((m) => Number(m[1])).filter((n) => n !== context); };
+      const stubborn: TableModel = { choice: base.model.choice, async call(c) {
+        const shown = pageOf(c);
+        if (shown.includes(2)) { if (shown.length === 1) alone++; return { json: null, stopReason: "max_tokens", model: "stand-in", input: 10, output: c.maxTokens, ms: 1 }; }
+        return base.model.call(c);
+      } };
+      const strongCalls: number[] = [];
+      const strong: TableModel = { choice: { provider: "anthropic", model: "stand-in-strong" }, async call(c) { strongCalls.push(c.maxTokens); return strongBase.model.call(c); } };
+      const strongUsage: string[] = [];
+      const later = async (id: string, run: number) => { qq.push({ id, run }); };
+      const opts = { deadline: 10_000_000, now: () => 0, continueLater: later, strong: { model: strong, onUsage: (what: string) => { strongUsage.push(what); } } };
+      let rr = await readIntoTable(k.db, stubborn, A, "doc", opts);
+      let n = 0;
+      while (qq.length && n++ < 20) rr = await readIntoTable(k.db, stubborn, A, "doc", { ...opts, continuation: qq.shift()! });
+      assert.equal(rr.read, true, `K14: read: ${rr.why}`);
+      assert.equal(alone, 1, "K14: the normal reader paid for the page alone once");
+      assert.deepEqual(strongCalls, [STRONG_MAX_OUTPUT], "K14: the stronger reader read it, once, with more room");
+      assert.deepEqual(strongUsage, ["reading"], "K14: its call is booked at its own price");
+      assert.equal(JSON.parse(k.s.readings.get("doc")!.reading).skippedPages, undefined, "K14: nothing read past");
       assert.deepEqual(k.s.notes, []);
     }
 
@@ -782,9 +838,15 @@ async function main() {
     const { readFileSync } = await import("node:fs");
     const app = readFileSync(new URL("../../lib/benefit-table/app.ts", import.meta.url), "utf8");
     assert.match(app, /continueLater: \(id, run, delayMs\) => enqueueTableReading\(pool, accountId, policyId, id, run, delayMs\)/);
-    assert.match(app, /linkLater: \(id, attempt\) => enqueueTableLink\(pool, accountId, policyId, id, attempt\)/);
+    assert.match(app, /linkLater: \(id, attempt, delayMs\) => enqueueTableLink\(pool, accountId, policyId, id, attempt, delayMs\)/);
+    assert.match(app, /readIntoTable\(appDb, model, accountId, policyId, \{ \.\.\.opts, strong,/, "K8: the stronger reader is passed in");
+    assert.doesNotMatch(app, /overSpendCap|assertUnderSpendCap/, "K8: reading is not limited by the spend limit (DC, 10 Nov)");
+    const drain = readFileSync(new URL("../../lib/jobs/request-drain.ts", import.meta.url), "utf8");
+    assert.match(drain, /requeueStuckTableWorkEverywhere\(\);\n\s*if \(!\(await hasClaimableWork\(\)\)\)/, "K8: the drain queues stuck table work again before it looks for work");
+    const cron = readFileSync(new URL("../../app/api/internal/jobs/run/route.ts", import.meta.url), "utf8");
+    assert.match(cron, /await requeueStuckTableWorkEverywhere\(\);/, "K8: so does the daily run");
     const route = readFileSync(new URL("../../app/api/benefit-table/route.ts", import.meta.url), "utf8");
-    assert.match(route, /await requeueStuckTableLinks\(accountId\)/, "K8: opening Coverage queues a dead link run again");
+    assert.match(route, /await requeueStuckTableReadings\(accountId\)/, "K8: opening Coverage queues a dead link run again");
     const processors = readFileSync(new URL("../../lib/jobs/processors.ts", import.meta.url), "utf8");
     assert.match(processors, /jobType: TABLE_READING_JOB_TYPE, process: .*processTableReadingJob\(job\)/);
     const ingest = readFileSync(new URL("../../lib/rag/ingest.ts", import.meta.url), "utf8");

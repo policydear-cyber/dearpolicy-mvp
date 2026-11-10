@@ -65,6 +65,15 @@ async function main() {
     assert.match(a.bottomLine!, /Osprey Critical Care could not be read, Plover Accident Plan was read only in part and Gannet Saver is still being read, so any cover in them is not counted here/);
     assert.doesNotMatch(a.bottomLine!, /Harbour Term Life (could|was|is still)/);
   });
+  await check("a policy whose table reading read past a page names that page: never read as her whole cover (Critic and TE #404)", async () => {
+    const { tableStateKey } = await import("@/lib/benefit-table/service");
+    const a = answer([{ person: JANE }]);
+    noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [23] })]]));
+    assert.match(a.bottomLine!, /This may not be all of Jane Doe’s cover: Kestrel Whole Life was read only in part \(page 23 could not be read\), so any cover in it is not counted here/);
+    const b = answer([{ person: JANE }]);
+    noteCoverNotCounted(b, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [4, 23] })]]));
+    assert.match(b.bottomLine!, /Kestrel Whole Life was read only in part \(pages 4 and 23 could not be read\)/);
+  });
   await check("receipts, superseded copies and another person's documents are never named", () => {
     const a = answer([{ person: JANE }]);
     assert.equal(noteCoverNotCounted(a, HOUSE([READ, RECEIPT, OLD, JOHNS]), null), null);

@@ -2264,6 +2264,11 @@ function notCountedWhy(d: HouseholdDocument, tableStates: ReadonlyMap<string, st
   if (unreadable(d)) return "could not be read";
   const state = tableStates?.get(d.policyId);
   if (state && TABLE_STATE_WORDS[state]) return TABLE_STATE_WORDS[state];
+  // Read with pages read past (lib/benefit-table/service.ts tableStateKey: "read_in_part:23,24"): the pages are named.
+  if (state?.startsWith("read_in_part")) {
+    const pages = state.slice("read_in_part:".length).split(",").filter((n) => /^\d+$/.test(n));
+    return pages.length ? `was read only in part (${pages.length === 1 ? `page ${pages[0]}` : `pages ${andList(pages)}`} could not be read)` : "was read only in part";
+  }
   if (readInPart(d)) return "was read only in part";
   return null;
 }

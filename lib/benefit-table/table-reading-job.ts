@@ -19,11 +19,12 @@ export { TABLE_READING_JOB_TYPE };
 export const MAX_TABLE_READING_RUNS = 10;
 export type TableReadingPayload = { policyId: string; id: string; run: number };
 
-/** Queues continuation `run` (1-based) of the reading named `id`. Idempotent per reading and run. */
-export async function enqueueTableReading(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, run: number, delayMs = 0) {
+/** Queues continuation `run` (1-based) of the reading named `id`. Idempotent per reading and run. `again`: the run is
+ * queued again after the one meant to go on died (app.ts requeueStuckTableWork), under its own key, so it is a new job. */
+export async function enqueueTableReading(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, run: number, delayMs = 0, again?: number) {
   if (run < 1) return null;
   const payload: TableReadingPayload = { policyId, id, run };
-  return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:${run}`, payload, accountId, maxAttempts: 1,
+  return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:${again ? `again-${again}` : run}`, payload, accountId, maxAttempts: 1,
     ...(delayMs > 0 ? { availableAt: new Date(Date.now() + delayMs) } : {}) });
 }
 

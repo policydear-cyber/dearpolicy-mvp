@@ -57,3 +57,4 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client, opts: 
     },
   };
 }
+
