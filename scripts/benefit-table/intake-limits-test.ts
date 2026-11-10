@@ -361,7 +361,9 @@ for (const { m, person, sign } of MARKETS) {
   const gpaReading = checkReading({ id: GPA, name: "Certificate.pdf", readable: true, pages: gpaPages }, reading("personal_proof", "Group Scheme",
     [{ person, product: "Group Scheme", cover: "Group Personal Accident", plan: null, sumInsured: 200000, asOf: null, startDate: "01/04/2026", endDate: "31/03/2027", page: 1, quote: `${person}\t${sign}200,000` }],
     [b({ section: "GROUP PERSONAL ACCIDENT", benefit: "Accidental death", pays: "amount", value: 200000, quote: `${person}\t${sign}200,000` })], { from: "01/04/2026", to: "31/03/2027" }));
-  const family: FamilyMember[] = [{ id: "p1", display_name: person }];
+  // The trip's personal accident row is printed for adults below 70: it is the person's because the household entered a
+  // date of birth that puts them in that group (assemble.ts tierProblem; 10 Nov).
+  const family: FamilyMember[] = [{ id: "p1", display_name: person, date_of_birth: "1985-06-15" }];
   const trip = coverKeyOf({ product: "Travel insurance summary", cover: "Single Trip", plan: "Business" });
   const gpa = coverKeyOf({ product: "Group Scheme", cover: "Group Personal Accident", plan: null });
   const links = [{ section: sectionKeyOf(TRIP, { section: "Section 3 Personal accident", column: null }), cover: trip, why: "the trip" },

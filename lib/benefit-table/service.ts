@@ -131,8 +131,9 @@ export async function tableReady(db: Db): Promise<boolean> {
 }
 
 async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
-  return (await db("SELECT id, display_name, preferred_name FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at", [accountId]))
-    .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name) }));
+  return (await db("SELECT id, display_name, preferred_name, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at", [accountId]))
+    .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name),
+      date_of_birth: r.date_of_birth == null ? null : String(r.date_of_birth) }));
 }
 
 /** Each person's own links to documents, used only to tell apart people with the same name (assemble.ts sharedNameMatch):
