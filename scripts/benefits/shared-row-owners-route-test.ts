@@ -25,7 +25,7 @@ async function main() {
   const { query } = await import("@/lib/db/client");
   const { GET } = await import("@/app/api/benefits/route");
   const { syncInsuredPersonToMember } = await import("@/lib/policies/linking");
-  const { sharedRowOwners, NOT_TOLD_NOTE } = await import("@/lib/policies/shared-row-owners");
+  const { sharedRowOwners, printedAmounts, NOT_TOLD_NOTE } = await import("@/lib/policies/shared-row-owners");
   let passed = 0; const failures: string[] = [];
   const test = async (name: string, fn: () => Promise<void>) => { try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } };
 
@@ -39,10 +39,24 @@ async function main() {
     assert.deepEqual([...sharedRowOwners(row({ tier: "Payable to John Roe", formulaValue: 7500 }), two)!], []);
     assert.equal(sharedRowOwners(row({ formulaKind: "sum_insured", formulaValue: 1 }), two), null);
     assert.equal(sharedRowOwners(row({}), [two[0]]), null);
+    // A row stored with no formula still prints its amount in its quote: never everyone's by default (TE #406).
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "none", formulaValue: null, quote: "Egret Joint Shield S$120,000" }), two)!], ["k"]);
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "none", formulaValue: null, quote: "Medical Expenses S$2,000" }), two)!], []);
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "none", formulaValue: null, quote: "Death S$300,000 S$120,000" }), two)!], [], "a line printing both sums is no one's");
+    assert.equal(sharedRowOwners(row({ formulaKind: "none", formulaValue: null, quote: "Pays on diagnosis of a covered condition" }), two), null);
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "sum_insured", formulaValue: 1, quote: "100% of Sum Insured (S$300,000)" }), two)!], ["j"]);
     // A wording both reference, held as no one's own document: unchanged.
     assert.equal(sharedRowOwners(row({}), two.map((x) => ({ ...x, documents: [{ id: "other" }] }))), null);
   });
 
+  await test("U2 the amounts a quote prints: signed money, or figures grouped in thousands; never a percentage or a day count", async () => {
+    assert.deepEqual(printedAmounts("Egret Joint Shield S$250,000"), [250000]);
+    assert.deepEqual(printedAmounts("Funeral Expense RM5,000.00"), [5000]);
+    assert.deepEqual(printedAmounts("Accidental Death 100,000"), [100000]);
+    assert.deepEqual(printedAmounts("Hospital cash S$200 a day up to 30 days"), [200]);
+    assert.deepEqual(printedAmounts("Pays 25% of the sum insured"), []);
+    assert.deepEqual(printedAmounts(null), []);
+  });
   await query("INSERT INTO accounts(id,name) VALUES($1,'Shared row test household')", [ACCOUNT]);
   await query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner')", [ACCOUNT, USER]);
   const P: Record<string, string> = {};
@@ -64,18 +78,21 @@ async function main() {
       await syncInsuredPersonToMember({ accountId: ACCOUNT, sourcePolicyId: policy, familyMemberId: P[name], detectedName: name, extraction: extraction as never, link: { source: "ai_name_match", confidence: 0.95 } });
     }
     for (const [name, kind, value, tier, quote] of [["Death benefit", "fixed", 300000, null, "Death benefit\tS$300,000"], ["Funeral benefit", "fixed", 5000, null, "Funeral benefit\tS$5,000"],
-      ["Hospital cash", "daily", 200, "Life Assured: Siti Aminah", "Hospital cash\tS$200 a day"], ["Hospital cash", "daily", 100, "Life Assured: Faiz Rahman", "Hospital cash\tS$100 a day"]] as const)
+      ["Hospital cash", "daily", 200, "Life Assured: Siti Aminah", "Hospital cash\tS$200 a day"], ["Hospital cash", "daily", 100, "Life Assured: Faiz Rahman", "Hospital cash\tS$100 a day"],
+      // Stored with no formula (TE #406): each person's own line, and a row that is no one's sum.
+      [product, "none", null, null, `Siti Aminah\t${product}\tSum insured S$300,000`], [product, "none", null, null, `Faiz Rahman\t${product}\tSum insured S$120,000`],
+      ["Medical expenses", "none", null, null, "Medical expenses\tS$2,000"]] as const)
       await query(`INSERT INTO policy_benefits(id,account_id,policy_id,product_name,benefit_name,formula_kind,formula_value,currency,maximum_days,source_page,quote,conditions,requirements,needs_review,tier)
         VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6,'SGD',$7,1,$8,'[]'::jsonb,'[]'::jsonb,false,$9)`, [ACCOUNT, policy, product, name, kind, value, kind === "daily" ? 30 : null, quote, tier]);
-    type Body = { benefits: { benefitName: string; formulaValue: number | null; owners: string[]; conditions: string[] }[] };
+    type Body = { benefits: { benefitName: string; formulaValue: number | null; quote: string | null; owners: string[]; conditions: string[] }[] };
     const get = async (who?: string) => { const r = await GET(new NextRequest(`http://localhost/api/benefits${who ? `?familyMemberId=${P[who]}` : ""}`)); assert.equal(r.status, 200); return (await r.json()) as Body; };
-    const shown = (b: Body) => b.benefits.map((x) => `${x.benefitName} ${x.formulaValue}`).sort();
+    const shown = (b: Body) => b.benefits.map((x) => `${x.benefitName} ${x.formulaValue ?? (x.quote ?? "").match(/S\$[\d,]+/)?.[0]}`).sort();
     const siti = await get("Siti Aminah"), faiz = await get("Faiz Rahman"), all = await get();
     await test("S1 Siti sees the figure that is her own sum, and the hospital cash her column names", async () => {
-      assert.deepEqual(shown(siti), ["Death benefit 300000", "Hospital cash 200"]);
+      assert.deepEqual(shown(siti), ["Death benefit 300000", "Hospital cash 200", `${product} S$300,000`]);
     });
     await test("S2 Faiz never sees Siti's S$300,000, nor her column; he sees his own column", async () => {
-      assert.deepEqual(shown(faiz), ["Hospital cash 100"]);
+      assert.deepEqual(shown(faiz), ["Hospital cash 100", `${product} S$120,000`]);
     });
     await test("S3 the household view names whose each row is, and says the row no one can be told for is no one's", async () => {
       const row = (n: string, v: number) => all.benefits.find((x) => x.benefitName === n && x.formulaValue === v)!;
@@ -83,6 +100,9 @@ async function main() {
       assert.deepEqual(row("Hospital cash", 100).owners, ["Faiz Rahman"]);
       assert.deepEqual(row("Funeral benefit", 5000).owners, []);
       assert.ok(row("Funeral benefit", 5000).conditions.includes(NOT_TOLD_NOTE));
+      const medical = all.benefits.find((x) => x.benefitName === "Medical expenses")!;
+      assert.deepEqual(medical.owners, []);
+      assert.ok(medical.conditions.includes(NOT_TOLD_NOTE));
     });
   } finally {
     for (const t of ["policy_benefits", "policy_coverages", "policy_members", "policy_detected_people", "policy_pages", "policies", "family_members", "household_members"])

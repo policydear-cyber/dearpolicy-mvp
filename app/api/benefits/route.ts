@@ -228,7 +228,7 @@ export async function GET(request:NextRequest){
     // A row of a document two or more people hold as their own (a joint schedule, a shared certificate) is shown only for
     // the person it says it is for, or whose own sum it is; otherwise for no one (DC, 10 Nov; lib/policies/shared-row-owners).
     const whoseOf=new Map(usableRows.map(row=>{const stub=resolved.get(row.id)!;
-      return [row.id,sharedRowOwners({policyId:row.policy_id,tier:row.tier,formulaKind:stub.formulaKind,formulaValue:stub.formulaValue,currency:stub.currency},contractsByDocument.get(row.policy_id)??[])] as const;}));
+      return [row.id,sharedRowOwners({policyId:row.policy_id,tier:row.tier,formulaKind:stub.formulaKind,formulaValue:stub.formulaValue,currency:stub.currency,quote:row.quote},contractsByDocument.get(row.policy_id)??[])] as const;}));
     const ownerNames=new Map((inventory?.contracts??[]).map(c=>[c.ownerId,c.ownerName]));
     const benefits=usableRows.filter(row=>{const whose=whoseOf.get(row.id);return !(member&&whose&&!whose.has(member));}).map(row=>{
       const stub=resolved.get(row.id)!;
