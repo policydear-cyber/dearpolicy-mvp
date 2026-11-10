@@ -11,7 +11,7 @@ function usableCharacters(text: string) {
 /** Select image-backed pages whose embedded text layer is missing or useless. */
 export function pagesNeedingOcr(pages: PdfPage[]) {
   return pages
-    .filter((page) => usableCharacters(page.text) < 24 && (page.imageCount ?? 0) > 0)
+    .filter((page) => page.unmappedText || (usableCharacters(page.text) < 24 && (page.imageCount ?? 0) > 0))
     .map((page) => page.pageNumber);
 }
 
