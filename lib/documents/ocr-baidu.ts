@@ -188,6 +188,15 @@ export function resultHostAllowed(host: string, env: Env = process.env) {
   return h === baseHost || suffixes.some((sfx) => h === sfx || h.endsWith("." + sfx));
 }
 
+/** Documented exception to the provenance rule that a resolved model must be provider-reported (owner decision,
+ * 10 Nov 2026; lib/ai/provenance.ts computeVerified). Baidu's jobs API does not return a model name. A Baidu job is
+ * bound at submission to one exact, versioned model name from a closed list (never a family alias), and Baidu returns
+ * its own job id for it. So a Baidu attempt is recorded with resolvedModel = the model Baidu reports when it reports
+ * one, otherwise the model the job was submitted with, and providerRequestId = Baidu's job id. Everything else stays
+ * fail-closed: no job id, a failed or timed-out job, a page-count mismatch, an unparsable result, a result link off
+ * Baidu's hosts, or a page under the 24-character bar sends those pages to the AI reader. */
+export const BAIDU_IDENTITY_EXCEPTION = "baidu-submitted-model-with-job-id";
+
 export type BaiduJobResult = { pages: string[]; jobId: string; model: string | null };
 
 /** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order.
@@ -260,7 +269,7 @@ class WeakChunk extends Error {
  * did not give enough text for (all of them when Baidu failed): those go to the AI reader.
  * Reading has no spend cap, but it fails closed when this month's spend cannot be read (overSpendCap throws
  * SpendCheckUnavailable). Each job is booked to the ledger ($0, page count as input) and recorded as a provenance
- * attempt; text is used only when that attempt is verified (Baidu reported which model served it). */
+ * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION). */
 export async function completePdfPagesWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; pages: PdfPage[]; pageNumbers: number[];
 }): Promise<{ pages: PdfPage[]; unread: number[] }> {
@@ -308,7 +317,8 @@ export async function completePdfPagesWithBaidu(args: {
           await recordUsage({ accountId: args.accountId, role: "reading", choice, input: chunk.length, output: 0, durationMs: latencyMs, ok: true });
           const record = await recordModelExecution({ correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
             householdId: args.accountId, resourceId: args.resourceId ?? null, requested, requestedAt,
-            resolved: { resolvedModel: job.model, providerRequestId: job.jobId, finishReason: null, region: null, resolvedProvider: "baidu" },
+            // BAIDU_IDENTITY_EXCEPTION: the submitted model stands in when Baidu reports none (see above).
+            resolved: { resolvedModel: job.model ?? choice.model, providerRequestId: job.jobId, finishReason: null, region: null, resolvedProvider: "baidu" },
             status: "succeeded", usage: { input: chunk.length, output: 0 }, costUsd: 0, latencyMs });
           // The same chokepoint as the AI reader (ocr-hosted.ts): text that feeds figures only from a verified attempt.
           // A record that could not be saved (null) does not block, the same failure-isolation contract.

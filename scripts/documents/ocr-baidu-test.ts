@@ -143,6 +143,19 @@ async function main() {
   assert.equal(prov.rows.length, 1);
   assert.deepEqual({ ...prov.rows[0] }, { operation: "hosted_ocr", resolved_model: "PaddleOCR-VL-1.6", provider_request_id: "job-abc123", verified: true });
 
+  // 2c. BAIDU_IDENTITY_EXCEPTION: Baidu reports no model name -> the attempt is recorded with the SUBMITTED model and
+  // Baidu's job id, counts as verified, and its text is used. A model Baidu does report is recorded as reported.
+  await db.query("DELETE FROM model_executions WHERE requested_provider='baidu'");
+  seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { model: null });
+  out = await run();
+  assert.equal(out[1].text, PAGE_A); assert.equal(aiCalls().length, 0, "no AI fallback: the job counts as verified");
+  const noModel = await db.query<{ resolved_model: string; provider_request_id: string; verified: boolean }>("SELECT resolved_model, provider_request_id, verified FROM model_executions WHERE requested_provider='baidu'");
+  assert.deepEqual({ ...noModel.rows[0] }, { resolved_model: "PaddleOCR-VL-1.6", provider_request_id: "job-abc123", verified: true });
+  await db.query("DELETE FROM model_executions WHERE requested_provider='baidu'");
+  seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { model: "PaddleOCR-VL-1.6-20261101" });
+  await run();
+  assert.equal((await db.query<{ resolved_model: string }>("SELECT resolved_model FROM model_executions WHERE requested_provider='baidu'")).rows[0].resolved_model, "PaddleOCR-VL-1.6-20261101");
+
   // 3. A page Baidu returns empty is read by the AI reader, alone; the page Baidu read keeps Baidu's text.
   seen = []; baidu = baiduJob([vlLine([PAGE_A, "   "])]);
   out = await run();
@@ -179,13 +192,13 @@ async function main() {
     ["bad token (HTTP 401)", baiduJob([], { submit: { status: 401, json: { code: 401, msg: "unauthorised" } } })],
     ["error code with HTTP 200", baiduJob([], { submit: { status: 200, json: { code: 10001, msg: "limit" } } })],
     ["service down (HTTP 503)", baiduJob([], { submit: { status: 503, json: {} } })],
+    ["no job id", baiduJob([], { submit: { status: 200, json: { code: 0, data: {} } } })],
     ["job failed", baiduJob([], { states: ["running", "failed"] })],
     ["never finishes", baiduJob([], { states: ["running"] }), { BAIDU_OCR_MAX_WAIT_MS: "30" }],
     ["page count mismatch", baiduJob([vlLine(["only one page"])])],
     ["malformed JSONL", baiduJob(["not json"])],
     ["plain-http result link", baiduJob([vlLine(["a", "b"])], { jsonUrl: "http://fake-baidu-bucket.test/r.jsonl" })],
     ["unknown model", baiduJob([vlLine([PAGE_A, PAGE_B])]), { BAIDU_PADDLEOCR_MODEL: "Not-A-Model" }],
-    ["Baidu does not report its model (unverified)", baiduJob([vlLine([PAGE_A, PAGE_B])], { model: null })],
     ["result link on a host that is not Baidu's", baiduJob([vlLine([PAGE_A, PAGE_B])], { jsonUrl: "https://fake-elsewhere.test/r.jsonl" })],
     ["no time left in the function for Baidu", baiduJob([vlLine([PAGE_A, PAGE_B])]), { VERCEL: "1", __DEADLINE__: "1" }],
   ];

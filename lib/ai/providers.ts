@@ -203,7 +203,13 @@ export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cac
  * provider's response shape does not carry one (or parsing it fails), the
  * field is null, honestly, rather than falling back to the requested model
  * name -- lib/ai/provenance.ts treats a null resolvedModel as grounds to
- * mark the execution unverified. */
+ * mark the execution unverified.
+ *
+ * ONE DOCUMENTED EXCEPTION (owner decision, 10 Nov 2026): Baidu's hosted PaddleOCR (lib/documents/ocr-baidu.ts) does
+ * not report which model served a job. Its job is bound to an exact, versioned model name (never a family alias) at
+ * submission, and Baidu issues a job id for it, so a Baidu attempt records resolvedModel = the model named at
+ * submission (or the model Baidu reports, when it does) together with Baidu's job id as providerRequestId. Every other
+ * provider stays provider-reported only. */
 export type ResolvedModelIdentity={resolvedModel:string|null;providerRequestId:string|null;finishReason:string|null;region:string|null;
   /** The provider that actually served the call, when it is not the requested one (a document-reading fallback). */
   resolvedProvider?:Provider|null};
