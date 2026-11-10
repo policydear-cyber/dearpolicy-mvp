@@ -344,8 +344,8 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  *   from this part), and the section and plan-column headings found so far, so a table whose header is on the page
  *   before is still read under its columns (Critic R364 H1). The check drops a row that prints a figure for each plan
  *   with no column (check.ts), whatever the reader does.
- * - A part that runs out of output is read again as two halves, down to a single page, and every part still to come
- *   is made smaller too. At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
+ * - A part that runs out of output is read again as two halves, down to a single page; the parts still to come keep their
+ *   size unless a second part of full size runs out too (TE #404). At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
  * - The document's own facts are merged across parts: the first kind, product, insurer, plan and period any part
  *   gives, and every named person (TE pr364).
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
@@ -380,6 +380,9 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     stalls = from.stalls ?? 0; pageTries = { ...(from.pageTries ?? {}) }; skipped = [...(from.skipped ?? [])];
   }
   const doneAtStart = done.length, callsAtStart = calls;
+  // Parts made by halving one that ran out, and how many parts of full size ran out (max_tokens below).
+  const halves = new Set<string>(), partKey = (part: { page: number }[]) => part.map((p) => p.page).join(",");
+  let fullRanOut = 0;
   const saveProgress = async () => carry?.save({ id: carry.id, fp, queue: queue.map((part) => part.map((p) => p.page)), done, headings, columns, calls, limit, outputLimit,
     ...(stalls ? { stalls } : {}), ...(Object.keys(pageTries).length ? { pageTries } : {}), ...(skipped.length ? { skipped } : {}) });
   // The run stops here; the reading so far is saved, and the next run goes on from it. A run that paid for a call and read
@@ -442,11 +445,17 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
       }
       if (reply.stopReason === "timeout") return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
       if (reply.stopReason === "max_tokens" && part.length > 1) {
-        // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
-        limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
-        outputLimit = Math.max(1, Math.floor(part.reduce((n, p) => n + expectedOutput(p.text), 0) / 2));
+        // The part that ran out is read as two halves. The parts still to come keep their size, so one dense page never
+        // makes every later part smaller (TE #404: 37 calls for 50 pages instead of about 8); only when a second part of
+        // full size runs out too (the whole document is dense) are they made smaller, so each is not paid for twice.
         const half = Math.ceil(part.length / 2);
-        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit, outputLimit)];
+        if (!halves.has(partKey(part))) fullRanOut++;
+        halves.add(partKey(part.slice(0, half))); halves.add(partKey(part.slice(half)));
+        if (fullRanOut >= 2) {
+          limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
+          outputLimit = Math.max(1, Math.floor(part.reduce((n, p) => n + expectedOutput(p.text), 0) / 2));
+          queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit, outputLimit)];
+        } else queue = [part.slice(0, half), part.slice(half), ...queue];
         continue;
       }
       if (carry) {

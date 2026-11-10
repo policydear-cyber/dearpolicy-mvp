@@ -195,11 +195,25 @@ async function main() {
       assert.equal(r.read, false);
       assert.ok(m.calls.length <= 2 * pageParts(pages).length + 4, `${n} pages: ${m.calls.length} calls`);
     }
-    // After the first part runs out, the parts still to come are made smaller too, so each is not paid for twice.
+    // A dense document: once a second part of full size runs out, the parts still to come are made smaller too, so each is
+    // not paid for twice.
     const m = lister({ tokensPerRow: 400 });
     await readDocument(fakeDb(booklet(30, 10)).db, m.model, A, "doc");
     const ranOut = m.calls.filter((c) => c.output > READ_MAX_OUTPUT).length;
-    assert.equal(ranOut, 1, `${ranOut} calls ran out`);
+    assert.ok(ranOut <= 2, `${ranOut} calls ran out`);
+    // One dense page in a long document: only its part is halved; every other part is read at its size (TE #404: 37 calls
+    // for 50 pages instead of about 8).
+    const pages = booklet(50, 10), plain = lister();
+    const dense: TableModel = { choice: plain.model.choice, async call(c) {
+      const context = Number(c.user.match(/do not list rows from page (\d+)/)?.[1] ?? NaN);
+      const shown = [...c.user.matchAll(/<page n="(\d+)">/g)].map((x) => Number(x[1])).filter((n) => n !== context);
+      if (shown.includes(20) && shown.length > 2) { plain.calls.push({ pages: shown, chars: 0, maxTokens: c.maxTokens, user: c.user, context: null, output: c.maxTokens + 1 }); return { json: null, stopReason: "max_tokens", model: "stand-in", input: 0, output: c.maxTokens, ms: 1 }; }
+      return plain.model.call(c);
+    } };
+    const rd = await readDocument(fakeDb(pages).db, dense, A, "doc");
+    assert.equal(rd.read, true, rd.why);
+    const parts = pageParts(pages).length, readingCalls = plain.calls.filter((c) => c.maxTokens === READ_MAX_OUTPUT).length;
+    assert.ok(readingCalls <= parts + 2 * Math.ceil(Math.log2(50)), `one dense page: ${readingCalls} reading calls for ${parts} parts`);
   });
   await test("L8 each part after the first is shown the page before for context only, with the plan columns found so far (Critic R364 H1)", async () => {
     const m = lister({ plans: true });

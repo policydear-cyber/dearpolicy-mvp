@@ -69,10 +69,16 @@ async function main() {
     const { tableStateKey } = await import("@/lib/benefit-table/service");
     const a = answer([{ person: JANE }]);
     noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [23] })]]));
-    assert.match(a.bottomLine!, /This may not be all of Jane Doe’s cover: Kestrel Whole Life was read only in part \(page 23 could not be read\), so any cover in it is not counted here/);
+    // Its other rows are in the answer: possibly incomplete, never "not counted" (TE #404).
+    assert.match(a.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(page 23 could not be read\)\.$/);
+    assert.doesNotMatch(a.bottomLine!, /not counted/);
     const b = answer([{ person: JANE }]);
     noteCoverNotCounted(b, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [4, 23] })]]));
-    assert.match(b.bottomLine!, /Kestrel Whole Life was read only in part \(pages 4 and 23 could not be read\)/);
+    assert.match(b.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(pages 4 and 23 could not be read\)\./);
+    // Said once on the next turn too, when the model repeats it.
+    const c = answer([{ person: JANE }], b.bottomLine!);
+    noteCoverNotCounted(c, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: [4, 23] })]]));
+    assert.equal(c.bottomLine!.match(/may be incomplete/g)?.length, 1);
   });
   await check("receipts, superseded copies and another person's documents are never named", () => {
     const a = answer([{ person: JANE }]);

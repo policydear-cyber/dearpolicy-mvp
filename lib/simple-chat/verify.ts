@@ -2264,13 +2264,17 @@ function notCountedWhy(d: HouseholdDocument, tableStates: ReadonlyMap<string, st
   if (unreadable(d)) return "could not be read";
   const state = tableStates?.get(d.policyId);
   if (state && TABLE_STATE_WORDS[state]) return TABLE_STATE_WORDS[state];
-  // Read with pages read past (lib/benefit-table/service.ts tableStateKey: "read_in_part:23,24"): the pages are named.
-  if (state?.startsWith("read_in_part")) {
-    const pages = state.slice("read_in_part:".length).split(",").filter((n) => /^\d+$/.test(n));
-    return pages.length ? `was read only in part (${pages.length === 1 ? `page ${pages[0]}` : `pages ${andList(pages)}`} could not be read)` : "was read only in part";
-  }
   if (readInPart(d)) return "was read only in part";
   return null;
+}
+/** A document the benefit table read with pages read past (lib/benefit-table/service.ts tableStateKey:
+ * "read_in_part:23,24"): its other rows are in the answer, so it is said to be possibly incomplete, naming the pages, never
+ * "not counted" (TE #404). null when the document is not read in part. */
+function readPastWords(d: HouseholdDocument, tableStates: ReadonlyMap<string, string> | null): string | null {
+  const state = tableStates?.get(d.policyId);
+  if (!state?.startsWith("read_in_part")) return null;
+  const pages = state.slice("read_in_part:".length).split(",").filter((n) => /^\d+$/.test(n));
+  return pages.length ? `${pages.length === 1 ? `page ${pages[0]}` : `pages ${andList(pages)}`} could not be read` : "some pages could not be read";
 }
 /** A person's documents: linked to them, or uploaded for them (or for no one) and linked to no one. */
 const ownedBy = (d: HouseholdDocument, person: string) =>
@@ -2288,7 +2292,7 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * added, or null. */
 /** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
  * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
-const COVER_NOTE = /\s*This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\./g;
+const COVER_NOTE = /\s*(?:This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\.|The cover shown from [^.]{1,300}? may be incomplete \([^)]{1,200}\)\.)/g;
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
   // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
   const repeated = (answer.bottomLine ?? answer.summary ?? "");
@@ -2307,10 +2311,12 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
   const sayWho = named.length > 0 && !people.includes(null);
   const groups = sayWho ? named.map((p) => ({ who: p, docs: candidates.filter((d) => ownedBy(d, p)) })) : [{ who: null, docs: candidates }];
   for (const g of groups) {
-    const missing = g.docs.flatMap((d) => { const why = notCountedWhy(d, tableStates); return why ? [`${labelFor(household, d)} ${why}`] : []; });
-    if (!missing.length) continue;
+    const missing = g.docs.flatMap((d) => { if (readPastWords(d, tableStates)) return []; const why = notCountedWhy(d, tableStates); return why ? [`${labelFor(household, d)} ${why}`] : []; });
+    const partial = g.docs.flatMap((d) => { const words = readPastWords(d, tableStates); return words ? [`The cover shown from ${labelFor(household, d)} may be incomplete (${words}).`] : []; });
+    if (!missing.length && !partial.length) continue;
     const whose = g.who ? `${g.who}’s` : "your household’s";
-    notes.push(`This may not be all of ${whose} cover: ${andList(missing)}, so any cover in ${missing.length === 1 ? "it" : "them"} is not counted here and the amounts shown are not a total.`);
+    if (missing.length) notes.push(`This may not be all of ${whose} cover: ${andList(missing)}, so any cover in ${missing.length === 1 ? "it" : "them"} is not counted here and the amounts shown are not a total.`);
+    notes.push(...partial);
   }
   if (!notes.length) return null;
   const said = notes.join(" ");
