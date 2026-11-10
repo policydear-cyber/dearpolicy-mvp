@@ -6,7 +6,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,restartWaitingPolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
-import { appendJobAudit, recordJobEvent, recoverExpiredLeases, type BackgroundJobRow } from "@/lib/jobs/queue";
+import { appendJobAudit, recordJobEvent, recoverExpiredLeases, WITHOUT_PASSWORD_SQL, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     try {
       await tx.query("BEGIN");
       const waiting = await tx.query<BackgroundJobRow>(
-        `UPDATE background_jobs SET status='cancelled', cancel_requested=true, lease_owner=NULL, lease_expires_at=NULL, updated_at=now()
+        `UPDATE background_jobs SET status='cancelled', cancel_requested=true, lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
          WHERE job_type=$1 AND idempotency_key=$2
            AND (status IN ('queued','failed_retryable') OR (status='processing' AND lease_expires_at <= now())) RETURNING *`,
         [POLICY_PROCESSING_JOB_TYPE, body.policyId + ":retry-read"],

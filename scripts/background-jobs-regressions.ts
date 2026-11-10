@@ -401,10 +401,84 @@ async function runDatabaseTests() {
       assert.equal(leased.row.status, "processing");
     });
 
+    await testAsync("a finished job keeps no PDF password: succeeded, dead-lettered, lease-expired into dead_letter and cancelled rows drop it; a job that can still run keeps it (TE #400)", async () => {
+      const PW = "Made-up-Passw0rd";
+      const passwordOf = async (id: string) => (await pool.query<{ has: boolean; other: string | null }>(
+        `SELECT payload ? 'pdfPassword' AS has, payload->>'policyId' AS other FROM background_jobs WHERE id=$1`, [id])).rows[0];
+      const fresh = async (maxAttempts = 3) => {
+        const jobType = `pw-${randomUUID()}`;
+        const { row } = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { policyId: "p-1", pdfPassword: PW }, maxAttempts });
+        return { jobType, id: row.id };
+      };
+      // Succeeded.
+      let j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await completeJob(pool, { jobId: j.id, workerId: "w" });
+      assert.deepEqual(await passwordOf(j.id), { has: false, other: "p-1" }, "succeeded: password gone, the rest of the payload kept");
+      // A retryable failure keeps it (the retry needs it); the last attempt's failure drops it.
+      j = await fresh(2);
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await failJob(pool, { jobId: j.id, workerId: "w", errorCategory: "transient", errorMessage: "x" });
+      assert.equal((await passwordOf(j.id)).has, true, "failed_retryable: kept for the retry");
+      await pool.query(`UPDATE background_jobs SET available_at=now() WHERE id=$1`, [j.id]);
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await failJob(pool, { jobId: j.id, workerId: "w", errorCategory: "transient", errorMessage: "x" });
+      assert.deepEqual(await passwordOf(j.id), { has: false, other: "p-1" }, "dead_letter: password gone");
+      // A non-retryable failure goes straight to dead_letter and drops it.
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await failJob(pool, { jobId: j.id, workerId: "w", errorCategory: "non_retryable", errorMessage: "x" });
+      assert.equal((await passwordOf(j.id)).has, false, "non-retryable dead_letter: password gone");
+      // A lapsed lease: back to retry keeps it; into dead_letter drops it.
+      j = await fresh(1);
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await recoverExpiredLeases(pool, { asOf: new Date(Date.now() + 10 * DEFAULT_LEASE_DURATION_MS) });
+      assert.equal((await passwordOf(j.id)).has, false, "lease expired into dead_letter: password gone");
+      j = await fresh(3);
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await recoverExpiredLeases(pool, { asOf: new Date(Date.now() + 10 * DEFAULT_LEASE_DURATION_MS) });
+      assert.equal((await passwordOf(j.id)).has, true, "lease expired back to retry: kept");
+      // Cancelled while queued, and cancelled cooperatively while processing.
+      j = await fresh();
+      await cancelJob(pool, { jobId: j.id });
+      assert.equal((await passwordOf(j.id)).has, false, "cancelled while queued: password gone");
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await cancelJob(pool, { jobId: j.id });
+      assert.equal((await passwordOf(j.id)).has, true, "processing with a cancel requested: still running, kept");
+      await finalizeCancelledJob(pool, { jobId: j.id, workerId: "w" });
+      assert.equal((await passwordOf(j.id)).has, false, "cancelled by its worker: password gone");
+      // A run that marked its job as waiting for the malware scan keeps it on success (lib/scanning/held-password.ts); a dead letter never does.
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await pool.query(`UPDATE background_jobs SET payload=payload || '{"heldForScan":true}' WHERE id=$1`, [j.id]);
+      await completeJob(pool, { jobId: j.id, workerId: "w" });
+      assert.equal((await passwordOf(j.id)).has, true, "held for its scan: kept");
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await pool.query(`UPDATE background_jobs SET payload=payload || '{"heldForScan":true}' WHERE id=$1`, [j.id]);
+      await failJob(pool, { jobId: j.id, workerId: "w", errorCategory: "non_retryable", errorMessage: "x" });
+      assert.equal((await pool.query(`SELECT payload ?| ARRAY['pdfPassword','heldForScan'] AS has FROM background_jobs WHERE id=$1`, [j.id])).rows[0].has, false, "dead letter: password and mark gone");
+      // A job with no password, or a payload that is not an object, finishes as before.
+      const { row: plain } = await enqueueJob(pool, { jobType: `pw-${randomUUID()}`, idempotencyKey: "a", payload: ["x"] });
+      await claimNextJob(pool, { jobType: plain.job_type, workerId: "w" });
+      const done = await completeJob(pool, { jobId: plain.id, workerId: "w" });
+      assert.equal(done.status, "succeeded");
+      assert.deepEqual(done.payload, ["x"]);
+      // Read again revives a finished row with the fresh payload it is given, password and all.
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await completeJob(pool, { jobId: j.id, workerId: "w" });
+      await enqueueJob(pool, { jobType: j.jobType, idempotencyKey: "doc", payload: { policyId: "p-1", pdfPassword: PW }, resurrectTerminal: true });
+      assert.equal((await passwordOf(j.id)).has, true, "a revived job carries the password typed again");
+      // The reprocess route's own cancel of a waiting re-read drops it too.
+      const { readFileSync } = await import("node:fs");
+      assert.match(readFileSync(path.resolve("app/api/policies/reprocess/route.ts"), "utf8"), /SET status='cancelled'[^`]*payload=\$\{WITHOUT_PASSWORD_SQL\}/);
+    });
     console.log(`background-jobs regressions passed: ${cases} cases (idempotent enqueue, claim/SKIP LOCKED exclusivity, heartbeat lease extension, ` +
       `completion, bounded transient retry matching computeBackoffMs(), immediate non_retryable dead-letter, lease-expiry recovery & the zombie-worker ` +
       `ownership CAS, dead-letter-on-recovery once max_attempts is exhausted, immediate and cooperative cancellation, idempotent cancel-of-terminal, ` +
-      `structural audit trail, terminal-row resurrection for re-requested work).`);
+      `structural audit trail, terminal-row resurrection for re-requested work, no PDF password kept on a finished job).`);
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;
