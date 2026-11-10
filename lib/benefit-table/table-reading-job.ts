@@ -18,7 +18,8 @@ export type TableReadingPayload = { policyId: string; id: string; run: number };
 
 /** Queues continuation `run` (1-based) of the reading named `id`. Idempotent per reading and run. */
 export async function enqueueTableReading(db: { query: typeof pool.query }, accountId: string, policyId: string, id: string, run: number) {
-  if (run < 1 || run > MAX_TABLE_READING_RUNS) return null;
+  // One run past the last: a reading finished by the last run with no time left to link its sections links them there.
+  if (run < 1 || run > MAX_TABLE_READING_RUNS + 1) return null;
   const payload: TableReadingPayload = { policyId, id, run };
   return enqueueJob(db, { jobType: TABLE_READING_JOB_TYPE, idempotencyKey: `${policyId}:table-reading:${id}:${run}`, payload, accountId, maxAttempts: 1 });
 }

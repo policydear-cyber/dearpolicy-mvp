@@ -43,7 +43,9 @@ export type ReadTime = { deadline?: number; now?: () => number; carry?: Carry };
  * one limit. `id` names the reading (when it started); `fp` is the document's checked pages when it started, so a
  * reading is never finished over pages that changed since. */
 export type ReadingProgress = { id: string; fp: string; queue: number[][]; done: { pages: number[]; json: unknown; model: string }[];
-  headings: string[]; columns: string[]; calls: number; limit: number; outputLimit: number };
+  headings: string[]; columns: string[]; calls: number; limit: number; outputLimit: number;
+  /** The reading is stored and only its sections' links are left: the run that finished it had no time to link them. */
+  linkOnly?: true };
 /** `from`: the saved reading to go on with (null: a fresh reading named `id`); `save`: stores the reading so far. */
 export type Carry = { id: string; from: ReadingProgress | null; save: (p: ReadingProgress) => Promise<void> };
 /** A call with at least this long to run that still timed out was cut off by its own size, not by a run that had little

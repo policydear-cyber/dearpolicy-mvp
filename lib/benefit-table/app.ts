@@ -7,7 +7,7 @@ import type { ModelChoice } from "@/lib/ai/providers";
 import { benefitTableModel, benefitTableStatus } from "./flag";
 import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel, type TableModel } from "./model";
-import { policyJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, tableReadingJobLive } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { MIN_CALL_MS, SAVE_MARGIN_MS, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage, type ReadingProgress } from "./service";
 import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
@@ -43,8 +43,11 @@ export async function benefitTableLiveFor(db: Db, env: NodeJS.ProcessEnv, accoun
     if (onTable.length) return true;
     // A document is marked ready just before it is read into the table, so one whose reading job is still live is not
     // "read before"; nor is a receipt, statement or letter, which is never read into the table.
+    // A table reading carried over runs (TABLE_PROGRESS_KEY, its continuation queued or running) is being read too: a new
+    // household whose first document is carried stays on the table, so its continuation goes on (TE #404).
     const readBefore = await db(`SELECT 1 FROM policies WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL
-      AND processing_status='ready' AND COALESCE(document_role,'') <> ALL($2::text[]) AND NOT (${policyJobLive("policies")}) LIMIT 1`,
+      AND processing_status='ready' AND COALESCE(document_role,'') <> ALL($2::text[]) AND NOT (${policyJobLive("policies")})
+      AND NOT (${tableReadingJobLive("policies")}) AND NOT (COALESCE(extracted_json,'{}'::jsonb) ? '${TABLE_PROGRESS_KEY}') LIMIT 1`,
       [accountId, [...NO_COVER_READING_ROLES]]);
     if (readBefore.length) return false;
     const ledger = await db("SELECT to_regclass('public.coverage_rules') IS NOT NULL AS ok", []);
@@ -81,9 +84,11 @@ export async function tableReadingProgress(db: Db, accountId: string, policyId: 
 }
 /** `continuing`: the run goes on with a saved reading, so it saves only over that same reading: when a fresh reading (Read
  * again) replaced it meanwhile, the run stops here and never overwrites the fresh one. */
-async function saveTableProgress(db: Db, accountId: string, policyId: string, p: ReadingProgress | null, continuing = false) {
+async function saveTableProgress(db: Db, accountId: string, policyId: string, p: ReadingProgress | null, continuing = false, only?: string) {
   if (!p) {
-    await db(`UPDATE policies SET extracted_json=extracted_json - '${TABLE_PROGRESS_KEY}' WHERE id=$1 AND account_id=$2 AND extracted_json ? '${TABLE_PROGRESS_KEY}'`, [policyId, accountId]);
+    // `only`: cleared only while it is still that reading, so a fresh one (Read again) started meanwhile is kept.
+    await db(`UPDATE policies SET extracted_json=extracted_json - '${TABLE_PROGRESS_KEY}' WHERE id=$1 AND account_id=$2 AND extracted_json ? '${TABLE_PROGRESS_KEY}'
+      ${only ? `AND extracted_json->'${TABLE_PROGRESS_KEY}'->>'id'=$3` : ""}`, only ? [policyId, accountId, only] : [policyId, accountId]);
     return;
   }
   const saved = await db(`UPDATE policies SET extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{${TABLE_PROGRESS_KEY}}',$3::jsonb) WHERE id=$1 AND account_id=$2
@@ -142,6 +147,9 @@ export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsa
 export function tableReadingRetry(args: { attempt?: { number: number } | null; deferredRetry?: boolean | null }): boolean {
   return (args.attempt?.number ?? 1) > 1 || args.deferredRetry === true;
 }
+/** What a run of readIntoTable did. `relinked`: the household's sections were re-linked after this document's reading. */
+export type TableReadResult = { read: boolean; why?: string; pagesReread: number; linked: number; relinked?: boolean; carried?: boolean;
+  parts?: number; figuresChecking?: number; guardsAt?: string };
 /** readIntoBenefitTable with its database and model passed in (tests pass fakes).
  * - `continuation`: this run is continuation `run` of the carried reading `id` (table-reading-job.ts). It goes on with
  *   that reading only; with that reading gone or replaced (a fresh reading started since) it does nothing and pays nothing.
@@ -150,7 +158,7 @@ export function tableReadingRetry(args: { attempt?: { number: number } | null; d
  * A retried job (`retry`) never starts a fresh reading: it goes on with a carried reading the earlier attempt saved, and
  * otherwise keeps what is stored, as before. */
 export async function readIntoTable(db: Db, model: TableModel, accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean; now?: () => number; guards?: GuardSetup;
-  continuation?: { id: string; run: number }; continueLater?: (id: string, run: number) => Promise<void> } = {}, onUsage?: OnUsage) {
+  continuation?: { id: string; run: number }; continueLater?: (id: string, run: number) => Promise<void> } = {}, onUsage?: OnUsage): Promise<TableReadResult> {
   const now = opts.now ?? Date.now;
   const carried = opts.continueLater && (opts.retry || opts.continuation) ? await tableReadingProgress(db, accountId, policyId) : null;
   if (opts.continuation && (!carried || carried.id !== opts.continuation.id))
@@ -165,6 +173,15 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
     if (cutOff || !stored) await noteUnreadTable(db, accountId, policyId, true);
     if (cutOff) await markTableReading(db, accountId, policyId, false);
     return { read: false, why: "a retried job does not read the table again; Read again starts a fresh reading", pagesReread: 0, linked: 0 };
+  }
+  // A reading stored by a run that had no time left to link its sections: this run links them only, and pays for no
+  // reading (TE #404: a 64-page reading finished near the end of its run showed "read" as one unlinked section, 0 rows).
+  if (carried?.linkOnly) {
+    const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
+    const linked = await relink(db, model, accountId, onUsage, left ?? undefined, policyId);
+    await saveTableProgress(db, accountId, policyId, null, true, carried.id);
+    await markTableReading(db, accountId, policyId, false);
+    return { read: true, why: "the stored reading's sections were linked", pagesReread: 0, linked: linked.proposed, relinked: true };
   }
   // The mark is cleared only once the reading and the re-link have both returned. A run that throws or is stopped at any
   // point in between (an API error, a database error while saving, the time limit during the re-link) leaves it set, so
@@ -185,9 +202,17 @@ export async function readIntoTable(db: Db, model: TableModel, accountId: string
     await markTableReading(db, accountId, policyId, false);
     return { ...read, carried: false, why: `the reading did not finish in ${MAX_TABLE_READING_RUNS} runs`, linked: 0 };
   }
-  if (carry) await saveTableProgress(db, accountId, policyId, null);
   const left = opts.deadline == null ? null : opts.deadline - SAVE_MARGIN_MS - now();
-  const linked = read.read && (left == null || left >= MIN_CALL_MS) ? await relink(db, model, accountId, onUsage, left ?? undefined, policyId) : { proposed: 0 };
+  const timeToLink = left == null || left >= MIN_CALL_MS;
+  if (read.read && !timeToLink && carry) {
+    // Stored with no time left to link its sections: one more run links them, so the document is never left "read"
+    // with its whole table unlinked. The mark stays set until that run has linked.
+    await saveTableProgress(db, accountId, policyId, { id, fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true }, !!carried);
+    await opts.continueLater!(id, (opts.continuation?.run ?? 0) + 1);
+    return { ...read, linked: 0, relinked: false };
+  }
+  if (carry) await saveTableProgress(db, accountId, policyId, null, false, id);
+  const linked = read.read && timeToLink ? await relink(db, model, accountId, onUsage, left ?? undefined, policyId) : { proposed: 0 };
   await markTableReading(db, accountId, policyId, false);
-  return { ...read, linked: linked.proposed };
+  return { ...read, linked: linked.proposed, relinked: read.read && timeToLink };
 }

@@ -552,7 +552,10 @@ async function main() {
           if (p.length > 3 && (st.progress == null || JSON.parse(st.progress).id !== p[3])) return [];
           st.progress = p[2] as string; st.saves++; return [{ id: "doc" }];
         }
-        if (q.startsWith("UPDATE policies SET extracted_json=extracted_json -") && q.includes(TABLE_PROGRESS_KEY)) { st.progress = null; return []; }
+        if (q.startsWith("UPDATE policies SET extracted_json=extracted_json -") && q.includes(TABLE_PROGRESS_KEY)) {
+          if (p.length > 2 && (st.progress == null || JSON.parse(st.progress).id !== p[2])) return [];
+          st.progress = null; return [];
+        }
         if (q.startsWith("DELETE FROM benefit_links") || q.startsWith("UPDATE benefit_links")) return [];
         try { return await f.db(sql, p); } catch (error) { if (q.startsWith("SELECT")) return []; throw error; }
       };
@@ -654,6 +657,42 @@ async function main() {
     const replacing: TableModel = { choice: m7.model.choice, async call(c) { k7.st.progress = JSON.stringify({ ...JSON.parse(k7.st.progress!), id: "fresh" }); return m7.model.call(c); } };
     await assert.rejects(readIntoTable(k7.db, replacing, A, "doc", { deadline: k7clock.t + 150_000, now: () => k7clock.t, continuation: q7[0], continueLater: async () => undefined }), /replaced/);
     assert.equal(JSON.parse(k7.st.progress!).id, "fresh", "K7: the fresh reading is kept");
+
+    // K9: a reading finished by a run with too little time left to link its sections is never left unlinked: one more run
+    // links them, pays for no reading, and clears what was carried (TE #404: 2 of 6 long readings showed "read" with 0 rows).
+    let linkRuns = 0;
+    for (let runMs = 100_000; runMs <= 290_000; runMs += 5_000) {
+      const k9clock = { t: 0 }, k9 = carriedDb(pages), m9 = priced({ worse: 1.9, clock: k9clock }), q9: { id: string; run: number }[] = [];
+      const later = async (id: string, run: number) => { q9.push({ id, run }); };
+      let r9 = await readIntoTable(k9.db, m9.model, A, "doc", { deadline: runMs, now: () => k9clock.t, continueLater: later });
+      let guard = 0;
+      while (q9.length && guard++ < MAX_TABLE_READING_RUNS + 2) {
+        const next = q9.shift()!, before9 = m9.calls.length, start = k9clock.t;
+        const linkOnly = k9.st.progress != null && JSON.parse(k9.st.progress).linkOnly === true;
+        r9 = await readIntoTable(k9.db, m9.model, A, "doc", { deadline: start + runMs, now: () => k9clock.t, continuation: next, continueLater: later });
+        if (linkOnly) {
+          linkRuns++;
+          assert.equal(m9.calls.length, before9, `K9 (${runMs} ms runs): the link run pays for no reading`);
+          assert.equal(r9.relinked, true, "K9: the link run links");
+        }
+      }
+      if (!r9.read) continue; // too short a run to finish: K5 covers it
+      assert.equal(r9.relinked, true, `K9 (${runMs} ms runs): the finished reading is linked`);
+      assert.equal(k9.st.progress, null, `K9 (${runMs} ms runs): nothing left carried`);
+      assert.equal(k9.st.mark, false);
+      assert.ok(k9.s.readings.get("doc")?.reading, "K9: the reading is stored");
+    }
+    assert.ok(linkRuns > 0, "K9: some run length finishes a reading with too little time left to link");
+    // A link run whose reading Read again replaced meanwhile does nothing; a fresh reading drops a pending link run.
+    const k9b = carriedDb(pages), m9b = priced();
+    k9b.st.progress = JSON.stringify({ id: "older", fp: "", queue: [], done: [], headings: [], columns: [], calls: 0, limit: 0, outputLimit: 0, linkOnly: true });
+    r = await readIntoTable(k9b.db, m9b.model, A, "doc", { continuation: { id: "other", run: 3 }, continueLater });
+    assert.equal(r.read, false, "K9: a link run for a replaced reading does nothing");
+    assert.equal(m9b.calls.length, 0);
+    const { enqueueTableReading } = await import("@/lib/benefit-table/table-reading-job");
+    const enq: unknown[] = [];
+    const fakeQueue = { query: (async (_sql: string, params: unknown[]) => { enq.push(params); return { rows: [{ id: "j", status: "queued" }], rowCount: 1 }; }) } as never;
+    assert.equal(await enqueueTableReading(fakeQueue, A, "doc", "x", MAX_TABLE_READING_RUNS + 2), null, "K9: never more than one run past the last");
 
     // K8: wired: the document job passes continueLater; the job is registered; ingest keeps the carried reading.
     const { readFileSync } = await import("node:fs");
