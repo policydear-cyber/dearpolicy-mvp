@@ -1,7 +1,7 @@
 import { PDFDocument, degrees } from "pdf-lib";
 import { randomUUID } from "node:crypto";
 import { costUsd, documentReaderFor, hostedDocumentToText, modelFor } from "@/lib/ai/providers";
-import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
+import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse } from "@/lib/ai/provenance";
 import type { PdfPage } from "@/lib/documents/pdf";
 import { createHash } from "node:crypto";
@@ -52,7 +52,10 @@ export const HOSTED_OCR_SYSTEM = SYSTEM;
  * response. */
 async function attemptHostedOcr(args: { accountId: string; resourceId?: string; bytes: Uint8Array; pageNumbers: number[]; correlationId?: string; turn?: Map<number, number> }): Promise<BridgePage[]> {
   const choice = modelFor("reading");
-  await assertUnderSpendCap(args.accountId);
+  // Reading a document is never stopped by the household's spend limit (DC, 10 Nov: accuracy before cost); every call is
+  // still booked in the usage ledger below, so a page is never sent when this month's usage cannot be read
+  // (SpendCheckUnavailable; Critic #405).
+  await overSpendCap(args.accountId);
   const subset = await subsetPdf(args.bytes, args.pageNumbers, args.turn);
   const pdfBase64 = Buffer.from(subset).toString("base64");
   const started = Date.now();

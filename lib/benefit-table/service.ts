@@ -828,7 +828,8 @@ export async function restoreLink(db: Db, accountId: string, section: string, co
   const was = l.links.find((x) => x.section === section);
   const count = (links: SectionLink[]) => Object.fromEntries(assembleTable(l.readings, l.family, links).people.map((p) => [p.name, p.rows.length]));
   const rowsNow = count(l.links);
-  const rowsAfter = count([...l.links.filter((x) => x.section !== section), { section, cover, why: "Restored" }]);
+  // As setLink writes it: chosen by the household, so the preview places rows as the applied link will (Critic #405).
+  const rowsAfter = count([...l.links.filter((x) => x.section !== section), { section, cover, why: "Restored", chosenBy: "household" as const }]);
   const added = Object.keys(rowsAfter).reduce((n, k) => n + (rowsAfter[k] - (rowsNow[k] ?? 0)), 0);
   if (apply) await setLink(db, accountId, section, cover);
   return { current: was ? { cover: was.cover, chosenBy: was.chosenBy } : null, rowsNow, rowsAfter, added, applied: apply };
