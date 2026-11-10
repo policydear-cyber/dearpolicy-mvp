@@ -277,6 +277,17 @@ async function main() {
   // 12. Inline maths a vision model may print around figures never leaves a "$" that reads as a currency sign; printed money stays as printed.
   assert.equal(bd.baiduMarkdownToText("Co-insurance $10\\%$ of the bill; $\\text{RM}\\ 50,000$; $$\\mathrm{HK\\$}\\,2{,}000$$"), "Co-insurance 10% of the bill; RM 50,000; HK$ 2,000");
   assert.equal(bd.baiduMarkdownToText("Sum Assured $ 100,000 and S$1,000 to S$2,000 or US$5 and $3"), "Sum Assured $ 100,000 and S$1,000 to S$2,000 or US$5 and $3");
+  // Critic #410 F1: a "$" after a letter never opens maths and a "$" before a digit or comma never closes it, so two
+  // amounts are never paired into one span and lose their currency.
+  for (const line of ["Hospital cash S$200^{1} per day, max S$9,000", "S$500 per day^ and S$1,000 overall", "HK$300{a} or US$40", "$500 and $600^{2}", "$500^{2} per day and $600", "Hospital S$200^{1} per day, max $ 9,000"])
+    assert.equal(bd.baiduMarkdownToText(line), line);
+  assert.equal(bd.baiduMarkdownToText("\\$1{,}000 and \\$2{,}000"), "$1,000 and $2,000");
+  // F2: a span with real working is left exactly as printed (no clean figure is made from it).
+  assert.equal(bd.baiduMarkdownToText("$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$"), "$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$");
+  // F3: a rowspan cell with no money figure ("Plan 1", "Age 18-65", "Section 2") repeats on each row; a money figure or a
+  // percentage does not.
+  assert.equal(bd.baiduMarkdownToText('<table><tr><td rowspan="2">Plan 1</td><td rowspan="2">Age 18-65</td><td>Death</td><td rowspan="2">25%</td></tr><tr><td>TPD</td></tr></table>'),
+    "Plan 1\tAge 18-65\tDeath\t25%\nPlan 1\tAge 18-65\tTPD");
 
   // 13. Baidu unreachable (the first live run, 10 Nov: connection failures after ~10 s from Vercel): the AI reader reads the
   // pages, the processing history says which call failed and the system's error code, and this instance then skips

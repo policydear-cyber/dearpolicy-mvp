@@ -127,9 +127,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** An HTML table as a grid of cell texts, with merged cells expanded so every row keeps its columns:
  * - colspan: the text in the first column it covers, the others left empty, so a value stays under its own column;
- * - rowspan: a LABEL (a cell with no digit, such as a benefit group's name) is repeated on each row it covers, so every
- *   row keeps its own name; a cell WITH a figure is printed once, on its first row, and left empty below, so one shared
+ * - rowspan: a LABEL (no money figure: a benefit group's name, "Plan 1", "Age 18-65") is repeated on each row it covers, so every
+ *   row keeps its own name; a cell WITH a money figure (a currency, grouped digits or a percentage) is printed once, on its first row, and left empty below, so one shared
  *   amount (an overall limit beside several benefits) is never copied onto each row as if it were that row's own. */
+const MONEY_FIGURE = /[$£€¥₹₩]|\b(?:RM|EUR|USD|SGD|HKD|GBP|MYR|AUD|NZD|CNY|RMB|JPY|IDR|THB|PHP|INR|Rp)\b|\d{1,3}(?:[,.' ]\d{3})+|\d+(?:\.\d+)?\s*%/;
 export function tableGrid(table: string, cellText: (html: string) => string): string[][] {
   const grid: string[][] = [];
   const pending: { col: number; rows: number; text: string }[] = [];
@@ -149,7 +150,7 @@ export function tableGrid(table: string, cellText: (html: string) => string): st
       const cs = span(m[2], "colspan"), rs = span(m[2], "rowspan");
       for (let k = 0; k < cs; k++) out[col + k] = k === 0 ? text : "";
       if (rs > 1) {
-        const carried = /\d/.test(text) ? "" : text;
+        const carried = MONEY_FIGURE.test(text) ? "" : text;
         for (let k = 0; k < cs; k++) pending.push({ col: col + k, rows: rs - 1, text: k === 0 ? carried : "" });
       }
       col += cs;
@@ -162,16 +163,27 @@ export function tableGrid(table: string, cellText: (html: string) => string): st
 
 /** Inline maths a vision model can print for figures ("$80\\%$", "$\\text{RM}\\ 50,000$") becomes plain text, so its "$"
  * delimiters are never read as a currency sign. Only a span with a LaTeX command or brace is touched: "$ 100,000" and
- * "S$1,000 to S$2,000" are printed money and stay exactly as they are. */
+ * "S$1,000 to S$2,000" are printed money and stay exactly as they are. A "$" right after a letter (S$, US$, HK$) or a
+ * backslash never opens maths, and a "$" before a digit or comma never closes it, so two amounts are never paired as
+ * one span (Critic #410: "S$200^{1} per day, max S$9,000"). A span with real working (a fraction, a sum, a root) is
+ * left exactly as printed: turning it into plain words could make a figure the page does not print. Outside maths an
+ * escaped "\\$" is a dollar sign and "1{,}000" is 1,000. */
 export function plainMath(text: string): string {
   const unlatex = (m: string) => m
     .replace(/\\(?:text|mathrm|mathbf|textbf|mbox|operatorname)\s*\{([^{}]*)\}/g, "$1")
     .replace(/\\([%$&#_])/g, "$1").replace(/\\(?:,|;|:|!|quad|qquad| )/g, " ").replace(/\\(?:times)/g, "x")
     .replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
   const mathy = (m: string) => /\\[A-Za-z%$&#_,;: !]|[{}^]/.test(m);
-  return text
-    .replace(/\$\$([\s\S]+?)\$\$/g, (whole, m: string) => (mathy(m) ? unlatex(m) : whole))
-    .replace(/\$([^$\n]+?)\$/g, (whole, m: string) => (mathy(m) ? unlatex(m) : whole));
+  const working = (m: string) => /\\(?:d?t?frac|sum|prod|int|oint|sqrt|div|cdot|pm|mp|binom|over|lim|log|ln|exp|min|max|le|ge|leq|geq|approx|neq|left|right)(?![A-Za-z])/.test(m);
+  // A span kept as printed is set aside (a private-use mark) so the clean-up below never touches it.
+  const kept: string[] = [];
+  const keep = (whole: string) => `\uE000${kept.push(whole) - 1}\uE001`;
+  const swap = (whole: string, m: string) => (!mathy(m) ? whole : working(m) ? keep(whole) : unlatex(m));
+  return text.replace(/[\uE000\uE001]/g, "")
+    .replace(/(?<![A-Za-z\\])\$\$([\s\S]+?)(?<!\\)\$\$(?![\d,])/g, swap)
+    .replace(/(?<![A-Za-z\\$])\$(?!\$)([^$\n]+?)(?<!\\)\$(?![\d,$])/g, swap)
+    .replace(/\\\$/g, "$").replace(/(\d)\{,\}(?=\d)/g, "$1,")
+    .replace(/\uE000(\d+)\uE001/g, (_, i: string) => kept[Number(i)]);
 }
 
 /** Turns one page of Baidu's Markdown into the plain page text the rest of the pipeline reads: a table row becomes
