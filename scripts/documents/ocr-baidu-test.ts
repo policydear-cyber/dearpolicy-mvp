@@ -284,10 +284,19 @@ async function main() {
   assert.equal(bd.baiduMarkdownToText("\\$1{,}000 and \\$2{,}000"), "$1,000 and $2,000");
   // F2: a span with real working is left exactly as printed (no clean figure is made from it).
   assert.equal(bd.baiduMarkdownToText("$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$"), "$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$");
-  // F3: a rowspan cell with no money figure ("Plan 1", "Age 18-65", "Section 2") repeats on each row; a money figure or a
-  // percentage does not.
-  assert.equal(bd.baiduMarkdownToText('<table><tr><td rowspan="2">Plan 1</td><td rowspan="2">Age 18-65</td><td>Death</td><td rowspan="2">25%</td></tr><tr><td>TPD</td></tr></table>'),
-    "Plan 1\tAge 18-65\tDeath\t25%\nPlan 1\tAge 18-65\tTPD");
+  // F3/F4: by position, not wording. A rowspan cell in the label column (column 0, or left of the row's first number)
+  // repeats on each row ("Age 18-65", "Section 2 Accident"); anywhere else a cell with a number, however written, is one
+  // shared figure, printed once.
+  const grid = (t: string) => bd.baiduMarkdownToText(`<table>${t}</table>`);
+  assert.equal(grid('<tr><td rowspan="2">Age 18-65</td><td>Death</td><td>S$100,000</td></tr><tr><td>TPD</td><td>S$50,000</td></tr>'), "Age 18-65\tDeath\tS$100,000\nAge 18-65\tTPD\tS$50,000");
+  assert.equal(grid('<tr><td rowspan="2">Section 2 Accident</td><td>Death</td><td>25%</td></tr><tr><td>TPD</td><td>10%</td></tr>'), "Section 2 Accident\tDeath\t25%\nSection 2 Accident\tTPD\t10%");
+  assert.equal(grid('<tr><th>Benefit</th><th>Limit (S$)</th><th>Overall (S$)</th></tr><tr><td>Outpatient</td><td>200</td><td rowspan="3">5000</td></tr><tr><td>Dental</td><td>300</td></tr><tr><td>Optical</td><td>150</td></tr>'),
+    "Benefit\tLimit (S$)\tOverall (S$)\nOutpatient\t200\t5000\nDental\t300\nOptical\t150");
+  assert.equal(grid('<tr><td>A</td><td rowspan="2">SGD5000</td></tr><tr><td>B</td></tr>'), "A\tSGD5000\nB");
+  assert.equal(grid('<tr><td>Death</td><td rowspan="2">One hundred thousand dollars</td></tr><tr><td>TPD</td></tr>'), "Death\tOne hundred thousand dollars\nTPD");
+  assert.equal(grid('<tr><td>Hospital cash</td><td>S$100 per day</td><td rowspan="2">up to 30 days</td></tr><tr><td>ICU cash</td><td>S$200 per day</td></tr>'), "Hospital cash\tS$100 per day\tup to 30 days\nICU cash\tS$200 per day");
+  assert.equal(grid('<tr><td>Physio</td><td>S$80 per visit</td><td rowspan="2">max 10 visits</td></tr><tr><td>Chiro</td><td>S$60 per visit</td></tr>'), "Physio\tS$80 per visit\tmax 10 visits\nChiro\tS$60 per visit");
+  assert.equal(grid('<tr><td rowspan="2">Plan 1</td><td rowspan="2">Hospital</td><td>Room</td><td>S$300</td></tr><tr><td>ICU</td><td>S$600</td></tr>'), "Plan 1\tHospital\tRoom\tS$300\nPlan 1\tHospital\tICU\tS$600");
 
   // 13. Baidu unreachable (the first live run, 10 Nov: connection failures after ~10 s from Vercel): the AI reader reads the
   // pages, the processing history says which call failed and the system's error code, and this instance then skips

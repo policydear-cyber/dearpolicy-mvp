@@ -125,12 +125,13 @@ async function apiData(res: Response): Promise<Record<string, unknown>> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** A digit or a number written as a word: such a cell may be a figure ("5000", "up to 30 days", "One hundred thousand"). */
+const NUMBERISH = /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|lakh|crore|half|double|twice|once)\b/i;
 /** An HTML table as a grid of cell texts, with merged cells expanded so every row keeps its columns:
  * - colspan: the text in the first column it covers, the others left empty, so a value stays under its own column;
- * - rowspan: a LABEL (no money figure: a benefit group's name, "Plan 1", "Age 18-65") is repeated on each row it covers, so every
- *   row keeps its own name; a cell WITH a money figure (a currency, grouped digits or a percentage) is printed once, on its first row, and left empty below, so one shared
- *   amount (an overall limit beside several benefits) is never copied onto each row as if it were that row's own. */
-const MONEY_FIGURE = /[$£€¥₹₩]|\b(?:RM|EUR|USD|SGD|HKD|GBP|MYR|AUD|NZD|CNY|RMB|JPY|IDR|THB|PHP|INR|Rp)\b|\d{1,3}(?:[,.' ]\d{3})+|\d+(?:\.\d+)?\s*%/;
+ * - rowspan: a LABEL (in column 0, or holding no number at all) is repeated on each
+ *   row it covers, so every row keeps its own name; any other cell with a number (a digit or a number word) is printed
+ *   once, on its first row, and left empty below, so one shared amount (an overall limit beside several benefits) is never copied onto each row as if it were that row's own. */
 export function tableGrid(table: string, cellText: (html: string) => string): string[][] {
   const grid: string[][] = [];
   const pending: { col: number; rows: number; text: string }[] = [];
@@ -144,16 +145,21 @@ export function tableGrid(table: string, cellText: (html: string) => string): st
     // Cells carried down from a rowspan above take their columns first.
     for (const p of pending) if (p.rows > 0) { out[p.col] = p.text; p.rows--; }
     let col = 0;
+    const spans: { col: number; cs: number; rs: number; text: string }[] = [];
     for (const m of row.matchAll(/<t([dh])\b([^>]*)>([\s\S]*?)<\/t\1>/gi)) {
       while (out[col] !== undefined) col++;
       const text = cellText(m[3]);
       const cs = span(m[2], "colspan"), rs = span(m[2], "rowspan");
       for (let k = 0; k < cs; k++) out[col + k] = k === 0 ? text : "";
-      if (rs > 1) {
-        const carried = MONEY_FIGURE.test(text) ? "" : text;
-        for (let k = 0; k < cs; k++) pending.push({ col: col + k, rows: rs - 1, text: k === 0 ? carried : "" });
-      }
+      if (rs > 1) spans.push({ col, cs, rs, text });
       col += cs;
+    }
+    // Decided by position, never by how a figure is written (Critic #410 F4): a rowspan cell in column 0 is the rows'
+    // name and repeats; anywhere else a cell with a number (a digit or a number word) is one shared figure, printed once.
+    // (A column left of the row's first number holds no number by definition, so it repeats under the same rule.)
+    for (const sp of spans) {
+      const carried = sp.col === 0 || !NUMBERISH.test(sp.text) ? sp.text : "";
+      for (let k = 0; k < sp.cs; k++) pending.push({ col: sp.col + k, rows: sp.rs - 1, text: k === 0 ? carried : "" });
     }
     for (let i = pending.length - 1; i >= 0; i--) if (pending[i].rows <= 0) pending.splice(i, 1);
     grid.push(Array.from({ length: out.length }, (_, i) => out[i] ?? ""));
