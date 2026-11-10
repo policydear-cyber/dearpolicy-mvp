@@ -137,7 +137,7 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
   // (assemble.ts tierProblem). Read on their own, so a failure only leaves the age groups unsettled (shown with no amount),
   // never the table unbuilt.
   try {
-    const dob = new Map((await db("SELECT id, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND date_of_birth IS NOT NULL", [accountId]))
+    const dob = new Map((await db("SELECT id, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND lifecycle_state='active' AND date_of_birth IS NOT NULL", [accountId]))
       .map((r) => [String(r.id), String(r.date_of_birth)]));
     for (const p of people) p.date_of_birth = dob.get(p.id) ?? null;
   } catch { /* no dates of birth: age groups stay unsettled */ }
