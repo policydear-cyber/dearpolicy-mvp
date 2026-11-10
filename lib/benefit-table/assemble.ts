@@ -423,27 +423,35 @@ export const OWN_LINE_WHY = "printed on this cover's own line";
  * same words, spacing aside) belongs to that cover, whatever section the reading put it in: a rider's line in a schedule's
  * "Component" or "Policy Schedule" block is the rider's own line, not a benefit of the section's base cover (live test
  * 10 Nov: rider amounts shown under the base cover, or under no cover at all). Only when exactly one cover type of that
- * document prints that line, and only for cover types someone in the family holds. Fixed for any document: it compares
- * the reading's own quotes, never a product or benefit name. */
-export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<string>): Map<CheckedBenefit, string> {
-  const lineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
-  const out = new Map<CheckedBenefit, string>();
+ * document prints that line, and only for cover types someone in the family holds. The row is then shown only for the
+ * people whose own cover was read from that very line (Critic #405 F1: on a joint schedule, Jane's S$50,000 rider line is
+ * never shown for John, whose own line prints S$30,000). A cover's quote counts as its own line only when it is one printed
+ * line that holds no other cover's quote (Critic #405 F2: a basic plan quoted as a block that includes its rider's line
+ * never takes the rider's row). Fixed for any document: it compares the reading's own quotes, never a product or benefit
+ * name. */
+export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<string>): Map<CheckedBenefit, { cover: string; line: string }> {
+  const out = new Map<CheckedBenefit, { cover: string; line: string }>();
   for (const r of readings) {
     if (r.kind === "illustration") continue;
+    const own = r.covers.filter((c) => c.source.documentId === r.documentId && !!c.source.excerpt.trim());
+    const flat = (s: Source) => s.excerpt.toLowerCase().replace(/\s+/g, " ").trim();
     const byLine = new Map<string, Set<string>>();
-    for (const c of r.covers) {
-      if (c.source.documentId !== r.documentId || !c.source.excerpt.trim()) continue;
-      const k = lineKey(c.source);
+    for (const c of own) {
+      if (c.source.excerpt.trim().includes("\n")) continue;
+      if (own.some((o) => o !== c && o.source.page === c.source.page && flat(o.source) !== flat(c.source) && flat(c.source).includes(flat(o.source)))) continue;
+      const k = ownLineKey(c.source);
       byLine.set(k, new Set([...(byLine.get(k) ?? []), coverKeyOf(c)]));
     }
     for (const b of r.benefits) {
       if (b.source.documentId !== r.documentId || !b.source.excerpt.trim()) continue;
-      const keys = byLine.get(lineKey(b.source));
-      if (keys?.size === 1) { const key = [...keys][0]; if (held.has(key)) out.set(b, key); }
+      const line = ownLineKey(b.source), keys = byLine.get(line);
+      if (keys?.size === 1) { const key = [...keys][0]; if (held.has(key)) out.set(b, { cover: key, line }); }
     }
   }
   return out;
 }
+/** A printed line's place: its page and words, spacing aside. */
+export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
@@ -475,12 +483,16 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   }
   const people = family.map((m) => ({ id: m.id, name: m.display_name, covers: covers.filter((c) => c.personId === m.id), rows: [] as TableRow[] }));
   const ownLine = ownLineCovers(readings, new Set(types.map((t) => t.key)));
+  // Placed by its line only when someone's cover shown here was read from that line (a person's cover kept from another
+  // copy of the document is not): otherwise the row keeps the section's link, so it is never placed for no one.
+  const readFrom = new Set(covers.map((c) => `${c.coverKey}\u0001${c.source.documentId}\u0001${ownLineKey(c.source)}`));
+  for (const [b, o] of ownLine) if (!readFrom.has(`${o.cover}\u0001${b.source.documentId}\u0001${o.line}`)) ownLine.delete(b);
   // A link the household chose is theirs: the own line never overrides it.
   const householdChose = (l: SectionLink | undefined) => (l as { chosenBy?: string } | undefined)?.chosenBy === "household";
-  const placedOf = (sectionKey: string, b: CheckedBenefit): { cover: string; why: string } | null => {
+  const placedOf = (sectionKey: string, b: CheckedBenefit): { cover: string; why: string; line?: string } | null => {
     const l = linkOf.get(sectionKey);
     const own = householdChose(l) ? undefined : ownLine.get(b);
-    if (own) return { cover: own, why: OWN_LINE_WHY };
+    if (own) return { cover: own.cover, why: OWN_LINE_WHY, line: own.line };
     return l?.cover ? { cover: l.cover, why: l.why } : null;
   };
   // A section is said to be unlinked only for the rows its own line did not place.
@@ -497,7 +509,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;
-    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover), r.documentId)) {
+    // A row placed by its own line is shown only for the people whose cover was read from that line.
+    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,

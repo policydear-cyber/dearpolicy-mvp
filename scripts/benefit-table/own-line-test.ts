@@ -91,6 +91,46 @@ test("a cover nobody in the family holds is never given rows by its line", () =>
   assert.deepEqual(t.people[0].rows, []);
 });
 
+test("Critic #405 F1: on a joint schedule each life's rider line is shown only for that life, at its own amount", () => {
+  const text = "POLICY SCHEDULE\nPolicy No: HL-77120\nLife Assured: Jane Doe\nComponent\tSum Assured\nCritical Illness Rider\tS$50,000\nLife Assured: John Roe\nComponent\tSum Assured\nCritical Illness Rider\tS$30,000\nEnd.";
+  const doc: SourceDoc = { id: DOC, name: "Joint schedule.pdf", readable: true, pages: [{ page: 1, text }] };
+  const r = checkReading(doc, { ...reading([
+    cover({ person: "Jane Doe", product: "Harbour Life Plan", cover: "Critical Illness Rider", sumInsured: 50000, quote: "Critical Illness Rider\tS$50,000" }),
+    cover({ person: "John Roe", product: "Harbour Life Plan", cover: "Critical Illness Rider", sumInsured: 30000, quote: "Critical Illness Rider\tS$30,000" }),
+  ], [
+    row({ section: "Component", benefit: "Critical Illness Rider", value: 50000, quote: "Critical Illness Rider\tS$50,000" }),
+    row({ section: "Component", benefit: "Critical Illness Rider", value: 30000, quote: "Critical Illness Rider\tS$30,000" }),
+  ]), document: { kind: "personal_proof", product: "Harbour Life Plan", insurer: null, namedPeople: ["Jane Doe", "John Roe"], plan: null, periodFrom: null, periodTo: null } });
+  const section = sectionKeyOf(DOC, { section: "Component", column: null });
+  const ci = coverKeyOf({ product: "Harbour Life Plan", cover: "Critical Illness Rider", plan: null, riderOf: null });
+  for (const link of [null, ci]) {
+    const t = assembleTable([r], family, [{ section, cover: link, why: "block" }]);
+    const amounts = (i: number) => t.people[i].rows.map((x) => (x.figure as { amount?: number }).amount);
+    assert.deepEqual(amounts(0), [50000], `Jane (link ${link}): only her own line`);
+    assert.deepEqual(amounts(1), [30000], `John (link ${link}): only his own line`);
+  }
+});
+test("Critic #405 F2: a basic plan quoted as a block that includes its rider's line never takes the rider's row", () => {
+  const text = "POLICY SCHEDULE\nLife Assured: Jane Doe\nHarbour Life Plan\tS$100,000\nCritical Illness Rider\tS$50,000\nEnd.";
+  const doc: SourceDoc = { id: DOC, name: "Harbour schedule.pdf", readable: true, pages: [{ page: 1, text }] };
+  const r = checkReading(doc, reading([
+    cover({ product: "Harbour Life Plan", cover: "Harbour Life Plan", sumInsured: 100000, quote: "Harbour Life Plan\tS$100,000\nCritical Illness Rider\tS$50,000" }),
+    cover({ product: "Harbour Life Plan", cover: "Critical Illness Rider", riderOf: "Harbour Life Plan", sumInsured: 50000, quote: "Critical Illness Rider\tS$50,000" }),
+  ], [row({ section: "Riders", benefit: "Critical Illness Rider", value: 50000, quote: "Critical Illness Rider\tS$50,000" })]));
+  const base = coverKeyOf({ product: "Harbour Life Plan", cover: "Harbour Life Plan", plan: null, riderOf: null });
+  const ci = coverKeyOf({ product: "Harbour Life Plan", cover: "Critical Illness Rider", plan: null, riderOf: "Harbour Life Plan" });
+  const t = assembleTable([r], family, [{ section: sectionKeyOf(DOC, { section: "Riders", column: null }), cover: ci, why: "the rider" }]);
+  assert.deepEqual(rowsOf(t, ci), ["Critical Illness Rider"]);
+  assert.deepEqual(rowsOf(t, base), [], "never moved under the basic plan");
+});
+test("a row whose person's cover is kept from another document keeps the section's link: never shown for no one", () => {
+  const s = schedule();
+  const cert: SourceDoc = { id: "eeeeeeee-0000-4000-8000-000000000002", name: "Certificate.pdf", readable: true, pages: [{ page: 1, text: "CERTIFICATE\nJane Doe\nCritical Illness Rider\tS$50,000" }] };
+  const c = checkReading(cert, reading([cover({ product: "Harbour Life Plan", cover: s.lines.ci, riderOf: s.lines.base, sumInsured: 50000, quote: `${s.lines.ci}\tS$50,000` })], []));
+  const t = assembleTable([c, s.r], family, [{ section: s.section, cover: s.keys.ci, why: "block" }]);
+  assert.ok(rowsOf(t, s.keys.ci).includes(s.lines.ci), JSON.stringify(t.people[0].rows.map((x) => [x.cover, x.benefit])));
+});
+
 console.log(`benefit-table own line: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 process.exit(failures.length ? 1 : 0);

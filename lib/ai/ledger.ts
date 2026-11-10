@@ -86,7 +86,7 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
 }
 /** What the household reads when the hard stop is reached: no figures, no system words (live run 23 Oct: the chat showed
  * "Something went wrong" instead). */
-export const SPEND_LIMIT_TEXT="Your household has reached this month’s limit for answers and document reading. It resets at the start of next month.";
+export const SPEND_LIMIT_TEXT="Your household has reached this month’s limit for answers. Documents are still read. It resets at the start of next month.";
 /** Thrown before a hosted call when the household has passed its hard stop. */
 export class SpendCapReached extends Error{constructor(message:string){super(message);this.name="SpendCapReached";}}
 /** What the household reads when this month's use could not be checked: nothing was sent, and it is worth another try. */
@@ -107,5 +107,5 @@ export async function overSpendCap(accountId:string){
 }
 export async function assertUnderSpendCap(accountId:string){
   if(await overSpendCap(accountId))
-    throw new SpendCapReached("This household has reached its model-spend limit for the month ($"+planLimits().hardStopUsd.toFixed(2)+"). Questions from documents already read still work; reading new documents and model-assisted answers resume next month or on an upgraded plan.");
+    throw new SpendCapReached("This household has reached its model-spend limit for the month ($"+planLimits().hardStopUsd.toFixed(2)+"). Documents are still read, and questions from documents already read still work; model-assisted answers resume next month or on an upgraded plan.");
 }
