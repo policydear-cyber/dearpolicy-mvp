@@ -222,6 +222,7 @@
     "security:rollout-staleness-test": "node --import tsx scripts/rollout-staleness-regressions.ts",
     "security:pipeline-worker-test": "node --import tsx scripts/pipeline-worker-regressions.ts",
     "security:worker-runtime-test": "node --import tsx scripts/worker-runtime-regressions.ts",
+    "jobs:self-kick-test": "node --import tsx scripts/jobs/self-kick-test.ts",
     "security:dead-letter-test": "node --import tsx scripts/dead-letter-regressions.ts",
     "jobs:worker": "node --import tsx scripts/worker.ts",
     "jobs:dead-letter": "node --import tsx scripts/dead-letter.ts",

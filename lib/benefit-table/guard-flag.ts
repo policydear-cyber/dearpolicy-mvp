@@ -7,7 +7,9 @@
  * - DEARPOLICY_FIGURE_GUARD_MODELS: the four guards, comma-separated "anthropic:<model>:<wording>" (wording "direct" or
  *   "copyFirst"). Default: Opus 5.5 direct, Sonnet 5.5 copy-first, Sonnet 5 direct, Haiku 4.5 copy-first: different
  *   models and wordings, so the five readers do not share one blind spot.
- * - DEARPOLICY_FIGURE_GUARD_CAP_USD: the most one document's check may spend, worst case (default 3). */
+ * - DEARPOLICY_FIGURE_GUARD_CAP_USD: an optional limit on what one document's check may spend, worst case. Unset: no limit,
+ *   since reading a document is never limited by cost (DC, 10 Nov: accuracy first); every call is still booked and the
+ *   reading still fails closed when the usage ledger cannot be read. */
 import { isProduction, truthy } from "@/lib/launch/guards";
 import { alphaAccountAllowed } from "@/lib/launch/alpha";
 import type { ModelChoice } from "@/lib/ai/providers";
@@ -42,6 +44,7 @@ export function guardRoster(env: NodeJS.ProcessEnv = process.env): { choice: Mod
 /** Whether a guard model takes the effort setting: Haiku 4.5 refuses a request that carries one (400, checked 6 Nov 2026). */
 export const supportsEffort = (model: string) => !/^claude-haiku-4/.test(model);
 export function guardCapUsd(env: NodeJS.ProcessEnv = process.env): number {
-  const n = Number((env.DEARPOLICY_FIGURE_GUARD_CAP_USD ?? "").trim() || 3);
-  return Number.isFinite(n) && n > 0 ? n : 3;
+  const raw = (env.DEARPOLICY_FIGURE_GUARD_CAP_USD ?? "").trim();
+  const n = Number(raw);
+  return raw && Number.isFinite(n) && n > 0 ? n : Infinity;
 }
