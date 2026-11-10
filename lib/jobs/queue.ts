@@ -297,7 +297,11 @@ export async function heartbeatJob(
  * with the password typed again (enqueueJob resurrectTerminal), so the password is kept only while the job can still run
  * (queued, processing, failed_retryable). Before, it stayed in a finished job's row until the document was deleted
  * (TE #400). A payload that is not an object is left as it is. */
-export const WITHOUT_PASSWORD_SQL = `CASE WHEN jsonb_typeof(payload)='object' THEN payload - 'pdfPassword' ELSE payload END`;
+export const WITHOUT_PASSWORD_SQL = `CASE WHEN jsonb_typeof(payload)='object' THEN payload - 'pdfPassword' - 'heldForScan' ELSE payload END`;
+/** On success the password is dropped too, unless the run marked the job as
+ * waiting for its malware scan (lib/scanning/held-password.ts): the scan
+ * retry reads the document later from this payload and drops it then. */
+const SUCCEEDED_PAYLOAD_SQL = `CASE WHEN jsonb_typeof(payload)='object' AND payload->>'heldForScan' IS DISTINCT FROM 'true' THEN payload - 'pdfPassword' - 'heldForScan' ELSE payload END`;
 
 /** Marks a job successfully finished. CAS-guarded on (id, lease_owner,
  * status='processing') -- a worker that has lost its lease can never
@@ -305,7 +309,7 @@ export const WITHOUT_PASSWORD_SQL = `CASE WHEN jsonb_typeof(payload)='object' TH
 export async function completeJob(db: DbClient, params: { jobId: string; workerId: string }): Promise<BackgroundJobRow> {
   const result = await db.query<BackgroundJobRow>(
     `UPDATE background_jobs
-        SET status='succeeded', completed_at=now(), lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
+        SET status='succeeded', completed_at=now(), lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${SUCCEEDED_PAYLOAD_SQL}
       WHERE id=$1 AND lease_owner=$2 AND status='processing'
       RETURNING ${COLUMNS}`,
     [params.jobId, params.workerId],

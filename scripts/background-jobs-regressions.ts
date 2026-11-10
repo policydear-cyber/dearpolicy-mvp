@@ -448,6 +448,17 @@ async function runDatabaseTests() {
       assert.equal((await passwordOf(j.id)).has, true, "processing with a cancel requested: still running, kept");
       await finalizeCancelledJob(pool, { jobId: j.id, workerId: "w" });
       assert.equal((await passwordOf(j.id)).has, false, "cancelled by its worker: password gone");
+      // A run that marked its job as waiting for the malware scan keeps it on success (lib/scanning/held-password.ts); a dead letter never does.
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await pool.query(`UPDATE background_jobs SET payload=payload || '{"heldForScan":true}' WHERE id=$1`, [j.id]);
+      await completeJob(pool, { jobId: j.id, workerId: "w" });
+      assert.equal((await passwordOf(j.id)).has, true, "held for its scan: kept");
+      j = await fresh();
+      await claimNextJob(pool, { jobType: j.jobType, workerId: "w" });
+      await pool.query(`UPDATE background_jobs SET payload=payload || '{"heldForScan":true}' WHERE id=$1`, [j.id]);
+      await failJob(pool, { jobId: j.id, workerId: "w", errorCategory: "non_retryable", errorMessage: "x" });
+      assert.equal((await pool.query(`SELECT payload ?| ARRAY['pdfPassword','heldForScan'] AS has FROM background_jobs WHERE id=$1`, [j.id])).rows[0].has, false, "dead letter: password and mark gone");
       // A job with no password, or a payload that is not an object, finishes as before.
       const { row: plain } = await enqueueJob(pool, { jobType: `pw-${randomUUID()}`, idempotencyKey: "a", payload: ["x"] });
       await claimNextJob(pool, { jobType: plain.job_type, workerId: "w" });
