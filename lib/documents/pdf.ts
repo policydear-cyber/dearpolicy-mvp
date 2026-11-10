@@ -78,11 +78,18 @@ export async function extractPdfPages(
       const content = await page.getTextContent();
       // Keep the position of every text item. Joining with spaces was throwing
       // away the layout, which is where a benefit table lives.
-      const positioned = content.items.flatMap((item) =>
-        "str" in item && String(item.str).trim()
-          ? [{ text: String(item.str), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
-          : []);
-      const layout = renderPageLayout(positioned, page.getViewport({ scale: 1 }).width);
+      // Each position is where the item is on the page as it is shown: a page stored turned (a landscape statement
+      // kept as a portrait page with /Rotate 90) prints its rows along the stored page's x axis, so read in the stored
+      // coordinates every table column came out as one line ("StatusIn ForceIn Force", "100,000.002,000.00500.00")
+      // and no figure could be tied to its row (a household's schedules, held back since October). y counts up from
+      // the bottom of the shown page, as the layout expects.
+      const viewport = page.getViewport({ scale: 1 });
+      const positioned = content.items.flatMap((item) => {
+        if (!("str" in item) || !String(item.str).trim()) return [];
+        const shown = pdfjs.Util.transform(viewport.transform, item.transform ?? [1, 0, 0, 1, 0, 0]);
+        return [{ text: String(item.str), x: Number(shown[4] ?? 0), y: viewport.height - Number(shown[5] ?? 0), w: Number(item.width ?? 0) }];
+      });
+      const layout = renderPageLayout(positioned, viewport.width);
       const text = layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim();
       // A page with almost no text but one or more painted images is normally a
       // scan. Remembering that signal lets the ingestion pipeline OCR only the

@@ -288,6 +288,7 @@
     "documents:role-unchecked-pages-test": "node --import tsx scripts/documents/role-unchecked-pages-test.ts",
     "documents:layout-wrapped-labels-test": "node --import tsx scripts/documents/layout-wrapped-labels-test.ts",
     "documents:column-check-test": "node --import tsx scripts/documents/column-check-test.ts",
+    "documents:turned-page-test": "node --import tsx scripts/documents/turned-page-test.ts",
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
     "policies:not-sure-owner-test": "node --import tsx --test scripts/policies/not-sure-owner-test.ts",
     "policies:upload-override-test": "node --import tsx --test scripts/policies/upload-override-test.ts",
