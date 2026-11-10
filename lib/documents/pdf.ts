@@ -81,11 +81,33 @@ export async function extractPdfPages(
       const content = await page.getTextContent();
       // Keep the position of every text item. Joining with spaces was throwing
       // away the layout, which is where a benefit table lives.
-      const positioned = content.items.flatMap((item) =>
-        "str" in item && String(item.str).trim()
-          ? [{ text: String(item.str), x: Number(item.transform?.[4] ?? 0), y: Number(item.transform?.[5] ?? 0), w: Number(item.width ?? 0) }]
-          : []);
-      const layout = renderPageLayout(positioned, page.getViewport({ scale: 1 }).width);
+      // A page stored turned (a landscape statement kept as a portrait page with /Rotate 90) prints its rows along the
+      // stored page's x axis: read in the stored coordinates, every table column came out as one line ("StatusIn ForceIn
+      // Force", "100,000.002,000.00500.00") and no figure could be tied to its row (a household's schedules, held back
+      // since October). Such a page is read where each item is as the page is shown. But a page whose text runs plainly
+      // left to right in the stored coordinates and that a viewer only turned (and saved with /Rotate) reads right in
+      // them, and not as shown (Critic #401). So the frame is chosen per page by the text's own direction: as shown only
+      // when the page is turned and most of its text runs left to right there; otherwise the stored coordinates, as
+      // before. y counts up from the bottom, as the layout expects.
+      const viewport = page.getViewport({ scale: 1 });
+      const items = content.items.flatMap((item) => "str" in item && String(item.str).trim()
+        ? [{ text: String(item.str), stored: (item.transform ?? [1, 0, 0, 1, 0, 0]) as number[], w: Number(item.width ?? 0) }] : []);
+      const shownOf = (t: number[]) => pdfjs.Util.transform(viewport.transform, t) as number[];
+      // Left to right on the shown page: its baseline runs along +x (a > 0) and barely rises or falls (|b| small).
+      const readsAcross = (t: number[]) => t[0] > 0 && Math.abs(t[1]) <= Math.abs(t[0]) * 0.1;
+      const turned = ((page.rotate ?? 0) % 360 + 360) % 360 !== 0;
+      const asShown = turned && items.filter((i) => readsAcross(shownOf(i.stored))).length * 2 > items.length;
+      const stored = (i: (typeof items)[number]) => ({ text: i.text, x: Number(i.stored[4] ?? 0), y: Number(i.stored[5] ?? 0), w: i.w });
+      const shown = (i: (typeof items)[number]) => { const t = shownOf(i.stored); return { text: i.text, x: Number(t[4] ?? 0), y: viewport.height - Number(t[5] ?? 0), w: i.w }; };
+      // On a turned page, text that runs across only in the other frame (a footer added plainly after the page was turned,
+      // or a line stamped upright on a page a viewer turned) is its own block, laid out in that frame and put after the
+      // rest, never glued into the main block's lines (Critic #401).
+      const apart = !turned ? [] : asShown ? items.filter((i) => !readsAcross(shownOf(i.stored)) && readsAcross(i.stored))
+        : items.filter((i) => !readsAcross(i.stored) && readsAcross(shownOf(i.stored)));
+      const rest = items.filter((i) => !apart.includes(i));
+      const main = renderPageLayout(rest.map(asShown ? shown : stored), viewport.width);
+      const extra = apart.length ? renderPageLayout(apart.map(asShown ? stored : shown), viewport.width) : null;
+      const layout = extra ? { text: [main.text, extra.text].filter(Boolean).join("\n"), lines: [...main.lines, ...extra.lines] } : main;
       const text = layout.text || content.items.map((item) => ("str" in item ? String(item.str) : "")).join(" ").replace(/\s+/g, " ").trim();
       // A page with almost no text but one or more painted images is normally a
       // scan. Remembering that signal lets the ingestion pipeline OCR only the
