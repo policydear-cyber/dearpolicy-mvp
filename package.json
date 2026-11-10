@@ -77,6 +77,7 @@
     "simple:chat-test": "node --import tsx scripts/simple-answer/chat-test.ts",
     "simple:all-accounts-test": "node --import tsx --test scripts/simple-answer/all-accounts-test.ts",
     "simple:still-reading-test": "node --import tsx scripts/simple-answer/still-reading-test.ts",
+    "simple:cover-not-counted-test": "node --import tsx scripts/simple-answer/cover-not-counted-test.ts",
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
     "chat:no-expiry-wording-test": "node --import tsx scripts/chat/no-expiry-wording-test.ts",
     "db:start": "docker compose up -d db",
