@@ -391,7 +391,10 @@ const within = (a: string, b: string) => ` ${b} `.includes(` ${a} `);
 function planLists(readings: CheckedReading[], types: CoverType[]): Map<string, Set<string>> {
   const household = types.map((t) => headingWords(t.plan)).filter(Boolean);
   return new Map(readings.map((r) => {
-    const columns = [...new Set(r.benefits.map((b) => headingWords(b.column)).filter(Boolean))];
+    // A column headed with the full name of someone the document prints a cover for is that person's, never a plan
+    // (a joint schedule's "Jane Doe" and "John Roe" columns; whoseRows tells them apart).
+    const names = [...new Set([...r.covers.map((c) => c.person), ...r.namedPeople])].map((n) => headingWords(n)).filter((n) => n.includes(" "));
+    const columns = [...new Set(r.benefits.map((b) => headingWords(b.column)).filter((c) => c && !names.some((n) => within(n, c))))];
     return [r.documentId, new Set([...household, headingWords(r.plan), ...(columns.length >= 2 ? columns : [])].filter(Boolean))];
   }));
 }
@@ -414,6 +417,46 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
   if (!list.some((c) => c.holding)) return list;
   const own = list.filter((c) => c.source.documentId === documentId);
   return own.length ? own : list;
+}
+
+/** Why a section's rows are shown for no one when its document prints the cover for two or more people and the rows do
+ * not say whose they are (whoseRows). */
+export const NOT_TOLD_WHY = "printed for more than one person on this document, and these rows do not say whose they are: not shown for anyone";
+const wholeName = (name: string) => { const n = norm(name); return n.includes(" ") ? n : null; };
+/** Whose a linked section's row is, by what its own document prints (joint schedule fix, 10 Nov: a section linked by cover
+ * type was shown for every holder of that type, so one life's amounts showed for the other life on a joint schedule).
+ * `undefined`: every holder of the cover type, as before (a wording or product summary, a document that prints no one's
+ * cover of that type). Otherwise the people the row may be shown for: when the document prints the cover for exactly one
+ * holder, only that holder (never another holder whose own cover is printed elsewhere); when it prints it for two or more,
+ * only the one whose full printed name the row's column or section heading names (never its own line, which may name a payee);
+ * when no one life is named, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
+ * no figure of its own, or one worked out on each person's own sum insured, is every holder's. */
+function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[]): Set<string> | undefined {
+  // A row whose figure is worked out on each person's own sum insured, or that prints none, is right for every holder (a
+  // scheme summary's "Death Benefit" for each member): only a row that prints its own figure can be one life's.
+  if (b.value == null || (b.pays === "percent" && b.percentOf === "sum_insured")) return undefined;
+  const onDoc = (c: PersonCover) => c.source.documentId === documentId || (c.copyDocuments ?? []).some((d) => d.documentId === documentId);
+  let printed = covers.filter((c) => c.coverKey === coverKey && onDoc(c));
+  // The cover type is not printed on this document, but its holders' other covers are (a personal schedule whose rider is
+  // printed only as a benefit section): those holders only.
+  if (!printed.length) {
+    const holders = new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId));
+    printed = covers.filter((c) => holders.has(c.personId) && onDoc(c));
+  }
+  const ids = new Set(printed.map((c) => c.personId));
+  if (!ids.size) return undefined;
+  if (ids.size === 1) return ids;
+  const text = ` ${norm([b.column, b.section].filter(Boolean).join(" "))} `;
+  const named = [...ids].filter((id) => {
+    const names = [...printed.filter((c) => c.personId === id).map((c) => c.person), family.find((m) => m.id === id)?.display_name ?? ""];
+    return names.some((n) => { const w = wholeName(n); return !!w && text.includes(` ${w} `); });
+  });
+  if (named.length === 1) return new Set(named);
+  // No one life named: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never anyone
+  // else: no one is shown an amount that is not theirs.
+  const own = (c: PersonCover) => c.confirmation ? c.confirmation.printed : c.sumInsured;
+  return new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
+    && (!c.currency || !b.currency || c.currency === b.currency))));
 }
 
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
@@ -506,11 +549,15 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     const refused = refusedLinks.find((x) => x.link.section === s.key);
     if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
+  const notTold = new Set<string>();
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;
+    // A row placed by its section's link is shown only for the people its own document says it is for (whoseRows).
+    const who = l.line ? undefined : whoseRows(r.documentId, b, l.cover, covers, family);
+    if (who && !who.size) { notTold.add(sectionKeyOf(r.documentId, b)); continue; }
     // A row placed by its own line is shown only for the people whose cover was read from that line.
-    for (const p of people) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
+    for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       const figure = figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
@@ -521,6 +568,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
     }
   }
+  for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
 }
 

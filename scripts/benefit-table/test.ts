@@ -3,7 +3,7 @@
  *   npm run benefit-table:test */
 import assert from "node:assert/strict";
 import { checkReading, startDay, type SourceDoc } from "@/lib/benefit-table/check";
-import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { assembleTable, figureText, NOT_TOLD_WHY, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 import { LINKING_SCHEMA, READING_SCHEMA } from "@/lib/benefit-table/reading";
 import { sourcesOf } from "./read";
@@ -239,8 +239,18 @@ test("a premium or policy number not printed for that cover is not kept", () => 
   assert.equal(his.policyNumber, null);
   assert.equal(his.sumInsured, 80000);
 });
+// The schedule prints two lives' plans and its statement names neither: their fund value is shown for no one (DC, 10 Nov:
+// a figure is shown only for the life its document says it is for). With only Mei Ling in the family, it is hers.
+const ilpOneLife = assembleTable([ilpReading], family.filter((m) => m.id === "b"), [
+  { section: sectionKeyOf("ilp", { section: "Fund", column: null }), cover: ilpKey, why: "the plan's fund" },
+]).people[0];
+test("a joint schedule's fund value that names neither life is shown for neither, and said to be not shown", () => {
+  assert.ok(!ilpRows("a").rows.some((r) => r.benefit === "Fund value"));
+  assert.ok(!ilpRows("b").rows.some((r) => r.benefit === "Fund value"));
+  assert.ok(ilpTable.unlinkedSections.some((u) => u.why === NOT_TOLD_WHY && u.section.key === sectionKeyOf("ilp", { section: "Fund", column: null })));
+});
 test("a fund value is shown with the date it is printed for", () => {
-  const row = ilpRows("b").rows.find((r) => r.benefit === "Fund value")!;
+  const row = ilpOneLife.rows.find((r) => r.benefit === "Fund value")!;
   assert.equal(figureText(row.figure), "S$12,345.67 value as of 31/12/2025");
 });
 test("a rider with the same name on two different basic plans stays two covers", () => {
@@ -258,7 +268,7 @@ test("a rider with the same name on two different basic plans stays two covers",
   assert.equal(t.people.find((p) => p.id === "b")!.rows.length, 0);
 });
 test("a non-guaranteed projection is never shown as an amount held or payable", () => {
-  const row = ilpRows("b").rows.find((r) => r.benefit.startsWith("Projected"))!;
+  const row = ilpOneLife.rows.find((r) => r.benefit.startsWith("Projected"))!;
   assert.equal(row.figure.kind, "projected");
   assert.match(figureText(row.figure), /not guaranteed: not an amount held or payable/);
 });
