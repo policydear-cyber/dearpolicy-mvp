@@ -1,8 +1,9 @@
 /**
- * The household spend cap guards every structured model call (lib/ai/llm.ts structuredCompletion): document reading,
- * "Read again" and every other job that goes through it. A household already past its plan's hard stop is refused
- * before any provider request is made, whether the household is named by the caller or set for the whole request
- * (runWithModelHousehold). Scripted: the ledger read is answered in memory, model keys are removed, and every outbound
+ * The household spend cap guards every answering model call (lib/ai/llm.ts structuredCompletion), such as the chat's
+ * per-question policy reading (coverage_extraction). A household already past its plan's hard stop is refused before any
+ * provider request is made, whether the household is named by the caller or set for the whole request
+ * (runWithModelHousehold). Reading a document (intake, "Read again") is never stopped by the limit (DC, 10 Nov: "do not
+ * limit cost for reading documents"): it goes on to the provider past the hard stop. Scripted: the ledger read is answered in memory, model keys are removed, and every outbound
  * request is refused and counted, so the test can never spend anything.
  *   npm run ai:read-spend-cap-test
  */
@@ -34,8 +35,8 @@ async function main() {
   const { structuredCompletion } = await import("@/lib/ai/llm");
   const { SpendCapReached, planLimits } = await import("@/lib/ai/ledger");
   const { runWithModelHousehold } = await import("@/lib/ai/usage");
-  const call = (householdId?: string) => structuredCompletion({ system: "Read the page.", user: "Page 1: Hospital cash S$100 a day.", schema: z.object({ ok: z.boolean() }),
-    role: "reading", operation: "policy_extraction" as never, householdId, attempts: 1, timeoutMs: 1_000 } as never);
+  const call = (householdId?: string, operation = "coverage_extraction") => structuredCompletion({ system: "Read the page.", user: "Page 1: Hospital cash S$100 a day.", schema: z.object({ ok: z.boolean() }),
+    role: "reading", operation: operation as never, householdId, attempts: 1, timeoutMs: 1_000 } as never);
   const outcome = async (p: Promise<unknown>) => { try { await p; return null; } catch (e) { return e; } };
 
   const over = "11111111-1111-4111-8111-111111111111", under = "22222222-2222-4222-8222-222222222222";
@@ -50,7 +51,7 @@ async function main() {
     assert.equal(outbound, before, "a provider request was attempted for a household past its limit");
     assert.deepEqual(writes, [], "a refused call recorded usage");
   });
-  await test("a household past its hard stop is refused when it is set for the whole request (document reading, Read again)", async () => {
+  await test("a household past its hard stop is refused when it is set for the whole request (a chat turn)", async () => {
     const before = outbound;
     const e = await outcome(runWithModelHousehold(over, () => call()));
     assert.ok(e instanceof SpendCapReached, `expected the spend cap, got: ${e instanceof Error ? e.message : String(e)}`);
@@ -60,6 +61,12 @@ async function main() {
     spent.set(over, cap);
     assert.ok((await outcome(call(over))) instanceof SpendCapReached);
     spent.set(over, cap + 0.01);
+  });
+  await test("reading a document past the hard stop is not refused: it goes on to the provider, named or set for the request", async () => {
+    const e = await outcome(call(over, "policy_extraction"));
+    assert.ok(e && !(e instanceof SpendCapReached), `a document reading was refused for spend: ${e instanceof Error ? e.message : String(e)}`);
+    const e2 = await outcome(runWithModelHousehold(over, () => call(undefined, "policy_extraction")));
+    assert.ok(e2 && !(e2 instanceof SpendCapReached), `a document reading set for the request was refused for spend: ${e2 instanceof Error ? e2.message : String(e2)}`);
   });
   await test("control: a household under its limit goes on to the provider (refused here only because no model is set up)", async () => {
     const e = await outcome(call(under));
