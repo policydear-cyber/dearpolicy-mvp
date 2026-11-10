@@ -174,7 +174,7 @@ async function main() {
   const { benefitTableLiveFor } = await import("@/lib/benefit-table/app");
   const all = env({ ...prod, DEARPOLICY_BENEFIT_TABLE_ALL_ACCOUNTS: "1" });
   const OLD = "3a9c7d21-0b4e-4f6a-8c55-998877665544";
-  type Doc = { role: string | null; live: boolean; tableRead: boolean };
+  type Doc = { role: string | null; live: boolean; tableRead: boolean; carried?: "job" | "key" };
   type Stored = { docs?: Doc[]; ledgerRows?: number; ledgerTable?: boolean; fail?: "readings" | "ledger" };
   // Answers the statements benefitTableLiveFor sends, from what is stored for OLD; every other household has nothing.
   const dbWith = (who: string, st: Stored) => (async (sql: string, p: unknown[]) => {
@@ -186,7 +186,10 @@ async function main() {
     if (q.startsWith("SELECT 1 FROM policies")) {
       assert.match(q, /processing_status='ready'/); assert.match(q, /background_jobs/, "a document being read now is not 'read before'");
       const noCover = p[1] as string[];
-      return docs.filter((d) => !d.live && !noCover.includes(d.role ?? "")).slice(0, 1).map(() => ({ x: 1 }));
+      // A table reading carried over runs: its continuation job is live ("job"), or only its saved progress is on file
+      // ("key": the continuation waits for the next request or the daily run). Either way it is being read, not read before.
+      const carriedSeen = (d: Doc) => d.carried === "job" ? /:table-reading:/.test(q) : d.carried === "key" ? /\? 'benefitTableProgress'/.test(q) : false;
+      return docs.filter((d) => !d.live && !carriedSeen(d) && !noCover.includes(d.role ?? "")).slice(0, 1).map(() => ({ x: 1 }));
     }
     if (st.fail === "ledger") throw new Error("connection reset");
     if (q.includes("to_regclass('public.coverage_rules')")) return [{ ok: st.ledgerTable !== false }];
@@ -207,6 +210,11 @@ async function main() {
     assert.equal(await benefitTableLiveFor(dbWith(OLD, {}), all, NEW), true);
     assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ live: true })] }), all, OLD), true, "a ready document whose read job is live");
     assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ role: "premium_receipt" })], ledgerTable: false }), all, OLD), true, "only a receipt on file");
+  });
+  await test("new household whose first document's table reading is carried over runs stays on the table, so the reading goes on (TE #404)", async () => {
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ carried: "job" })] }), all, OLD), true, "its continuation job is live");
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ carried: "key" })] }), all, OLD), true, "its continuation waits for the next run");
+    assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ carried: "key" }), schedule()], ledgerRows: 4 }), all, OLD), false, "control: another document read the existing way still decides");
   });
   await test("a household on the table stays there, even with coverage_rules rows and old documents (Critic M2)", async () => {
     assert.equal(await benefitTableLiveFor(dbWith(OLD, { docs: [schedule({ tableRead: true }), schedule()], ledgerRows: 9 }), all, OLD), true);

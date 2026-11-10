@@ -31,6 +31,7 @@ import { SCAN_RETRY_JOB_TYPE } from "@/lib/scanning/retry";
 import { processScanRetryJob } from "@/lib/scanning/retry-processor";
 import { holdPasswordWhileScanPending } from "@/lib/scanning/held-password";
 import { FIGURE_CHECK_JOB_TYPE } from "@/lib/benefit-table/figure-check-job";
+import { TABLE_READING_JOB_TYPE } from "@/lib/benefit-table/table-reading-job";
 
 // Checkpoint 14i: re-exported so existing importers of
 // lib/jobs/processors.ts (scripts/worker.ts, the e2e stages, this
@@ -123,4 +124,6 @@ export const PRODUCTION_JOB_TYPES: WorkerJobTypeConfig[] = [
   { jobType: SCAN_RETRY_JOB_TYPE, process: processScanRetryJob },
   // The figure guards' continuation (lib/benefit-table/figure-check-job.ts): does nothing while the guards are off.
   { jobType: FIGURE_CHECK_JOB_TYPE, process: async (job) => (await import("@/lib/benefit-table/app")).processFigureCheckJob(job) },
+  // A long document's table reading, carried over runs (lib/benefit-table/table-reading-job.ts): does nothing while the table is off.
+  { jobType: TABLE_READING_JOB_TYPE, process: async (job) => (await import("@/lib/benefit-table/app")).processTableReadingJob(job) },
 ];

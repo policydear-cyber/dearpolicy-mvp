@@ -18,7 +18,7 @@ import { SCAN_GOES_ON } from "@/lib/benefit-table/service";
  * pack). */
 export type NotFullyRead = { count: number; names: string[]; ids: string[] };
 /** Benefit-table states that mean the document's cover was not read (lib/benefit-table/service.ts documentState). */
-const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread"]);
+const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread", "read_in_part"]);
 /** The person's own documents: linked to them, or uploaded for them and linked to no one. `p` is the policies alias. */
 /** `cache`: the policies.reading_cache column exists (readingCacheReady). Then an upload whose person was "Not sure"
  * (lib/policies/upload-owner.ts) and that nobody is linked to yet is nobody's: its placeholder owner never counts. */

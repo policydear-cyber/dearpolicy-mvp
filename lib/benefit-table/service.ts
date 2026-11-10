@@ -11,7 +11,7 @@ import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
-import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, scanJobLive, tableReadingJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
@@ -35,7 +35,53 @@ export const SAVE_MARGIN_MS = 20_000;
 /** No reading call is started with less time than this left: it could not finish, and would only be paid for. */
 export const MIN_CALL_MS = 45_000;
 /** A time limit for one reading: the moment (ms since 1970) by which it must have saved, and the clock (tests pass their own). */
-export type ReadTime = { deadline?: number; now?: () => number };
+/** `strong`: the stronger reader (and how its calls are booked) a single page is tried with after a try that gave no
+ * reading, before it is read past (flag.ts benefitTableStrongModel). */
+export type ReadTime = { deadline?: number; now?: () => number; carry?: Carry; strong?: { model: TableModel; onUsage?: OnUsage } };
+/** Output room for a page's try with the stronger reader. */
+export const STRONG_MAX_OUTPUT = 48_000;
+/** A reading of a long document carried over several runs (10 Nov: a 58-page schedule and a 47-page wording ran out of
+ * their run's time after the document's other reading, and never had a table). What is read so far is saved after every
+ * part, so a run that runs out of time stops without losing it, and the next run (a continuation job,
+ * table-reading-job.ts) reads only what is left: no part is paid for twice, and the calls of every run count against the
+ * one limit. `id` names the reading (when it started); `fp` is the document's checked pages when it started, so a
+ * reading is never finished over pages that changed since. */
+export type ReadingProgress = { id: string; fp: string; queue: number[][]; done: { pages: number[]; json: unknown; model: string }[];
+  headings: string[]; columns: string[]; calls: number; limit: number; outputLimit: number;
+  /** The reading is stored and only its sections' links are left: the run that finished it had no time to link them. */
+  linkOnly?: true;
+  /** Link runs queued for it so far: each one queued again after one died waits longer (linkRetryDelayMs). */
+  linkAttempts?: number;
+  /** Runs in a row that made a paid call and read no part: the next run waits longer (readingRetryDelayMs), and the
+   * operator is told (OPERATOR_FLAG_AFTER). */
+  stalls?: number;
+  /** Paid tries of a single page whose call ran out (a whole run's time, or its output): it is tried again in a later run,
+   * at most PAGE_MAX_TRIES times, then read past (skipped) so the rest of the document is read and stored. */
+  pageTries?: Record<string, number>; skipped?: number[];
+  /** The last run that saved it (0: the run that started it), so a run queued again after one died goes on numbering. */
+  run?: number;
+  /** Times it was queued again after the run meant to go on with it died (app.ts requeueStuckTableWork). */
+  requeues?: number;
+  /** When it was last saved (app.ts saveTableProgress): a reading saved moments ago may still be queuing its next run. */
+  at?: string };
+/** Paid tries of one page that runs out before it is read past; every other page is read and stored. */
+export const PAGE_MAX_TRIES = 3;
+/** After this many failed runs or link runs in a row, the operator is told in the logs (the household sees "still reading"). */
+export const OPERATOR_FLAG_AFTER = 3;
+/** How long the next run of a carried reading waits after `stalls` runs in a row that read nothing: at once, then 2, 4, 8 ...
+ * minutes, at most 6 hours. A long policy is never given up on (DC, 10 Nov). */
+export function readingRetryDelayMs(stalls: number): number {
+  return stalls <= 0 ? 0 : Math.min(6 * 3600_000, 2 ** stalls * 60_000);
+}
+/** How long a link run queued again waits, after `attempts` link runs: 1, 2, 4 ... minutes, at most 6 hours. */
+export function linkRetryDelayMs(attempts: number): number {
+  return Math.min(6 * 3600_000, 2 ** Math.max(0, attempts - 1) * 60_000);
+}
+/** `from`: the saved reading to go on with (null: a fresh reading named `id`); `save`: stores the reading so far. */
+export type Carry = { id: string; from: ReadingProgress | null; save: (p: ReadingProgress) => Promise<void> };
+/** A call with at least this long to run that still timed out was cut off by its own size, not by a run that had little
+ * time left: a part of several pages is then read as two halves, and a single page is not tried again. */
+export const FULL_CALL_MS = 200_000;
 
 /** The output a part is planned to need, at most: half the cap, so a part is never cut off by it (5 Nov: pages 1-9 of a
  * 47-page wording, 13,400 characters with a plan table of 189 figures, ran out of 24,000 output tokens twice; each call
@@ -68,7 +114,9 @@ export function pageParts<T extends { page: number; text: string }>(pages: T[], 
 type Row = Record<string, unknown>;
 export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
 /** guards: the figure guards' verdicts on this reading (guards.ts), stored only when the guards ran (switch on). */
-export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[]; guards?: GuardRecord };
+/** skippedPages: pages a carried reading read past after PAGE_MAX_TRIES (their benefits are not in the table); the
+ * document is "read_in_part" and says which pages (Critic and TE #404). */
+export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[]; guards?: GuardRecord; skippedPages?: number[] };
 /** The figure guards for one reading (guard-run.ts): five readers, reader 1 first, and the most the check may spend. */
 export type GuardSetup = { readers: GuardReader[]; capUsd: number };
 export type OnUsage = (what: string, reply: TableReply) => Promise<void> | void;
@@ -132,17 +180,23 @@ export type DocumentFile = { original_filename: string; product_name: string | n
   policy_number: string | null; quarantine: string | null; scan_detail?: string | null };
 /** `live`: a live intake job is reading the document now (lib/rag/live-job.ts, the Documents page's own rule).
  * `scanLive`: a live automatic malware-scan retry is checking it (lib/rag/live-job.ts scanJobLive). */
-type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; file: DocumentFile };
+/** `linking`: its reading is stored, and the run that links its sections to covers is still to come (app.ts readIntoTable
+ * linkOnly; queued again until it links, requeueStuckTableWork): until then it is still being read, and none of its reading is
+ * shown. */
+/** `carried`: a table reading of it is carried over runs (app.ts TABLE_PROGRESS_KEY), which is never given up on: it goes on
+ * until read, and is queued again if its run died (app.ts requeueStuckTableWork). */
+type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boolean; linking: boolean; carried: boolean; file: DocumentFile };
 
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string, pick?: (docs: HouseholdDoc[]) => Promise<HouseholdDoc[]>): Promise<HouseholdDoc[]> {
   const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status, scan_result_detail,
-      ${policyJobLive("policies")} AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
+      (${policyJobLive("policies")} OR ${tableReadingJobLive("policies")}) AS reading_live, ${scanJobLive("policies")} AS scan_live,
+      COALESCE(extracted_json->'benefitTableProgress'->>'linkOnly','')='true' AS link_only, COALESCE(extracted_json ? 'benefitTableProgress', false) AS carried FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
   const shaped = docs.map((d) => ({
-    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true, scanLive: d.scan_live === true,
+    id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready", live: d.reading_live === true || d.link_only === true, scanLive: d.scan_live === true, linking: d.link_only === true, carried: d.carried === true,
     pages: [] as { page: number; text: string }[], people,
     file: { original_filename: String(d.original_filename), product_name: text(d.product_name), insurer: text(d.insurer), document_role: text(d.document_role),
       policy_number: text(d.policy_number), quarantine: text(d.quarantine_status), scan_detail: text(d.scan_result_detail) },
@@ -182,7 +236,12 @@ export const SCAN_GOES_ON = new Set(["uploaded", "quarantined", "scan_pending", 
 const PERSONAL_PROOF_ROLES = new Set(["personal_schedule", "certificate"]);
 /** Scan states Read again accepts (app/api/policies/reprocess/route.ts); any other is refused there. */
 const READ_AGAIN_SCAN = new Set(["scan_clean", "not_scanned_prototype"]);
-export type DocumentState = "read" | "waiting" | "stalled" | "held" | "table_unread" | "no_table" | "not_readable";
+export type DocumentState = "read" | "read_in_part" | "waiting" | "stalled" | "held" | "table_unread" | "no_table" | "not_readable";
+/** A document's table state as the chat reads it (lib/simple-chat/verify.ts): "read_in_part" carries the pages not read,
+ * as "read_in_part:23,24", so the chat's note names them. */
+export function tableStateKey(d: { state: DocumentState; unreadPages?: number[] }): string {
+  return d.state === "read_in_part" && d.unreadPages?.length ? `read_in_part:${d.unreadPages.join(",")}` : d.state;
+}
 
 /** Where a document stands in the table. "waiting" only while it is genuinely being read: a live intake job is reading it
  * (lib/rag/live-job.ts, the rule the Documents page uses), whether still in intake or ready and being read into the table
@@ -285,14 +344,14 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  *   from this part), and the section and plan-column headings found so far, so a table whose header is on the page
  *   before is still read under its columns (Critic R364 H1). The check drops a row that prints a figure for each plan
  *   with no column (check.ts), whatever the reader does.
- * - A part that runs out of output is read again as two halves, down to a single page, and every part still to come
- *   is made smaller too. At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
+ * - A part that runs out of output is read again as two halves, down to a single page; the parts still to come keep their
+ *   size unless a second part of full size runs out too (TE #404). At most 2 x the first count of parts + 4 calls are made for one document (Critic R364 M2).
  * - The document's own facts are merged across parts: the first kind, product, insurer, plan and period any part
  *   gives, and every named person (TE pr364).
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string; carried?: boolean; stalls?: number; skipped?: number[] }> {
   const now = time.now ?? Date.now;
   // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
@@ -305,31 +364,108 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   const whole = queue.length === 1;
   const done: { pages: number[]; json: unknown; model: string }[] = [];
   let headings: string[] = [], columns: string[] = [], calls = 0;
+  let stalls = 0, pageTries: Record<string, number> = {}, skipped: number[] = [];
   const fail = async (why: string) => { await noteUnreadTable(db, accountId, doc.id); return { read: false, why, pagesReread: 0 }; };
+  const carry = time.carry;
+  const fp = carry ? pagesPrint(doc.pages) : "";
+  if (carry?.from) {
+    // Going on with a saved reading: only over the very pages it started from, and only what is left of it.
+    const from = carry.from;
+    if (from.fp !== fp || from.id !== carry.id) return fail("the document's pages changed since its reading started");
+    const byPage = new Map(doc.pages.map((p) => [p.page, p]));
+    if (from.queue.some((part) => part.some((n) => !byPage.has(n)))) return fail("the document's pages changed since its reading started");
+    queue = from.queue.map((part) => part.map((n) => byPage.get(n)!));
+    done.push(...from.done);
+    headings = [...from.headings]; columns = [...from.columns]; calls = from.calls; limit = from.limit; outputLimit = from.outputLimit;
+    stalls = from.stalls ?? 0; pageTries = { ...(from.pageTries ?? {}) }; skipped = [...(from.skipped ?? [])];
+  }
+  const doneAtStart = done.length, callsAtStart = calls;
+  // Parts made by halving one that ran out, and how many parts of full size ran out (max_tokens below).
+  const halves = new Set<string>(), partKey = (part: { page: number }[]) => part.map((p) => p.page).join(",");
+  let fullRanOut = 0;
+  const saveProgress = async () => carry?.save({ id: carry.id, fp, queue: queue.map((part) => part.map((p) => p.page)), done, headings, columns, calls, limit, outputLimit,
+    ...(stalls ? { stalls } : {}), ...(Object.keys(pageTries).length ? { pageTries } : {}), ...(skipped.length ? { skipped } : {}) });
+  // The run stops here; the reading so far is saved, and the next run goes on from it. A run that paid for a call and read
+  // no part is a stall: the next run waits longer (readingRetryDelayMs). A run that made no call (no time for one) is not.
+  const carryOn = async (why: string) => {
+    if (calls > callsAtStart) stalls = done.length > doneAtStart ? 0 : stalls + 1;
+    await saveProgress();
+    return { read: false, why, pagesReread: 0, carried: true, stalls };
+  };
+  // A carried reading is never given up on (DC, 10 Nov: "i cannot accept cannot be read"): a page that keeps running out is
+  // tried again in later runs, then read past so the rest is stored; any other failed call is tried again next run.
+  const retryPage = (part: typeof queue[number], why: string) => {
+    const key = String(part[0].page);
+    pageTries[key] = (pageTries[key] ?? 0) + 1;
+    if (pageTries[key] < PAGE_MAX_TRIES) { queue.unshift(part); return carryOn(why); }
+    skipped.push(part[0].page);
+    console.warn(`benefit table reading for policy ${policyId}: page ${part[0].page} gave no reading in ${pageTries[key]} tries and is read past (operator: check this page)`);
+    return null;
+  };
+  // A carried reading's limit counts from the whole document, in whichever run it started.
+  if (!queue.length && !done.length) return fail("nothing of the reading was left to go on with");
+  // A carried reading has no call limit of its own: no part read is paid for again, and a page that runs out is tried at
+  // most PAGE_MAX_TRIES times, so its paid calls are bounded by its pages.
+  const callLimit = carry ? Infinity : maxCalls;
   while (queue.length) {
-    if (calls >= maxCalls) return fail(`the reading did not finish (more than ${maxCalls} calls for this document)`);
+    if (calls >= callLimit) return fail(`the reading did not finish (more than ${callLimit} calls for this document)`);
     const part = queue.shift()!;
     const pages = part.map((p) => p.page);
     // A serverless run is stopped at its time limit, and then neither the reading nor its note is saved (5 Nov: two parts of
     // a 47-page wording ran out of output, about two minutes each, and the run ended before any note was written). A call
     // that cannot finish in the time left is not started; one still running at the limit is stopped, and the note is saved.
+    // A carried reading instead stops and saves what it has read, and the next run goes on with this part.
     const left = callTime();
-    if (left != null && left < MIN_CALL_MS) return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
+    if (left != null && left < MIN_CALL_MS) {
+      if (carry) { queue.unshift(part); return carryOn(`the run ran out of time (pages ${pageRange(pages)} are read next run)`); }
+      return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
+    }
     const before = done.length ? doc.pages.filter((p) => p.page < pages[0]).at(-1) : undefined;
     const user = whole && done.length === 0 && pages.length === doc.pages.length
       ? renderDocument({ name: doc.name, pages: part })
       : renderDocument({ name: doc.name, pages: before ? [before, ...part] : part }) + partReadingNote(pages, doc.pages.length, headings, columns, before?.page ?? null);
     calls++;
-    const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT, ...(left != null ? { timeoutMs: left } : {}) });
-    await onUsage?.("reading", reply);
+    // Counted before the call: a run stopped during it never makes the next run's limit larger.
+    if (carry) { queue.unshift(part); await saveProgress(); queue.shift(); }
+    // A single page whose earlier try gave no reading is tried with the stronger reader and more room, before it is ever read
+    // past (DC, 10 Nov: accuracy before cost).
+    const escalate = !!carry && !!time.strong && part.length === 1 && (pageTries[String(part[0].page)] ?? 0) > 0;
+    const reader = escalate ? time.strong!.model : model;
+    const reply = await reader.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: escalate ? STRONG_MAX_OUTPUT : READ_MAX_OUTPUT, ...(left != null ? { timeoutMs: left } : {}) });
+    await (escalate ? time.strong!.onUsage : onUsage)?.("reading", reply);
     if (reply.json == null) {
+      if (reply.stopReason === "timeout" && carry) {
+        // Cut off by a run that had little time left: the same part next run. Cut off with a whole run's time: too big for
+        // one call, so its two halves; a single page that big is not read.
+        if (left != null && left < FULL_CALL_MS) { queue.unshift(part); return carryOn(`the run ran out of time (pages ${pageRange(pages)} are read next run)`); }
+        if (part.length > 1) { const half = Math.ceil(part.length / 2); queue.unshift(part.slice(0, half), part.slice(half)); return carryOn(`pages ${pageRange(pages)} took too long for one call; read as two halves next run`); }
+        const again = retryPage(part, `page ${pages[0]} took too long for one call; tried again next run`);
+        if (again) return again;
+        continue;
+      }
       if (reply.stopReason === "timeout") return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
       if (reply.stopReason === "max_tokens" && part.length > 1) {
-        // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
-        limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
-        outputLimit = Math.max(1, Math.floor(part.reduce((n, p) => n + expectedOutput(p.text), 0) / 2));
+        // The part that ran out is read as two halves. The parts still to come keep their size, so one dense page never
+        // makes every later part smaller (TE #404: 37 calls for 50 pages instead of about 8); only when a second part of
+        // full size runs out too (the whole document is dense) are they made smaller, so each is not paid for twice.
         const half = Math.ceil(part.length / 2);
-        queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit, outputLimit)];
+        if (!halves.has(partKey(part))) fullRanOut++;
+        halves.add(partKey(part.slice(0, half))); halves.add(partKey(part.slice(half)));
+        if (fullRanOut >= 2) {
+          limit = Math.max(1, Math.floor(part.reduce((n, p) => n + p.text.length, 0) / 2));
+          outputLimit = Math.max(1, Math.floor(part.reduce((n, p) => n + expectedOutput(p.text), 0) / 2));
+          queue = [part.slice(0, half), part.slice(half), ...pageParts(queue.flat(), limit, outputLimit)];
+        } else queue = [part.slice(0, half), part.slice(half), ...queue];
+        continue;
+      }
+      if (carry) {
+        // Any other paid call that gave no reading (it ran out of output, refused, or replied with no valid reading): a part
+        // of several pages is read as two halves next run, and a single page is tried again a few times, then read past
+        // (retryPage), so no part is paid for without bound (Critic #404). A call the service could not answer at all
+        // throws: its run stops, and the reading goes on in a run queued again (app.ts requeueStuckTableWork).
+        if (part.length > 1) { const half = Math.ceil(part.length / 2); queue.unshift(part.slice(0, half), part.slice(half)); return carryOn(`the reading call gave no reading (${reply.stopReason ?? "no reply"}); pages ${pageRange(pages)} are read as two halves next run`); }
+        const again = retryPage(part, `page ${pages[0]} gave no reading (${reply.stopReason ?? "no reply"}); tried again next run`);
+        if (again) return again;
         continue;
       }
       return fail(`the reading did not finish (${reply.stopReason ?? "no reply"}${pages.length < doc.pages.length ? `, pages ${pageRange(pages)}` : ""})`);
@@ -340,11 +476,14 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     const read = checkReading(doc, json);
     headings = [...new Set([...headings, ...read.benefits.map((b) => b.section).filter((h): h is string => !!h)])];
     columns = [...new Set([...columns, ...read.benefits.map((b) => b.column).filter((c): c is string => !!c)])];
+    if (carry) await saveProgress();
   }
   // The document's own facts, merged across parts; the parts' rows are added as page readings (checkStored merges them).
-  const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
+  const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })),
+    ...(skipped.length ? { skippedPages: [...skipped].sort((a, b) => a - b) } : {}) };
   const first = checkStored(doc, stored);
-  for (const f of pagesToReread(doc, first).slice(0, MAX_PAGE_REREADS)) {
+  // A page read past after PAGE_MAX_TRIES (skipped) is not paid for again here.
+  for (const f of pagesToReread(doc, first).filter((x) => !skipped.includes(x.page)).slice(0, MAX_PAGE_REREADS)) {
     // A page read again only adds rows: with too little time left the reading is saved without it.
     const left = callTime();
     if (left != null && left < MIN_CALL_MS) break;
@@ -375,7 +514,8 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     WHERE benefit_readings.account_id=EXCLUDED.account_id`,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
   await clearUnreadTableNote(db, accountId, doc.id);
-  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}),
+  if (stored.skippedPages) await noteReadPast(db, accountId, doc.id, stored.skippedPages);
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}), ...(skipped.length ? { skipped } : {}),
     ...(stored.guards ? { figuresChecking: unfinishedCount(checkStored(doc, stored), stored.guards), guardsAt: stored.guards.at } : {}) };
 }
 
@@ -426,11 +566,24 @@ export const UNREAD_TABLE_NOTE = (when: string | null) => when
 /** Takes away the "could not be read" note once a reading of the document finishes. */
 async function clearUnreadTableNote(db: Db, accountId: string, policyId: string) {
   try {
-    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits (?:could not be read[^.]*\\.|was not read[^.]*\\. Choose Read again to read it\\.)', '', 'g')), ''),
-        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3 AND n #>> '{}' NOT LIKE $4),'[]'::jsonb)),updated_at=now()
+    await db(`UPDATE policies SET processing_message=nullif(btrim(regexp_replace(coalesce(processing_message,''), '\\s*The table of benefits (?:could not be read[^.]*\\.|was not read[^.]*\\. Choose Read again to read it\\.|was read except [^.]*\\. Choose Read again to try (?:it|them) again\\.)', '', 'g')), ''),
+        extracted_json=jsonb_set(extracted_json,'{documentNotes}',coalesce((SELECT jsonb_agg(n) FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' NOT LIKE $3 AND n #>> '{}' NOT LIKE $4 AND n #>> '{}' NOT LIKE $5),'[]'::jsonb)),updated_at=now()
       WHERE id=$1 AND account_id=$2 AND jsonb_typeof(extracted_json->'documentNotes')='array'
-        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3 OR n #>> '{}' LIKE $4)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%", NOT_READ_TABLE_PREFIX + "%"]);
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(extracted_json->'documentNotes') n WHERE n #>> '{}' LIKE $3 OR n #>> '{}' LIKE $4 OR n #>> '{}' LIKE $5)`, [policyId, accountId, UNREAD_TABLE_PREFIX + "%", NOT_READ_TABLE_PREFIX + "%", READ_PAST_TABLE_PREFIX + "%"]);
   } catch (error) { console.warn("Benefit table: could not clear the unread-table note for " + policyId + ":", error instanceof Error ? error.message : error); }
+}
+/** What a document says when its reading read past pages it could not read after PAGE_MAX_TRIES: the rest is in the table,
+ * and these pages' benefits are not (Critic and TE #404: a policy showed "Ready." with page 23 missing and nothing said). */
+export const READ_PAST_TABLE_PREFIX = "The table of benefits was read except";
+export const READ_PAST_TABLE_NOTE = (pages: number[]) =>
+  `${READ_PAST_TABLE_PREFIX} ${pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`}, which DearPolicy could not read, so ${pages.length === 1 ? "its" : "their"} benefits are not shown. Choose Read again to try ${pages.length === 1 ? "it" : "them"} again.`;
+async function noteReadPast(db: Db, accountId: string, policyId: string, pages: number[]) {
+  try {
+    const note = READ_PAST_TABLE_NOTE(pages);
+    await db(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
+        extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND NOT (coalesce(extracted_json->'documentNotes','[]'::jsonb) ? $3::text)`, [policyId, accountId, note]);
+  } catch (error) { console.warn("Benefit table: could not note the pages read past for " + policyId + ":", error instanceof Error ? error.message : error); }
 }
 /** notTried: the reading was not tried (a retried job), so the note says so and points to Read again. */
 export async function noteUnreadTable(db: Db, accountId: string, policyId: string, notTried = false) {
@@ -450,7 +603,7 @@ export type FigureCheck = GuardNote & { documentId: string; document: string };
 /** checked: the readings before the figure guards were applied; figureChecks: the figures the household is asked about.
  * Both are set only when the guards are on (guard-flag.ts). */
 type Loaded = { family: FamilyMember[]; readings: CheckedReading[]; links: (SectionLink & { chosenBy: "model" | "household" })[]; confirmations: Confirmation[];
-  documents: { id: string; name: string; state: DocumentState; file: DocumentFile }[]; checked?: CheckedReading[]; figureChecks?: FigureCheck[] };
+  documents: { id: string; name: string; state: DocumentState; unreadPages?: number[]; unlinked?: boolean; file: DocumentFile }[]; checked?: CheckedReading[]; figureChecks?: FigureCheck[] };
 
 /** The household's own figures for checks the guards did not settle (benefit_figure_confirmations): final. None before the
  * table is applied. */
@@ -508,8 +661,15 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
     .map((r) => ({ personId: String(r.family_member_id), coverKey: String(r.cover_key), status: r.status === "corrected" ? "corrected" as const : "confirmed" as const,
       sumInsured: r.sum_insured == null ? null : Number(r.sum_insured), updatedAt: r.updated_at == null ? null : String(r.updated_at) }));
   return { family: people, readings, links, confirmations, ...(guarded ? { checked, figureChecks: figureChecksOf(readings) } : {}),
-    documents: docs.map((d) => ({ id: d.id, name: d.name, state: documentState({ status: d.status, pages: fetched.has(d.id) ? d.pages.length : counts.get(d.id) ?? 0, live: d.live, scanLive: d.scanLive,
-      misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id)), file: d.file })) };
+    documents: docs.map((d) => {
+      // A document with no stored reading whose reading is carried over runs is still being read, however long its next run
+      // waits (a backoff, or a pause at the spend limit): never "not read" (DC, 10 Nov).
+      const state = documentState({ status: d.status, pages: fetched.has(d.id) ? d.pages.length : counts.get(d.id) ?? 0, live: d.live || (d.carried && !stored.has(d.id)), scanLive: d.scanLive,
+        misfiled: !stored.has(d.id) && filedBeforeRoleRules(d.file.document_role, d.pages), file: d.file }, stored.has(d.id) && !d.linking);
+      // Read with pages read past (skippedPages): its other rows are shown, and the pages not read are named.
+      const unreadPages = state === "read" ? stored.get(d.id)?.skippedPages?.filter((n) => Number.isInteger(n)) ?? [] : [];
+      return { id: d.id, name: d.name, state: unreadPages.length ? "read_in_part" as const : state, ...(unreadPages.length ? { unreadPages } : {}), unlinked: d.linking, file: d.file };
+    }) };
 }
 
 /** Each person's table, with the documents still waiting to be read. */
@@ -518,7 +678,11 @@ export async function tableFor(db: Db, accountId: string): Promise<{ table: Bene
   // No confirmations: people never confirm or correct amounts (DC, 22 Oct 2026), so the table always uses the printed
   // figures, even where an older build stored a correction (TE #99). The one exception is a figure the guards could not
   // settle, which the household confirms (DC, 6 Nov 2026); that is applied in load().
-  return { table: assembleTable(l.readings, l.family, l.links), documents: l.documents, links: l.links, ...(l.figureChecks ? { figureChecks: l.figureChecks } : {}) };
+  // A document still being read shows none of its reading: one whose reading is stored but whose sections are not linked
+  // yet (its link run is still to come) would show only one unlinked section and no rows (TE #404).
+  const waiting = new Set(l.documents.filter((d) => d.state === "waiting" || d.unlinked).map((d) => d.id));
+  const readings = l.readings.filter((r) => !waiting.has(r.documentId));
+  return { table: assembleTable(readings, l.family, l.links), documents: l.documents, links: l.links, ...(l.figureChecks ? { figureChecks: l.figureChecks.filter((f) => !waiting.has(f.documentId)) } : {}) };
 }
 
 /** The household gives the figure for one check the guards did not settle, or takes it back (value null). Final: no
