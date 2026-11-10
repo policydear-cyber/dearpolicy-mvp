@@ -198,6 +198,10 @@ export type StartNowOutcome = "disabled" | "busy" | "not_claimable" | "succeeded
 /** Claims and runs the one job of this type with this idempotency key, now, when it is claimable (awaitable; tests and
  * scheduleJobStart). At most START_NOW_MAX_IN_FLIGHT per instance; "not_claimable" when it is already running, done,
  * cancelled or waiting out a retry delay. */
+/** Starts the background chain when work is due soon (lib/jobs/self-kick.ts); never throws. */
+async function kickSoon(): Promise<void> {
+  await (await import("./self-kick")).kickIfPending();
+}
 /** Runs a drain inside the time limit of the function that serves this request (lib/jobs/function-time.ts). */
 async function inFunctionTime(startedAt: number, fn: () => Promise<unknown>): Promise<void> {
   const { withFunctionDeadline } = await import("./function-time");
@@ -225,7 +229,8 @@ export async function startJobNow(params: { jobType: string; idempotencyKey: str
  * enqueued. Never throws and never delays or changes the response. */
 export function scheduleJobStart(jobType: string, idempotencyKey: string): void {
   if (!requestDrainEnabled()) return;
-  try { after(async () => { await startJobNow({ jobType, idempotencyKey }); }); }
+  // What the job leaves queued (a long reading's next run) goes on without a visit (lib/jobs/self-kick.ts).
+  try { after(async () => { await startJobNow({ jobType, idempotencyKey }); await kickSoon(); }); }
   catch { /* Outside a request scope: nothing to run after (see scheduleRequestDrain). */ }
 }
 
@@ -236,7 +241,7 @@ export function scheduleRequestDrain(): void {
   if (!requestDrainEnabled()) return;
   // The function's time counts from this request, not from when the drain starts after the response.
   const startedAt = Date.now();
-  const task = () => inFunctionTime(startedAt, () => drainOnce());
+  const task = () => inFunctionTime(startedAt, async () => { await drainOnce(); await kickSoon(); });
   try {
     after(task);
   } catch {

@@ -272,7 +272,7 @@ async function main() {
     assert.deepEqual(guardRoster(env({})), DEFAULT_GUARDS);
     assert.equal(new Set(DEFAULT_GUARDS.map((g) => g.choice.model)).size, 4, "four different models");
     assert.throws(() => guardRoster(env({ DEARPOLICY_FIGURE_GUARD_MODELS: "anthropic:x:direct" })));
-    assert.equal(guardCapUsd(env({})), 3);
+    assert.equal(guardCapUsd(env({})), Infinity, "reading is not limited by cost (DC, 10 Nov)");
   });
 
   // ---- Through the service, with an in-memory database. ----
