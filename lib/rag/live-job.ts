@@ -27,3 +27,11 @@ export const SCAN_RETRY_JOB_TYPE = "document_scan_retry";
 export const scanJobLive = (p: string) =>
   `EXISTS (SELECT 1 FROM background_jobs sj WHERE sj.job_type='${SCAN_RETRY_JOB_TYPE}' AND sj.idempotency_key LIKE 'policy_document:' || ${p}.id::text || ':scan-retry:%'
      AND ${livePolicyJob("sj", String(UNCLAIMED_STALL_MINUTES))})`;
+/** A long document's table reading carried over runs (lib/benefit-table/table-reading-job.ts; keys
+ * `<id>:table-reading:<reading>:<N>`). */
+export const TABLE_READING_JOB_TYPE = "benefit_table_reading";
+/** SQL: true when the policy row (alias `p`) has a live continuation of its table reading (livePolicyJob's rule): the
+ * table then shows the document as being read, never as unread. Only server constants are written into the text. */
+export const tableReadingJobLive = (p: string) =>
+  `EXISTS (SELECT 1 FROM background_jobs tj WHERE tj.job_type='${TABLE_READING_JOB_TYPE}' AND tj.idempotency_key LIKE ${p}.id::text || ':table-reading:%'
+     AND ${livePolicyJob("tj", String(UNCLAIMED_STALL_MINUTES))})`;

@@ -11,7 +11,7 @@ import { checkReading, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
-import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
+import { policyJobLive, scanJobLive, tableReadingJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
@@ -35,7 +35,20 @@ export const SAVE_MARGIN_MS = 20_000;
 /** No reading call is started with less time than this left: it could not finish, and would only be paid for. */
 export const MIN_CALL_MS = 45_000;
 /** A time limit for one reading: the moment (ms since 1970) by which it must have saved, and the clock (tests pass their own). */
-export type ReadTime = { deadline?: number; now?: () => number };
+export type ReadTime = { deadline?: number; now?: () => number; carry?: Carry };
+/** A reading of a long document carried over several runs (10 Nov: a 58-page schedule and a 47-page wording ran out of
+ * their run's time after the document's other reading, and never had a table). What is read so far is saved after every
+ * part, so a run that runs out of time stops without losing it, and the next run (a continuation job,
+ * table-reading-job.ts) reads only what is left: no part is paid for twice, and the calls of every run count against the
+ * one limit. `id` names the reading (when it started); `fp` is the document's checked pages when it started, so a
+ * reading is never finished over pages that changed since. */
+export type ReadingProgress = { id: string; fp: string; queue: number[][]; done: { pages: number[]; json: unknown; model: string }[];
+  headings: string[]; columns: string[]; calls: number; limit: number; outputLimit: number };
+/** `from`: the saved reading to go on with (null: a fresh reading named `id`); `save`: stores the reading so far. */
+export type Carry = { id: string; from: ReadingProgress | null; save: (p: ReadingProgress) => Promise<void> };
+/** A call with at least this long to run that still timed out was cut off by its own size, not by a run that had little
+ * time left: a part of several pages is then read as two halves, and a single page is not tried again. */
+export const FULL_CALL_MS = 200_000;
 
 /** The output a part is planned to need, at most: half the cap, so a part is never cut off by it (5 Nov: pages 1-9 of a
  * 47-page wording, 13,400 characters with a plan table of 189 figures, ran out of 24,000 output tokens twice; each call
@@ -137,7 +150,7 @@ type HouseholdDoc = SourceDoc & { status: string; live: boolean; scanLive: boole
 /** The household's current documents (not deleted, not superseded) with their stored pages. */
 async function documents(db: Db, accountId: string, policyId?: string, pick?: (docs: HouseholdDoc[]) => Promise<HouseholdDoc[]>): Promise<HouseholdDoc[]> {
   const docs = await db(`SELECT id, original_filename, processing_status, product_name, insurer, document_role, policy_number, quarantine_status, scan_result_detail,
-      ${policyJobLive("policies")} AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
+      (${policyJobLive("policies")} OR ${tableReadingJobLive("policies")}) AS reading_live, ${scanJobLive("policies")} AS scan_live FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
@@ -292,7 +305,7 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string; carried?: boolean }> {
   const now = time.now ?? Date.now;
   // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
@@ -306,23 +319,53 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
   const done: { pages: number[]; json: unknown; model: string }[] = [];
   let headings: string[] = [], columns: string[] = [], calls = 0;
   const fail = async (why: string) => { await noteUnreadTable(db, accountId, doc.id); return { read: false, why, pagesReread: 0 }; };
+  const carry = time.carry;
+  const fp = carry ? pagesPrint(doc.pages) : "";
+  if (carry?.from) {
+    // Going on with a saved reading: only over the very pages it started from, and only what is left of it.
+    const from = carry.from;
+    if (from.fp !== fp || from.id !== carry.id) return fail("the document's pages changed since its reading started");
+    const byPage = new Map(doc.pages.map((p) => [p.page, p]));
+    if (from.queue.some((part) => part.some((n) => !byPage.has(n)))) return fail("the document's pages changed since its reading started");
+    queue = from.queue.map((part) => part.map((n) => byPage.get(n)!));
+    done.push(...from.done);
+    headings = [...from.headings]; columns = [...from.columns]; calls = from.calls; limit = from.limit; outputLimit = from.outputLimit;
+  }
+  const saveProgress = async () => carry?.save({ id: carry.id, fp, queue: queue.map((part) => part.map((p) => p.page)), done, headings, columns, calls, limit, outputLimit });
+  // The run stops here; the reading so far is saved, and the next run goes on from it.
+  const carryOn = async (why: string) => { await saveProgress(); return { read: false, why, pagesReread: 0, carried: true }; };
+  // A carried reading's limit counts from the whole document, in whichever run it started.
+  if (!queue.length && !done.length) return fail("nothing of the reading was left to go on with");
+  const callLimit = carry?.from ? Math.max(maxCalls, 2 * (queue.length + done.length) + 4) : maxCalls;
   while (queue.length) {
-    if (calls >= maxCalls) return fail(`the reading did not finish (more than ${maxCalls} calls for this document)`);
+    if (calls >= callLimit) return fail(`the reading did not finish (more than ${callLimit} calls for this document)`);
     const part = queue.shift()!;
     const pages = part.map((p) => p.page);
     // A serverless run is stopped at its time limit, and then neither the reading nor its note is saved (5 Nov: two parts of
     // a 47-page wording ran out of output, about two minutes each, and the run ended before any note was written). A call
     // that cannot finish in the time left is not started; one still running at the limit is stopped, and the note is saved.
+    // A carried reading instead stops and saves what it has read, and the next run goes on with this part.
     const left = callTime();
-    if (left != null && left < MIN_CALL_MS) return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
+    if (left != null && left < MIN_CALL_MS) {
+      if (carry) { queue.unshift(part); return carryOn(`the run ran out of time (pages ${pageRange(pages)} are read next run)`); }
+      return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
+    }
     const before = done.length ? doc.pages.filter((p) => p.page < pages[0]).at(-1) : undefined;
     const user = whole && done.length === 0 && pages.length === doc.pages.length
       ? renderDocument({ name: doc.name, pages: part })
       : renderDocument({ name: doc.name, pages: before ? [before, ...part] : part }) + partReadingNote(pages, doc.pages.length, headings, columns, before?.page ?? null);
     calls++;
+    // Counted before the call: a run stopped during it never makes the next run's limit larger.
+    if (carry) { queue.unshift(part); await saveProgress(); queue.shift(); }
     const reply = await model.call({ system: READING_PROMPT, user, schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT, ...(left != null ? { timeoutMs: left } : {}) });
     await onUsage?.("reading", reply);
     if (reply.json == null) {
+      if (reply.stopReason === "timeout" && carry) {
+        // Cut off by a run that had little time left: the same part next run. Cut off with a whole run's time: too big for
+        // one call, so its two halves; a single page that big is not read.
+        if (left != null && left < FULL_CALL_MS) { queue.unshift(part); return carryOn(`the run ran out of time (pages ${pageRange(pages)} are read next run)`); }
+        if (part.length > 1) { const half = Math.ceil(part.length / 2); queue.unshift(part.slice(0, half), part.slice(half)); return carryOn(`pages ${pageRange(pages)} took too long for one call; read as two halves next run`); }
+      }
       if (reply.stopReason === "timeout") return fail(`the reading did not finish in time (pages ${pageRange(pages)} not read)`);
       if (reply.stopReason === "max_tokens" && part.length > 1) {
         // Parts this size run out on this document: the rest are made smaller too, so each is not paid for twice.
@@ -340,6 +383,7 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     const read = checkReading(doc, json);
     headings = [...new Set([...headings, ...read.benefits.map((b) => b.section).filter((h): h is string => !!h)])];
     columns = [...new Set([...columns, ...read.benefits.map((b) => b.column).filter((c): c is string => !!c)])];
+    if (carry) await saveProgress();
   }
   // The document's own facts, merged across parts; the parts' rows are added as page readings (checkStored merges them).
   const stored: StoredReading = { document: withMergedDocument(done.map((d) => d.json)), pages: done.slice(1).map((d) => ({ page: d.pages[0], json: d.json })) };
