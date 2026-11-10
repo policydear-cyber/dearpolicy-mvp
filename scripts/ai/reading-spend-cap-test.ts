@@ -52,6 +52,17 @@ async function main() {
         assert.equal(outbound.length, before, "no reading request was sent");
       } finally { await query("ALTER TABLE model_usage_unreadable RENAME TO model_usage"); }
     });
+    await test("the benefit table's reading fails closed too when this month's usage cannot be read", async () => {
+      const { SpendCheckUnavailable } = await import("@/lib/ai/ledger");
+      const { readIntoBenefitTable } = await import("@/lib/benefit-table/app");
+      const before = outbound.length;
+      await query("ALTER TABLE model_usage RENAME TO model_usage_unreadable");
+      try {
+        const error = await readIntoBenefitTable(account, randomUUID()).then(() => null, (e: unknown) => e);
+        assert.ok(error instanceof SpendCheckUnavailable, `the table reading went on with the ledger unreadable: ${error instanceof Error ? error.message : error}`);
+        assert.equal(outbound.length, before, "no table reading request was sent");
+      } finally { await query("ALTER TABLE model_usage_unreadable RENAME TO model_usage"); }
+    });
     await test("a chat call is still stopped at the spend limit, before any request", async () => {
       const before = outbound.length;
       const error = await ask("chat_reply", "chat").then(() => null, (e: unknown) => e);

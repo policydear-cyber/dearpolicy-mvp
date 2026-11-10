@@ -2,7 +2,7 @@
  * its tests run with fakes; this file is the only place the real ones are passed in. */
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { recordUsage } from "@/lib/ai/ledger";
+import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
 import type { ModelChoice } from "@/lib/ai/providers";
 import { benefitTableModel, benefitTableStatus } from "./flag";
 import { ledgerUsage } from "@/lib/simple-chat/model";
@@ -81,6 +81,9 @@ async function markTableReading(db: Db, accountId: string, policyId: string, sta
  *   wording cut off at the time limit was read again by each retry of its job, about US$0.58 a time, and none could
  *   finish). */
 export async function readIntoBenefitTable(accountId: string, policyId: string, opts: { deadline?: number; retry?: boolean } = {}) {
+  // Reading is never stopped by the household's spend limit (DC, 10 Nov), but every call is booked in the usage ledger: when
+  // this month's usage cannot be read, nothing is sent (SpendCheckUnavailable; Critic #405).
+  await overSpendCap(accountId);
   const model = anthropicTableModel(benefitTableModel());
   const onUsage = usage(accountId, model.choice);
   const guarded = figureGuardsEnabled(process.env, accountId);
