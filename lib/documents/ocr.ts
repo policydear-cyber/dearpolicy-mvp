@@ -74,8 +74,8 @@ export async function completePdfPagesWithOcr(args: {
   // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
   // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
   let pages = args.pages, remaining = pageNumbers;
-  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers }));
+  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers }));
   if (!remaining.length) return pages;
   if (!documentReaderFor()) return notRead(pages, remaining);
-  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers: remaining });
+  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers: remaining });
 }

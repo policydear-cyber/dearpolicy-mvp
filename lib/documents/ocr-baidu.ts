@@ -39,7 +39,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v2";
+const TEXT_VERSION = "baidu-md-v3";
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -63,17 +63,33 @@ export function baiduOcrSettings(env: Env = process.env) {
     pollIntervalMs: intEnv(env.BAIDU_OCR_POLL_INTERVAL_MS, 2_000, 1, 15_000),
     requestTimeoutMs: intEnv(env.BAIDU_OCR_REQUEST_TIMEOUT_MS, 60_000, 1, 120_000),
     pagesPerJob: intEnv(env.BAIDU_OCR_PAGES_PER_JOB, 50, 1, 100),
+    // After Baidu cannot be reached (connect failure or timeout on submit), this instance skips it for this long.
+    cooldownMs: intEnv(env.BAIDU_OCR_COOLDOWN_MS, 600_000, 0, 3_600_000),
   };
 }
 
-export type BaiduFailureKind = "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format" | "unverified";
+export type BaiduFailureKind = "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format" | "unverified" | "cooling_down";
 /** A Baidu failure. Its message names the kind and the HTTP status only: never the token, never page text. */
 export class BaiduOcrError extends Error {
   kind: BaiduFailureKind; status?: number;
-  constructor(kind: BaiduFailureKind, status?: number) {
+  /** For a network failure: which call (submit, poll, result) and the system's error code (UND_ERR_CONNECT_TIMEOUT,
+   * ENOTFOUND, ECONNRESET, a certificate code...) -- fixed words only, never a message, URL or token. */
+  stage?: "submit" | "poll" | "result"; code?: string;
+  constructor(kind: BaiduFailureKind, status?: number, stage?: BaiduOcrError["stage"], code?: string) {
     super(`Baidu PaddleOCR ${kind.replace(/_/g, " ")}${status ? ` (HTTP ${status})` : ""}`);
-    this.name = "BaiduOcrError"; this.kind = kind; this.status = status;
+    this.name = "BaiduOcrError"; this.kind = kind; this.status = status; this.stage = stage; this.code = code;
   }
+  /** What the processing history records: the kind, and where known the call and the error code. */
+  get summary() { return [this.kind, this.stage, this.code, this.status ? `HTTP ${this.status}` : undefined].filter(Boolean).join(" "); }
+}
+
+/** The error code of a failed fetch (undici puts it on `cause`, sometimes one level deeper), when it is a plain code. */
+function errorCode(error: unknown): string | undefined {
+  for (let e: unknown = error, depth = 0; e && depth < 4; e = (e as { cause?: unknown }).cause, depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Z][A-Z0-9_]{1,40}$/.test(code)) return code;
+  }
+  return undefined;
 }
 
 function kindForStatus(status: number): BaiduFailureKind {
@@ -83,11 +99,11 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-async function call(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function call(url: string, init: RequestInit, timeoutMs: number, stage: NonNullable<BaiduOcrError["stage"]>): Promise<Response> {
   try {
     return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    throw new BaiduOcrError((error as Error)?.name === "TimeoutError" ? "timeout" : "network");
+    throw new BaiduOcrError((error as Error)?.name === "TimeoutError" ? "timeout" : "network", undefined, stage, errorCode(error));
   }
 }
 
@@ -109,6 +125,55 @@ async function apiData(res: Response): Promise<Record<string, unknown>> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** An HTML table as a grid of cell texts, with merged cells expanded so every row keeps its columns:
+ * - colspan: the text in the first column it covers, the others left empty, so a value stays under its own column;
+ * - rowspan: a LABEL (a cell with no digit, such as a benefit group's name) is repeated on each row it covers, so every
+ *   row keeps its own name; a cell WITH a figure is printed once, on its first row, and left empty below, so one shared
+ *   amount (an overall limit beside several benefits) is never copied onto each row as if it were that row's own. */
+export function tableGrid(table: string, cellText: (html: string) => string): string[][] {
+  const grid: string[][] = [];
+  const pending: { col: number; rows: number; text: string }[] = [];
+  const rows = table.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+  const span = (attrs: string, name: string) => {
+    const n = Number(attrs.match(new RegExp(`${name}\\s*=\\s*["']?(\\d+)`, "i"))?.[1] ?? 1);
+    return Number.isInteger(n) && n >= 1 ? Math.min(n, 50) : 1;
+  };
+  for (const row of rows) {
+    const out: string[] = [];
+    // Cells carried down from a rowspan above take their columns first.
+    for (const p of pending) if (p.rows > 0) { out[p.col] = p.text; p.rows--; }
+    let col = 0;
+    for (const m of row.matchAll(/<t([dh])\b([^>]*)>([\s\S]*?)<\/t\1>/gi)) {
+      while (out[col] !== undefined) col++;
+      const text = cellText(m[3]);
+      const cs = span(m[2], "colspan"), rs = span(m[2], "rowspan");
+      for (let k = 0; k < cs; k++) out[col + k] = k === 0 ? text : "";
+      if (rs > 1) {
+        const carried = /\d/.test(text) ? "" : text;
+        for (let k = 0; k < cs; k++) pending.push({ col: col + k, rows: rs - 1, text: k === 0 ? carried : "" });
+      }
+      col += cs;
+    }
+    for (let i = pending.length - 1; i >= 0; i--) if (pending[i].rows <= 0) pending.splice(i, 1);
+    grid.push(Array.from({ length: out.length }, (_, i) => out[i] ?? ""));
+  }
+  return grid;
+}
+
+/** Inline maths a vision model can print for figures ("$80\\%$", "$\\text{RM}\\ 50,000$") becomes plain text, so its "$"
+ * delimiters are never read as a currency sign. Only a span with a LaTeX command or brace is touched: "$ 100,000" and
+ * "S$1,000 to S$2,000" are printed money and stay exactly as they are. */
+export function plainMath(text: string): string {
+  const unlatex = (m: string) => m
+    .replace(/\\(?:text|mathrm|mathbf|textbf|mbox|operatorname)\s*\{([^{}]*)\}/g, "$1")
+    .replace(/\\([%$&#_])/g, "$1").replace(/\\(?:,|;|:|!|quad|qquad| )/g, " ").replace(/\\(?:times)/g, "x")
+    .replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+  const mathy = (m: string) => /\\[A-Za-z%$&#_,;: !]|[{}^]/.test(m);
+  return text
+    .replace(/\$\$([\s\S]+?)\$\$/g, (whole, m: string) => (mathy(m) ? unlatex(m) : whole))
+    .replace(/\$([^$\n]+?)\$/g, (whole, m: string) => (mathy(m) ? unlatex(m) : whole));
+}
+
 /** Turns one page of Baidu's Markdown into the plain page text the rest of the pipeline reads: a table row becomes
  * one line with its cells separated by TAB (the same shape the AI reader is asked for), headings and emphasis marks
  * are dropped, images are dropped. Figures are copied exactly. */
@@ -120,11 +185,9 @@ export function baiduMarkdownToText(markdown: string): string {
   let text = String(markdown ?? "");
   text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/<img\b[^>]*>/gi, "");
   // HTML tables (the VL and structure models print tables this way): one line per row, cells TAB-separated.
-  text = text.replace(/<table\b[\s\S]*?<\/table>/gi, (table) => {
-    const rows = table.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
-    return "\n" + rows.map((row) => (row.match(/<t[dh]\b[\s\S]*?<\/t[dh]>/gi) ?? []).map(cellText).join("\t"))
-      .filter((r) => r.replace(/\t/g, "").trim()).join("\n") + "\n";
-  });
+  text = text.replace(/<table\b[\s\S]*?<\/table>/gi, (table) => "\n" + tableGrid(table, cellText)
+    .map((r) => r.join("\t").replace(/\t+$/, "")).filter((r) => r.replace(/\t/g, "").trim()).join("\n") + "\n");
+  text = plainMath(text);
   const lines: string[] = [];
   for (const raw of text.split(/\r?\n/)) {
     let line = raw;
@@ -222,13 +285,13 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
   form.append("model", s.model);
   // Pages photographed sideways or upside down are turned upright by Baidu's own orientation step.
   form.append("optionalPayload", JSON.stringify({ useDocOrientationClassify: true }));
-  const submitted = await apiData(await call(jobsUrl, { method: "POST", headers: auth, body: form }, timeout()));
+  const submitted = await apiData(await call(jobsUrl, { method: "POST", headers: auth, body: form }, timeout(), "submit"));
   const jobId = submitted.jobId;
   if (typeof jobId !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(jobId)) throw new BaiduOcrError("format");
 
   let interval = s.pollIntervalMs;
   for (;;) {
-    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout()));
+    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout(), "poll"));
     const state = data.state;
     if (state === "done") {
       const jsonUrl = (data.resultUrl as { jsonUrl?: unknown } | undefined)?.jsonUrl;
@@ -239,7 +302,7 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
       // (plain http only when the configured service itself is plain http, i.e. a local test double).
       if (url.protocol !== "https:" && !(url.protocol === "http:" && s.baseUrl.startsWith("http:"))) throw new BaiduOcrError("format");
       if (!resultHostAllowed(url.hostname, env)) throw new BaiduOcrError("format");
-      const res = await call(url.href, { method: "GET" }, timeout());
+      const res = await call(url.href, { method: "GET" }, timeout(), "result");
       if (!res.ok) throw new BaiduOcrError(kindForStatus(res.status), res.status);
       const jsonl = await res.text();
       let first: { model?: unknown; result?: { model?: unknown; dataInfo?: unknown } } | null = null;
@@ -255,6 +318,11 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
     interval = Math.min(Math.round(interval * 1.5), 15_000);
   }
 }
+
+/** Until when (ms since 1970) this instance skips Baidu after it could not be reached. Process-local. */
+let baiduUnreachableUntil = 0;
+/** Tests only. */
+export function resetBaiduCooldown() { baiduUnreachableUntil = 0; }
 
 /** Time kept back, inside the function's limit, for the AI reader to read whatever Baidu did not. */
 export const AI_FALLBACK_RESERVE_MS = 120_000;
@@ -273,7 +341,7 @@ class WeakChunk extends Error {
  * SpendCheckUnavailable). Each job is booked to the ledger ($0, page count as input) and recorded as a provenance
  * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION). */
 export async function completePdfPagesWithBaidu(args: {
-  accountId: string; resourceId?: string; bytes: Uint8Array; pages: PdfPage[]; pageNumbers: number[];
+  accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
 }): Promise<{ pages: PdfPage[]; unread: number[] }> {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
@@ -293,6 +361,7 @@ export async function completePdfPagesWithBaidu(args: {
   for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
     const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
     if (deadline - Date.now() < MIN_BAIDU_MS) { failures.push("timeout"); break; }
+    if (Date.now() < baiduUnreachableUntil) { failures.push("cooling_down"); break; }
     try {
       const got = await cachedReading(
         args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined,
@@ -304,7 +373,7 @@ export async function completePdfPagesWithBaidu(args: {
           const requested = { provider: choice.provider, model: choice.model, capability: "reading" as const, inputArtifactType: "application/pdf" };
           let job: BaiduJobResult;
           try {
-            job = await readPdfWithBaidu(await subsetPdf(args.bytes, chunk), process.env, deadline);
+            job = await readPdfWithBaidu(await subsetPdf(args.bytes, chunk, undefined, args.password), process.env, deadline);
             // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
             if (job.pages.length !== chunk.length) throw new BaiduOcrError("format");
           } catch (error) {
@@ -333,7 +402,12 @@ export async function completePdfPagesWithBaidu(args: {
       accept(got);
     } catch (error) {
       if (error instanceof WeakChunk) { accept(error.pages); continue; }
-      failures.push(error instanceof BaiduOcrError ? error.kind : "unexpected");
+      failures.push(error instanceof BaiduOcrError ? error.summary : "unexpected");
+      // Baidu could not be reached at all: this instance stops trying for a while, so each later scanned document does
+      // not wait 10-60 s for a connection that is not coming before the AI reader reads it.
+      if (error instanceof BaiduOcrError && error.stage === "submit" && (error.kind === "network" || error.kind === "timeout")) {
+        baiduUnreachableUntil = Date.now() + baiduOcrSettings().cooldownMs;
+      }
       // Pages after a failed job are not sent to Baidu again in this reading: the AI reader reads them.
       break;
     }
@@ -342,7 +416,7 @@ export async function completePdfPagesWithBaidu(args: {
   const unread = args.pageNumbers.filter((n) => !texts.has(n));
   if (failures.length) {
     const kind = failures.join(",");
-    void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0] as BaiduFailureKind),
+    void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0].split(" ")[0] as BaiduFailureKind),
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, kind, durationMs: Date.now() - started } });
     if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
       failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
