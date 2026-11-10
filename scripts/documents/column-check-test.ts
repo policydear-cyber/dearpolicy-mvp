@@ -11,8 +11,12 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k))
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 
 let passed = 0; const failures: string[] = [];
+// Every case runs twice: with the image reader's cells as TABs, and with the reader printing each row with spaces only
+// (no cell marks, 10 Nov). Every case that holds a figure back must hold it back both ways.
+let SPACES = false;
 async function test(name: string, fn: () => unknown) {
-  try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); }
+  const label = `${SPACES ? "[spaces] " : ""}${name}`;
+  try { await fn(); passed++; } catch (e) { failures.push(`${label}: ${e instanceof Error ? e.message : String(e)}`); }
 }
 
 type Line = { text: string; cells: string[]; xs?: number[] };
@@ -45,14 +49,17 @@ const ROWS = [
 const IMAGE = ["Policy Details", "", ...ROWS].join("\n");
 
 async function main() {
-  const { crossCheckPages, NOT_CHECKED } = await import("@/lib/documents/layout-check");
+  const { crossCheckPages, NOT_CHECKED, spacedCells } = await import("@/lib/documents/layout-check");
   const check = async (image: string, lines: Line[] = TEXT_LINES, geometry = true) => {
     const page: { pageNumber: number; text: string; extractionMethod: string; lines?: Line[]; unchecked?: boolean; partChecked?: boolean; uncheckedWhy?: string } =
       { pageNumber: 3, text: lines.map((l) => l.text).join("\n"), extractionMethod: "native", lines: geometry ? lines : undefined };
-    const [out] = await crossCheckPages([page], [3], async () => [{ pageNumber: 3, text: image, extractionMethod: "ocr" }]);
+    const [out] = await crossCheckPages([page], [3], async () => [{ pageNumber: 3, text: SPACES ? image.replace(/\t+/g, " ") : image, extractionMethod: "ocr" }]);
     return out;
   };
+  // With spaces only, a page whose tables are confirmed may still hold a line it cannot place (a title glued to the
+  // labels in the text, over rows the reader printed without cells): the cases written for spaces assert what is kept.
   const kept = (out: Awaited<ReturnType<typeof check>>) => {
+    if (SPACES) return;
     assert.ok(!out.unchecked && !out.partChecked, `expected the page checked, got ${out.unchecked ? "unchecked" : "part checked"} (${out.uncheckedWhy}):\n${out.text}`);
     assert.ok(!out.text.includes(NOT_CHECKED), out.text);
   };
@@ -61,10 +68,12 @@ async function main() {
     assert.ok(!out.text.split("\n").some((l) => l.includes(figure) && !l.includes(NOT_CHECKED)), `${figure} must not be used:\n${out.text}`);
   };
 
+  for (const spaces of [false, true]) {
+  SPACES = spaces;
   await test("a column-by-column text layer is confirmed against the image's rows, and stored as those rows", async () => {
     const out = await check(IMAGE);
     kept(out);
-    for (const row of ROWS.slice(1)) assert.ok(out.text.split("\n").includes(row), `row stored: ${row}\n${out.text}`);
+    if (!SPACES) for (const row of ROWS.slice(1)) assert.ok(out.text.split("\n").includes(row), `row stored: ${row}\n${out.text}`);
     assert.ok(!out.text.includes("200,000.00150.00"), "the glued column is gone");
   });
   await test("an image reader that prints the page twice (once without cells) still confirms it", async () => {
@@ -172,8 +181,70 @@ async function main() {
     held(out2, "40.00");
   });
 
+  }
+  SPACES = false;
+  await spacedCases(check, held, NOT_CHECKED, spacedCells);
+
   console.log(`column-check: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);
+}
+
+type Check = (image: string, lines?: Line[], geometry?: boolean) => Promise<{ pageNumber: number; text: string; extractionMethod: string; lines?: Line[]; unchecked?: boolean; partChecked?: boolean; uncheckedWhy?: string }>;
+type Held = (out: Awaited<ReturnType<Check>>, figure: string) => void;
+/** Image readings that print each table row with spaces only, no TAB between cells, on varied made-up schedules. */
+async function spacedCases(check: Check, held: Held, NOT_CHECKED: string, spacedCells: (line: string, vocab: string) => string[]) {
+  const squash = (c: string) => c.toLowerCase().replace(/(\d)[,'’](?=\d)/g, "$1").replace(/(\d)\.(?=\d)/g, "$1\u0001").replace(/[^\p{L}\p{N}\u0001]/gu, "").replace(/\u0001/g, ".");
+  const vocab = (...cells: string[]) => cells.map(squash).join("\u0000");
+  const used = (out: Awaited<ReturnType<Check>>, row: string) => assert.ok(out.text.split("\n").includes(row), `row stored with its cells: ${row}\n${out.text}`);
+  const noneHeld = (out: Awaited<ReturnType<Check>>, figures: string[]) => {
+    for (const f of figures) assert.ok(out.text.split("\n").some((l) => l.includes(f) && !l.includes(NOT_CHECKED)), `${f} is used:\n${out.text}`);
+  };
+
+  await test("[spaces] a component table printed with spaces only is checked column by column, and stored with its cells", async () => {
+    const out = await check(ROWS.map((r) => r.replace(/\t/g, " ")).join("\n"));
+    used(out, "Accidental Death\tIn Force\t200,000.00\t12.50\t01-Mar-2019");
+    used(out, "Waiver of Premium\tIn Force\t20.70\t3.10\t01-Mar-2019");
+    noneHeld(out, ["200,000.00", "150.00", "20.70", "12.50", "8.20", "3.10"]);
+  });
+  // A made-up Maple Mutual hospital schedule in ringgit: headings on one line, each plan's column one run.
+  const MAPLE = [line(["Benefit", "Plan A", "Plan B"], [40, 260, 420]), line(["Room and board (per day)Intensive careSurgical fees"], [40]),
+    line(["RM 200.00RM 400.00RM 5,000.00"], [260]), line(["RM 300.00RM 600.00RM 8,000.00"], [420])];
+  const MAPLE_IMAGE = "Benefit Plan A Plan B\nRoom and board (per day) RM 200.00 RM 300.00\nIntensive care RM 400.00 RM 600.00\nSurgical fees RM 5,000.00 RM 8,000.00";
+  await test("[spaces] a hospital schedule in another currency, printed with spaces only: kept", async () => {
+    const out = await check(MAPLE_IMAGE, MAPLE);
+    assert.ok(!out.unchecked && !out.partChecked, `${out.uncheckedWhy}\n${out.text}`);
+    used(out, "Intensive care\tRM 400.00\tRM 600.00");
+  });
+  await test("[spaces] the same schedule with two plans' amounts swapped on a row, or two rows swapped: held", async () => {
+    held(await check(MAPLE_IMAGE.replace("RM 400.00 RM 600.00", "RM 600.00 RM 400.00"), MAPLE), "600.00");
+    held(await check(MAPLE_IMAGE.replace("Intensive care RM 400.00 RM 600.00", "Intensive care RM 5,000.00 RM 8,000.00").replace("Surgical fees RM 5,000.00 RM 8,000.00", "Surgical fees RM 400.00 RM 600.00"), MAPLE), "5,000.00");
+  });
+  await test("[spaces] a figure the image reads differently: held", async () => {
+    held(await check(MAPLE_IMAGE.replace("RM 400.00", "RM 460.00"), MAPLE), "600.00");
+  });
+  await test("[spaces] a heading the text does not print: the rows are not compared without it", async () => {
+    held(await check(MAPLE_IMAGE.replace("Benefit Plan A Plan B", "Benefits Plan A Plan B"), MAPLE), "5,000.00");
+  });
+  await test("[spaces] a row whose cell the reader left out, so its cells shift: held", async () => {
+    const out = await check(ROWS.map((r) => r.replace(/\t/g, " ")).join("\n").replace("Hospital Cash Rider In Force 150.00", "Hospital Cash Rider 150.00"));
+    held(out, "150.00");
+  });
+  await test("[spaces] a row with only its label, over the rows of the same table: which row each figure is on is not known, held", async () => {
+    const text = [line(["Benefit", "Limit"], [40, 300]), line(["Trip cancellationOverseas medicalBaggage"], [40]), line(["150,000.003,000.00"], [300])];
+    held(await check("Benefit Limit\nTrip cancellation\nOverseas medical 150,000.00\nBaggage 3,000.00", text), "150,000.00");
+    held(await check("Benefit Limit\nTrip cancellation 150,000.00\nOverseas medical 3,000.00\nBaggage", text), "150,000.00");
+  });
+  await test("[spaces] two figures that could be one amount with a space for thousands leave the line whole", async () => {
+    assert.deepEqual(spacedCells("Option 2 500.00", vocab("Option", "2", "500.00")), ["Option 2 500.00"]);
+    assert.deepEqual(spacedCells("Death 1 000 000", vocab("Death", "1 000 000")), ["Death 1 000 000"]);
+  });
+  await test("[spaces] words the text splits two ways leave the line whole; a word the text never prints is its own cell", async () => {
+    assert.deepEqual(spacedCells("Room Board Plus 100.00", vocab("Room Board", "Board Plus", "Room", "Plus", "100.00")), ["Room Board Plus 100.00"]);
+    assert.deepEqual(spacedCells("Accidental Death In Force 200,000.00 12.50", vocab("Accidental DeathWaiver", "StatusIn Force", "200,000.0020.70", "12.503.10")),
+      ["Accidental Death", "In Force", "200,000.00", "12.50"]);
+    assert.deepEqual(spacedCells("Lapsed Death 100.00", vocab("Death", "100.00")), ["Lapsed", "Death", "100.00"]);
+    assert.deepEqual(spacedCells("Cover Start 1 Oct 2026 S$ 50.00", vocab("Cover Start", "50.00")), ["Cover Start", "1 Oct 2026", "S$ 50.00"]);
+  });
 }
 main().catch((e) => { console.error(e); process.exit(1); });
