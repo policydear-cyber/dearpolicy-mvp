@@ -37,7 +37,7 @@ type Benefit={
   wholeSum?:{owner:string;plan:string;amount:string;source:string}[]|null;
   /** An unreadable row: whether the household's own cover on the same document holds a sum for each person shown (no figure). */
   foundSum?:boolean;
-  documentName:string;insurer:string|null;owners:string[];
+  documentName:string;insurer:string|null;owners:string[];documentOwners?:string[];
   /** Two documents print different amounts for this benefit: drawn as one either/or block, never a total. */
   alternatives?:AlternativeAmounts|null;
 };
@@ -177,7 +177,7 @@ export default function BenefitsPage(){
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
           <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
-            <small>{shared(rows)?`${selectedPerson!.name} · shared policy`:rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
+            <small>{shared(rows)?`${selectedPerson!.name} · shared policy`:(rows[0].documentOwners??rows[0].owners).length?(rows[0].documentOwners??rows[0].owners).join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
           {(()=>{const note=shared(rows);return note?<p className="muted" data-testid="shared-policy">{sharedPolicyText(note,selectedPerson!.name)}</p>:null;})()}
           {(()=>{const k=[...new Set(rows.map(r=>r.policyId))].map(id=>docKinds[id]).filter(Boolean);
             // Said only when every document of the group with a kind agrees, as on Home and Coverage.

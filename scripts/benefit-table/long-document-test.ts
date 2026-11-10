@@ -854,7 +854,10 @@ async function main() {
     assert.match(app, /continueLater: \(id, run, delayMs\) => enqueueTableReading\(pool, accountId, policyId, id, run, delayMs\)/);
     assert.match(app, /linkLater: \(id, attempt, delayMs\) => enqueueTableLink\(pool, accountId, policyId, id, attempt, delayMs\)/);
     assert.match(app, /readIntoTable\(appDb, model, accountId, policyId, \{ \.\.\.opts, strong,/, "K8: the stronger reader is passed in");
-    assert.doesNotMatch(app, /overSpendCap|assertUnderSpendCap/, "K8: reading is not limited by the spend limit (DC, 10 Nov)");
+    // Reading is never stopped by the spend limit; it only checks the usage ledger can be read (fails closed when it cannot,
+    // Critic #405) and ignores whether the household is over its limit.
+    assert.doesNotMatch(app, /assertUnderSpendCap|(?:if\s*\(|=|return|&&|\|\|)\s*!?\s*\(?\s*await overSpendCap/, "K8: reading is not limited by the spend limit (DC, 10 Nov)");
+    assert.match(app, /\n\s*await overSpendCap\(accountId\);\n/, "K8: the reading checks only that the usage ledger can be read");
     const drain = readFileSync(new URL("../../lib/jobs/request-drain.ts", import.meta.url), "utf8");
     assert.match(drain, /requeueStuckTableWorkEverywhere\(\);\n\s*if \(!\(await hasClaimableWork\(\)\)\)/, "K8: the drain queues stuck table work again before it looks for work");
     const cron = readFileSync(new URL("../../app/api/internal/jobs/run/route.ts", import.meta.url), "utf8");

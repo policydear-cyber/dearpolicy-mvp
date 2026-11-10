@@ -1,3 +1,4 @@
+import { isCodeName } from "@/lib/policies/document-name";
 import { PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UserActionableProcessingError } from "@/lib/documents/processing-errors";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -158,6 +159,8 @@ export async function pdfDocumentTitle(bytes: Uint8Array, password?: string): Pr
   const title = ((doc.isEncrypted ? await decryptedTitle(bytes, password) : doc.getTitle()) ?? "").replace(/\s+/g, " ").trim();
   if (/[\u0000-\u001f\u007f-\u009f\ufffd]/.test(title)) return null;
   if (title.length < 4 || title.length > 120 || /^(?:untitled|document\d*|microsoft word|scan\d*|img[_-]?\d+)/i.test(title) || /\.(?:pdf|docx?|jpe?g|png)$/i.test(title)) return null;
+  // A system's code for the file ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: one word joined by underscores.
+  if (isCodeName(title)) return null;
   return title;
 }
 

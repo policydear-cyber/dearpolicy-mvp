@@ -69,9 +69,10 @@ async function main() {
     await doc("Wawasan Group Life", [["Siti Aminah", 300000], ["Faiz Rahman", 120000]], ["Death benefit", 300000]);
     await doc("Faiz Term Life", [["Faiz Rahman", 500000]], ["Death benefit", 500000]);
     const faiz = await page("Faiz Rahman"), siti = await page("Siti Aminah");
-    await test("the shared certificate's figure on Faiz's page names Siti and Faiz's own sum", async () => {
-      const row = faiz.find((r) => r.product === "Wawasan Group Life");
-      assert.deepEqual(row?.shared, { others: ["Siti Aminah"], ownSum: "MYR 120,000" }, JSON.stringify(row));
+    // The certificate's "Death benefit RM300,000" names no member and is Siti's own sum: it is hers, never on Faiz's page
+    // (DC, 10 Nov: a figure is shown only for the person its document says it is for).
+    await test("the shared certificate's figure that is Siti's own sum is never on Faiz's page", async () => {
+      assert.ok(!faiz.some((r) => r.product === "Wawasan Group Life"), JSON.stringify(faiz));
     });
     await test("Siti's page names Faiz, with her own sum", async () => {
       assert.deepEqual(siti.find((r) => r.product === "Wawasan Group Life")?.shared, { others: ["Faiz Rahman"], ownSum: "MYR 300,000" });
@@ -80,7 +81,7 @@ async function main() {
       assert.equal(faiz.find((r) => r.product === "Faiz Term Life")?.shared, null);
     });
     await test("a person with a base plan and a rider on one shared certificate gets no one sum", async () => {
-      await doc("Seri Family Plan", [["Nur Faiz", 80000], ["Nur Faiz", 30000, "Seri Child Rider"], ["Siti Aminah", 90000]], ["Death benefit", 90000]);
+      await doc("Seri Family Plan", [["Nur Faiz", 80000], ["Nur Faiz", 30000, "Seri Child Rider"], ["Siti Aminah", 90000]], ["Death benefit", 80000]);
       const r = await GET(new NextRequest(`http://localhost/api/coverage?familyMemberId=${P["Nur Faiz"]}&category=Death`));
       const row = ((await r.json()) as { table: { product: string; shared: { others: string[]; ownSum: string | null } | null }[] }).table.find((x) => x.product === "Seri Family Plan");
       assert.deepEqual(row?.shared, { others: ["Siti Aminah"], ownSum: null }, JSON.stringify(row));

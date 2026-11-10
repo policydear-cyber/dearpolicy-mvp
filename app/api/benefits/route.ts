@@ -19,6 +19,7 @@ import { wholeSumAgainst } from "@/lib/policies/whole-sum";
 import { sumKindsOf } from "@/lib/policies/no-amount-pointer";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { oncePerPerson } from "@/lib/policies/benefit-people";
+import { NOT_TOLD_NOTE,sharedRowOwners } from "@/lib/policies/shared-row-owners";
 import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 import { PLAN_COLUMNS_NOTE,conditionsWithPlan,planCellRun,planColumnFigure,type PlanColumnReading } from "@/lib/insurance/scale-limit";
 import { maskShownText,sentName } from "@/lib/chat/identity-numbers";
@@ -224,8 +225,14 @@ export async function GET(request:NextRequest){
       const run=planCellRun(row.quote);
       return run!=null&&rows.rows.filter(r=>r.policy_id===row.policy_id&&r.source_page===row.source_page&&String(r.quote??"").replace(/\s+/g," ").includes(run)).length===1;
     };
-    const benefits=usableRows.map(row=>{
+    // A row of a document two or more people hold as their own (a joint schedule, a shared certificate) is shown only for
+    // the person it says it is for, or whose own sum it is; otherwise for no one (DC, 10 Nov; lib/policies/shared-row-owners).
+    const whoseOf=new Map(usableRows.map(row=>{const stub=resolved.get(row.id)!;
+      return [row.id,sharedRowOwners({policyId:row.policy_id,tier:row.tier,formulaKind:stub.formulaKind,formulaValue:stub.formulaValue,currency:stub.currency,quote:row.quote},contractsByDocument.get(row.policy_id)??[])] as const;}));
+    const ownerNames=new Map((inventory?.contracts??[]).map(c=>[c.ownerId,c.ownerName]));
+    const benefits=usableRows.filter(row=>{const whose=whoseOf.get(row.id);return !(member&&whose&&!whose.has(member));}).map(row=>{
       const stub=resolved.get(row.id)!;
+      const whose=whoseOf.get(row.id)??null;
       const formula={
         formulaKind:stub.formulaKind,formulaValue:stub.formulaValue,
         currency:stub.currency,factKey:stub.factKey,offsetDays:stub.offsetDays,maximumDays:stub.maximumDays,
@@ -244,7 +251,7 @@ export async function GET(request:NextRequest){
       })():null;
       const attention=term||planColumns?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       // Each person once, and only the person asked for: one person is often linked to a booklet by several documents.
-      const calculatedAgainst=oncePerPerson((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member).map(contract=>{
+      const calculatedAgainst=oncePerPerson((contractsByDocument.get(row.policy_id)??[]).filter(contract=>!member||contract.ownerId===member).filter(contract=>!whose||whose.has(contract.ownerId)).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
         return coverage?{ownerId:contract.ownerId,owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
           :{ownerId:contract.ownerId,owner:contract.ownerName,plan:null,amount:null};
@@ -285,7 +292,7 @@ export async function GET(request:NextRequest){
         // What the page adds after a name cut at its stored length: ")" or "…" (lib/policies/cut-name).
         nameSuffix:cutNameSuffix(row.benefit_name,row.quote),
         // A plan the household's documents settle: the "which plan is yours is not shown" note no longer applies.
-        conditions:conditionsWithPlan(stub.conditions,planFigure),planColumns,planFigure,
+        conditions:conditionsWithPlan(stub.conditions,planFigure).concat(whose&&!whose.size?[NOT_TOLD_NOTE]:[]),planColumns,planFigure,
         requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and
@@ -294,7 +301,10 @@ export async function GET(request:NextRequest){
         documentName:documentNames.get(row.policy_id)??nameOf(row),insurer:row.insurer,documentRole:row.document_role,
         // A booklet nobody has claimed yet has no owner. Saying so is more
         // useful than printing an empty cell.
-        owners:row.owner_names??[],
+        owners:whose?[...whose].map(id=>ownerNames.get(id)??"").filter(Boolean).sort():row.owner_names??[],
+        // Everyone who holds the document, for its heading; `owners` is whose this row is.
+        documentOwners:row.owner_names??[],
+        ...(whose&&!whose.size?{ownerNotTold:true}:{}),
         alternatives:alternativesFor(row),
       };
     });
@@ -342,7 +352,7 @@ export async function GET(request:NextRequest){
         unreadable:benefits.filter(b=>b.attention==="unreadable").length,
         usable:benefits.filter(b=>b.attention==null).length,
         documents:new Set(benefits.map(b=>b.policyId)).size,
-        unclaimed:benefits.filter(b=>!b.owners.length).length,
+        unclaimed:benefits.filter(b=>!b.owners.length&&!("ownerNotTold" in b)).length,
       },
     }),{headers:{"Server-Timing":timings.join(", ")}});
   }catch(error){
