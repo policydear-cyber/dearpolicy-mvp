@@ -131,9 +131,17 @@ export async function tableReady(db: Db): Promise<boolean> {
 }
 
 async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
-  return (await db("SELECT id, display_name, preferred_name, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at", [accountId]))
-    .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name),
-      date_of_birth: r.date_of_birth == null ? null : String(r.date_of_birth) }));
+  const people = (await db("SELECT id, display_name, preferred_name FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at", [accountId]))
+    .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name) }) as FamilyMember);
+  // The dates of birth the household entered (Family page): they tell which of a wording's age groups is the person's
+  // (assemble.ts tierProblem). Read on their own, so a failure only leaves the age groups unsettled (shown with no amount),
+  // never the table unbuilt.
+  try {
+    const dob = new Map((await db("SELECT id, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND date_of_birth IS NOT NULL", [accountId]))
+      .map((r) => [String(r.id), String(r.date_of_birth)]));
+    for (const p of people) p.date_of_birth = dob.get(p.id) ?? null;
+  } catch { /* no dates of birth: age groups stay unsettled */ }
+  return people;
 }
 
 /** Each person's own links to documents, used only to tell apart people with the same name (assemble.ts sharedNameMatch):

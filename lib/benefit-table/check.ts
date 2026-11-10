@@ -214,7 +214,11 @@ export type Dropped = { what: string; why: string };
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
   periodFrom?: string | null; periodTo?: string | null; covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[];
   /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
-  planType?: PlanType | null };
+  planType?: PlanType | null;
+  /** The document's own field lines that say what kind of plan or insured it is ("Coverage type: Family", "Plan: Elite
+   * (Family plan)", "Insured: Child"): a field label, then a value naming a family, child, individual or age group. Read by
+   * assemble.ts tierProblem; never a benefit row's label. */
+  tierLines?: string };
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
@@ -653,6 +657,20 @@ const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const int = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : null);
 
+/** See CheckedReading.tierLines: a short field label ending in a plan or cover word, then its value, which names a tier. */
+const TIER_FIELD = /^\s*([^:\t\n]{0,40}?\b(?:type|option|category|plan|cover(?:age)?|basis|insured|class)\b)\s*(?::|\t)\s*([^\n]+)$/i;
+const TIER_VALUE = /\b(?:family|child(?:ren)?|individual|single|couple|senior|adult|aged?\s+\d|\d{1,3}\s*(?:years?|yrs?))\b/i;
+export function tierLinesOf(pages: { text: string }[]): string {
+  const lines: string[] = [];
+  for (const p of pages) for (const line of p.text.split(/\r?\n/)) {
+    const m = TIER_FIELD.exec(line);
+    // The value is words, not a figure: "Baggage overall limit for family plan  S$12,500" is a benefit row, not a field.
+    if (m && TIER_VALUE.test(m[2]) && !/\d[\d,]*(?:\.\d+)?\s*$/.test(m[2].replace(/\b(?:years?|yrs?)(?:\s+old)?\b.*$/i, "")) ) lines.push(line.trim());
+    if (lines.length >= 20) break;
+  }
+  return lines.join("\n");
+}
+
 export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   const r = (raw ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
@@ -663,6 +681,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   const printedPeriod = (v: unknown) => doc.pages.map((p) => dateOnPage(str(v), p.text)).find(Boolean) ?? null;
   out.periodFrom = printedPeriod(d.periodFrom); out.periodTo = printedPeriod(d.periodTo);
   out.planType = planTypeOfPages(doc.pages);
+  out.tierLines = tierLinesOf(doc.pages);
   const household = asHousehold(doc);
   const pageText = (n: number) => doc.pages.find((p) => p.page === n)?.text ?? "";
   // Where on its page each located quote is printed, for reading the row around it.
