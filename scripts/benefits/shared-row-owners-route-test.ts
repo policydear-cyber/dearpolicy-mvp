@@ -25,7 +25,7 @@ async function main() {
   const { query } = await import("@/lib/db/client");
   const { GET } = await import("@/app/api/benefits/route");
   const { syncInsuredPersonToMember } = await import("@/lib/policies/linking");
-  const { sharedRowOwners, printedAmounts, NOT_TOLD_NOTE } = await import("@/lib/policies/shared-row-owners");
+  const { sharedRowOwners, printedAmounts, printedFigures, NOT_TOLD_NOTE } = await import("@/lib/policies/shared-row-owners");
   let passed = 0; const failures: string[] = [];
   const test = async (name: string, fn: () => Promise<void>) => { try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } };
 
@@ -49,6 +49,35 @@ async function main() {
     assert.equal(sharedRowOwners(row({}), two.map((x) => ({ ...x, documents: [{ id: "other" }] }))), null);
   });
 
+  await test("G1 a row on each person's own sum stays everyone's; a cap or limit is never matched to anyone's sum", async () => {
+    const c = (ownerId: string, ownerName: string, amount: number) => ({ ownerId, ownerName, documents: [{ id: "d" }], coverages: [{ policyId: "d", amount, currency: "SGD" }] });
+    const two = [c("j", "Jane Doe", 50000), c("k", "John Roe", 30000)];
+    const row = (formulaKind: string, formulaValue: number | null, quote: string) => ({ policyId: "d", tier: null, formulaKind, formulaValue, currency: "SGD", quote });
+    assert.equal(sharedRowOwners(row("sum_insured", 0.25, "Early Critical Illness: 25% of Sum Assured, up to S$25,000"), two), null);
+    assert.equal(sharedRowOwners(row("sum_insured", 1, "Death Benefit 100% of Sum Assured, maximum S$50,000 per life"), two), null);
+    assert.equal(sharedRowOwners(row("limit_percentage", 0.1, "Simple Fracture 10% of Benefit Limit S$5,000"), two), null);
+    assert.equal(sharedRowOwners(row("limit_percentage", 0.1, "Simple Fracture 10% of Benefit Limit S$50,000"), two), null, "a limit equal to a holder's sum is still a limit");
+    assert.deepEqual([...sharedRowOwners(row("sum_insured", 1, "Death 100% of Sum Assured (S$30,000)"), two)!], ["k"]);
+    // A row with no formula that prints only a cap: not everyone's, and not matched to the holder whose sum it equals.
+    assert.deepEqual([...sharedRowOwners(row("none", null, "Accidental Death up to S$50,000"), two)!], []);
+  });
+
+  await test("G2 a printed amount matches a holder's sum only in the same currency", async () => {
+    const c = (ownerId: string, ownerName: string, amount: number, currency = "SGD") => ({ ownerId, ownerName, documents: [{ id: "d" }], coverages: [{ policyId: "d", amount, currency }] });
+    const two = [c("j", "Jane Doe", 50000), c("k", "John Roe", 30000)];
+    const row = (o: Partial<Parameters<typeof sharedRowOwners>[0]>) => ({ policyId: "d", tier: null, formulaKind: "none", formulaValue: null, currency: null, ...o });
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Accidental Death US$50,000" }), two)!], []);
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Accidental Death USD 50,000" }), two)!], []);
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Accidental Death S$50,000" }), two)!], ["j"]);
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "fixed", formulaValue: 50000, quote: "Accidental Death US$50,000" }), two)!], [], "a fixed row with no stored currency takes its quote's");
+    assert.deepEqual([...sharedRowOwners(row({ formulaKind: "fixed", formulaValue: 50000, currency: "USD", quote: "Accidental Death 50,000" }), two)!], []);
+    // An unsigned figure matches only when the document's covers are all in one currency.
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Accidental Death 50,000" }), two)!], ["j"]);
+    const mixed = [c("j", "Jane Doe", 50000), c("k", "John Roe", 30000, "USD")];
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Accidental Death 50,000" }), mixed)!], []);
+    assert.deepEqual([...sharedRowOwners(row({ quote: "Policy No. 50,000-12 Accidental Death" }), mixed)!], []);
+  });
+
   await test("U2 the amounts a quote prints: signed money, or figures grouped in thousands; never a percentage or a day count", async () => {
     assert.deepEqual(printedAmounts("Egret Joint Shield S$250,000"), [250000]);
     assert.deepEqual(printedAmounts("Funeral Expense RM5,000.00"), [5000]);
@@ -56,6 +85,7 @@ async function main() {
     assert.deepEqual(printedAmounts("Hospital cash S$200 a day up to 30 days"), [200]);
     assert.deepEqual(printedAmounts("Pays 25% of the sum insured"), []);
     assert.deepEqual(printedAmounts(null), []);
+    assert.deepEqual(printedFigures("Death US$50,000, maximum S$25,000"), [{ amount: 50000, currency: "USD", cap: false }, { amount: 25000, currency: "SGD", cap: true }]);
   });
   await query("INSERT INTO accounts(id,name) VALUES($1,'Shared row test household')", [ACCOUNT]);
   await query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner')", [ACCOUNT, USER]);
