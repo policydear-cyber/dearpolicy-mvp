@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
+import { appDb, benefitTableLive, requeueStuckTableReadings } from "@/lib/benefit-table/app";
 import { figureText } from "@/lib/benefit-table/assemble";
 import { holdReason, tableFor } from "@/lib/benefit-table/service";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { documentName } from "@/lib/policies/inventory";
 import { maskShownText } from "@/lib/chat/identity-numbers";
@@ -18,7 +19,13 @@ export async function GET(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
+    // A carried reading or link run whose run died is queued again (bounded, later each time; no part is paid for twice).
+    await requeueStuckTableReadings(accountId).catch(()=>0);
     const {table,documents,links,figureChecks}=await tableFor(appDb,accountId);
+    // A document still being read (a long reading's next run, or the run that links its sections) goes on now, after this
+    // response, rather than waiting for another page or the daily run (lib/jobs/request-drain.ts: bounded, throttled).
+    if(documents.some(d=>d.state==="waiting"))
+      scheduleRequestDrain();
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
     // Each person's schedule lines, the ones Home's tiles count, so Family lists the same kinds of cover (kindsOfTable). Optional.
     const lines=await scheduleLinesFor(accountId).catch(()=>[]);
@@ -26,7 +33,9 @@ export async function GET(request:NextRequest){
     // ID numbers in quotes and excerpts are masked as chat masks them; row and link keys are left exactly as stored.
     return NextResponse.json(maskShownText({enabled:true,documents:documents.map(d=>({id:d.id,name:documentName(d.file),state:d.state,
       // A document on hold for its malware scan says why, as its Documents page card does.
-      hold:d.state==="held"?holdReason(d.file,malwareScanningIntentionallyDisabled()):null})),
+      hold:d.state==="held"?holdReason(d.file,malwareScanningIntentionallyDisabled()):null,
+      // Read with pages it could not read: those pages, which the page names (Critic and TE #404).
+      ...(d.unreadPages?.length?{unreadPages:d.unreadPages}:{})})),
       people:table.people.map(p=>({...p,rows:p.rows.map(r=>({...r,figureText:figureText(r.figure)})),scheduleLines:lines.filter(l=>l.familyMemberId===p.id).map(l=>({policyId:l.policyId,category:l.category}))})),
       covers:[...new Map(table.people.flatMap(p=>p.covers).map(c=>[c.coverKey,{key:c.coverKey,product:c.product,cover:c.cover,plan:c.plan,riderOf:c.riderOf??null}])).values()],
       unmatchedCovers:table.unmatchedCovers,ambiguousCovers:table.ambiguousCovers,illustrationCovers:table.illustrationCovers,

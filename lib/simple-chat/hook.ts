@@ -38,9 +38,9 @@ export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) 
 async function liveTable(accountId: string): Promise<{ table: BenefitTable; states: ReadonlyMap<string, string> } | null> {
   const { appDb, benefitTableLive } = await import("@/lib/benefit-table/app");
   if (!(await benefitTableLive(accountId))) return null;
-  const { tableFor } = await import("@/lib/benefit-table/service");
+  const { tableFor, tableStateKey } = await import("@/lib/benefit-table/service");
   const t = await tableFor(appDb, accountId);
-  return { table: t.table, states: new Map(t.documents.map((d) => [d.id, d.state])) };
+  return { table: t.table, states: new Map(t.documents.map((d) => [d.id, tableStateKey(d)])) };
 }
 
 /** Opens or continues the conversation; who the question is about is left to the model and the checks. */

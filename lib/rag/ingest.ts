@@ -705,7 +705,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     await query(
       `UPDATE policies SET insurer=$1,product_name=$2,policy_number=$3,group_policy_number=$4,policy_type=$5,document_role=$6,
        personal_coverage_confirmed=$7,document_authority=$8,document_authority_label=$9,effective_date=$10,renewal_or_expiry_date=$11,
-       page_count=$12,extracted_json=$13::jsonb || CASE WHEN extracted_json ? 'benefitTableReadingStarted' THEN jsonb_build_object('benefitTableReadingStarted', extracted_json->'benefitTableReadingStarted') ELSE '{}'::jsonb END,processing_status='indexing',processing_stage='organising',processing_progress=61,
+       page_count=$12,extracted_json=$13::jsonb || CASE WHEN extracted_json ? 'benefitTableReadingStarted' THEN jsonb_build_object('benefitTableReadingStarted', extracted_json->'benefitTableReadingStarted') ELSE '{}'::jsonb END
+         || CASE WHEN extracted_json ? 'benefitTableProgress' THEN jsonb_build_object('benefitTableProgress', extracted_json->'benefitTableProgress') ELSE '{}'::jsonb END,processing_status='indexing',processing_stage='organising',processing_progress=61,
        processing_message='Organising people, coverage and payment evidence…',updated_at=now()
        WHERE id=$14 AND account_id=$15`,
       [

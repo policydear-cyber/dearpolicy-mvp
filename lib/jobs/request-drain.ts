@@ -100,6 +100,9 @@ export async function drainOnce(params: { jobTypes?: WorkerJobTypeConfig[]; now?
     // it, catching up any earlier failure (lib/lifecycle/claim-snapshot-scrub.ts;
     // bounded, never throws).
     await (await import("@/lib/lifecycle/claim-snapshot-scrub")).scrubDeletedDocumentClaimSnapshots();
+    // A long policy's table reading (or its link run) whose run died is queued again, later each time, so it is never left
+    // waiting with nothing to go on with it (lib/benefit-table/app.ts; bounded, never throws).
+    await (await import("@/lib/benefit-table/app")).requeueStuckTableWorkEverywhere();
     if (!(await hasClaimableWork())) return { ran: false, reason: "no_work" };
     // Round 10: a household waiting on a chat answer is waiting now; a
     // document being read is not watched second by second. Chat analysis is
