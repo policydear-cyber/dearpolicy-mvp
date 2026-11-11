@@ -15,7 +15,8 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { readWhole, CutReading, CATALOG_BUDGETS } = await import("@/lib/policies/catalog-builder");
+  const { readWhole, CutReading, CATALOG_BUDGETS, boundedCall, quoteKey } = await import("@/lib/policies/catalog-builder");
+  const { TruncatedModelOutput } = await import("@/lib/ai/llm");
   await test("W1 a reply not cut is read once, at the first budget", async () => {
     const asked: number[] = [];
     const v = await readWhole(async (b) => { asked.push(b); return { value: "all", cut: false }; });
@@ -35,6 +36,33 @@ async function main() {
   await test("W5 an error from the model is not swallowed", async () => {
     await assert.rejects(readWhole(async () => { throw new Error("provider 500"); }), /provider 500/);
   });
+  // G1: the cut comes from the reply itself, never from provenance being stored; a reply never reported counts as cut.
+  await test("B1 a reply reported whole is not cut", async () => {
+    assert.deepEqual(await boundedCall(async (onReply) => { onReply({ truncated: false, finishReason: "end_turn" }); return "v"; }, "e"), { value: "v", cut: false });
+  });
+  await test("B2 a reply reported cut (flag or finish reason) is cut", async () => {
+    assert.equal((await boundedCall(async (onReply) => { onReply({ truncated: true, finishReason: null }); return "v"; }, "e")).cut, true);
+    for (const r of ["max_tokens", "length", "MAX_TOKENS"]) assert.equal((await boundedCall(async (onReply) => { onReply({ truncated: false, finishReason: r }); return "v"; }, "e")).cut, true, r);
+  });
+  await test("B3 a reply never reported (no provenance, no callback) is taken as cut (Critic #419 G1)", async () => {
+    assert.deepEqual(await boundedCall(async () => "v", "e"), { value: "v", cut: true });
+  });
+  await test("B4 a cut reply that could not be repaired is an empty cut reading, so the larger bound is tried (G2)", async () => {
+    assert.deepEqual(await boundedCall(async () => { throw new TruncatedModelOutput("cut", "{\"benefits\":[{\"na", true); }, "e"), { value: "e", cut: true });
+    const asked: number[] = [];
+    const v = await readWhole((b) => { asked.push(b); return boundedCall(async (onReply) => { if (b === CATALOG_BUDGETS[0]) throw new TruncatedModelOutput("cut", "", true); onReply({ truncated: false, finishReason: "end_turn" }); return "all"; }, "none"); });
+    assert.equal(v, "all"); assert.deepEqual(asked, CATALOG_BUDGETS);
+  });
+  await test("B5 a reply that is not cut but does not match the structure still fails as before", async () => {
+    await assert.rejects(boundedCall(async () => { throw new TruncatedModelOutput("shape", "{}", false); }, "e"), TruncatedModelOutput);
+    await assert.rejects(boundedCall(async () => { throw new Error("provider 500"); }, "e"), /provider 500/);
+  });
+  // G3: an earlier row of the same printed quote on the same page is the same benefit under another name.
+  await test("Q1 one printed row read under two names shares its quote key; another page or quote does not", () => {
+    assert.equal(quoteKey("Outpatient  benefit\tS$1,000", 3), quoteKey("outpatient benefit S$1,000", 3));
+    assert.notEqual(quoteKey("Outpatient benefit S$1,000", 3), quoteKey("Outpatient benefit S$1,000", 4));
+    assert.equal(quoteKey("", 3), null); assert.equal(quoteKey("x", null), null);
+  });
   // The call sites: both catalogue readings go through readWhole with the bound per attempt, report the finish reason, and
   // cache under a key that names the whole-reading rule; a CutReading is used for its partial result.
   const src = readFileSync("lib/policies/catalog-builder.ts", "utf8");
@@ -51,7 +79,9 @@ async function main() {
   });
   await test("S4 the cut is read from the call's own finish reason", () => {
     assert.match(src, /OUTPUT_CUT=\/\^\(\?:max_tokens\|length\|MAX_TOKENS\)\$\//);
-    assert.equal((src.match(/boundedCall\(\(onExecutionRecord\)=>structuredCompletion\(\{onExecutionRecord,/g) ?? []).length, 2);
+    assert.equal((src.match(/boundedCall\(\(onReply\)=>structuredCompletion\(\{onReply,/g) ?? []).length, 2);
+    assert.ok(!/onExecutionRecord/.test(src), "the cut must not depend on provenance");
+    assert.match(src, /!quoted\.has\(quoteKey\(b\.quote,b\.sourcePage\)/);
   });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
