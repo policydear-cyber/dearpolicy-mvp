@@ -23,12 +23,6 @@ export function otherLife(pageText: string, person: string, people: string[]): b
   const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
   const same = (name: string) => { const n = normalizePersonName(name.replace(/,/g, " ")).split(" ").filter((w) => w.length > 1); return n.every((w) => own.includes(w)) || own.every((w) => n.includes(w)); };
   if (people.some((name) => !same(name) && nameOnPage(name, pageText))) return true;
-  return lifeLineNamesOther(pageText, person);
-}
-
-/** Whether a life line on the page ("Life assured: ...", "Policyholder: ...") prints a name that is not this person's. */
-export function lifeLineNamesOther(pageText: string, person: string): boolean {
-  const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
   return [...pageText.matchAll(LIFE_LINE)].some((m) => {
     // A figure is not a name: "Sum Insured\tRM 250,000" names no one, as "Sum Insured\tS$250,000" does not (parity test, 25 Oct).
     const named = normalizePersonName(m[1].replace(FIGURE_AFTER_LABEL, " ").replace(/,/g, " ")).split(" ").filter((w) => w.length > 1 && /^[a-z]+$/.test(w));

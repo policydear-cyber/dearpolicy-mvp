@@ -7,7 +7,7 @@ import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { isExcluded, notExcludedClause } from "@/lib/policies/member-exclusions";
 import { nameKey } from "@/lib/policies/name-dismissals";
-import { lifeLineNamesOther, nameOnPage } from "@/lib/benefit-table/lives";
+import { nameOnPage } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 
 /** The ISO code of a currency the document printed, or null. Unlike
@@ -144,11 +144,11 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
 type SchemeLink = { policy_id: string; family_member_id: string; confidence: string | number };
 
 /** The matched links that do not put a person on someone else's own document (TE main journeys 11 Nov, defect 2). A
- * document of the same product is reference material for a person only where its pages do not show it is another life's:
- * - no document names another household member without also naming this person;
- * - a personal document (schedule, certificate, endorsement, statement or receipt) whose reading was not confirmed names no
- *   other household member and prints no life ("Life assured: ...") that is not this person, so one member's schedule is
- *   never another member's cover because they hold the same plan. */
+ * document of the same product is reference material for a person only where its pages do not show it is another
+ * member's: no document names another household member without also naming this person, and a personal document
+ * (schedule, certificate, endorsement, statement or receipt) names no other household member at all, so one member's
+ * schedule is never another member's cover because they hold the same plan. Only household members' names count: an
+ * employer policyholder, "As per schedule" or "Self" names no one (Critic #424). */
 async function schemeLinksForTheirOwnDocuments(accountId: string, links: SchemeLink[]): Promise<SchemeLink[]> {
   const ids = [...new Set(links.map((l) => l.policy_id))];
   const [docs, pages, family] = await Promise.all([
@@ -165,10 +165,8 @@ async function schemeLinksForTheirOwnDocuments(accountId: string, links: SchemeL
     const others = family.filter((m) => m.id !== l.family_member_id);
     const otherNamed = others.some((m) => printed(l.policy_id, m.id));
     if (otherNamed && !printed(l.policy_id, l.family_member_id)) return false;
-    if (!PERSONAL_AUTHORITY_ROLES.has(role.get(l.policy_id) ?? "")) return true;
-    if (otherNamed) return false;
-    const own = names(l.family_member_id);
-    return !(textOf.get(l.policy_id) ?? []).some((t) => own.length > 0 && own.every((n) => lifeLineNamesOther(t, n)));
+    // A personal document naming another member is theirs, even where it also names this one (a policyholder).
+    return !(otherNamed && PERSONAL_AUTHORITY_ROLES.has(role.get(l.policy_id) ?? ""));
   });
 }
 

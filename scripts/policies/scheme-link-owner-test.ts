@@ -58,13 +58,6 @@ async function main() {
       await linkRelatedReferenceDocuments(h.account, dan);
       assert.deepEqual(await h.linked(dan), []);
     });
-    await test("S3 a schedule printing a life outside the household is not matched to a member", async () => {
-      const h = await household();
-      const other = await h.doc({ role: "personal_schedule", confirmed: false, text: schedule("Peter Vance") });
-      const grace = await h.doc({ role: "personal_schedule", confirmed: true, text: schedule("Grace Tern"), member: "Grace Tern" });
-      await linkRelatedReferenceDocuments(h.account, grace);
-      assert.deepEqual(await h.linked(other), []);
-    });
     await test("S4 a schedule where Grace is only the policyholder and Daniel the life assured is not Grace's", async () => {
       const h = await household();
       const dan = await h.doc({ role: "personal_schedule", confirmed: false, text: `HERON ASSURANCE - POLICY SCHEDULE\nPolicyholder: Grace Tern\nLife assured: Daniel Tern\nPlan: Heron Care Plus\nCritical Illness Benefit S$120,000` });
@@ -109,6 +102,20 @@ async function main() {
       await linkRelatedReferenceDocuments(h.account, grace);
       assert.deepEqual(await h.linked(joint), ["Grace Tern:scheme_reference_match"]);
     });
+    // Critic #424: only household members' names count; an employer, "As per schedule" or "Self" names no one.
+    for (const [label, role, text] of [
+      ["an endorsement naming no one", "endorsement", "ENDORSEMENT\nInsured: As per schedule\nThe Critical Illness Benefit is increased."],
+      ["a group certificate with an employer policyholder", "certificate", "GROUP CERTIFICATE\nPolicyholder: Acme Pte Ltd\nInsured Person: Daniel Tern\nCritical Illness Benefit S$100,000"],
+      ["a schedule whose owner is 'Self'", "personal_schedule", "POLICY SCHEDULE\nLife Assured: TERN DANIEL\nOwner: Self\nCritical Illness Benefit S$100,000"],
+    ] as const)
+      await test(`C5 control: ${label} is still matched to Daniel`, async () => {
+        const h = await household();
+        const ref = await h.doc({ role, confirmed: false, text, member: undefined });
+        const dan = await h.doc({ role: "personal_schedule", confirmed: true, text: schedule("Daniel Tern"), member: "Daniel Tern" });
+        await query("DELETE FROM policy_members WHERE policy_id=$1", [ref]);
+        await linkRelatedReferenceDocuments(h.account, dan);
+        assert.deepEqual(await h.linked(ref), ["Daniel Tern:scheme_reference_match"]);
+      });
   } finally {
     for (const a of accounts) await query("DELETE FROM accounts WHERE id=$1", [a]);
   }
