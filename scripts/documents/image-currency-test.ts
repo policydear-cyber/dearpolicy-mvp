@@ -33,7 +33,8 @@ async function main() {
     ["RM", BARE, "Jumlah RM 100,000.00", "MYR"],
     ["MYR code", BARE, "Currency MYR\n" + BARE, "MYR"],
     ["pound sign", BARE, "Sum assured £100,000.00", "GBP"],
-    ["bare $ only", BARE, "Total Permanent Disability $100,000.00", "$"],
+    ["bare $ only names no currency (Critic #417 C3)", BARE, "Total Permanent Disability $100,000.00", null],
+    ["bare dollars only", BARE, "All amounts in dollars\n" + BARE, null],
     ["two currencies", BARE, "S$ 100,000.00\nUS$ 50,000.00", null],
     ["ringgit beside a $", BARE, "RM 100,000.00\n$ 20.00", null],
     ["a sign outside the list (yen)", BARE, "¥100,000", null],
@@ -89,9 +90,15 @@ async function main() {
   await test("F3 a USD reading on an SGD page is not confirmed", () => {
     assert.equal(fc(extraction(100000, "USD", "Total Permanent Disability\t100,000.00"), "SGD").evidenceVerified, false);
   });
-  await test("F4 a bare $ image does not confirm a USD reading", () => {
-    assert.equal(fc(extraction(100000, "USD", "Total Permanent Disability\t100,000.00"), "$").evidenceVerified, false);
+  await test("F4 an A$ page does not confirm an SGD reading (Critic #417 C2)", () => {
+    assert.equal(fc(extraction(100000, "SGD", "Total Permanent Disability\t100,000.00"), "AUD").evidenceVerified, false);
+    assert.equal(fc(extraction(100000, "SGD", "Total Permanent Disability\t100,000.00"), "PHP").evidenceVerified, false);
   });
+  // Critic #417 C1 / TE j417: a plain number on an S$ page is never money.
+  const PLAIN = "Policy Schedule\nLife Assured\tJane Doe\nAge at entry\t45\nEntry age\t45\nPolicy Term\t20\nCommencement\t1 October 2026\nPlan Code\t50000\nPolicy No.\t88123456\nPolicy No.\t70,451,288\nWaiting period (days)\t90\nCustomer hotline\t6555 0199";
+  for (const [label, amount, evidence] of [["age", 45, "Age at entry\t45"], ["entry age", 45, "Entry age\t45"], ["term", 20, "Policy Term\t20"], ["year of a date", 2026, "Commencement\t1 October 2026"],
+    ["plan code", 50000, "Plan Code\t50000"], ["policy number", 88123456, "Policy No.\t88123456"], ["policy number with commas", 70451288, "Policy No.\t70,451,288"], ["days", 90, "Waiting period (days)\t90"], ["phone", 65550199, "Customer hotline\t6555 0199"]] as const)
+    await test(`F11 ${label} is not money on an S$ page`, () => assert.equal(fc(extraction(amount, "SGD", evidence, "Death"), "SGD", PLAIN).evidenceVerified, false));
   await test("F5 USD page image confirms a USD reading", () => {
     assert.equal(fc(extraction(100000, "USD", "Total Permanent Disability\t100,000.00"), "USD").evidenceVerified, true);
   });

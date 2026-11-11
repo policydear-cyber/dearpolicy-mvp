@@ -5,11 +5,11 @@
  * when all of these hold:
  * - the text layer prints no currency at all (a sign, a code, a currency word): otherwise the text decides;
  * - the image reading prints exactly one currency, from a closed list ("S$", "SGD", "Singapore Dollar" are one; "$" next
- *   to one dollar currency is that currency); any other currency sign or word, or two currencies, gives none.
+ *   to one dollar currency is that currency); any other currency sign or word, two currencies, or only a bare "$", gives none.
+ * The fact check then confirms a figure in it only when the reading's currency is that same currency, and only a
+ * money-shaped figure (thousands separators or two decimals) on the cover's own evidence line (moneyShapedFigure).
  * Nothing here uses a model or reads a particular document: the image reading is the one the page check already made. */
 
-/** Currencies the fact check can confirm a figure in, with the mark it reads (lib/documents/fact-check CURRENCY_MARK). */
-export const IMAGE_CURRENCY_MARK: Record<string, string> = { SGD: "S$", USD: "US$", HKD: "HK$", AUD: "A$", MYR: "RM", EUR: "€", GBP: "£", PHP: "₱", $: "$" };
 const DOLLARS = new Set(["SGD", "USD", "HKD", "AUD"]);
 
 /** Every currency the text names, as codes from the closed list, or "?" for one outside it. */
@@ -56,9 +56,25 @@ export function singleImageCurrency(textReading: string, imageReading: string): 
   if (!found.size || found.has("?")) return null;
   const named = [...found].filter((c) => c !== "$");
   if (named.length > 1) return null;
-  if (!named.length) return "$";
+  // A bare "$" or "dollars" names no currency (S$, US$, A$ ...): none (Critic #417 C3).
+  if (!named.length) return null;
   // "$" beside one named currency is that currency only when it is a dollar ("S$" header, "$" figures); beside a ringgit,
   // euro or pound it is another currency.
   if (found.has("$") && !DOLLARS.has(named[0])) return null;
   return named[0];
+}
+
+/** A money-shaped figure on the line equal to the value: with thousands separators or two decimals ("250,000",
+ * "250,000.00", "80.50"), never a plain number (an age, a term, a policy or plan number, a year, a phone number), a
+ * percentage, a count of days or years, or a figure after a number, code, age, term, period or date label (Critic #417 C1). */
+export function moneyShapedFigure(line: string, value: number): boolean {
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const re = /(?<![\w.,/:-])(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?![\w.,/%-]|\s*(?:%|per\s*cent|days?|nights?|years?|months?|weeks?|hours?|times|x\b))/gi;
+  for (const m of String(line ?? "").matchAll(re)) {
+    if (Math.abs(Number(m[1].replace(/,/g, "")) - value) >= 0.005) continue;
+    const before = line.slice(0, m.index);
+    if (/\b(?:no\.?|nos?\.|number|code|ref(?:erence)?|age|term|period|years?|date|tel|phone|fax|hotline|nric|id)\b[^\d\n]*$/i.test(before)) continue;
+    return true;
+  }
+  return false;
 }
