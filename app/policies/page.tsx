@@ -421,7 +421,12 @@ export default function PoliciesPage() {
     <section className="upload-panel">
       {/* On a phone the file comes first, as one large target; who it is for is optional, and a password is asked
           only once a PDF is chosen. What happened shows right under the button, where the thumb just was. */}
-      <form onSubmit={upload} className="upload-form">
+      {/* A household with no one in it yet cannot upload (the server needs a person to file the document under): it is
+          asked to add the people first, before choosing a file, never after (Live tester, new-household walk 11 Nov). */}
+      {loaded && !family.length ? <div className="upload-form" data-testid="upload-needs-family">
+        <p><strong>First, add the people your policies cover.</strong> DearPolicy files each document under a person and uses their names to tell whose cover is whose. You can add yourself first and the rest of your family later.</p>
+        <Link className="button primary" href="/family"><Icon name="family"/> Add family members</Link>
+      </div> : <form onSubmit={upload} className="upload-form">
         <div className="field upload-pick">
           <input id="up-file" ref={fileInput} type="file" className="upload-file-input" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => { const next = e.target.files?.[0] ?? null; setFile(next); if (!next || !isPdf(next)) setPdfPassword(""); }}/>
           <label htmlFor="up-file" className={`upload-drop${file ? " chosen" : ""}`} data-testid="upload-drop">
@@ -435,7 +440,7 @@ export default function PoliciesPage() {
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload &amp; analyse</>}</button>
         {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
-      </form>
+      </form>}
     </section>
 
     <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b><Icon name="documents"/></b><span><strong>Reads it</strong><small>Any policy, wording or receipt</small></span></div><div><b><Icon name="family"/></b><span><strong>Finds who it covers</strong><small>From the names printed in it</small></span></div><div><b><Icon name="eye"/></b><span><strong>Shows the page</strong><small>Every answer cites its source</small></span></div></section>

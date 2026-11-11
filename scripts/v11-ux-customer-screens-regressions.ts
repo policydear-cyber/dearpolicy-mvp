@@ -211,11 +211,18 @@ test("customerMessage/customerAnswerText: the endowment defect fixture never rea
     assert.equal(customerMessage(leak, "fallback"), "fallback", leak);
     assert.equal(customerError(new Error(leak), "fallback"), "fallback", leak);
   }
-  for (const plain of ["Incorrect email or password.", "Files must be 50 MB or smaller.", "This exact document is already in DearPolicy.", "Create at least one family profile before uploading documents."]) {
+  for (const plain of ["Incorrect email or password.", "Files must be 50 MB or smaller.", "This exact document is already in DearPolicy.", "Add the people your policies cover on the Family page first, then upload this document again."]) {
     assert.equal(customerMessage(plain, "fallback"), plain);
   }
   assert.equal(customerMessage(undefined, "fallback"), "fallback");
   assert.equal(customerMessage("x".repeat(400), "fallback"), "fallback");
+});
+
+test("a household with no people is asked to add them before choosing a file, never refused after the upload", () => {
+  const page = read("app/policies/page.tsx");
+  assert.match(page, /loaded && !family\.length \? <div className="upload-form" data-testid="upload-needs-family">/);
+  assert.match(page, /data-testid="upload-needs-family"[\s\S]{0,600}href="\/family"/);
+  assert.match(read("app/api/policies/upload/accept.ts"), /Add the people your policies cover on the Family page first/);
 });
 
 test("'not found in the uploaded documents' never becomes 'not covered' on household screens", () => {
