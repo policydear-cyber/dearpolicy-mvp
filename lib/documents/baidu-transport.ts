@@ -45,7 +45,8 @@ export type TransportResponse = { ok: boolean; status: number; text(): Promise<s
 export type TransportRequest = {
   method: "GET" | "POST";
   headers?: Record<string, string>;
-  body?: FormData;
+  /** A multipart form (a file upload), or a JSON text (sent as application/json). */
+  body?: FormData | string;
 };
 
 export type TransportOptions = {
@@ -88,10 +89,12 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
   let payload: Uint8Array | undefined;
   const headers: Record<string, string> = { ...(req.headers ?? {}), connection: "close" };
   if (req.body) {
-    // The standard multipart encoding (the same bytes fetch would send), with a known length.
-    const encoded = new Response(req.body);
+    // The body sets these two itself; a caller's own spelling ("Content-Type") would otherwise be sent twice.
+    for (const name of Object.keys(headers)) if (/^content-(type|length)$/i.test(name)) delete headers[name];
+    // The standard encoding (the same bytes fetch would send), with a known length. A string is JSON.
+    const encoded = new Response(req.body, typeof req.body === "string" ? { headers: { "content-type": "application/json" } } : undefined);
     payload = new Uint8Array(await encoded.arrayBuffer());
-    headers["content-type"] = encoded.headers.get("content-type") ?? "multipart/form-data";
+    headers["content-type"] = encoded.headers.get("content-type") ?? (typeof req.body === "string" ? "application/json" : "multipart/form-data");
     headers["content-length"] = String(payload.byteLength);
   }
   const started = Date.now();

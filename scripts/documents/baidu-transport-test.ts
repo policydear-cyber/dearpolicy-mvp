@@ -55,6 +55,28 @@ async function main() {
     await close(server);
   }
 
+  // 1b. A JSON submit (Baidu downloads the file from a link): sent as application/json once, with a known length.
+  {
+    let got: { type?: string | string[]; raw?: string[]; length?: string; body?: string } = {};
+    const { server, url } = await serve((req, res) => {
+      const parts: Buffer[] = [];
+      req.on("data", (c) => parts.push(c));
+      req.on("end", () => {
+        got = { type: req.headers["content-type"], raw: req.rawHeaders.filter((_, i) => i % 2 === 0).map((h) => h.toLowerCase()), length: req.headers["content-length"], body: Buffer.concat(parts).toString("utf8") };
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ code: 0, data: { jobId: "job-2" } }));
+      });
+    });
+    const body = JSON.stringify({ fileUrl: "https://storage.example/f.pdf?token=x", model: "PaddleOCR-VL-1.6", optionalPayload: { useDocOrientationClassify: true } });
+    const res = await transportRequest(`${url}/api/v2/ocr/jobs`, { method: "POST", headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" }, body }, limits);
+    assert.deepEqual(await res.json(), { code: 0, data: { jobId: "job-2" } });
+    assert.match(String(got.type), /^application\/json/);
+    assert.equal(got.raw?.filter((h) => h === "content-type").length, 1, "content-type sent once");
+    assert.equal(Number(got.length), Buffer.byteLength(body), "a known Content-Length");
+    assert.deepEqual(JSON.parse(got.body ?? "{}"), JSON.parse(body));
+    await close(server);
+  }
+
   // 2. The server reads the whole upload and never replies: a timeout AT "reply", with everything sent.
   {
     const { server, url } = await serve((req) => { req.resume(); });
@@ -122,7 +144,7 @@ async function main() {
     await close(server); await close(s2);
   }
 
-  console.log("DearPolicy Baidu transport (local servers): multipart submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace -- passed. TLS and Baidu's live service are NOT covered.");
+  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace -- passed. TLS and Baidu's live service are NOT covered.");
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
