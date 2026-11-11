@@ -43,6 +43,11 @@ async function main() {
     ["'on' the premium paid", "Refund\t10% on the premium paid"],
     ["total premiums paid", "Maturity\t105% of total premiums paid"],
     ["a wrapped 'of' line", "Refund\t10%\nof the annual premium"],
+    ["a bracketed base", "Refund\t10% (annual premium)"],
+    ["a bracketed 'of' base", "Refund\t10% (of the annual premium)"],
+    ["a dash, then a base", "Refund\t10% - annual premium"],
+    ["a colon, then a base", "Refund\t10%: annual premium"],
+    ["'and', then another benefit", "Refund\t10% and premium refund"],
   ] as const) test(`A1: a share of ${base} read as of the sum insured gets no amount; the row keeps its words`, () => {
     const value = Number(line.match(/(\d+)%/)![1]);
     const r = one("Life Cover", 200000, "S$200,000", line, { benefit: line.split("\t")[0], value });
@@ -60,6 +65,8 @@ async function main() {
     ["SGD", "S$200,000", 200000, "Terminal illness\t100% (one hundred per cent) of the Sum Assured", 200000],
     ["SGD", "S$200,000", 200000, "Hospital cash\t1% per day", 2000],
     ["SGD", "S$200,000", 200000, "Burns\t50%", 100000],
+    ["SGD", "S$200,000", 200000, "Terminal illness\t50% - Sum Insured", 100000],
+    ["SGD", "S$200,000", 200000, "Angioplasty\t10%, up to $25,000", 20000],
   ] as const) test(`control (${cur}): ${line.split("\t")[1]} is still worked out on the sum insured`, () => {
     const value = Number(line.match(/(\d+)%/)![1]);
     const r = one("Main Cover", sum, sumText, line, { benefit: line.split("\t")[0], value, ...(/up to/.test(line) ? { cap: 25000, capQuote: "up to $25,000" } : {}) });

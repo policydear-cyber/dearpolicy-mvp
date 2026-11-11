@@ -571,20 +571,30 @@ function capFigureCurrency(excerpt: string, value: number, page: string): string
  * to", "subject to", "whichever"). Anything else is another base, and a share of it is never worked out on the sum
  * insured. */
 const SUM_INSURED_WORDS = /^(?:(?:the|your|this|its|basic|base|main|initial|original|current|prevailing|total|policy(?:'s|’s)?|plan(?:'s|’s)?|rider(?:'s|’s)?|benefit|coverage|cover)\s+)*(?:sum\s+(?:insured|assured|covered|at\s+risk)|insured\s+amount|amount\s+(?:insured|assured)|face\s+(?:amount|value)|coverage\s+amount|amount\s+of\s+(?:cover|coverage|insurance)|s\.?\s?[ia]\.?(?![\p{L}])|jumlah\s+(?:diinsuranskan|dijamin|dilindungi))/iu;
-/** What may follow a percentage without naming its base. */
-const NEUTRAL_AFTER = /^(?:$|[\d$£€¥₱,;.:)\-–—/|*^]|(?:s|us|hk|nz|a|sg)\$|(?:sgd|usd|myr|rm|hkd|gbp|eur|aud|nzd|idr|php|thb)\b|not\s+covered\b|(?:per|payable|paid|up\s+to|subject\s+to|max(?:imum)?|limited\s+to|not\s+exceeding|capped|whichever|or|and|but|each|a\s+(?:day|week|month|year)|daily|weekly|monthly|yearly|annually|for\s+(?:each|every|any|one)|of\s+(?:each|every))\b)/iu;
+/** What may follow a percentage without naming its base: the row's next figure (a table cell), a closing bracket or a full
+ * stop, or words that say how or how much it pays. */
+const NEUTRAL_AFTER = /^(?:$|[\d$£€¥₱)*^]|\.(?:\s|$)|(?:s|us|hk|nz|a|sg)\$|(?:sgd|usd|myr|rm|hkd|gbp|eur|aud|nzd|idr|php|thb)\b|not\s+covered\b|(?:per|payable|paid|up\s+to|subject\s+to|max(?:imum)?|limited\s+to|not\s+exceeding|capped|whichever|each|a\s+(?:day|week|month|year)|daily|weekly|monthly|yearly|annually|for\s+(?:each|every|any|one)|of\s+(?:each|every)|(?:less|more|greater)\s+than|at\s+least|equals?\s+to|(?:or|and)\s+(?:more|less|above|below|over))\b)/iu;
+/** A separator after a percentage says nothing by itself: the words after it are read again (Critic B3, "10% - annual
+ * premium", "10% and premium refund"). */
+const SEPARATOR = /^(?:[-–—:;,/|]|(?:and|or|but)\b)\s*/iu;
+/** A bracket that only spells the percentage out ("(one hundred per cent)") is read through. */
+const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
 /** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
  * row's end follows it). False when no percentage equal to the value is printed. */
 function percentBaseUnsettled(row: string, value: number): boolean {
   const t = row.normalize("NFKC").replace(/[ \t]+/g, " ");
   for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)) {
     if (Math.abs(Number(m[1].replace(",", ".")) - value) > 0.0001) continue;
-    // "(one hundred per cent)" after the figure, or the ")" closing "(100%)", says nothing about the base.
-    // Only the rest of the percentage's own line counts: a line below is the row's next line or the next row. A bracket
-    // opening the rest ("(up to S$50,000)") is read through.
-    // A percentage that ends its line with its "of ..." wrapped onto the next ("10%\nof the annual premium") reads on.
+    // Only the rest of the percentage's own line counts: a line below is the row's next line or the next row. A
+    // percentage that ends its line with its "of ..." wrapped onto the next ("10%\nof the annual premium") reads on.
     const lines = t.slice(m.index! + m[0].length).split("\n");
-    const after = (!lines[0].trim() && /^\s*(?:of|on|daripada|dari)\s/iu.test(lines[1] ?? "") ? lines[1] : lines[0]).replace(/^\s*\)/, "").replace(/^\s*\([^()\d]*\)/, "").trim().replace(/^\(\s*/, "");
+    let after = (!lines[0].trim() && /^\s*(?:of|on|daripada|dari)\s/iu.test(lines[1] ?? "") ? lines[1] : lines[0]).trim();
+    // The ")" closing "(100%)", a bracket spelling the percentage out, an opening bracket and separators are read through.
+    for (let i = 0; i < 6; i++) {
+      const next = after.replace(/^\)\s*/, "").replace(SPELLED_PERCENT, "").replace(/^\(\s*/, "").replace(SEPARATOR, "");
+      if (next === after) break;
+      after = next;
+    }
     const of = after.match(/^(?:of|on|daripada|dari)\s+/iu);
     if (of) { if (!SUM_INSURED_WORDS.test(after.slice(of[0].length))) return true; continue; }
     if (!SUM_INSURED_WORDS.test(after) && !NEUTRAL_AFTER.test(after)) return true;
