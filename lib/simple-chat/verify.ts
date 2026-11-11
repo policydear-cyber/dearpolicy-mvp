@@ -797,6 +797,21 @@ const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|cappe
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
  *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
  *   amount (A10c). */
+/** Whether two of the household's documents are one policy for the person: the same document; or both print a policy number
+ * and it is the same; or (one or both print none, so no number can tell them apart) they are the household's only two
+ * current documents of one product from one insurer, and both are linked to the person (a schedule and its wording;
+ * Speed S2). A third document of that product (a second policy, another person's copy) or any other doubt: false. */
+function onePolicy(household: Household, a: number, b: number, person: string): boolean {
+  if (a === b) return true;
+  const da = household.documents[a], db = household.documents[b];
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (number(da) && number(db)) return number(da) === number(db);
+  const key = (d: HouseholdDocument) => [d.insurer, d.productName].map((x) => (x ?? "").trim().toLowerCase().replace(/\s+/g, " "));
+  const [ia, pa] = key(da), [ib, pb] = key(db);
+  if (!ia || !pa || ia !== ib || pa !== pb) return false;
+  if (![da, db].every((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person))) return false;
+  return household.documents.filter((d) => !d.supersededAt && key(d)[0] === ia && key(d)[1] === pa).length === 2;
+}
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string, serverWords: ReadonlySet<string> = new Set()): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -804,8 +819,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   const bf = locateQuote(household, po.baseQuote, Number.isFinite(preferred) ? preferred : null);
   if (!bf) return null;
   const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
-  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc));
+  const samePolicy = onePolicy(household, wording.docIndex, bf.docIndex, person);
   if (samePolicy && quotedLineIsWhole(bf, wording, household, person)) return bf;
   // Otherwise the plan's own Sum Assured cell, in the wording's document or the base's (when it is the same policy).
   const want = moneyFiguresIn(po.baseAmount)[0]?.value ?? numbersIn(po.baseAmount)[0];
@@ -911,7 +925,8 @@ function quotedLineIsWhole(bf: Found, wording: Found, household: Household, pers
 /** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
 const AMOUNT = /(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|(?<![\w.,])\d+\.\d{2}(?![\d])/;
 const NOT_BENEFIT_AMOUNT = /\b(?:premiums?|instalments?|installments?|total|discount|gst|tax|fees?|charges?|payable\s+for\s+advice)\b/i;
-const HEADING_STOP = new Set(["benefit", "benefits", "the", "of", "and", "for", "on", "a", "an", "to", "in"]);
+// "Cover" names no benefit of its own, as "benefit" does not ("Critical Illness Cover" is the critical illness plan; Speed S2).
+const HEADING_STOP = new Set(["benefit", "benefits", "cover", "the", "of", "and", "for", "on", "a", "an", "to", "in"]);
 /** The name words of the heading above the quoted wording ("2.2. Critical Illness Benefit" gives critical, illness), from
  * the nearest line above it that is a numbered heading or in capitals. Empty when there is none (refused, fail-safe). */
 function headingWords(household: Household, found: Found): string[] {
@@ -926,6 +941,11 @@ function headingWords(household: Household, found: Found): string[] {
     if (heading) return tokens(heading).filter((w) => !HEADING_STOP.has(w));
   }
   return [];
+}
+/** Whether the row a quote is on prints 100% as its last percentage ("... 100% of the Sum Assured will be payable"). */
+function wholeRow(household: Household, f: Found): boolean {
+  const page = household.documents[f.docIndex].pages.find((p) => p.page === f.page);
+  return !!page && [...rowLine(page.text, f.offset).text.matchAll(PCTS)].map((m) => Number(m[1])).at(-1) === 100;
 }
 /** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
  * figure ("100% of the Sum Insured, up to S$400,000"), or a line above it on its page prints a sum insured or limit with a
@@ -1904,11 +1924,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // (live run 22 Oct, A3), only where wholeSumInsured finds it is theirs for this policy (Critic R126-1).
       let whole: string | null = null;
       if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && person && !limitedWords(household, found)) {
-        const bf = wholeSumInsured(st, found, household, person, serverWords);
+        // The quote may be the sum itself ("Critical Illness Cover 200,000.00"), with the wording that pays its 100% quoted as
+        // a condition: that wording is then read as the statement's own, when it prints the 100% on its row and nothing
+        // limits it, under its own heading (Speed S2). Every check below applies to it as to a quoted wording.
+        const wording = headingWords(household, found).length ? found : st.percentOf.baseQuote && locateQuote(household, st.percentOf.baseQuote, null)?.offset === found.offset
+          ? st.conditions.map((c) => c.quote ? locateQuote(household, c.quote, null) : null)
+            .find((c): c is Found => !!c && headingWords(household, c).length > 0 && wholeRow(household, c) && !limitedWords(household, c)) ?? found
+          : found;
+        const bf = wholeSumInsured(st, wording, household, person, serverWords);
         const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: bf.excerpt }, bf, household) : null;
         // The card stays on the wording's own page, so its conditions are read there, and says where the sum is printed.
         if (bf && plain?.ok) {
-          r = { ...plain, found };
+          r = { ...plain, found: wording };
           whole = `100% of ${person}'s sum insured of ${plain.amount.text} (${docLabel(household, household.documents[bf.docIndex])}, page ${bf.page})`;
         }
       }
