@@ -278,6 +278,27 @@ function readerRequires(label:string,line:string,category?:{requires:ScenarioTra
   return [...new Set([...requiredTraits(label,line),...said])];
 }
 
+/** The finish reasons a provider gives for a reply that stopped at its output bound (Anthropic, OpenAI-style, Gemini). */
+const OUTPUT_CUT=/^(?:max_tokens|length|MAX_TOKENS)$/;
+/** A reading still cut at its largest output bound: what it held, complete items only (the JSON repair keeps whole array
+ * elements). It is used for what it holds, the page is treated as not fully read, and it is never cached. */
+export class CutReading<T> extends Error{constructor(readonly partial:T){super("catalog_reading_cut");this.name="CutReading";}}
+/** Output bounds for a catalogue reading: a reply cut at the first is read again at the second (catalog_building calls cut at
+ * 700 and 900 tokens dropped every benefit after the cut on 43 page reads across 16 documents, 24 Oct to 11 Nov). */
+export const CATALOG_BUDGETS=[2400,6000];
+/** Reads with each budget in turn until a reply is not cut at its bound; a reply cut at the last is thrown as CutReading. */
+export async function readWhole<T>(read:(budget:number)=>Promise<{value:T;cut:boolean}>,budgets:number[]=CATALOG_BUDGETS):Promise<T>{
+  let last:{value:T;cut:boolean}|null=null;
+  for(const budget of budgets){last=await read(budget);if(!last.cut)return last.value;}
+  throw new CutReading(last!.value);
+}
+/** One structured catalogue call, with whether its reply stopped at the output bound (from the call's own execution record). */
+async function boundedCall<T>(call:(onExecutionRecord:(record:{resolved?:{finishReason?:string|null}|null})=>void)=>Promise<T>):Promise<{value:T;cut:boolean}>{
+  let cut=false;
+  const value=await call((record)=>{cut=OUTPUT_CUT.test(record.resolved?.finishReason??"");});
+  return {value,cut};
+}
+
 async function categoriseRows(rows:{index:number;label:string;value:string}[],owner:{accountId:string;policyId:string}){
   if(!rows.length)return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();
   // attempts:2 -- one retry survives a transient 429 (the free-tier hosted
@@ -287,13 +308,18 @@ async function categoriseRows(rows:{index:number;label:string;value:string}[],ow
   try{
     const payload={rows:rows.slice(0,60).map(row=>({index:row.index,label:row.label.slice(0,120),amount:row.value.slice(0,60)}))};
     // Cached by the exact rows read: a retry never pays for this twice.
-    const result=await cachedReading(owner,"catalog_categorise",{payload,prompt:CATEGORISE_SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
-      role:"reading",operation:"catalog_building",householdId:owner.accountId,resourceId:owner.policyId,schema:RowCategoriesSchema,temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
+    // A reply cut at its bound is read again with room for every row (a cut one held only the rows before the cut); the
+    // cache key names the whole-reading rule, so a cut reply cached before it is not reused.
+    const categorise=()=>readWhole((budget)=>boundedCall((onExecutionRecord)=>structuredCompletion({onExecutionRecord,
+      role:"reading",operation:"catalog_building",householdId:owner.accountId,resourceId:owner.policyId,schema:RowCategoriesSchema,temperature:0,maxOutputTokens:budget,timeoutMs:120_000,attempts:2,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         return {rows:(Array.isArray(source.rows)?source.rows:[]).filter(row=>RowCategoriesSchema.shape.rows.element.safeParse(row).success)};},
       system:CATEGORISE_SYSTEM,
       user:JSON.stringify(payload),
-    }));
+    })));
+    // Still cut: the rows it holds are used (the rest keep their keyword traits), and it is not cached.
+    const result=await cachedReading(owner,"catalog_categorise",{payload,prompt:CATEGORISE_SYSTEM,whole:true},await readingModelIdentity(),categorise)
+      .catch((error)=>{if(error instanceof CutReading)return error.partial as z.infer<typeof RowCategoriesSchema>;throw error;});
     return new Map(result.rows.map(row=>[row.index,{isBenefit:row.isBenefit,respondsTo:row.respondsTo as ScenarioTrait[],requires:(row.requires??[]) as ScenarioTrait[]}]));
   }catch{return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();/* Keyword traits still apply. */}
 }
@@ -441,16 +467,23 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     try{
       // Cached by the exact page read: a retried job, a resumed drain or a
       // re-upload of identical bytes never pays to read this page again.
-      extraction=await cachedReading({accountId:args.accountId,policyId:args.policyId},"catalog_page",{modelPayload,prompt:SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
+      // A reply cut at its output bound is read again with more room: a cut reply held only the benefits before the cut
+      // (catalog_building at 700 tokens). The cache key names the whole-reading rule, so a cut reply cached before is not reused.
+      extraction=await cachedReading({accountId:args.accountId,policyId:args.policyId},"catalog_page",{modelPayload,prompt:SYSTEM,whole:true},await readingModelIdentity(),()=>readWhole((budget)=>boundedCall((onExecutionRecord)=>structuredCompletion({onExecutionRecord,
         role:"reading",
         operation:"catalog_building",
         householdId:args.accountId,resourceId:args.policyId,
         schema:CatalogExtractionSchema,coerce:coerceExtraction,
-        temperature:0,maxOutputTokens:700,timeoutMs:120_000,attempts:2,
+        temperature:0,maxOutputTokens:budget,timeoutMs:120_000,attempts:2,
         system:SYSTEM,
         user:JSON.stringify(modelPayload),
-      }));
-    }catch(error){firstFailure??=error;failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
+      }))));
+    }catch(error){
+      // Still cut at the largest bound: the benefits it holds are used, and the page also keeps what an earlier read of it
+      // established (previouslyReadRows), as for a page that could not be read.
+      if(error instanceof CutReading){extraction=error.partial as z.infer<typeof CatalogExtractionSchema>;failedPages.add(page.page_number);}
+      else{firstFailure??=error;failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
+    }
     for(const found of extraction.benefits){
       // The quote must be present on this page, verbatim.
       if(!hasQuote(page.text,found.quote))continue;
