@@ -8,6 +8,7 @@ import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { amountAppears } from "@/lib/documents/evidence";
 import { figuresDifferByPlan } from "@/lib/insurance/scale-limit";
 import { amountOnlyInContext } from "@/lib/documents/own-figure";
+import { benefitRowsFromText } from "@/lib/documents/layout";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -78,6 +79,13 @@ test("G3 the glued rule never brings back a word's tail: lower-case or capital w
   eq(moneyPrinted("Exclusion: FRAUD 10", 10), false, "FRAUD 10");
   eq(moneyPrinted("Claim FormRM 10,000", 10000), true, "FormRM 10,000 (a lost space before RM)");
   eq(figuresDifferByPlan("Hospital cashRM100 RM200"), true, "a glued ringgit cell beside another");
+});
+
+test("B1 a short sign with its dot (\"Rp.\", \"Rs.\") still marks a table's amounts (TE #421 B1)", () => {
+  const rows = (t: string) => benefitRowsFromText(t).length;
+  eq(rows("Benefit\tLimit\nDaily Hospital Cash\tRp. 500.000\nSurgical Benefit\tRp. 2.000.000") > 0, true, "Rp. rows");
+  eq(rows("Benefit\tLimit\nDaily Hospital Cash\tRp. 500.000\nSurgical Benefit\tRp. 2.000.000"), rows("Benefit\tLimit\nDaily Hospital Cash\tRp 500.000\nSurgical Benefit\tRp 2.000.000"), "Rp. reads like Rp");
+  eq(rows("Benefit\tLimit\nDaily Hospital Cash\tRs. 5,000\nSurgical Benefit\tRs. 20,000") > 0, true, "Rs. rows");
 });
 
 for (const f of failures) console.error("FAIL", f);
