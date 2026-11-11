@@ -6,9 +6,10 @@ export default defineConfig({
   // .github/workflows/browser-e2e.yml (never against this development-identity stack):
   //   r8-*            chat rendering        e2e/playwright.r8.config.ts (chat-render-e2e.yml)
   //   v11-*           sign-up / sign-in     e2e/playwright.v11.config.ts (test-only Auth stand-in, no dev identity)
-  //   rag2-conversation  scripted loop model e2e/support/playwright.rag2.config.ts (rag2-loop-server.ts)
+  //   rag2-*, reliable-chat-*  scripted loop model  e2e/support/playwright.<spec>.config.ts (rag2-loop-server.ts,
+  //                   which serves the /__rag2stress seeding routes this stack does not have)
   //   v1-core-loop    phased certification  e2e/playwright.v1.config.ts (household B first, then A)
-  testIgnore: [/tests\/r8-[^/]*\.spec\.ts$/, /tests\/v11-[^/]*\.spec\.ts$/, /tests\/rag2-conversation\.spec\.ts$/, /tests\/v1-core-loop\.spec\.ts$/],
+  testIgnore: [/tests\/r8-[^/]*\.spec\.ts$/, /tests\/v11-[^/]*\.spec\.ts$/, /tests\/rag2-[^/]*\.spec\.ts$/, /tests\/reliable-chat[^/]*\.spec\.ts$/, /tests\/v1-core-loop\.spec\.ts$/],
   fullyParallel: false,
   workers: 1,
   retries: 0,

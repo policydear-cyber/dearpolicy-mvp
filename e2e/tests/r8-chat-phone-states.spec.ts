@@ -101,7 +101,8 @@ test.use({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true
 test("to confirm: the bottom line says so first, and the next step is right under it", async ({ page }) => {
   const answer = await askOnPhone(page, "toConfirm", "Is Grace covered for a hospital stay?");
   await expect(answer.getByTestId("answer-bottom-line")).toContainText("Not confirmed yet");
-  await expect(answer.getByTestId("answer-bottom-line")).toHaveClass(/to-confirm/);
+  // The bottom line's own words say it is not confirmed; the separate "To confirm" badge was removed by the style guide (aef0cbda).
+  await expect(answer.getByTestId("answer-bottom-line").locator(".answer-flag")).toHaveCount(0);
   // The step that settles it sits with the answer, before the collapsed sources.
   expect(await topOf(answer.getByTestId("next-step"))).toBeLessThan(await topOf(answer.getByTestId("answer-where")));
   // A sentence that adds a reason to the step stays (Critic R47-1: a sentence is hidden only when it says no more than the step).

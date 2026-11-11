@@ -149,7 +149,7 @@ async function main() {
     const a = (await msg(aboutVida)).answer_json as Record<string, unknown>;
     assert.equal(a.summary, STALE_ANSWER_NOTICE); assert.deepEqual(a.invalidated, { reason: "policy_deleted" });
     assert.equal(a.conversationRevision, 3, "which chat turn it was is kept");
-    assert.equal(a.knownFacts, undefined); assert.equal(a.policyReview, undefined);
+    assert.deepEqual(a.knownFacts, [], "no stated fact is kept (an empty list, so the page can read it)"); assert.equal(a.policyReview, undefined);
     assert.equal((await msg(legacy)).answer_json, null, "an older answer with no saved answer stays without one");
   });
   await t("answers about the kept document, answers from before it was added, and the person's own questions, are untouched", async () => {

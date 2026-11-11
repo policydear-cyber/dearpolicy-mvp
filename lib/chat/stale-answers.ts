@@ -57,6 +57,8 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: InvalidationReason
     ...answer,
     summary: NOTICE[reason],
     details: [], claimItems: [], citations: [], nextSteps: [], missingFacts: [], questions: [],
+    // (the household's own stated facts stay; a notice built from nothing, as the deletion scrub saves, has none)
+    knownFacts: Array.isArray(answer.knownFacts) ? answer.knownFacts : [],
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
     // (what its figures were bound to and worked out from goes too: a page that draws figures from them must find none)

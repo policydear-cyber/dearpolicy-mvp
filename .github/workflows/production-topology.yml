@@ -36,6 +36,8 @@ jobs:
       MALWARE_SCANNER_PROVIDER: virustotal
       VIRUSTOTAL_API_KEY: synthetic-topology-virustotal-key
       VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      # The adapter looks up only the hash by default; the fake implements the upload API, so prove that path.
+      VIRUSTOTAL_UPLOAD_FILES: "true"
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "300"
       TOPOLOGY_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}

@@ -35,6 +35,8 @@ jobs:
       MALWARE_SCANNER_PROVIDER: virustotal
       VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
       VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      # The adapter looks up only the hash by default; the fake implements the upload API, so prove that path.
+      VIRUSTOTAL_UPLOAD_FILES: "true"
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEV_AUTH_ENABLED: "true"
@@ -125,6 +127,8 @@ jobs:
       MALWARE_SCANNER_PROVIDER: virustotal
       VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
       VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      # The adapter looks up only the hash by default; the fake implements the upload API, so prove that path.
+      VIRUSTOTAL_UPLOAD_FILES: "true"
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
@@ -199,6 +203,8 @@ jobs:
       MALWARE_SCANNER_PROVIDER: virustotal
       VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
       VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      # The adapter looks up only the hash by default; the fake implements the upload API, so prove that path.
+      VIRUSTOTAL_UPLOAD_FILES: "true"
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
@@ -326,6 +332,8 @@ jobs:
       MALWARE_SCANNER_PROVIDER: virustotal
       VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
       VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      # The adapter looks up only the hash by default; the fake implements the upload API, so prove that path.
+      VIRUSTOTAL_UPLOAD_FILES: "true"
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e

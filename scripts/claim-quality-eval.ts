@@ -300,13 +300,11 @@ const scenarios: Scenario[] = [
     expectItems: [
       { id: "med-inpatient", status: "potentially_applicable", calculatedAmount: 8_000 },
       { id: "travel-medical-expenses", status: "potentially_applicable", calculatedAmount: 8_000 },
-      // The legacy hardcoded G007500 hospital-cash item is a documented
-      // pre-existing quirk (see lib/claims/rules.ts's own comment): it
-      // keys off ANY G007500 cover the household owns (the GTL cover
-      // here), not off the coverage that was actually hospitalised, and
-      // it does not clear its own 10-day waiting period at 3 nights.
-      { id: "gtl-hospital-cash", status: "not_applicable" },
     ],
+    // The legacy hardcoded G007500 hospital-cash item (one scheme's S$30/day
+    // written in code) was removed on 25 Oct (69e80700): estimates now come
+    // from each household's own benefit-table rows. It must never come back.
+    expectAbsentIds: ["gtl-hospital-cash"],
   },
   {
     name: "hospitalisation: no reviewed bill and no trip dates asks for the admission date first, and shows no amount on either cover",
