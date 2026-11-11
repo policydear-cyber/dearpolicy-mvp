@@ -13,6 +13,8 @@ import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { TransportError, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
 import { query } from "@/lib/db/client";
 import { probeBaiduPath, probeSummary } from "@/lib/documents/baidu-probe";
+import { removeOcrHandoff, stageOcrHandoff } from "@/lib/storage";
+import { enqueueStoragePurge } from "@/lib/storage/purge";
 
 /**
  * Baidu AI Studio's hosted PaddleOCR (async jobs API) as the FIRST reader of scanned, image-only pages. It runs as a
@@ -77,10 +79,17 @@ export function baiduOcrSettings(env: Env = process.env) {
     // After such a failure, check each step of the path to Baidu (lib/documents/baidu-probe.ts), each within this limit.
     // 0 switches the check off.
     probeStepMs: intEnv(env.BAIDU_OCR_PROBE_STEP_MS, 6_000, 0, 15_000),
+    // "link" (default): the pages are staged in our own storage and Baidu downloads them through a short-lived signed
+    // link (the official `fileUrl` submit), because pushing the file from Vercel to Baidu was measured at under
+    // 20 KB/s (11 Nov 2026: 1.4 of 8.4 MB in 90 s). "upload": send the file in the request, as before. Without
+    // Supabase Storage (the local driver) there is no link Baidu could reach, so the file is uploaded.
+    submitVia: (/^upload$/i.test(env.BAIDU_OCR_SUBMIT?.trim() ?? "") ? "upload" : "link") as "link" | "upload",
+    // How long that signed link works. It is removed as soon as the job ends anyway.
+    linkTtlSeconds: intEnv(env.BAIDU_OCR_LINK_TTL_S, 900, 60, 3_600),
   };
 }
 
-export type BaiduFailureKind = "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format" | "unverified" | "cooling_down";
+export type BaiduFailureKind = "handoff_failed" | "not_configured" | "unsupported_model" | "auth" | "rate_limit" | "unavailable" | "bad_request" | "network" | "timeout" | "job_failed" | "format" | "unverified" | "cooling_down";
 /** A Baidu failure. Its message names the kind and the HTTP status only: never the token, never page text. */
 export class BaiduOcrError extends Error {
   kind: BaiduFailureKind; status?: number;
@@ -322,7 +331,7 @@ export type BaiduJobResult = { pages: string[]; jobId: string; model: string | n
 
 /** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order.
  * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
-export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number): Promise<BaiduJobResult> {
+export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string } = {}): Promise<BaiduJobResult> {
   const token = env.BAIDU_AISTUDIO_TOKEN?.trim();
   if (!token || !baiduOcrConfigured(env)) throw new BaiduOcrError("not_configured");
   const s = baiduOcrSettings(env);
@@ -337,12 +346,22 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
     return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily };
   };
 
-  const form = new FormData();
-  form.append("file", new Blob([Uint8Array.from(pdf)], { type: "application/pdf" }), "pages.pdf");
-  form.append("model", s.model);
   // Pages photographed sideways or upside down are turned upright by Baidu's own orientation step.
-  form.append("optionalPayload", JSON.stringify({ useDocOrientationClassify: true }));
-  const submitted = await apiData(await call(jobsUrl, { method: "POST", headers: auth, body: form }, timeout(), "submit"));
+  const optionalPayload = { useDocOrientationClassify: true };
+  let submitRequest: TransportRequest;
+  if (opts.fileUrl) {
+    // Baidu downloads the pages itself (the SDK's submit_url): a small JSON request instead of the whole file. The
+    // link is a secret for its short life: it goes only into this request body, never into a log or error.
+    submitRequest = { method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ fileUrl: opts.fileUrl, model: s.model, optionalPayload }) };
+  } else {
+    const form = new FormData();
+    form.append("file", new Blob([Uint8Array.from(pdf)], { type: "application/pdf" }), "pages.pdf");
+    form.append("model", s.model);
+    form.append("optionalPayload", JSON.stringify(optionalPayload));
+    submitRequest = { method: "POST", headers: auth, body: form };
+  }
+  const submitted = await apiData(await call(jobsUrl, submitRequest, timeout(), "submit"));
   const jobId = submitted.jobId;
   if (typeof jobId !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(jobId)) throw new BaiduOcrError("format");
 
@@ -411,6 +430,37 @@ const PROBE_MARGIN_MS = 30_000;
 /** Below this much time, Baidu is not started at all: the AI reader gets all of it. */
 const MIN_BAIDU_MS = 5_000;
 
+type Handoff = {
+  stage: (args: { accountId: string; handoffId: string; bytes: Uint8Array; ttlSeconds: number }) => Promise<{ storageKey: string; url: string } | null>;
+  remove: (storageKey: string) => Promise<void>;
+};
+const storageHandoff: Handoff = { stage: stageOcrHandoff, remove: removeOcrHandoff };
+let handoff: Handoff = storageHandoff;
+/** Tests only: stand in for the storage hand-off (null restores the real one). */
+export function setBaiduHandoffForTests(h: Handoff | null) { handoff = h ?? storageHandoff; }
+
+/** Reads one chunk with Baidu: through a signed link to a staged copy when "link" is on and storage can make one,
+ * otherwise by uploading the file. The staged copy is removed when the job ends, whatever the outcome; if that
+ * removal fails it is queued for the storage purge, so no copy is left behind. */
+async function readChunkWithBaidu(accountId: string, pdf: Uint8Array, deadline: number, via: { used: "link" | "upload" }): Promise<BaiduJobResult> {
+  const s = baiduOcrSettings();
+  if (s.submitVia !== "link") { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline); }
+  let staged: { storageKey: string; url: string } | null;
+  try {
+    staged = await handoff.stage({ accountId, handoffId: randomUUID(), bytes: pdf, ttlSeconds: s.linkTtlSeconds });
+  } catch {
+    throw new BaiduOcrError("handoff_failed");
+  }
+  if (!staged) { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline); }
+  via.used = "link";
+  try {
+    return await readPdfWithBaidu(pdf, process.env, deadline, { fileUrl: staged.url });
+  } finally {
+    const key = staged.storageKey;
+    await handoff.remove(key).catch(() => enqueueStoragePurge([{ domain: "policy", storageKey: key }], "ocr_handoff").catch(() => undefined));
+  }
+}
+
 /** A chunk with a page Baidu read too little of: used for this reading, never cached, so a later re-read asks again. */
 class WeakChunk extends Error {
   pages: { pageNumber: number; text: string }[];
@@ -441,6 +491,7 @@ export async function completePdfPagesWithBaidu(args: {
   };
 
   let unreachable = false;
+  const via: { used: "link" | "upload" } = { used: s.submitVia };
   for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
     const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
     if (deadline - Date.now() < MIN_BAIDU_MS) { failures.push("timeout"); break; }
@@ -456,7 +507,7 @@ export async function completePdfPagesWithBaidu(args: {
           const requested = { provider: choice.provider, model: choice.model, capability: "reading" as const, inputArtifactType: "application/pdf" };
           let job: BaiduJobResult;
           try {
-            job = await readPdfWithBaidu(await subsetPdf(args.bytes, chunk, undefined, args.password), process.env, deadline);
+            job = await readChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
             // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
             if (job.pages.length !== chunk.length) throw new BaiduOcrError("format");
           } catch (error) {
@@ -485,7 +536,7 @@ export async function completePdfPagesWithBaidu(args: {
       accept(got);
     } catch (error) {
       if (error instanceof WeakChunk) { accept(error.pages); continue; }
-      failures.push(error instanceof BaiduOcrError ? error.summary : "unexpected");
+      failures.push(`${error instanceof BaiduOcrError ? error.summary : "unexpected"} via=${via.used}`);
       // Baidu could not be reached at all, or did not answer the submit in time: every instance stops trying for a while, so each later scanned document does
       // not wait 10-60 s for a connection that is not coming before the AI reader reads it.
       if (error instanceof BaiduOcrError && error.stage === "submit" && (error.kind === "network" || error.kind === "timeout")) {

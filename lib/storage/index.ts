@@ -103,3 +103,23 @@ export async function readHouseholdExportFile(storageKey: string) {
 export async function deleteHouseholdExportFile(storageKey: string) {
   return backend().deleteHouseholdExportFile(storageKey);
 }
+
+// --- Baidu OCR hand-off (see ./supabase.ts). Supabase Storage only: on the local driver there is no link Baidu could
+// reach, so stageOcrHandoff returns null and the caller uploads the bytes itself, as before.
+export function ocrHandoffAvailable(): boolean {
+  return driver() === "supabase";
+}
+export async function stageOcrHandoff(args: { accountId: string; handoffId: string; bytes: Uint8Array; ttlSeconds: number }): Promise<{ storageKey: string; url: string } | null> {
+  if (driver() !== "supabase") return null;
+  const storageKey = await supabaseStorage.saveOcrHandoffFile(args);
+  try {
+    return { storageKey, url: await supabaseStorage.createOcrHandoffSignedUrl(storageKey, args.ttlSeconds) };
+  } catch (error) {
+    await supabaseStorage.deleteOcrHandoffFile(storageKey).catch(() => undefined);
+    throw error;
+  }
+}
+export async function removeOcrHandoff(storageKey: string) {
+  if (driver() !== "supabase") return;
+  await supabaseStorage.deleteOcrHandoffFile(storageKey);
+}
