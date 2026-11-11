@@ -1,7 +1,8 @@
 /** A catalogue reading cut at its output bound (catalog_building replies stopped at 700 and 900 tokens, and the JSON repair
  * kept only the benefits before the cut) is read again with more room; a reading still cut is used for what it holds, the
  * page is treated as not fully read (earlier rows kept), and it is never cached. The cache key names the whole-reading
- * rule, so a cut reply cached before is not reused. Pure logic: no database, network or model.
+ * rule, so a cut reply cached before is not reused. The condition reading (condition_catalog_extraction) follows the same
+ * rule. Pure logic: no database, network or model.
  *   npm run -s policies:catalog-whole-read-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -78,12 +79,20 @@ async function main() {
     assert.match(src, /error instanceof CutReading\)\{extraction=error\.partial[^}]*failedPages\.add\(page\.page_number\)/);
   });
   await test("S4 the cut is read from the call's own finish reason", () => {
-    assert.match(src, /OUTPUT_CUT=\/\^\(\?:max_tokens\|length\|MAX_TOKENS\)\$\//);
+    assert.match(readFileSync("lib/ai/whole-reading.ts", "utf8"), /OUTPUT_CUT=\/\^\(\?:max_tokens\|length\|MAX_TOKENS\)\$\//);
     assert.equal((src.match(/boundedCall\(\(onReply\)=>structuredCompletion\(\{onReply,/g) ?? []).length, 2);
     assert.ok(!/onExecutionRecord/.test(src), "the cut must not depend on provenance");
     assert.match(src, /!quoted\.has\(quoteKey\(b\.quote,b\.sourcePage\)/);
   });
 
+  const cond = readFileSync("lib/policies/condition-catalog.ts", "utf8");
+  await test("C1 the condition reading is read whole too: per-attempt bound, reply-reported cut, whole-rule cache key, partial kept when still cut", () => {
+    assert.ok(!/maxOutputTokens:\s*900\b/.test(cond));
+    assert.match(cond, /readWhole\(\(budget\)=>boundedCall\(\(onReply\)=>structuredCompletion\(\{onReply,/);
+    assert.match(cond, /maxOutputTokens:budget/);
+    assert.match(cond, /"condition_page",\{payload,prompt:SYSTEM,whole:true\}/);
+    assert.match(cond, /error instanceof CutReading\)extraction=error\.partial/);
+  });
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`catalog-whole-read: ${passed} passed, 0 failed`);
 }

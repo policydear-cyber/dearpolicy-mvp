@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
-import { TruncatedModelOutput,structuredCompletion } from "@/lib/ai/llm";
+import { structuredCompletion } from "@/lib/ai/llm";
+import { CutReading,boundedCall,readWhole } from "@/lib/ai/whole-reading";
+export { CATALOG_BUDGETS,CutReading,boundedCall,readWhole } from "@/lib/ai/whole-reading";
 import { clearCatalogCheckpoints,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
@@ -278,35 +280,6 @@ function readerRequires(label:string,line:string,category?:{requires:ScenarioTra
   return [...new Set([...requiredTraits(label,line),...said])];
 }
 
-/** The finish reasons a provider gives for a reply that stopped at its output bound (Anthropic, OpenAI-style, Gemini). */
-const OUTPUT_CUT=/^(?:max_tokens|length|MAX_TOKENS)$/;
-/** A reading still cut at its largest output bound: what it held, complete items only (the JSON repair keeps whole array
- * elements). It is used for what it holds, the page is treated as not fully read, and it is never cached. */
-export class CutReading<T> extends Error{constructor(readonly partial:T){super("catalog_reading_cut");this.name="CutReading";}}
-/** Output bounds for a catalogue reading: a reply cut at the first is read again at the second (catalog_building calls cut at
- * 700 and 900 tokens dropped every benefit after the cut on 43 page reads across 16 documents, 24 Oct to 11 Nov). */
-export const CATALOG_BUDGETS=[2400,6000];
-/** Reads with each budget in turn until a reply is not cut at its bound; a reply cut at the last is thrown as CutReading. */
-export async function readWhole<T>(read:(budget:number)=>Promise<{value:T;cut:boolean}>,budgets:number[]=CATALOG_BUDGETS):Promise<T>{
-  let last:{value:T;cut:boolean}|null=null;
-  for(const budget of budgets){last=await read(budget);if(!last.cut)return last.value;}
-  throw new CutReading(last!.value);
-}
-/** One structured catalogue call, with whether its reply stopped at the output bound, from the reply itself (onReply, which
- * does not depend on provenance being stored). Fail-safe: a call whose reply was never reported is taken as cut, and a
- * cut reply that could not be repaired or validated is an empty cut reading, so the larger bound is still tried (Critic
- * #419 G1, G2). */
-export async function boundedCall<T>(call:(onReply:(reply:{truncated:boolean;finishReason:string|null})=>void)=>Promise<T>,empty:T):Promise<{value:T;cut:boolean}>{
-  let cut:boolean|null=null;
-  try{
-    const value=await call((reply)=>{cut=reply.truncated||OUTPUT_CUT.test(reply.finishReason??"");});
-    return {value,cut:cut??true};
-  }catch(error){
-    if(error instanceof TruncatedModelOutput&&error.truncated)return {value:empty,cut:true};
-    throw error;
-  }
-}
-
 async function categoriseRows(rows:{index:number;label:string;value:string}[],owner:{accountId:string;policyId:string}){
   if(!rows.length)return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();
   // attempts:2 -- one retry survives a transient 429 (the free-tier hosted
@@ -552,14 +525,14 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // re-enters this function and must skip straight past a stage already done.
   return benefits.length;
 }
-/** Round 9: rows an earlier read of these pages stored from a model reading
- * (and that are still printed on them, as quoted), for pages whose read failed
- * this time: a failed read never erases what was already established. */
 /** A row's printed quote on its page, spacing and case aside: two readings of one printed row share it. */
 export function quoteKey(quote:string|null|undefined,page:number|null|undefined):string|null{
   const q=String(quote??"").replace(/\s+/g," ").trim().toLowerCase();
   return q.length>=3&&page!=null?`${page}|${q}`:null;
 }
+/** Round 9: rows an earlier read of these pages stored from a model reading
+ * (and that are still printed on them, as quoted), for pages whose read failed
+ * this time: a failed read never erases what was already established. */
 async function previouslyReadRows(accountId:string,policyId:string,failedPages:Set<number>,current:Omit<CatalogBenefit,"id"|"policyId">[],
   pages:{page_number:number;text:string}[]):Promise<Omit<CatalogBenefit,"id"|"policyId">[]>{
   try{
