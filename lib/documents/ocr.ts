@@ -50,6 +50,13 @@ export function mergeOcrPages(pages: PdfPage[], ocrPages: BridgePage[]) {
  * 'unreadable', and the document says which pages are missing) -- never
  * returned as if read. Before this, an OpenAI reading model (production)
  * returned the scanned pages unchanged and silently: they were never OCR'd. */
+// Both flags: a document whose other pages carry enough text is still read, and its note names each scanned page
+// that was not read (Critic #323 M1: with scans switched off they were dropped without a word).
+function notRead(pages: PdfPage[], numbers: number[]): PdfPage[] {
+  const unread = new Set(numbers);
+  return pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
+}
+
 export async function completePdfPagesWithOcr(args: {
   accountId: string;
   /** The document being read: provenance and the reading cache. */
@@ -63,18 +70,17 @@ export async function completePdfPagesWithOcr(args: {
   if (!pageNumbers.length) return args.pages;
   // No reader looks at the scanned pages: they are marked as not read (never as read and empty), so the document is
   // not called "no readable text" for a reason that is not the file's (new-household audit, 3 Nov).
-  // Both flags: a document whose other pages carry enough text is still read, and its note names each scanned page
-  // that was not read (Critic #323 M1: with scans switched off they were dropped without a word).
-  const notRead = (pages: PdfPage[], numbers: number[]) => {
-    const unread = new Set(numbers);
-    return pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true, notRead: true } : page));
-  };
   const baidu = baiduOcrConfigured();
   if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || (!baidu && !documentReaderFor())) return notRead(args.pages, pageNumbers);
   // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
   // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
-  let pages = args.pages, remaining = pageNumbers;
-  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers }));
+  let pages = args.pages, remaining = pageNumbers, probe: (() => Promise<void>) | undefined;
+  if (baidu) ({ pages, unread: remaining, probe } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers }));
+  // After Baidu could not be reached, the path probe runs once the AI reader is done, whatever it read.
+  try { return await readRemaining(args, pages, remaining); } finally { if (probe) await probe().catch(() => undefined); }
+}
+
+async function readRemaining(args: Parameters<typeof completePdfPagesWithOcr>[0], pages: PdfPage[], remaining: number[]): Promise<PdfPage[]> {
   if (!remaining.length) return pages;
   if (!documentReaderFor()) return notRead(pages, remaining);
   // A page that cannot be copied out of the file for the reader (a locked file pdf-lib cannot open, and the page is not
