@@ -24,6 +24,8 @@ process.env.BAIDU_OCR_POLL_INTERVAL_MS = "1";
 process.env.BAIDU_OCR_RESULT_HOSTS = "fake-baidu-bucket.test";
 // Each case starts with Baidu reachable; the cool-down after an unreachable Baidu has its own case below.
 process.env.BAIDU_OCR_COOLDOWN_MS = "0";
+// The path probe after an unreachable Baidu is switched on only in case 13 (it would otherwise look up real DNS).
+process.env.BAIDU_OCR_PROBE_STEP_MS = "0";
 // Two pages of ordinary scanned schedule text, each well over the 24-character bar.
 const PAGE_A = "Death Benefit\tS$100,000 payable on death of the life assured";
 const PAGE_B = "Hospital Cash Benefit\tS$50 per day, up to 30 days a year";
@@ -31,7 +33,7 @@ const TOKEN = "test-token-NOT-REAL-7f3c";
 
 type Seen = { url: string; method: string; auth: string | null; body: any; form?: Record<string, string>; filePages?: number };
 let seen: Seen[] = [];
-type Reply = { status: number; json?: unknown; text?: string; throwCode?: string };
+type Reply = { status: number; json?: unknown; text?: string; throwCode?: string; hang?: boolean };
 let baidu: (s: Seen) => Reply = () => ({ status: 500, json: {} });
 let ai: (s: Seen) => Reply = () => ({ status: 500, json: {} });
 const realFetch = globalThis.fetch;
@@ -50,6 +52,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   seen.push(s);
   const r = /fake-openai/.test(url) ? ai(s) : baidu(s);
   if (r.throwCode) throw new TypeError("fetch failed", { cause: Object.assign(new Error("connect failed"), { code: r.throwCode }) });
+  // No answer at all: the request waits until the caller's own time limit aborts it (as Baidu did from Vercel, 11 Nov).
+  // (A real socket keeps the process alive while it waits; the timer stands in for it, since AbortSignal.timeout does not.)
+  if (r.hang) await new Promise((_, reject) => { const alive = setInterval(() => undefined, 1000);
+    init?.signal?.addEventListener("abort", () => { clearInterval(alive); reject(init.signal!.reason); }); });
   return new Response(r.text ?? JSON.stringify(r.json), { status: r.status, headers: { "content-type": r.text ? "application/jsonl" : "application/json" } });
 }) as typeof fetch;
 
@@ -323,6 +329,15 @@ async function main() {
     // A repeated group name in column 0 under a non-name heading: each row is named by its own benefit cell.
     const grouped = benefitRowsFromText("Overall limit\tBenefit\tOwn limit\nOutpatient group\tSpecialist visit\tS$200\nOutpatient group\tBlood test\tS$80").map((r) => `${r.label}=${r.value}`);
     assert.deepEqual(grouped, ["Specialist visit=S$200", "Blood test=S$80"], grouped.join(" | "));
+    // Critic #410 F7: a lower-case or footnote-marked cell continues the row above; it is never named as a benefit.
+    for (const cont of ["per visit", "* per policy year", "*Per policy year", "subject to approval"])
+      assert.ok(!benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${cont}\tS$100`).some((r) => r.label === cont), cont);
+    assert.ok(benefitRowsFromText("Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\tDental\tS$100").some((r) => r.label === "Dental" && r.value === "S$100"));
+    // Critic #411 F8: only clear continuations are skipped; names that start in lower case or with a mark stay (as on main).
+    for (const [name, amount] of [["eye test", "S$50"], ["e-consultation", "S$30"], ["iPhone repair", "S$200"], ["*Dental", "S$300"], ["in-patient", "S$900"], ["office visit", "S$40"]])
+      assert.ok(benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${name}\t${amount}`).some((r) => r.label.includes(name.replace("*", "")) && r.value === amount), name);
+    for (const cont of ["each visit", "up to 10 visits", "max 3 claims", "including X-rays", "* subject to approval", "*Per policy year", "in hospital only"])
+      assert.ok(!benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${cont}\tS$100`).some((r) => r.label === cont), cont);
     // A label column already headed as names keeps its name, even when a later column is headed as names too.
     assert.deepEqual([...new Set(benefitRowsFromText("Benefit\tDescription\tLimit\nRoom and board\tWard A\tS$100").map((r) => r.label))], ["Room and board"]);
     // "Injury | Benefit": the Benefit column holds the amounts, so the name stays in column 0.
@@ -336,6 +351,7 @@ async function main() {
   // pages, the processing history says which call failed and the system's error code, and this instance then skips
   // Baidu for the cool-down instead of waiting on a connection for every later document.
   process.env.BAIDU_OCR_COOLDOWN_MS = "600000";
+  process.env.BAIDU_OCR_PROBE_STEP_MS = "300";
   const POLICY2 = "00000000-0000-4000-8000-0000000000c2";
   await db.query("INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status) VALUES($1,$2,$3,'synthetic2.pdf','synthetic/key2','processing')", [POLICY2, ACCOUNT, PERSON]);
   seen = []; baidu = () => ({ status: 0, throwCode: "UND_ERR_CONNECT_TIMEOUT" });
@@ -345,13 +361,48 @@ async function main() {
   const why = await db.query<{ detail: string }>("SELECT detail FROM processing_failure_diagnostics WHERE resource_id::text=$1 AND failure_code='BAIDU_OCR_FALLBACK'", [POLICY2]);
   assert.match(why.rows[0].detail, /network submit UND_ERR_CONNECT_TIMEOUT/);
   assert.ok(!why.rows[0].detail.includes(TOKEN));
+  // ...and the path probe then records which step of the connection fails (here the made-up host has no address), with no token.
+  const probe = await db.query<{ detail: string }>("SELECT detail FROM processing_failure_diagnostics WHERE resource_id::text=$1 AND failure_code='BAIDU_OCR_PATH_PROBE'", [POLICY2]);
+  assert.equal(probe.rows.length, 1, "one path probe after an unreachable Baidu");
+  assert.match(probe.rows[0].detail, /^region=local host=fake-baidu\.test dns=\S+/);
+  assert.ok(!probe.rows[0].detail.includes(TOKEN));
+  process.env.BAIDU_OCR_PROBE_STEP_MS = "0";
   seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
   out = await run();
   assert.equal(baiduCalls().length, 0, "cooling down: Baidu is not tried again at once");
   assert.equal(out[1].text, "AI reading of page 2");
-  bd.resetBaiduCooldown();
+  // Another (or a fresh) function instance shares the cool-down through the database.
+  bd.forgetLocalBaiduCooldown();
+  seen = []; out = await run();
+  assert.equal(baiduCalls().length, 0, "the cool-down is shared by every instance");
+  assert.equal(out[1].text, "AI reading of page 2");
+  await bd.resetBaiduCooldown();
   seen = []; out = await run();
   assert.equal(out[1].text, PAGE_A, "after the cool-down Baidu reads again");
+  // 13b. Baidu takes the upload but never answers the submit (11 Nov, from Singapore: "timeout submit" after 60 s): the
+  // timeout starts the same shared cool-down, so the next document, on any instance, goes straight to the AI reader.
+  process.env.BAIDU_OCR_REQUEST_TIMEOUT_MS = "200";
+  const POLICY3 = "00000000-0000-4000-8000-0000000000c3";
+  await db.query("INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status) VALUES($1,$2,$3,'synthetic3.pdf','synthetic/key3','processing')", [POLICY3, ACCOUNT, PERSON]);
+  seen = []; baidu = (q) => (q.method === "POST" ? { status: 0, hang: true } : baiduJob([vlLine([PAGE_A, PAGE_B])])(q));
+  const bytes3 = await fixturePdf("-C");
+  out = await completePdfPagesWithOcr({ accountId: ACCOUNT, resourceId: POLICY3, bytes: bytes3, pages: await extractPdfPages(bytes3) });
+  assert.equal(out[1].text, "AI reading of page 2");
+  const why3 = await db.query<{ detail: string }>("SELECT detail FROM processing_failure_diagnostics WHERE resource_id::text=$1 AND failure_code='BAIDU_OCR_FALLBACK'", [POLICY3]);
+  assert.match(why3.rows[0].detail, /timeout submit/);
+  bd.forgetLocalBaiduCooldown();
+  seen = []; out = await run();
+  assert.equal(baiduCalls().length, 0, "a submit timeout starts the shared cool-down");
+  await bd.resetBaiduCooldown();
+  // A timeout while POLLING (the job was taken) does not: Baidu is reachable.
+  seen = []; baidu = (q) => (q.method === "GET" && /jobs\//.test(q.url) ? { status: 0, hang: true } : baiduJob([vlLine([PAGE_A, PAGE_B])])(q));
+  out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-D"), pages: await extractPdfPages(await fixturePdf("-D")) });
+  bd.forgetLocalBaiduCooldown();
+  seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+  out = await run();
+  assert.equal(out[1].text, PAGE_A, "no cool-down after a poll timeout");
+  delete process.env.BAIDU_OCR_REQUEST_TIMEOUT_MS;
+  await bd.resetBaiduCooldown();
   process.env.BAIDU_OCR_COOLDOWN_MS = "0";
 
   // 14. TE #410: a locked file saved with object streams that pdf-lib cannot open. Page 1 (one image) is rebuilt by
