@@ -79,6 +79,10 @@ export function moneyShapedFigure(line: string, value: number): boolean {
     // "Waiting period", "Policy year:"). Inside a label they name a cover: "No Claim Bonus", "Old Age Benefit", "Benefit
     // Period Limit"; and "per policy year" is a limit's unit ("Overall limit per policy year").
     if (/\b(?:no\.?|nos?\.|age|period|years?)\s*(?:\([^)\n]*\))?\s*[:#\-]?\s*$/i.test(before) && !/\bper\s+(?:[a-z]+\s+)?years?\s*[:\-]?\s*$/i.test(before)) continue;
+    // ... and as the word that opens a field phrase anywhere in the label: "No. of units", "Age next birthday", "Age at
+    // entry", "Age limit", "Period of cover", "Years in force", "Year of entry" (Critic #423). "per period of insurance"
+    // stays a limit's unit ("Annual limit per period of insurance").
+    if (/(?<!\bper\s(?:[a-z]+\s)?)\b(?:nos?\.|no\.|age|period|years?)\s+(?:of|at|next|last|on|in|to|attained)\b|\bage\s+limit\b/i.test(before)) continue;
     // "Term" is a label only as the label's last word ("Policy Term", "Term (years):"); "Term Life", "Long Term Care" and
     // "Short-term disability" are covers (Critic #417).
     if (/\bterm\s*(?:\([^)\n]*\))?\s*[:\-]?\s*$/i.test(before)) continue;
