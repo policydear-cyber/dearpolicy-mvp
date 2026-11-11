@@ -26,6 +26,8 @@ process.env.BAIDU_OCR_RESULT_HOSTS = "fake-baidu-bucket.test";
 process.env.BAIDU_OCR_COOLDOWN_MS = "0";
 // The path probe after an unreachable Baidu is switched on only in case 13 (it would otherwise look up real DNS).
 process.env.BAIDU_OCR_PROBE_STEP_MS = "0";
+// Connection retries are switched on only in case 16 (each would otherwise wait 1-2 s).
+process.env.BAIDU_OCR_CONNECT_RETRIES = "0";
 // Two pages of ordinary scanned schedule text, each well over the 24-character bar.
 const PAGE_A = "Death Benefit\tS$100,000 payable on death of the life assured";
 const PAGE_B = "Hospital Cash Benefit\tS$50 per day, up to 30 days a year";
@@ -493,9 +495,56 @@ async function main() {
     bd.setBaiduHandoffForTests(null);
   }
 
+  // 16. The connection to Baidu sometimes does not open at all (11 Nov, 12:57: TCP timed out where 12:47 had worked).
+  // A call that failed BEFORE sending anything is tried again (1 s, then 2 s later); a call that sent anything is not.
+  {
+    await bd.resetBaiduCooldown();
+    process.env.BAIDU_OCR_CONNECT_RETRIES = "2";
+    process.env.BAIDU_OCR_SUBMIT = "upload";
+    const posts = () => baiduCalls().filter((c) => c.method === "POST");
+    // Two failed connections, then it opens: one job, Baidu's text, no AI reader.
+    let refusals = 2;
+    const ok = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+    seen = []; baidu = (q) => (q.method === "POST" && refusals-- > 0 ? { status: 0, throwCode: "ECONNREFUSED" } : ok(q));
+    let t0 = Date.now();
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-R1"), pages: await extractPdfPages(await fixturePdf("-R1")) });
+    assert.equal(posts().length, 3, "two retries after connections that did not open");
+    assert.ok(Date.now() - t0 >= 2_900, "waits 1 s, then 2 s");
+    assert.equal(out[1].text, PAGE_A); assert.equal(aiCalls().length, 0);
+    assert.equal(baiduCalls().filter((c) => c.method === "GET" && /jobs\//.test(c.url)).length >= 1, true);
+    // Never opens: three tries in all, then the AI reader; the failure says how many tries.
+    seen = []; baidu = () => ({ status: 0, throwCode: "ECONNREFUSED" });
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-R2"), pages: await extractPdfPages(await fixturePdf("-R2")) });
+    assert.equal(posts().length, 3, "1 try + 2 retries, no more");
+    assert.equal(out[1].text, "AI reading of page 2");
+    await bd.resetBaiduCooldown();
+    // A failure AFTER the request may have reached Baidu (connection reset) is never repeated: no second paid submit.
+    seen = []; baidu = () => ({ status: 0, throwCode: "ECONNRESET" });
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-R3"), pages: await extractPdfPages(await fixturePdf("-R3")) });
+    assert.equal(posts().length, 1, "a reset is not retried");
+    await bd.resetBaiduCooldown();
+    // An HTTP reply is never retried either.
+    seen = []; baidu = baiduJob([], { submit: { status: 503, json: { code: 503 } } });
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-R4"), pages: await extractPdfPages(await fixturePdf("-R4")) });
+    assert.equal(posts().length, 1, "an HTTP error is not retried");
+    // No retry once too little of the job's time is left for one: the job's own limit holds.
+    process.env.BAIDU_OCR_MAX_WAIT_MS = "5500"; // enough to start a job (5 s), not enough for a 1 s wait plus 5 s
+    seen = []; baidu = () => ({ status: 0, throwCode: "ECONNREFUSED" }); t0 = Date.now();
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: await fixturePdf("-R5"), pages: await extractPdfPages(await fixturePdf("-R5")) });
+    assert.equal(posts().length, 1, "no retry without time for it"); assert.ok(Date.now() - t0 < 5_500);
+    delete process.env.BAIDU_OCR_MAX_WAIT_MS;
+    await bd.resetBaiduCooldown();
+    // The rule itself: only a failure before any byte was sent counts.
+    const { TransportError } = await import("@/lib/documents/baidu-transport");
+    const tr = (phase: "dns" | "connect" | "tls" | "upload" | "reply", sentBytes: number) => new TransportError("network", { phase, sentBytes, totalBytes: 10, elapsedMs: 1 });
+    assert.deepEqual([tr("dns", 0), tr("connect", 0), tr("tls", 0), tr("upload", 0), tr("upload", 5), tr("reply", 10)].map(bd.failedBeforeSending), [true, true, true, false, false, false]);
+    process.env.BAIDU_OCR_CONNECT_RETRIES = "0";
+    delete process.env.BAIDU_OCR_SUBMIT;
+  }
+
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
 
-  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal -- passed. Live Baidu behaviour is NOT covered by this test.");
+  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent -- passed. Live Baidu behaviour is NOT covered by this test.");
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
