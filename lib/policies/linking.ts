@@ -152,7 +152,7 @@ type SchemeLink = { policy_id: string; family_member_id: string; confidence: str
 async function schemeLinksForTheirOwnDocuments(accountId: string, links: SchemeLink[]): Promise<SchemeLink[]> {
   const ids = [...new Set(links.map((l) => l.policy_id))];
   const [docs, pages, family] = await Promise.all([
-    query<{ id: string; document_role: string | null }>(`SELECT id,document_role FROM policies WHERE account_id=$1 AND id=ANY($2::uuid[])`, [accountId, ids]),
+    query<{ id: string; document_role: string | null }>(`SELECT id,document_role FROM policies WHERE account_id=$1 AND id=ANY($2::uuid[]) AND ${activePredicate()}`, [accountId, ids]),
     query<{ policy_id: string; text: string }>(`SELECT policy_id,text FROM policy_pages WHERE account_id=$1 AND policy_id=ANY($2::uuid[])`, [accountId, ids]),
     familyMembersForAccount(accountId),
   ]);

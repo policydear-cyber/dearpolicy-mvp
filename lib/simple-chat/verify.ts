@@ -29,6 +29,7 @@ import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageLis
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
+import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -1330,7 +1331,7 @@ export function matchMember(household: Household, person: string | null): string
 /** Whether the document a figure is quoted from is another member's own and not this person's (TE main journeys 11 Nov,
  * defect 1). A document stays the person's when it names them, or when the household or the reading linked them to it (a
  * dependant is rarely named on the policyholder's or employee's document: Critic #424 A1, A2, A4). Otherwise it is
- * someone else's when it is linked only to other members, or names another household member -- including a document
+ * someone else's when it is a personal document linked only to other members, or names another household member -- including a document
  * DearPolicy matched to the person only by its plan (scheme_reference_match), which is no proof it covers them. */
 export function someoneElsesDocument(household: Household, docIndex: number, person: string): boolean {
   const doc = household.documents[docIndex];
@@ -1339,7 +1340,9 @@ export function someoneElsesDocument(household: Household, docIndex: number, per
   const linked = doc.linkedPeople.map(baseName);
   const matchedOnly = new Set((doc.matchedOnly ?? []).map(baseName));
   if (linked.includes(person) && !matchedOnly.has(person)) return false;
-  if (linked.length && !linked.includes(person)) return true;
+  // A personal document (schedule, certificate, endorsement, statement) linked only to others is theirs; a wording or
+  // summary naming no one is the plan's, as before (simple:chat-test either/or across two people).
+  if (PERSONAL_AUTHORITY_ROLES.has(doc.documentRole ?? "") && linked.length && !linked.includes(person)) return true;
   const others = household.members.map((m) => baseName(m.name)).filter((n) => n !== person && tokens(n).length > 0);
   return others.some((n) => doc.pages.some((p) => nameOnPage(n, p.text)));
 }
