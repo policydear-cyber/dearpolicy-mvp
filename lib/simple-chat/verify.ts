@@ -1328,14 +1328,17 @@ export function matchMember(household: Household, person: string | null): string
 }
 
 /** Whether the document a figure is quoted from is another member's own and not this person's (TE main journeys 11 Nov,
- * defect 1): the document never names the person, and either it is linked only to other members, or it names another
- * household member. A wording that names nobody and is linked to the person (or to no one) stays theirs; a joint schedule
- * that names both stays both people's. Leaning safe, a figure from someone else's schedule is never shown for this person. */
+ * defect 1). A document stays the person's when it names them, or when the household or the reading linked them to it (a
+ * dependant is rarely named on the policyholder's or employee's document: Critic #424 A1, A2, A4). Otherwise it is
+ * someone else's when it is linked only to other members, or names another household member -- including a document
+ * DearPolicy matched to the person only by its plan (scheme_reference_match), which is no proof it covers them. */
 export function someoneElsesDocument(household: Household, docIndex: number, person: string): boolean {
   const doc = household.documents[docIndex];
   if (!doc) return false;
   if (doc.pages.some((p) => nameOnPage(person, p.text))) return false;
   const linked = doc.linkedPeople.map(baseName);
+  const matchedOnly = new Set((doc.matchedOnly ?? []).map(baseName));
+  if (linked.includes(person) && !matchedOnly.has(person)) return false;
   if (linked.length && !linked.includes(person)) return true;
   const others = household.members.map((m) => baseName(m.name)).filter((n) => n !== person && tokens(n).length > 0);
   return others.some((n) => doc.pages.some((p) => nameOnPage(n, p.text)));

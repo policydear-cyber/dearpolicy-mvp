@@ -40,7 +40,8 @@ const G = "Critical Illness Benefit S$80,000", D = "Critical Illness Benefit S$1
 // ---- W: another member's document gives no figure
 test("W1 Daniel named, Grace's own schedule quoted: no figure", () => assert.deepEqual(shown(house([GRACE(), DANIEL()]), "Daniel Tern", "D1", G, "Actually it was Daniel who was diagnosed."), []));
 test("W2 Grace named, Daniel's own schedule quoted: no figure", () => assert.deepEqual(shown(house([GRACE(), DANIEL()]), "Grace Tern", "D2", D), []));
-test("W3 Daniel's schedule wrongly linked to both: Grace named, Daniel's schedule quoted: no figure", () => assert.deepEqual(shown(house([GRACE(), DANIEL(["Grace Tern", "Daniel Tern"])]), "Grace Tern", "D2", D), []));
+test("W3 Daniel's schedule matched to Grace by its plan only: Grace named, Daniel's schedule quoted: no figure", () =>
+  assert.deepEqual(shown(house([GRACE(), { ...DANIEL(["Grace Tern", "Daniel Tern"]), matchedOnly: ["Grace Tern"] } as Doc]), "Grace Tern", "D2", D), []));
 test("W4 Daniel's schedule linked to nobody but printing his name: Grace named: no figure", () => assert.deepEqual(shown(house([GRACE(), DANIEL([])]), "Grace Tern", "D2", D), []));
 test("W5 a page naming nobody, linked only to Grace: Daniel named: no figure", () => assert.deepEqual(shown(house([doc("g", "Grace benefits.pdf", ["Grace Tern"], "Heron Care Plus\nCritical Illness Benefit S$80,000")]), "Daniel Tern", "D1", G), []));
 
@@ -59,6 +60,16 @@ test("C4 control: a wording naming nobody, linked to both, shows the figure for 
 });
 test("C5 control: a page naming nobody and linked to nobody keeps its figure", () => assert.deepEqual(shown(house([doc("u", "Benefits.pdf", [], "Heron Care Plus\nCritical Illness Benefit S$80,000")]), "Daniel Tern", "D1", G), ["S$80,000"]));
 test("C6 control: a statement naming no one is unchanged", () => assert.deepEqual(shown(house([GRACE(), DANIEL()]), null, "D1", G), ["S$80,000"]));
+// Critic #424: a dependant is rarely named on the policyholder's or employee's document; the household's link keeps it theirs.
+const both = ["Grace Tern", "Daniel Tern"];
+test("C8 control: a family schedule naming only the policyholder, linked to both: the spouse's figure stays", () =>
+  assert.deepEqual(shown(house([doc("f", "Family schedule.pdf", both, "HERON ASSURANCE - FAMILY SCHEDULE\nPolicyholder: Grace Tern\nInsured: Policyholder, Spouse and Children\nCritical Illness Benefit S$80,000")]), "Daniel Tern", "D1", G), ["S$80,000"]));
+test("C9 control: a group certificate summary naming the employee, linked to both: the dependant's figure stays", () =>
+  assert.deepEqual(shown(house([doc("c", "Group summary.pdf", both, "GROUP CERTIFICATE SUMMARY\nEmployee: Grace Tern\nDependants covered: Spouse\nCritical Illness Benefit S$80,000", "certificate")]), "Daniel Tern", "D1", G), ["S$80,000"]));
+test("C10 control: a wording prepared for the policyholder, linked to both: the other member's figure stays", () =>
+  assert.deepEqual(shown(house([doc("w", "Wording.pdf", both, "Prepared for: Grace Tern\nHERON CARE PLUS - POLICY WORDING\nCritical Illness Benefit S$80,000", "policy_wording")]), "Daniel Tern", "D1", G), ["S$80,000"]));
+test("W6 the same family schedule matched to Daniel only by its plan: no figure", () =>
+  assert.deepEqual(shown(house([{ ...doc("f", "Family schedule.pdf", both, "HERON ASSURANCE - FAMILY SCHEDULE\nPolicyholder: Grace Tern\nCritical Illness Benefit S$80,000"), matchedOnly: ["Daniel Tern"] } as Doc]), "Daniel Tern", "D1", G), []));
 test("C7 the person's own schedule printing the same line: shown from theirs, not the other member's", () => {
   const h = house([GRACE(), doc("d", "Daniel schedule.pdf", ["Daniel Tern"], schedule("HA-77102", "Daniel Tern", "80,000"))]);
   const s = answer(h, "Daniel Tern", "D1", G, "What does Daniel get?").find((x) => x.amount);
