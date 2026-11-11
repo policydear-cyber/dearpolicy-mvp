@@ -41,12 +41,31 @@ async function main() {
   eq(await verified(SIGNED, SIGNED.replace("Death\tS$300,000.00", "Death\tS$330,000.00"), ext(300000, "SGD", "300,000.00 300,000.00", "Death")), false,
     "F4 a citation of figures only");
 
+  // A label another cover's label contains, or shares half of, is not the cover's own line (Critic #422 G1, G2).
+  const BY_COVER = ["Heron Guard - Policy Schedule", "Life Assured\tWren Heron", "Sum Assured (Death)\tS$300,000.00", "Sum Assured (TPD)\tS$300,000.00"].join("\n");
+  eq(await verified(BY_COVER, BY_COVER.replace("(Death)\tS$300,000.00", "(Death)\tS$330,000.00"), ext(300000, "SGD", "Sum Assured Death S$300,000.00", "Death")), false,
+    "F5 Sum Assured (TPD) stands in for Sum Assured (Death)");
+  const ACCIDENTAL = ["Heron Guard - Policy Schedule", "Life Assured\tWren Heron", "Death Benefit\tS$300,000.00", "Accidental Death Benefit\tS$300,000.00"].join("\n");
+  eq(await verified(ACCIDENTAL, ACCIDENTAL.replace("\nDeath Benefit\tS$300,000.00", "\nDeath Benefit\tS$330,000.00"), ext(300000, "SGD", "Death Benefit: S$300,000.00", "Death")), false,
+    "F6 Accidental Death Benefit stands in for Death Benefit");
+  // An initialism names the line it spells, never another line with the same figure.
+  eq(await verified(SIGNED, SIGNED.replace("Total and Permanent Disability\tS$300,000.00", "Total and Permanent Disability\tS$330,000.00"), ext(300000, "SGD", "TPD S$300,000.00", "Total Permanent Disability")), false,
+    "F7 TPD cited, the image disagrees on the TPD line; Death prints the same figure");
+  const TWO_CI = ["Heron Guard - Policy Schedule", "Life Assured\tWren Heron", "Critical Illness\tS$80,000.00", "Cancer Insurance\tS$80,000.00"].join("\n");
+  eq(await verified(TWO_CI, TWO_CI.replace("Critical Illness\tS$80,000.00", "Critical Illness\tS$85,000.00"), ext(80000, "SGD", "CI S$80,000.00", "Critical Illness")), false,
+    "F8 CI spells two labels; one of them could not be confirmed, so neither confirms");
+  eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "PA S$300,000.00", "Personal Accident")), false, "F9 an initialism no label on the page spells");
+
   // Controls: the cover's own line still confirms.
   eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "Death\tS$300,000.00", "Death")), true, "K1 image agrees, the cited line is found");
   eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "Death benefit S$300,000.00", "Death")), true,
     "K2 the citation adds a word the line does not print: half its words and its figure are on the Death line");
   eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "Total Permanent Disability S$300,000.00", "Total Permanent Disability")), true,
     "K3 the citation drops a word of the label (and)");
+  eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "TPD S$300,000.00", "Total Permanent Disability")), true,
+    "K6 an abbreviated label: TPD is Total and Permanent Disability's initialism, and that line prints the figure (TE #422 V11)");
+  eq(await verified(SIGNED, SIGNED, ext(90000, "SGD", "ci s$90,000.00", "Critical Illness")), true, "K7 a lower-case initialism");
+  eq(await verified(TWO_CI, TWO_CI, ext(80000, "SGD", "CI S$80,000.00", "Critical Illness")), true, "K8 CI spells two labels that both print the figure");
   eq(await verified(BARE, "Currency: S$\n" + BARE, ext(300000, "SGD", "Death\t300,000.00", "Death")), true, "K4 no currency in the text, the image prints S$ and agrees");
   eq(await verified(SIGNED, SIGNED.replace("Death\tS$300,000.00", "Death\tS$330,000.00"), ext(90000, "SGD", "Critical Illness cover S$90,000.00", "Critical Illness")), true,
     "K5 the image disagrees on another line (Death): Critical Illness, cited loosely, still confirms on its own line");
