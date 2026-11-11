@@ -583,10 +583,14 @@ for (const [layout, sep] of [["tab", "\t"], ["space", " "]] as const) {
     const sameLine = read1({ benefit: "Hip", value: 75, page: 3, quote: "Hip 75%", cap: 5000, capQuote: "up to S$5,000" });
     assert.equal(sameLine.benefits[0].cap, null, "the next row on the same line is not this row's");
   });
-  test(`R95 N3 (${layout}): a quote that runs into the next row is refused`, () => {
+  test(`R95 N3 (${layout}): a quote that runs into the next row gives no figure; the row stays as words`, () => {
     const r = read1({ benefit: "Hip", value: 75, page: 2, quote: "Hip 75% Wrist 20% up to S$5,000", cap: 5000, capQuote: "up to S$5,000" });
-    assert.equal(r.benefits.length, 0);
-    assert.match(r.dropped[0].why, /more than one row/);
+    assert.equal(r.benefits.length, 1);
+    assert.equal(r.benefits[0].pays, "words");
+    assert.equal(r.benefits[0].value, null);
+    assert.equal(r.benefits[0].cap, null);
+    assert.equal(r.benefits[0].percentOf, null);
+    assert.match(r.dropped[0].why, /more than one percentage/);
   });
 }
 // Critic R96-1: a lettered, numbered or lower-case row below is its own row, never a continuation of the one above.
