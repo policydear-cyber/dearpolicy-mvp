@@ -11,15 +11,15 @@ async function main() {
   const family = [{ id: "p1", display_name: "Jane Doe" }];
   const row = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "percent", value: null, percentOf: "sum_insured", baseAmount: null, baseQuote: null,
     cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 7, ...o });
-  const table = (o: { cover: string; sum: number; sumText: string; lines: string[]; benefits: Record<string, unknown>[] }) => {
+  const table = (o: { cover: string; sum: number; sumText: string; lines: string[]; benefits: Record<string, unknown>[]; riderOf?: string }) => {
     const sched: Doc = { id: "s1", name: "Schedule.pdf", readable: true, pages: [{ page: 1, text: `POLICY SCHEDULE\n${o.cover}\nJane Doe\t${o.sumText}` }] };
     const terms: Doc = { id: "t1", name: "Benefits.pdf", readable: true, pages: [{ page: 7, text: o.lines.join("\n") }] };
-    const cover = { person: "Jane Doe", product: "Prod", cover: o.cover, plan: null, riderOf: null, policyNumber: null, sumInsured: o.sum, premium: null, premiumFrequency: null,
+    const cover = { person: "Jane Doe", product: "Prod", cover: o.cover, plan: null, riderOf: o.riderOf ?? null, policyNumber: null, sumInsured: o.sum, premium: null, premiumFrequency: null,
       asOf: null, startDate: null, endDate: null, page: 1, quote: `Jane Doe\t${o.sumText}` };
     const meta = { kind: "personal_proof", product: "Prod", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null };
     const a = checkReading(sched, { document: meta, covers: [cover], benefits: [] } as never);
     const b = checkReading(terms, { document: { ...meta, kind: "scheme_terms" }, covers: [], benefits: o.benefits.map((x) => row({ section: o.cover, ...x })) } as never);
-    return assembleTable([a, b], family, [{ section: sectionKeyOf("t1", { section: o.cover, column: null }), cover: coverKeyOf({ product: "Prod", cover: o.cover, plan: null }), why: "x" }])
+    return assembleTable([a, b], family, [{ section: sectionKeyOf("t1", { section: o.cover, column: null }), cover: coverKeyOf({ product: "Prod", cover: o.cover, plan: null, riderOf: o.riderOf ?? null }), why: "x" }])
       .people.flatMap((p) => p.rows);
   };
   const one = (cover: string, sum: number, sumText: string, line: string, b: Record<string, unknown>) => {
@@ -37,6 +37,12 @@ async function main() {
     ["Fund Value", "Loyalty bonus\t2% of Fund Value"],
     ["the Fracture Benefit", "Broken bones\t50% of the Fracture Benefit"],
     ["no 'of', premium", "Premium refund\t10% annual premium"],
+    ["no 'of', Basic Premium", "Bonus\t10% Basic Premium"],
+    ["no 'of', single premium", "Bonus\t5% single premium"],
+    ["no 'of', Initial Investment Amount", "Bonus\t5% Initial Investment Amount"],
+    ["'on' the premium paid", "Refund\t10% on the premium paid"],
+    ["total premiums paid", "Maturity\t105% of total premiums paid"],
+    ["a wrapped 'of' line", "Refund\t10%\nof the annual premium"],
   ] as const) test(`A1: a share of ${base} read as of the sum insured gets no amount; the row keeps its words`, () => {
     const value = Number(line.match(/(\d+)%/)![1]);
     const r = one("Life Cover", 200000, "S$200,000", line, { benefit: line.split("\t")[0], value });
@@ -50,6 +56,10 @@ async function main() {
     ["SGD", "S$200,000", 200000, "Terminal illness\t50% Sum Insured", 100000],
     ["MYR", "RM100,000", 100000, "Hilang upaya\t25% daripada Jumlah Diinsuranskan", 25000],
     ["GBP", "£80,000", 80000, "Loss of one eye\t50% of the sum insured", 40000],
+    ["SGD", "S$200,000", 200000, "Terminal illness\t25% of S.I.", 50000],
+    ["SGD", "S$200,000", 200000, "Terminal illness\t100% (one hundred per cent) of the Sum Assured", 200000],
+    ["SGD", "S$200,000", 200000, "Hospital cash\t1% per day", 2000],
+    ["SGD", "S$200,000", 200000, "Burns\t50%", 100000],
   ] as const) test(`control (${cur}): ${line.split("\t")[1]} is still worked out on the sum insured`, () => {
     const value = Number(line.match(/(\d+)%/)![1]);
     const r = one("Main Cover", sum, sumText, line, { benefit: line.split("\t")[0], value, ...(/up to/.test(line) ? { cap: 25000, capQuote: "up to $25,000" } : {}) });
@@ -62,6 +72,26 @@ async function main() {
     assert.equal(r.figure.kind, "none");
     assert.doesNotMatch(JSON.stringify(r.figure), /USD 10,000|US\$10,000/);
     assert.match(JSON.stringify(r.figure), /S\$15,000/);
+  });
+  test("B2: a bare $ cap on a page that declares US dollars, under a S$ sum insured, gets no amount", () => {
+    const line = "Angioplasty\t10% of Sum Insured, up to $15,000";
+    const rows = table({ cover: "Crit", sum: 100000, sumText: "S$100,000", lines: ["All amounts are in US dollars", "Crit", line],
+      benefits: [{ benefit: "Angioplasty", value: 10, cap: 15000, capQuote: "up to $15,000", quote: line }] });
+    assert.equal(rows[0].figure.kind, "none");
+  });
+  test("B2 control: a bare $ cap under a S$ sum insured, on a page that declares nothing, still limits the amount", () => {
+    const line = "Angioplasty\t10% of Sum Insured, up to $5,000";
+    const r = one("Crit", 100000, "S$100,000", line, { benefit: "Angioplasty", value: 10, cap: 5000, capQuote: "up to $5,000" });
+    assert.equal(r.figure.kind, "worked_out");
+    assert.equal((r.figure as { amount: number }).amount, 5000);
+  });
+  test("a rider's share of the basic plan's sum assured is not worked out on the rider's own sum", () => {
+    const line = "Early CI\t20% of the Basic Plan Sum Assured";
+    const rows = table({ cover: "Early CI Rider", sum: 50000, sumText: "S$50,000", lines: ["Early CI Rider", line], riderOf: "Life Plan",
+      benefits: [{ benefit: "Early CI", value: 20, quote: line }] });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].figure.kind, "none");
+    assert.doesNotMatch(JSON.stringify(rows[0].figure), /10,000/);
   });
   test("A2 control: a cap in the same currency still limits the amount", () => {
     const line = "Angioplasty\t10% of Sum Insured, up to US$5,000";

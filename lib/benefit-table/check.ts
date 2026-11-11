@@ -554,28 +554,40 @@ function figureCurrency(excerpt: string, value: number, page: string): string | 
   if (codes.size > 1) return null;
   return [...codes][0] ?? declaredCurrency(page);
 }
-/** The currency printed with this figure in the excerpt itself (never the page's), or null when none or two are. */
-function statedFigureCurrency(excerpt: string, value: number): string | null {
+/** The currency of a cap figure: the one printed with it in the excerpt; for a bare "$", the currency its page declares
+ * (Critic B2); otherwise null. Two different ones printed with it give null. */
+function capFigureCurrency(excerpt: string, value: number, page: string): string | null {
   const text = plainText(excerpt);
-  const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
-  return codes.size === 1 ? [...codes][0] : null;
+  const figures = anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005);
+  const codes = new Set(figures.map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))).filter((c): c is string => !!c));
+  if (codes.size === 1) return [...codes][0];
+  if (codes.size > 1) return null;
+  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? declaredCurrency(page) : null;
 }
-/** What a percentage is of may be the sum insured only when the row names it so. Read in any wording: these words, after
- * optional qualifiers ("basic", "prevailing", "the policy's"), are the sum insured; any other words after "of" (the
- * annual premium, the Account Value, the Death Benefit, the Fracture Benefit) are another base, and a percentage of
- * another base is never worked out on the sum insured (Critic audit of 5c1075d7, A1). */
-const SUM_INSURED_WORDS = /^(?:(?:the|your|this|its|basic|base|initial|original|current|prevailing|total|policy(?:'s|’s)?|plan(?:'s|’s)?|rider(?:'s|’s)?|benefit|coverage|cover)\s+)*(?:sum\s+(?:insured|assured|covered|at\s+risk)|insured\s+amount|amount\s+(?:insured|assured)|face\s+(?:amount|value)|coverage\s+amount|amount\s+of\s+(?:cover|coverage|insurance)|s\.?\s?[ia]\.?(?![\p{L}])|jumlah\s+(?:diinsuranskan|dijamin|dilindungi))/iu;
-/** Words that, right after a percentage with no "of", name a base other than the sum insured ("10% annual premium"). */
-const OTHER_BASE_WORDS = /^(?:(?:the|your|this|its|total|annual|yearly|monthly|current|prevailing)\s+)*(?:premiums?|account\s+value|fund\s+value|cash\s+value|surrender\s+value|policy\s+value|death\s+benefit|(?:\p{L}+\s+){0,2}benefit\b|bills?|charges?|expenses?|claims?)/iu;
-/** Whether the row says its percentage is of something other than the sum insured. Null when it names no base. */
-function otherBaseThanSumInsured(row: string, value: number): boolean {
-  const t = row.normalize("NFKC").replace(/\s+/g, " ");
-  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*%\s*/g)) {
+/** What a percentage is of may be the sum insured only when the row says so, read with ALLOW-lists in any wording (Critic
+ * audit of 5c1075d7, A1 and B1: a list of other bases leaks, "10% Basic Premium", "5% Initial Investment Amount"). After
+ * the percentage, with an optional "of"/"on" (Malay "daripada"/"dari"), the row must go on with words that name the sum
+ * insured, or end, or go on with a neutral continuation (a table cell's next figure, punctuation, "per", "payable", "up
+ * to", "subject to", "whichever"). Anything else is another base, and a share of it is never worked out on the sum
+ * insured. */
+const SUM_INSURED_WORDS = /^(?:(?:the|your|this|its|basic|base|main|initial|original|current|prevailing|total|policy(?:'s|’s)?|plan(?:'s|’s)?|rider(?:'s|’s)?|benefit|coverage|cover)\s+)*(?:sum\s+(?:insured|assured|covered|at\s+risk)|insured\s+amount|amount\s+(?:insured|assured)|face\s+(?:amount|value)|coverage\s+amount|amount\s+of\s+(?:cover|coverage|insurance)|s\.?\s?[ia]\.?(?![\p{L}])|jumlah\s+(?:diinsuranskan|dijamin|dilindungi))/iu;
+/** What may follow a percentage without naming its base. */
+const NEUTRAL_AFTER = /^(?:$|[\d$£€¥₱,;.:)\-–—/|*^]|(?:s|us|hk|nz|a|sg)\$|(?:sgd|usd|myr|rm|hkd|gbp|eur|aud|nzd|idr|php|thb)\b|not\s+covered\b|(?:per|payable|paid|up\s+to|subject\s+to|max(?:imum)?|limited\s+to|not\s+exceeding|capped|whichever|or|and|but|each|a\s+(?:day|week|month|year)|daily|weekly|monthly|yearly|annually|for\s+(?:each|every|any|one)|of\s+(?:each|every))\b)/iu;
+/** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
+ * row's end follows it). False when no percentage equal to the value is printed. */
+function percentBaseUnsettled(row: string, value: number): boolean {
+  const t = row.normalize("NFKC").replace(/[ \t]+/g, " ");
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)) {
     if (Math.abs(Number(m[1].replace(",", ".")) - value) > 0.0001) continue;
-    const after = t.slice(m.index! + m[0].length);
-    const of = after.match(/^(?:of|daripada|dari)\s+(.*)$/iu);
-    if (of) return !SUM_INSURED_WORDS.test(of[1]);
-    if (OTHER_BASE_WORDS.test(after) && !SUM_INSURED_WORDS.test(after)) return true;
+    // "(one hundred per cent)" after the figure, or the ")" closing "(100%)", says nothing about the base.
+    // Only the rest of the percentage's own line counts: a line below is the row's next line or the next row. A bracket
+    // opening the rest ("(up to S$50,000)") is read through.
+    // A percentage that ends its line with its "of ..." wrapped onto the next ("10%\nof the annual premium") reads on.
+    const lines = t.slice(m.index! + m[0].length).split("\n");
+    const after = (!lines[0].trim() && /^\s*(?:of|on|daripada|dari)\s/iu.test(lines[1] ?? "") ? lines[1] : lines[0]).replace(/^\s*\)/, "").replace(/^\s*\([^()\d]*\)/, "").trim().replace(/^\(\s*/, "");
+    const of = after.match(/^(?:of|on|daripada|dari)\s+/iu);
+    if (of) { if (!SUM_INSURED_WORDS.test(after.slice(of[0].length))) return true; continue; }
+    if (!SUM_INSURED_WORDS.test(after) && !NEUTRAL_AFTER.test(after)) return true;
   }
   return false;
 }
@@ -964,11 +976,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     // A share read as of the sum insured whose row names another base ("10% of the annual premium", "50% of the Death
     // Benefit") is not of the sum insured: the row keeps its words and gets no amount.
-    if (percentOf === "sum_insured" && value != null && otherBaseThanSumInsured(pays === "percent" ? segmentOf(source).text : source.excerpt, value)) {
-      out.dropped.push({ what: label, why: `${value}% is of a base the row names, not the sum insured; no amount is worked out for it` });
+    if (percentOf === "sum_insured" && value != null && percentBaseUnsettled(pays === "percent" ? segmentOf(source).text : source.excerpt, value)) {
+      out.dropped.push({ what: label, why: `${value}% is not printed as a share of the sum insured; no amount is worked out for it` });
       percentOf = null;
     }
-    const capCurrency = cap != null && capSource ? statedFigureCurrency(capSource.excerpt, cap) : null;
+    const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, pageText(capSource.page)) : null;
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).

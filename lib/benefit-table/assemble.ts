@@ -331,6 +331,8 @@ function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: bool
   if (basis && f.kind !== "none") return { kind: "projected", amount: f.amount, currency: f.currency, basis, asOf: b.asOf };
   return f;
 }
+/** A percentage printed as a share of the basic (main) plan's or policy's sum. */
+const BASIC_PLAN_SHARE = /%[^\n%]{0,60}\b(?:basic|base|main)\s+(?:plan|policy|contract|benefit)\b|%[^\n%]{0,60}\bof\s+the\s+(?:basic|base|main)\b/i;
 function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.pays === "amount" || b.pays === "up_to" || b.pays === "per_day" || b.pays === "per_period")
     return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays, period: b.period };
@@ -357,6 +359,9 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.percentOf === "fixed_amount" && b.baseAmount != null)
     return capped(cents(b.value! * b.baseAmount / 100), b.currency, `${b.value}% of ${money(b.baseAmount, b.currency)}, printed on the same page`);
   if (b.percentOf === "sum_insured") {
+    // A rider's row that is a share of the basic plan's sum ("20% of the Basic Plan Sum Assured") is not a share of the
+    // rider's own sum (Critic, #415): no amount, the share stays as printed.
+    if (cover.riderOf && BASIC_PLAN_SHARE.test(b.source.excerpt)) return withShare(b, { kind: "none", why: `${b.value}% of the basic plan's sum, which is not this rider's own sum insured` });
     if (cover.sumInsured == null) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
     return capped(cents(b.value! * cover.sumInsured / 100), cover.currency,
       `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})`);
