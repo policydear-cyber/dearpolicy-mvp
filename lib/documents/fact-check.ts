@@ -674,9 +674,12 @@ function tokenShare(line: string, evidence: string) {
 function closestLines(lines: string[], evidence: string): { lines: string[]; all: boolean } {
   const want = [...new Set(labelWords(evidence))];
   if (!want.length) return { lines: [], all: false };
-  // The closest label is chosen among every line that names the cover, whether or not its figure survived the page check:
-  // the cover's own line with "[amount not checked]" still wins over another cover's line, and then confirms nothing.
+  // The closest label is chosen among the lines that hold the citation's figures and the lines whose figure the page check
+  // could not confirm: the cover's own line with "[amount not checked]" still wins over another cover's line, and then
+  // confirms nothing. A heading or plan line with no figure ("Plan: Heron Guard Death Cover") never competes, so it cannot
+  // hide the row below it (Critic #422 R1).
   const scored = lines.flatMap((line) => {
+    if (!line.includes(NOT_CHECKED) && tokenShare(line, evidence) < 0.7) return [];
     const m = labelMatch(want, line);
     return m.matched * 2 < want.length ? [] : [{ line, score: m.matched / (want.length + m.size - m.covered || 1) }];
   });

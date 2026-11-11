@@ -66,6 +66,9 @@ async function main() {
     "K6 an abbreviated label: TPD is Total and Permanent Disability's initialism, and that line prints the figure (TE #422 V11)");
   eq(await verified(SIGNED, SIGNED, ext(90000, "SGD", "ci s$90,000.00", "Critical Illness")), true, "K7 a lower-case initialism");
   eq(await verified(SIGNED, SIGNED, ext(300000, "SGD", "T.P.D. S$300,000.00", "Total Permanent Disability")), true, "K9 a dotted initialism (TE #422 V24)");
+  const HEADED = ["Heron Guard - Policy Schedule", "Plan: Heron Guard Death Cover", "Life Assured\tWren Heron", "Death Cover\tS$300,000.00", "Critical Illness\tS$90,000.00"].join("\n");
+  eq(await verified(HEADED, HEADED, ext(300000, "SGD", "Heron Guard Death Cover S$300,000.00", "Death")), true,
+    "K10 a plan heading with no figure repeats the citation's words: the figure row still confirms (Critic #422 R1)");
   eq(await verified(TWO_CI, TWO_CI, ext(80000, "SGD", "CI S$80,000.00", "Critical Illness")), true, "K8 CI spells two labels that both print the figure");
   eq(await verified(BARE, "Currency: S$\n" + BARE, ext(300000, "SGD", "Death\t300,000.00", "Death")), true, "K4 no currency in the text, the image prints S$ and agrees");
   eq(await verified(SIGNED, SIGNED.replace("Death\tS$300,000.00", "Death\tS$330,000.00"), ext(90000, "SGD", "Critical Illness cover S$90,000.00", "Critical Illness")), true,
