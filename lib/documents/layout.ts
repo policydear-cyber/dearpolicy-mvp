@@ -521,7 +521,9 @@ function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
     if(!namesColumn(labelCol)){
       const next=cells.findIndex((cell,col)=>col>labelCol&&col!==table.rowNumberCol&&!!cell.trim());
       const emptyLabel=!(cells[labelCol]??"").trim();
-      if(next>=0&&namesColumn(next)&&!valueLike(cells[next])&&(emptyLabel||cells.slice(labelCol+1,next).every((c)=>!c.trim()))){labelCol=next;moved=true;}
+      // A cell that starts in lower case or with a footnote mark ("per visit", "* per policy year") continues the row
+      // above; it is never a benefit's name (Critic #410 F7), so such a row is skipped as on main.
+      if(next>=0&&namesColumn(next)&&!valueLike(cells[next])&&!/^\s*[a-z*]/.test(cells[next])&&(emptyLabel||cells.slice(labelCol+1,next).every((c)=>!c.trim()))){labelCol=next;moved=true;}
     }
     const label=(cells[labelCol]??"").replace(/\s+/g," ").trim();
     if(label.length<2||label.length>160)continue;
