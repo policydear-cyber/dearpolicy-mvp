@@ -538,6 +538,19 @@ async function main() {
     const { TransportError } = await import("@/lib/documents/baidu-transport");
     const tr = (phase: "dns" | "connect" | "tls" | "upload" | "reply", sentBytes: number) => new TransportError("network", { phase, sentBytes, totalBytes: 10, elapsedMs: 1 });
     assert.deepEqual([tr("dns", 0), tr("connect", 0), tr("tls", 0), tr("upload", 0), tr("upload", 5), tr("reply", 10)].map(bd.failedBeforeSending), [true, true, true, false, false, false]);
+    // A retry gets the short connect limit (5 s by default; a healthy connection opens in about 1.3 s); the first try keeps
+    // the full one, and a retry is never given a longer limit than the first try.
+    const l = { totalMs: 80_000, idleMs: 60_000, connectMs: 30_000, family: 4 as const };
+    assert.deepEqual([0, 1, 2].map((a) => bd.limitsForTry(l, a, 5_000).connectMs), [30_000, 5_000, 5_000]);
+    assert.equal(bd.limitsForTry({ ...l, connectMs: 3_000 }, 1, 5_000).connectMs, 3_000);
+    assert.equal(bd.baiduOcrSettings({} as NodeJS.ProcessEnv).retryConnectTimeoutMs, 5_000);
+    // All tries of one call stay within ~40 s: a connection that never opens (30 s, then a 5 s retry) gets one retry, not two;
+    // fast refusals get both; a retry also needs 5 s of the job's time after the wait.
+    assert.equal(bd.retryFits(30_000, 60_000, 1_000, 5_000), true, "30 s + 1 s + 5 s = 36 s: one retry");
+    assert.equal(bd.retryFits(36_000, 54_000, 2_000, 5_000), false, "36 s + 2 s + 5 s = 43 s: no second retry");
+    assert.equal(bd.retryFits(15_400, 70_000, 1_000, 5_000), true); assert.equal(bd.retryFits(21_400, 64_000, 2_000, 5_000), true, "15.4 s system timeout: both retries, ~28 s in all");
+    assert.equal(bd.retryFits(1_000, 70_000, 2_000, 5_000), true, "fast refusals: both retries");
+    assert.equal(bd.retryFits(0, 5_500, 1_000, 5_000), false, "too little of the job's time left");
     process.env.BAIDU_OCR_CONNECT_RETRIES = "0";
     delete process.env.BAIDU_OCR_SUBMIT;
   }
