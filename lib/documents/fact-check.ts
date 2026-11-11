@@ -24,6 +24,11 @@ const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim(
 // Figures
 // ---------------------------------------------------------------------------
 const CURRENCY_MARK = String.raw`(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|HKD|AUD|RM|MYR|PHP|EUR|GBP)(?![A-Za-z])|₱|€|£|\$)`;
+/** A capital code run on from a lower-case word, with its figure right after: the space a PDF's text layer lost between
+ * two table cells ("Sum InsuredSGD 100,000"). Matched case-sensitively, so a word that merely ends in a code's letters
+ * ("Term 20", "TERM 20", "fraud 10") is never one (Critic #421 (1)). */
+const GLUED_CODE = (codes: string) => String.raw`(?<=[a-z])(?:${codes})(?=\s?\d)`;
+const GLUED_MARK = GLUED_CODE("SGD|USD|HKD|AUD|RM|MYR|PHP|EUR|GBP");
 function digitsPattern(value: number) {
   const whole = Math.trunc(Math.abs(value)), cents = Math.round((Math.abs(value) - whole) * 100);
   const digits = String(whole), groups: string[] = [];
@@ -49,10 +54,11 @@ export function moneyPrinted(text: string, value: number): boolean {
 function moneyPrintedExact(text: string, value: number): boolean {
   const body = digitsPattern(value);
   // Round 10: never part of a figure a scan printed unclearly ("S$5O,000" is not S$5).
-  const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`, "i");
-  if (marked.test(text)) return true;
+  const after = String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`;
+  const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + after, "i");
+  if (marked.test(text) || new RegExp(GLUED_MARK + String.raw`\s?` + body + after).test(text)) return true;
   const bare = new RegExp(String.raw`(?<![\d.,/-])(?<![\d][,.]?[OoIl|]+[,.]?)` + body + String.raw`(?![\d]|[.,]\d|\s*(?:%|per\s*cent|days?|nights?|years?|months?|hours?|weeks?|x\b|times)|[/-]\d|[,.]?[OoIl|])`, "i");
-  return String(text ?? "").split("\n").some((line) => new RegExp(CURRENCY_MARK, "i").test(line) && bare.test(line));
+  return String(text ?? "").split("\n").some((line) => (new RegExp(CURRENCY_MARK, "i").test(line) || new RegExp(GLUED_MARK).test(line)) && bare.test(line));
 }
 /** A per-day (or per-night) rate: the figure is followed by "per day", "a day", "daily", "per night" in its line. */
 export function dailyRatePrinted(text: string, value: number) {
@@ -629,8 +635,9 @@ function tokenShare(line: string, evidence: string) {
 }
 function currencyOk(line: string, currency: string) {
   const code = currency.toUpperCase();
-  if (code === "SGD") return /S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || !/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line);
-  if (code === "USD") return /US\$|(?<![A-Za-z])USD(?![A-Za-z])/i.test(line);
+  if (code === "SGD") return /S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || new RegExp(GLUED_CODE("SGD")).test(line)
+    || !(/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line) || new RegExp(GLUED_CODE("USD|RM|MYR")).test(line));
+  if (code === "USD") return /US\$|(?<![A-Za-z])USD(?![A-Za-z])/i.test(line) || new RegExp(GLUED_CODE("USD")).test(line);
   return true;
 }
 

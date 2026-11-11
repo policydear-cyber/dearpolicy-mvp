@@ -146,7 +146,7 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
     const dueM = dueLine?.l.match(new RegExp(ANY_DATE, "i")), dueIso = dueM ? isoOfAny(dueM, 1) : null;
     // The amount said as unpaid is the figure on the premium line itself ("Monthly premium S$212.40", "Amount due: S$86.40"),
     // never another figure on a line that mentions a premium ("Premium waiver benefit S$50,000", "Annual limit S$150,000").
-    const amount = all.find((y) => y.page === x.page && PREMIUM_LINE.test(y.l))?.l.match(/(?:S\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD)|£|US\$)\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
+    const amount = all.find((y) => y.page === x.page && PREMIUM_LINE.test(y.l))?.l.match(/(?:S\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|RM|MYR|GBP|USD)|£|US\$)\s?[\d,]+(?:\.\d+)?/)?.[0] ?? null;
     // A reminder prints what is due: a grace date with no due date and no amount due beside it is not one.
     if (!dueIso && !amount && !all.some((y) => y.page === x.page && /\b(?:amount due|premium (?:due|outstanding|unpaid)|outstanding premium|unpaid premium)\b/i.test(y.l) && /\d/.test(y.l) && !HYPOTHETICAL.test(y.l))) continue;
     // A grace period that has already run out says nothing about payment since: neither "in force" nor "lapsed".

@@ -116,7 +116,7 @@ export function labelHead(label: string): string {
   // Qualifiers and dates never decide ("Annual limit after deductible", "Fund value as at 30 Sep 2026").
   s = s.replace(QUALIFIER, "").replace(WHEN, "").replace(/[\s,:;—–\/-]+$/u, "").trim();
   // The last clause: after the last separator, or after an earlier figure on the same row ("Life Cover S$500,000 Premium").
-  const clauses = s.split(/\s*[,:;—–\/]\s*|\s+-\s+|\s*(?:[A-Z]{1,3}\$|(?<![A-Za-z])(?:RM|Rp\.?)|€|£)?\s?\d[\d.,'’ ]*\s?(?:%|€|£)?\s+/u);
+  const clauses = s.split(/\s*[,:;—–\/]\s*|\s+-\s+|\s*(?:[A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:RM|Rp\.?)|€|£)?\s?\d[\d.,'’ ]*\s?(?:%|€|£)?\s+/u);
   return (clauses.pop() ?? "").trim();
 }
 

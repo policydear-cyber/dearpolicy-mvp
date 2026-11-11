@@ -298,7 +298,7 @@ export function locateQuote(args: Parameters<typeof evidenceFor>[0]): EvidenceRe
   return trimmed !== args.passage && trimmed.length >= 20 ? evidenceFor({ ...args, passage: trimmed }) : null;
 }
 
-const MONEY_IN = /(S\$|US\$|HK\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD))\s?(\d[\d,]*(?:\.\d+)?)/g;
+const MONEY_IN = /(S\$|US\$|HK\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD))\s?(\d[\d,]*(?:\.\d+)?)/g;
 const CURRENCY_OF: Record<string, string> = { "S$": "SGD", SGD: "SGD", "US$": "USD", USD: "USD", RM: "MYR", MYR: "MYR", "HK$": "HKD", HKD: "HKD" };
 const SELECT_NEUTRAL = new Set(["benefit", "benefits", "each", "every", "with", "from", "that", "this", "which", "shall", "will", "payable", "paid", "insured", "person", "policy", "under", "their", "fracture", "the", "and", "for"]);
 const selectWords = (t: string) => [...new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !SELECT_NEUTRAL.has(w)))];

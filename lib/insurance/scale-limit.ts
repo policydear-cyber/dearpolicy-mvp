@@ -266,7 +266,7 @@ export const PLAN_COLUMNS_NOTE="The document prints a different figure for each 
 // A cell of a plan table: an amount with its currency printed (and the unit each column repeats: "S$100 per day",
 // "RM150 sehari", TE pr190 F1), or a plan that does not have the benefit ("Not covered", "Nil", "Tidak dilindungi", F2).
 const UNIT=String.raw`(?:\s*(?:\/\s*(?:day|night|week|month|year|visit)|(?:per|each)\s+(?:day|night|week|month|year|visit|trip|claim|incident)|a\s+(?:day|night)|daily|sehari|setiap\s+hari))?`;
-const MONEY_CELL=String.raw`(?:S\$|US\$|A\$|HK\$|(?<![A-Za-z])RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?`+UNIT;
+const MONEY_CELL=String.raw`(?:S\$|US\$|A\$|HK\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|MYR|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?`+UNIT;
 const NONE_CELL=String.raw`(?:[Nn]ot\s+(?:[Cc]overed|[Aa]pplicable|[Ii]ncluded|[Aa]vailable)|[Ee]xcluded|N\/A|[Nn]il|NIL|[Tt]idak\s+[Dd]ilindungi|[Tt]iada)`;
 const PLAN_CELL=`(?:${MONEY_CELL}|${NONE_CELL})`;
 const PLAN_ROW=new RegExp(`${PLAN_CELL}(?:\\s+${PLAN_CELL})+`,"g");
@@ -300,7 +300,7 @@ export function figuresDifferByPlan(quote:string|null|undefined):boolean{
 // held unless every later figure carries its own unit or says it is part of the first ("S$300 per trip, S$1,500 per
 // year", "S$150,000, of which S$5,000 for outpatient"). Plans are printed in too many ways to list (labels, pipes,
 // "Gold - S$500,000", "for Basic and ... for Premier", "respectively", TE pr361 r2), so a term fails closed instead.
-const SIGNED_FIGURE=/(S\$|US\$|A\$|HK\$|(?<![A-Za-z])RM|£|€|\$|(?<![A-Za-z])(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?(\d[\d,]*(?:\.\d+)?)(?![\d,]*\d)/g;
+const SIGNED_FIGURE=/(S\$|US\$|A\$|HK\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?(\d[\d,]*(?:\.\d+)?)(?![\d,]*\d)/g;
 const CURRENCY_OF:Record<string,string>={SGD:"S$",USD:"US$",MYR:"RM",GBP:"£",EUR:"€",AUD:"A$",HKD:"HK$"};
 const OWN_UNIT_AFTER=/^\s*\(?\s*(?:(?:per|each|every|an?)\s+(?!plans?\b)([a-z]+(?:\s+(?:year|day|trip|claim|person|visit|disability|period|illness|injury|item|event|incident))?)|\/\s*(day|night|week|month|year|visit|trip|claim|person|item|event|incident)\b|(daily|weekly|monthly|annually|yearly)\b)/iu;
 const PART_OF_FIRST_BEFORE=/(?:\bof\s+which|\bwithin\s+which|\bincluding|\bsub-?limit(?:\s+of)?)[\s:,]*(?:up\s+to\s+|a\s+maximum\s+of\s+)?$/iu;

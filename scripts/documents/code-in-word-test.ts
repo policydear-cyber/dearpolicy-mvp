@@ -3,7 +3,8 @@
  * "FRAUD" is not Australian dollars, and "ERM" in "TERM" is no three-letter code. Made-up text only.
  * Run: node --import tsx scripts/documents/code-in-word-test.ts
  */
-import { moneyPrinted, dailyRatePrinted } from "@/lib/documents/fact-check";
+import { moneyPrinted, dailyRatePrinted, factCheckExtraction } from "@/lib/documents/fact-check";
+import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { amountAppears } from "@/lib/documents/evidence";
 import { figuresDifferByPlan } from "@/lib/insurance/scale-limit";
 import { amountOnlyInContext } from "@/lib/documents/own-figure";
@@ -49,6 +50,34 @@ test("W7 a word ending in rm before a count is no ringgit; a printed S$ figure s
 });
 test("W6 own figure: a year count after Term is no money figure in the line", () => {
   eq(amountOnlyInContext("Policy Term 20 years\nSum Assured S$200,000", 200000), null, "the sum is the person's own");
+});
+
+// A PDF text layer can lose the space between two table cells ("Sum InsuredSGD 100,000"). A capital code run on from a
+// lower-case word, with its figure right after, is still that currency (Critic #421 (1)); its currency must still match.
+const verified = (line: string, amount: number, currency: string) => factCheckExtraction(PolicyExtractionSchema.parse({
+  documentType: "Policy schedule", documentRole: "personal_schedule", documentNotes: [], insurer: "Plover Life (fictitious)", productName: "Plover Protect", productsMentioned: ["Plover Protect"],
+  policyNumber: null, groupPolicyNumber: null, policyType: "Life", policyholder: null, personalCoverageConfirmed: true, startDate: null, renewalOrExpiryDate: null,
+  insuredPeople: [{ name: "Ada Plover", relationshipHint: "self", coverages: [{ category: "Death", productName: null, policyNumber: null, amount, currency, notes: null, sourcePage: 1, evidenceText: line, evidenceVerified: true }] }],
+  referenceCoverages: [], premium: { amount: null, currency: null, frequency: null }, paymentRecords: [], keyExclusions: [], waitingPeriods: [], deductiblesAndCoinsurance: [], riders: [],
+}), [{ pageNumber: 1, text: "Policy Schedule\nLife Assured\tAda Plover\n" + line }]).extraction.insuredPeople[0].coverages[0].evidenceVerified;
+test("G1 a code glued to a lower-case word by a lost space is still money in its own currency", () => {
+  eq(verified("Sum InsuredSGD 100,000", 100000, "SGD"), true, "InsuredSGD 100,000 as SGD");
+  eq(verified("Sum InsuredSGD100,000", 100000, "SGD"), true, "InsuredSGD100,000 as SGD");
+  eq(verified("Sum InsuredUSD 100,000", 100000, "USD"), true, "InsuredUSD 100,000 as USD");
+  eq(verified("Sum InsuredS$100,000", 100000, "SGD"), true, "InsuredS$100,000 as SGD");
+});
+test("G2 a glued code never confirms another currency", () => {
+  eq(verified("Sum InsuredUSD 100,000", 100000, "SGD"), false, "InsuredUSD read as SGD");
+  eq(verified("Sum AssuredRM 100,000", 100000, "SGD"), false, "AssuredRM read as SGD");
+  eq(verified("Death BenefitMYR 100,000", 100000, "SGD"), false, "BenefitMYR read as SGD");
+  eq(verified("SUM ASSUREDUSD 100,000", 100000, "SGD"), false, "capitals run on: no code is told apart, and no currency is confirmed");
+});
+test("G3 the glued rule never brings back a word's tail: lower-case or capital words ending in code letters stay no money", () => {
+  eq(moneyPrinted("Policy Term\t20 years", 20), false, "Term 20");
+  eq(moneyPrinted("POLICY TERM 25", 25), false, "TERM 25");
+  eq(moneyPrinted("Exclusion: FRAUD 10", 10), false, "FRAUD 10");
+  eq(moneyPrinted("Claim FormRM 10,000", 10000), true, "FormRM 10,000 (a lost space before RM)");
+  eq(figuresDifferByPlan("Hospital cashRM100 RM200"), true, "a glued ringgit cell beside another");
 });
 
 for (const f of failures) console.error("FAIL", f);

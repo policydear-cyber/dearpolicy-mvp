@@ -27,7 +27,7 @@ export function printedFigures(quote: string | null): PrintedFigure[] {
   const before = (index: number) => text.slice(Math.max(0, index - 40), index);
   const cap = (index: number) => CAP_BEFORE.test(before(index));
   const base = (index: number) => SUM_BEFORE.test(before(index));
-  const signed = [...text.matchAll(/([A-Z]{1,3}\$|(?<![A-Za-z])RM|Rp\.?|€|£|¥|₹|₱|฿|₩|₫|\$|\b[A-Z]{3}\b)\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?!\s*%)/g)]
+  const signed = [...text.matchAll(/([A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|Rp\.?|€|£|¥|₹|₱|฿|₩|₫|\$|\b[A-Z]{3}\b)\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?!\s*%)/g)]
     .map((m) => { const sign = m[1].toUpperCase(); return { amount: Number(m[2].replace(/,/g, "")),
       currency: SIGNS[sign] ?? (/^[A-Z]{3}$/.test(sign) ? sign : null), cap: cap(m.index ?? 0), base: base(m.index ?? 0) }; });
   const grouped = signed.length ? [] : [...text.matchAll(/(?<![\d.,])(\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?!\s*%)(?![\d,])/g)]

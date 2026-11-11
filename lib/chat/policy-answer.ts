@@ -2001,7 +2001,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
 /** A table cell that prints an amount in any market's money: a sign or code before the figure ("RM100", "HK$ 1,500",
  * "Rp100.000", "£50", "CHF 1'250") or after it ("100 €", "150,00 EUR"). A row with two or more such cells prints one figure
  * per column, so no one of them is a person's own limit card. */
-export const MONEY_CELL = /(?:[A-Z]{1,3}\$|R\$|(?<![A-Za-z])(?:Rp\.?|RM)|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\b[A-Z]{3})\s?\d|\d[\d.,'’ ]*\s?(?:€|£|\b(?:EUR|GBP|USD|SGD|MYR|IDR|HKD|CHF|AUD|INR)\b)/u;
+export const MONEY_CELL = /(?:[A-Z]{1,3}\$|R\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:Rp\.?|RM)|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\b[A-Z]{3})\s?\d|\d[\d.,'’ ]*\s?(?:€|£|\b(?:EUR|GBP|USD|SGD|MYR|IDR|HKD|CHF|AUD|INR)\b)/u;
 export function conciseDetails(details: string[], limits: { benefitTitle: string; ownerName?: string | null; amountText?: string }[], opts: { cap: number; keep?: RegExp[] }) {
   if (opts.cap === Infinity) return;
   // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the

@@ -123,9 +123,9 @@ const norm = (s: string) => normalPassage(s ?? "");
 const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 const COVER_CLAIM = /^(?:(?:yes|good news)[,.!]?\s+)?(?:[\p{L}’' -]{2,60}?)\s+(?:is|are)\s+(not\s+)?covered\b/iu;
 const NUMBERING = /^\d{1,2}[a-z]?[.)]?$/i;
-const MONEY_FIGURE = /(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)\s?\d+(?:\.\d+)?|\d+\.\d{2}\b/g;
+const MONEY_FIGURE = /(?:S\$|SG\$|US\$|HK\$|A\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?:S\$|SG\$|US\$|HK\$|A\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)\s?\d+(?:\.\d+)?|\d+\.\d{2}\b/g;
 /** A line that prints an amount is a data row, never a table's header. */
-const MONEY_CELL = /(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥)\s?\d/;
+const MONEY_CELL = /(?:S\$|SG\$|US\$|HK\$|A\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥)\s?\d/;
 const RANK = { match: 0, bare: 1, other: 2, absent: 3 } as const;
 const CLASS: [string, RegExp][] = [["spouse", /\b(?:spouse|wife|husband|partner)\b/i], ["child", /\b(?:child(?:ren)?|son|daughter|kids?)\b/i], ["self", /\b(?:employee|member|self|staff|policyholder|policy owner|main insured|principal)\b/i], ["parent", /\b(?:parents?|father|mother)\b/i]];
 const classOf = (text: string) => CLASS.find(([, re]) => re.test(text))?.[0] ?? null;
@@ -242,7 +242,7 @@ export function printedRowFor(sentence: string, value: number, pageText: string)
   const first = cells.findIndex((c) => !NUMBERING.test(c));
   let label = cells.length >= 2 ? cells[Math.max(0, first)] : "";
   if (cells.length < 2) {
-    const m = line.match(/(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d[\d,]*(?:\.\d+)?/g)?.find((x) => amountAppears(value, x));
+    const m = line.match(/(?:S\$|SG\$|US\$|HK\$|A\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d[\d,]*(?:\.\d+)?/g)?.find((x) => amountAppears(value, x));
     const at = m ? line.indexOf(m) : -1;
     label = (at > 0 ? line.slice(0, at) : line).replace(/[\s:–—·-]+$/, "").trim();
     if (label.replace(/[^A-Za-z]/g, "").length < 3) label = line.replace(m ?? "", " ").replace(/\s+/g, " ").trim();
@@ -264,7 +264,7 @@ export function printedRowFor(sentence: string, value: number, pageText: string)
  * own words without its amounts ("Amount due (annual premium)"), so the row is named by what it prints. */
 export function rowBenefit(r: { line: string; label: string }): string {
   if (benefitWords(r.label).size) return r.label;
-  const words = r.line.replace(/(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d[\d,]*(?:\.\d+)?/g, " ").replace(/[\t|]+/g, " ").replace(/\s+/g, " ").trim();
+  const words = r.line.replace(/(?:S\$|SG\$|US\$|HK\$|A\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD|AUD)|€|£|¥|\$)?\s?\d[\d,]*(?:\.\d+)?/g, " ").replace(/[\t|]+/g, " ").replace(/\s+/g, " ").trim();
   return benefitWords(words).size ? words : r.label;
 }
 /** A binding for `value` read from `pageText` (one page of one policy), or null when that page does not print it. */

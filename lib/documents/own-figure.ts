@@ -157,7 +157,7 @@ const DISCLAIMER = /\bnot\s+(?:valid|for|a\s+real|an\s+actual|to\s+be\s+used|an?
 function bannerLine(line: string): boolean {
   // Words in brackets inside a title are never its banner ("Policy Schedule (sample collection included)", TE round 4).
   const t = line.trim().replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/^[\s*#=_|~\-–]+|[\s*#=_|~\-–]+$/g, "").trim();
-  if (!t || /(?:S\$|US\$|\$|(?<![A-Za-z])(?:RM|SGD)|£|€)\s?\d|\d{3,}/.test(t) || t.split(/\s+/).length > 10) return false;
+  if (!t || /(?:S\$|US\$|\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:RM|SGD)|£|€)\s?\d|\d{3,}/.test(t) || t.split(/\s+/).length > 10) return false;
   const parts = t.split(/\s*[-–:|]\s+|\s+[-–:|]\s*|\.\s+|[()[\]]/).map((x) => x.replace(/^[\s*.,!]+|[\s*.,!]+$/g, "")).filter(Boolean);
   let marked = false;
   for (const part of parts) {
@@ -173,8 +173,8 @@ function bannerLine(line: string): boolean {
  * heading (Critic G4). */
 function pageEdges(text: string) {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  const body = (l: string) => /\S\s*:\s*\S|(?:S\$|US\$|\$|(?<![A-Za-z])(?:RM|SGD)|£|€)\s?\d/.test(l);
-  const firstBody = lines.findIndex(body), lastMoney = lines.map((l) => /(?:S\$|US\$|\$|(?<![A-Za-z])(?:RM|SGD)|£|€)\s?\d/.test(l)).lastIndexOf(true);
+  const body = (l: string) => /\S\s*:\s*\S|(?:S\$|US\$|\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:RM|SGD)|£|€)\s?\d/.test(l);
+  const firstBody = lines.findIndex(body), lastMoney = lines.map((l) => /(?:S\$|US\$|\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:RM|SGD)|£|€)\s?\d/.test(l)).lastIndexOf(true);
   const head = lines.slice(0, Math.min(5, firstBody < 0 ? lines.length : firstBody));
   const foot = lines.slice(Math.max(head.length, lastMoney + 1, lines.length - 3));
   return { head, foot };
