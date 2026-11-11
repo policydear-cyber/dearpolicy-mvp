@@ -123,6 +123,15 @@ async function main() {
     const line = "Policy Term (years):\t20.00";
     assert.equal(fc(extraction(20, "SGD", line, "Death"), "SGD", BARE + "\n" + line).evidenceVerified, false);
   });
+  // "No.", "Age", "Period", "Year" mark a non-money field only as the label's last word (parked follow-up, #417).
+  for (const [label, evidence, amount] of [["No Claim Bonus", "No Claim Bonus\t5,000.00", 5000], ["Old Age Benefit", "Old Age Benefit\t50,000.00", 50000],
+    ["Benefit Period Limit", "Benefit Period Limit\t100,000.00", 100000], ["a limit per policy year", "Overall limit per policy year\t150,000.00", 150000],
+    ["a limit per year", "Annual limit per year:\t150,000.00", 150000]] as const)
+    await test(`F14 ${label} is a cover: the word is inside its label`, () => assert.equal(fc(extraction(amount, "SGD", evidence, "Other"), "SGD", BARE + "\n" + evidence).evidenceVerified, true));
+  for (const [label, evidence, amount] of [["policy number", "Policy No.\t70,451,288", 70451288], ["policy number with a colon", "Policy No.:\t1,234.00", 1234],
+    ["entry age", "Entry age\t45.00", 45], ["waiting period", "Waiting period\t30.00", 30], ["waiting period with its unit", "Waiting Period (days):\t90.00", 90],
+    ["policy year", "Policy year:\t2,026.00", 2026], ["years", "Premium payment years\t25.00", 25]] as const)
+    await test(`F15 ${label} ends its label: not money`, () => assert.equal(fc(extraction(amount, "SGD", evidence, "Death"), "SGD", BARE + "\n" + evidence).evidenceVerified, false));
   await test("F10 an MYR page: RM is read for a ringgit reading", () => {
     assert.equal(fc(extraction(100000, "MYR", "Total Permanent Disability\t100,000.00"), "MYR").evidenceVerified, true);
   });

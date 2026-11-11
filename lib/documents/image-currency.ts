@@ -73,7 +73,12 @@ export function moneyShapedFigure(line: string, value: number): boolean {
   for (const m of String(line ?? "").matchAll(re)) {
     if (Math.abs(Number(m[1].replace(/,/g, "")) - value) >= 0.005) continue;
     const before = line.slice(0, m.index);
-    if (/\b(?:no\.?|nos?\.|number|code|ref(?:erence)?|age|period|years?|date|tel|phone|fax|hotline|nric|id)\b[^\d\n]*$/i.test(before)) continue;
+    // A field whose label names it as a number, code, date or contact is never money, wherever the word stands.
+    if (/\b(?:number|code|ref(?:erence)?|date|tel|phone|fax|hotline|nric|id)\b[^\d\n]*$/i.test(before)) continue;
+    // "No.", "Age", "Period" and "Year" mark a non-money field only as the label's last word ("Policy No.", "Entry age",
+    // "Waiting period", "Policy year:"). Inside a label they name a cover: "No Claim Bonus", "Old Age Benefit", "Benefit
+    // Period Limit"; and "per policy year" is a limit's unit ("Overall limit per policy year").
+    if (/\b(?:no\.?|nos?\.|age|period|years?)\s*(?:\([^)\n]*\))?\s*[:#\-]?\s*$/i.test(before) && !/\bper\s+(?:[a-z]+\s+)?years?\s*[:\-]?\s*$/i.test(before)) continue;
     // "Term" is a label only as the label's last word ("Policy Term", "Term (years):"); "Term Life", "Long Term Care" and
     // "Short-term disability" are covers (Critic #417).
     if (/\bterm\s*(?:\([^)\n]*\))?\s*[:\-]?\s*$/i.test(before)) continue;
