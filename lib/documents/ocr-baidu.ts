@@ -10,6 +10,8 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
+import { query } from "@/lib/db/client";
+import { probeBaiduPath, probeSummary } from "@/lib/documents/baidu-probe";
 
 /**
  * Baidu AI Studio's hosted PaddleOCR (async jobs API) as the FIRST reader of scanned, image-only pages. It runs as a
@@ -65,6 +67,9 @@ export function baiduOcrSettings(env: Env = process.env) {
     pagesPerJob: intEnv(env.BAIDU_OCR_PAGES_PER_JOB, 50, 1, 100),
     // After Baidu cannot be reached (connect failure or timeout on submit), this instance skips it for this long.
     cooldownMs: intEnv(env.BAIDU_OCR_COOLDOWN_MS, 600_000, 0, 3_600_000),
+    // After such a failure, check each step of the path to Baidu (lib/documents/baidu-probe.ts), each within this limit.
+    // 0 switches the check off.
+    probeStepMs: intEnv(env.BAIDU_OCR_PROBE_STEP_MS, 6_000, 0, 15_000),
   };
 }
 
@@ -341,13 +346,38 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
   }
 }
 
-/** Until when (ms since 1970) this instance skips Baidu after it could not be reached. Process-local. */
+/** Until when (ms since 1970) this instance skips Baidu after it could not be reached. */
 let baiduUnreachableUntil = 0;
+/** The cool-down is also kept in the database (one row, storage_cleanup_locks key BAIDU_COOLDOWN_KEY), so every function
+ * instance shares it: on Vercel a later upload usually lands on another (or a fresh) instance, which would otherwise wait
+ * the full 10-60 s again (11 Nov: the first upload after the Singapore redeploy waited 60 s). A database error never
+ * blocks reading: the instance's own cool-down still applies, and Baidu is tried as before. */
+export const BAIDU_COOLDOWN_KEY = "baidu-ocr-unreachable";
+async function sharedCooldownActive(cooldownMs: number): Promise<boolean> {
+  if (cooldownMs <= 0) return false;
+  try {
+    const r = await query<{ on: boolean }>(`SELECT EXISTS (SELECT 1 FROM storage_cleanup_locks WHERE lock_key = $1 AND acquired_at > now() - ($2 || ' milliseconds')::interval) AS on`, [BAIDU_COOLDOWN_KEY, String(cooldownMs)]);
+    return r.rows[0]?.on === true;
+  } catch { return false; }
+}
+async function startSharedCooldown(): Promise<void> {
+  try {
+    await query(`INSERT INTO storage_cleanup_locks(lock_key, holder, acquired_at) VALUES ($1, 'baidu-cooldown', now())
+      ON CONFLICT (lock_key) DO UPDATE SET acquired_at = now()`, [BAIDU_COOLDOWN_KEY]);
+  } catch { /* the instance's own cool-down still applies */ }
+}
+/** Tests only: this instance forgets its own cool-down, as a fresh instance would. */
+export function forgetLocalBaiduCooldown() { baiduUnreachableUntil = 0; }
 /** Tests only. */
-export function resetBaiduCooldown() { baiduUnreachableUntil = 0; }
+export async function resetBaiduCooldown() {
+  baiduUnreachableUntil = 0;
+  await query(`DELETE FROM storage_cleanup_locks WHERE lock_key = $1`, [BAIDU_COOLDOWN_KEY]).catch(() => undefined);
+}
 
 /** Time kept back, inside the function's limit, for the AI reader to read whatever Baidu did not. */
 export const AI_FALLBACK_RESERVE_MS = 120_000;
+/** Time kept free after the path probe for the rest of the document's processing. */
+const PROBE_MARGIN_MS = 30_000;
 /** Below this much time, Baidu is not started at all: the AI reader gets all of it. */
 const MIN_BAIDU_MS = 5_000;
 
@@ -364,7 +394,7 @@ class WeakChunk extends Error {
  * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION). */
 export async function completePdfPagesWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
-}): Promise<{ pages: PdfPage[]; unread: number[] }> {
+}): Promise<{ pages: PdfPage[]; unread: number[]; probe?: () => Promise<void> }> {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
   await overSpendCap(args.accountId);
@@ -380,10 +410,11 @@ export async function completePdfPagesWithBaidu(args: {
     for (const p of got) if (typeof p?.text === "string" && usableCharacters(p.text) >= OCR_TEXT_BAR) texts.set(p.pageNumber, p.text.trim());
   };
 
+  let unreachable = false;
   for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
     const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
     if (deadline - Date.now() < MIN_BAIDU_MS) { failures.push("timeout"); break; }
-    if (Date.now() < baiduUnreachableUntil) { failures.push("cooling_down"); break; }
+    if (Date.now() < baiduUnreachableUntil || (i === 0 && await sharedCooldownActive(s.cooldownMs))) { failures.push("cooling_down"); break; }
     try {
       const got = await cachedReading(
         args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined,
@@ -425,10 +456,12 @@ export async function completePdfPagesWithBaidu(args: {
     } catch (error) {
       if (error instanceof WeakChunk) { accept(error.pages); continue; }
       failures.push(error instanceof BaiduOcrError ? error.summary : "unexpected");
-      // Baidu could not be reached at all: this instance stops trying for a while, so each later scanned document does
+      // Baidu could not be reached at all, or did not answer the submit in time: every instance stops trying for a while, so each later scanned document does
       // not wait 10-60 s for a connection that is not coming before the AI reader reads it.
       if (error instanceof BaiduOcrError && error.stage === "submit" && (error.kind === "network" || error.kind === "timeout")) {
         baiduUnreachableUntil = Date.now() + baiduOcrSettings().cooldownMs;
+        if (baiduOcrSettings().cooldownMs > 0) await startSharedCooldown();
+        unreachable = true;
       }
       // Pages after a failed job are not sent to Baidu again in this reading: the AI reader reads them.
       break;
@@ -436,12 +469,25 @@ export async function completePdfPagesWithBaidu(args: {
   }
 
   const unread = args.pageNumbers.filter((n) => !texts.has(n));
+  let probe: (() => Promise<void>) | undefined;
   if (failures.length) {
     const kind = failures.join(",");
     void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0].split(" ")[0] as BaiduFailureKind),
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, kind, durationMs: Date.now() - started } });
     if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
       failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
+    // Which step of the path to Baidu fails, and from which region (no token is used). Only after a submit could not
+    // be completed, and run by the caller only AFTER the AI reader has read the pages, so the upload is not held up
+    // (Critic #411); it is skipped when the function no longer has time to spare for it.
+    if (unreachable && args.resourceId && s.probeStepMs > 0) {
+      const resourceId = args.resourceId, stepMs = s.probeStepMs;
+      probe = async () => {
+        if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
+        const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
+        if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
+          failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
+      };
+    }
   } else {
     void recordEvent({ name: "documents.ocr_baidu.completed", correlationId, status: "success", householdRef,
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, pagesToFallback: unread.length, durationMs: Date.now() - started } });
@@ -449,5 +495,6 @@ export async function completePdfPagesWithBaidu(args: {
   return {
     pages: args.pages.map((page) => (texts.has(page.pageNumber) ? { ...page, text: texts.get(page.pageNumber)!, extractionMethod: "ocr" as const } : page)),
     unread,
+    probe,
   };
 }
