@@ -621,10 +621,17 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     return { ...coverage, amount: null, notes: [notes, NOTIONAL_SUM_NOTE].filter(Boolean).join(" · "), evidenceVerified: ok && coverage.evidenceVerified === true };
   return { ...coverage, notes, evidenceVerified: ok && coverage.evidenceVerified === true };
 }
+/** How much of a cited line a page line holds, when the citation is not found word for word (spacing, a tab read as a
+ * space). The figures count toward the share, but never alone: the line must also hold at least half of the citation's
+ * own words (its label). Else another line that prints the same figure stands in for the cited one ("Death S$250,000"
+ * confirmed from "Total Permanent Disability S$250,000" once the page check marked the Death line's figure as not
+ * checked, TE #417 N11m), and a wrong amount is confirmed. A citation with no words of its own is never matched this way. */
 function tokenShare(line: string, evidence: string) {
   const want = [...new Set(nameKey(evidence).split(" ").filter((t) => t.length > 1))];
   if (!want.length) return 0;
   const have = new Set(nameKey(line).split(" "));
+  const words = want.filter((t) => !/\d/.test(t));
+  if (!words.length || words.filter((t) => have.has(t)).length * 2 < words.length) return 0;
   return want.filter((t) => have.has(t)).length / want.length;
 }
 function currencyOk(line: string, currency: string) {
