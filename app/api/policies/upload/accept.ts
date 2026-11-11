@@ -64,7 +64,7 @@ export async function resolveUploadFamilyMember(ctx: HouseholdContext, requested
 export function uploadErrorResponse(error: unknown, request: NextRequest): NextResponse | null {
   const correlationId = resolveCorrelationId(request.headers.get("x-correlation-id"));
   const reject = () => void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
-  if (error instanceof NoFamilyMember) { reject(); return NextResponse.json({ error: "Create at least one family profile before uploading documents." }, { status: 400 }); }
+  if (error instanceof NoFamilyMember) { reject(); return NextResponse.json({ error: "Add the people your policies cover on the Family page first, then upload this document again." }, { status: 400 }); }
   if (error instanceof FamilyMemberNotFound) { reject(); return NextResponse.json({ error: "Family member not found." }, { status: 404 }); }
   if (error instanceof DuplicateDocument) { reject(); return NextResponse.json({ error: `This exact document is already in DearPolicy as ${maskIdentityText(error.filename)}.` }, { status: 409 }); }
   return null;
