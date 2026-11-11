@@ -627,7 +627,9 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
 }
 /** A label's own words, in order: no figures, and no "[amount not checked]" the page check left where it could not confirm
  * a figure. */
-const labelWords = (t: string) => nameKey(String(t ?? "").split(NOT_CHECKED).join(" ")).split(" ").filter((w) => w.length > 1 && !/\d/.test(w));
+const labelWords = (t: string) => nameKey(String(t ?? "").split(NOT_CHECKED).join(" ")
+  // A dotted initialism is one word: "T.P.D." is "TPD" (TE #422 V24).
+  .replace(/(?<![A-Za-z])((?:[A-Za-z]\.){2,}[A-Za-z]?)(?![A-Za-z])/g, (m) => m.replace(/\./g, ""))).split(" ").filter((w) => w.length > 1 && !/\d/.test(w));
 const LINKING_WORDS = new Set(["and", "of", "the", "for", "on", "in", "or"]);
 /** How a citation's label words sit in a page line's label. A cited word matches a word the line prints, or is the
  * initialism of a run of the line's words, case-insensitive and leaving out linking words ("TPD" for "Total and Permanent
