@@ -237,7 +237,7 @@ export function ingestChaosModeFor(seed: number, args: { system: string; user: s
 const pick = <T,>(r: () => number, list: readonly T[]): T => list[Math.floor(r() * list.length) % list.length];
 
 type Obj = Record<string, unknown>;
-const MONEY_LINE = /(?:S\$|SGD\s?|US\$|RM\s?)\s?(\d[\d,]*(?:\.\d{1,2})?)/;
+const MONEY_LINE = /(?:S\$|(?<![A-Za-z])SGD\s?|US\$|(?<![A-Za-z])RM\s?)\s?(\d[\d,]*(?:\.\d{1,2})?)/;
 const DEFAULT_NAMES = ["Tan Mei Ling", "Lim Wei Jie", "Lim Xin Yi", "Wong Siew Lan", "Rahman bin Yusof", "Aminah binte Ismail", "Muhammad Irfan bin Rahman", "Nur Aisyah binte Rahman", "Maria Luz D'Souza-Reyes"];
 /** Policy numbers the household's OTHER documents carry (set by the fixture from the well-behaved
  * read), sorted -- never "whatever an earlier call happened to report", which depended on call order. */

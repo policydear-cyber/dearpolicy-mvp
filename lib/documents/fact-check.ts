@@ -23,7 +23,7 @@ const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim(
 // ---------------------------------------------------------------------------
 // Figures
 // ---------------------------------------------------------------------------
-const CURRENCY_MARK = String.raw`(?:S\$|SG\$|SGD|US\$|USD|HK\$|HKD|A\$|AUD|RM|MYR|PHP|₱|€|EUR|£|GBP|\$)`;
+const CURRENCY_MARK = String.raw`(?:S\$|SG\$|US\$|HK\$|A\$|(?<![A-Za-z])(?:SGD|USD|HKD|AUD|RM|MYR|PHP|EUR|GBP)(?![A-Za-z])|₱|€|£|\$)`;
 function digitsPattern(value: number) {
   const whole = Math.trunc(Math.abs(value)), cents = Math.round((Math.abs(value) - whole) * 100);
   const digits = String(whole), groups: string[] = [];
@@ -629,8 +629,8 @@ function tokenShare(line: string, evidence: string) {
 }
 function currencyOk(line: string, currency: string) {
   const code = currency.toUpperCase();
-  if (code === "SGD") return /S\$|SGD|SG\$/i.test(line) || !/US\$|USD|RM|MYR|€|£|HK\$/i.test(line);
-  if (code === "USD") return /US\$|USD/i.test(line);
+  if (code === "SGD") return /S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || !/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line);
+  if (code === "USD") return /US\$|(?<![A-Za-z])USD(?![A-Za-z])/i.test(line);
   return true;
 }
 

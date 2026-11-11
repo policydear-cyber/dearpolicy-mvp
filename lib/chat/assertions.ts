@@ -306,7 +306,7 @@ function aboutClauses(a: { text: string; amount?: number | null }, passage: stri
 }
 /** The label an assertion states its figure for ("Hospital cash" of "Hospital cash: S$100 per day"). */
 function labelWords(text: string): Set<string> {
-  const label = text.includes(":") ? text.slice(0, text.indexOf(":")) : text.replace(/(?:S\$|US\$|SGD|USD|RM|MYR|\$)?\s?\d[\d,.]*.*$/, "");
+  const label = text.includes(":") ? text.slice(0, text.indexOf(":")) : text.replace(/(?:S\$|US\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR)|\$)?\s?\d[\d,.]*.*$/, "");
   return contentWords(label.replace(/\([^)]*column\)/i, ""), GENERIC_LABEL);
 }
 const SAYS_SUPERSEDED = /\b(?:superseded|replaced|earlier|previous(?:ly)?|old(?:er)?|original(?:ly)?|former(?:ly)?|before (?:the|it was) (?:change|endorse|amend)|no longer (?:current|in force)|since (?:been )?(?:replaced|amended|changed))\b/i;

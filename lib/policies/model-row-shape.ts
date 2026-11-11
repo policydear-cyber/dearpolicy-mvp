@@ -4,7 +4,7 @@
  * asking the person what it pays. A benefit the page names as its own heading ("• Premium Waiver") is a cover the person
  * holds, and is kept, said to print no amount. No database, no model. */
 
-const CURRENCY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])(?:Rp|Rs)\.?|€|£|¥|₹|₱|฿)`;
+const CURRENCY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|(?<![A-Za-z])(?:SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|Rp|Rs\.?)(?![A-Za-z])|€|£|¥|₹|₱|฿)`;
 const MONEY=String.raw`${CURRENCY}\s?\d[\d,]*(?:\.\d+)?`;
 const NUMBER_WORD=String.raw`(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|a\s+(?:hundred|thousand|million))`;
 const AMOUNT_IN_WORDS=new RegExp(String.raw`\b${NUMBER_WORD}(?:[\s-]+${NUMBER_WORD})*[\s-]+(?:hundred|thousand|million|billion)?\s*(?:dollars?|ringgit|pounds?|euros?|rupees?|pesos?|baht|yuan|yen)\b|\b${NUMBER_WORD}(?:[\s-]+${NUMBER_WORD})*[\s-]+(?:thousand|million|billion)\b`,"i");

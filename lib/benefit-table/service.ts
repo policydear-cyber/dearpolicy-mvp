@@ -92,7 +92,7 @@ export const PART_MAX_OUTPUT = 12_000;
  * about 0.3 tokens a character (pages 10-17, about 20,000 characters of wording and 11 figures, needed 5,763). */
 export const TOKENS_PER_FIGURE = 130;
 export const TOKENS_PER_CHAR = 0.3;
-const FIGURE = /(?:S\$|US\$|A\$|HK\$|NZ\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s?\d[\d,]*(?:\.\d+)?|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
+const FIGURE = /(?:S\$|US\$|A\$|HK\$|NZ\$|(?<![A-Za-z])(?:RM|SGD|USD|MYR|HKD|GBP|EUR|AUD)|£|€|\$)\s?\d[\d,]*(?:\.\d+)?|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
 /** The output tokens a page is expected to need when read (TOKENS_PER_FIGURE, TOKENS_PER_CHAR). */
 export function expectedOutput(text: string): number {
   return Math.ceil((text.match(FIGURE)?.length ?? 0) * TOKENS_PER_FIGURE + text.length * TOKENS_PER_CHAR);

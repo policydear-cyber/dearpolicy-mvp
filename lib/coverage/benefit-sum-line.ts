@@ -46,7 +46,7 @@ const EXCESS_COVER = /\b(?:rental\s+(?:vehicle|car)|car\s+rental|vehicle|motor|c
 const RETURN_OF_PREMIUM = /\breturn\s+of\s+(?:premiums?|contributions?)\b|\bpremiums?\s+refund\b|\bpengembalian\s+(?:premi|kontribusi)\b|\bpemulangan\s+(?:premium|caruman|sumbangan)\b|\bremboursement\s+des\s+primes\b|\bBeitragsr[uü]ckgew[aä]hr\b|退还保费|返还保费/iu;
 /** A sum or benefit named as one alternative ("…or Sum Assured", "higher of sum assured or fund value"). */
 const NAMES_A_SUM = /\bsum\s+(?:assured|insured|covered|at\s+risk)\b|\bbenefits?\b|\blimits?\b|\bcover(?:ed|age)?\b|\bcapital\b/iu;
-const CURRENCY_AT_END = /(?:[A-Z]{1,3}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\$|\b(?:SGD|MYR|USD|EUR|GBP|IDR|HKD|AUD|NZD|INR|CHF|JPY|CNY|RMB|THB|PHP|VND|KRW|TWD|AED|SAR|QAR|BHD|KWD|OMR|CAD|ZAR))\s*$/u;
+const CURRENCY_AT_END = /(?:[A-Z]{1,3}\$|R\$|(?<![A-Za-z])(?:Rp\.?|RM)|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|\$|\b(?:SGD|MYR|USD|EUR|GBP|IDR|HKD|AUD|NZD|INR|CHF|JPY|CNY|RMB|THB|PHP|VND|KRW|TWD|AED|SAR|QAR|BHD|KWD|OMR|CAD|ZAR))\s*$/u;
 const LINK_AT_END = /\s*(?:\b(?:up\s+to|capped\s+at|max(?:imum)?(?:\s+of)?|limited\s+to|of|is|at|sebanyak|sehingga|hingga|jusqu['’]à|bis\s+zu)\b|[=:])\s*$/iu;
 const QUALIFIER = /(?:^|\s+)(?:in\s+addition\s+to|including|inclusive\s+of|incl\.?|in\s+excess\s+of|after|without|excluding|excl\.?|net\s+of|less|on\s+top\s+of|ohne|mit|sans|avec|termasuk|tidak\s+termasuk|selepas|setelah|tanpa|不含|包括|含)(?=\s|$).*$/iu;
 const WHEN = /\s+(?:as\s+(?:at|of)|at|on|per|for|pada|au|am|zum)\s+.*$/iu;
@@ -116,7 +116,7 @@ export function labelHead(label: string): string {
   // Qualifiers and dates never decide ("Annual limit after deductible", "Fund value as at 30 Sep 2026").
   s = s.replace(QUALIFIER, "").replace(WHEN, "").replace(/[\s,:;—–\/-]+$/u, "").trim();
   // The last clause: after the last separator, or after an earlier figure on the same row ("Life Cover S$500,000 Premium").
-  const clauses = s.split(/\s*[,:;—–\/]\s*|\s+-\s+|\s*(?:[A-Z]{1,3}\$|RM|Rp\.?|€|£)?\s?\d[\d.,'’ ]*\s?(?:%|€|£)?\s+/u);
+  const clauses = s.split(/\s*[,:;—–\/]\s*|\s+-\s+|\s*(?:[A-Z]{1,3}\$|(?<![A-Za-z])(?:RM|Rp\.?)|€|£)?\s?\d[\d.,'’ ]*\s?(?:%|€|£)?\s+/u);
   return (clauses.pop() ?? "").trim();
 }
 

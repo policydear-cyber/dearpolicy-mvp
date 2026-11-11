@@ -167,7 +167,7 @@ export function independentStatements(x: Record<string, unknown>): Record<string
   const tidy = (t: string) => { const u = t.trim().replace(/[;,\s]+$/, ""); return u.charAt(0).toUpperCase() + u.slice(1) + (/[.!?]$/.test(u) ? "" : "."); };
   return parts.map((t) => ({ ...x, text: tidy(t), _split: true }));
 }
-const CUR_AT = /(S\$|SGD\s?|US\$|USD\s?|HK\$|RM\s?|(?<![A-Za-z$])\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
+const CUR_AT = /(S\$|(?<![A-Za-z])SGD\s?|US\$|(?<![A-Za-z])USD\s?|HK\$|(?<![A-Za-z])RM\s?|(?<![A-Za-z$])\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
 /** How a line prints `value`: with S$ / SGD ("explicit"), with a bare "$" ("bare"), in another currency, or not at all. */
 function printedForm(line: string, value: number): "explicit" | "bare" | "other" | null {
   let out: "bare" | "other" | null = null;

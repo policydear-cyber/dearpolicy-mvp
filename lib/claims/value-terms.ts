@@ -38,7 +38,7 @@ export type ValueTerms = {
 };
 export type TermSource = { source: string; text: string; page?: number | null; offset?: number | null };
 
-const CUR = String.raw`(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|S\$|SG\$|US\$|HK\$|A\$|RM|€|£)`;
+const CUR = String.raw`(?:(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|RM)|S\$|SG\$|US\$|HK\$|A\$|€|£)`;
 const MONEY_RE = new RegExp(String.raw`(${CUR})\s?(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|million)\b)?`, "i");
 const FIG = String.raw`(?:${CUR}\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|million)\b)?|\d[\d,]*)`;
 const UNIT = String.raw`(?:(?:complete(?:d)?\s+)?(?:24[- ]hour\s+)?(?:days?|nights?|periods?|visits?|sessions?|weeks?|months?|times|treatments?|admissions?))`;
