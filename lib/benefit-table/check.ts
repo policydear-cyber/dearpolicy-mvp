@@ -208,7 +208,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The row is the most paid for several benefits' or policies' claims in total (combinedLimit below), not a benefit. */
   combinedLimit?: boolean;
   /** The row is printed under a heading that names the limits of compensation (LIMITS_HEADING). */
-  limitsHeading?: boolean };
+  limitsHeading?: boolean;
+  /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
+   * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
+  capCurrency?: string | null };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -551,6 +554,31 @@ function figureCurrency(excerpt: string, value: number, page: string): string | 
   if (codes.size > 1) return null;
   return [...codes][0] ?? declaredCurrency(page);
 }
+/** The currency printed with this figure in the excerpt itself (never the page's), or null when none or two are. */
+function statedFigureCurrency(excerpt: string, value: number): string | null {
+  const text = plainText(excerpt);
+  const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
+  return codes.size === 1 ? [...codes][0] : null;
+}
+/** What a percentage is of may be the sum insured only when the row names it so. Read in any wording: these words, after
+ * optional qualifiers ("basic", "prevailing", "the policy's"), are the sum insured; any other words after "of" (the
+ * annual premium, the Account Value, the Death Benefit, the Fracture Benefit) are another base, and a percentage of
+ * another base is never worked out on the sum insured (Critic audit of 5c1075d7, A1). */
+const SUM_INSURED_WORDS = /^(?:(?:the|your|this|its|basic|base|initial|original|current|prevailing|total|policy(?:'s|’s)?|plan(?:'s|’s)?|rider(?:'s|’s)?|benefit|coverage|cover)\s+)*(?:sum\s+(?:insured|assured|covered|at\s+risk)|insured\s+amount|amount\s+(?:insured|assured)|face\s+(?:amount|value)|coverage\s+amount|amount\s+of\s+(?:cover|coverage|insurance)|s\.?\s?[ia]\.?(?![\p{L}])|jumlah\s+(?:diinsuranskan|dijamin|dilindungi))/iu;
+/** Words that, right after a percentage with no "of", name a base other than the sum insured ("10% annual premium"). */
+const OTHER_BASE_WORDS = /^(?:(?:the|your|this|its|total|annual|yearly|monthly|current|prevailing)\s+)*(?:premiums?|account\s+value|fund\s+value|cash\s+value|surrender\s+value|policy\s+value|death\s+benefit|(?:\p{L}+\s+){0,2}benefit\b|bills?|charges?|expenses?|claims?)/iu;
+/** Whether the row says its percentage is of something other than the sum insured. Null when it names no base. */
+function otherBaseThanSumInsured(row: string, value: number): boolean {
+  const t = row.normalize("NFKC").replace(/\s+/g, " ");
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*%\s*/g)) {
+    if (Math.abs(Number(m[1].replace(",", ".")) - value) > 0.0001) continue;
+    const after = t.slice(m.index! + m[0].length);
+    const of = after.match(/^(?:of|daripada|dari)\s+(.*)$/iu);
+    if (of) return !SUM_INSURED_WORDS.test(of[1]);
+    if (OTHER_BASE_WORDS.test(after) && !SUM_INSURED_WORDS.test(after)) return true;
+  }
+  return false;
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -871,13 +899,15 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const period = pays === "per_period" && (PERIODS as readonly string[]).includes(b.period as string) ? b.period! : null;
     if (pays === "per_period" && !period) { out.dropped.push({ what: label, why: "payment with no period" }); continue; }
     const basis = (BASES as readonly string[]).includes(b.basis as string) ? b.basis! : null;
-    const percentOf = pays === "percent" && (PERCENT_OF as readonly string[]).includes(b.percentOf as string) ? b.percentOf! : null;
+    let percentOf = pays === "percent" && (PERCENT_OF as readonly string[]).includes(b.percentOf as string) ? b.percentOf! : null;
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
       baseAmount = num(b.baseAmount);
       baseSource = find(str(b.baseQuote), source.page);
       if (baseAmount == null || !baseSource || baseSource.page !== source.page || !printedIn(baseSource, baseAmount)) {
-        out.dropped.push({ what: label, why: "fixed base not printed on the row's page" }); continue;
+        // The row stays with its share as printed and no amount: what it is a share of is not settled on its page.
+        out.dropped.push({ what: label, why: "fixed base not printed on the row's page; kept the row with no amount" });
+        percentOf = null; baseAmount = null; baseSource = null;
       }
     }
     const currency = pays === "percent"
@@ -896,7 +926,14 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // A percentage row's quote holds one row: two percentages mean it runs into the next row (R95-2, N3).
     // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
-    if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) { out.dropped.push({ what: label, why: "quote holds more than one row" }); continue; }
+    // The row itself stays, as words with no figure: its quote cannot tell which percentage is its own.
+    if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) {
+      out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
+      out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
+        baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions, page: source.page, quote, source, currency: null, baseSource: null, capSource: null,
+        capUnread: false, droppedConditions, combinedLimit: false, limitsHeading: LIMITS_HEADING.test(str(b.section) ?? "") });
+      continue;
+    }
     if (pays === "percent") {
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
@@ -925,6 +962,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
           || CAPPED.test(row) || NEAR_CAP.test(near);
       }
     }
+    // A share read as of the sum insured whose row names another base ("10% of the annual premium", "50% of the Death
+    // Benefit") is not of the sum insured: the row keeps its words and gets no amount.
+    if (percentOf === "sum_insured" && value != null && otherBaseThanSumInsured(pays === "percent" ? segmentOf(source).text : source.excerpt, value)) {
+      out.dropped.push({ what: label, why: `${value}% is of a base the row names, not the sum insured; no amount is worked out for it` });
+      percentOf = null;
+    }
+    const capCurrency = cap != null && capSource ? statedFigureCurrency(capSource.excerpt, cap) : null;
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
@@ -939,7 +983,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
-      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? "") });
+      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}) });
   }
   return out;
 }

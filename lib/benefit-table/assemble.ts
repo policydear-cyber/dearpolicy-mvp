@@ -335,7 +335,8 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.pays === "amount" || b.pays === "up_to" || b.pays === "per_day" || b.pays === "per_period")
     return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays, period: b.period };
   if (b.pays === "value") return { kind: "value", amount: b.value!, currency: b.currency, asOf: b.asOf };
-  if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row" : "no figure printed" };
+  if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
+    : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
   if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt))) {
@@ -343,6 +344,12 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
       ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
   }
+  // A cap printed in another currency than the amount it limits ("10% of US$100,000, up to S$15,000") cannot be compared
+  // with it: no amount, the row keeps its share and its cap as printed (Critic audit of 5c1075d7, A2).
+  const otherCurrencyCap = (currency: string | null) => b.cap != null && !!b.capCurrency && b.capCurrency !== currency;
+  if (b.percentOf === "sum_insured" && cover.sumInsured != null && otherCurrencyCap(cover.currency)
+    || b.percentOf === "fixed_amount" && b.baseAmount != null && otherCurrencyCap(b.currency))
+    return withShare(b, { kind: "none", why: `${b.value}% of ${shareWords(b) ?? "a printed amount"}, with a maximum printed in another currency on p${b.capSource?.page ?? b.source.page}: see the document` });
   const capped = (amount: number, currency: string | null, how: string): Figure =>
     b.cap != null && amount > b.cap
       ? { kind: "worked_out", amount: b.cap, currency, how: `${how} is more than the most it pays, so up to ${money(b.cap, currency)} (printed with it on p${b.capSource?.page ?? b.source.page})`, capped: true }
