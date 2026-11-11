@@ -2,7 +2,7 @@ import type { PdfPage } from "@/lib/documents/pdf";
 
 type BridgePage = { pageNumber: number; text: string };
 import { documentReaderFor } from "@/lib/ai/providers";
-import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
+import { PageCopyUnavailable, completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 import { baiduOcrConfigured, completePdfPagesWithBaidu } from "@/lib/documents/ocr-baidu";
 
 export function usableCharacters(text: string) {
@@ -74,8 +74,20 @@ export async function completePdfPagesWithOcr(args: {
   // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
   // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
   let pages = args.pages, remaining = pageNumbers;
-  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers }));
+  if (baidu) ({ pages, unread: remaining } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers }));
   if (!remaining.length) return pages;
   if (!documentReaderFor()) return notRead(pages, remaining);
-  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages, pageNumbers: remaining });
+  // A page that cannot be copied out of the file for the reader (a locked file pdf-lib cannot open, and the page is not
+  // one image PDF.js can rebuild) is marked not read and named, and the other pages are still read (TE #410).
+  const uncopied = new Set<number>();
+  for (let todo = remaining; ;) {
+    try {
+      const read = todo.length ? await completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers: todo }) : pages;
+      return notRead(read, [...uncopied]);
+    } catch (error) {
+      if (!(error instanceof PageCopyUnavailable) || !error.pages.some((n) => todo.includes(n))) throw error;
+      for (const n of error.pages) uncopied.add(n);
+      todo = todo.filter((n) => !uncopied.has(n));
+    }
+  }
 }

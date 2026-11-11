@@ -89,6 +89,68 @@ async function main() {
     assert.ok(!plain.unmappedText);
   });
 
+  // A locked scan sent to an OCR reader (Baidu or the hosted AI): pdf-lib copies the page's image still encrypted with the
+  // source file's key, so the reader got noise. The page is rebuilt from the image PDF.js decodes, drawn with the same
+  // matrix and /Rotate, so it shows exactly what the plain file shows. Made-up 64x48 gradient, placed off-centre, turned 90.
+  const { subsetPdf } = await import("@/lib/documents/ocr-hosted");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  async function painted(bytes: Uint8Array) {
+    const task = pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0]);
+    const doc = await task.promise;
+    try {
+      const page = await doc.getPage(1);
+      const ops = await page.getOperatorList();
+      const at = ops.fnArray.indexOf(pdfjs.OPS.paintImageXObject);
+      assert.ok(at >= 0, "the page paints an image");
+      let m = [1, 0, 0, 1, 0, 0];
+      for (let i = 0; i < at; i++) if (ops.fnArray[i] === pdfjs.OPS.transform) {
+        const n = ops.argsArray[i] as number[];
+        m = [n[0] * m[0] + n[1] * m[2], n[0] * m[1] + n[1] * m[3], n[2] * m[0] + n[3] * m[2], n[2] * m[1] + n[3] * m[3], n[4] * m[0] + n[5] * m[2] + m[4], n[4] * m[1] + n[5] * m[3] + m[5]];
+      }
+      const img = await new Promise<{ width: number; height: number; data: Uint8ClampedArray }>((r) => page.objs.get(String(ops.argsArray[at][0]), r as (v: unknown) => void));
+      return { rotate: page.rotate, view: page.view, matrix: m.map((v) => Math.round(v * 1000) / 1000), width: img.width, height: img.height,
+        rgb: Buffer.from(img.data.filter((_, i) => img.data.length === img.width * img.height * 3 || i % 4 !== 3)).toString("base64") };
+    } finally { await task.destroy(); }
+  }
+  const plainScan = await painted(await subsetPdf(fixture("scan-plain.pdf"), [1]));
+  await test("a plain scan's subset is unchanged (the baseline)", () => {
+    assert.equal(plainScan.rotate, 90); assert.deepEqual(plainScan.matrix, [240, 0, 0, 180, 30, 110]); assert.equal(plainScan.width, 64);
+  });
+  await test("a locked scan (AES-256, with its password) is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-aes256.pdf"), [1], undefined, PASSWORD)), plainScan);
+  });
+  await test("an owner-only lock (no password to open) is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-owner-only.pdf"), [1])), plainScan);
+  });
+  await test("a locked scan turned for a second read turns like the plain one", async () => {
+    const turn = new Map([[1, 90]]);
+    const plain = await painted(await subsetPdf(fixture("scan-plain.pdf"), [1], turn));
+    assert.equal(plain.rotate, 180);
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-aes256.pdf"), [1], turn, PASSWORD)), plain);
+  });
+  // TE #410: saved with object streams (Acrobat, most PDF 1.5+ writers), pdf-lib cannot open a locked file at all; the
+  // page is rebuilt from PDF.js alone, the same as the plain one shows.
+  await test("a locked scan saved with object streams (open password) is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm.pdf"), [1], undefined, PASSWORD)), plainScan);
+  });
+  await test("an owner-only lock saved with object streams is sent as the plain one shows", async () => {
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-owner-only-objstm.pdf"), [1])), plainScan);
+  });
+  await test("an object-stream locked scan turned for a second read turns like the plain one", async () => {
+    const turn = new Map([[1, 270]]);
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm.pdf"), [1], turn, PASSWORD)), await painted(await subsetPdf(fixture("scan-plain.pdf"), [1], turn)));
+  });
+  await test("a page PDF.js alone cannot rebuild is named (PageCopyUnavailable), never sent as noise", async () => {
+    const { PageCopyUnavailable } = await import("@/lib/documents/ocr-hosted");
+    await assert.rejects(subsetPdf(fixture("scan-locked-objstm-2p.pdf"), [1, 2], undefined, PASSWORD), (e: unknown) => e instanceof PageCopyUnavailable && e.pages.join() === "2");
+    await assert.rejects(subsetPdf(fixture("scan-locked-objstm.pdf"), [1]), (e: unknown) => e instanceof PageCopyUnavailable && e.pages.join() === "1"); // no password
+    assert.deepEqual(await painted(await subsetPdf(fixture("scan-locked-objstm-2p.pdf"), [1], undefined, PASSWORD)), plainScan);
+  });
+  await test("a locked scan with no password is copied as before (never fails the read)", async () => {
+    const out = await subsetPdf(fixture("scan-locked-aes256.pdf"), [1]);
+    assert.ok(out.length > 0);
+  });
+
   console.log(`locked-pdf: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log("  FAIL " + f);
   if (failures.length) process.exit(1);

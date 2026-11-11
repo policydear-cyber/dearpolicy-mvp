@@ -22,6 +22,8 @@ process.env.OPENAI_BASE_URL = "http://fake-openai.test/v1";
 process.env.BAIDU_OCR_BASE_URL = "https://fake-baidu.test";
 process.env.BAIDU_OCR_POLL_INTERVAL_MS = "1";
 process.env.BAIDU_OCR_RESULT_HOSTS = "fake-baidu-bucket.test";
+// Each case starts with Baidu reachable; the cool-down after an unreachable Baidu has its own case below.
+process.env.BAIDU_OCR_COOLDOWN_MS = "0";
 // Two pages of ordinary scanned schedule text, each well over the 24-character bar.
 const PAGE_A = "Death Benefit\tS$100,000 payable on death of the life assured";
 const PAGE_B = "Hospital Cash Benefit\tS$50 per day, up to 30 days a year";
@@ -29,7 +31,7 @@ const TOKEN = "test-token-NOT-REAL-7f3c";
 
 type Seen = { url: string; method: string; auth: string | null; body: any; form?: Record<string, string>; filePages?: number };
 let seen: Seen[] = [];
-type Reply = { status: number; json?: unknown; text?: string };
+type Reply = { status: number; json?: unknown; text?: string; throwCode?: string };
 let baidu: (s: Seen) => Reply = () => ({ status: 500, json: {} });
 let ai: (s: Seen) => Reply = () => ({ status: 500, json: {} });
 const realFetch = globalThis.fetch;
@@ -47,14 +49,15 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   } else if (typeof init?.body === "string") s.body = JSON.parse(init.body);
   seen.push(s);
   const r = /fake-openai/.test(url) ? ai(s) : baidu(s);
+  if (r.throwCode) throw new TypeError("fetch failed", { cause: Object.assign(new Error("connect failed"), { code: r.throwCode }) });
   return new Response(r.text ?? JSON.stringify(r.json), { status: r.status, headers: { "content-type": r.text ? "application/jsonl" : "application/json" } });
 }) as typeof fetch;
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
-async function fixturePdf() {
+async function fixturePdf(variant = "") {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
-  doc.addPage([400, 400]).drawText("SYNTHETIC-DPTEST Policy Schedule. Insured: Placeholder Person. Policy number SYN-0001.", { x: 10, y: 300, size: 8, font });
+  doc.addPage([400, 400]).drawText("SYNTHETIC-DPTEST Policy Schedule. Insured: Placeholder Person. Policy number SYN-0001" + variant + ".", { x: 10, y: 300, size: 8, font });
   const img = await doc.embedPng(PNG);
   doc.addPage([400, 400]).drawImage(img, { x: 0, y: 0, width: 400, height: 400 }); // page 2: scan
   doc.addPage([400, 400]).drawImage(img, { x: 0, y: 0, width: 400, height: 400 }); // page 3: scan
@@ -263,6 +266,109 @@ async function main() {
   assert.ok(baiduCalls().filter((c) => c.method === "POST").every((c) => c.filePages === 1));
   assert.equal(out[1].text, PAGE_A); assert.equal(out[2].text, PAGE_A);
   delete process.env.BAIDU_OCR_PAGES_PER_JOB;
+
+  // 11. Merged table cells keep every value under its own column and every row its own name; a figure that spans rows
+  // (one shared limit) is printed once, never copied onto each row as that row's own.
+  assert.equal(bd.baiduMarkdownToText('<table><tr><td rowspan="2">Hospital Benefits</td><td>Room &amp; Board</td><td>S$500 per day</td></tr><tr><td>ICU</td><td>S$1,000 per day</td></tr><tr><td colspan="2">Annual Limit</td><td>S$150,000</td></tr></table>'),
+    "Hospital Benefits\tRoom & Board\tS$500 per day\nHospital Benefits\tICU\tS$1,000 per day\nAnnual Limit\t\tS$150,000");
+  assert.equal(bd.baiduMarkdownToText("<table><tr><th>Benefit</th><th>Amount</th><th>Overall</th></tr><tr><td>Outpatient</td><td>RM 200</td><td rowspan=3>RM 5,000 per year</td></tr><tr><td>Dental</td><td>RM 300</td></tr><tr><td>Optical</td><td>RM 150</td></tr></table>"),
+    "Benefit\tAmount\tOverall\nOutpatient\tRM 200\tRM 5,000 per year\nDental\tRM 300\nOptical\tRM 150");
+  assert.equal(bd.baiduMarkdownToText('<table><tr><th colspan="3">Plan B</th></tr><tr><td>Death</td><td>EUR 20.000</td><td>100%</td></tr></table>'), "Plan B\nDeath\tEUR 20.000\t100%");
+  // 12. Inline maths a vision model may print around figures never leaves a "$" that reads as a currency sign; printed money stays as printed.
+  assert.equal(bd.baiduMarkdownToText("Co-insurance $10\\%$ of the bill; $\\text{RM}\\ 50,000$; $$\\mathrm{HK\\$}\\,2{,}000$$"), "Co-insurance 10% of the bill; RM 50,000; HK$ 2,000");
+  assert.equal(bd.baiduMarkdownToText("Sum Assured $ 100,000 and S$1,000 to S$2,000 or US$5 and $3"), "Sum Assured $ 100,000 and S$1,000 to S$2,000 or US$5 and $3");
+  // Critic #410 F1: a "$" after a letter never opens maths and a "$" before a digit or comma never closes it, so two
+  // amounts are never paired into one span and lose their currency.
+  for (const line of ["Hospital cash S$200^{1} per day, max S$9,000", "S$500 per day^ and S$1,000 overall", "HK$300{a} or US$40", "$500 and $600^{2}", "$500^{2} per day and $600", "Hospital S$200^{1} per day, max $ 9,000"])
+    assert.equal(bd.baiduMarkdownToText(line), line);
+  assert.equal(bd.baiduMarkdownToText("\\$1{,}000 and \\$2{,}000"), "$1,000 and $2,000");
+  // F2: a span with real working is left exactly as printed (no clean figure is made from it).
+  assert.equal(bd.baiduMarkdownToText("$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$"), "$$\\frac{1}{2} \\times 100{,}000$$ payable; $\\sqrt{4}$");
+  // F3/F4: by position, not wording. A rowspan cell in the label column (column 0, or left of the row's first number)
+  // repeats on each row ("Age 18-65", "Section 2 Accident"); anywhere else a cell with a number, however written, is one
+  // shared figure, printed once.
+  const grid = (t: string) => bd.baiduMarkdownToText(`<table>${t}</table>`);
+  assert.equal(grid('<tr><td rowspan="2">Age 18-65</td><td>Death</td><td>S$100,000</td></tr><tr><td>TPD</td><td>S$50,000</td></tr>'), "Age 18-65\tDeath\tS$100,000\nAge 18-65\tTPD\tS$50,000");
+  assert.equal(grid('<tr><td rowspan="2">Section 2 Accident</td><td>Death</td><td>25%</td></tr><tr><td>TPD</td><td>10%</td></tr>'), "Section 2 Accident\tDeath\t25%\nSection 2 Accident\tTPD\t10%");
+  assert.equal(grid('<tr><th>Benefit</th><th>Limit (S$)</th><th>Overall (S$)</th></tr><tr><td>Outpatient</td><td>200</td><td rowspan="3">5000</td></tr><tr><td>Dental</td><td>300</td></tr><tr><td>Optical</td><td>150</td></tr>'),
+    "Benefit\tLimit (S$)\tOverall (S$)\nOutpatient\t200\t5000\nDental\t300\nOptical\t150");
+  assert.equal(grid('<tr><td>A</td><td rowspan="2">SGD5000</td></tr><tr><td>B</td></tr>'), "A\tSGD5000\nB");
+  assert.equal(grid('<tr><td>Death</td><td rowspan="2">One hundred thousand dollars</td></tr><tr><td>TPD</td></tr>'), "Death\tOne hundred thousand dollars\nTPD");
+  assert.equal(grid('<tr><td>Hospital cash</td><td>S$100 per day</td><td rowspan="2">up to 30 days</td></tr><tr><td>ICU cash</td><td>S$200 per day</td></tr>'), "Hospital cash\tS$100 per day\tup to 30 days\nICU cash\tS$200 per day");
+  assert.equal(grid('<tr><td>Physio</td><td>S$80 per visit</td><td rowspan="2">max 10 visits</td></tr><tr><td>Chiro</td><td>S$60 per visit</td></tr>'), "Physio\tS$80 per visit\tmax 10 visits\nChiro\tS$60 per visit");
+  // F5: column 0 still holds back a currency-marked amount (a sideways table), but names with numbers repeat.
+  assert.equal(grid('<tr><td rowspan="2">S$5,000 overall</td><td>Outpatient</td><td>S$200</td></tr><tr><td>Dental</td><td>S$300</td></tr>'), "S$5,000 overall\tOutpatient\tS$200\n\tDental\tS$300");
+  for (const [cell, kept] of [["RM 5000", false], ["SGD5000", false], ["1,000,000", false], ["80%", false], ["5000 EUR", false], ["Section 2 Accident", true], ["Plan 3 (age 66-75)", true], ["Table 1", true]] as const)
+    assert.equal(grid(`<tr><td rowspan="2">${cell}</td><td>A</td></tr><tr><td>B</td></tr>`).split("\n")[1].startsWith(cell), kept, cell);
+  // TE #410 T4: the second row of a sideways table (column 0's shared amount held back) keeps its own name and amount
+  // all the way to the benefit rows the catalogue reads; a row of values only is still not given a name.
+  {
+    const { benefitRowsFromText } = await import("@/lib/documents/layout");
+    const t4 = grid('<tr><th>Overall limit</th><th>Benefit</th><th>Own limit</th></tr><tr><td rowspan="2">S$5,000 overall</td><td>Physiotherapy</td><td>S$60</td></tr><tr><td>Chiropractic</td><td>S$75</td></tr><tr><td rowspan="2">Outpatient group</td><td>Specialist visit</td><td>S$200</td></tr><tr><td>Blood test</td><td>S$80</td></tr>');
+    const rows = benefitRowsFromText(t4).map((r) => `${r.label}=${r.value}`);
+    assert.ok(rows.includes("Chiropractic=S$75"), rows.join(" | "));
+    assert.ok(rows.includes("Blood test=S$80") && rows.includes("Specialist visit=S$200"), rows.join(" | "));
+    assert.ok(!rows.some((r) => r.startsWith("Chiropractic=Chiropractic")));
+    assert.deepEqual(benefitRowsFromText("Benefit\tPlan A\tPlan B\nRoom\tS$300\tS$500\n\tS$100\tS$200").map((r) => r.label), ["Room", "Room"]);
+    // Critic #410 F6: a shifted cell is a name only under a column headed as benefit names. Under people's names it
+    // belongs to nobody known, and the row is skipped (never TPD S$80,000 for John Roe).
+    const joint = benefitRowsFromText("Benefit\tJane Doe\tJohn Roe\nDeath\tS$100,000\tS$50,000\n\tTPD\tS$80,000").map((r) => `${r.label}=${r.value}`);
+    assert.deepEqual(joint, ["Death=S$100,000", "Death=S$50,000"], joint.join(" | "));
+    assert.ok(!benefitRowsFromText("Overall\tPlan A\tPlan B\nS$5,000 overall\tRoom\tS$300\n\tICU\tS$600").some((r) => r.label === "ICU"), "a plan heading is not a name column");
+    // TE #410 T5: under "Detail" a condition or footnote is never a benefit of its own.
+    const t5 = benefitRowsFromText("Benefit\tDetail\tLimit\nHospital cash\tPer day of stay\tS$100\n\tSubject to pre-approval\tS$500\n\t* Per policy year\tS$1,000\n\tAfter a 90-day waiting period\tS$2,000").map((r) => r.label);
+    assert.deepEqual([...new Set(t5)], ["Hospital cash"], t5.join(" | "));
+    // A repeated group name in column 0 under a non-name heading: each row is named by its own benefit cell.
+    const grouped = benefitRowsFromText("Overall limit\tBenefit\tOwn limit\nOutpatient group\tSpecialist visit\tS$200\nOutpatient group\tBlood test\tS$80").map((r) => `${r.label}=${r.value}`);
+    assert.deepEqual(grouped, ["Specialist visit=S$200", "Blood test=S$80"], grouped.join(" | "));
+    // A label column already headed as names keeps its name, even when a later column is headed as names too.
+    assert.deepEqual([...new Set(benefitRowsFromText("Benefit\tDescription\tLimit\nRoom and board\tWard A\tS$100").map((r) => r.label))], ["Room and board"]);
+    // "Injury | Benefit": the Benefit column holds the amounts, so the name stays in column 0.
+    assert.deepEqual(benefitRowsFromText("Injury\tBenefit\tNotes\nLoss of eye\t50%\tper eye\nLoss of limb\tS$10,000\t-").map((r) => `${r.label}=${r.value}`), ["Loss of eye=50%", "Loss of limb=S$10,000"]);
+    for (const head of ["Benefit", "Type of benefit", "Description", "Coverage", "Item"])
+      assert.ok(benefitRowsFromText(`Overall limit\t${head}\tOwn limit\nS$5,000 overall\tPhysiotherapy\tS$60\n\tChiropractic\tS$75`).some((r) => r.label === "Chiropractic" && r.value === "S$75"), head);
+  }
+  assert.equal(grid('<tr><td rowspan="2">Plan 1</td><td rowspan="2">Hospital</td><td>Room</td><td>S$300</td></tr><tr><td>ICU</td><td>S$600</td></tr>'), "Plan 1\tHospital\tRoom\tS$300\nPlan 1\tHospital\tICU\tS$600");
+
+  // 13. Baidu unreachable (the first live run, 10 Nov: connection failures after ~10 s from Vercel): the AI reader reads the
+  // pages, the processing history says which call failed and the system's error code, and this instance then skips
+  // Baidu for the cool-down instead of waiting on a connection for every later document.
+  process.env.BAIDU_OCR_COOLDOWN_MS = "600000";
+  const POLICY2 = "00000000-0000-4000-8000-0000000000c2";
+  await db.query("INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status) VALUES($1,$2,$3,'synthetic2.pdf','synthetic/key2','processing')", [POLICY2, ACCOUNT, PERSON]);
+  seen = []; baidu = () => ({ status: 0, throwCode: "UND_ERR_CONNECT_TIMEOUT" });
+  const bytes2 = await fixturePdf("-B"); // other bytes: no reading of them is cached yet
+  out = await completePdfPagesWithOcr({ accountId: ACCOUNT, resourceId: POLICY2, bytes: bytes2, pages: await extractPdfPages(bytes2) });
+  assert.equal(out[1].text, "AI reading of page 2");
+  const why = await db.query<{ detail: string }>("SELECT detail FROM processing_failure_diagnostics WHERE resource_id::text=$1 AND failure_code='BAIDU_OCR_FALLBACK'", [POLICY2]);
+  assert.match(why.rows[0].detail, /network submit UND_ERR_CONNECT_TIMEOUT/);
+  assert.ok(!why.rows[0].detail.includes(TOKEN));
+  seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+  out = await run();
+  assert.equal(baiduCalls().length, 0, "cooling down: Baidu is not tried again at once");
+  assert.equal(out[1].text, "AI reading of page 2");
+  bd.resetBaiduCooldown();
+  seen = []; out = await run();
+  assert.equal(out[1].text, PAGE_A, "after the cool-down Baidu reads again");
+  process.env.BAIDU_OCR_COOLDOWN_MS = "0";
+
+  // 14. TE #410: a locked file saved with object streams that pdf-lib cannot open. Page 1 (one image) is rebuilt by
+  // PDF.js and read; page 2 (two images) cannot be copied for any reader, so it is marked NOT READ (named to the person),
+  // and the document finishes instead of failing its job over and over.
+  {
+    const { readFileSync } = await import("node:fs");
+    const locked = new Uint8Array(readFileSync(require("node:path").join(__dirname, "fixtures", "scan-locked-objstm-2p.pdf")));
+    const blank = [1, 2].map((n) => ({ pageNumber: n, text: "" })) as unknown as Awaited<ReturnType<typeof extractPdfPages>>;
+    seen = []; baidu = baiduJob([vlLine(["Baidu page 1"])]);
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: locked, password: "Harbour-2026", pages: blank, pageNumbers: [1, 2] });
+    assert.equal(out[0].text, "AI reading of page 1", "the page PDF.js rebuilt is read");
+    assert.equal(out[1].notRead, true, "the page no reader can be sent is named as not read"); assert.equal(out[1].unreadable, true);
+    assert.equal(aiCalls().length, 1); assert.match(aiCalls()[0].body.messages[1].content[1].text, /in this order: 1\./);
+    // Without the password nothing can be rebuilt: every page is named, no reader is sent noise.
+    seen = [];
+    out = await completePdfPagesWithOcr({ accountId: ACCOUNT, bytes: locked, pages: blank, pageNumbers: [1, 2] });
+    assert.deepEqual(out.map((p) => p.notRead), [true, true]); assert.equal(aiCalls().length, 0);
+  }
 
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");

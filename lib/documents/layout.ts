@@ -456,6 +456,8 @@ const AMENDED_COLUMN=/^(?:after|new|revised|amended|altered|updated|to)(?:\s+(?:
 const COST_SHARING_LABEL=/\b(?:deductibles?|co-?insurance|co-?pay(?:ment)?(?:\s+cap)?|pro-?ration(?: factor)?)\b/i;
 const TWO_COLUMN_LABEL=/^(?:benefits?|items?|features?|description|cover(?:age)?|particulars|benefit\s*\(.*\))$/i;
 const TWO_COLUMN_VALUE=/^(?:limits?|amounts?|benefits?|sum (?:insured|assured)|values?|details?|coverage|maximum(?: limit)?|limit of liability|what we pay)$/i;
+/** Headings of a column of benefit NAMES. A person's name, a plan, a tier or a value heading never is one. */
+const LABEL_HEADING=/^(?:(?:type\s+of\s+)?benefits?(?:\s+(?:type|name|description|details))?|(?:schedule|table|summary)\s+of\s+benefits|items?|features?|descriptions?|cover(?:age)?(?:\s+type)?|type\s+of\s+cover(?:age)?|particulars|benefit\s*\(.*\))$/i;
 type TableShape={header:string[];labelCol:number;rowNumberCol:number;valueCols:number[];from:number;to:number};
 /** Finds tables: a heading line of three or more cells with no amount in it,
  * followed by rows with the same number of column slots, at least one of
@@ -507,12 +509,30 @@ function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
   const rows:BenefitRow[]=[];
   for(let index=table.from+1;index<table.to;index++){
     const cells=lines[index].rawCells??lines[index].cells;
-    const label=(cells[table.labelCol]??"").replace(/\s+/g," ").trim();
+    let labelCol=table.labelCol;
+    const namesColumn=(col:number)=>LABEL_HEADING.test((table.header[col]??"").replace(/\s+/g," ").trim());
+    // The row's own name, when the label column does not hold it: its first worded cell after the label cell (or, with
+    // the label cell empty, its first worded cell at all), when that comes before any value and its column is headed as
+    // benefit names. This covers a sideways table ("Overall limit | Benefit | Own limit": a shared amount or a group
+    // name in column 0) without ever moving a name under "Jane Doe | John Roe" or a plan (Critic #410 F6) or naming a
+    // row by a condition under "Detail" (TE #410 T5); such a row keeps its label cell, or is skipped when that is empty
+    // (TE #410 T4: "\tChiropractic\tS$75" had lost its own S$75).
+    let moved=false;
+    if(!namesColumn(labelCol)){
+      const next=cells.findIndex((cell,col)=>col>labelCol&&col!==table.rowNumberCol&&!!cell.trim());
+      const emptyLabel=!(cells[labelCol]??"").trim();
+      if(next>=0&&namesColumn(next)&&!valueLike(cells[next])&&(emptyLabel||cells.slice(labelCol+1,next).every((c)=>!c.trim()))){labelCol=next;moved=true;}
+    }
+    const label=(cells[labelCol]??"").replace(/\s+/g," ").trim();
     if(label.length<2||label.length>160)continue;
     if(PAYMENT_LABEL.test(label)||(PREMIUM_LABEL.test(label)&&!PREMIUM_BENEFIT.test(label)))continue;
     if(NOT_A_BENEFIT_LABEL.some(pattern=>pattern.test(label)))continue;
-    for(const col of table.valueCols){
+    for(const col of moved?[table.labelCol,...table.valueCols]:table.valueCols){
+      if(col===labelCol)continue;
       const value=(cells[col]??"").replace(/\s+/g," ").trim();
+      // The cell the name moved from is kept only as a value it really is (a shared "S$5,000 overall"), never as a
+      // group name read as a value.
+      if(moved&&col===table.labelCol&&!valueLike(value))continue;
       // Round 10: a dash is how a table prints an empty cell, never a value.
       if(!value||/^[-–—]$/.test(value))continue;
       rows.push({label,value,line:lines[index].text,index,

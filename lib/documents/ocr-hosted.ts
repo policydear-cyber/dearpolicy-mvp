@@ -1,4 +1,4 @@
-import { PDFDocument, degrees } from "pdf-lib";
+import { PDFDocument, type PDFPage, concatTransformationMatrix, degrees, drawObject, popGraphicsState, pushGraphicsState } from "pdf-lib";
 import { randomUUID } from "node:crypto";
 import { costUsd, documentReaderFor, hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
@@ -17,17 +17,126 @@ type BridgePage = { pageNumber: number; text: string; orientation?: "upright" | 
  * scanned 90-page policy only ever sends the handful of image-only pages to
  * the model, not the whole document. Round 10: `turn` turns a page by that
  * many degrees (clockwise) before it is sent -- a phone photo taken sideways
- * or a page fed into the scanner upside down is shown to the reader upright. */
-export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map()) {
-  const source = await PDFDocument.load(bytes, { ignoreEncryption: true });
-  const out = await PDFDocument.create({ updateMetadata: false });
-  const copied = await out.copyPages(source, pageNumbers.map((n) => n - 1));
-  copied.forEach((page, i) => {
-    const by = turn.get(pageNumbers[i]) ?? 0;
+ * or a page fed into the scanner upside down is shown to the reader upright.
+ *
+ * A LOCKED (encrypted) PDF -- with an open password, or only an owner password that still encrypts every stream --
+ * cannot be copied page by page: pdf-lib does not decrypt, so the copied page kept its encrypted image and the reader
+ * was sent noise (overnight check, 10 Nov: the copy would not even render). For such a file, each scanned page is
+ * rebuilt from its decoded image (PDF.js opens the file with the household's password, or none for an owner-only
+ * lock). A page that is not exactly one image is copied as before. The password is only handed to PDF.js.
+ *
+ * A locked file saved with object streams (Acrobat and most PDF 1.5+ writers) cannot be opened by pdf-lib at all: the
+ * page tree sits inside an encrypted stream ("Expected instance of PDFDict", TE #410). Then every page is rebuilt from
+ * PDF.js alone; a page it cannot rebuild (not exactly one image) throws PageCopyUnavailable naming it, and the caller
+ * marks those pages as not read, so the document is never left waiting on a copy that can never be made. */
+export class PageCopyUnavailable extends Error {
+  readonly pages: number[];
+  constructor(pages: number[]) { super("page copy unavailable"); this.name = "PageCopyUnavailable"; this.pages = pages; }
+}
+export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map(), password?: string) {
+  let out = await PDFDocument.create({ updateMetadata: false });
+  let source: PDFDocument | null = null, copied: PDFPage[] | null = null;
+  try {
+    source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    copied = await out.copyPages(source, pageNumbers.map((n) => n - 1));
+  } catch {
+    // pdf-lib cannot read this file's structure: a fresh output, with nothing half-copied into it.
+    source = null; copied = null;
+    out = await PDFDocument.create({ updateMetadata: false });
+  }
+  const rebuilt = !copied || source?.isEncrypted ? await decodedPageImages(bytes, pageNumbers, password) : new Map<number, DecodedPage>();
+  if (!copied) {
+    const lost = pageNumbers.filter((n) => !rebuilt.has(n));
+    if (lost.length) throw new PageCopyUnavailable(lost);
+  }
+  for (const [i, n] of pageNumbers.entries()) {
+    const page = copied?.[i];
+    const by = turn.get(n) ?? 0;
+    const image = rebuilt.get(n);
+    if (image) {
+      const png = await out.embedPng(image.png);
+      const [x0, y0, x1, y1] = image.box;
+      const fresh = out.addPage([x1 - x0, y1 - y0]);
+      fresh.setMediaBox(x0, y0, x1 - x0, y1 - y0);
+      // Drawn where the original page drew it: the same transformation matrix, so its place, size and turn are kept.
+      const name = fresh.node.newXObject("Scan", png.ref);
+      fresh.pushOperators(pushGraphicsState(), concatTransformationMatrix(...image.matrix), drawObject(name), popGraphicsState());
+      const angle = (((image.rotate + by) % 360) + 360) % 360;
+      if (angle) fresh.setRotation(degrees(angle));
+      continue;
+    }
+    if (!page) throw new PageCopyUnavailable([n]);
     if (by) page.setRotation(degrees((((page.getRotation().angle + by) % 360) + 360) % 360));
     out.addPage(page);
-  });
+  }
   return out.save();
+}
+
+type Matrix = [number, number, number, number, number, number];
+type DecodedPage = { png: Uint8Array; box: [number, number, number, number]; matrix: Matrix; rotate: number };
+const times = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2],
+  m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+/** Each requested page of a locked PDF that is exactly one image, decoded by PDF.js, as a PNG with the page's size and
+ * rotation. Pages it cannot rebuild are left out (and copied as before); a file PDF.js cannot open gives none. */
+async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], password?: string): Promise<Map<number, DecodedPage>> {
+  const out = new Map<number, DecodedPage>();
+  type Doc = { getPage(n: number): Promise<unknown> };
+  let doc = null as Doc | null;
+  let task = null as { destroy(): Promise<void> } | null;
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loading = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0]);
+    task = loading as unknown as { destroy(): Promise<void> };
+    doc = await loading.promise as unknown as Doc;
+    const sharp = (await import("sharp")).default;
+    const IMAGE_OPS = new Set([pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject]);
+    for (const n of pageNumbers) {
+      try {
+        const page = await doc!.getPage(n) as {
+          rotate: number; view: number[];
+          getOperatorList(): Promise<{ fnArray: number[]; argsArray: unknown[][] }>; objs: { get(name: string, cb: (v: unknown) => void): void };
+        };
+        const ops = await page.getOperatorList();
+        const painted = ops.fnArray.map((fn, i) => (IMAGE_OPS.has(fn) ? { fn, args: ops.argsArray[i] } : null)).filter(Boolean) as { fn: number; args: unknown[] }[];
+        if (painted.length !== 1 || painted[0].fn !== pdfjs.OPS.paintImageXObject) continue;
+        // The matrix in force where the image is painted (the page's q/Q and cm before it).
+        let matrix: Matrix = [1, 0, 0, 1, 0, 0];
+        const saved: Matrix[] = [];
+        for (const [i, fn] of ops.fnArray.entries()) {
+          if (fn === pdfjs.OPS.save) saved.push(matrix);
+          else if (fn === pdfjs.OPS.restore) matrix = saved.pop() ?? matrix;
+          else if (fn === pdfjs.OPS.transform) matrix = times(ops.argsArray[i].map(Number) as Matrix, matrix);
+          else if (fn === pdfjs.OPS.paintImageXObject) break;
+          else if (fn === pdfjs.OPS.paintFormXObjectBegin) { matrix = [NaN, 0, 0, 0, 0, 0]; break; } // inside a form: copied as before
+        }
+        if (!matrix.every(Number.isFinite)) continue;
+        const name = String(painted[0].args[0]);
+        const img = await new Promise<{ width: number; height: number; kind: number; data?: Uint8Array | Uint8ClampedArray }>((resolve) => page.objs.get(name, resolve as (v: unknown) => void));
+        if (!img?.data || !(img.width > 0) || !(img.height > 0)) continue;
+        // PDF.js image kinds: 1 = 1 bit per pixel grey (rows padded to bytes), 2 = RGB, 3 = RGBA.
+        let raw: Buffer, channels: 1 | 3 | 4;
+        if (img.kind === 1) {
+          const rowBytes = Math.ceil(img.width / 8);
+          raw = Buffer.alloc(img.width * img.height);
+          for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+            raw[y * img.width + x] = (img.data[y * rowBytes + (x >> 3)] >> (7 - (x & 7))) & 1 ? 255 : 0;
+          }
+          channels = 1;
+        } else if (img.kind === 2 || img.kind === 3) {
+          raw = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength); channels = img.kind === 2 ? 3 : 4;
+        } else continue;
+        if (raw.length !== img.width * img.height * channels) continue;
+        const png = new Uint8Array(await sharp(raw, { raw: { width: img.width, height: img.height, channels } }).png().toBuffer());
+        // The page's own box, unrotated: the page's /Rotate is applied to the new page, as it was on the original.
+        const box = page.view.map(Number) as [number, number, number, number];
+        if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= box[0] || box[3] <= box[1]) continue;
+        out.set(n, { png, box, matrix, rotate: ((page.rotate % 360) + 360) % 360 });
+      } catch { /* this page is copied as before */ }
+    }
+  } catch { /* PDF.js could not open it: every page is copied as before */ } finally {
+    await task?.destroy().catch(() => undefined);
+  }
+  return out;
 }
 
 const SYSTEM = "You transcribe scanned insurance-document pages exactly as printed. Reply with a single JSON object of the form "
@@ -50,13 +159,13 @@ export const HOSTED_OCR_SYSTEM = SYSTEM;
  * model actually reported rather than throwing, so the caller can retry just
  * the pages it dropped instead of failing the whole document on one flaky
  * response. */
-async function attemptHostedOcr(args: { accountId: string; resourceId?: string; bytes: Uint8Array; pageNumbers: number[]; correlationId?: string; turn?: Map<number, number> }): Promise<BridgePage[]> {
+async function attemptHostedOcr(args: { accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pageNumbers: number[]; correlationId?: string; turn?: Map<number, number> }): Promise<BridgePage[]> {
   const choice = modelFor("reading");
   // Reading a document is never stopped by the household's spend limit (DC, 10 Nov: accuracy before cost); every call is
   // still booked in the usage ledger below, so a page is never sent when this month's usage cannot be read
   // (SpendCheckUnavailable; Critic #405).
   await overSpendCap(args.accountId);
-  const subset = await subsetPdf(args.bytes, args.pageNumbers, args.turn);
+  const subset = await subsetPdf(args.bytes, args.pageNumbers, args.turn, args.password);
   const pdfBase64 = Buffer.from(subset).toString("base64");
   const started = Date.now();
   const requestedAt = new Date();
@@ -217,7 +326,7 @@ export function turnsToTry(p: Pick<BridgePage, "orientation" | "rotation">): num
 /** Round 10: pages a reader could not read because they were turned are sent
  * again, turned upright (at most three tries a page, only for those pages).
  * Each page keeps the first upright reading; the others keep what they had. */
-async function readTurnedPages(args: { accountId: string; resourceId?: string; bytes: Uint8Array }, got: BridgePage[]): Promise<{ pages: BridgePage[]; turned: Map<number, number> }> {
+async function readTurnedPages(args: { accountId: string; resourceId?: string; bytes: Uint8Array; password?: string }, got: BridgePage[]): Promise<{ pages: BridgePage[]; turned: Map<number, number> }> {
   const turned = new Map<number, number>();
   let pending = got.filter(turnedAway);
   const tries = new Map(pending.map((p) => [p.pageNumber, turnsToTry(p)]));
@@ -249,6 +358,8 @@ export async function completePdfPagesWithHostedOcr(args: {
    * that do not pass it still record the household). */
   resourceId?: string;
   bytes: Uint8Array;
+  /** A locked PDF's open password: only handed to PDF.js to decode the scanned pages (subsetPdf). */
+  password?: string;
   pages: PdfPage[];
   pageNumbers: number[];
 }): Promise<PdfPage[]> {
@@ -274,13 +385,13 @@ export async function completePdfPagesWithHostedOcr(args: {
         "hosted_ocr", { bytes: createHash("sha256").update(args.bytes).digest("hex"), pages: args.pageNumbers, prompt: SYSTEM },
         await readingModelIdentity(),
         async () => {
-          let got = await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pageNumbers: args.pageNumbers });
+          let got = await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pageNumbers: args.pageNumbers });
           let absent = args.pageNumbers.filter((n) => !got.some((p) => p.pageNumber === n));
           // A model dropping a page it was asked for is usually a one-off flake
           // (a truncated reply, a page it briefly balked at): retry just those
           // pages, alone in their own small request.
           if (absent.length) {
-            got = got.concat(await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pageNumbers: absent }));
+            got = got.concat(await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pageNumbers: absent }));
             absent = args.pageNumbers.filter((n) => !got.some((p) => p.pageNumber === n));
           }
           // Round 10: pages the reader saw sideways or upside down are read again, turned upright.
