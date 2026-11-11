@@ -376,6 +376,8 @@ export async function resetBaiduCooldown() {
 
 /** Time kept back, inside the function's limit, for the AI reader to read whatever Baidu did not. */
 export const AI_FALLBACK_RESERVE_MS = 120_000;
+/** Time kept free after the path probe for the rest of the document's processing. */
+const PROBE_MARGIN_MS = 30_000;
 /** Below this much time, Baidu is not started at all: the AI reader gets all of it. */
 const MIN_BAIDU_MS = 5_000;
 
@@ -392,7 +394,7 @@ class WeakChunk extends Error {
  * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION). */
 export async function completePdfPagesWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
-}): Promise<{ pages: PdfPage[]; unread: number[] }> {
+}): Promise<{ pages: PdfPage[]; unread: number[]; probe?: () => Promise<void> }> {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
   await overSpendCap(args.accountId);
@@ -467,6 +469,7 @@ export async function completePdfPagesWithBaidu(args: {
   }
 
   const unread = args.pageNumbers.filter((n) => !texts.has(n));
+  let probe: (() => Promise<void>) | undefined;
   if (failures.length) {
     const kind = failures.join(",");
     void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0].split(" ")[0] as BaiduFailureKind),
@@ -474,12 +477,16 @@ export async function completePdfPagesWithBaidu(args: {
     if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
       failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
     // Which step of the path to Baidu fails, and from which region (no token is used). Only after a submit could not
-    // be completed, at most once per cool-down, and only while the function has time to spare beyond the AI reader's.
-    const room = (fnDeadline ?? Infinity) - AI_FALLBACK_RESERVE_MS - Date.now();
-    if (unreachable && args.resourceId && s.probeStepMs > 0 && room > s.probeStepMs * 4) {
-      const probe = await probeBaiduPath(s.baseUrl, { stepMs: s.probeStepMs }).catch(() => null);
-      if (probe) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
-        failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(probe) }).catch(() => undefined);
+    // be completed, and run by the caller only AFTER the AI reader has read the pages, so the upload is not held up
+    // (Critic #411); it is skipped when the function no longer has time to spare for it.
+    if (unreachable && args.resourceId && s.probeStepMs > 0) {
+      const resourceId = args.resourceId, stepMs = s.probeStepMs;
+      probe = async () => {
+        if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
+        const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
+        if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
+          failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
+      };
     }
   } else {
     void recordEvent({ name: "documents.ocr_baidu.completed", correlationId, status: "success", householdRef,
@@ -488,5 +495,6 @@ export async function completePdfPagesWithBaidu(args: {
   return {
     pages: args.pages.map((page) => (texts.has(page.pageNumber) ? { ...page, text: texts.get(page.pageNumber)!, extractionMethod: "ocr" as const } : page)),
     unread,
+    probe,
   };
 }

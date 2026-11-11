@@ -331,6 +331,11 @@ async function main() {
     for (const cont of ["per visit", "* per policy year", "*Per policy year", "subject to approval"])
       assert.ok(!benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${cont}\tS$100`).some((r) => r.label === cont), cont);
     assert.ok(benefitRowsFromText("Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\tDental\tS$100").some((r) => r.label === "Dental" && r.value === "S$100"));
+    // Critic #411 F8: only clear continuations are skipped; names that start in lower case or with a mark stay (as on main).
+    for (const [name, amount] of [["eye test", "S$50"], ["e-consultation", "S$30"], ["iPhone repair", "S$200"], ["*Dental", "S$300"], ["in-patient", "S$900"], ["office visit", "S$40"]])
+      assert.ok(benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${name}\t${amount}`).some((r) => r.label.includes(name.replace("*", "")) && r.value === amount), name);
+    for (const cont of ["each visit", "up to 10 visits", "max 3 claims", "including X-rays", "* subject to approval", "*Per policy year", "in hospital only"])
+      assert.ok(!benefitRowsFromText(`Section\tBenefit\tLimit\nA\tOutpatient\tS$1,000\n\t${cont}\tS$100`).some((r) => r.label === cont), cont);
     // A label column already headed as names keeps its name, even when a later column is headed as names too.
     assert.deepEqual([...new Set(benefitRowsFromText("Benefit\tDescription\tLimit\nRoom and board\tWard A\tS$100").map((r) => r.label))], ["Room and board"]);
     // "Injury | Benefit": the Benefit column holds the amounts, so the name stays in column 0.

@@ -505,6 +505,10 @@ function findTables(lines:PageLine[]):TableShape[]{
   }
   return tables;
 }
+const CONNECTORS="per|each|for each|up to|max|maximum|subject to|including|excluding|except|limited to|payable|see|note|of|in|on|or|and|plus|with|without|after|before|within";
+const CONNECTOR_START=new RegExp(`^\\s*(?:${CONNECTORS})(?=[\\s:.,;]|$)`);
+const MARKED_CONNECTOR_START=new RegExp(`^\\s*\\*\\s*(?:${CONNECTORS})(?=[\\s:.,;]|$)`,"i");
+export const continuesRowAbove=(cell:string)=>CONNECTOR_START.test(cell)||/^\s*\*\s+[a-z]/.test(cell)||MARKED_CONNECTOR_START.test(cell);
 function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
   const rows:BenefitRow[]=[];
   for(let index=table.from+1;index<table.to;index++){
@@ -521,9 +525,10 @@ function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
     if(!namesColumn(labelCol)){
       const next=cells.findIndex((cell,col)=>col>labelCol&&col!==table.rowNumberCol&&!!cell.trim());
       const emptyLabel=!(cells[labelCol]??"").trim();
-      // A cell that starts in lower case or with a footnote mark ("per visit", "* per policy year") continues the row
-      // above; it is never a benefit's name (Critic #410 F7), so such a row is skipped as on main.
-      if(next>=0&&namesColumn(next)&&!valueLike(cells[next])&&!/^\s*[a-z*]/.test(cells[next])&&(emptyLabel||cells.slice(labelCol+1,next).every((c)=>!c.trim()))){labelCol=next;moved=true;}
+      // A cell that clearly continues the row above ("per visit", "subject to approval", "* per policy year") is never a
+      // benefit's name (Critic #410 F7), so such a row is skipped as on main. Only a closed list of connecting words, or a
+      // footnote mark then a space or a lower-case word: "eye test", "iPhone repair" and "*Dental" are names (Critic F8).
+      if(next>=0&&namesColumn(next)&&!valueLike(cells[next])&&!continuesRowAbove(cells[next])&&(emptyLabel||cells.slice(labelCol+1,next).every((c)=>!c.trim()))){labelCol=next;moved=true;}
     }
     const label=(cells[labelCol]??"").replace(/\s+/g," ").trim();
     if(label.length<2||label.length>160)continue;
