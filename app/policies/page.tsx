@@ -96,6 +96,9 @@ function stageLabel(_stage: string | null, status: string) {
 
 export default function PoliciesPage() {
   const [family, setFamily] = useState<Member[]>([]);
+  // Whether the family list was read: a failed /api/family (an error or offline) is not an empty family, so the page then
+  // keeps the file picker, as before, and the upload route still refuses a household with no people.
+  const [familyKnown, setFamilyKnown] = useState(false);
   const [policies, setPolicies] = useState<Policy[]>([]);
   // "malware_scan" (default) or "not_scanned_prototype" -- reported by the
   // policies API so held documents never show malware-scan language when
@@ -209,7 +212,7 @@ export default function PoliciesPage() {
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
   async function refresh() {
     const [f, p] = await Promise.all([
-      fetch("/api/family", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/family", { cache: "no-store" }).then(async (r) => r.ok ? r.json() : null).catch(() => null) as Promise<{ family?: Member[] } | null>,
       fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
     ]);
     // What each document was found to pay for. A household on the benefit table: from its table rows (documentTableKinds),
@@ -228,7 +231,8 @@ export default function PoliciesPage() {
       if (l) setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
       if (t && l) setFound(documentFoundLabels(l.rows ?? []));
     }).catch(() => undefined);
-    setFamily(f.family ?? []);
+    setFamily(f?.family ?? []);
+    setFamilyKnown(!!f && Array.isArray(f.family));
     setPolicies(p.policies ?? []);
     setPlanChoice(p.planChoice !== false);
     setLoaded(true);
@@ -423,7 +427,7 @@ export default function PoliciesPage() {
           only once a PDF is chosen. What happened shows right under the button, where the thumb just was. */}
       {/* A household with no one in it yet cannot upload (the server needs a person to file the document under): it is
           asked to add the people first, before choosing a file, never after (Live tester, new-household walk 11 Nov). */}
-      {loaded && !family.length ? <div className="upload-form" data-testid="upload-needs-family">
+      {loaded && familyKnown && !family.length ? <div className="upload-form" data-testid="upload-needs-family">
         <p><strong>First, add the people your policies cover.</strong> DearPolicy files each document under a person and uses their names to tell whose cover is whose. You can add yourself first and the rest of your family later.</p>
         <Link className="button primary" href="/family"><Icon name="family"/> Add family members</Link>
       </div> : <form onSubmit={upload} className="upload-form">
@@ -546,7 +550,7 @@ export default function PoliciesPage() {
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
-      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
+      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. Add the people your policies cover first, then upload a policy schedule, certificate, renewal notice or benefits booklet." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
   </div>;
 }

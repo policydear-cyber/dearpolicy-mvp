@@ -220,7 +220,12 @@ test("customerMessage/customerAnswerText: the endowment defect fixture never rea
 
 test("a household with no people is asked to add them before choosing a file, never refused after the upload", () => {
   const page = read("app/policies/page.tsx");
-  assert.match(page, /loaded && !family\.length \? <div className="upload-form" data-testid="upload-needs-family">/);
+  assert.match(page, /loaded && familyKnown && !family\.length \? <div className="upload-form" data-testid="upload-needs-family">/);
+  // A failed family fetch is not an empty family: the prompt shows only when the list was read (TE #416).
+  assert.match(page, /fetch\("\/api\/family", \{ cache: "no-store" \}\)\.then\(async \(r\) => r\.ok \? r\.json\(\) : null\)\.catch\(\(\) => null\)/);
+  assert.match(page, /setFamilyKnown\(!!f && Array\.isArray\(f\.family\)\)/);
+  // The empty Library under the prompt points to no upload "above" (TE #416).
+  assert.match(page, /familyKnown && !family\.length \? "No documents yet\. Add the people your policies cover first/);
   assert.match(page, /data-testid="upload-needs-family"[\s\S]{0,600}href="\/family"/);
   assert.match(read("app/api/policies/upload/accept.ts"), /Add the people your policies cover on the Family page first/);
 });
