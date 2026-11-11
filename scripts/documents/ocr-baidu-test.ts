@@ -423,9 +423,79 @@ async function main() {
     assert.deepEqual(out.map((p) => p.notRead), [true, true]); assert.equal(aiCalls().length, 0);
   }
 
+  // 15. Link submit (fileUrl): the pages are staged in our storage, Baidu downloads them through a short-lived signed
+  // link, and the staged copy is removed whatever happens. The local storage driver has no link (stage gives null), so
+  // every case above uploaded the file, exactly as before.
+  {
+    await bd.resetBaiduCooldown();
+    const LINK = "https://storage.example/sign/k-1?token=SECRET-LINK";
+    let staged: { accountId: string; ttlSeconds: number; pages: number }[] = [];
+    let removed: string[] = [];
+    let stageMode: "ok" | "throw" | "null" = "ok";
+    let removeThrows = false;
+    bd.setBaiduHandoffForTests({
+      stage: async ({ accountId, bytes: b, ttlSeconds }) => {
+        if (stageMode === "throw") throw new Error("storage down");
+        if (stageMode === "null") return null;
+        staged.push({ accountId, ttlSeconds, pages: (await PDFDocument.load(b)).getPageCount() });
+        return { storageKey: `k-${staged.length}`, url: LINK };
+      },
+      remove: async (key) => { if (removeThrows) throw new Error("remove failed"); removed.push(key); },
+    });
+    const submits = () => baiduCalls().filter((c) => c.method === "POST");
+
+    // Happy path: a small JSON submit with the link, no file in the request; Baidu's text is used; the copy is removed.
+    seen = []; ai = aiReads; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+    out = await run();
+    assert.equal(submits().length, 1);
+    assert.equal(submits()[0].form, undefined, "link mode sends no multipart form");
+    assert.equal(submits()[0].filePages, undefined, "link mode uploads no file");
+    assert.deepEqual(submits()[0].body, { fileUrl: LINK, model: "PaddleOCR-VL-1.6", optionalPayload: { useDocOrientationClassify: true } });
+    assert.equal(submits()[0].auth, `Bearer ${TOKEN}`);
+    assert.equal(out[1].text, PAGE_A); assert.equal(out[2].text, PAGE_B); assert.equal(aiCalls().length, 0);
+    assert.deepEqual(staged, [{ accountId: ACCOUNT, ttlSeconds: 900, pages: 2 }], "only the two scanned pages are staged, with a 15-minute link");
+    assert.deepEqual(removed, ["k-1"], "staged copy removed after a successful job");
+
+    // A failed job (e.g. Baidu could not download the link): the copy is still removed and the AI reader reads the pages.
+    seen = []; staged = []; removed = []; baidu = baiduJob([], { states: ["failed"] });
+    out = await run();
+    assert.deepEqual(removed, ["k-1"], "staged copy removed after a failed job");
+    assert.equal(out[1].text, "AI reading of page 2"); assert.equal(aiCalls().length, 1);
+
+    // Removal fails: the copy is queued for the storage purge instead of being left behind.
+    seen = []; staged = []; removed = []; removeThrows = true; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+    await db.query("DELETE FROM storage_purge_queue WHERE storage_key='k-1'").catch(() => undefined);
+    out = await run();
+    assert.equal(out[1].text, PAGE_A);
+    const queued = await db.query("SELECT storage_domain, reason FROM storage_purge_queue WHERE storage_key='k-1'");
+    assert.deepEqual(queued.rows, [{ storage_domain: "policy", reason: "ocr_handoff" }], "unremoved copy queued for purge");
+    removeThrows = false;
+
+    // Staging fails: Baidu is not called (no link to give it); the AI reader reads the pages.
+    seen = []; staged = []; removed = []; stageMode = "throw";
+    out = await run();
+    assert.equal(baiduCalls().length, 0, "no Baidu call without a staged copy");
+    assert.equal(out[1].text, "AI reading of page 2"); assert.equal(aiCalls().length, 1);
+
+    // No link available (the local storage driver): the file is uploaded as before.
+    seen = []; stageMode = "null"; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+    out = await run();
+    assert.equal(submits()[0].filePages, 2, "falls back to uploading the file"); assert.equal(submits()[0].form?.model, "PaddleOCR-VL-1.6");
+    assert.equal(out[1].text, PAGE_A);
+
+    // BAIDU_OCR_SUBMIT=upload: storage is never touched.
+    seen = []; staged = []; stageMode = "ok"; process.env.BAIDU_OCR_SUBMIT = "upload";
+    out = await run();
+    assert.equal(staged.length, 0, "upload mode never stages a copy"); assert.equal(submits()[0].filePages, 2);
+    delete process.env.BAIDU_OCR_SUBMIT;
+    // The link never reaches a log or error: only the submit body carries it.
+    for (const s of seen) assert.ok(!s.url.includes("SECRET-LINK"));
+    bd.setBaiduHandoffForTests(null);
+  }
+
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
 
-  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed -- passed. Live Baidu behaviour is NOT covered by this test.");
+  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal -- passed. Live Baidu behaviour is NOT covered by this test.");
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
