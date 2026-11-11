@@ -73,7 +73,10 @@ export function moneyShapedFigure(line: string, value: number): boolean {
   for (const m of String(line ?? "").matchAll(re)) {
     if (Math.abs(Number(m[1].replace(/,/g, "")) - value) >= 0.005) continue;
     const before = line.slice(0, m.index);
-    if (/\b(?:no\.?|nos?\.|number|code|ref(?:erence)?|age|term|period|years?|date|tel|phone|fax|hotline|nric|id)\b[^\d\n]*$/i.test(before)) continue;
+    if (/\b(?:no\.?|nos?\.|number|code|ref(?:erence)?|age|period|years?|date|tel|phone|fax|hotline|nric|id)\b[^\d\n]*$/i.test(before)) continue;
+    // "Term" is a label only as the label's last word ("Policy Term", "Term (years):"); "Term Life", "Long Term Care" and
+    // "Short-term disability" are covers (Critic #417).
+    if (/\bterm\s*(?:\([^)\n]*\))?\s*[:\-]?\s*$/i.test(before)) continue;
     return true;
   }
   return false;

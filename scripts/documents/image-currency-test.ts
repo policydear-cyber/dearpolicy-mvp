@@ -117,6 +117,12 @@ async function main() {
     const c = FC.factCheckExtraction(extraction(100000, "SGD", "Total Permanent Disability\t100,000.00"), [{ pageNumber: 1, text: "Cover page", imageCurrency: "SGD" }, { pageNumber: 2, text: BARE }]).extraction.insuredPeople[0].coverages[0];
     assert.equal(c.evidenceVerified, false);
   });
+  for (const [label, evidence] of [["Term Life", "Term life sum assured\t100,000.00"], ["Long Term Care", "Long Term Care benefit\t100,000.00"], ["Short-term disability", "Short-term disability\t100,000.00"]] as const)
+    await test(`F12 ${label} is a cover, not a term label`, () => assert.equal(fc(extraction(100000, "SGD", evidence, "Death"), "SGD", BARE + "\n" + evidence).evidenceVerified, true));
+  await test("F13 a money-shaped figure after a term label is not money", () => {
+    const line = "Policy Term (years):\t20.00";
+    assert.equal(fc(extraction(20, "SGD", line, "Death"), "SGD", BARE + "\n" + line).evidenceVerified, false);
+  });
   await test("F10 an MYR page: RM is read for a ringgit reading", () => {
     assert.equal(fc(extraction(100000, "MYR", "Total Permanent Disability\t100,000.00"), "MYR").evidenceVerified, true);
   });
