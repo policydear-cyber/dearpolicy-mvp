@@ -10,6 +10,7 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
+import { TransportError, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
 
 /**
  * Baidu AI Studio's hosted PaddleOCR (async jobs API) as the FIRST reader of scanned, image-only pages. It runs as a
@@ -61,7 +62,13 @@ export function baiduOcrSettings(env: Env = process.env) {
     // Bounded so a slow queue leaves time for the AI reader inside the 300 s request: give up and fall back after this.
     maxWaitMs: intEnv(env.BAIDU_OCR_MAX_WAIT_MS, 90_000, 1, 240_000),
     pollIntervalMs: intEnv(env.BAIDU_OCR_POLL_INTERVAL_MS, 2_000, 1, 15_000),
+    // No bytes moving for this long (after connecting) ends a call. Not a cap on the whole call: a slow but moving
+    // upload keeps going until the job's own limit (maxWaitMs / the function deadline).
     requestTimeoutMs: intEnv(env.BAIDU_OCR_REQUEST_TIMEOUT_MS, 60_000, 1, 120_000),
+    // DNS + TCP + TLS. fetch (undici) fixed this at 10 s, which is where half the production attempts died.
+    connectTimeoutMs: intEnv(env.BAIDU_OCR_CONNECT_TIMEOUT_MS, 30_000, 1, 120_000),
+    // 4 (default): ask DNS for IPv4 only. 0: either family. 6: IPv6 only.
+    ipFamily: ([0, 4, 6] as const).find((f) => f === intEnv(env.BAIDU_OCR_IP_FAMILY, 4, 0, 6)) ?? 4,
     pagesPerJob: intEnv(env.BAIDU_OCR_PAGES_PER_JOB, 50, 1, 100),
     // After Baidu cannot be reached (connect failure or timeout on submit), this instance skips it for this long.
     cooldownMs: intEnv(env.BAIDU_OCR_COOLDOWN_MS, 600_000, 0, 3_600_000),
@@ -75,12 +82,15 @@ export class BaiduOcrError extends Error {
   /** For a network failure: which call (submit, poll, result) and the system's error code (UND_ERR_CONNECT_TIMEOUT,
    * ENOTFOUND, ECONNRESET, a certificate code...) -- fixed words only, never a message, URL or token. */
   stage?: "submit" | "poll" | "result"; code?: string;
-  constructor(kind: BaiduFailureKind, status?: number, stage?: BaiduOcrError["stage"], code?: string) {
+  /** For a network failure or timeout: how far the call got (see baidu-transport.ts traceSummary). Fixed words,
+   * numbers and Baidu's IP address only. */
+  trace?: string;
+  constructor(kind: BaiduFailureKind, status?: number, stage?: BaiduOcrError["stage"], code?: string, trace?: string) {
     super(`Baidu PaddleOCR ${kind.replace(/_/g, " ")}${status ? ` (HTTP ${status})` : ""}`);
-    this.name = "BaiduOcrError"; this.kind = kind; this.status = status; this.stage = stage; this.code = code;
+    this.name = "BaiduOcrError"; this.kind = kind; this.status = status; this.stage = stage; this.code = code; this.trace = trace;
   }
-  /** What the processing history records: the kind, and where known the call and the error code. */
-  get summary() { return [this.kind, this.stage, this.code, this.status ? `HTTP ${this.status}` : undefined].filter(Boolean).join(" "); }
+  /** What the processing history records: the kind, and where known the call, the error code and how far it got. */
+  get summary() { return [this.kind, this.stage, this.code, this.status ? `HTTP ${this.status}` : undefined, this.trace].filter(Boolean).join(" "); }
 }
 
 /** The error code of a failed fetch (undici puts it on `cause`, sometimes one level deeper), when it is a plain code. */
@@ -99,16 +109,35 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-async function call(url: string, init: RequestInit, timeoutMs: number, stage: NonNullable<BaiduOcrError["stage"]>): Promise<Response> {
+type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6 };
+type Transport = (url: string, req: TransportRequest, limits: Limits) => Promise<TransportResponse>;
+
+/** Production: node:https with separate connect / no-progress / total limits and a trace (baidu-transport.ts). */
+const httpsTransport: Transport = async (url, req, l) => {
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family });
   } catch (error) {
+    if (error instanceof TransportError) throw Object.assign(error, { summary: traceSummary(error.trace) });
+    throw error;
+  }
+};
+/** Tests that stand in for Baidu with a fake globalThis.fetch. */
+const fetchTransport: Transport = (url, req, l) => fetch(url, { method: req.method, headers: req.headers, body: req.body, signal: AbortSignal.timeout(l.totalMs) });
+let transport: Transport = httpsTransport;
+/** Tests only: "fetch" sends Baidu calls through globalThis.fetch; "https" (the default) through node:https. */
+export function setBaiduTransportForTests(kind: "fetch" | "https") { transport = kind === "fetch" ? fetchTransport : httpsTransport; }
+
+async function call(url: string, req: TransportRequest, limits: Limits, stage: NonNullable<BaiduOcrError["stage"]>): Promise<TransportResponse> {
+  try {
+    return await transport(url, req, limits);
+  } catch (error) {
+    if (error instanceof TransportError) throw new BaiduOcrError(error.kind, undefined, stage, error.code, (error as TransportError & { summary?: string }).summary);
     throw new BaiduOcrError((error as Error)?.name === "TimeoutError" ? "timeout" : "network", undefined, stage, errorCode(error));
   }
 }
 
 /** The `data` object of a Baidu reply; any non-2xx status, non-zero `code` or missing `data` is a typed failure. */
-async function apiData(res: Response): Promise<Record<string, unknown>> {
+async function apiData(res: TransportResponse): Promise<Record<string, unknown>> {
   let body: unknown = null;
   try { body = await res.json(); } catch { /* handled below */ }
   if (!res.ok) throw new BaiduOcrError(kindForStatus(res.status), res.status);
@@ -296,10 +325,11 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
   const auth = { Authorization: `Bearer ${token}` };
   const jobsUrl = `${s.baseUrl}${JOBS_PATH}`;
   const end = Math.min(deadline ?? Infinity, Date.now() + s.maxWaitMs);
-  const timeout = () => {
+  // Each call: connect within connectTimeoutMs, never sit idle for requestTimeoutMs, and end by the job's deadline.
+  const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
-    return Math.min(s.requestTimeoutMs, left);
+    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily };
   };
 
   const form = new FormData();
