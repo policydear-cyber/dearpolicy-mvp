@@ -112,6 +112,10 @@ export async function structuredCompletion<T>(args: {
    * Never invoked for a failed attempt or for the failed primary of a
    * fallback pair. Optional: existing callers are unaffected. */
   onExecutionRecord?: (record: ModelExecutionRecord) => void;
+  /** Receives whether the reply that this call returns stopped at its output bound (the provider's own finish reason),
+   * once that reply has parsed and validated. Unlike onExecutionRecord it never depends on provenance being persisted,
+   * so a caller can tell a whole reply from one the JSON repair cut back to its complete items (Critic #419 G1). */
+  onReply?: (reply: { truncated: boolean; finishReason: string | null }) => void;
 } & CompletionRuntimeOptions): Promise<T> {
   // Checkpoint 14i: "Model completions" was named as a required
   // telemetry call site (scripts/launch-check.ts's privacy_safe_
@@ -244,6 +248,8 @@ export async function structuredCompletion<T>(args: {
       }
       if (json === undefined) {
         const repaired = repairTruncatedJson(reply.content);
+        // A reply stopped at its bound that cannot be repaired is a cut reply, so a caller can read it again with more room.
+        if (repaired === null && reply.truncated) throw new TruncatedModelOutput("The " + describeChoice(usedChoice) + " model stopped part-way through its structured output.", reply.content, true);
         if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${reply.content.slice(0, 200)}`);
         try { json = JSON.parse(repaired); }
         catch { throw new TruncatedModelOutput("The " + describeChoice(usedChoice) + " model stopped part-way through its structured output.", reply.content, true); }
@@ -257,6 +263,7 @@ export async function structuredCompletion<T>(args: {
       // Handed over only once the reply has parsed and validated, and only
       // for the attempt that produced it -- see onExecutionRecord's doc.
       if (usedRecord && args.onExecutionRecord) args.onExecutionRecord(usedRecord);
+      args.onReply?.({ truncated: reply.truncated, finishReason: reply.resolved?.finishReason ?? null });
       void recordEvent({
         name: "ai.structured_completion.completed",
         correlationId: telemetryCorrelationId,

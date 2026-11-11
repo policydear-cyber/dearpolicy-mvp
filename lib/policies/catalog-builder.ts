@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { structuredCompletion } from "@/lib/ai/llm";
+import { CutReading,boundedCall,readWhole } from "@/lib/ai/whole-reading";
+export { CATALOG_BUDGETS,CutReading,boundedCall,readWhole } from "@/lib/ai/whole-reading";
 import { clearCatalogCheckpoints,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
@@ -287,13 +289,18 @@ async function categoriseRows(rows:{index:number;label:string;value:string}[],ow
   try{
     const payload={rows:rows.slice(0,60).map(row=>({index:row.index,label:row.label.slice(0,120),amount:row.value.slice(0,60)}))};
     // Cached by the exact rows read: a retry never pays for this twice.
-    const result=await cachedReading(owner,"catalog_categorise",{payload,prompt:CATEGORISE_SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
-      role:"reading",operation:"catalog_building",householdId:owner.accountId,resourceId:owner.policyId,schema:RowCategoriesSchema,temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
+    // A reply cut at its bound is read again with room for every row (a cut one held only the rows before the cut); the
+    // cache key names the whole-reading rule, so a cut reply cached before it is not reused.
+    const categorise=()=>readWhole((budget)=>boundedCall((onReply)=>structuredCompletion({onReply,
+      role:"reading",operation:"catalog_building",householdId:owner.accountId,resourceId:owner.policyId,schema:RowCategoriesSchema,temperature:0,maxOutputTokens:budget,timeoutMs:120_000,attempts:2,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         return {rows:(Array.isArray(source.rows)?source.rows:[]).filter(row=>RowCategoriesSchema.shape.rows.element.safeParse(row).success)};},
       system:CATEGORISE_SYSTEM,
       user:JSON.stringify(payload),
-    }));
+    }),{rows:[]}));
+    // Still cut: the rows it holds are used (the rest keep their keyword traits), and it is not cached.
+    const result=await cachedReading(owner,"catalog_categorise",{payload,prompt:CATEGORISE_SYSTEM,whole:true},await readingModelIdentity(),categorise)
+      .catch((error)=>{if(error instanceof CutReading)return error.partial as z.infer<typeof RowCategoriesSchema>;throw error;});
     return new Map(result.rows.map(row=>[row.index,{isBenefit:row.isBenefit,respondsTo:row.respondsTo as ScenarioTrait[],requires:(row.requires??[]) as ScenarioTrait[]}]));
   }catch{return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();/* Keyword traits still apply. */}
 }
@@ -441,16 +448,23 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     try{
       // Cached by the exact page read: a retried job, a resumed drain or a
       // re-upload of identical bytes never pays to read this page again.
-      extraction=await cachedReading({accountId:args.accountId,policyId:args.policyId},"catalog_page",{modelPayload,prompt:SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
+      // A reply cut at its output bound is read again with more room: a cut reply held only the benefits before the cut
+      // (catalog_building at 700 tokens). The cache key names the whole-reading rule, so a cut reply cached before is not reused.
+      extraction=await cachedReading({accountId:args.accountId,policyId:args.policyId},"catalog_page",{modelPayload,prompt:SYSTEM,whole:true},await readingModelIdentity(),()=>readWhole((budget)=>boundedCall((onReply)=>structuredCompletion({onReply,
         role:"reading",
         operation:"catalog_building",
         householdId:args.accountId,resourceId:args.policyId,
         schema:CatalogExtractionSchema,coerce:coerceExtraction,
-        temperature:0,maxOutputTokens:700,timeoutMs:120_000,attempts:2,
+        temperature:0,maxOutputTokens:budget,timeoutMs:120_000,attempts:2,
         system:SYSTEM,
         user:JSON.stringify(modelPayload),
-      }));
-    }catch(error){firstFailure??=error;failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
+      }),{benefits:[]} as unknown as z.infer<typeof CatalogExtractionSchema>)));
+    }catch(error){
+      // Still cut at the largest bound: the benefits it holds are used, and the page also keeps what an earlier read of it
+      // established (previouslyReadRows), as for a page that could not be read.
+      if(error instanceof CutReading){extraction=error.partial as z.infer<typeof CatalogExtractionSchema>;failedPages.add(page.page_number);}
+      else{firstFailure??=error;failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
+    }
     for(const found of extraction.benefits){
       // The quote must be present on this page, verbatim.
       if(!hasQuote(page.text,found.quote))continue;
@@ -511,6 +525,11 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // re-enters this function and must skip straight past a stage already done.
   return benefits.length;
 }
+/** A row's printed quote on its page, spacing and case aside: two readings of one printed row share it. */
+export function quoteKey(quote:string|null|undefined,page:number|null|undefined):string|null{
+  const q=String(quote??"").replace(/\s+/g," ").trim().toLowerCase();
+  return q.length>=3&&page!=null?`${page}|${q}`:null;
+}
 /** Round 9: rows an earlier read of these pages stored from a model reading
  * (and that are still printed on them, as quoted), for pages whose read failed
  * this time: a failed read never erases what was already established. */
@@ -520,8 +539,12 @@ async function previouslyReadRows(accountId:string,policyId:string,failedPages:S
     const methods=new Map((await query<{id:string;m:string|null}>(
       "SELECT id::text AS id,to_jsonb(b)->>'extraction_method' AS m FROM policy_benefits b WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NULL",[accountId,policyId])).rows.map(r=>[r.id,r.m]));
     const have=new Set(current.map(b=>b.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+b.sourcePage));
+    // The same printed row read under another name ("Outpatient benefit" and "Outpatient") is the same benefit: a row whose
+    // quote and page this reading already holds is not added again (Critic #419 G3).
+    const quoted=new Set(current.map(b=>quoteKey(b.quote,b.sourcePage)).filter((k):k is string=>!!k));
     return (await loadBenefitCatalog(accountId,[policyId])).filter(b=>b.sourcePage!=null&&failedPages.has(b.sourcePage)
       &&/model/.test(methods.get(b.id)??"")&&!have.has(b.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+b.sourcePage)
+      &&!quoted.has(quoteKey(b.quote,b.sourcePage)??"")
       &&hasQuote(pages.find(p=>p.page_number===b.sourcePage)?.text??"",b.quote))
       .map(({id:_id,policyId:_policy,...rest})=>{void _id;void _policy;return rest;});
   }catch{return [];}

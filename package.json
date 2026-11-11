@@ -407,7 +407,9 @@
     "ledger:schedule-lines-test": "node --import tsx scripts/ledger/schedule-lines-test.ts",
     "coverage:in-force-test": "node --import tsx scripts/coverage/in-force-test.ts",
     "ocr:baidu-transport-test": "node --import tsx scripts/documents/baidu-transport-test.ts",
-    "benefit-table:percent-base-test": "tsx scripts/benefit-table/percent-base-test.ts"
+    "benefit-table:percent-base-test": "tsx scripts/benefit-table/percent-base-test.ts",
+    "documents:image-currency-test": "node --import tsx scripts/documents/image-currency-test.ts",
+    "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CutReading,boundedCall,readWhole } from "@/lib/ai/whole-reading";
 import { looksLikeInjectedInstruction } from "@/lib/documents/evidence";
 import { namePrinted } from "@/lib/documents/fact-check";
 import { readFile } from "node:fs/promises";
@@ -193,16 +194,22 @@ async function readPageConditionsWithModel(page:{page_number:number;text:string}
   const payload={page:page.page_number,text:page.text.slice(0,3600)};
   try{
     // Cached by the exact page read (never re-paid on a retry or re-upload).
-    extraction=await cachedReading(owner,"condition_page",{payload,prompt:SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
+    // A reply cut at its output bound held only the conditions before the cut (149 of 659 readings, 24 Oct to 11 Nov): it
+    // is read again with more room; one still cut is used for what it holds and never cached. The cache key names the
+    // whole-reading rule, so a cut reply cached before is not reused (lib/ai/whole-reading).
+    extraction=await cachedReading(owner,"condition_page",{payload,prompt:SYSTEM,whole:true},await readingModelIdentity(),()=>readWhole((budget)=>boundedCall((onReply)=>structuredCompletion({onReply,
       role:"reading",
       operation:"condition_catalog_extraction",
       householdId:owner?.accountId,resourceId:owner?.policyId,
       schema:ConditionExtractionSchema,coerce:coerceConditions,
-      temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
+      temperature:0,maxOutputTokens:budget,timeoutMs:120_000,attempts:2,
       system:SYSTEM,
       user:JSON.stringify(payload),
-    }));
-  }catch{return [] as Omit<CoverCondition,"id"|"policyId">[];}
+    }),{conditions:[]} as unknown as z.infer<typeof ConditionExtractionSchema>)));
+  }catch(error){
+    if(error instanceof CutReading)extraction=error.partial;
+    else return [] as Omit<CoverCondition,"id"|"policyId">[];
+  }
   return conditionsFromExtraction({page,productName,raw:extraction});
 }
 
