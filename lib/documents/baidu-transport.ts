@@ -1,0 +1,190 @@
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP, type Socket } from "node:net";
+
+/**
+ * The HTTP transport for Baidu's PaddleOCR service, built on node:https instead of fetch (undici) because the
+ * production calls failed in two ways that fetch cannot tell apart or tune (11 Nov 2026, model_executions):
+ *   - about 10 s, "network": undici's FIXED 10 s connect timeout (DNS + TCP + TLS) fired. Baidu's own SDK
+ *     (`paddleocr` 3.7.0, Python requests) waits up to 300 s to connect.
+ *   - exactly 60 s, "timeout": the connection opened, then our 60 s cap on the WHOLE request (upload + Baidu's reply)
+ *     fired. The SDK's 300 s is a per-read (no progress) limit, not a whole-request cap.
+ * This transport:
+ *   - waits `connectTimeoutMs` (default 30 s) for DNS + TCP + TLS;
+ *   - after that, gives up only when NO bytes move for `idleTimeoutMs`, and always at `totalTimeoutMs`;
+ *   - asks DNS for IPv4 only by default (`family`), as serverless functions generally have no IPv6 route out;
+ *   - records how far each call got (DNS, connect, TLS, upload bytes, reply), so the next failure names the exact
+ *     step that stalls instead of a bare "timeout". The record holds fixed words, numbers and Baidu's IP address only:
+ *     never a header, the token, a URL path or page text.
+ */
+
+export type TransportPhase = "dns" | "connect" | "tls" | "upload" | "reply" | "body";
+
+export type TransportTrace = {
+  phase: TransportPhase;
+  /** ms from the start of the call to each step that completed. */
+  dnsMs?: number; connectMs?: number; tlsMs?: number; uploadedMs?: number; firstByteMs?: number;
+  ip?: string; family?: number;
+  sentBytes: number; totalBytes: number;
+  elapsedMs: number;
+};
+
+export class TransportError extends Error {
+  kind: "timeout" | "network";
+  code?: string;
+  trace: TransportTrace;
+  constructor(kind: "timeout" | "network", trace: TransportTrace, code?: string) {
+    super(`transport ${kind} during ${trace.phase}`);
+    this.name = "TransportError"; this.kind = kind; this.trace = trace; this.code = code;
+  }
+}
+
+/** The part of a fetch Response the Baidu client uses. */
+export type TransportResponse = { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> };
+
+export type TransportRequest = {
+  method: "GET" | "POST";
+  headers?: Record<string, string>;
+  body?: FormData;
+};
+
+export type TransportOptions = {
+  connectTimeoutMs: number;
+  idleTimeoutMs: number;
+  totalTimeoutMs: number;
+  /** 4 (default) or 6 to ask DNS for that address family only; 0 for either. */
+  family?: 0 | 4 | 6;
+};
+
+const CHUNK = 64 * 1024;
+const MAX_REPLY_BYTES = 64 * 1024 * 1024;
+
+/** A short, fixed-words summary of a trace for the processing history, e.g.
+ * "at=upload sent=1.2/3.4MB dns=40ms connect=180ms tls=420ms ip=4:1.2.3.4 t=60.0s". */
+export function traceSummary(t: TransportTrace): string {
+  const mb = (n: number) => (n / 1_048_576).toFixed(n < 104_858 ? 2 : 1);
+  return [
+    `at=${t.phase}`,
+    t.totalBytes ? `sent=${mb(t.sentBytes)}/${mb(t.totalBytes)}MB` : undefined,
+    t.dnsMs !== undefined ? `dns=${t.dnsMs}ms` : undefined,
+    t.connectMs !== undefined ? `connect=${t.connectMs}ms` : undefined,
+    t.tlsMs !== undefined ? `tls=${t.tlsMs}ms` : undefined,
+    t.uploadedMs !== undefined ? `uploaded=${t.uploadedMs}ms` : undefined,
+    t.firstByteMs !== undefined ? `reply=${t.firstByteMs}ms` : undefined,
+    t.ip && /^[0-9a-fA-F:.]{2,45}$/.test(t.ip) ? `ip=${t.family ?? "?"}:${t.ip}` : undefined,
+    `t=${(t.elapsedMs / 1000).toFixed(1)}s`,
+  ].filter(Boolean).join(" ");
+}
+
+/** The system error code on an error, when it is a plain code (ETIMEDOUT, ECONNRESET, ENOTFOUND...). */
+function plainCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,40}$/.test(code) ? code : undefined;
+}
+
+/** One HTTP request with the limits above. Resolves once the whole reply body has arrived. */
+export async function transportRequest(url: string, req: TransportRequest, opts: TransportOptions): Promise<TransportResponse> {
+  const target = new URL(url);
+  let payload: Uint8Array | undefined;
+  const headers: Record<string, string> = { ...(req.headers ?? {}), connection: "close" };
+  if (req.body) {
+    // The standard multipart encoding (the same bytes fetch would send), with a known length.
+    const encoded = new Response(req.body);
+    payload = new Uint8Array(await encoded.arrayBuffer());
+    headers["content-type"] = encoded.headers.get("content-type") ?? "multipart/form-data";
+    headers["content-length"] = String(payload.byteLength);
+  }
+  const started = Date.now();
+  // An IP-literal host does no DNS lookup, so its first step is the connection.
+  const trace: TransportTrace = { phase: isIP(target.hostname.replace(/^\[|\]$/g, "")) ? "connect" : "dns", sentBytes: 0, totalBytes: payload?.byteLength ?? 0, elapsedMs: 0 };
+  const since = () => Date.now() - started;
+  const secure = target.protocol === "https:";
+  const family = opts.family ?? 4;
+
+  return new Promise<TransportResponse>((resolve, reject) => {
+    let settled = false;
+    let idleTimer: NodeJS.Timeout | undefined;
+    const finish = (error?: TransportError, response?: TransportResponse) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(connectTimer); clearTimeout(totalTimer); clearTimeout(idleTimer);
+      trace.elapsedMs = since();
+      if (error) { error.trace.elapsedMs = trace.elapsedMs; request.destroy(); reject(error); }
+      else resolve(response!);
+    };
+    const fail = (kind: "timeout" | "network", code?: string) => finish(new TransportError(kind, trace, code));
+    const progress = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => fail("timeout"), opts.idleTimeoutMs);
+    };
+
+    const request = (secure ? httpsRequest : httpRequest)({
+      protocol: target.protocol, hostname: target.hostname, port: target.port || undefined,
+      path: `${target.pathname}${target.search}`, method: req.method, headers,
+      family: family || undefined, agent: false,
+    });
+    const connectTimer = setTimeout(() => fail("timeout"), opts.connectTimeoutMs);
+    const totalTimer = setTimeout(() => fail("timeout"), opts.totalTimeoutMs);
+
+    const connected = () => {
+      clearTimeout(connectTimer);
+      progress();
+      trace.phase = payload ? "upload" : "reply";
+      if (!payload) { request.end(); return; }
+      let offset = 0;
+      const writeNext = () => {
+        if (settled) return;
+        if (offset >= payload!.byteLength) {
+          request.end(() => { trace.uploadedMs = since(); if (trace.phase === "upload") trace.phase = "reply"; progress(); });
+          return;
+        }
+        const piece = payload!.subarray(offset, offset + CHUNK);
+        offset += piece.byteLength;
+        // Count bytes as they are handed to the network (the write callback), so a stalled upload shows how far it got.
+        // The kernel's send buffer means this can run ahead of what Baidu has received by up to a few MB.
+        request.write(piece, () => { trace.sentBytes += piece.byteLength; progress(); writeNext(); });
+      };
+      writeNext();
+    };
+
+    request.on("socket", (socket: Socket) => {
+      socket.on("lookup", (error, address, addrFamily) => {
+        if (error) return;
+        trace.dnsMs = since(); trace.ip = typeof address === "string" ? address : undefined;
+        trace.family = typeof addrFamily === "number" ? addrFamily : undefined;
+        trace.phase = "connect";
+      });
+      socket.on("connect", () => {
+        trace.connectMs = since();
+        if (trace.dnsMs === undefined) trace.dnsMs = trace.connectMs; // an IP-literal host does no lookup
+        if (!trace.ip && socket.remoteAddress) { trace.ip = socket.remoteAddress; trace.family = socket.remoteFamily === "IPv6" ? 6 : 4; }
+        if (secure) trace.phase = "tls"; else connected();
+      });
+      if (secure) socket.on("secureConnect", () => { trace.tlsMs = since(); connected(); });
+    });
+
+    request.on("response", (res) => {
+      trace.firstByteMs = since();
+      trace.phase = "body";
+      progress();
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (chunk: Buffer) => {
+        size += chunk.byteLength;
+        if (size > MAX_REPLY_BYTES) { fail("network", "REPLY_TOO_LARGE"); return; }
+        chunks.push(chunk); progress();
+      });
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        const status = res.statusCode ?? 0;
+        finish(undefined, {
+          ok: status >= 200 && status < 300, status,
+          text: async () => text,
+          json: async () => JSON.parse(text),
+        });
+      });
+      res.on("error", (error) => fail("network", plainCode(error)));
+    });
+    request.on("error", (error) => fail("network", plainCode(error)));
+  });
+}

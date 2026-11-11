@@ -104,6 +104,8 @@ async function main() {
   const { extractPdfPages } = await import("@/lib/documents/pdf");
   const { completePdfPagesWithOcr, pagesNeedingOcr } = await import("@/lib/documents/ocr");
   const bd = await import("@/lib/documents/ocr-baidu");
+  // This file stands Baidu in with a fake globalThis.fetch; the node:https transport has its own test (baidu-transport-test.ts).
+  bd.setBaiduTransportForTests("fetch");
   const { completePdfPagesWithBaidu } = bd;
   const { withFunctionDeadline } = await import("@/lib/jobs/function-time");
   const bytes = await fixturePdf();
