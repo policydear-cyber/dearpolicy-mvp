@@ -24,6 +24,9 @@ import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
+  /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
+   * wording is the person's (tierProblem). */
+  date_of_birth?: string | null;
   /** The documents this person is linked to by their own record (policy_members: chosen at upload, ticked in the "who does
    * this cover" picker, or matched when read), and the printed names on a document the household matched to them
    * (policy_detected_people). Used only to tell apart people whose names are the same. */
@@ -109,6 +112,10 @@ export type BenefitTable = {
   staleConfirmations: Confirmation[];
   /** Links refused by the server's own checks. */
   refusedLinks: { link: SectionLink; why: string }[];
+  /** Rows of a linked section shown with no amount for a person because they are printed for a kind of insured person or
+   * plan (a family plan, a child, one of several age groups) that the person's own documents do not say they are
+   * (tierProblem); each is also on the person's rows, with the reason as its figure's why. */
+  notForPerson?: { personId: string; benefit: string; section: string | null; column: string | null; why: string; source: Source }[];
 };
 
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -411,6 +418,103 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
   return `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
+/** Rows printed for one kind of insured person or plan, by the words of the row's own label (or its column): a family plan
+ * ("Overall limit for family plan", "per family"), a child ("Child covered under a family plan", "each child"), or an
+ * age group ("Adult below 70 years of age", "70 years old or older", "aged 65 and above"). Such a row is the person's only
+ * when their own cover's document prints the same: "family" for a family row, "child" for a child row, the same age
+ * group for an age row. When it cannot be told, the row is not the person's figure (never another tier's amount: 10 Nov,
+ * a family plan's S$12,500 baggage limit was shown on a single traveller's plan). A label that only names a child as the
+ * subject of the benefit ("Child companion", "child care") is not a tier. */
+const FAMILY_TIER = /\b(?:family\s+(?:plan|cover|policy|limit|option)s?|per\s+family|for\s+(?:a|the|each)\s+family|family\s+overall)\b/i;
+const CHILD_TIER = /\b(?:child(?:ren)?\s+(?:covered|insured|below|under|aged|up\s+to)|(?:each|per|every|insured)\s+child|for\s+(?:a|each|every)\s+child|dependent\s+child(?:ren)?)\b/i;
+/** An age group as "<n" / ">=n" / "a-b", the same for every wording of it. A number counts as an age only with "years",
+ * "yrs" or "age(d)" beside it, so "over 3 days" or "S$500 and above" is never an age group. */
+const YEARS = String.raw`\s*(?:years?|yrs?)(?:\s+old)?(?:\s+of\s+age)?`;
+const AGE_PATTERNS: [RegExp, (m: RegExpExecArray) => string][] = [
+  [new RegExp(String.raw`\b(below|under|less\s+than|younger\s+than)\s+(?:the\s+age\s+of\s+)?(\d{1,3})${YEARS}`, "i"), (m) => `<${m[2]}`],
+  [new RegExp(String.raw`\baged?\s+(below|under|less\s+than|younger\s+than)\s+(\d{1,3})\b`, "i"), (m) => `<${m[2]}`],
+  [new RegExp(String.raw`\b(over|above|more\s+than|older\s+than)\s+(?:the\s+age\s+of\s+)?(\d{1,3})${YEARS}`, "i"), (m) => `>${m[2]}`],
+  [new RegExp(String.raw`\baged?\s+(over|above|more\s+than|older\s+than)\s+(\d{1,3})\b`, "i"), (m) => `>${m[2]}`],
+  [new RegExp(String.raw`\b(\d{1,3})${YEARS}\s+(?:or|and)\s+(older|above|over)\b`, "i"), (m) => `>=${m[1]}`],
+  [new RegExp(String.raw`\baged?\s+(\d{1,3})\s+(?:or|and)\s+(older|above|over)\b`, "i"), (m) => `>=${m[1]}`],
+  [new RegExp(String.raw`\b(\d{1,3})${YEARS}\s+(?:or|and)\s+(below|under|younger)\b`, "i"), (m) => `<=${m[1]}`],
+  [new RegExp(String.raw`\b(?:aged?\s+)?(\d{1,3})\s*(?:-|to)\s*(\d{1,3})\s*(?:years|yrs)\b`, "i"), (m) => `${m[1]}-${m[2]}`],
+];
+function ageBand(text: string): string | null {
+  for (const [re, band] of AGE_PATTERNS) { const m = re.exec(text); if (m) return band(m); }
+  return null;
+}
+/** Whether an age is in a band ageBand gives. */
+function inBand(age: number, band: string): boolean {
+  const m = /^(<=|>=|<|>)(\d+)$/.exec(band);
+  if (m) { const n = Number(m[2]); return m[1] === "<" ? age < n : m[1] === ">" ? age > n : m[1] === "<=" ? age <= n : age >= n; }
+  const [a, b] = band.split("-").map(Number);
+  return age >= a && age <= b;
+}
+/** Whole years from a YYYY-MM-DD birth date to `today` (a Singapore day number, as singaporeDay), or null. */
+export function ageOn(dateOfBirth: string | null | undefined, today: number): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOfBirth ?? "");
+  if (!m) return null;
+  const now = new Date(today * 86_400_000);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const age = now.getUTCFullYear() - y - (now.getUTCMonth() + 1 < mo || (now.getUTCMonth() + 1 === mo && now.getUTCDate() < d) ? 1 : 0);
+  return age >= 0 && age < 130 ? age : null;
+}
+/** The benefit a row is for, without its age group: "Personal accident: Adult below 70 years of age" and "Personal
+ * accident: Adult 70 years old or older" are the same benefit printed for two age groups. */
+function ageStem(label: string): string {
+  const head = label.includes(":") ? label.split(":")[0] : AGE_PATTERNS.reduce((t, [re]) => t.replace(new RegExp(re.source, "gi"), " "), label);
+  return norm(head);
+}
+/** Per document, section and column: each benefit's age groups. An age group is a tier only where the same benefit is
+ * printed for two or more of them side by side; one alone ("TPD for insured persons under 65 years of age") is a condition
+ * of the benefit, and the row stays the person's. */
+function ageAlternatives(readings: CheckedReading[]): (r: CheckedReading, b: CheckedBenefit) => boolean {
+  const bands = new Map<string, Set<string>>();
+  const key = (r: CheckedReading, b: CheckedBenefit) => [r.documentId, norm(b.section), norm(b.column), ageStem(`${b.benefit}`)].join("|");
+  for (const r of readings) for (const b of r.benefits) {
+    const band = ageBand(`${b.benefit} ${b.column ?? ""}`);
+    if (!band) continue;
+    const k = key(r, b);
+    bands.set(k, (bands.get(k) ?? new Set()).add(band));
+  }
+  return (r, b) => (bands.get(key(r, b))?.size ?? 0) >= 2;
+}
+/** `age`: the person's age from the date of birth the household entered, or null when it entered none. `ageTier`: the row's
+ * benefit is printed for two or more age groups side by side (ageAlternatives); otherwise an age in it is a condition. */
+export function tierProblem(b: Pick<CheckedBenefit, "benefit" | "column">, ownWords: string, age: number | null = null, ageTier = true): string | null {
+  const label = `${b.benefit} ${b.column ?? ""}`;
+  if (FAMILY_TIER.test(label) && !/\bfamily\b/i.test(ownWords)) return "printed for a family plan; the person's own documents do not say their plan is a family plan";
+  if (CHILD_TIER.test(label) && !/\bchild(?:ren)?\b/i.test(ownWords)) return "printed for a child; the person's own documents do not say they are insured as a child";
+  const band = ageTier ? ageBand(label) : null;
+  if (band && ageBand(ownWords) !== band) {
+    if (age == null) return "printed for one age group of several; add this person's date of birth on the Family page to see whether it is theirs";
+    if (!inBand(age, band)) return "printed for an age group the person is not in (by the date of birth on the Family page)";
+  }
+  return null;
+}
+/** What the person's own cover prints about who and what it covers: its plan, cover, product and line, and its document's
+ * product and plan. */
+function ownTierWords(c: PersonCover, readings: CheckedReading[]): string {
+  const own = readings.find((r) => r.documentId === c.source.documentId);
+  return [c.plan, c.cover, c.product, c.source.excerpt, own?.product, own?.plan, own?.tierLines].filter(Boolean).join(" \n ");
+}
+/** The covers the person's own document prints as not covered (its "not covered" rows), as label words: a wording's row
+ * for one of them shows no amount for that person. */
+const NOT_COVER_WORDS = new Set(["cover", "covers", "coverage", "rider", "riders", "benefit", "benefits", "add", "on", "optional", "option"]);
+const coverHead = (label: string) => norm(label.replace(/\([^)]*\)/g, " ").split(":")[0]);
+const notCoverKey = (label: string) => coverHead(label).split(" ").filter((w) => w && !NOT_COVER_WORDS.has(w)).join(" ");
+/** Only a "not covered" row with no column, or in the person's own plan's column, counts; and never one whose label the
+ * same schedule also prints with a covered value (an Adult column's S$100,000 beside a Child column's "Not covered"). */
+function notCoveredOn(c: PersonCover, readings: CheckedReading[]): string[] {
+  const own = readings.find((r) => r.documentId === c.source.documentId);
+  if (!own) return [];
+  const covered = new Set(own.benefits.filter((b) => b.pays !== "not_covered").map((b) => notCoverKey(b.benefit)));
+  return own.benefits.filter((b) => b.pays === "not_covered" && (!headingWords(b.column) || headingWords(b.column) === headingWords(c.plan)))
+    .map((b) => notCoverKey(b.benefit)).filter((k) => k && !covered.has(k));
+}
+const printedNotCovered = (b: CheckedBenefit, keys: string[]) => { const head = coverHead(b.benefit); return keys.some((k) => head === k || head.startsWith(`${k} `)); };
+
 /** The covers a linked section's rows are built for. Where the person holds several policies of the cover type
  * (holdings), a section printed on one policy's own document belongs to that policy only, never to the other; a section
  * on a document that holds none of them (a wording, a product summary) belongs to each. */
@@ -545,6 +649,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     const refused = refusedLinks.find((x) => x.link.section === s.key);
     if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
+  const notForPerson: NonNullable<BenefitTable["notForPerson"]> = [];
+  const isAgeTier = ageAlternatives(readings);
   const notTold = new Set<string>();
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
@@ -554,7 +660,17 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (who && !who.size) { notTold.add(sectionKeyOf(r.documentId, b)); continue; }
     // A row placed by its own line is shown only for the people whose cover was read from that line.
     for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
-      const figure = figureFor(b, c, r.kind === "illustration");
+      // A row on the person's own schedule or certificate is theirs as printed ("Total Permanent Disability (below 65 years
+      // of age)" is a condition of their own cover, not another tier's row): the rule is for wordings, summaries and terms.
+      const tier = r.documentId === c.source.documentId ? null
+        : tierProblem(b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), isAgeTier(r, b));
+      // A row for another tier stays on the table with no amount and the reason, so nothing is lost without a word.
+      if (tier) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: tier, source: b.source });
+      // A cover the person's own schedule prints as not covered shows no amount from another document (a wording's figure
+      // for an optional cover they did not buy).
+      const figure: Figure = tier ? { kind: "none", why: tier }
+        : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
+          ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
@@ -565,7 +681,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     }
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
-  return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
+  return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks, notForPerson };
 }
 
 // In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
