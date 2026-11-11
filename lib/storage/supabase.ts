@@ -84,6 +84,31 @@ export async function deletePolicyFile(storageKey: string) {
   if (error) throw new Error(`Could not delete the stored PDF: ${error.message}`);
 }
 
+// --- Baidu OCR hand-off: the scanned pages of one reading, stored briefly so Baidu's service can download them itself
+// through a short-lived signed link (lib/documents/ocr-baidu.ts). Pushing the file from the app to Baidu was measured
+// at under 20 KB/s (11 Nov 2026); Baidu fetching it is the official alternative (the `fileUrl` submit). Each hand-off
+// is its own object under the household's own folder, removed as soon as the job ends (and queued for purge if that
+// removal fails), never referenced by any table.
+export function ocrHandoffObjectKey(accountId: string, handoffId: string) {
+  return [safeSegment(accountId), "ocr-handoff", safeSegment(handoffId), "pages.pdf"].join("/");
+}
+export async function saveOcrHandoffFile(args: { accountId: string; handoffId: string; bytes: Uint8Array }) {
+  const key = ocrHandoffObjectKey(args.accountId, args.handoffId);
+  const { error } = await client().storage.from(BUCKET).upload(key, args.bytes, { contentType: "application/pdf", upsert: false });
+  if (error) throw new Error(`Could not stage the pages for OCR: ${error.message}`);
+  return key;
+}
+export async function createOcrHandoffSignedUrl(storageKey: string, ttlSeconds: number): Promise<string> {
+  const { data, error } = await client().storage.from(BUCKET).createSignedUrl(storageKey, ttlSeconds);
+  if (error || !data?.signedUrl) throw new Error(`Could not sign the OCR hand-off link: ${error?.message ?? "no signed URL"}`);
+  return data.signedUrl;
+}
+/** Removes exactly this one object (never a folder listing). */
+export async function deleteOcrHandoffFile(storageKey: string) {
+  const { error } = await client().storage.from(BUCKET).remove([storageKey]);
+  if (error) throw new Error(`Could not remove the OCR hand-off: ${error.message}`);
+}
+
 // --- Claim evidence: its own private bucket, never the policy-files bucket
 // above, and never made public -- every read goes through a short-lived
 // signed URL (createClaimEvidenceSignedUrl) rather than a public object URL.
