@@ -240,7 +240,7 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[] } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[] } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
   // document is decided on every page, as it is when every page could be checked.
   const rolePages = opts.allPages ?? pages;
@@ -669,8 +669,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       if (failed.length) {
         await crossCheck(failed);
         const now = pages.filter((p) => (p.unchecked || p.partChecked) && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
-        if (now.length) {
+        // A page the image confirmed whose currency only the image prints is checked again in that currency (DC 11 Nov, b).
+        if (now.length || pages.some((p) => failed.includes(p.pageNumber) && !p.unchecked && p.imageCurrency))
           extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages });
+        if (now.length) {
           // What the catalogue and the evidence notes read is rebuilt too, so the newly unchecked pages give them no amount (Critic R176-1).
           evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
           for (const p of pages.filter((x) => now.includes(x.pageNumber))) {

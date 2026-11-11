@@ -39,6 +39,8 @@ export type PdfPage = {
   /** Some of the page's figure lines were confirmed by the image reading and some were not: the confirmed lines are kept
    * word for word, and the others keep their words with each figure shown as "[amount not checked]". */
   partChecked?: boolean;
+  /** The one currency the page image prints when its text layer prints none: read in memory at intake only (lib/documents/image-currency). */
+  imageCurrency?: string;
   /** What kind of difference the two readings had (counts, shapes and positions of the figures, never a figure or a
    * word): kept for the processing history only. */
   checkLog?: string;

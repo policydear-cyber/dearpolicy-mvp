@@ -9,13 +9,14 @@
  * figures, units, dates, people, roles and numbers are each checked against
  * the verbatim page they cite. Pure functions; no I/O.
  */
+import { IMAGE_CURRENCY_MARK } from "@/lib/documents/image-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
-type Page = { pageNumber: number; text: string };
+type Page = { pageNumber: number; text: string; imageCurrency?: string };
 const norm = (value: string) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -306,6 +307,7 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
 export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
+  const pageCurrency = new Map(pages.flatMap((p) => p.imageCurrency && IMAGE_CURRENCY_MARK[p.imageCurrency] ? [[p.pageNumber, IMAGE_CURRENCY_MARK[p.imageCurrency]] as const] : []));
   const dropped: string[] = [];
   const drop = (what: string) => { dropped.push(what); return null; };
   const printedOr = (value: string | null, what: string) => (value && !namePrinted(fullText, value) ? drop(what + " that is not printed in this document") : value);
@@ -369,7 +371,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const hint = person.relationshipHint && hintNearName(pages, person.name, person.relationshipHint) ? person.relationshipHint : null;
     const coverages = person.coverages.map((c) => checkCoverage({ ...c,
       productName: c.productName && namePrinted(fullText, c.productName) ? c.productName : null,
-      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText));
+      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText, pageCurrency));
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
   }
@@ -588,7 +590,7 @@ function hintNearName(pages: Page[], name: string, hint: string) {
  * page, and the amount is printed as money in the evidence (or on the line
  * that carries it). Anything less is kept as unverified, which the chat never
  * states as a figure. */
-function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>): C {
+function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, imageMark: Map<number, string> = new Map()): C {
   const text = coverage.sourcePage != null ? pageText.get(coverage.sourcePage) ?? "" : "";
   const evidence = String(coverage.evidenceText ?? "");
   let ok = !!text && evidence.trim().length >= 3 && !looksLikeInjectedInstruction(evidence) && personPrinted(text, person);
@@ -598,7 +600,12 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     const evidenceLines = span ? lines.filter((line, i) => { const start = lines.slice(0, i).join("\n").length + (i ? 1 : 0); return start <= span.end && start + line.length >= span.start; })
       : lines.filter((line) => tokenShare(line, evidence) >= 0.7);
     if (!evidenceLines.length) ok = false;
-    else if (coverage.amount != null) ok = evidenceLines.some((line) => moneyPrinted(line, Number(coverage.amount)) && (!coverage.currency || currencyOk(line, coverage.currency)));
+    else if (coverage.amount != null) {
+      // A page whose text layer prints no currency, confirmed against its image, which prints one (lib/documents/image-currency):
+      // its bare figures are read in that currency, under the same money rules (never a percentage, a count or a date).
+      const mark = coverage.sourcePage != null ? imageMark.get(coverage.sourcePage) : undefined;
+      ok = evidenceLines.some((line) => [line, ...(mark ? [`${mark} ${line}`] : [])].some((l) => moneyPrinted(l, Number(coverage.amount)) && (!coverage.currency || currencyOk(l, coverage.currency))));
+    }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
   // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
