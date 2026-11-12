@@ -65,7 +65,7 @@ async function main() {
     assert.match(joined, /25% of a sum assured of 100,000, the illustrated amount is 25,000/);
     // 10,000 bill, 1,000 deductible, 10% co-payment on the remaining 9,000 = 900, so 8,100.
     assert.equal((10000 - 1000) * 0.9, 8100);
-    assert.match(joined, /10,000, a deductible of 1,000 and a 10% co-payment\. The policy would pay 9,000 less 900, so 8,100/);
+    assert.match(joined, /10,000, a deductible of 1,000 and a 10% co-payment\. The policy would pay 9,000 less 900, so 8,100, if no lower limit applies\. Policies differ in the order these apply/);
   });
 
   await t("content: states the project's evidence rules a household needs (missing ≠ excluded, wording ≠ proof, date ≠ current, bare $ unresolved)", () => {
@@ -74,6 +74,11 @@ async function main() {
     assert.match(joined, /shows what was true on its date/);
     assert.match(joined, /only a symbol such as "\$" without saying which currency, DearPolicy leaves the currency unconfirmed/);
     assert.match(joined, /same policy number can still cover different people or products/);
+    // Critic #426: claims about the product must match what it does (no figure when unsure; illustration not always shown).
+    assert.doesNotMatch(joined, /shows both rather than choosing/);
+    assert.match(joined, /does not pick one: it says they differ, or shows no figure/);
+    assert.doesNotMatch(joined, /often the highest/);
+    assert.doesNotMatch(joined, /with your name does\./);
   });
 
   await t("content: unique slugs and term ids; every term has a definition; terms page reachable", () => {
@@ -124,6 +129,15 @@ async function main() {
 
   await t("match: ordinary words that are not policy terms do not trigger links (claim, limit, excess, excluded)", () => {
     assert.deepEqual(learnTermsIn(["You can claim this. There is no limit to questions, in excess of what you need; nothing is excluded here."]), []);
+  });
+
+  await t("match: words in nearly every answer (schedule, premium, per day) do not crowd out the useful terms", () => {
+    const ids = learnTermsIn(["Your schedule shows a premium of 1,200 and 100 per day. A waiting period and a co-payment apply, and one exclusion."]).map((x) => x.id);
+    assert.deepEqual(ids, ["waiting-period", "co-payment", "exclusion"]);
+  });
+
+  await t("wiring: an older saved claim item without conditions does not break the links row", () => {
+    assert.match(readFileSync("app/chat/page.tsx", "utf8"), /\.\.\.\(item\.conditions\?\?\[\]\)/);
   });
 
   await t("links: render a link per matched term to its anchor on the terms page, and nothing when none match", () => {
