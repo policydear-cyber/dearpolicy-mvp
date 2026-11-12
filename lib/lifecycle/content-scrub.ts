@@ -25,7 +25,9 @@
 import { pool } from "@/lib/db/client";
 import { withServiceTransaction } from "@/lib/db/authz-client";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
-import { enqueueStoragePurge } from "@/lib/storage/purge";
+import { activeStorageDriverName, enqueueStoragePurge } from "@/lib/storage/purge";
+import { recordErrorEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 
 type Db = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number | null }> };
 
@@ -241,9 +243,19 @@ export async function sweepStaleOcrHandoffs(db: Db, hours = STALE_OCR_HANDOFF_HO
       `SELECT name FROM storage.objects WHERE bucket_id=$1 AND name LIKE '%/ocr-handoff/%/pages.pdf' AND created_at < now() - make_interval(hours => $2::int)
         ORDER BY created_at LIMIT 500`, [bucket, hours]);
     const keys = r.rows.map((x) => x.name).filter((k) => STAGED_COPY_KEY.test(k));
-    if (keys.length) await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff_stale", db);
+    if (keys.length) {
+      await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff_stale", db);
+      console.warn(`ocr handoff sweep: ${keys.length} staged cop${keys.length === 1 ? "y" : "ies"} older than ${hours} h queued for removal`);
+    }
     return keys.length;
-  } catch {
+  } catch (error) {
+    // With Supabase Storage in use the object list should be readable: a failure (no permission, say) is reported once
+    // per pass, error class only, so a sweep that cannot run does not go unseen. Without it (local driver) it is expected.
+    if (activeStorageDriverName() === "supabase") {
+      const errorClass = error instanceof Error ? error.name : "unknown";
+      console.error(`ocr handoff sweep: OCR_HANDOFF_SWEEP_UNAVAILABLE (${errorClass})`);
+      await recordErrorEvent({ name: "lifecycle.ocr_handoff_sweep.unavailable", correlationId: resolveCorrelationId(undefined), error }).catch(() => undefined);
+    }
     return 0;
   }
 }

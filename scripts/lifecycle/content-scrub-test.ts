@@ -348,6 +348,13 @@ async function main() {
     await q(`DROP SCHEMA storage CASCADE`);
     // No storage schema (the local driver): nothing happens, nothing throws.
     assert.equal(await sweepStaleOcrHandoffs((await import("@/lib/db/client")).pool as never), 0);
+    // With Supabase Storage in use, an object list that cannot be read is reported (error class only), never silent.
+    const logged: string[] = []; const realError = console.error;
+    console.error = (...a: unknown[]) => { logged.push(a.map(String).join(" ")); };
+    const driverBefore = process.env.STORAGE_DRIVER; process.env.STORAGE_DRIVER = "supabase";
+    try { assert.equal(await sweepStaleOcrHandoffs((await import("@/lib/db/client")).pool as never), 0); }
+    finally { console.error = realError; process.env.STORAGE_DRIVER = driverBefore; }
+    assert.ok(logged.some((l) => /OCR_HANDOFF_SWEEP_UNAVAILABLE \(\w+\)/.test(l)), logged.join("\n"));
   });
 
   await t("a reading that fails after its document was deleted schedules no re-read", async () => {
