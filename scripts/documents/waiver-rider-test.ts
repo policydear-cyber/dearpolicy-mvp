@@ -19,13 +19,17 @@ async function main() {
   const { PolicyExtractionSchema } = await import("@/lib/ai/extract-policy");
 
   // ---- N: names
-  const waivers = ["Crisis Waiver III", "Early Stage Crisis Waiver", "Waiver of Premium Rider", "Premium Waiver (TPD)", "Payor Benefit", "Payer Rider",
-    "Premium Eraser", "Enhanced Payor Benefit II", "WAIVER OF PREMIUM - CRITICAL ILLNESS", "Pengecualian Premium Penyakit Kritikal", "保费豁免附加险"];
+  const waivers = ["Crisis Waiver III", "Early Stage Crisis Waiver", "Waiver of Premium Rider", "Premium Waiver Rider", "Payor Benefit", "Payer Rider",
+    "Premium Eraser", "Enhanced Payor Benefit II", "WAIVER OF PREMIUM - CRITICAL ILLNESS", "Pengecualian Premium Penyakit Kritikal", "保费豁免附加险",
+    // Critic #436: detected, and the two it found missed.
+    "Crisis Waiver & Payor Benefit", "Critical Illness Waiver Plus", "Early CI Premium Waiver Rider", "Payer Benefit and Waiver of Premium", "WOP (Critical Illness)",
+    "TPD Waiver", "Cancer Premium Waiver Benefit"];
   for (const n of waivers) await test(`N waiver rider: ${n}`, () => assert.equal(namesWaiverRider(n), true, n));
   const covers = ["Critical Illness Plus", "Excess Waiver", "Waiver of Deductible", "Collision Damage Waiver", "Critical Illness Benefit with Premium Waiver",
-    "Term Life incl. Waiver of Premium", "Sum assured S$100,000 (future premiums waived on diagnosis)", "Early Crisis Cover", "Premium Plan", "Payout Plan"];
+    "Term Life incl. Waiver of Premium", "Sum assured S$100,000 (future premiums waived on diagnosis)", "Early Crisis Cover", "Premium Plan", "Payout Plan",
+    "Waiver of Excess", "Term Life (Premium Waiver Option)", "Critical Illness Benefit (waiver of waiting period)", "Hospital Plan - Waiver of Pre-existing Condition Exclusion"];
   for (const n of covers) await test(`N not a waiver rider: ${n}`, () => assert.equal(namesWaiverRider(n), false, n));
-  await test("N null and empty name nothing", () => { assert.equal(namesWaiverRider(null, undefined, ""), false); });
+  await test("N null and empty name nothing", () => { assert.equal(namesWaiverRider(null, undefined) || namesWaiverRider("", ""), false); });
 
   // ---- I: intake (the fact check every reading passes through)
   const PERSON = "Tan Mei Ling Rachel";
@@ -66,6 +70,26 @@ async function main() {
     const p = [{ pageNumber: 2, text: `POLICY SCHEDULE (fictitious)\nLife Assured\t${PERSON}\nCritical Illness Benefit with Premium Waiver\tS$80,000.00` }];
     const [c] = FC.factCheckExtraction(extraction([coverage("Critical Illness", "Critical Illness Benefit with Premium Waiver", 80000, "Critical Illness Benefit with Premium Waiver\tS$80,000.00")]), p).extraction.insuredPeople[0].coverages;
     assert.equal(c.amount, 80000);
+  });
+
+  // ---- C: Critic #436's cover lines, through the fact check: each keeps its sum (only its first cell names the cover).
+  const criticLines: [string, string, number][] = [
+    ["Critical Illness", "Critical Illness Benefit (waiver of waiting period)\t100,000", 100000],
+    ["Death", "Whole Life Plan\tSum Assured 200,000\tWaiver of Surrender Charge", 200000],
+    ["Death", "Life Assured / Payor: Jane Doe\tSum Insured S$200,000", 200000],
+    ["Death", "Death Benefit\t100,000\tPremium Waiver: Included", 100000],
+    ["Hospitalisation", "Hospital Plan - Waiver of Pre-existing Condition Exclusion\t500,000", 500000],
+    ["Death", "Term Life (Premium Waiver Option)\t300,000", 300000],
+  ];
+  for (const [category, line, amount] of criticLines) await test(`C keeps its sum: ${line.replace(/\t/g, " | ")}`, () => {
+    const p = [{ pageNumber: 2, text: `POLICY SCHEDULE (fictitious)\nLife Assured\t${PERSON}\n${line}` }];
+    const [c] = FC.factCheckExtraction(extraction([coverage(category, null, amount, line)]), p).extraction.insuredPeople[0].coverages;
+    assert.equal(c.amount, amount); assert.equal(namesWaiverRider(null, line), false);
+  });
+  await test("C the first cell decides: a rider row with its premium is a rider, its feature column is not", () => {
+    assert.equal(namesWaiverRider(null, "Payer Benefit and Waiver of Premium\t-\t42.00"), true);
+    assert.equal(namesWaiverRider(null, "WOP (Critical Illness)\t-\t12.60"), true);
+    assert.equal(namesWaiverRider(null, "Whole Life Plan\t200,000\tWaiver of Premium: Yes"), false);
   });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
