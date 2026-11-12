@@ -366,7 +366,7 @@ async function main() {
     for (const reply of ["Has a doctor said the injury will leave any lasting impairment: No", "An accident", "Not sure", "Singapore", "What treatment was given?", "2026-09-18", "Yes"]) {
       if (!looksLikeInterviewReply(reply)) f.push("not recognised as a reply: " + reply);
       const name = claimEventName(person, {}, null, reply);
-      if (name !== "Josephine: claim check") f.push("claimEventName names an event after the reply '" + reply + "': " + name);
+      if (name !== "Josephine: what happened") f.push("claimEventName names an event after the reply '" + reply + "': " + name);
     }
     for (const good of ["Josephine: broken arm", "Death of Raymond", "Josephine broke her arm", "Marcus: flight delay"]) if (looksLikeInterviewReply(good)) f.push("a proper event name is treated as a reply: " + good);
     if (claimEventName(person, {}, null, "Josephine broke her arm") !== "Josephine broke her arm") f.push("the opening message no longer names an uncategorised event");
