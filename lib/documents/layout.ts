@@ -240,7 +240,7 @@ import { WORDED_SHARE_CELL } from "@/lib/policies/word-fractions";
  * country prefix (S$, US$, HK$, A$ …), an ISO code (SGD, USD, EUR …), RM, € or
  * £. Only "S$"-style cells used to count, so a travel schedule printing
  * "US$250,000" or "USD 500,000" lost those rows without a trace. */
-export const CURRENCY_MARKER=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])(?:Rp|Rs)\.?|€|£|¥|₹|₱|฿)`;
+export const CURRENCY_MARKER=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|(?<![A-Za-z])(?:SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?:Rp|Rs)\.?)(?![A-Za-z])|€|£|¥|₹|₱|฿)`;
 const AMOUNT=new RegExp(String.raw`(?:${CURRENCY_MARKER}\s?[\d,]+(?:\.\d{1,2})?|\d{1,3}(?:\.\d+)?\s?%)`);
 const VALUE_START=new RegExp(String.raw`^(?:${CURRENCY_MARKER}\s?\d|\d)`);
 /** Limits are rarely bare figures. "Up to S$500 per incident" and "25% of the

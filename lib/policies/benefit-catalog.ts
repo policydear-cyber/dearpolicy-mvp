@@ -1477,7 +1477,7 @@ function readsAsNoBenefit(name:string,quote:string){
  * the cover itself, already on the Coverage page. A row stored with a formula is what a claim pays and is kept (Critic
  * R395 H2). Benefits route display only. */
 const COVER_DATE=String.raw`(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})`;
-const COVER_MONEY=String.raw`(?:S\$|SGD\s?|US\$|RM\s?|£|\$)\s?\d[\d,]*(?:\.\d{2})?`;
+const COVER_MONEY=String.raw`(?:S\$|(?<![A-Za-z])SGD\s?|US\$|(?<![A-Za-z])RM\s?|£|\$)\s?\d[\d,]*(?:\.\d{2})?`;
 const COVER_LINE_TAIL=new RegExp(String.raw`^\s*${COVER_MONEY}\s+${COVER_DATE}\s+${COVER_DATE}(?:\s+${COVER_MONEY}(?:\s+\d{1,3})?)?\s*$`,"i");
 export function isRulelessCoverLine(row:{benefitName:string;quote:string|null;formulaKind:string|null;formulaValue:unknown}):boolean{
   if(row.formulaKind&&row.formulaKind!=="none")return false;

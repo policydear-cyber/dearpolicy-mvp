@@ -6,7 +6,7 @@
  * months", "from the Nth month/day" or "from month N", "up to N months" or "of hospitalisation". Anything else ("a month after the claim is admitted",
  * "monthly instalments") gives no period. A "Monthly ..." label alone is never enough (Critic #351): the figure beside
  * it may be a total. Any other period, a premium or a lump sum anywhere in the row gives no period. No database, no model. */
-const CURRENCY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|€|£|¥|₹|₱|฿)`;
+const CURRENCY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|(?<![A-Za-z])(?:SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM)(?![A-Za-z])|€|£|¥|₹|₱|฿)`;
 const MONEY=String.raw`${CURRENCY}\s?\d[\d,]*(?:\.\d+)?`;
 const SHARE=String.raw`(?:\d+(?:\.\d+)?\s?%|\b(?:one|two|three)[\s-]+[a-z-]+)\s+of\s+(?:the\s+)?(?:sum\s+(?:insured|assured)|insured\s+amount|coverage\s+amount|benefit\s+amount)`;
 const UNIT=String.raw`\s*(?:,\s*)?(?:(?:per|a|each|every)\s+(?:calendar\s+)?month\b|monthly\b|\/\s?(?:month|mth|mo)\b)`;
