@@ -11,8 +11,9 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { TransportError, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
+import { TransportError, baiduConnection, type BaiduConnection, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
 import { query } from "@/lib/db/client";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { probeBaiduPath, probeSummary } from "@/lib/documents/baidu-probe";
 import { removeOcrHandoff, stageOcrHandoff } from "@/lib/storage";
 import { enqueueStoragePurge } from "@/lib/storage/purge";
@@ -59,12 +60,38 @@ export function baiduOcrConfigured(env: Env = process.env) {
   return Boolean(env.BAIDU_AISTUDIO_TOKEN?.trim()) && !/^(0|false|off)$/i.test(env.BAIDU_OCR_ENABLED?.trim() ?? "");
 }
 
+/** Baidu's front door for its overseas users: aistudio.baidu.com (like Baidu's other public hosts) resolves outside
+ * China to Baidu's edge servers, which pass a request on to the service named in its Host header. The OCR service's own
+ * name resolves only to one Beijing address (180.76.248.9) that the paths from Vercel's Singapore and Hong Kong regions
+ * drop (12 Nov 2026, from throwaway sin1 and hkg1 machines: 0 of 30 TCP connects there, while the front door answered
+ * every request in about 0.3 s, the token-less submit with the service's own 401 reply and trace id). */
+export const BAIDU_DEFAULT_VIA = "aistudio.baidu.com";
+/** Only a Baidu host may carry the token: the front door must be one of Baidu's own domains. The TLS name (SNI) of each
+ * call is the front door's name and its certificate is checked against that name (baidu-transport.ts `via`). */
+const BAIDU_VIA_DOMAINS = ["baidu.com", "baidubce.com", "aistudio-app.com"];
+
+/** The host to open connections to for the configured service, or undefined to connect to the service's own host.
+ * BAIDU_OCR_VIA: unset = the front door for Baidu's own service host (none for any other base URL); off/direct/0 = connect
+ * directly; a host name under one of Baidu's domains = that host. Anything else connects directly. */
+export function baiduVia(env: Env, baseUrl: string): string | undefined {
+  const raw = env.BAIDU_OCR_VIA?.trim().toLowerCase() ?? "";
+  if (/^(0|off|false|direct|none)$/.test(raw)) return undefined;
+  let baseHost = "";
+  try { baseHost = new URL(baseUrl).hostname.toLowerCase(); } catch { return undefined; }
+  if (!raw) return baseHost === new URL(BAIDU_DEFAULT_BASE_URL).hostname ? BAIDU_DEFAULT_VIA : undefined;
+  const ok = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(raw)
+    && BAIDU_VIA_DOMAINS.some((d) => raw === d || raw.endsWith("." + d));
+  return ok && raw !== baseHost ? raw : undefined;
+}
+
 export function baiduOcrSettings(env: Env = process.env) {
   const model = env.BAIDU_PADDLEOCR_MODEL?.trim() || BAIDU_DEFAULT_MODEL;
   const baseUrl = (env.BAIDU_OCR_BASE_URL?.trim() || BAIDU_DEFAULT_BASE_URL).replace(/\/+$/, "");
   return {
     model,
     baseUrl,
+    // Connect through Baidu's front door (baiduVia): only calls to the service's own host go this way.
+    via: baiduVia(env, baseUrl),
     // Bounded so a slow queue leaves time for the AI reader inside the 300 s request: give up and fall back after this.
     maxWaitMs: intEnv(env.BAIDU_OCR_MAX_WAIT_MS, 90_000, 1, 240_000),
     pollIntervalMs: intEnv(env.BAIDU_OCR_POLL_INTERVAL_MS, 2_000, 1, 15_000),
@@ -138,13 +165,23 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6 };
+type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection; reusedReplyMs?: number;
+  /** Calls to the service's own host (`for`) connect to `host` instead (baiduVia). A result link on another host does not. */
+  via?: { host: string; for: string } };
 type Transport = (url: string, req: TransportRequest, limits: Limits) => Promise<TransportResponse>;
+
+/** The front door for one call: only a call to the service's own host goes through it (a result link on a storage
+ * host, for example, connects to that host itself). */
+export function viaHostFor(url: string, via?: { host: string; for: string }): string | undefined {
+  if (!via) return undefined;
+  try { return new URL(url).hostname.toLowerCase() === via.for ? via.host : undefined; } catch { return undefined; }
+}
 
 /** Production: node:https with separate connect / no-progress / total limits and a trace (baidu-transport.ts). */
 const httpsTransport: Transport = async (url, req, l) => {
   try {
-    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family });
+    const via = viaHostFor(url, l.via);
+    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection, reusedReplyMs: l.reusedReplyMs, via });
   } catch (error) {
     if (error instanceof TransportError) throw Object.assign(error, { summary: traceSummary(error.trace) });
     throw error;
@@ -191,11 +228,15 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
   retry: { retries: number; connectMs: number } = { retries: 0, connectMs: 0 }): Promise<TransportResponse> {
   const retries = retry.retries;
   const firstTry = Date.now();
+  let reopened = false;
   for (let attempt = 0; ; attempt++) {
     const l = limitsForTry(limits(), attempt, retry.connectMs);
     try {
-      return await transport(url, req, l);
+      return await transport(url, req, { ...l, reusedReplyMs: REUSED_REPLY_MS });
     } catch (error) {
+      // A kept-open connection Baidu had already closed: a GET (poll or result: nothing is created) is sent once more on a
+      // new connection, at once. A POST is never repeated once sent.
+      if (!reopened && req.method === "GET" && staleKeptConnection(error)) { reopened = true; attempt--; continue; }
       const wait = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
       if (attempt < retries && failedBeforeSending(error) && retryFits(Date.now() - firstTry, limitsLeft(limits), wait, retry.connectMs)) { await sleep(wait); continue; }
       const tries = attempt > 0 ? `tries=${attempt + 1}` : undefined;
@@ -207,6 +248,27 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
     }
   }
 }
+/** True when a call over a kept-open connection failed before any reply arrived (the far end had closed it). */
+export function staleKeptConnection(error: unknown): boolean {
+  // "network": the far end had closed it; "timeout": the path went silent on it (no reply within REUSED_REPLY_MS).
+  return error instanceof TransportError && error.trace.reused === true && error.trace.firstByteMs === undefined;
+}
+/** How long a poll or result request on a kept connection waits for the first reply byte before that connection is
+ * dropped and the request sent once more on a new one. A poll's reply is small and normally comes in under a second. */
+export const REUSED_REPLY_MS = 10_000;
+
+/** The kept-open connection for the Baidu calls running inside withBaiduConnection (one reading, or one readPdfWithBaidu). */
+const keptConnection = new AsyncLocalStorage<BaiduConnection>();
+/** Runs `fn` with one kept-open connection to Baidu for its polls and result calls, as Baidu's own client does (one
+ * requests.Session), and closes it at the end. Inside an outer one, the outer connection is used. The calls inside one
+ * scope must stay one at a time (no Promise.all): the agent holds ONE socket, and a request queued for it would have its
+ * connect limit running while it waits, failing as a "connect" timeout. */
+export async function withBaiduConnection<T>(fn: () => Promise<T>): Promise<T> {
+  if (keptConnection.getStore()) return fn();
+  const conn = baiduConnection();
+  try { return await keptConnection.run(conn, fn); } finally { conn.close(); }
+}
+
 /** The job's time left, or 0 when it has run out. */
 function limitsLeft(limits: () => Limits): number {
   try { return limits().totalMs; } catch { return 0; }
@@ -395,8 +457,10 @@ export type BaiduJobResult = { pages: string[]; jobId: string; model: string | n
  * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
 export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string } = {}): Promise<BaiduJobResult> {
   const end = Math.min(deadline ?? Infinity, Date.now() + baiduOcrSettings(env).maxWaitMs);
-  const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
-  return awaitBaiduJob(jobId, env, end, submitted);
+  return withBaiduConnection(async () => {
+    const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
+    return awaitBaiduJob(jobId, env, end, submitted);
+  });
 }
 
 /** What every call of one job needs: the token's header, the settings, and the limits by the job's end (ms since 1970). */
@@ -409,7 +473,8 @@ function jobContext(env: Env, end: number) {
   const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
-    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily };
+    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily, connection: keptConnection.getStore(),
+      ...(s.via ? { via: { host: s.via, for: new URL(s.baseUrl).hostname.toLowerCase() } } : {}) };
   };
   return { s, auth: { Authorization: `Bearer ${token}` }, jobsUrl: `${s.baseUrl}${JOBS_PATH}`, timeout,
     retry: { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs } };
@@ -605,7 +670,10 @@ const samePages = (a: number[], b: number[]) => a.length === b.length && a.every
  * job again (never a second job for the same pages while one is going), or submits again after a connection failure.
  * Only after BAIDU_OCR_BACKGROUND_WINDOW_MIN from the first try does the AI reader read what Baidu still has not; a
  * failed job or a refused request goes to the AI reader at the end of the reading, as before. */
-export async function completePdfPagesWithBaidu(args: {
+export function completePdfPagesWithBaidu(args: Parameters<typeof completeWithBaidu>[0]): ReturnType<typeof completeWithBaidu> {
+  return withBaiduConnection(() => completeWithBaidu(args));
+}
+async function completeWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
   /** Background reading: "start" on a reading's first run, then the state the previous run returned. */
   wait?: BaiduWaitState | "start";
@@ -770,7 +838,7 @@ export async function completePdfPagesWithBaidu(args: {
     const resourceId = args.resourceId, stepMs = s.probeStepMs;
     return async () => {
       if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
-      const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
+      const found = await probeBaiduPath(s.baseUrl, { stepMs, via: s.via }).catch(() => null);
       if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
         failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
     };

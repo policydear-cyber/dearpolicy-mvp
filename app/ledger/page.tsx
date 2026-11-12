@@ -159,8 +159,7 @@ function LedgerCoveragePage(){
   return <div className="page">
     <header className="page-header"><div>
       <h1><span className="title-icon"><Icon name="ledger"/></span>Who is covered for what</h1>
-      <p className="lead">For each person: what their plans pay, and the main kinds of cover not found in your documents. Amounts are as your documents print them, not a payment or an insurer&rsquo;s decision.</p>
-      <p className="muted">Looking for everything one policy pays, with its exclusions? <Link className="text-link" href="/schedule">See Benefits, by policy →</Link></p>
+      <p className="lead">What each person&rsquo;s plans pay, as printed in your documents. Your insurer decides any claim. <Link className="text-link" href="/schedule">See by policy →</Link></p>
     </div></header>
     {error?<div className="alert error" role="alert"><strong>Your coverage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>:null}
     {/* The server names each document whose read failed, why, and when it is tried again; without that, the plain stalled banner. */}

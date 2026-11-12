@@ -196,7 +196,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="privacy-pill" data-tip={hosted ? "Your documents and questions are kept private to your household." : "Your documents and questions stay on this computer."} tabIndex={0}
             aria-label={hosted ? "Hosted and encrypted. Your documents and questions are kept private to your household." : "Local-first. Your documents and questions stay on this computer."}>
             <Icon name="lock" />{hosted ? "Private & encrypted" : "Local-first"}</div>
-          <p className="trust-line"><Icon name="lock" />{hosted ? "Private to your household." : "Stays on this computer."}</p>
         </div>
       </aside>
       <main className="main-content">

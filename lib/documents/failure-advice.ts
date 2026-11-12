@@ -118,6 +118,8 @@ export function failedDocumentChatAdvice(error: string | null | undefined, { has
 export type ReadInPartAdvice = { what: string; next: string };
 const NUMBERS = String.raw`\d{1,4}(?:(?:, | and )\d{1,4})*`;
 const WHOLE = new RegExp(String.raw`^Pages? ${NUMBERS} could not be checked: a second reading from the page image did not agree with (?:its|their) text, so no amount on (?:it|them) is used\.$`);
+/** The note a document read before page checks existed carries (lib/rag/ingest.ts): how many cover amounts, no pages. */
+const COUNT = new RegExp(String.raw`^\d{1,4} cover amounts? could not be checked word for word against the document's pages, so (?:it is|they are) not shown as confirmed\.$`);
 const PART = new RegExp(String.raw`^Some amounts on pages? ${NUMBERS} could not be checked against the page image, so they are shown as not checked and not used; the rest of (?:that page|those pages) agreed and is used\.$`);
 export function readInPartAdvice(message: string | null | undefined): ReadInPartAdvice | null {
   const text = (message ?? "").trim();
@@ -126,7 +128,7 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
   // elsewhere. Only the leading sentences that are this note, word for word, are shown (TE pr217 B1-B5).
   const sentences = text.replace(/^Read in part\.\s*/, "").split(/(?<=\.)\s+(?=\p{Lu})/u).filter(Boolean);
   const known: string[] = [];
-  for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
+  for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence) && !COUNT.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
   return {
     what: known.length ? known.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
     next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it, and once it shows as read, delete this one. Read again reads the document once more, but with the same copy the result may not change.",

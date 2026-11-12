@@ -84,7 +84,7 @@ function libraryOf(policies:LibraryPolicy[]):Library{
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
  * answer can draw on today. */
 function ChatWelcome({library}:{library:Library|null}){
-  return <div className="chat-empty" data-testid="chat-welcome"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
+  return <div className="chat-empty" data-testid="chat-welcome">
     {library&&library.total===0?<>
       <p><strong>Upload a policy first.</strong> DearPolicy answers only from the documents you upload, so there is nothing to answer from yet.</p>
       <Link className="button primary" href="/policies"><Icon name="upload"/>Upload a document</Link>
@@ -351,7 +351,7 @@ function ChatContent(){
 
   return <div className="page chat-page">
     <header className="chat-header">
-      <div><h1><span className="title-icon"><Icon name="ask"/></span>Ask DearPolicy</h1><p className="trust-line" data-testid="chat-trust-line"><Icon name="documents"/>Answers only from your documents, with the page.</p></div>
+      <div><h1><span className="title-icon"><Icon name="ask"/></span>Ask DearPolicy</h1></div>
       <div className="chat-head-actions"><div className="auto-context"><strong><Icon name="person"/> Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
