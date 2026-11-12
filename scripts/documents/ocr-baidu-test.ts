@@ -555,9 +555,118 @@ async function main() {
     delete process.env.BAIDU_OCR_SUBMIT;
   }
 
+  // 17. Background reading: when Baidu has not finished within the run (or could not be reached), the reading waits and
+  // looks again later instead of handing the pages to the AI reader; the same Baidu job is looked at again, never a second.
+  {
+    await bd.resetBaiduCooldown();
+    const { BaiduReadingPending, parseBaiduWaitState, baiduWaitDelayMs } = await import("@/lib/documents/baidu-wait");
+    const KEY = (n: number) => `${ACCOUNT}/ocr-handoff/0000000${n}-0000-4000-8000-000000000000/pages.pdf`;
+    let staged = 0; let removed: string[] = [];
+    bd.setBaiduHandoffForTests({ stage: async () => ({ storageKey: KEY(++staged), url: "https://storage.example/sign/x?token=SECRET-LINK" }), remove: async (k) => { removed.push(k); } });
+    const submits = () => baiduCalls().filter((c) => c.method === "POST");
+    const bg = (wait: any) => completePdfPagesWithOcr({ accountId: ACCOUNT, bytes, pages, baiduWait: wait });
+    const pending = async (wait: any) => {
+      try { await bg(wait); } catch (e) { if (e instanceof BaiduReadingPending) return e; throw e; }
+      assert.fail("expected the reading to wait for Baidu");
+    };
+    // Each run gives Baidu 5.5 s here (the floor is 5 s); live it is 90 s.
+    process.env.BAIDU_OCR_MAX_WAIT_MS = "5500";
+
+    // Run 1: Baidu takes the job but is still on it when the run's time is up -> wait; nothing for the AI reader.
+    seen = []; ai = aiReads; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { states: ["pending"] });
+    const t1 = Date.now();
+    const w1 = await pending("start");
+    assert.ok(Date.now() - t1 < 9_000, "the run ends within its Baidu time");
+    assert.equal(submits().length, 1); assert.equal(aiCalls().length, 0, "the AI reader is not called while Baidu reads");
+    assert.deepEqual(w1.pages, [2, 3]);
+    assert.equal(w1.state.runs, 1); assert.deepEqual(w1.state.gaveUp, []);
+    assert.deepEqual(w1.state.jobs.map((j) => [j.pages, j.jobId, j.stagedKey]), [[[2, 3], "job-abc123", KEY(1)]]);
+    assert.deepEqual(removed, [], "the staged copy is kept while Baidu may still download it");
+    // What the job payload carries survives the round trip, and holds no text, link or token.
+    const carried = parseBaiduWaitState(JSON.parse(JSON.stringify(w1.state)));
+    assert.deepEqual(carried, w1.state);
+    assert.ok(!/SECRET-LINK|Death Benefit|test-token/.test(JSON.stringify(w1.state)));
+    assert.equal(baiduWaitDelayMs(1), 20_000); assert.equal(baiduWaitDelayMs(2), 40_000); assert.equal(baiduWaitDelayMs(99), 300_000);
+
+    // Run 2: the job is done -> its result is read, with no second submit; the staged copy is removed; no AI reader.
+    seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { states: ["done"] });
+    out = await bg(carried!);
+    assert.equal(submits().length, 0, "the same job is looked at again, never submitted twice");
+    assert.equal(out[1].text, PAGE_A); assert.equal(out[2].text, PAGE_B); assert.equal(aiCalls().length, 0);
+    assert.deepEqual(removed, [KEY(1)]);
+
+    // Baidu not reached at all (the connection is refused) -> wait, no job kept; the next run submits again and reads.
+    seen = []; removed = []; staged = 0; baidu = () => ({ status: 0, throwCode: "ECONNREFUSED" });
+    const w2 = await pending("start");
+    assert.deepEqual(w2.state.jobs, []); assert.deepEqual(w2.pages, [2, 3]); assert.equal(aiCalls().length, 0);
+    assert.deepEqual(removed, [KEY(1)], "the copy staged for a submit that failed is removed at once");
+    seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])]);
+    out = await bg(w2.state);
+    assert.equal(submits().length, 1); assert.equal(out[1].text, PAGE_A); assert.equal(aiCalls().length, 0);
+
+    // Baidu fails the job (or refuses the request): not waited on -> the AI reader reads the pages in this same run.
+    seen = []; removed = []; staged = 0; baidu = baiduJob([], { states: ["failed"] });
+    out = await bg("start");
+    assert.equal(out[1].text, "AI reading of page 2"); assert.equal(aiCalls().length, 1);
+    assert.deepEqual(removed, [KEY(1)]);
+    seen = []; removed = []; staged = 0; baidu = baiduJob([], { submit: { status: 401, json: { code: 401 } } });
+    out = await bg("start");
+    assert.equal(out[1].text, "AI reading of page 2"); assert.equal(aiCalls().length, 1, "a refused request goes to the AI reader at once");
+
+    // The waiting window is over (30 min from the first try): the job is looked at one last time, then the AI reader reads.
+    seen = []; removed = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { states: ["running"] });
+    const old = { ...w1.state, since: Date.now() - 31 * 60_000, runs: 9 };
+    out = await bg(old);
+    assert.equal(submits().length, 0); assert.equal(out[1].text, "AI reading of page 2"); assert.equal(aiCalls().length, 1);
+    assert.deepEqual(removed, [KEY(1)], "no staged copy is left when the reading stops waiting");
+    // Window over and nothing submitted yet: no new Baidu job; the AI reader reads.
+    seen = []; out = await bg({ since: Date.now() - 31 * 60_000, runs: 9, jobs: [], gaveUp: [] });
+    assert.equal(baiduCalls().length, 0); assert.equal(out[1].text, "AI reading of page 2");
+
+    // Two jobs (one page each): one read, one still running -> wait; the next run reads the second, and the first page's
+    // text is not lost (its job is read again from Baidu: here there is no reading cache, since no document id is given).
+    process.env.BAIDU_OCR_PAGES_PER_JOB = "1";
+    seen = []; removed = []; staged = 0;
+    let polls = 0;
+    baidu = (s) => {
+      if (s.method === "POST") return { status: 200, json: { code: 0, data: { jobId: `job-${submits().length}` } } };
+      const id = s.url.match(/jobs\/(job-\d)/)?.[1];
+      if (id) { polls++; const done = id === "job-1" || polls > 1_000_000; return { status: 200, json: { code: 0, data: { state: done ? "done" : "running", ...(done ? { resultUrl: { jsonUrl: `https://fake-baidu-bucket.test/${id}.jsonl` } } : {}) } } }; }
+      if (/job-1\.jsonl/.test(s.url)) return { status: 200, text: vlLine([PAGE_A]) + "\n" };
+      if (/job-2\.jsonl/.test(s.url)) return { status: 200, text: vlLine([PAGE_B]) + "\n" };
+      return { status: 404, json: {} };
+    };
+    const w3 = await pending("start");
+    assert.deepEqual(baiduCalls().slice(0, 2).map((c) => c.method), ["POST", "POST"], "a long document's jobs are all handed to Baidu first, then waited on");
+    assert.deepEqual(w3.pages, [3]); assert.equal(aiCalls().length, 0);
+    assert.deepEqual(w3.state.jobs.map((j) => [j.pages, j.jobId, j.stagedKey ?? null]), [[[2], "job-1", null], [[3], "job-2", KEY(2)]], "the read job's copy is removed, the other kept");
+    assert.deepEqual(removed, [KEY(1)]);
+    seen = []; polls = 2_000_000;
+    out = await bg(w3.state);
+    assert.equal(submits().length, 0); assert.equal(out[1].text, PAGE_A); assert.equal(out[2].text, PAGE_B); assert.equal(aiCalls().length, 0);
+    assert.deepEqual(removed, [KEY(1), KEY(2)]);
+    delete process.env.BAIDU_OCR_PAGES_PER_JOB;
+
+    // Switched off (BAIDU_OCR_BACKGROUND=off): the reading never waits; a job still running is handed to the AI reader.
+    process.env.BAIDU_OCR_BACKGROUND = "off";
+    seen = []; baidu = baiduJob([vlLine([PAGE_A, PAGE_B])], { states: ["pending"] });
+    out = await bg("start");
+    assert.equal(out[1].text, "AI reading of page 2");
+    delete process.env.BAIDU_OCR_BACKGROUND;
+    // A caller that does not ask for background reading (a claim document, the table check) never waits either.
+    seen = []; out = await run();
+    assert.equal(out[1].text, "AI reading of page 2");
+    // A payload that is not exactly the state's shape is not used.
+    for (const bad of [null, {}, { since: 1, runs: 0, jobs: [{ pages: [2], jobId: "../x", submittedAt: 1 }], gaveUp: [] },
+      { since: 1, runs: 0, jobs: [{ pages: [2], jobId: "j", submittedAt: 1, stagedKey: "other/../../policy.pdf" }], gaveUp: [] }])
+      assert.equal(parseBaiduWaitState(bad), null);
+    delete process.env.BAIDU_OCR_MAX_WAIT_MS;
+    bd.setBaiduHandoffForTests(null);
+  }
+
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
 
-  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent -- passed. Live Baidu behaviour is NOT covered by this test.");
+  console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent, background reading that waits for Baidu instead of handing pages to the AI reader -- passed. Live Baidu behaviour is NOT covered by this test.");
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
