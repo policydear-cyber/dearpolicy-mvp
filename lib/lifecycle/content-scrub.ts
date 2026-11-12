@@ -221,19 +221,32 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
   return result;
 }
 
+/** A staged copy's key as lib/storage/supabase.ts ocrHandoffObjectKey makes it (never ".."): only such a key is removed. */
+const STAGED_COPY_KEY = /^(?!.*\.\.)[A-Za-z0-9._-]{1,80}\/ocr-handoff\/[A-Za-z0-9._-]{1,80}\/pages\.pdf$/;
+
 /**
  * Every pass: a deleted document's reading jobs (its own, keyed by its id, and its later re-read, "<id>:retry-read")
  * keep no PDF password, file key or error text, and stay stopped. The deletion strips them once; a reading that was
  * running can schedule its re-read again afterwards, which brings the job back with the password.
  */
 export async function stopDeletedDocumentJobs(db: Db): Promise<number> {
+  // A reading that was waiting for Baidu (lib/documents/ocr-baidu.ts background reading) may have left a staged copy of
+  // the scanned pages for Baidu to download: it is queued for removal, and the job forgets it.
+  const staged = await db.query<{ key: string | null }>(
+    `SELECT DISTINCT job->>'stagedKey' AS key
+       FROM background_jobs j JOIN policies p ON j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
+       CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(j.payload->'baiduWait'->'jobs')='array' THEN j.payload->'baiduWait'->'jobs' ELSE '[]'::jsonb END) job
+      WHERE j.job_type='policy_processing' AND p.lifecycle_state=ANY($1::text[]) AND j.status <> 'processing'`,
+    [DELETED_STATES]).catch(() => ({ rows: [] as { key: string | null }[] }));
+  const keys = staged.rows.map((r) => r.key).filter((k): k is string => typeof k === "string" && STAGED_COPY_KEY.test(k));
+  const queued = keys.length ? await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff", db).then(() => true, () => false) : true;
   const r = await db.query(
-    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true,
+    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey'${queued ? "-'baiduWait'" : ""}, last_error_message=NULL, cancel_requested=true,
             status=CASE WHEN j.status IN ('queued','failed_retryable') THEN 'cancelled' ELSE j.status END, updated_at=now()
        FROM policies p
       WHERE j.job_type='policy_processing' AND j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
         AND p.lifecycle_state=ANY($1::text[])
-        AND (j.payload ?| ARRAY['pdfPassword','storageKey'] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
+        AND (j.payload ?| ARRAY['pdfPassword','storageKey'${queued ? ",'baiduWait'" : ""}] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
              OR j.status IN ('queued','failed_retryable'))`,
     [DELETED_STATES]).catch(() => ({ rowCount: 0 }));
   return r.rowCount ?? 0;

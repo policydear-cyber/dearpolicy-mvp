@@ -295,6 +295,37 @@ async function main() {
     assert.equal(other.payload.pdfPassword, "keep-me"); assert.equal(other.status, "queued", "another document's re-read is untouched");
   });
 
+  await t("a reading that was waiting for Baidu when its document was deleted leaves no staged copy: queued for removal, and the job forgets it", async () => {
+    const doc = await upload(aisyah, { filename: "Scan-Aisyah.pdf", insurer: "Amanah Life (fictitious)", product: "Amanah Scan", policyNo: "AL-55", hash: "h-scan-wait", pages: ["Sum assured RM100,000."], amount: 100000, currency: "MYR" });
+    const req = await requestPolicyDocumentDeletion({ client: scoped, accountId, actorUserId: randomUUID(), policyId: doc.id, reasonCategory: "user_requested", idempotencyKey: "scrub-baidu-wait" });
+    await finishPolicyDocumentDeletion({ accountId, actorUserId: randomUUID(), policyId: doc.id, deletionRequestId: req.deletionRequestId });
+    const staged = `${accountId}/ocr-handoff/11111111-2222-4333-8444-555555555555/pages.pdf`;
+    const wait = (key: string) => ({ since: Date.now(), runs: 1, gaveUp: [], jobs: [{ pages: [2, 3], jobId: "job-1", submittedAt: Date.now(), stagedKey: key }, { pages: [4], jobId: "job-2", submittedAt: Date.now() }] });
+    // The job as the queue leaves it when a cancel wins over the wait (lib/jobs/queue.ts deferJob): cancelled, the state kept.
+    await q(`UPDATE background_jobs SET status='cancelled', cancel_requested=true, payload=$2::jsonb WHERE job_type='policy_processing' AND idempotency_key=$1`,
+      [doc.id, JSON.stringify({ policyId: doc.id, baiduWait: wait(staged) })]);
+    if (!(await q(`SELECT 1 FROM background_jobs WHERE idempotency_key=$1`, [doc.id])).rows.length)
+      await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status,cancel_requested) VALUES ($1,'policy_processing',$2,$3::jsonb,'cancelled',true)`,
+        [accountId, doc.id, JSON.stringify({ policyId: doc.id, baiduWait: wait(staged) })]);
+    // Another document's waiting reading, and a key that is not a staged copy's, are never touched.
+    const homeStaged = `${accountId}/ocr-handoff/99999999-2222-4333-8444-555555555555/pages.pdf`;
+    const homeRetry = (await q<{ payload: unknown; status: string }>(`SELECT payload, status FROM background_jobs WHERE idempotency_key=$1`, [home.id + ":retry-read"])).rows[0];
+    await q(`DELETE FROM background_jobs WHERE idempotency_key=$1`, [home.id + ":retry-read"]);
+    await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status) VALUES ($1,'policy_processing',$2||':retry-read',$3::jsonb,'queued')`,
+      [accountId, home.id, JSON.stringify({ policyId: home.id, baiduWait: wait(homeStaged) })]);
+    await scrubDeletedDocuments({ pinecone: pineconeSpy([]) });
+    const purge = (await q<{ storage_key: string; reason: string }>(`SELECT storage_key, reason FROM storage_purge_queue WHERE storage_key LIKE '%/ocr-handoff/%'`)).rows;
+    assert.ok(purge.some((r) => r.reason === "ocr_handoff" && (r.storage_key === staged || r.storage_key.startsWith("purged/"))), "the staged copy is queued for removal");
+    assert.ok(!purge.some((r) => r.storage_key === homeStaged), "another document's staged copy is not removed");
+    const mine = (await q<{ payload: Record<string, unknown> }>(`SELECT payload FROM background_jobs WHERE idempotency_key=$1`, [doc.id])).rows[0];
+    assert.equal(mine.payload.baiduWait, undefined, "the job forgets the staged copy");
+    const other = (await q<{ payload: Record<string, unknown> }>(`SELECT payload FROM background_jobs WHERE idempotency_key=$1`, [home.id + ":retry-read"])).rows[0];
+    assert.ok(other.payload.baiduWait, "another document's waiting reading keeps its state");
+    await q(`DELETE FROM background_jobs WHERE idempotency_key=$1`, [home.id + ":retry-read"]);
+    if (homeRetry) await q(`INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload,status) VALUES ($1,'policy_processing',$2||':retry-read',$3::jsonb,$4)`,
+      [accountId, home.id, JSON.stringify(homeRetry.payload), homeRetry.status]);
+  });
+
   await t("a reading that fails after its document was deleted schedules no re-read", async () => {
     const { scheduleDeferredReadForTest } = await import("@/lib/rag/ingest");
     const doc = await upload(haziq, { filename: "Cycle-Haziq.pdf", insurer: "Pedal Cover (fictitious)", product: "Pedal", policyNo: "PC-5", hash: "h-cycle", pages: ["Bike £1,200."], amount: 1200, currency: "GBP" });

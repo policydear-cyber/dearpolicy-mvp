@@ -15,6 +15,7 @@ import { query } from "@/lib/db/client";
 import { probeBaiduPath, probeSummary } from "@/lib/documents/baidu-probe";
 import { removeOcrHandoff, stageOcrHandoff } from "@/lib/storage";
 import { enqueueStoragePurge } from "@/lib/storage/purge";
+import type { BaiduWaitJob, BaiduWaitState } from "@/lib/documents/baidu-wait";
 
 /**
  * Baidu AI Studio's hosted PaddleOCR (async jobs API) as the FIRST reader of scanned, image-only pages. It runs as a
@@ -93,6 +94,12 @@ export function baiduOcrSettings(env: Env = process.env) {
     submitVia: (/^upload$/i.test(env.BAIDU_OCR_SUBMIT?.trim() ?? "") ? "upload" : "link") as "link" | "upload",
     // How long that signed link works. It is removed as soon as the job ends anyway.
     linkTtlSeconds: intEnv(env.BAIDU_OCR_LINK_TTL_S, 900, 60, 3_600),
+    // Background reading (on unless BAIDU_OCR_BACKGROUND=0/false/off): when Baidu has not finished, or could not be
+    // reached, a document's reading waits and looks again a little later (BAIDU_WAIT_DELAYS_MS), in a run of its own,
+    // instead of handing the pages to the AI reader at once. Only for a document's own reading run by the job queue.
+    background: !/^(0|false|off)$/i.test(env.BAIDU_OCR_BACKGROUND?.trim() ?? ""),
+    // How long, from the first try, a reading keeps waiting for Baidu before the AI reader reads what is left.
+    backgroundWindowMs: intEnv(env.BAIDU_OCR_BACKGROUND_WINDOW_MIN, 30, 5, 180) * 60_000,
   };
 }
 
@@ -386,21 +393,30 @@ export type BaiduJobResult = { pages: string[]; jobId: string; model: string | n
 /** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order.
  * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
 export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string } = {}): Promise<BaiduJobResult> {
+  const end = Math.min(deadline ?? Infinity, Date.now() + baiduOcrSettings(env).maxWaitMs);
+  const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
+  return awaitBaiduJob(jobId, env, end, submitted);
+}
+
+/** What every call of one job needs: the token's header, the settings, and the limits by the job's end (ms since 1970). */
+function jobContext(env: Env, end: number) {
   const token = env.BAIDU_AISTUDIO_TOKEN?.trim();
   if (!token || !baiduOcrConfigured(env)) throw new BaiduOcrError("not_configured");
   const s = baiduOcrSettings(env);
   if (!OCR_MODELS.has(s.model) && !DOC_MODELS.has(s.model)) throw new BaiduOcrError("unsupported_model");
-  const auth = { Authorization: `Bearer ${token}` };
-  const jobsUrl = `${s.baseUrl}${JOBS_PATH}`;
-  const end = Math.min(deadline ?? Infinity, Date.now() + s.maxWaitMs);
   // Each call: connect within connectTimeoutMs, never sit idle for requestTimeoutMs, and end by the job's deadline.
-  const retry = { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs };
   const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
     return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily };
   };
+  return { s, auth: { Authorization: `Bearer ${token}` }, jobsUrl: `${s.baseUrl}${JOBS_PATH}`, timeout,
+    retry: { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs } };
+}
 
+/** Submits one job (the PDF holds only the pages to read) and returns Baidu's job id. `end` (ms since 1970) bounds it. */
+export async function submitBaiduJob(pdf: Uint8Array, env: Env, end: number, opts: { fileUrl?: string } = {}): Promise<{ jobId: string; submitted: Record<string, unknown> }> {
+  const { s, auth, jobsUrl, timeout, retry } = jobContext(env, end);
   // Pages photographed sideways or upside down are turned upright by Baidu's own orientation step.
   const optionalPayload = { useDocOrientationClassify: true };
   let submitRequest: TransportRequest;
@@ -418,12 +434,22 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
   }
   const submitted = await apiData(await call(jobsUrl, submitRequest, timeout, "submit", retry));
   const jobId = submitted.jobId;
-  if (typeof jobId !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(jobId)) throw new BaiduOcrError("format");
+  if (typeof jobId !== "string" || !BAIDU_JOB_ID.test(jobId)) throw new BaiduOcrError("format");
+  return { jobId, submitted };
+}
+/** The shape of a Baidu job id: the only form one is ever put in a URL or kept between runs. */
+const BAIDU_JOB_ID = /^[A-Za-z0-9_.-]{1,128}$/;
 
+/** Waits for a submitted job until `end` (ms since 1970) and returns its pages. A job still pending or running at `end`
+ * is a "timeout". `onState` hears each state Baidu reports ("pending", "running", "done", "failed"). */
+export async function awaitBaiduJob(jobId: string, env: Env, end: number, submitted: Record<string, unknown> = {}, onState?: (state: string) => void): Promise<BaiduJobResult> {
+  const { s, auth, jobsUrl, timeout, retry } = jobContext(env, end);
+  if (!BAIDU_JOB_ID.test(jobId)) throw new BaiduOcrError("format");
   let interval = s.pollIntervalMs;
   for (;;) {
     const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout, "poll", retry));
     const state = data.state;
+    if (typeof state === "string") onState?.(state);
     if (state === "done") {
       const jsonUrl = (data.resultUrl as { jsonUrl?: unknown } | undefined)?.jsonUrl;
       if (typeof jsonUrl !== "string") throw new BaiduOcrError("format");
@@ -516,20 +542,73 @@ async function readChunkWithBaidu(accountId: string, pdf: Uint8Array, deadline: 
   }
 }
 
+/** Background reading: submits one chunk and returns at once with Baidu's job id. With "link" on, the pages are staged
+ * for Baidu to download; the staged copy is kept (its key is returned) until the job ends, since Baidu may download it
+ * only when the job starts, and removed at once when the submit fails. */
+async function submitChunkWithBaidu(accountId: string, pdf: Uint8Array, end: number, via: { used: "link" | "upload" }): Promise<{ jobId: string; submitted: Record<string, unknown>; stagedKey?: string }> {
+  const s = baiduOcrSettings();
+  if (s.submitVia !== "link") { via.used = "upload"; return submitBaiduJob(pdf, process.env, end); }
+  let staged: { storageKey: string; url: string } | null;
+  try {
+    staged = await handoff.stage({ accountId, handoffId: randomUUID(), bytes: pdf, ttlSeconds: s.linkTtlSeconds });
+  } catch {
+    throw new BaiduOcrError("handoff_failed");
+  }
+  if (!staged) { via.used = "upload"; return submitBaiduJob(pdf, process.env, end); }
+  via.used = "link";
+  try {
+    return { ...await submitBaiduJob(pdf, process.env, end, { fileUrl: staged.url }), stagedKey: staged.storageKey };
+  } catch (error) {
+    await removeStaged(staged.storageKey);
+    throw error;
+  }
+}
+/** Removes a staged copy; when that fails it is queued for the storage purge, so no copy is left behind. */
+async function removeStaged(key: string): Promise<void> {
+  await handoff.remove(key).catch(() => enqueueStoragePurge([{ domain: "policy", storageKey: key }], "ocr_handoff").catch(() => undefined));
+}
+
+/** A waiting reading that will not go on (its document was deleted): every staged copy it kept is removed. */
+export async function abandonBaiduWait(state: BaiduWaitState): Promise<void> {
+  for (const job of state.jobs) if (job.stagedKey) await removeStaged(job.stagedKey);
+}
+
 /** A chunk with a page Baidu read too little of: used for this reading, never cached, so a later re-read asks again. */
 class WeakChunk extends Error {
   pages: { pageNumber: number; text: string }[];
   constructor(pages: { pageNumber: number; text: string }[]) { super("weak chunk"); this.name = "WeakChunk"; this.pages = pages; }
 }
+/** Background reading's first pass: the chunk was handed to Baidu (nothing to cache yet). */
+class JustSubmitted extends Error { constructor() { super("submitted"); this.name = "JustSubmitted"; } }
+/** Background reading: Baidu has not finished this chunk yet (or could not be reached): it is looked at again in a later run. */
+class ChunkWaiting extends Error {
+  why: string;
+  constructor(why: string) { super("chunk waiting"); this.name = "ChunkWaiting"; this.why = why; }
+}
+/** Failures a later run can get past: Baidu not reached, not answering in time, briefly unavailable (5xx), or our own
+ * storage not staging the pages. A refused request, a failed job or a result that cannot be used is never waited on. */
+function worthWaiting(error: unknown): error is BaiduOcrError {
+  return error instanceof BaiduOcrError && (error.kind === "network" || error.kind === "timeout" || error.kind === "unavailable" || error.kind === "handoff_failed");
+}
+const samePages = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => n === b[i]);
 
 /** Reads the given scanned pages with Baidu. Returns the pages with Baidu's text filled in, and the page numbers Baidu
  * did not give enough text for (all of them when Baidu failed): those go to the AI reader.
  * Reading has no spend cap, but it fails closed when this month's spend cannot be read (overSpendCap throws
  * SpendCheckUnavailable). Each job is booked to the ledger ($0, page count as input) and recorded as a provenance
- * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION). */
+ * attempt; text is used only when that attempt is verified (Baidu's job id plus the model, per BAIDU_IDENTITY_EXCEPTION).
+ *
+ * Background reading (`wait` given, BAIDU_OCR_BACKGROUND on): a chunk Baidu has not finished within this run, or could
+ * not be reached for, is not handed to the AI reader. The result then carries `wait` (the jobs to look at again) and
+ * `waitingPages`, and the caller puts the reading back to wait (lib/rag/ingest.ts). Each later run looks at the same Baidu
+ * job again (never a second job for the same pages while one is going), or submits again after a connection failure.
+ * Only after BAIDU_OCR_BACKGROUND_WINDOW_MIN from the first try does the AI reader read what Baidu still has not; a
+ * failed job or a refused request goes to the AI reader at the end of the reading, as before. */
 export async function completePdfPagesWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
-}): Promise<{ pages: PdfPage[]; unread: number[]; probe?: () => Promise<void> }> {
+  /** Background reading: "start" on a reading's first run, then the state the previous run returned. */
+  wait?: BaiduWaitState | "start";
+}): Promise<{ pages: PdfPage[]; unread: number[]; probe?: () => Promise<void>; wait?: BaiduWaitState; waitingPages?: number[] }> {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
   await overSpendCap(args.accountId);
@@ -544,28 +623,100 @@ export async function completePdfPagesWithBaidu(args: {
   const accept = (got: { pageNumber: number; text: string }[]) => {
     for (const p of got) if (typeof p?.text === "string" && usableCharacters(p.text) >= OCR_TEXT_BAR) texts.set(p.pageNumber, p.text.trim());
   };
+  // Background reading: the state carried between runs (a copy: the caller's is never changed).
+  const state: BaiduWaitState | null = args.wait === undefined || !s.background ? null
+    : args.wait === "start" ? { since: started, runs: 0, jobs: [], gaveUp: [] }
+    : { ...args.wait, jobs: args.wait.jobs.map((j) => ({ ...j, pages: [...j.pages] })), gaveUp: [...args.wait.gaveUp] };
+  const windowOpen = state !== null && started - state.since < s.backgroundWindowMs;
+  const waiting: number[] = [], waitWhy: string[] = [];
+  /** Chunks (by their first index) the reading cache already held. */
+  const cachedChunks = new Set<number>();
+  /** A background job that has ended (read, failed or given up on): its staged copy is removed and it is not looked at again. */
+  const settle = async (job: BaiduWaitJob | undefined) => {
+    if (!state || !job) return;
+    state.jobs = state.jobs.filter((j) => j !== job);
+    if (job.stagedKey) await removeStaged(job.stagedKey);
+  };
+
+  /** Background: a chunk Baidu has read. Its staged copy is no longer needed, but the job stays known while the reading
+   * waits on other chunks, so a later run reads its result again from Baidu (no new job) when the reading cache does not
+   * hold it (a weak page is never cached). */
+  const release = async (chunk: number[]) => {
+    const job = state?.jobs.find((j) => samePages(j.pages, chunk));
+    if (job?.stagedKey) { const key = job.stagedKey; delete job.stagedKey; await removeStaged(key); }
+  };
 
   let unreachable = false;
   const via: { used: "link" | "upload" } = { used: s.submitVia };
+  const owner = args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined;
+  const cacheMaterial = (chunk: number[]) => ({ bytes: bytesHash, pages: chunk, version: TEXT_VERSION });
+  // Background: every chunk not yet with Baidu is submitted first, so Baidu reads a long document's chunks side by side
+  // while this run waits on the first. A chunk the reading cache already holds is not sent; a submit that fails is
+  // handled again by that chunk's turn below (its error, not a second try).
+  const submitFailed = new Map<number, unknown>();
+  if (state && windowOpen) {
+    for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
+      const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
+      if (chunk.every((n) => state.gaveUp.includes(n)) || state.jobs.some((j) => samePages(j.pages, chunk))) continue;
+      if (deadline - Date.now() < MIN_BAIDU_MS) break;
+      try {
+        accept(await cachedReading(owner, "baidu_ocr", cacheMaterial(chunk), `baidu:${s.model}`, async (): Promise<{ pageNumber: number; text: string }[]> => {
+          const sent = await submitChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
+          state.jobs.push({ pages: [...chunk], jobId: sent.jobId, submittedAt: Date.now(), ...(sent.stagedKey ? { stagedKey: sent.stagedKey } : {}) });
+          throw new JustSubmitted();
+        }));
+        // From the cache: read before, nothing sent.
+        cachedChunks.add(i);
+      } catch (error) {
+        if (error instanceof JustSubmitted) continue;
+        // Not sent: this chunk's turn below reports it, and later chunks are submitted in their own turns.
+        submitFailed.set(i, error);
+        break;
+      }
+    }
+  }
   for (let i = 0; i < args.pageNumbers.length; i += s.pagesPerJob) {
     const chunk = args.pageNumbers.slice(i, i + s.pagesPerJob);
-    if (deadline - Date.now() < MIN_BAIDU_MS) { failures.push("timeout"); break; }
-    if (Date.now() < baiduUnreachableUntil || (i === 0 && await sharedCooldownActive(s.cooldownMs))) { failures.push("cooling_down"); break; }
+    if (cachedChunks.has(i) || (state && chunk.every((n) => state.gaveUp.includes(n)))) continue;
+    const known = state?.jobs.find((j) => samePages(j.pages, chunk));
+    if (state && !known && !windowOpen) { failures.push(`timeout waited ${Math.round((started - state.since) / 1000)}s`); state.gaveUp.push(...chunk); continue; }
+    if (deadline - Date.now() < MIN_BAIDU_MS) {
+      if (windowOpen) { waiting.push(...chunk); waitWhy.push("no time left in this run"); continue; }
+      failures.push("timeout"); if (state) { state.gaveUp.push(...chunk); await settle(known); continue; } break;
+    }
+    // A background reading tries Baidu on every run whatever the cool-down says: its own waits space the tries out, and
+    // nobody is kept waiting on the connection (the cool-down spares a reading that would hand its pages on at once).
+    if (!state && (Date.now() < baiduUnreachableUntil || (i === 0 && await sharedCooldownActive(s.cooldownMs)))) { failures.push("cooling_down"); break; }
     try {
-      const got = await cachedReading(
-        args.resourceId ? { accountId: args.accountId, policyId: args.resourceId } : undefined,
-        "baidu_ocr", { bytes: bytesHash, pages: chunk, version: TEXT_VERSION }, `baidu:${s.model}`,
+      const got = await cachedReading(owner, "baidu_ocr", cacheMaterial(chunk), `baidu:${s.model}`,
         async () => {
           const attemptGroupId = randomUUID();
-          const requestedAt = new Date();
-          const t0 = Date.now();
+          const requestedAt = known ? new Date(known.submittedAt) : new Date();
+          const t0 = known?.submittedAt ?? Date.now();
           const requested = { provider: choice.provider, model: choice.model, capability: "reading" as const, inputArtifactType: "application/pdf" };
           let job: BaiduJobResult;
+          // Background: the last state Baidu reported for the job ("pending": queued at Baidu, "running": reading).
+          let lastState: string | undefined;
           try {
-            job = await readChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
+            if (!state) {
+              job = await readChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
+            } else {
+              // Background: look at the job a previous run submitted, or submit one now and keep its id for later runs.
+              let entry = known ?? state.jobs.find((j) => samePages(j.pages, chunk)), submitted: Record<string, unknown> = {};
+              if (submitFailed.has(i)) throw submitFailed.get(i);
+              if (!entry) {
+                const sent = await submitChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
+                entry = { pages: [...chunk], jobId: sent.jobId, submittedAt: t0, ...(sent.stagedKey ? { stagedKey: sent.stagedKey } : {}) };
+                state.jobs.push(entry);
+                submitted = sent.submitted;
+              }
+              job = await awaitBaiduJob(entry.jobId, process.env, deadline, submitted, (st) => { lastState = st; });
+            }
             // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
             if (job.pages.length !== chunk.length) throw new BaiduOcrError("format");
           } catch (error) {
+            // Background: not finished, or not reached, and the window is still open: looked at again later, nothing recorded.
+            if (state && windowOpen && worthWaiting(error)) throw new ChunkWaiting(`${error.summary} via=${via.used}${lastState ? ` baidu=${lastState}` : ""}`);
             const latencyMs = Date.now() - t0;
             await recordUsage({ accountId: args.accountId, role: "reading", choice, input: chunk.length, output: 0, durationMs: latencyMs, ok: false });
             await recordModelExecution({ correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
@@ -589,8 +740,10 @@ export async function completePdfPagesWithBaidu(args: {
           return out;
         });
       accept(got);
+      await release(chunk);
     } catch (error) {
-      if (error instanceof WeakChunk) { accept(error.pages); continue; }
+      if (error instanceof WeakChunk) { accept(error.pages); await release(chunk); continue; }
+      if (error instanceof ChunkWaiting) { waiting.push(...chunk); waitWhy.push(error.why); continue; }
       failures.push(`${error instanceof BaiduOcrError ? error.summary : "unexpected"} via=${via.used}`);
       // Baidu could not be reached at all, or did not answer the submit in time: every instance stops trying for a while, so each later scanned document does
       // not wait 10-60 s for a connection that is not coming before the AI reader reads it.
@@ -599,38 +752,53 @@ export async function completePdfPagesWithBaidu(args: {
         if (baiduOcrSettings().cooldownMs > 0) await startSharedCooldown();
         unreachable = true;
       }
+      // Background: these pages go to the AI reader at the end of the reading; the other chunks still go to Baidu.
+      if (state) { state.gaveUp.push(...chunk); await settle(state.jobs.find((j) => samePages(j.pages, chunk))); continue; }
       // Pages after a failed job are not sent to Baidu again in this reading: the AI reader reads them.
       break;
     }
   }
 
+  const merged = args.pages.map((page) => (texts.has(page.pageNumber) ? { ...page, text: texts.get(page.pageNumber)!, extractionMethod: "ocr" as const } : page));
   const unread = args.pageNumbers.filter((n) => !texts.has(n));
-  let probe: (() => Promise<void>) | undefined;
+  const probeFor = (): (() => Promise<void>) | undefined => {
+    // Which step of the path to Baidu fails, and from which region (no token is used). Only after a submit could not
+    // be completed, and run by the caller only AFTER the AI reader has read the pages, so the upload is not held up
+    // (Critic #411); it is skipped when the function no longer has time to spare for it.
+    if (!unreachable || !args.resourceId || s.probeStepMs <= 0) return undefined;
+    const resourceId = args.resourceId, stepMs = s.probeStepMs;
+    return async () => {
+      if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
+      const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
+      if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
+        failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
+    };
+  };
+
+  // Background: Baidu is still reading (or was not reached) and the window is open: the reading waits and looks again.
+  if (state && waiting.length) {
+    state.runs += 1;
+    if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
+      failureCode: "BAIDU_OCR_WAITING", error: `pages ${waiting.join(", ")}: ${waitWhy.join(",")}; wait ${state.runs}, ${Math.round((Date.now() - state.since) / 1000)}s since the first try`
+        + (failures.length ? `; pages ${state.gaveUp.join(", ")} left for the AI reader: ${failures.join(",")}` : "") }).catch(() => undefined);
+    void recordEvent({ name: "documents.ocr_baidu.waiting", correlationId, status: "in_progress", householdRef,
+      extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, pagesWaiting: waiting.length, wait: state.runs, durationMs: Date.now() - started } });
+    return { pages: merged, unread, probe: probeFor(), wait: state, waitingPages: waiting };
+  }
+  // The reading ends here: no Baidu job is looked at again, so no staged copy is kept.
+  if (state) for (const job of [...state.jobs]) await settle(job);
+  // Pages Baidu failed on in an earlier run of this reading are named too: the AI reader reads them now.
+  if (state && !failures.length && state.gaveUp.some((n) => !texts.has(n))) failures.push("failed in an earlier run (see BAIDU_OCR_WAITING)");
+
   if (failures.length) {
     const kind = failures.join(",");
     void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0].split(" ")[0] as BaiduFailureKind),
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, kind, durationMs: Date.now() - started } });
     if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
       failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
-    // Which step of the path to Baidu fails, and from which region (no token is used). Only after a submit could not
-    // be completed, and run by the caller only AFTER the AI reader has read the pages, so the upload is not held up
-    // (Critic #411); it is skipped when the function no longer has time to spare for it.
-    if (unreachable && args.resourceId && s.probeStepMs > 0) {
-      const resourceId = args.resourceId, stepMs = s.probeStepMs;
-      probe = async () => {
-        if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
-        const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
-        if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
-          failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
-      };
-    }
   } else {
     void recordEvent({ name: "documents.ocr_baidu.completed", correlationId, status: "success", householdRef,
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, pagesToFallback: unread.length, durationMs: Date.now() - started } });
   }
-  return {
-    pages: args.pages.map((page) => (texts.has(page.pageNumber) ? { ...page, text: texts.get(page.pageNumber)!, extractionMethod: "ocr" as const } : page)),
-    unread,
-    probe,
-  };
+  return { pages: merged, unread, probe: failures.length ? probeFor() : undefined };
 }

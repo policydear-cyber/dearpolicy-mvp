@@ -321,6 +321,39 @@ export async function completeJob(db: DbClient, params: { jobId: string; workerI
   return row;
 }
 
+/** Puts a running job back in the queue to run again after `delayMs` (lib/jobs/deferral.ts): its work waits on something
+ * outside, such as Baidu reading a document's scanned pages. The attempt it was claimed with is given back (the wait is
+ * not a failure), `payloadPatch` is merged into its payload for the next run, and the job keeps its id and idempotency
+ * key. A job asked to cancel meanwhile is cancelled instead. CAS-guarded the same way completeJob() is. */
+export async function deferJob(
+  db: DbClient,
+  params: { jobId: string; workerId: string; delayMs: number; payloadPatch: Record<string, unknown> },
+): Promise<BackgroundJobRow> {
+  const result = await db.query<BackgroundJobRow>(
+    `UPDATE background_jobs
+        SET status = CASE WHEN cancel_requested THEN 'cancelled' ELSE 'queued' END,
+            payload = CASE WHEN jsonb_typeof(payload) <> 'object' THEN $4::jsonb
+                           -- Cancelled: no password kept, but the patch is (it can name files still to remove, see
+                           -- lib/lifecycle/content-scrub.ts stopDeletedDocumentJobs).
+                           WHEN cancel_requested THEN (payload || $4::jsonb) - 'pdfPassword' - 'heldForScan'
+                           ELSE payload || $4::jsonb END,
+            attempt_count = GREATEST(attempt_count - 1, 0),
+            available_at = now() + ($3 || ' milliseconds')::interval,
+            lease_owner = NULL,
+            lease_expires_at = NULL,
+            last_heartbeat_at = NULL,
+            updated_at = now()
+      WHERE id=$1 AND lease_owner=$2 AND status='processing'
+      RETURNING ${COLUMNS}`,
+    [params.jobId, params.workerId, String(Math.max(0, Math.round(params.delayMs))), JSON.stringify(params.payloadPatch)],
+  );
+  const row = result.rows[0];
+  if (!row) throw new LeaseLostError(params.jobId);
+  await appendJobAudit(db, row, row.status, { fromStatus: "processing" });
+  await recordJobEvent(row, row.status === "cancelled" ? "job.cancelled" : "job.deferred", { status: row.status === "cancelled" ? "cancelled" : "in_progress", delayMs: params.delayMs });
+  return row;
+}
+
 /** Marks a job attempt failed. `errorCategory: "non_retryable"` sends it
  * straight to dead_letter regardless of attempt_count (a validation
  * error, a permanently-malformed input -- retrying would never help).
