@@ -238,6 +238,14 @@ function spouseNote(household: Household, said: string[]): string {
   return meant ? `("${meant.word}" is ${meant.member}: the documents print "${meant.printed}".) ` : "";
 }
 
+/** The answer when the household has no documents yet: what to do, with no model call and no figures. */
+export const NO_DOCUMENTS_ANSWER = {
+  bottomLine: "There are no documents in your household yet, so there is nothing to answer from.",
+  statements: [],
+  nextSteps: ["Upload a policy, schedule or certificate on the Documents page, then ask again."],
+  question: null,
+};
+
 export async function runSimpleChat(context: ChatContext, opts: { check?: () => Promise<void>; jobId?: string } = {}, deps: SimpleDeps = {}): Promise<ChatResult> {
   const { request, conversation } = context;
   const message = request.submittedQuestion ?? request.question;
@@ -261,6 +269,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // A question about DearPolicy itself gets its fixed answer, with no model call (lib/simple-chat/app-help).
   const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
   if (help) reply = { json: help.answer, stopReason: null, model: `app-help:${help.id}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
+  // A household with no documents has nothing to answer from: its fixed answer costs no model call (TE main journeys 11 Nov).
+  else if (!household.documents.length) reply = { json: NO_DOCUMENTS_ANSWER, stopReason: null, model: "no-documents", usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   else try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
