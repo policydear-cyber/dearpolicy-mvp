@@ -65,7 +65,7 @@ export type PersonBenefit = {
 export type PersonBenefitView = { householdId: string; member: { id: string; name: string }; benefits: PersonBenefit[]; unresolved: string[] };
 
 const MONEY_ONLY = /^(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d[\d,]*(?:\.\d+)?$/i;
-const HAS_MONEY = /(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d/i;
+const HAS_MONEY = /(?:S\$|US\$|HK\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD))\s?\d/i;
 const CONDITION = /\b(?:if|unless|within|provided|subject to|from the \d+\w* day|payable (?:only|from|after|on)|after|up to|per (?:accident|policy year|day))\b/i;
 /** PR #54 (rc-live-8): a footnote marker after a row's name ("Benefit*"), a name left unfinished at a line's end, a
  * numbered section heading, the sections that are never one benefit, and any printed amount (group 1: its currency
@@ -301,7 +301,7 @@ async function personBenefitsUncached(accountId: string, memberId: string, prelo
       let at = 0;
       for (const line of p.text.split("\n")) {
         const start = at; at += line.length + 1;
-        const money = line.match(/(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d[\d,]*(?:\.\d+)?/gi) ?? [];
+        const money = line.match(/(?:S\$|US\$|HK\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD))\s?\d[\d,]*(?:\.\d+)?/gi) ?? [];
         if (money.length !== 1 || memberNamedIn(line, household) !== memberId) continue;
         const named = labels.filter((l) => line.toLowerCase().includes(l.toLowerCase()));
         if (named.length !== 1) continue;

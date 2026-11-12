@@ -8,7 +8,7 @@
  * piece (a table row whose label wraps between its figures). Runs in the browser and on the server: no database code. */
 const NAME_CAP = 90;
 // A figure or currency starting the quote's next cell: "S$500,000", "SGD 1,000", "RM50", "100%", "$1,000".
-const FIGURE = String.raw`(?:\p{Sc}|(?:S|US|HK|A|NZ)\$|(?:SGD|USD|MYR|RM|GBP|EUR|HKD|AUD|NZD)(?=[\s\d])|\d)`;
+const FIGURE = String.raw`(?:\p{Sc}|(?:S|US|HK|A|NZ)\$|(?<![A-Za-z])(?:SGD|USD|MYR|RM|GBP|EUR|HKD|AUD|NZD)(?=[\s\d])|\d)`;
 const spaced = (t: string) => t.replace(/\s+/g, " ").trim();
 
 export function cutNameSuffix(name: string, quote: string | null | undefined): "" | "…" | ")" {

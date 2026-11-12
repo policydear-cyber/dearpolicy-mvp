@@ -50,7 +50,7 @@ export type BenefitRecord = {
   definitions: Definition[];
 };
 
-const MONEY = /(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/;
+const MONEY = /(S\$|US\$|HK\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD))\s?(\d[\d,]*(?:\.\d+)?)/;
 const CUR: Record<string, string> = { "S$": "SGD", SGD: "SGD", "US$": "USD", USD: "USD", RM: "MYR", MYR: "MYR", "HK$": "HKD", HKD: "HKD" };
 const hid = (...parts: string[]) => "b" + createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 10);
 const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["policy", "wording", "summary", "benefits", "schedule", "certificate", "document", "insurance", "group", "scheme"].includes(w)));

@@ -159,7 +159,7 @@ const NO_PAYMENT_YET = /\bnot\s+(?:been\s+)?(?:received|paid)\b|\bwill\s+be\s+(?
 // footnote ("premiums not received by the due date may lapse") or a promise ("a copy will be sent") does not undo it (TE #184 R4/R5).
 // Lines and sentences; "No." and "Ref." are abbreviations, not sentence ends ("Your cheque no. 004512 ... was returned").
 const SENTENCE_BREAK = /\n|(?<=[.!?])(?<!\b(?:[Nn][Oo]|[Rr]ef|[Aa]cc|[Aa]\/[Cc])\.)\s+/;
-const PAID_AMOUNT = /(?:S\$|SGD|RM|MYR|£|GBP|US\$|USD)\s?\d[\d,]*(?:\.\d{2})?/i;
+const PAID_AMOUNT = /(?:S\$|(?<![A-Za-z])(?:SGD|RM|MYR|GBP|USD)|£|US\$)\s?\d[\d,]*(?:\.\d{2})?/i;
 const PAID_PHRASE = /\breceived\s+with\s+thanks\b|\b(?:amount|premium|payment|sum)\s+(?:received|paid)\b|\bwe\s+have\s+received\b|\b(?:has|have)\s+been\s+(?:received|paid)\b|\b(?:was|were)\s+(?:received|paid)\s+on\b|\breceived\s+on\s+\d|\breceived\s+from\b[^.]{0,80}\bthe\s+sum\s+of\b|\backnowledge\s+receipt\s+of\b|\bthank\s+you\s+for\s+your\s+payment\s+of\b/i;
 // A payment undone undoes the receipt (TE #184 R23): only a sentence that says this payment was undone, never a
 // standard footnote ("Cheques returned unpaid will incur a charge", "If your cheque is dishonoured", "Premiums are not

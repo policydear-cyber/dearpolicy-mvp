@@ -282,7 +282,7 @@ const contentWords=(text:string)=>text.toLowerCase().split(/[^\p{L}\p{N}]+/u).fi
  * expenses), less the words of the cover it is stored under ("Double Critical Cover: subject to a limit": nothing). */
 function limitSubject(condition:CoverCondition):string[]{
   const quote=condition.quote??"";
-  const at=quote.search(/(?:S\$|US\$|RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR)\b)?\s*\d/u);
+  const at=quote.search(/(?:S\$|US\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|\$|\b(?:SGD|USD|MYR|GBP|EUR)\b)?\s*\d/u);
   const plan=new Set(contentWords(condition.productName??""));
   return contentWords(at<0?quote:quote.slice(0,at)).filter(w=>!plan.has(w));
 }
@@ -427,7 +427,7 @@ const narrows=(text:string,limit?:{amount:number|null})=>{
     return own&&at>=own.end&&FRAME_JOIN.test(named.slice(own.end,at))?" ":frame;
   }));
 };
-const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|RM|£|€|\$)?\s*\d/u)[0];
+const limitHead=(condition:CoverCondition)=>(condition.quote??"").split(/(?:S\$|US\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|\$)?\s*\d/u)[0];
 /** Whom a sub-limit is for (TE #188 H1, M2; Critic R358 H1). "this": its sentence names the benefit ("Hospital Cash is
  * limited to S$5,000", "ICU Benefit: up to S$25,000" for "Intensive Care Unit (ICU) Benefit", "TPD benefit" for "Total
  * and Permanent Disability"), or the cover it is stored under is the benefit's own name. "other" only on proof: the
