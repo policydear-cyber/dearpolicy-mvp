@@ -29,6 +29,7 @@ import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageLis
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
+import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -1327,6 +1328,25 @@ export function matchMember(household: Household, person: string | null): string
   return hits.length === 1 ? baseName(hits[0].name) : null;
 }
 
+/** Whether the document a figure is quoted from is another member's own and not this person's (TE main journeys 11 Nov,
+ * defect 1). A document stays the person's when it names them, or when the household or the reading linked them to it (a
+ * dependant is rarely named on the policyholder's or employee's document: Critic #424 A1, A2, A4). Otherwise it is
+ * someone else's when it is a personal document linked only to other members, or names another household member -- including a document
+ * DearPolicy matched to the person only by its plan (scheme_reference_match), which is no proof it covers them. */
+export function someoneElsesDocument(household: Household, docIndex: number, person: string): boolean {
+  const doc = household.documents[docIndex];
+  if (!doc) return false;
+  if (doc.pages.some((p) => nameOnPage(person, p.text))) return false;
+  const linked = doc.linkedPeople.map(baseName);
+  const matchedOnly = new Set((doc.matchedOnly ?? []).map(baseName));
+  if (linked.includes(person) && !matchedOnly.has(person)) return false;
+  // A personal document (schedule, certificate, endorsement, statement) linked only to others is theirs; a wording or
+  // summary naming no one is the plan's, as before (simple:chat-test either/or across two people).
+  if (PERSONAL_AUTHORITY_ROLES.has(doc.documentRole ?? "") && linked.length && !linked.includes(person)) return true;
+  const others = household.members.map((m) => baseName(m.name)).filter((n) => n !== person && tokens(n).length > 0);
+  return others.some((n) => doc.pages.some((p) => nameOnPage(n, p.text)));
+}
+
 // ------------------------------------------------------------------ the written answer carries no money
 /** Whether a sentence states money: a figure with a currency, a number with "dollars", or a number with thousands
  * separators. Amounts are shown only on the server's cards, so no sentence the model wrote may carry one -- which is
@@ -1894,10 +1914,17 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const fromRecord = new Set<string>();
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
-    const found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
+    let found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
+      // A quote placed in another member's own document stands only where the person's own documents print it too.
+      if (person && someoneElsesDocument(household, found.docIndex, person)) {
+        const own = household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, person))
+          .map((di) => locateQuote(household, st.quote!, di)).find((f) => f && !someoneElsesDocument(household, f.docIndex, person)) ?? null;
+        if (!own) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
+        found = own;
+      }
       let r = checkAmount(st, found, household, person);
       // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
       // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it
