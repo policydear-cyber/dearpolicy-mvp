@@ -384,7 +384,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .danger-zone { border: 1px solid var(--critical-line); background: var(--critical-tint); border-radius: var(--r-lg); padding: 20px; }
 .danger-zone h2 { color: var(--critical); }
 .accuracy-warning { display: grid; grid-template-columns: 1fr; gap: 4px; align-items: start; }
-.accuracy-warning .warning-next summary { cursor: pointer; font-weight: 650; }
+.accuracy-warning .warning-next summary { cursor: pointer; font-weight: 650; padding: 13px 0; line-height: 18px; }
 .accuracy-warning .warning-next small { display: block; margin-top: 4px; }
 .accuracy-warning b { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; }
 .accuracy-warning span { font-size: var(--fs-xs); line-height: 1.45; }
