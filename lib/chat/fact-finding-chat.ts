@@ -375,7 +375,7 @@ export function claimEventName(person: Person, facts: SubjectFacts, category: Fa
   // No recognised category: the opening message may name the event, but a
   // reply to an interview question never does ("Has a doctor said ...: No").
   const text = fallback.trim().replace(/\s+/g, " ");
-  return text.length > 3 && !looksLikeInterviewReply(text) ? text.slice(0, 120) : who + ": claim check";
+  return text.length > 3 && !looksLikeInterviewReply(text) ? text.slice(0, 120) : who + ": what happened";
 }
 const ACTIVE_STATUS = /^Active status not recently verified\b/i;
 export const DEATH_FIRST_STEPS = "What to do first: get the death certificate and keep the police report number (after an accident the police and coroner are involved). Nothing has to go to an insurer today.";
