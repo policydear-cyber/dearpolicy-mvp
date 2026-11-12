@@ -12,6 +12,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "privacy:notice-test": "node --import tsx scripts/privacy/notice-test.ts",
+    "learn:content-test": "node --import tsx scripts/learn/learn-content-test.ts",
     "benefit-table:upload-profile-test": "node --import tsx scripts/benefit-table/upload-profile-test.ts",
     "benefit-table:coverage-people-test": "node --import tsx scripts/benefit-table/coverage-people-test.ts",
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
