@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { GUIDES, TERMS_PAGE } from "@/lib/learn/content";
 import { LearnNotice } from "@/components/learn-notice";
+import { Pictogram } from "@/components/learn/pictogram";
+import type { LearnIcon } from "@/lib/learn/content";
 
 /** The knowledge library's index. Static text: it reads no household data and calls no service. */
 export const metadata = { title: "Learn · DearPolicy" };
 
 export default function LearnPage() {
-  const pages = [...GUIDES.map(({ slug, title, summary }) => ({ slug, title, summary })), TERMS_PAGE];
+  const pages: Array<{ slug: string; title: string; summary: string; icon: LearnIcon }> = [
+    ...GUIDES.map(({ slug, title, summary, icon }) => ({ slug, title, summary, icon })),
+    { ...TERMS_PAGE, icon: "read" },
+  ];
   return (
     <div className="page learn-page" data-testid="learn-index">
       <header className="page-header compact"><div>
@@ -18,8 +23,8 @@ export default function LearnPage() {
         {pages.map((page) => (
           <li key={page.slug}>
             <Link className="learn-card" href={`/learn/${page.slug}`}>
-              <strong>{page.title}</strong>
-              <span>{page.summary}</span>
+              <Pictogram icon={page.icon} size={44} />
+              <div><strong>{page.title}</strong><span>{page.summary}</span></div>
             </Link>
           </li>
         ))}

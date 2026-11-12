@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GUIDES, TERMS_PAGE, guideBySlug, termsSorted } from "@/lib/learn/content";
 import { LearnNotice } from "@/components/learn-notice";
+import { LearnBlockView } from "@/components/learn/blocks";
 
 /** One knowledge-library page: a guide, or the A to Z of terms. Static text: no household data, no service calls. */
 export function generateStaticParams() {
@@ -53,9 +54,7 @@ export default async function LearnGuidePage({ params }: { params: Promise<{ slu
         {guide.sections.map((section) => (
           <section className="section" key={section.heading}>
             <h2>{section.heading}</h2>
-            {section.blocks.map((block, i) => block.kind === "p" ? <p key={i}>{block.text}</p>
-              : block.kind === "example" ? <p key={i} className="learn-example" data-testid="learn-example">{block.text}</p>
-              : <ul key={i}>{block.items.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+            {section.blocks.map((block, i) => <LearnBlockView key={i} block={block} />)}
           </section>
         ))}
       </article>

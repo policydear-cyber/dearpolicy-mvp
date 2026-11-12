@@ -9,7 +9,9 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GUIDES, LEARN_NOTICE, TERMS, TERMS_PAGE, guideBySlug, termHref } from "@/lib/learn/content";
+import { GUIDES, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, termHref } from "@/lib/learn/content";
+import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
+import { PICTOGRAMS } from "@/components/learn/pictogram";
 import { MAX_LEARN_LINKS, learnTermsIn } from "@/lib/learn/match";
 import { LearnLinks } from "@/components/learn-links";
 import LearnIndex from "@/app/learn/page";
@@ -22,24 +24,31 @@ const t = async (name: string, fn: () => void | Promise<void>) => { try { await 
 const allText = [
   LEARN_NOTICE, TERMS_PAGE.title, TERMS_PAGE.summary,
   ...TERMS.flatMap((term) => [term.term, term.definition, ...(term.alsoCalled ?? [])]),
-  ...GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap((b) => b.kind === "list" ? b.items : [b.text])])]),
+  ...GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]),
 ];
 const joined = allText.join("\n");
+const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
+/** Picture and try-it components carry a few words of their own (labels, notes); the same word rules apply to them. */
+const componentSources = [...walk("components/learn"), "lib/learn/try-it.ts"].map((f) => readFileSync(f, "utf8")).join("\n");
+const CURRENCY_NEXT_TO_FIGURE = /(?:[$€£¥₹₩₱฿]\s?\d|\b(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD|RM|S\$|US\$)\s?\d|\d\s?(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD)\b)/;
 
 async function main() {
   console.log("Knowledge library");
 
   await t("content: no currency attached to any figure (examples are plain numbers)", () => {
     // Currency symbols or ISO-style codes next to a number would read as someone's cover in a given currency.
-    const hit = joined.match(/(?:[$€£¥₹₩₱฿]\s?\d|\b(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD|RM|S\$|US\$)\s?\d|\d\s?(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD)\b)/);
+    const hit = joined.match(CURRENCY_NEXT_TO_FIGURE);
     assert.equal(hit, null, `currency next to a figure: ${hit?.[0]}`);
+    const inComponents = componentSources.match(CURRENCY_NEXT_TO_FIGURE);
+    assert.equal(inComponents, null, `currency next to a figure in a picture or try-it component: ${inComponents?.[0]}`);
+    assert.doesNotMatch(componentSources, /currency:|style: "currency"/, "try-it numbers must be formatted without a currency");
   });
 
   await t("content: every figure-bearing passage is an example block that says it is an example", () => {
     for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
-      const texts = b.kind === "list" ? b.items : [b.text];
-      for (const text of texts) {
+      for (const text of blockTexts(b)) {
         if (!/\d{3}/.test(text)) continue;
+        if (b.kind === "quiz") { assert.match(b.question, /^Example only/, `${g.slug}: a quiz with figures must say it is an example`); continue; }
         assert.equal(b.kind, "example", `${g.slug} / ${s.heading}: a figure outside an example block: "${text.slice(0, 60)}"`);
         assert.match(text, /^Example only/, `${g.slug}: example not labelled`);
       }
@@ -51,10 +60,13 @@ async function main() {
     const names = /\b(AIA|AXA|Allianz|Prudential|Great Eastern|Income Insurance|NTUC|FWD|Manulife|Sun Life|HSBC Life|Singlife|Tokio Marine|Zurich|MetLife|Chubb|Aviva|Generali|Ping An|China Life|Etiqa|MediShield|MediSave|CareShield|Integrated Shield|CPF|Medicare|Medicaid|NHS|Obamacare|MAS|FCA)\b/;
     const hit = joined.match(names);
     assert.equal(hit, null, `named: ${hit?.[0]}`);
+    const inComponents = componentSources.match(names);
+    assert.equal(inComponents, null, `named in a component: ${inComponents?.[0]}`);
   });
 
   await t("content: never promises payment or states what a particular policy pays", () => {
-    const hit = joined.match(/\b(you will (?:be paid|receive|get)|is guaranteed to pay|will definitely|always pays|you are covered for)\b/i);
+    const promise = /\b(you will (?:be paid|receive|get)|is guaranteed to pay|will definitely|always pays|you are covered for|the policy pays \d|you get \d)\b/i;
+    const hit = joined.match(promise) ?? componentSources.match(promise);
     assert.equal(hit, null, `promise wording: ${hit?.[0]}`);
     assert.match(LEARN_NOTICE, /General education only/);
     assert.match(LEARN_NOTICE, /not advice about your own cover/);
@@ -169,14 +181,13 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx"];
-    const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match)|@\/components\/learn-notice|\.\/content)$/.test(i), `${f} imports ${i}`);
-      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env/i, f);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it)|\.\/content)$/.test(i), `${f} imports ${i}`);
+      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b|https?:\/\//i, f);
     }
   });
 
@@ -195,6 +206,62 @@ async function main() {
 
   await t("wiring: /learn still needs a signed-in session (not added to the public paths)", () => {
     assert.doesNotMatch(readFileSync("middleware.ts", "utf8"), /"\/learn/);
+  });
+
+  await t("pictures: every guide has at least one picture and one thing to tap or try", () => {
+    for (const g of GUIDES) {
+      const kinds = g.sections.flatMap((s) => s.blocks.map((b) => b.kind));
+      assert.ok(kinds.some((k) => k === "tiles" || k === "steps" || k === "flow" || k === "diagram"), `${g.slug}: no picture`);
+      assert.ok(kinds.some((k) => k === "cards" || k === "quiz" || k === "bill-split" || k === "percent-of-sum"), `${g.slug}: nothing interactive`);
+      assert.ok(PICTOGRAMS.includes(g.icon), `${g.slug}: index picture ${g.icon} not drawn`);
+    }
+  });
+
+  await t("pictures: every picture a block names is drawn; quizzes have one valid answer", () => {
+    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      const tiles = b.kind === "tiles" ? b.tiles : b.kind === "steps" ? b.steps : b.kind === "flow" ? b.items : [];
+      for (const tile of tiles) assert.ok(PICTOGRAMS.includes(tile.icon), `${g.slug}: ${tile.icon} not drawn`);
+      if (b.kind === "quiz") {
+        assert.ok(b.options.length >= 2 && b.options.length <= 4, `${g.slug}: quiz options`);
+        assert.ok(Number.isInteger(b.answer) && b.answer >= 0 && b.answer < b.options.length, `${g.slug}: quiz answer out of range`);
+        assert.equal(new Set(b.options).size, b.options.length, `${g.slug}: duplicate quiz option`);
+        assert.ok(b.explain.length > 40, `${g.slug}: quiz explanation too thin`);
+      }
+      if (b.kind === "cards") for (const c of b.cards) assert.ok(c.back.length > 30, `${g.slug}: card "${c.front}" answer too thin`);
+    }
+  });
+
+  await t("try-it: the bill split adds up, matches the guide's worked example, and caps at the limit", () => {
+    const base = splitBill({ bill: 10000, deductible: 1000, coPaymentPercent: 10, limit: 20000 });
+    assert.deepEqual(base, { deductible: 1000, coPayment: 900, overLimit: 0, policyShare: 8100, yourShare: 1900 });
+    const capped = splitBill({ bill: 20000, deductible: 1000, coPaymentPercent: 10, limit: 5000 });
+    assert.equal(capped.policyShare, 5000);
+    assert.equal(capped.overLimit, 20000 - 1000 - 1900 - 5000);
+    const small = splitBill({ bill: 500, deductible: 1000, coPaymentPercent: 10, limit: 5000 });
+    assert.deepEqual(small, { deductible: 500, coPayment: 0, overLimit: 0, policyShare: 0, yourShare: 500 });
+    for (const bill of [0, 1000, 7500, 30000]) for (const ded of [0, 300, 5000]) for (const pct of [0, 15, 50]) for (const limit of [1000, 30000]) {
+      const r = splitBill({ bill, deductible: ded, coPaymentPercent: pct, limit });
+      assert.equal(r.deductible + r.coPayment + r.overLimit + r.policyShare, bill, "parts must add up to the bill");
+      assert.equal(r.yourShare + r.policyShare, bill);
+      assert.ok(r.policyShare <= limit && Object.values(r).every((n) => n >= 0));
+    }
+    assert.equal(splitBill({ bill: NaN, deductible: -5, coPaymentPercent: 200, limit: Infinity }).policyShare, 0);
+    assert.equal(percentOf(25, 100000), 25000);
+    assert.equal(percentOf(150, 100000), 100000);
+    assert.equal(plainNumber(8100), "8,100");
+  });
+
+  await t("try-it and quiz render labelled as made-up examples; quiz buttons are buttons", async () => {
+    const html = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "how-amounts-work" }) }));
+    assert.ok(html.includes('data-testid="learn-bill-split"') && html.includes('data-testid="learn-percent-of-sum"'));
+    assert.equal((html.match(/Example only: made-up numbers in no particular currency, not your policy\./g) ?? []).length, 2);
+    assert.match(html, /Your insurer decides what it pays\./);
+    assert.match(html, />8,100</, "the bill slider starts at the guide's worked example");
+    assert.match(html, /data-testid="learn-quiz"/);
+    for (const btn of html.match(/<button[^>]*>/g) ?? []) assert.match(btn, /type="button"/);
+    const docs = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "your-documents" }) }));
+    assert.match(docs, /<details class="learn-flip"><summary>/, "tap cards work without JavaScript");
+    assert.match(docs, /<svg class="lp"[^>]*aria-hidden="true"/, "pictures are decorative next to their words");
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);
