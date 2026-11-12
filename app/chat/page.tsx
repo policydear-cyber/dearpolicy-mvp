@@ -457,6 +457,7 @@ function ChatContent(){
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
+          {message.answer?.disclaimer&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
         </div>
         {message.error?(message.conflict
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>
