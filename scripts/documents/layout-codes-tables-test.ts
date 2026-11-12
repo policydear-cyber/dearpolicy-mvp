@@ -70,6 +70,30 @@ async function main() {
     refused("Rates\nSum\tPremium\n50,000\t11.40\n50,000\t11.40", "Rates\nSum Premium\n50,000 11.40");
   });
 
+  // Critic #432: the image's header is checked, and only the last row may be shorter than the header.
+  await test("C1 the image prints the same rows under its columns the other way round: refused", () => {
+    refused("Rates\nSum assured\tPremium\n50,000\t11.40\n100,000\t21.10", "Rates\nPremium Sum assured\n50,000 11.40\n100,000 21.10");
+  });
+  await test("C2 the same rows sit under another table's header in the image: refused", () => {
+    refused("Rates\nSum assured\tPremium\n50,000\t11.40\n100,000\t21.10", "Rates\nYear Cash value\n50,000 11.40\n100,000 21.10");
+  });
+  await test("B2 every row narrower than its header (which column is it?): refused", () => {
+    const r = refused("Rates\nAge\tMale\tFemale\n30\t120.50\n31\t125.10", "Rates\nAge Male Female\n30 120.50\n31 125.10");
+    assert.ok(r.text === null || r.text.split("\n").filter((l) => /^\d/.test(l)).length === 0, `no short row kept:\n${r.text}`);
+  });
+  await test("B4 a single row shorter than its header: refused", () => {
+    refused("Rates\nAge\tMale\tFemale\n30\t120.50", "Rates\nAge Male Female\n30 120.50");
+  });
+  await test("B3 a short row before a full one: refused", () => {
+    refused("Rates\nAge\tMale\tFemale\n30\t120.50\n31\t125.10\t114.70", "Rates\nAge Male Female\n30 120.50\n31 125.10 114.70");
+  });
+  await test("T9 a two-line header the image prints as one line, cell by cell", () => confirmed(
+    "Rates\nCoverage\tMonthly premium\namount (S$)\trates (S$)\n50,000\t11.40\n100,000\t21.10",
+    "Rates\nCoverage amount (S$) Monthly premium rates (S$)\n50,000 11.40\n100,000 21.10"));
+  await test("T10 a header line with one words cell and one other (\"see below\") must be printed alike above the rows", () => {
+    refused("Benefits payable\tsee below\n50,000\t11.40\n100,000\t21.10", "Benefits\n50,000 11.40\n100,000 21.10");
+  });
+
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`layout-codes-tables: ${passed} passed, 0 failed`);
 }

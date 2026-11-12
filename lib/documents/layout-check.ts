@@ -513,14 +513,28 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     for (let k = 0; k < filledText.length; k++) {
       const h = filledText[k], head = lineTokens(lines[h]), width = cellsOf(lines[h]);
       if (skipText.has(h) || width < 2 || !head.length || figureLine(head)) continue;
+      // Every row fills every column of the header; only the run's last row (never its first) may be shorter (a table's half-filled last
+      // row). A shorter row elsewhere cannot say which column it skipped (Critic #432 B2).
       const run: number[] = [];
       for (let m = k + 1; m < filledText.length; m++) {
         const i = filledText[m], t = lineTokens(lines[i]), c = cellsOf(lines[i]);
-        if (skipText.has(i) || !bare(t) || c < 2 || c > width) break;
+        if (skipText.has(i) || !bare(t) || c < 2 || c > width || (!run.length && c < width)) break;
         run.push(i);
+        if (c < width) break;
       }
       if (!run.length) continue;
-      const rowsAt = (s0: number) => run.every((i, r) => {
+      // The image must print the same header right above the same rows, so both readings say the same thing about each
+      // column (Critic #432 C1/C2: the same rows under "Premium  Sum assured", or under another table's header, are not
+      // the same table). A two-line header the image prints as one line is accepted cell by cell ("Coverage" over
+      // "amount (S$)" is "Coverage amount (S$)").
+      const prev = filledText[k - 1];
+      const merged = prev !== undefined && !skipText.has(prev) && cellsOf(lines[prev]) === width && lineTokens(lines[prev]).length && !figureLine(lineTokens(lines[prev]))
+        ? lineTokens(lines[prev].split("\t").filter((c) => c.trim()).map((c, x) => `${c} ${lines[h].split("\t").filter((d) => d.trim())[x] ?? ""}`).join("\t")) : null;
+      const headerAt = (s0: number) => {
+        const j = filledImage[s0 - 1], t = j === undefined ? [] : lineTokens(imageLinesAll[j]);
+        return t.length > 0 && (sameLine(t, head) || (merged !== null && sameLine(t, merged)));
+      };
+      const rowsAt = (s0: number) => headerAt(s0) && run.every((i, r) => {
         const j = filledImage[s0 + r], t = j === undefined || skipImage.has(j) ? [] : lineTokens(imageLinesAll[j]);
         return bare(t) && sameLine(lineTokens(lines[i]), t);
       });
