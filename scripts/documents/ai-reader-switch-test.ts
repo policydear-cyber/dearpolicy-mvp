@@ -147,11 +147,32 @@ async function main() {
   });
   delete process.env.OCR_AI_READER;
 
-  await check("S6 ingest: the image check of unverified figures keeps the pages when nothing read them (source)", async () => {
+  await check("S6 ingest: the unverified-figure check decides page by page with the switch off; the scrambled-table check does not (source)", async () => {
     const src = (await import("node:fs")).readFileSync("lib/rag/ingest.ts", "utf8");
     assert.match(src, /await crossCheck\(failed, true\)/, "the unverified-figure check keeps unread pages");
     assert.match(src, /await crossCheck\(ocrSourceBytes && sniffed\.format === "pdf" \? suspectPages\(pages\) : \[\]\);/, "the scrambled-table check does not");
-    assert.match(src, /noImage = keepUnread && !aiPageReaderOn\(\)/);
+    assert.match(src, /if \(keepUnread && !aiPageReaderOn\(\)\) \{\s*const kept = await crossCheckKeepingUnread\(pages, numbers, await read\(numbers\)\)/);
+  });
+  const { crossCheckKeepingUnread } = await import("@/lib/documents/ai-reader-switch");
+  const TEXT = "Hospital cash benefit S$ 200 per day\nAccidental death S$ 100,000";
+  const two = [1, 2].map((n) => ({ pageNumber: n, text: TEXT, extractionMethod: "native" as const }));
+  await check("S7 mixed reply (Critic #435 H1): the page Baidu read is checked, the unread page keeps its text and figures", async () => {
+    const got = [{ pageNumber: 1, text: TEXT, extractionMethod: "ocr" as const }, { pageNumber: 2, text: "", extractionMethod: "native" as const, unreadable: true, notRead: true }];
+    const r = await crossCheckKeepingUnread(two, [1, 2], got);
+    assert.deepEqual(r.unread, [2]);
+    assert.equal(r.pages[1].text, TEXT); assert.equal((r.pages[1] as { unchecked?: boolean }).unchecked, undefined);
+    assert.notEqual((r.pages[0] as { unchecked?: boolean }).unchecked, true, "page 1 agreed with its image");
+  });
+  await check("S8 every page unread: all kept as they were", async () => {
+    const got = [1, 2].map((n) => ({ pageNumber: n, text: "", extractionMethod: "native" as const, unreadable: true, notRead: true }));
+    const r = await crossCheckKeepingUnread(two, [1, 2], got);
+    assert.deepEqual(r.unread, [1, 2]); assert.deepEqual(r.pages, two);
+  });
+  await check("S9 a page Baidu read that disagrees is still unchecked (the check itself is unchanged)", async () => {
+    const got = [{ pageNumber: 1, text: "Hospital cash benefit S$ 900 per day\nAccidental death S$ 400,000", extractionMethod: "ocr" as const }, { pageNumber: 2, text: "", extractionMethod: "native" as const, notRead: true }];
+    const r = await crossCheckKeepingUnread(two, [1, 2], got);
+    assert.equal((r.pages[0] as { unchecked?: boolean; partChecked?: boolean }).unchecked || (r.pages[0] as { partChecked?: boolean }).partChecked, true);
+    assert.equal(r.pages[1].text, TEXT);
   });
   console.log(`ai-reader-switch: ${passed} passed, 0 failed`);
 }
