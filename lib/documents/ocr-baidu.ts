@@ -138,13 +138,13 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection };
+type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection; reusedReplyMs?: number };
 type Transport = (url: string, req: TransportRequest, limits: Limits) => Promise<TransportResponse>;
 
 /** Production: node:https with separate connect / no-progress / total limits and a trace (baidu-transport.ts). */
 const httpsTransport: Transport = async (url, req, l) => {
   try {
-    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection });
+    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection, reusedReplyMs: l.reusedReplyMs });
   } catch (error) {
     if (error instanceof TransportError) throw Object.assign(error, { summary: traceSummary(error.trace) });
     throw error;
@@ -195,7 +195,7 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
   for (let attempt = 0; ; attempt++) {
     const l = limitsForTry(limits(), attempt, retry.connectMs);
     try {
-      return await transport(url, req, l);
+      return await transport(url, req, { ...l, reusedReplyMs: REUSED_REPLY_MS });
     } catch (error) {
       // A kept-open connection Baidu had already closed: a GET (poll or result: nothing is created) is sent once more on a
       // new connection, at once. A POST is never repeated once sent.
@@ -213,13 +213,19 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
 }
 /** True when a call over a kept-open connection failed before any reply arrived (the far end had closed it). */
 export function staleKeptConnection(error: unknown): boolean {
-  return error instanceof TransportError && error.trace.reused === true && error.trace.firstByteMs === undefined && error.kind === "network";
+  // "network": the far end had closed it; "timeout": the path went silent on it (no reply within REUSED_REPLY_MS).
+  return error instanceof TransportError && error.trace.reused === true && error.trace.firstByteMs === undefined;
 }
+/** How long a poll or result request on a kept connection waits for the first reply byte before that connection is
+ * dropped and the request sent once more on a new one. A poll's reply is small and normally comes in under a second. */
+export const REUSED_REPLY_MS = 10_000;
 
 /** The kept-open connection for the Baidu calls running inside withBaiduConnection (one reading, or one readPdfWithBaidu). */
 const keptConnection = new AsyncLocalStorage<BaiduConnection>();
-/** Runs `fn` with one kept-open connection to Baidu for all its calls (submit, polls, result), as Baidu's own client does
- * (one requests.Session), and closes it at the end. Inside an outer one, the outer connection is used. */
+/** Runs `fn` with one kept-open connection to Baidu for its polls and result calls, as Baidu's own client does (one
+ * requests.Session), and closes it at the end. Inside an outer one, the outer connection is used. The calls inside one
+ * scope must stay one at a time (no Promise.all): the agent holds ONE socket, and a request queued for it would have its
+ * connect limit running while it waits, failing as a "connect" timeout. */
 export async function withBaiduConnection<T>(fn: () => Promise<T>): Promise<T> {
   if (keptConnection.getStore()) return fn();
   const conn = baiduConnection();

@@ -61,10 +61,13 @@ export type TransportOptions = {
   /** A keep-alive agent (baiduConnection) shared by the calls of one job, so they reuse one open connection, as Baidu's
    * own client does (paddleocr 3.7.0: one requests.Session). Without it each call opens and closes its own connection. */
   connection?: BaiduConnection;
+  /** On a kept connection, the wait for the first reply byte (instead of idleTimeoutMs). A kept connection the path has
+   * gone silent on answers nothing at all; a poll's small reply normally comes in well under a second. */
+  reusedReplyMs?: number;
 };
 export type BaiduConnection = { https: HttpsAgent; http: HttpAgent; close: () => void };
 
-/** One kept-open connection for the calls of one Baidu job (submit, each poll, the result), like Baidu's own client.
+/** One kept-open connection for the polls and result of one Baidu job (submit, each poll, the result), like Baidu's own client.
  * Each new connection to Baidu's Beijing host is another chance to meet the stretches where the path from Singapore
  * answers nothing (11 Nov 12:57Z: no TCP answer for 15.4 s, again 17 s later). An idle connection is closed after 20 s
  * (longer than the 15 s longest wait between polls), and `close()` ends it when the job is done. */
@@ -105,7 +108,10 @@ function plainCode(error: unknown): string | undefined {
 export async function transportRequest(url: string, req: TransportRequest, opts: TransportOptions): Promise<TransportResponse> {
   const target = new URL(url);
   let payload: Uint8Array | undefined;
-  const agent = opts.connection ? (target.protocol === "https:" ? opts.connection.https : opts.connection.http) : undefined;
+  // Only GETs (polls, the result) ride the kept connection. A POST (the submit) always opens its own: if a kept
+  // connection had gone stale or silent, a submit on it could not be tried again (it may have reached Baidu), whereas a
+  // fresh connection that fails to open is retried safely (failedBeforeSending).
+  const agent = opts.connection && req.method === "GET" ? (target.protocol === "https:" ? opts.connection.https : opts.connection.http) : undefined;
   const headers: Record<string, string> = { ...(req.headers ?? {}), connection: agent ? "keep-alive" : "close" };
   if (req.body) {
     // The body sets these two itself; a caller's own spelling ("Content-Type") would otherwise be sent twice.
@@ -137,7 +143,8 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
     const fail = (kind: "timeout" | "network", code?: string) => finish(new TransportError(kind, trace, code));
     const progress = () => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => fail("timeout"), opts.idleTimeoutMs);
+      const waitingOnKept = trace.reused && trace.firstByteMs === undefined && opts.reusedReplyMs !== undefined;
+      idleTimer = setTimeout(() => fail("timeout"), waitingOnKept ? Math.min(opts.reusedReplyMs!, opts.idleTimeoutMs) : opts.idleTimeoutMs);
     };
 
     const request = (secure ? httpsRequest : httpRequest)({
@@ -171,7 +178,8 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
 
     request.on("socket", (socket: Socket) => {
       // A kept-open connection from the agent is already connected (and secured): no lookup/connect events follow.
-      if (agent && !socket.connecting && (!secure || (socket as Socket & { encrypted?: boolean }).encrypted)) {
+      // (A free agent socket has always finished its TLS handshake; `connecting` is what tells a kept socket apart.)
+      if (agent && !socket.connecting) {
         trace.reused = true; trace.dnsMs = trace.connectMs = since(); if (secure) trace.tlsMs = trace.connectMs;
         if (socket.remoteAddress) { trace.ip = socket.remoteAddress; trace.family = socket.remoteFamily === "IPv6" ? 6 : 4; }
         connected();
