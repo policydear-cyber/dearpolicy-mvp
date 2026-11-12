@@ -9,7 +9,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GUIDES, LEARN_NOTICE, TERMS, TERMS_PAGE, guideBySlug, termHref } from "@/lib/learn/content";
+import { GENERAL_GUIDES, GUIDES, LEARN_GROUPS, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, learnDate, learnSearchIndex, termHref } from "@/lib/learn/content";
+import { SINGAPORE_GUIDES } from "@/lib/learn/singapore";
+import { searchLearn } from "@/components/learn/search";
+import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
+import { PICTOGRAMS } from "@/components/learn/pictogram";
 import { MAX_LEARN_LINKS, learnTermsIn } from "@/lib/learn/match";
 import { LearnLinks } from "@/components/learn-links";
 import LearnIndex from "@/app/learn/page";
@@ -22,24 +26,33 @@ const t = async (name: string, fn: () => void | Promise<void>) => { try { await 
 const allText = [
   LEARN_NOTICE, TERMS_PAGE.title, TERMS_PAGE.summary,
   ...TERMS.flatMap((term) => [term.term, term.definition, ...(term.alsoCalled ?? [])]),
-  ...GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap((b) => b.kind === "list" ? b.items : [b.text])])]),
+  ...GENERAL_GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]),
 ];
+/** Country articles: they name schemes and state official figures, under their own, stricter sourcing rules (tested below). */
+const sgText = SINGAPORE_GUIDES.flatMap((g) => [g.title, g.summary, ...(g.keywords ?? []), ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]).join("\n");
 const joined = allText.join("\n");
+const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
+/** Picture and try-it components carry a few words of their own (labels, notes); the same word rules apply to them. */
+const componentSources = [...walk("components/learn"), "lib/learn/try-it.ts"].map((f) => readFileSync(f, "utf8")).join("\n");
+const CURRENCY_NEXT_TO_FIGURE = /(?:[$€£¥₹₩₱฿]\s?\d|\b(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD|RM|S\$|US\$)\s?\d|\d\s?(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD)\b)/;
 
 async function main() {
   console.log("Knowledge library");
 
   await t("content: no currency attached to any figure (examples are plain numbers)", () => {
     // Currency symbols or ISO-style codes next to a number would read as someone's cover in a given currency.
-    const hit = joined.match(/(?:[$€£¥₹₩₱฿]\s?\d|\b(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD|RM|S\$|US\$)\s?\d|\d\s?(?:USD|SGD|EUR|GBP|AUD|HKD|MYR|INR|CNY|JPY|NZD|CAD)\b)/);
+    const hit = joined.match(CURRENCY_NEXT_TO_FIGURE);
     assert.equal(hit, null, `currency next to a figure: ${hit?.[0]}`);
+    const inComponents = componentSources.match(CURRENCY_NEXT_TO_FIGURE);
+    assert.equal(inComponents, null, `currency next to a figure in a picture or try-it component: ${inComponents?.[0]}`);
+    assert.doesNotMatch(componentSources, /currency:|style: "currency"/, "try-it numbers must be formatted without a currency");
   });
 
   await t("content: every figure-bearing passage is an example block that says it is an example", () => {
-    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
-      const texts = b.kind === "list" ? b.items : [b.text];
-      for (const text of texts) {
+    for (const g of GENERAL_GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      for (const text of blockTexts(b)) {
         if (!/\d{3}/.test(text)) continue;
+        if (b.kind === "quiz") { assert.match(b.question, /^Example only/, `${g.slug}: a quiz with figures must say it is an example`); continue; }
         assert.equal(b.kind, "example", `${g.slug} / ${s.heading}: a figure outside an example block: "${text.slice(0, 60)}"`);
         assert.match(text, /^Example only/, `${g.slug}: example not labelled`);
       }
@@ -51,10 +64,13 @@ async function main() {
     const names = /\b(AIA|AXA|Allianz|Prudential|Great Eastern|Income Insurance|NTUC|FWD|Manulife|Sun Life|HSBC Life|Singlife|Tokio Marine|Zurich|MetLife|Chubb|Aviva|Generali|Ping An|China Life|Etiqa|MediShield|MediSave|CareShield|Integrated Shield|CPF|Medicare|Medicaid|NHS|Obamacare|MAS|FCA)\b/;
     const hit = joined.match(names);
     assert.equal(hit, null, `named: ${hit?.[0]}`);
+    const inComponents = componentSources.match(names);
+    assert.equal(inComponents, null, `named in a component: ${inComponents?.[0]}`);
   });
 
   await t("content: never promises payment or states what a particular policy pays", () => {
-    const hit = joined.match(/\b(you will (?:be paid|receive|get)|is guaranteed to pay|will definitely|always pays|you are covered for)\b/i);
+    const promise = /\b(you will (?:be paid|receive|get)|is guaranteed to pay|will definitely|always pays|you are covered for|the policy pays \d|you get \d)\b/i;
+    const hit = joined.match(promise) ?? componentSources.match(promise) ?? sgText.match(promise);
     assert.equal(hit, null, `promise wording: ${hit?.[0]}`);
     assert.match(LEARN_NOTICE, /General education only/);
     assert.match(LEARN_NOTICE, /not advice about your own cover/);
@@ -169,14 +185,15 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx"];
-    const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match)|@\/components\/learn-notice|\.\/content)$/.test(i), `${f} imports ${i}`);
-      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env/i, f);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore))$/.test(i), `${f} imports ${i}`);
+      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b/i, f);
+      // Only the country articles' source lists carry web addresses; they are checked against the official allow-list below.
+      if (f !== "lib/learn/singapore.ts") assert.doesNotMatch(src, /https?:\/\//i, f);
     }
   });
 
@@ -195,6 +212,184 @@ async function main() {
 
   await t("wiring: /learn still needs a signed-in session (not added to the public paths)", () => {
     assert.doesNotMatch(readFileSync("middleware.ts", "utf8"), /"\/learn/);
+  });
+
+  await t("pictures: every guide has at least one picture and one thing to tap or try", () => {
+    for (const g of GUIDES) {
+      const kinds = g.sections.flatMap((s) => s.blocks.map((b) => b.kind));
+      assert.ok(kinds.some((k) => k === "tiles" || k === "steps" || k === "flow" || k === "diagram"), `${g.slug}: no picture`);
+      assert.ok(kinds.some((k) => k === "cards" || k === "quiz" || k === "bill-split" || k === "percent-of-sum"), `${g.slug}: nothing interactive`);
+      assert.ok(PICTOGRAMS.includes(g.icon), `${g.slug}: index picture ${g.icon} not drawn`);
+    }
+  });
+
+  await t("content: every block kind is read by the word checks (no kind slips past them)", () => {
+    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      const texts = blockTexts(b);
+      assert.ok(Array.isArray(texts) && texts.every((x) => typeof x === "string"), `${g.slug}: blockTexts(${b.kind}) not a string list`);
+      if (b.kind !== "bill-split" && b.kind !== "percent-of-sum") assert.ok(texts.length > 0 && texts.every((x) => x.length > 0), `${g.slug}: ${b.kind} block contributes no words to the checks`);
+    }
+    assert.throws(() => blockTexts({ kind: "new-kind" } as never), /unknown block kind/);
+  });
+
+  await t("pictures: every picture a block names is drawn; quizzes have one valid answer", () => {
+    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      const tiles = b.kind === "tiles" ? b.tiles : b.kind === "steps" ? b.steps : b.kind === "flow" ? b.items : [];
+      for (const tile of tiles) assert.ok(PICTOGRAMS.includes(tile.icon), `${g.slug}: ${tile.icon} not drawn`);
+      if (b.kind === "quiz") {
+        assert.ok(b.options.length >= 2 && b.options.length <= 4, `${g.slug}: quiz options`);
+        assert.ok(Number.isInteger(b.answer) && b.answer >= 0 && b.answer < b.options.length, `${g.slug}: quiz answer out of range`);
+        assert.equal(new Set(b.options).size, b.options.length, `${g.slug}: duplicate quiz option`);
+        assert.ok(b.explain.length > 40, `${g.slug}: quiz explanation too thin`);
+      }
+      if (b.kind === "cards") for (const c of b.cards) assert.ok(c.back.length > 30, `${g.slug}: card "${c.front}" answer too thin`);
+    }
+  });
+
+  await t("try-it: the bill split adds up, matches the guide's worked example, and caps at the limit", () => {
+    const base = splitBill({ bill: 10000, deductible: 1000, coPaymentPercent: 10, limit: 20000 });
+    assert.deepEqual(base, { deductible: 1000, coPayment: 900, overLimit: 0, policyShare: 8100, yourShare: 1900 });
+    const capped = splitBill({ bill: 20000, deductible: 1000, coPaymentPercent: 10, limit: 5000 });
+    assert.equal(capped.policyShare, 5000);
+    assert.equal(capped.overLimit, 20000 - 1000 - 1900 - 5000);
+    const small = splitBill({ bill: 500, deductible: 1000, coPaymentPercent: 10, limit: 5000 });
+    assert.deepEqual(small, { deductible: 500, coPayment: 0, overLimit: 0, policyShare: 0, yourShare: 500 });
+    for (const bill of [0, 1000, 7500, 30000]) for (const ded of [0, 300, 5000]) for (const pct of [0, 15, 50]) for (const limit of [1000, 30000]) {
+      const r = splitBill({ bill, deductible: ded, coPaymentPercent: pct, limit });
+      assert.equal(r.deductible + r.coPayment + r.overLimit + r.policyShare, bill, "parts must add up to the bill");
+      assert.equal(r.yourShare + r.policyShare, bill);
+      assert.ok(r.policyShare <= limit && Object.values(r).every((n) => n >= 0));
+    }
+    assert.equal(splitBill({ bill: NaN, deductible: -5, coPaymentPercent: 200, limit: Infinity }).policyShare, 0);
+    // Critic #429: limit on the bill first gives a different split, and both orders must be offered.
+    assert.deepEqual(splitBill({ bill: 30000, deductible: 1000, coPaymentPercent: 10, limit: 20000 }).yourShare, 10000);
+    assert.deepEqual(splitBill({ bill: 30000, deductible: 1000, coPaymentPercent: 10, limit: 20000, limitApplies: "bill" }),
+      { deductible: 1000, coPayment: 1900, overLimit: 10000, policyShare: 17100, yourShare: 12900 });
+    assert.deepEqual(splitBill({ bill: 10000, deductible: 1000, coPaymentPercent: 10, limit: 20000, limitApplies: "bill" }).policyShare, 8100, "orders agree when no limit binds");
+    assert.deepEqual(splitBill({ bill: 3000, deductible: 5000, coPaymentPercent: 10, limit: 2000, limitApplies: "bill" }),
+      { deductible: 2000, coPayment: 0, overLimit: 1000, policyShare: 0, yourShare: 3000 });
+    for (const bill of [0, 1000, 7500, 30000]) for (const ded of [0, 300, 5000]) for (const pct of [0, 15, 50]) for (const limit of [1000, 30000]) {
+      const r = splitBill({ bill, deductible: ded, coPaymentPercent: pct, limit, limitApplies: "bill" });
+      assert.equal(r.deductible + r.coPayment + r.overLimit + r.policyShare, bill, "bill-first parts must add up to the bill");
+      assert.ok(r.policyShare <= limit && Object.values(r).every((n) => n >= 0));
+    }
+    assert.equal(percentOf(25, 100000), 25000);
+    assert.equal(percentOf(150, 100000), 150000, "not capped: some covers state more than 100%");
+    assert.equal(plainNumber(8100), "8,100");
+  });
+
+  await t("try-it and quiz render labelled as made-up examples; quiz buttons are buttons", async () => {
+    const html = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "how-amounts-work" }) }));
+    assert.ok(html.includes('data-testid="learn-bill-split"') && html.includes('data-testid="learn-percent-of-sum"'));
+    assert.equal((html.match(/Example only: made-up numbers in no particular currency, not your policy\./g) ?? []).length, 2);
+    assert.match(html, /Your insurer decides what it pays\./);
+    assert.match(html, /<legend>The limit applies to<\/legend>/);
+    assert.match(html, /aria-pressed="true"[^>]*>The policy’s share<\/button>/);
+    assert.match(html, />The bill, first<\/button>/);
+    assert.match(html, /Policies differ in which order they use/);
+    assert.match(html, />8,100</, "the bill slider starts at the guide's worked example");
+    assert.match(html, /data-testid="learn-quiz"/);
+    for (const btn of html.match(/<button[^>]*>/g) ?? []) assert.match(btn, /type="button"/);
+    const docs = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "your-documents" }) }));
+    assert.match(docs, /<details class="learn-flip"><summary>/, "tap cards work without JavaScript");
+    assert.match(docs, /<svg class="lp"[^>]*aria-hidden="true"/, "pictures are decorative next to their words");
+  });
+
+  await t("singapore: every article is on the Singapore shelf, has official sources and a valid checked-on date", () => {
+    assert.ok(SINGAPORE_GUIDES.length >= 4);
+    const official = /^https:\/\/(www\.)?(cpf\.gov\.sg|moh\.gov\.sg|mas\.gov\.sg|[a-z0-9-]+\.gov\.sg)\//;
+    for (const g of SINGAPORE_GUIDES) {
+      assert.equal(g.group, "singapore", g.slug);
+      assert.match(g.slug, /^sg-/, g.slug);
+      assert.deepEqual(g.region, { code: "SG", name: "Singapore" });
+      assert.match(g.checkedOn ?? "", /^\d{4}-\d{2}-\d{2}$/, `${g.slug}: checkedOn`);
+      assert.ok(!Number.isNaN(Date.parse(g.checkedOn!)) && Date.parse(g.checkedOn!) <= Date.now() + 86400000, `${g.slug}: checkedOn not a real past date`);
+      assert.ok(g.sources?.length, `${g.slug}: no sources`);
+      for (const src of g.sources!) {
+        assert.match(src.url, official, `${g.slug}: not an official source: ${src.url}`);
+        assert.doesNotMatch(src.url, /moneysense/i, `${g.slug}: MoneySense is not used (DC, 12 Nov 2026)`);
+      }
+    }
+    for (const g of GENERAL_GUIDES) assert.ok(!g.region && !g.sources, `${g.slug}: general guides stay country-neutral`);
+  });
+
+  await t("singapore: every figure sits in a fact or table that cites one of the article's sources; money is S$, never a bare $", () => {
+    for (const g of SINGAPORE_GUIDES) for (const text of [g.title, g.summary, ...g.sections.map((x) => x.heading)]) {
+      assert.doesNotMatch(text.replace(/\b(19|20)\d{2}\b/g, ""), /\$\s?\d|\d\s?%|\d{3}/, `${g.slug}: a figure in a title, summary or heading: "${text}"`);
+    }
+    for (const g of SINGAPORE_GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      if (b.kind === "fact" || b.kind === "table") assert.ok(Number.isInteger(b.source) && b.source >= 0 && b.source < g.sources!.length, `${g.slug}: bad source index`);
+      for (const text of blockTexts(b)) {
+        assert.doesNotMatch(text, /(?<!S)\$\s?\d/, `${g.slug}: bare "$" in "${text.slice(0, 60)}"`);
+        if (b.kind === "fact" || b.kind === "table") continue;
+        // Outside sourced blocks: no money, no percentages, no large figures. A quiz may repeat a sourced figure in its options.
+        if (b.kind === "quiz") continue;
+        // Dates and years ("1 April 2026", "born 1980") are not amounts; every other number must be sourced.
+        const undated = text.replace(/\b\d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/g, "").replace(/\b(19|20)\d{2}\b/g, "");
+        assert.doesNotMatch(undated, /S\$\s?\d|\d\s?%|\d{3}/, `${g.slug} / ${s.heading}: unsourced figure in a ${b.kind} block: "${text.slice(0, 60)}"`);
+      }
+      if (b.kind === "quiz") for (const text of blockTexts(b)) for (const fig of text.match(/S\$[\d,]+|\d+%/g) ?? []) {
+        const sourced = g.sections.flatMap((x) => x.blocks).filter((x) => x.kind === "fact" || x.kind === "table").flatMap(blockTexts).join(" ");
+        assert.ok(sourced.includes(fig), `${g.slug}: quiz figure ${fig} is not in any sourced fact`);
+      }
+    }
+  });
+
+  await t("singapore: no plan or insurer is recommended or ranked", () => {
+    assert.doesNotMatch(sgText, /\b(best|cheapest|top-rated|we recommend|you should (buy|choose|switch))\b/i);
+    assert.match(sgText, /does not recommend or rank insurers or plans/);
+  });
+
+  await t("singapore: pages show the country notice, the checked-on date, numbered sources and working source tags", async () => {
+    for (const g of SINGAPORE_GUIDES) {
+      const html = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: g.slug }) }));
+      assert.ok(html.includes('data-testid="learn-notice"'), g.slug);
+      assert.match(html, new RegExp(`Singapore only\\.</strong> Facts are from official sources, checked on ${learnDate(g.checkedOn!)}`), g.slug);
+      g.sources!.forEach((src, i) => {
+        assert.ok(html.includes(`id="source-${i + 1}"`), `${g.slug}: source ${i + 1} anchor`);
+        assert.ok(html.includes(`href="${src.url.replace(/&/g, "&amp;")}" target="_blank" rel="noopener noreferrer"`), `${g.slug}: source link`);
+      });
+      for (const tag of html.match(/href="#source-(\d+)"/g) ?? []) assert.ok(html.includes(`id="${tag.slice(7, -1)}"`), `${g.slug}: dangling ${tag}`);
+      assert.ok((html.match(/class="lf-src"/g) ?? []).length >= 1, `${g.slug}: no cited facts`);
+    }
+    assert.equal(learnDate("2026-11-12"), "12 Nov 2026");
+    const general = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "how-amounts-work" }) }));
+    assert.doesNotMatch(general, /data-testid="learn-region"|data-testid="learn-sources"/, "general guides carry no country notice");
+  });
+
+  await t("library: every page sits on one shelf, the index shows each shelf in order, and Next stays on the shelf", async () => {
+    const ids = LEARN_GROUPS.map((g) => g.id) as string[];
+    for (const g of GUIDES) assert.ok(ids.includes(g.group), g.slug);
+    assert.ok(ids.includes(TERMS_PAGE.group));
+    const html = renderToStaticMarkup(LearnIndex());
+    let at = -1;
+    for (const id of ids) { const i = html.indexOf(`data-testid="learn-shelf-${id}"`); assert.ok(i > at, `shelf ${id} missing or out of order`); at = i; }
+    const sgShelf = html.slice(html.indexOf('data-testid="learn-shelf-singapore"'));
+    for (const g of SINGAPORE_GUIDES) assert.ok(sgShelf.includes(`href="/learn/${g.slug}"`), g.slug);
+    const last = SINGAPORE_GUIDES[SINGAPORE_GUIDES.length - 1];
+    const lastHtml = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: last.slug }) }));
+    assert.doesNotMatch(lastHtml, /Next: /, "the last Singapore article does not lead into an unrelated shelf");
+    const firstSg = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: SINGAPORE_GUIDES[0].slug }) }));
+    assert.match(firstSg, new RegExp(`Next: <a class="text-link" href="/learn/${SINGAPORE_GUIDES[1].slug}"`));
+  });
+
+  await t("search: finds articles and terms by name, short name and a one-letter slip; nothing for unrelated words", () => {
+    const index = learnSearchIndex();
+    const first = (q: string) => searchLearn(index, q)[0]?.href;
+    assert.equal(first("careshield"), "/learn/sg-careshield-life");
+    assert.equal(first("What is MediShield Life"), "/learn/sg-medishield-life");
+    assert.equal(first("medisheld"), "/learn/sg-medishield-life", "a typing slip still finds it");
+    assert.equal(first("dependant protection scheme"), "/learn/sg-dependants-protection-scheme");
+    assert.equal(first("DPS"), "/learn/sg-dependants-protection-scheme");
+    assert.ok(searchLearn(index, "rider").some((r) => r.href === "/learn/sg-integrated-shield-plans"));
+    assert.ok(searchLearn(index, "deductible").some((r) => r.href === "/learn/terms#deductible"));
+    assert.deepEqual(searchLearn(index, ""), []);
+    assert.deepEqual(searchLearn(index, "zzzz qqqq"), []);
+    assert.deepEqual(searchLearn(index, "careshield xylophone"), [], "every word must match");
+    assert.ok(searchLearn(index, "insurance").length <= 8);
+    const html = renderToStaticMarkup(LearnIndex());
+    assert.match(html, /role="search"/);
+    assert.match(html, /<label for="[^"]+">Search the library<\/label><input id="[^"]+" type="search"/);
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);

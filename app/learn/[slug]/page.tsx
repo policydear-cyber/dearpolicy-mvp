@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { GUIDES, TERMS_PAGE, guideBySlug, termsSorted } from "@/lib/learn/content";
+import { GUIDES, LEARN_GROUPS, TERMS_PAGE, guideBySlug, learnDate, termsSorted } from "@/lib/learn/content";
 import { LearnNotice } from "@/components/learn-notice";
+import { LearnBlockView } from "@/components/learn/blocks";
 
 /** One knowledge-library page: a guide, or the A to Z of terms. Static text: no household data, no service calls. */
 export function generateStaticParams() {
@@ -42,22 +43,44 @@ export default async function LearnGuidePage({ params }: { params: Promise<{ slu
   }
   const guide = guideBySlug(slug);
   if (!guide) notFound();
-  const index = GUIDES.indexOf(guide);
-  const next = GUIDES[index + 1];
+  // "Next" stays on the same shelf, so a Singapore article leads to the next Singapore article.
+  const shelf = GUIDES.filter((g) => g.group === guide.group);
+  const next = shelf[shelf.indexOf(guide) + 1];
+  const group = LEARN_GROUPS.find((g) => g.id === guide.group);
   return (
     <div className="page learn-page" data-testid="learn-guide">
       <Back />
-      <header className="page-header compact"><div><h1>{guide.title}</h1><p className="lead">{guide.summary}</p></div></header>
+      <header className="page-header compact"><div>
+        {group ? <p className="learn-shelf-tag">{group.title}</p> : null}
+        <h1>{guide.title}</h1><p className="lead">{guide.summary}</p>
+      </div></header>
       <LearnNotice />
+      {guide.region && guide.checkedOn ? (
+        <p className="learn-region" role="note" data-testid="learn-region">
+          <strong>{guide.region.name} only.</strong> Facts are from official sources, checked on {learnDate(guide.checkedOn)}. Scheme rules and amounts change, so check the source for the latest before you rely on a figure.
+        </p>
+      ) : null}
       <article className="learn-article">
         {guide.sections.map((section) => (
           <section className="section" key={section.heading}>
             <h2>{section.heading}</h2>
-            {section.blocks.map((block, i) => block.kind === "p" ? <p key={i}>{block.text}</p>
-              : block.kind === "example" ? <p key={i} className="learn-example" data-testid="learn-example">{block.text}</p>
-              : <ul key={i}>{block.items.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+            {section.blocks.map((block, i) => <LearnBlockView key={i} block={block} sources={guide.sources} />)}
           </section>
         ))}
+        {guide.sources?.length ? (
+          <section className="section learn-sources" data-testid="learn-sources">
+            <h2>Sources</h2>
+            <ol>
+              {guide.sources.map((source, i) => (
+                <li key={source.url} id={`source-${i + 1}`}>
+                  <a className="text-link" href={source.url} target="_blank" rel="noopener noreferrer">{source.label}</a>
+                  {source.published ? <span> ({source.published})</span> : null}
+                </li>
+              ))}
+            </ol>
+            {guide.checkedOn ? <p className="note">Checked on {learnDate(guide.checkedOn)}.</p> : null}
+          </section>
+        ) : null}
       </article>
       <p className="note">
         {next ? <>Next: <Link className="text-link" href={`/learn/${next.slug}`}>{next.title}</Link> · </> : null}
