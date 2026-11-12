@@ -120,5 +120,6 @@ export function LearnBlockView({ block, sources }: { block: LearnBlock; sources?
     case "quiz": return <Quiz question={block.question} options={block.options} answer={block.answer} explain={block.explain} />;
     case "bill-split": return <BillSplitTry />;
     case "percent-of-sum": return <PercentOfSumTry />;
+    default: { const unknown: never = block; void unknown; return null; }
   }
 }

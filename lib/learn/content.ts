@@ -23,7 +23,7 @@ export type LearnIcon =
 /** A picture with a short label, used by tiles, steps and flows. All words live here so the content tests read them. */
 export type LearnTile = { icon: LearnIcon; title: string; text: string };
 
-/** Diagrams drawn in components/learn/diagrams.tsx. */
+/** Diagrams drawn in components/learn/blocks.tsx. */
 export type LearnDiagram = "lowest-limit";
 
 export type LearnBlock =
@@ -67,6 +67,7 @@ export function blockTexts(block: LearnBlock): string[] {
     case "cards": return [block.prompt, ...block.cards.flatMap((c) => [c.front, c.back])];
     case "quiz": return [block.question, ...block.options, block.explain];
     case "bill-split": case "percent-of-sum": return [];
+    default: { const unknown: never = block; throw new Error(`blockTexts: unknown block kind ${JSON.stringify(unknown)}`); }
   }
 }
 
@@ -306,7 +307,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
           { front: "Critical illness", back: "Usually a lump sum on diagnosis, whatever the treatment costs. Check how your policy defines each illness." },
           { front: "Hospital and medical", back: "Usually reimbursement: it pays back covered bills, up to its limits, after any deductible and co-payment." },
           { front: "Personal accident", back: "Often both: a set amount or percentage for listed injuries, plus medical costs up to a limit." },
-          { front: "Daily hospital cash", back: "A set amount for each day in hospital, up to a maximum number of days." },
+          { front: "Daily hospital cash", back: "A set amount for each day in hospital, up to a maximum number of days. Some plans pay only after a minimum stay." },
         ] },
         { kind: "quiz", question: "A savings plan shows a guaranteed amount and a projected amount. Which one is promised?",
           options: ["The projected amount", "The guaranteed amount", "Both"],
@@ -402,7 +403,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
           { front: "\"There's no rush to tell the insurer.\"", back: "Many policies set a time limit for telling them and for sending documents. The claims section says what yours needs." },
         ] },
         { kind: "quiz", question: "Planned surgery is booked for next month under a hospital policy. What is worth checking first?",
-          options: ["Whether the policy needs approval before treatment", "Nothing: claim after the surgery", "The insurer's decision, before you ask them"],
+          options: ["Whether the policy needs approval before treatment", "Nothing: claim after the surgery", "Whether the hospital is near your home"],
           answer: 0, explain: "Some health policies need pre-authorisation for planned treatment and pay less, or not at all, without it. The policy wording says whether yours does." },
       ] },
       { heading: "How DearPolicy helps", blocks: [
@@ -421,9 +422,9 @@ export const GENERAL_GUIDES: LearnGuide[] = [
         { kind: "tiles", caption: "The parts of a DearPolicy answer.", tiles: [
           { icon: "person", title: "Whose cover", text: "The person and the policy it comes from." },
           { icon: "printed", title: "Printed amount", text: "As the document states it, in its own currency." },
-          { icon: "source", title: "Source page", text: "Open it to read the page yourself." },
+          { icon: "source", title: "Source", text: "The document and page it comes from, so you can check it yourself." },
           { icon: "conditions", title: "Conditions", text: "Waiting periods, limits and other terms for that benefit." },
-          { icon: "question", title: "One question", text: "Only when your answer would change the result." },
+          { icon: "question", title: "A question", text: "Usually one at a time, only when your answer would change the result." },
         ] },
         { kind: "list", items: [
           "The benefits your documents describe for that person, with the page they come from.",
@@ -444,7 +445,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
           { front: "No amount is shown", back: "DearPolicy could not tie a figure to a page, so it shows none. It still tells you what the document says about the benefit." },
           { front: "A page is named as unread", back: "That page could not be read. Upload a clearer scan or the insurer's digital copy to include it." },
           { front: "The currency is unconfirmed", back: "The document shows only a symbol, such as \"$\", without saying which currency. DearPolicy does not guess." },
-          { front: "It asks you a question", back: "Your answer would change which benefit applies or how an illustration works. It asks one question at a time." },
+          { front: "It asks you a question", back: "Your answer would change which benefit applies or how an illustration works. It usually asks one question at a time." },
         ] },
         { kind: "quiz", question: "Your documents do not mention dental treatment at all. What does that tell you?",
           options: ["You are not covered for dental treatment", "Dental treatment is excluded", "Nothing on its own: a policy or page not uploaded may cover it"],

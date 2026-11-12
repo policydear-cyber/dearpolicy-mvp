@@ -1393,8 +1393,8 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .learn-steps { display: grid; gap: 0; }
 .learn-steps li { position: relative; display: grid; grid-template-columns: 28px 40px 1fr; align-items: center; gap: 12px; padding: 10px 0; }
 .learn-steps li + li::before { content: ""; position: absolute; left: 13px; top: -10px; height: 20px; border-left: 2px dotted var(--line-strong); }
-.ls-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: #fff; font-size: var(--fs-sm); font-weight: 700; }
-:root[data-theme="dark"] .ls-num { background: var(--brand-ink); color: var(--bg); }
+.learn-steps .ls-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: #fff; font-size: var(--fs-sm); font-weight: 700; }
+:root[data-theme="dark"] .learn-steps .ls-num { background: var(--brand-ink); color: var(--bg); }
 .ld-limits { display: grid; gap: 10px; }
 .ld-limits li { display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--ink-2); }
 .ld-limits i { display: block; height: 14px; border-radius: 7px; background: var(--line-strong); }
@@ -1480,3 +1480,9 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .learn-sources ol { padding-left: 22px; }
 .learn-sources li { margin: 6px 0; line-height: 1.5; overflow-wrap: anywhere; }
 .learn-sources li:target { background: var(--warn-tint); }
+.ti-switch { margin: 8px 0 0; padding: 0; border: 0; display: grid; gap: 6px; }
+.ti-switch legend { padding: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.ti-switch div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ti-switch button { min-height: 44px; padding: 8px 10px; font: inherit; font-size: var(--fs-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--input-line); border-radius: var(--r-sm); cursor: pointer; }
+.ti-switch button[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-tint); font-weight: 650; }
+.ti-switch button:focus-visible { outline: none; box-shadow: var(--focus); }

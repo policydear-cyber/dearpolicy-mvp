@@ -223,6 +223,15 @@ async function main() {
     }
   });
 
+  await t("content: every block kind is read by the word checks (no kind slips past them)", () => {
+    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      const texts = blockTexts(b);
+      assert.ok(Array.isArray(texts) && texts.every((x) => typeof x === "string"), `${g.slug}: blockTexts(${b.kind}) not a string list`);
+      if (b.kind !== "bill-split" && b.kind !== "percent-of-sum") assert.ok(texts.length > 0 && texts.every((x) => x.length > 0), `${g.slug}: ${b.kind} block contributes no words to the checks`);
+    }
+    assert.throws(() => blockTexts({ kind: "new-kind" } as never), /unknown block kind/);
+  });
+
   await t("pictures: every picture a block names is drawn; quizzes have one valid answer", () => {
     for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
       const tiles = b.kind === "tiles" ? b.tiles : b.kind === "steps" ? b.steps : b.kind === "flow" ? b.items : [];
@@ -252,8 +261,20 @@ async function main() {
       assert.ok(r.policyShare <= limit && Object.values(r).every((n) => n >= 0));
     }
     assert.equal(splitBill({ bill: NaN, deductible: -5, coPaymentPercent: 200, limit: Infinity }).policyShare, 0);
+    // Critic #429: limit on the bill first gives a different split, and both orders must be offered.
+    assert.deepEqual(splitBill({ bill: 30000, deductible: 1000, coPaymentPercent: 10, limit: 20000 }).yourShare, 10000);
+    assert.deepEqual(splitBill({ bill: 30000, deductible: 1000, coPaymentPercent: 10, limit: 20000, limitApplies: "bill" }),
+      { deductible: 1000, coPayment: 1900, overLimit: 10000, policyShare: 17100, yourShare: 12900 });
+    assert.deepEqual(splitBill({ bill: 10000, deductible: 1000, coPaymentPercent: 10, limit: 20000, limitApplies: "bill" }).policyShare, 8100, "orders agree when no limit binds");
+    assert.deepEqual(splitBill({ bill: 3000, deductible: 5000, coPaymentPercent: 10, limit: 2000, limitApplies: "bill" }),
+      { deductible: 2000, coPayment: 0, overLimit: 1000, policyShare: 0, yourShare: 3000 });
+    for (const bill of [0, 1000, 7500, 30000]) for (const ded of [0, 300, 5000]) for (const pct of [0, 15, 50]) for (const limit of [1000, 30000]) {
+      const r = splitBill({ bill, deductible: ded, coPaymentPercent: pct, limit, limitApplies: "bill" });
+      assert.equal(r.deductible + r.coPayment + r.overLimit + r.policyShare, bill, "bill-first parts must add up to the bill");
+      assert.ok(r.policyShare <= limit && Object.values(r).every((n) => n >= 0));
+    }
     assert.equal(percentOf(25, 100000), 25000);
-    assert.equal(percentOf(150, 100000), 100000);
+    assert.equal(percentOf(150, 100000), 150000, "not capped: some covers state more than 100%");
     assert.equal(plainNumber(8100), "8,100");
   });
 
@@ -262,6 +283,10 @@ async function main() {
     assert.ok(html.includes('data-testid="learn-bill-split"') && html.includes('data-testid="learn-percent-of-sum"'));
     assert.equal((html.match(/Example only: made-up numbers in no particular currency, not your policy\./g) ?? []).length, 2);
     assert.match(html, /Your insurer decides what it pays\./);
+    assert.match(html, /<legend>The limit applies to<\/legend>/);
+    assert.match(html, /aria-pressed="true"[^>]*>The policy’s share<\/button>/);
+    assert.match(html, />The bill, first<\/button>/);
+    assert.match(html, /Policies differ in which order they use/);
     assert.match(html, />8,100</, "the bill slider starts at the guide's worked example");
     assert.match(html, /data-testid="learn-quiz"/);
     for (const btn of html.match(/<button[^>]*>/g) ?? []) assert.match(btn, /type="button"/);

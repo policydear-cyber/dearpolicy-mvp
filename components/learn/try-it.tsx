@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
+import { percentOf, plainNumber, splitBill, type LimitApplies } from "@/lib/learn/try-it";
 
 /**
  * The library's interactive pieces. Everything here uses MADE-UP numbers typed into the page itself: nothing reads the
@@ -28,7 +28,8 @@ export function BillSplitTry() {
   const [deductible, setDeductible] = useState(1000);
   const [pct, setPct] = useState(10);
   const [limit, setLimit] = useState(20000);
-  const s = splitBill({ bill, deductible, coPaymentPercent: pct, limit });
+  const [limitApplies, setLimitApplies] = useState<LimitApplies>("share");
+  const s = splitBill({ bill, deductible, coPaymentPercent: pct, limit, limitApplies });
   const share = (n: number) => `${bill > 0 ? (n / bill) * 100 : 0}%`;
   return (
     <figure className="learn-try" data-testid="learn-bill-split">
@@ -51,8 +52,18 @@ export function BillSplitTry() {
         <Slider label="Deductible" value={deductible} min={0} max={5000} step={100} onChange={setDeductible} />
         <Slider label="Co-payment" value={pct} min={0} max={50} step={5} onChange={setPct} suffix="%" />
         <Slider label="Limit for this bill" value={limit} min={1000} max={30000} step={500} onChange={setLimit} />
+        <fieldset className="ti-switch">
+          <legend>The limit applies to</legend>
+          <div>
+            <button type="button" aria-pressed={limitApplies === "share"} onClick={() => setLimitApplies("share")}>The policy&rsquo;s share</button>
+            <button type="button" aria-pressed={limitApplies === "bill"} onClick={() => setLimitApplies("bill")}>The bill, first</button>
+          </div>
+        </fieldset>
       </div>
-      <p className="ti-note">This uses one common order: deductible first, then co-payment, then the limit. Your policy may apply them differently and have other limits. Your insurer decides what it pays.</p>
+      <p className="ti-note">{limitApplies === "share"
+        ? "In this order the deductible comes off first, then the co-payment, and the limit caps what the policy pays."
+        : "In this order the limit caps the bill first, then the deductible and co-payment come off what is left. Many hospital plans work this way."}{" "}
+        Policies differ in which order they use and may have other limits; your policy wording says which applies. Your insurer decides what it pays.</p>
     </figure>
   );
 }
