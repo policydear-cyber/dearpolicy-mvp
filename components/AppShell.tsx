@@ -16,16 +16,16 @@ function NavIcon({ name }: { name: IconName }) {
  * Eight tabs never fit a phone, and the ones that scrolled off the edge
  * included Ask DearPolicy itself. */
 type NavItem = { href: string; label: string; icon: IconName; tab?: number; short?: string; also?: string[] };
-/** Five places a household goes, plus Account settings. Coverage (/ledger) and Benefits (/schedule) are not in the
- * menu: Portfolio answers "what is each of us covered for" and links to both ("Coverage, by person", "Benefits, by
+/** Four places a household goes, plus Learn and Account settings. There is no Claims item: DearPolicy explains what a
+ * household's documents say, and the insurer handles claims; a claim page opened from an answer counts as Ask. Coverage (/ledger) and Benefits (/schedule) are not in the
+ * menu either: Portfolio answers "what is each of us covered for" and links to both ("Coverage, by person", "Benefits, by
  * policy"), as do its cover pages, so they count as Portfolio. Account settings opens on People (the family and who
  * can sign in), which every member can use; Household and Plan usage are its other tabs. */
 const nav: NavItem[] = [
   { href: "/", label: "Portfolio", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
   { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
-  { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask" },
-  { href: "/claims", label: "Claims", icon: "claims", tab: 4 },
-  { href: "/records", label: "Payments", icon: "payments" },
+  { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask", also: ["/claims"] },
+  { href: "/records", label: "Payments", icon: "payments", tab: 4 },
   { href: "/learn", label: "Learn", icon: "book" },
   { href: "/family", label: "Account settings", icon: "household", also: ["/household", "/usage"] },
 ];
