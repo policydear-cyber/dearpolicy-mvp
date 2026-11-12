@@ -1489,3 +1489,25 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .ti-switch button { min-height: 44px; padding: 8px 10px; font: inherit; font-size: var(--fs-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--input-line); border-radius: var(--r-sm); cursor: pointer; }
 .ti-switch button[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-tint); font-weight: 650; }
 .ti-switch button:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* --------------------------------------------------------------------------
+   Fluid desktop and tablet layout
+   Pages fill the space beside the sidebar at every width: no fixed page
+   column, nothing centred in empty space. Card lists add columns as room
+   grows (auto-fill), so a wider window shows more cards side by side rather
+   than wider cards. Reading text keeps a comfortable line length (.lead, h1,
+   .message, Learn paragraphs). Phone widths (under 761px) are unchanged.
+   -------------------------------------------------------------------------- */
+@media (min-width: 761px) {
+  .page, .chat-page, .learn-page { max-width: none; margin: 0; }
+  .document-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); align-items: start; }
+  .premium-breakdown-list, .payment-list, .claims-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+  .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .family-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+  .profile-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); align-items: start; }
+  .profile-list .profile-fields { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .learn-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); }
+  .learn-page .learn-notice, .learn-page .learn-search { max-width: 760px; }
+  .learn-article, .learn-terms { max-width: 80ch; }
+  .chat-empty { max-width: 720px; }
+}
