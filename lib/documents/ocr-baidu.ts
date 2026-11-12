@@ -59,12 +59,38 @@ export function baiduOcrConfigured(env: Env = process.env) {
   return Boolean(env.BAIDU_AISTUDIO_TOKEN?.trim()) && !/^(0|false|off)$/i.test(env.BAIDU_OCR_ENABLED?.trim() ?? "");
 }
 
+/** Baidu's front door for its overseas users: aistudio.baidu.com (like Baidu's other public hosts) resolves outside
+ * China to Baidu's edge servers, which pass a request on to the service named in its Host header. The OCR service's own
+ * name resolves only to one Beijing address (180.76.248.9) that the paths from Vercel's Singapore and Hong Kong regions
+ * drop (12 Nov 2026, from throwaway sin1 and hkg1 machines: 0 of 30 TCP connects there, while the front door answered
+ * every request in about 0.3 s, the token-less submit with the service's own 401 reply and trace id). */
+export const BAIDU_DEFAULT_VIA = "aistudio.baidu.com";
+/** Only a Baidu host may carry the token: the front door must be one of Baidu's own domains (its certificate is checked
+ * against that name). */
+const BAIDU_VIA_DOMAINS = ["baidu.com", "baidubce.com", "aistudio-app.com"];
+
+/** The host to open connections to for the configured service, or undefined to connect to the service's own host.
+ * BAIDU_OCR_VIA: unset = the front door for Baidu's own service host (none for any other base URL); off/direct/0 = connect
+ * directly; a host name under one of Baidu's domains = that host. Anything else connects directly. */
+export function baiduVia(env: Env, baseUrl: string): string | undefined {
+  const raw = env.BAIDU_OCR_VIA?.trim().toLowerCase() ?? "";
+  if (/^(0|off|false|direct|none)$/.test(raw)) return undefined;
+  let baseHost = "";
+  try { baseHost = new URL(baseUrl).hostname.toLowerCase(); } catch { return undefined; }
+  if (!raw) return baseHost === new URL(BAIDU_DEFAULT_BASE_URL).hostname ? BAIDU_DEFAULT_VIA : undefined;
+  const ok = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(raw)
+    && BAIDU_VIA_DOMAINS.some((d) => raw === d || raw.endsWith("." + d));
+  return ok && raw !== baseHost ? raw : undefined;
+}
+
 export function baiduOcrSettings(env: Env = process.env) {
   const model = env.BAIDU_PADDLEOCR_MODEL?.trim() || BAIDU_DEFAULT_MODEL;
   const baseUrl = (env.BAIDU_OCR_BASE_URL?.trim() || BAIDU_DEFAULT_BASE_URL).replace(/\/+$/, "");
   return {
     model,
     baseUrl,
+    // Connect through Baidu's front door (baiduVia): only calls to the service's own host go this way.
+    via: baiduVia(env, baseUrl),
     // Bounded so a slow queue leaves time for the AI reader inside the 300 s request: give up and fall back after this.
     maxWaitMs: intEnv(env.BAIDU_OCR_MAX_WAIT_MS, 90_000, 1, 240_000),
     pollIntervalMs: intEnv(env.BAIDU_OCR_POLL_INTERVAL_MS, 2_000, 1, 15_000),
@@ -138,13 +164,23 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection; reusedReplyMs?: number };
+type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection; reusedReplyMs?: number;
+  /** Calls to the service's own host (`for`) connect to `host` instead (baiduVia). A result link on another host does not. */
+  via?: { host: string; for: string } };
 type Transport = (url: string, req: TransportRequest, limits: Limits) => Promise<TransportResponse>;
+
+/** The front door for one call: only a call to the service's own host goes through it (a result link on a storage
+ * host, for example, connects to that host itself). */
+export function viaHostFor(url: string, via?: { host: string; for: string }): string | undefined {
+  if (!via) return undefined;
+  try { return new URL(url).hostname.toLowerCase() === via.for ? via.host : undefined; } catch { return undefined; }
+}
 
 /** Production: node:https with separate connect / no-progress / total limits and a trace (baidu-transport.ts). */
 const httpsTransport: Transport = async (url, req, l) => {
   try {
-    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection, reusedReplyMs: l.reusedReplyMs });
+    const via = viaHostFor(url, l.via);
+    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection, reusedReplyMs: l.reusedReplyMs, via });
   } catch (error) {
     if (error instanceof TransportError) throw Object.assign(error, { summary: traceSummary(error.trace) });
     throw error;
@@ -436,7 +472,8 @@ function jobContext(env: Env, end: number) {
   const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
-    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily, connection: keptConnection.getStore() };
+    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily, connection: keptConnection.getStore(),
+      ...(s.via ? { via: { host: s.via, for: new URL(s.baseUrl).hostname.toLowerCase() } } : {}) };
   };
   return { s, auth: { Authorization: `Bearer ${token}` }, jobsUrl: `${s.baseUrl}${JOBS_PATH}`, timeout,
     retry: { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs } };
@@ -800,7 +837,7 @@ async function completeWithBaidu(args: {
     const resourceId = args.resourceId, stepMs = s.probeStepMs;
     return async () => {
       if ((fnDeadline ?? Infinity) - PROBE_MARGIN_MS - Date.now() <= stepMs * 4) return;
-      const found = await probeBaiduPath(s.baseUrl, { stepMs }).catch(() => null);
+      const found = await probeBaiduPath(s.baseUrl, { stepMs, via: s.via }).catch(() => null);
       if (found) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId,
         failureCode: "BAIDU_OCR_PATH_PROBE", error: probeSummary(found) }).catch(() => undefined);
     };

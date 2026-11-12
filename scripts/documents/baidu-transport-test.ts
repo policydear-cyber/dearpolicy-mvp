@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
 import { TransportError, baiduConnection, traceSummary, transportRequest } from "@/lib/documents/baidu-transport";
-import { readPdfWithBaidu, setBaiduTransportForTests, staleKeptConnection } from "@/lib/documents/ocr-baidu";
+import { BAIDU_DEFAULT_VIA, baiduOcrSettings, baiduVia, readPdfWithBaidu, setBaiduTransportForTests, staleKeptConnection, viaHostFor } from "@/lib/documents/ocr-baidu";
 
 const sockets = new Set<Socket>();
 async function serve(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ server: Server; url: string }> {
@@ -233,7 +233,47 @@ async function main() {
     await close(server);
   }
 
-  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace, polls on one kept-open connection per job, the submit on its own, a dropped or silent kept connection replaced -- passed. TLS and Baidu's live service are NOT covered.");
+  // 10. `via`: the connection goes to the front door (here 127.0.0.1), the service's own name (which does not even
+  //     resolve here) is sent as the Host header, a caller's own Host header is replaced, and the trace says via=edge.
+  {
+    let host: string | undefined, hosts = 0;
+    const { server, url } = await serve((req, res) => { host = req.headers.host; hosts = req.rawHeaders.filter((h, i) => i % 2 === 0 && /^host$/i.test(h)).length; req.resume(); res.statusCode = 401; res.end("{}"); });
+    const port = new URL(url).port;
+    const r = await transportRequest(`http://ocr-service.invalid:${port}/api/v2/ocr/jobs`, { method: "POST", body: "{}", headers: { Host: "elsewhere.example" } }, { ...limits, via: "127.0.0.1" });
+    assert.equal(r.status, 401);
+    assert.equal(host, `ocr-service.invalid:${port}`); assert.equal(hosts, 1, "one Host header");
+    // A failure's trace names the front door.
+    await close(server);
+    const e = await failure(transportRequest(`http://ocr-service.invalid:${port}/x`, { method: "GET" }, { ...limits, via: "127.0.0.1" }));
+    assert.equal(e.trace.via, true); assert.match(traceSummary(e.trace), /\bvia=edge\b/);
+    // Without via, the trace carries no via mark at all.
+    const plain = await failure(transportRequest(`http://127.0.0.1:${port}/x`, { method: "GET" }, limits));
+    assert.equal(plain.trace.via, undefined); assert.doesNotMatch(traceSummary(plain.trace), /via=/);
+  }
+
+  // 11. Which calls use the front door. Default: Baidu's own service host goes through aistudio.baidu.com; another base
+  //     URL (a test server, a proxy someone configured) does not; BAIDU_OCR_VIA=off connects directly; a front door must
+  //     be a valid name under one of Baidu's own domains (the token travels to it), never a look-alike or an address.
+  {
+    const E = (v: Record<string, string>) => v as unknown as NodeJS.ProcessEnv;
+    const base = "https://paddleocr.aistudio-app.com";
+    assert.equal(BAIDU_DEFAULT_VIA, "aistudio.baidu.com");
+    assert.equal(baiduOcrSettings(E({})).via, "aistudio.baidu.com");
+    assert.equal(baiduVia(E({}), "http://127.0.0.1:9999"), undefined);
+    for (const off of ["off", "OFF", "direct", "0", "false", "none"]) assert.equal(baiduVia(E({ BAIDU_OCR_VIA: off }), base), undefined, off);
+    assert.equal(baiduVia(E({ BAIDU_OCR_VIA: "edge.baidu.com" }), base), "edge.baidu.com");
+    assert.equal(baiduVia(E({ BAIDU_OCR_VIA: "Aistudio.Baidu.com" }), "http://127.0.0.1:1"), "aistudio.baidu.com");
+    for (const bad of ["evil.com", "baidu.com.evil.com", "evilbaidu.com", "45.113.194.117", "aistudio.baidu.com:8443", "aistudio.baidu.com/x", "paddleocr.aistudio-app.com"])
+      assert.equal(baiduVia(E({ BAIDU_OCR_VIA: bad }), base), undefined, bad);
+    const v = { host: "aistudio.baidu.com", for: "paddleocr.aistudio-app.com" };
+    assert.equal(viaHostFor(`${base}/api/v2/ocr/jobs`, v), "aistudio.baidu.com");
+    assert.equal(viaHostFor("https://PaddleOCR.aistudio-app.com/api/v2/ocr/jobs/1", v), "aistudio.baidu.com");
+    assert.equal(viaHostFor("https://bj.bcebos.com/result.jsonl?sig=x", v), undefined, "a result link on storage connects itself");
+    assert.equal(viaHostFor(`${base}/x`, undefined), undefined);
+    assert.equal(viaHostFor("not a url", v), undefined);
+  }
+
+  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace, polls on one kept-open connection per job, the submit on its own, a dropped or silent kept connection replaced, Baidu's front door (via) for the service host only -- passed. TLS and Baidu's live service are NOT covered.");
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });

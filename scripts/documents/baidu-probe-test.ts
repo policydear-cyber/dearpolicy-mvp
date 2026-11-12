@@ -65,6 +65,20 @@ async function main() {
   p = await probeBaiduPath("not a url", { env: {} as NodeJS.ProcessEnv });
   assert.equal(p.region, "local"); assert.equal(p.dns, "bad base url");
 
-  console.log("baidu-probe: DNS, TCP, TLS and first-reply steps each named and timed; no token sent -- passed");
+  // 8. Through a front door (via): DNS, TCP and TLS go to the front door (its certificate checked against ITS name), the
+  //    service's own name is sent as the Host header, and the summary names the front door.
+  {
+    let asked = "", seen = "";
+    const door = tlsServer({ key, cert }, (s) => { s.once("data", (d) => { seen = d.toString(); s.end("HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n"); }); });
+    const doorPort = await listen(door);
+    const lookupVia = (async (name: string) => { asked = name; return [{ address: "127.0.0.1", family: 4 }]; }) as never;
+    p = await probeBaiduPath("https://service.test", { env, stepMs: 2000, lookup: lookupVia, port: doorPort, tlsOptions: { ca: cert }, via: "probe.test" });
+    assert.equal(asked, "probe.test"); assert.match(p.tls, /^\d+ms TLSv1\.[23]$/); assert.match(p.http, /^401 after \d+ms$/);
+    assert.match(seen, /^GET \/api\/v2\/ocr\/jobs HTTP\/1\.1\r\nHost: service\.test\r\n/);
+    assert.match(probeSummary(p), /^region=sin1 host=service\.test via=probe\.test dns=/);
+    door.close();
+  }
+
+  console.log("baidu-probe: DNS, TCP, TLS and first-reply steps each named and timed; through a front door when set; no token sent -- passed");
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

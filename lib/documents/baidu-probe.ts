@@ -12,7 +12,7 @@ import { lookup } from "node:dns/promises";
 import { connect as tcpConnect, type Socket } from "node:net";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 
-export type ProbeResult = { region: string; host: string; dns: string; tcp: string; tls: string; http: string };
+export type ProbeResult = { region: string; host: string; via?: string; dns: string; tcp: string; tls: string; http: string };
 type Steps = { lookup?: typeof lookup; tcp?: typeof tcpConnect; tls?: typeof tlsConnect; now?: () => number; port?: number; tlsOptions?: { ca?: string } };
 
 const errName = (error: unknown) => {
@@ -29,17 +29,20 @@ function within<T>(ms: number, run: (done: (v: T) => void, fail: (e: unknown) =>
   });
 }
 
-export async function probeBaiduPath(baseUrl: string, opts: { stepMs?: number; env?: NodeJS.ProcessEnv } & Steps = {}): Promise<ProbeResult> {
+/** `via`: check the path the calls take, to Baidu's front door (DNS, TCP and TLS to that host), asking it for `host`. */
+export async function probeBaiduPath(baseUrl: string, opts: { stepMs?: number; env?: NodeJS.ProcessEnv; via?: string } & Steps = {}): Promise<ProbeResult> {
   const env = opts.env ?? process.env, stepMs = opts.stepMs ?? 6_000, now = opts.now ?? Date.now;
   const region = (env.VERCEL_REGION ?? "").trim().replace(/[^a-z0-9-]/gi, "").slice(0, 20) || "local";
   let host = "", path = "/api/v2/ocr/jobs";
   try { const u = new URL(baseUrl); host = u.hostname; path = (u.pathname.replace(/\/+$/, "") || "") + path; } catch { /* below */ }
   const out: ProbeResult = { region, host, dns: "-", tcp: "-", tls: "-", http: "-" };
   if (!host) { out.dns = "bad base url"; return out; }
+  const peer = opts.via || host;
+  if (opts.via) out.via = opts.via;
 
   let t = now(), address = "";
   try {
-    const found = await within<{ address: string }[]>(stepMs, (done, fail) => { (opts.lookup ?? lookup)(host, { all: true }).then(done, fail); return () => undefined; });
+    const found = await within<{ address: string }[]>(stepMs, (done, fail) => { (opts.lookup ?? lookup)(peer, { all: true }).then(done, fail); return () => undefined; });
     address = found[0]?.address ?? "";
     out.dns = `${now() - t}ms ${found.map((a) => a.address).slice(0, 4).join(",")}`.trim();
     if (!address) { out.dns += " (no address)"; return out; }
@@ -59,7 +62,7 @@ export async function probeBaiduPath(baseUrl: string, opts: { stepMs?: number; e
   try {
     t = now();
     secure = await within<TLSSocket>(stepMs, (done, fail) => {
-      const s = (opts.tls ?? tlsConnect)({ socket: socket!, servername: host, ...(opts.tlsOptions ?? {}) });
+      const s = (opts.tls ?? tlsConnect)({ socket: socket!, servername: peer, ...(opts.tlsOptions ?? {}) });
       s.once("secureConnect", () => done(s)); s.once("error", fail);
       return () => s.destroy();
     });
@@ -85,4 +88,4 @@ export async function probeBaiduPath(baseUrl: string, opts: { stepMs?: number; e
   return out;
 }
 
-export const probeSummary = (p: ProbeResult) => `region=${p.region} host=${p.host} dns=${p.dns} tcp=${p.tcp} tls=${p.tls} http=${p.http}`;
+export const probeSummary = (p: ProbeResult) => `region=${p.region} host=${p.host}${p.via ? ` via=${p.via}` : ""} dns=${p.dns} tcp=${p.tcp} tls=${p.tls} http=${p.http}`;

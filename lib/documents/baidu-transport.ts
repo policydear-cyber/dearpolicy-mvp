@@ -28,6 +28,8 @@ export type TransportTrace = {
   ip?: string; family?: number;
   /** The call went over a connection an earlier call of the same job had already opened (no DNS, TCP or TLS). */
   reused?: boolean;
+  /** The connection went to the `via` host (Baidu's front door), not to the URL's own host. */
+  via?: boolean;
   sentBytes: number; totalBytes: number;
   elapsedMs: number;
 };
@@ -64,6 +66,10 @@ export type TransportOptions = {
   /** On a kept connection, the wait for the first reply byte (instead of idleTimeoutMs). A kept connection the path has
    * gone silent on answers nothing at all; a poll's small reply normally comes in well under a second. */
   reusedReplyMs?: number;
+  /** Open the connection to this host instead of the URL's own (DNS, TCP and TLS, the certificate checked against THIS
+   * name), and send the URL's host in the Host header. Baidu's front door (the address its other hosts, such as
+   * aistudio.baidu.com, resolve to) passes the request to the service named in the Host header. */
+  via?: string;
 };
 export type BaiduConnection = { https: HttpsAgent; http: HttpAgent; close: () => void };
 
@@ -93,6 +99,7 @@ export function traceSummary(t: TransportTrace): string {
     t.uploadedMs !== undefined ? `uploaded=${t.uploadedMs}ms` : undefined,
     t.firstByteMs !== undefined ? `reply=${t.firstByteMs}ms` : undefined,
     t.reused ? "reused" : undefined,
+    t.via ? "via=edge" : undefined,
     t.ip && /^[0-9a-fA-F:.]{2,45}$/.test(t.ip) ? `ip=${t.family ?? "?"}:${t.ip}` : undefined,
     `t=${(t.elapsedMs / 1000).toFixed(1)}s`,
   ].filter(Boolean).join(" ");
@@ -113,6 +120,11 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
   // fresh connection that fails to open is retried safely (failedBeforeSending).
   const agent = opts.connection && req.method === "GET" ? (target.protocol === "https:" ? opts.connection.https : opts.connection.http) : undefined;
   const headers: Record<string, string> = { ...(req.headers ?? {}), connection: agent ? "keep-alive" : "close" };
+  const via = opts.via?.trim().toLowerCase() || undefined;
+  if (via) {
+    for (const name of Object.keys(headers)) if (/^host$/i.test(name)) delete headers[name];
+    headers.host = target.host;
+  }
   if (req.body) {
     // The body sets these two itself; a caller's own spelling ("Content-Type") would otherwise be sent twice.
     for (const name of Object.keys(headers)) if (/^content-(type|length)$/i.test(name)) delete headers[name];
@@ -124,7 +136,7 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
   }
   const started = Date.now();
   // An IP-literal host does no DNS lookup, so its first step is the connection.
-  const trace: TransportTrace = { phase: isIP(target.hostname.replace(/^\[|\]$/g, "")) ? "connect" : "dns", sentBytes: 0, totalBytes: payload?.byteLength ?? 0, elapsedMs: 0 };
+  const trace: TransportTrace = { phase: isIP((via ?? target.hostname).replace(/^\[|\]$/g, "")) ? "connect" : "dns", ...(via ? { via: true } : {}), sentBytes: 0, totalBytes: payload?.byteLength ?? 0, elapsedMs: 0 };
   const since = () => Date.now() - started;
   const secure = target.protocol === "https:";
   const family = opts.family ?? 4;
@@ -148,7 +160,8 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
     };
 
     const request = (secure ? httpsRequest : httpRequest)({
-      protocol: target.protocol, hostname: target.hostname, port: target.port || undefined,
+      // With `via`, node connects to that host and checks the certificate against it (servername defaults to hostname).
+      protocol: target.protocol, hostname: via ?? target.hostname, port: target.port || undefined,
       path: `${target.pathname}${target.search}`, method: req.method, headers,
       family: family || undefined, agent: agent ?? false,
     });
