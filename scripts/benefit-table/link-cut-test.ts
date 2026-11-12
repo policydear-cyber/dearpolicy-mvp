@@ -48,9 +48,15 @@ async function main() {
     finally { console.warn = warn; }
     assert.ok(said.some((m) => /ran out of output/.test(m)) && said.some((m) => /got no usable answer/.test(m)), said.join(" | "));
   });
-  await test("L4 a call stopped at the time limit stops the linking (the caller keeps every link in place)", async () => {
+  await test("L4 a call stopped at the time limit stops the linking; the group that finished keeps its links (Critic 2 #437)", async () => {
     const f = fake(1000, { timeoutAt: 2 }); const r = await askLinks(f.model, sections(100), COVERS, undefined, 60_000);
     assert.equal(r.timedOut, true); assert.deepEqual(f.asked, [40, 40]);
+    assert.equal(r.links.length, 40, "the first group's answer is returned"); assert.equal(r.unasked, 60);
+  });
+  await test("L4b relink uses the finished groups' links on a timeout (source)", async () => {
+    const src = (await import("node:fs")).readFileSync("lib/benefit-table/service.ts", "utf8");
+    assert.doesNotMatch(src, /if \(asked\.timedOut\) return \{ proposed: 0 \}/);
+    assert.match(src, /for \(const x of asked\.links\)/);
   });
   await test("L5 with no time left nothing is asked", async () => {
     const f = fake(1000); const r = await askLinks(f.model, sections(10), COVERS, undefined, 0);
