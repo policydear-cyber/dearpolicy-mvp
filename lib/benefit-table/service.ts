@@ -795,8 +795,10 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
   const taken: SectionLink[] = [];
   if (sections.length && types.length) {
     const asked = await askLinks(model, sections, types, onUsage, timeoutMs);
-    // Stopped at the time limit: the links already in place are kept, not replaced by none or by part of the answer.
-    if (asked.timedOut) return { proposed: 0 };
+    // Stopped at the time limit: the groups that finished are used (each is a whole, uncut answer about its own sections),
+    // and the sections not asked keep the links they have; the next linking asks them again (Critic 2 #437: a household
+    // near its deadline was left with no new link at all).
+    if (asked.timedOut) console.warn(`benefit table linking stopped at the time limit: ${asked.unasked} section${asked.unasked === 1 ? "" : "s"} not asked keep their links`);
     const keys = new Set(sections.map((s) => s.key));
     const seen = new Set<string>();
     for (const x of asked.links) {
@@ -822,7 +824,7 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
  * limit is never used in part and never dropped without a word: it is asked again as two halves, down to one section; a
  * single section that still runs out, or a group that gave no valid reply, keeps the links it has, and the server log
  * names how many sections were left unasked. Every call has only the time left of timeoutMs; one stopped at it stops
- * the whole linking (timedOut), as one call did before. */
+ * the linking (timedOut) and returns the links of the groups that finished. */
 export async function askLinks(model: TableModel, sections: SectionRef[], types: CoverType[], onUsage?: OnUsage, timeoutMs?: number):
   Promise<{ links: SectionLink[]; timedOut: boolean; unasked: number; calls: number }> {
   const deadline = timeoutMs != null ? Date.now() + timeoutMs : null;
