@@ -17,12 +17,19 @@ import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/qu
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
 import { figureGuardsEnabled } from "./guard-flag";
-import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "./reading";
+import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
 export const PROMPT_VERSION = "2026-10-21.3";
 export const READ_MAX_OUTPUT = 24_000;
 export const PAGE_MAX_OUTPUT = 8_000;
-export const LINK_MAX_OUTPUT = 8_000;
+/** Output room for one linking call. Live, 12 Nov: a household with 150 sections asked in one call used all of 8,000
+ * tokens twice (39 s each), the reply was cut, and no section was linked -- with nothing said. Sections are now asked in
+ * groups of LINK_SECTIONS_PER_CALL with this much room each, and a group that still runs out is asked again as two halves
+ * (askLinks). */
+export const LINK_MAX_OUTPUT = 16_000;
+/** At most this many sections in one linking call (about 150 output tokens each, with the model's own working, well
+ * within LINK_MAX_OUTPUT). */
+export const LINK_SECTIONS_PER_CALL = 40;
 /** At most this many pages of one document are read again on their own. */
 export const MAX_PAGE_REREADS = 12;
 /** A document is read in parts of consecutive pages, each part at most this many characters of page text (a page longer
@@ -787,13 +794,12 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
   const existing = new Set(l.links.map((x) => x.section));
   const taken: SectionLink[] = [];
   if (sections.length && types.length) {
-    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(sections, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(timeoutMs != null ? { timeoutMs } : {}) });
-    await onUsage?.("linking", reply);
-    // Stopped at the time limit: the links already in place are kept, not replaced by none.
-    if (reply.stopReason === "timeout") return { proposed: 0 };
+    const asked = await askLinks(model, sections, types, onUsage, timeoutMs);
+    // Stopped at the time limit: the links already in place are kept, not replaced by none or by part of the answer.
+    if (asked.timedOut) return { proposed: 0 };
     const keys = new Set(sections.map((s) => s.key));
     const seen = new Set<string>();
-    for (const x of (reply.json as { links?: SectionLink[] } | null)?.links ?? []) {
+    for (const x of asked.links) {
       if (!keys.has(x.section) || seen.has(x.section) || (x.cover != null && !coverKeys.has(x.cover))) continue;
       seen.add(x.section);
       if (open.has(x.section) || (x.cover != null && working.get(x.section) !== x.cover && !!movesTo.get(x.section)?.has(x.cover))) taken.push(x);
@@ -809,6 +815,44 @@ export async function relink(db: Db, model: TableModel, accountId: string, onUsa
   }
   await db(`UPDATE benefit_links SET updated_at=now() WHERE account_id=$1`, [accountId]);
   return { proposed: taken.length };
+}
+
+/** Asks the model which cover each section belongs to, in groups of LINK_SECTIONS_PER_CALL (each section is linked on its
+ * own, against the same covers, so a group needs no other group's sections). A group whose reply was cut at its output
+ * limit is never used in part and never dropped without a word: it is asked again as two halves, down to one section; a
+ * single section that still runs out, or a group that gave no valid reply, keeps the links it has, and the server log
+ * names how many sections were left unasked. Every call has only the time left of timeoutMs; one stopped at it stops
+ * the whole linking (timedOut), as one call did before. */
+export async function askLinks(model: TableModel, sections: SectionRef[], types: CoverType[], onUsage?: OnUsage, timeoutMs?: number):
+  Promise<{ links: SectionLink[]; timedOut: boolean; unasked: number; calls: number }> {
+  const deadline = timeoutMs != null ? Date.now() + timeoutMs : null;
+  const queue: SectionRef[][] = [];
+  for (let i = 0; i < sections.length; i += LINK_SECTIONS_PER_CALL) queue.push(sections.slice(i, i + LINK_SECTIONS_PER_CALL));
+  const links: SectionLink[] = [];
+  let unasked = 0, calls = 0;
+  while (queue.length) {
+    const group = queue.shift()!;
+    const left = deadline == null ? null : deadline - Date.now();
+    if (left != null && left <= 0) return { links, timedOut: true, unasked: unasked + group.length + queue.flat().length, calls };
+    calls++;
+    const reply = await model.call({ system: LINKING_PROMPT, user: renderLinkingInput(group, types), schema: LINKING_SCHEMA, maxTokens: LINK_MAX_OUTPUT, ...(left != null ? { timeoutMs: left } : {}) });
+    await onUsage?.("linking", reply);
+    if (reply.stopReason === "timeout") return { links, timedOut: true, unasked: unasked + group.length + queue.flat().length, calls };
+    if (reply.stopReason === "max_tokens" && group.length > 1) {
+      const half = Math.ceil(group.length / 2);
+      queue.unshift(group.slice(0, half), group.slice(half));
+      console.warn(`benefit table linking: a reply for ${group.length} sections ran out of output (${reply.output} tokens); asked again as two halves`);
+      continue;
+    }
+    const got = (reply.json as { links?: SectionLink[] } | null)?.links;
+    if (reply.stopReason === "max_tokens" || !Array.isArray(got)) {
+      unasked += group.length;
+      console.warn(`benefit table linking: ${group.length} section${group.length === 1 ? "" : "s"} got no usable answer (${reply.stopReason ?? "no reply"}); their links are kept as they are`);
+      continue;
+    }
+    links.push(...got);
+  }
+  return { links, timedOut: false, unasked, calls };
 }
 
 /** A name's words for comparing one printed name with another: lower case, letters and digits only. */
