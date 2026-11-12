@@ -1,5 +1,6 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { request as httpRequest, Agent as HttpAgent } from "node:http";
+import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
+
 import { isIP, type Socket } from "node:net";
 
 /**
@@ -25,6 +26,8 @@ export type TransportTrace = {
   /** ms from the start of the call to each step that completed. */
   dnsMs?: number; connectMs?: number; tlsMs?: number; uploadedMs?: number; firstByteMs?: number;
   ip?: string; family?: number;
+  /** The call went over a connection an earlier call of the same job had already opened (no DNS, TCP or TLS). */
+  reused?: boolean;
   sentBytes: number; totalBytes: number;
   elapsedMs: number;
 };
@@ -55,7 +58,24 @@ export type TransportOptions = {
   totalTimeoutMs: number;
   /** 4 (default) or 6 to ask DNS for that address family only; 0 for either. */
   family?: 0 | 4 | 6;
+  /** A keep-alive agent (baiduConnection) shared by the calls of one job, so they reuse one open connection, as Baidu's
+   * own client does (paddleocr 3.7.0: one requests.Session). Without it each call opens and closes its own connection. */
+  connection?: BaiduConnection;
+  /** On a kept connection, the wait for the first reply byte (instead of idleTimeoutMs). A kept connection the path has
+   * gone silent on answers nothing at all; a poll's small reply normally comes in well under a second. */
+  reusedReplyMs?: number;
 };
+export type BaiduConnection = { https: HttpsAgent; http: HttpAgent; close: () => void };
+
+/** One kept-open connection for the polls and result of one Baidu job (submit, each poll, the result), like Baidu's own client.
+ * Each new connection to Baidu's Beijing host is another chance to meet the stretches where the path from Singapore
+ * answers nothing (11 Nov 12:57Z: no TCP answer for 15.4 s, again 17 s later). An idle connection is closed after 20 s
+ * (longer than the 15 s longest wait between polls), and `close()` ends it when the job is done. */
+export function baiduConnection(): BaiduConnection {
+  const options = { keepAlive: true, maxSockets: 1, maxFreeSockets: 1, timeout: 20_000 };
+  const https = new HttpsAgent(options), http = new HttpAgent(options);
+  return { https, http, close: () => { https.destroy(); http.destroy(); } };
+}
 
 const CHUNK = 64 * 1024;
 const MAX_REPLY_BYTES = 64 * 1024 * 1024;
@@ -72,6 +92,7 @@ export function traceSummary(t: TransportTrace): string {
     t.tlsMs !== undefined ? `tls=${t.tlsMs}ms` : undefined,
     t.uploadedMs !== undefined ? `uploaded=${t.uploadedMs}ms` : undefined,
     t.firstByteMs !== undefined ? `reply=${t.firstByteMs}ms` : undefined,
+    t.reused ? "reused" : undefined,
     t.ip && /^[0-9a-fA-F:.]{2,45}$/.test(t.ip) ? `ip=${t.family ?? "?"}:${t.ip}` : undefined,
     `t=${(t.elapsedMs / 1000).toFixed(1)}s`,
   ].filter(Boolean).join(" ");
@@ -87,7 +108,11 @@ function plainCode(error: unknown): string | undefined {
 export async function transportRequest(url: string, req: TransportRequest, opts: TransportOptions): Promise<TransportResponse> {
   const target = new URL(url);
   let payload: Uint8Array | undefined;
-  const headers: Record<string, string> = { ...(req.headers ?? {}), connection: "close" };
+  // Only GETs (polls, the result) ride the kept connection. A POST (the submit) always opens its own: if a kept
+  // connection had gone stale or silent, a submit on it could not be tried again (it may have reached Baidu), whereas a
+  // fresh connection that fails to open is retried safely (failedBeforeSending).
+  const agent = opts.connection && req.method === "GET" ? (target.protocol === "https:" ? opts.connection.https : opts.connection.http) : undefined;
+  const headers: Record<string, string> = { ...(req.headers ?? {}), connection: agent ? "keep-alive" : "close" };
   if (req.body) {
     // The body sets these two itself; a caller's own spelling ("Content-Type") would otherwise be sent twice.
     for (const name of Object.keys(headers)) if (/^content-(type|length)$/i.test(name)) delete headers[name];
@@ -118,13 +143,14 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
     const fail = (kind: "timeout" | "network", code?: string) => finish(new TransportError(kind, trace, code));
     const progress = () => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => fail("timeout"), opts.idleTimeoutMs);
+      const waitingOnKept = trace.reused && trace.firstByteMs === undefined && opts.reusedReplyMs !== undefined;
+      idleTimer = setTimeout(() => fail("timeout"), waitingOnKept ? Math.min(opts.reusedReplyMs!, opts.idleTimeoutMs) : opts.idleTimeoutMs);
     };
 
     const request = (secure ? httpsRequest : httpRequest)({
       protocol: target.protocol, hostname: target.hostname, port: target.port || undefined,
       path: `${target.pathname}${target.search}`, method: req.method, headers,
-      family: family || undefined, agent: false,
+      family: family || undefined, agent: agent ?? false,
     });
     const connectTimer = setTimeout(() => fail("timeout"), opts.connectTimeoutMs);
     const totalTimer = setTimeout(() => fail("timeout"), opts.totalTimeoutMs);
@@ -151,6 +177,14 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
     };
 
     request.on("socket", (socket: Socket) => {
+      // A kept-open connection from the agent is already connected (and secured): no lookup/connect events follow.
+      // (A free agent socket has always finished its TLS handshake; `connecting` is what tells a kept socket apart.)
+      if (agent && !socket.connecting) {
+        trace.reused = true; trace.dnsMs = trace.connectMs = since(); if (secure) trace.tlsMs = trace.connectMs;
+        if (socket.remoteAddress) { trace.ip = socket.remoteAddress; trace.family = socket.remoteFamily === "IPv6" ? 6 : 4; }
+        connected();
+        return;
+      }
       socket.on("lookup", (error, address, addrFamily) => {
         if (error) return;
         trace.dnsMs = since(); trace.ip = typeof address === "string" ? address : undefined;

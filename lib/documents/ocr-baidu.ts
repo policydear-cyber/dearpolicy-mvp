@@ -10,8 +10,9 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { TransportError, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
+import { TransportError, baiduConnection, type BaiduConnection, traceSummary, transportRequest, type TransportRequest, type TransportResponse } from "@/lib/documents/baidu-transport";
 import { query } from "@/lib/db/client";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { probeBaiduPath, probeSummary } from "@/lib/documents/baidu-probe";
 import { removeOcrHandoff, stageOcrHandoff } from "@/lib/storage";
 import { enqueueStoragePurge } from "@/lib/storage/purge";
@@ -137,13 +138,13 @@ function kindForStatus(status: number): BaiduFailureKind {
   return "unavailable";
 }
 
-type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6 };
+type Limits = { totalMs: number; idleMs: number; connectMs: number; family: 0 | 4 | 6; connection?: BaiduConnection; reusedReplyMs?: number };
 type Transport = (url: string, req: TransportRequest, limits: Limits) => Promise<TransportResponse>;
 
 /** Production: node:https with separate connect / no-progress / total limits and a trace (baidu-transport.ts). */
 const httpsTransport: Transport = async (url, req, l) => {
   try {
-    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family });
+    return await transportRequest(url, req, { connectTimeoutMs: Math.min(l.connectMs, l.totalMs), idleTimeoutMs: l.idleMs, totalTimeoutMs: l.totalMs, family: l.family, connection: l.connection, reusedReplyMs: l.reusedReplyMs });
   } catch (error) {
     if (error instanceof TransportError) throw Object.assign(error, { summary: traceSummary(error.trace) });
     throw error;
@@ -190,11 +191,15 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
   retry: { retries: number; connectMs: number } = { retries: 0, connectMs: 0 }): Promise<TransportResponse> {
   const retries = retry.retries;
   const firstTry = Date.now();
+  let reopened = false;
   for (let attempt = 0; ; attempt++) {
     const l = limitsForTry(limits(), attempt, retry.connectMs);
     try {
-      return await transport(url, req, l);
+      return await transport(url, req, { ...l, reusedReplyMs: REUSED_REPLY_MS });
     } catch (error) {
+      // A kept-open connection Baidu had already closed: a GET (poll or result: nothing is created) is sent once more on a
+      // new connection, at once. A POST is never repeated once sent.
+      if (!reopened && req.method === "GET" && staleKeptConnection(error)) { reopened = true; attempt--; continue; }
       const wait = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
       if (attempt < retries && failedBeforeSending(error) && retryFits(Date.now() - firstTry, limitsLeft(limits), wait, retry.connectMs)) { await sleep(wait); continue; }
       const tries = attempt > 0 ? `tries=${attempt + 1}` : undefined;
@@ -206,6 +211,27 @@ async function call(url: string, req: TransportRequest, limits: () => Limits, st
     }
   }
 }
+/** True when a call over a kept-open connection failed before any reply arrived (the far end had closed it). */
+export function staleKeptConnection(error: unknown): boolean {
+  // "network": the far end had closed it; "timeout": the path went silent on it (no reply within REUSED_REPLY_MS).
+  return error instanceof TransportError && error.trace.reused === true && error.trace.firstByteMs === undefined;
+}
+/** How long a poll or result request on a kept connection waits for the first reply byte before that connection is
+ * dropped and the request sent once more on a new one. A poll's reply is small and normally comes in under a second. */
+export const REUSED_REPLY_MS = 10_000;
+
+/** The kept-open connection for the Baidu calls running inside withBaiduConnection (one reading, or one readPdfWithBaidu). */
+const keptConnection = new AsyncLocalStorage<BaiduConnection>();
+/** Runs `fn` with one kept-open connection to Baidu for its polls and result calls, as Baidu's own client does (one
+ * requests.Session), and closes it at the end. Inside an outer one, the outer connection is used. The calls inside one
+ * scope must stay one at a time (no Promise.all): the agent holds ONE socket, and a request queued for it would have its
+ * connect limit running while it waits, failing as a "connect" timeout. */
+export async function withBaiduConnection<T>(fn: () => Promise<T>): Promise<T> {
+  if (keptConnection.getStore()) return fn();
+  const conn = baiduConnection();
+  try { return await keptConnection.run(conn, fn); } finally { conn.close(); }
+}
+
 /** The job's time left, or 0 when it has run out. */
 function limitsLeft(limits: () => Limits): number {
   try { return limits().totalMs; } catch { return 0; }
@@ -394,8 +420,10 @@ export type BaiduJobResult = { pages: string[]; jobId: string; model: string | n
  * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
 export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string } = {}): Promise<BaiduJobResult> {
   const end = Math.min(deadline ?? Infinity, Date.now() + baiduOcrSettings(env).maxWaitMs);
-  const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
-  return awaitBaiduJob(jobId, env, end, submitted);
+  return withBaiduConnection(async () => {
+    const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
+    return awaitBaiduJob(jobId, env, end, submitted);
+  });
 }
 
 /** What every call of one job needs: the token's header, the settings, and the limits by the job's end (ms since 1970). */
@@ -408,7 +436,7 @@ function jobContext(env: Env, end: number) {
   const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
-    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily };
+    return { totalMs: left, idleMs: Math.min(s.requestTimeoutMs, left), connectMs: s.connectTimeoutMs, family: s.ipFamily, connection: keptConnection.getStore() };
   };
   return { s, auth: { Authorization: `Bearer ${token}` }, jobsUrl: `${s.baseUrl}${JOBS_PATH}`, timeout,
     retry: { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs } };
@@ -604,7 +632,10 @@ const samePages = (a: number[], b: number[]) => a.length === b.length && a.every
  * job again (never a second job for the same pages while one is going), or submits again after a connection failure.
  * Only after BAIDU_OCR_BACKGROUND_WINDOW_MIN from the first try does the AI reader read what Baidu still has not; a
  * failed job or a refused request goes to the AI reader at the end of the reading, as before. */
-export async function completePdfPagesWithBaidu(args: {
+export function completePdfPagesWithBaidu(args: Parameters<typeof completeWithBaidu>[0]): ReturnType<typeof completeWithBaidu> {
+  return withBaiduConnection(() => completeWithBaidu(args));
+}
+async function completeWithBaidu(args: {
   accountId: string; resourceId?: string; bytes: Uint8Array; password?: string; pages: PdfPage[]; pageNumbers: number[];
   /** Background reading: "start" on a reading's first run, then the state the previous run returned. */
   wait?: BaiduWaitState | "start";
