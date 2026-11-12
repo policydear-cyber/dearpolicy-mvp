@@ -8,7 +8,8 @@
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { TransportError, traceSummary, transportRequest } from "@/lib/documents/baidu-transport";
+import { TransportError, baiduConnection, traceSummary, transportRequest } from "@/lib/documents/baidu-transport";
+import { readPdfWithBaidu, setBaiduTransportForTests, staleKeptConnection } from "@/lib/documents/ocr-baidu";
 
 const sockets = new Set<Socket>();
 async function serve(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ server: Server; url: string }> {
@@ -144,7 +145,74 @@ async function main() {
     await close(server); await close(s2);
   }
 
-  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace -- passed. TLS and Baidu's live service are NOT covered.");
+  // 7. Kept-open connection (as Baidu's own client): a submit, polls and the result over ONE TCP connection; the later
+  //    calls are marked reused and do no DNS/TCP/TLS of their own. Without a connection each call opens its own.
+  {
+    let connections = 0;
+    const { server, url } = await serve((req, res) => { req.resume(); req.on("end", () => res.end(JSON.stringify({ ok: req.method }))); });
+    server.on("connection", () => { connections++; });
+    const conn = baiduConnection();
+    const first = await transportRequest(`${url}/api/v2/ocr/jobs`, { method: "POST", body: JSON.stringify({ a: 1 }) }, { ...limits, connection: conn });
+    assert.equal(first.status, 200);
+    for (let i = 0; i < 3; i++) assert.equal((await transportRequest(`${url}/api/v2/ocr/jobs/j${i}`, { method: "GET" }, { ...limits, connection: conn })).status, 200);
+    assert.equal(connections, 1, "four calls, one connection");
+    conn.close();
+    connections = 0;
+    for (let i = 0; i < 2; i++) await transportRequest(`${url}/x`, { method: "GET" }, limits);
+    assert.equal(connections, 2, "without a kept connection each call opens its own");
+    await close(server);
+  }
+
+  // 8. A kept-open connection the far end has dropped: the call fails as "network", marked reused, with no reply --
+  //    exactly what staleKeptConnection recognises (the Baidu client then sends a GET once more on a new connection).
+  {
+    let n = 0;
+    const { server, url } = await serve((req, res) => { req.resume(); n++; if (n === 2) { req.socket.destroy(); return; } res.end("{}"); });
+    const conn = baiduConnection();
+    await transportRequest(`${url}/a`, { method: "GET" }, { ...limits, connection: conn });
+    const e = await failure(transportRequest(`${url}/b`, { method: "GET" }, { ...limits, connection: conn }));
+    assert.equal(e.trace.reused, true);
+    assert.equal(e.kind, "network");
+    assert.ok(staleKeptConnection(e));
+    assert.match(traceSummary(e.trace), /\breused\b/);
+    // The agent drops the broken connection: the next call opens a new one and succeeds.
+    assert.equal((await transportRequest(`${url}/c`, { method: "GET" }, { ...limits, connection: conn })).status, 200);
+    conn.close();
+    await close(server);
+  }
+
+  // 9. The real Baidu client (readPdfWithBaidu, node transport) against a local stand-in: submit, two polls (running,
+  //    then done) and the result, all on ONE connection; a poll whose kept connection was dropped is sent again once.
+  {
+    let connections = 0, polls = 0, dropped = false;
+    const { server, url } = await serve((req, res) => {
+      const parts: Buffer[] = [];
+      req.on("data", (c) => parts.push(c));
+      req.on("end", () => {
+        res.setHeader("content-type", "application/json");
+        if (req.method === "POST") { res.end(JSON.stringify({ code: 0, data: { jobId: "job-ka-1" } })); return; }
+        if (req.url?.startsWith("/api/v2/ocr/jobs/job-ka-1")) {
+          polls++;
+          if (polls === 2 && !dropped) { dropped = true; req.socket.destroy(); return; }
+          const done = polls >= 3;
+          res.end(JSON.stringify({ code: 0, data: done ? { state: "done", resultUrl: { jsonUrl: `${url}/result.jsonl` } } : { state: "running" } }));
+          return;
+        }
+        if (req.url === "/result.jsonl") { res.end(JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: "Kept connection page text" } }] } }) + "\n"); return; }
+        res.statusCode = 404; res.end("{}");
+      });
+    });
+    server.on("connection", () => { connections++; });
+    setBaiduTransportForTests("https");
+    const env = { BAIDU_AISTUDIO_TOKEN: TOKEN, BAIDU_OCR_BASE_URL: url, BAIDU_OCR_POLL_INTERVAL_MS: "1", BAIDU_PADDLEOCR_MODEL: "PaddleOCR-VL-1.5" } as unknown as NodeJS.ProcessEnv;
+    const got = await readPdfWithBaidu(new Uint8Array([37, 80, 68, 70]), env, Date.now() + 10_000);
+    assert.deepEqual(got.pages, ["Kept connection page text"]);
+    assert.equal(polls, 3, "running, dropped (sent again), done");
+    assert.equal(connections, 2, "one connection for the whole job, plus one to replace the dropped one");
+    await close(server);
+  }
+
+  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace, one kept-open connection per job (and a dropped one replaced) -- passed. TLS and Baidu's live service are NOT covered.");
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
