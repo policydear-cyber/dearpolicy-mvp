@@ -447,7 +447,6 @@ export default function PoliciesPage() {
       </form>}
     </section>
 
-    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b><Icon name="documents"/></b><span><strong>Reads it</strong><small>Any policy, wording or receipt</small></span></div><div><b><Icon name="family"/></b><span><strong>Finds who it covers</strong><small>From the names printed in it</small></span></div><div><b><Icon name="eye"/></b><span><strong>Shows the page</strong><small>Every answer cites its source</small></span></div></section>
 
     <section className="section">
       <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Library</h2></div></div>

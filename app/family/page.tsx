@@ -114,7 +114,7 @@ export default function FamilyPage() {
     <div className="page">
       <header className="page-header compact"><div><h1>Account settings</h1></div></header>
       <AccountTabs />
-      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use full legal names where possible: when a certificate names several insured people, DearPolicy uses these names to link it to everyone it covers.</p></div></div>
+      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use full names as they appear on your policies.</p></div></div>
 
       <section className="section">
         <div className="profile-list">
