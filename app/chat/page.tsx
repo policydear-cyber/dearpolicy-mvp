@@ -18,6 +18,7 @@ import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
+import { sendFailure } from "@/components/chat-send-failure";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -26,13 +27,14 @@ import { LearnLinks } from "@/components/learn-links";
 const ANSWER_FAILED="DearPolicy could not finish this answer. Your message is saved.";
 /** The server refuses a question longer than this (app/api/chat/route.ts). */
 const MAX_QUESTION_LENGTH=2000;
+/** Shown when the server gave no words of its own for a household with nobody in it. */
+const NO_FAMILY_TEXT="Add a family member first, then ask again.";
 /** The chat was changed elsewhere (another tab or window) since this page
  * loaded it: the server refuses to append to a stale copy. */
 const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
 const nextStepsAfter=(answer?:ChatAnswer)=>{const steps=uniqueSteps(answer?.nextSteps);return steps.length&&!answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;};
-function isConflict(status:number|null,text:string){return status===409||/chat changed|reopen it|changed while|changed underneath/i.test(text);}
 /** Keeps the open conversation in the address bar, so a reload (or a
  * closed tab reopened from history) returns to it -- and to its pending
  * answer -- instead of starting a new chat. */
@@ -42,7 +44,7 @@ function rememberConversation(id:string|null){
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 const CHAT_MAX_WAIT_MS=6*60_000;
-type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;stopped?:boolean;restored?:boolean};
+type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
   information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"A DearPolicy reviewer will check this",
@@ -63,6 +65,8 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
 }
 
 class ConflictError extends Error{}
+/** The household has nobody in it yet: the server's own words, with a link to add family members. */
+class NoFamilyError extends Error{}
 /** The page stopped waiting; the job may still finish on the server, so the answer can still arrive in this chat. */
 class StoppedWaiting extends Error{}
 
@@ -256,7 +260,7 @@ function ChatContent(){
           question:text,conversationId,conversationRevision:conversationId?revision:undefined,asynchronous:true,
           timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok){if(isConflict(response.status,typeof data.error==="string"?data.error:""))throw new ConflictError();throw new Error(data.error??"Chat failed");}
+      if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"Chat failed");}
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
@@ -268,14 +272,16 @@ function ChatContent(){
       // never got a reply: the person can see exactly which of their
       // messages didn't go through, and why, right where they sent it.
       if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
-        const conflict=e instanceof ConflictError||isConflict(null,String((e as {message?:unknown}|null)?.message??""));
+        const said=String((e as {message?:unknown}|null)?.message??"");
+        const kind=e instanceof NoFamilyError?"no_family":e instanceof ConflictError?"conflict":sendFailure(null,said);
+        const noFamily=kind==="no_family",conflict=kind==="conflict";
         const stopped=e instanceof StoppedWaiting;
-        const message=conflict?CONFLICT_TEXT:stopped?e.message:customerError(e,ANSWER_FAILED);
+        const message=noFamily?customerMessage(said,NO_FAMILY_TEXT):conflict?CONFLICT_TEXT:stopped?e.message:customerError(e,ANSWER_FAILED);
         // The unsent text goes back into the box, ready to send again -- unless something new is already typed there, or
         // the page only stopped waiting: that answer may still arrive, and sending again would ask twice.
         const restored=!stopped&&!boxText.current.trim();
         if(restored)setQuestion(text);
-        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,stopped,restored}:m));
+        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,stopped,restored}:m));
       }
     }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
@@ -462,7 +468,9 @@ function ChatContent(){
           {/* Knowledge library: general explanations of terms this answer uses (static, never changes the answer). */}
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content,...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
-        {message.error?(message.conflict
+        {message.error?(message.noFamily
+          ?<div className="alert error message-inline-error" role="alert" data-testid="chat-no-family"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/family">Add family members</Link></div>
+          :message.conflict
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>
           :message.stopped
           ?<div className="alert message-inline-error" role="alert" data-testid="chat-stopped-waiting"><strong>Still not answered.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Check for the answer</button>:null}</div>

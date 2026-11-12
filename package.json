@@ -80,6 +80,7 @@
     "benefit-table:read": "node --import tsx scripts/benefit-table/read.ts",
     "simple:offline-test": "node --import tsx scripts/simple-answer/offline-test.ts",
     "simple:row-cap-test": "node --import tsx scripts/simple-answer/row-cap-test.ts",
+    "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
     "simple:other-person-document-test": "node --import tsx scripts/simple-answer/other-person-document-test.ts",
     "simple:no-documents-test": "node --import tsx scripts/simple-answer/no-documents-test.ts",
     "simple:compare": "node --import tsx scripts/simple-answer/compare.ts",
