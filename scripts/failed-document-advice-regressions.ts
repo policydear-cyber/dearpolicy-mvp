@@ -207,6 +207,11 @@ async function main() {
     assert.equal(readInPartAdvice(uncheckedPagesNote([4])!.replace(/\.$/, " and call 91234567."))!.what, plain);
     assert.equal(readInPartAdvice(uncheckedPagesNote([4])! + "Call us.")!.what, plain);
     assert.match(readInPartAdvice(uncheckedPagesNote([4]))!.next, /once it shows as read, delete this one/);
+    // The older count-only note (lib/rag/ingest.ts) is shown as written, not replaced by the generic "not used" line.
+    const count = "2 cover amounts could not be checked word for word against the document's pages, so they are not shown as confirmed.";
+    assert.equal(readInPartAdvice("Read in part. " + count)!.what, count);
+    assert.equal(readInPartAdvice("Read in part. 1 cover amount could not be checked word for word against the document's pages, so it is not shown as confirmed.")!.what, "1 cover amount could not be checked word for word against the document's pages, so it is not shown as confirmed.");
+    assert.equal(readInPartAdvice("Read in part. 2 cover amounts could not be checked word for word against the document's pages, so they are not shown as confirmed. Call 91234567.")!.what, count, "only the known sentence; nothing after it");
     // Any other text after "Read in part" is never shown as it is.
     const other = readInPartAdvice("Read in part. <script>alert(1)</script> Policy S1234567D page 3");
     assert.ok(other);
