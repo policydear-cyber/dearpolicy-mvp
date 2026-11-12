@@ -142,7 +142,7 @@ function moneyPattern(value: number) {
 }
 /** A currency printed right beside a figure: before it ("Rp4.250.000", "€ 18.500,50", "CHF 1'250.00", "KWD 1.250") or after
  * it ("1.250,00 €", "150,75 EUR"). The code is returned (or the sign) so a three-decimal currency reads "1.250" as 1.25. */
-const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
+const SIGN_BEFORE = /(?<![A-Za-z])(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
 const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
 /** Words before a figure that make it a number of something else: a section, table, version, clause, page, year or age. */
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;

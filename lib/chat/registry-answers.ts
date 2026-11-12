@@ -377,7 +377,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
         // The insurer's own letters only: an app screenshot, a receipt or the family's notes never state cover.
         for (const d of ds.filter((x) => /^(?:insurer_letter|other|renewal_notice)$/.test(x.role ?? "")).sort((a, b) => (dateOf(b) ?? "").localeCompare(dateOf(a) ?? ""))) {
           for (const pg of pagesOf(d.id)) {
-            const m = /sum (?:assured|insured)[^\n$]{0,30}?(S\$|SGD\s?|US\$|USD\s?|RM\s?|MYR\s?|HK\$|HKD\s?)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(pg.text);
+            const m = /sum (?:assured|insured)[^\n$]{0,30}?(S\$|US\$|HK\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD)\s?)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(pg.text);
             if (!m) continue;
             const amount = Number(m[2].replace(/,/g, "")), cur = statedCurrencyCode(m[1].trim());
             const line = pg.text.split(/\n/).find((l) => l.includes(m[0])) ?? m[0];

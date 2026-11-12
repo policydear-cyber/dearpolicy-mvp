@@ -215,13 +215,13 @@ function wholeCoverName(category:string,re:RegExp):boolean{
  * cover it names ("TPD Premium Waiver" as Total Permanent Disability), so its printed label is read too (TE, 31 Oct). */
 const NOT_A_SUM=/\b(?:premiums?|waiver|fund value|surrender(?: value)?|cash value|fees?|charges?|excess|deductible|contributions?|subscriptions?|loan|levy|caruman|yuran|bayaran)\b|保费|保費|退保/i;
 export function printedLabelIsNotASum(evidenceText:string|null|undefined):boolean{
-  const label=String(evidenceText??"").split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"";
+  const label=String(evidenceText??"").split(/\t|\s(?=(?:[A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"";
   return NOT_A_SUM.test(label);
 }
 /** A schedule line's own label: the printed words before its figure. */
 function printedLabel(printed:string|null|undefined):string{
   const t=String(printed??"");
-  return (t.split(/\t|\s(?=(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"").replace(/[\s:;,.–—-]+$/,"").replace(/\s+/g," ").trim();
+  return (t.split(/\t|\s(?=(?:[A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|¥|S\$|A\$|US\$|\$)?\s?\d)/)[0]??"").replace(/[\s:;,.–—-]+$/,"").replace(/\s+/g," ").trim();
 }
 /** A travel schedule's lines are limits for one benefit each, named by the printed label (intake stores them all as
  * "Travel"). Only a label that is the whole benefit's name counts, closed list: "Overseas medical expenses",
@@ -262,7 +262,7 @@ export function scheduleLinePays(event:EventType,printed:string|null|undefined):
   // The value cell must be the figure itself: "£2,400 or 75% of salary, whichever is lower" or "As charged" is not a
   // rate or limit this line can carry (Critic p294).
   const text=String(printed??"");
-  const figures=text.match(/(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|HK\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[];
+  const figures=text.match(/(?:[A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|¥|S\$|A\$|US\$|HK\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[];
   if(figures.length!==1||/\b(?:or|whichever|lower|higher|lesser|greater|as charged)\b|%/i.test(text.slice(text.indexOf(figures[0])+figures[0].length)))return null;
   const kinds=new Set(parts.map((label)=>labelPays(event,label,printed)));
   // A rate is the value cell's figure and nothing more: "Up to £2,400", "Maximum S$5,000", "75% of salary up to
@@ -279,7 +279,7 @@ export function scheduleLinePays(event:EventType,printed:string|null|undefined):
 }
 function labelPays(event:EventType,label:string,printed:string|null|undefined):PaysKind|null{
   const text=String(printed??"");
-  const figures=(text.match(/(?:[A-Z]{1,3}\$|RM|£|€|¥|S\$|A\$|US\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[]).length;
+  const figures=(text.match(/(?:[A-Z]{1,3}\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))RM|£|€|¥|S\$|A\$|US\$|\$)\s?\d[\d,]*(?:\.\d+)?/g)??[]).length;
   if(figures>1)return null; // two amounts on one line: which is which is not certain
   if(event==="disability_income"||event==="long_term_care")
     return /^(?:monthly (?:benefit|income|payment|payout|allowance)|(?:benefit|income|payment|payout|allowance) per month)$/i.test(label)&&!NOT_A_RATE.test(label)?"per_month":null;
