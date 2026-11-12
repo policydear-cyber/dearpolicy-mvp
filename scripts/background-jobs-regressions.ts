@@ -39,6 +39,7 @@ import {
   recoverExpiredLeases,
   cancelJob,
   finalizeCancelledJob,
+  deferJob,
   computeBackoffMs,
   LeaseLostError,
   JobNotFoundError,
@@ -475,10 +476,46 @@ async function runDatabaseTests() {
       const { readFileSync } = await import("node:fs");
       assert.match(readFileSync(path.resolve("app/api/policies/reprocess/route.ts"), "utf8"), /SET status='cancelled'[^`]*payload=\$\{WITHOUT_PASSWORD_SQL\}/);
     });
+    await testAsync("deferJob puts the same job back to wait: attempt given back, payload patched, due later; a cancel wins; claimAndProcessOne defers on JobDeferral", async () => {
+      const jobType = `defer-${randomUUID()}`;
+      const { row: job } = await enqueueJob(pool, { jobType, idempotencyKey: "doc-1", payload: { policyId: "p-1", pdfPassword: "pw" }, maxAttempts: 3 });
+      const claimed = await claimNextJob(pool, { jobType, workerId: "w" });
+      assert.equal(claimed!.attempt_count, 1);
+      await assert.rejects(() => deferJob(pool, { jobId: job.id, workerId: "someone-else", delayMs: 1_000, payloadPatch: {} }), LeaseLostError, "only the lease owner defers");
+      const waiting = await deferJob(pool, { jobId: job.id, workerId: "w", delayMs: 60_000, payloadPatch: { baiduWait: { runs: 1 } } });
+      assert.equal(waiting.status, "queued");
+      assert.equal(waiting.attempt_count, 0, "the wait uses up no attempt");
+      assert.equal(waiting.lease_owner, null);
+      assert.deepEqual(waiting.payload, { policyId: "p-1", pdfPassword: "pw", baiduWait: { runs: 1 } }, "payload kept and patched");
+      const dueIn = new Date(waiting.available_at).getTime() - Date.now();
+      assert.ok(dueIn > 50_000 && dueIn <= 61_000, `due about a minute later (${dueIn} ms)`);
+      assert.equal(await claimNextJob(pool, { jobType, workerId: "w2" }), null, "not claimable before it is due");
+      await pool.query(`UPDATE background_jobs SET available_at=now() WHERE id=$1`, [job.id]);
+      const again = await claimNextJob(pool, { jobType, workerId: "w2" });
+      assert.equal(again!.id, job.id, "the same job, same key");
+      assert.equal(again!.attempt_count, 1, "still the first attempt");
+      // A cancel asked for while it ran: cancelled, no password, but the patch kept (it may name a staged copy to remove).
+      await pool.query(`UPDATE background_jobs SET cancel_requested=true WHERE id=$1`, [job.id]);
+      const cancelled = await deferJob(pool, { jobId: job.id, workerId: "w2", delayMs: 1_000, payloadPatch: { baiduWait: { runs: 2 } } });
+      assert.equal(cancelled.status, "cancelled");
+      assert.deepEqual(cancelled.payload, { policyId: "p-1", baiduWait: { runs: 2 } });
+      const audit = await pool.query<{ to_status: string }>(`SELECT to_status FROM background_job_audit_log WHERE job_id=$1 ORDER BY created_at, to_status`, [job.id]);
+      assert.ok(audit.rows.some((r) => r.to_status === "queued") && audit.rows.some((r) => r.to_status === "cancelled"), "both transitions audited");
+      // The runner: a processor that throws JobDeferral is deferred, not failed.
+      const { claimAndProcessOne } = await import("@/lib/jobs/worker-runtime");
+      const { JobDeferral } = await import("@/lib/jobs/deferral");
+      const type2 = `defer-${randomUUID()}`;
+      const { row: j2 } = await enqueueJob(pool, { jobType: type2, idempotencyKey: "doc-2", payload: { n: 1 } });
+      const outcome = await claimAndProcessOne({ jobType: type2, workerId: "w", process: async () => { throw new JobDeferral(20_000, { waited: true }); } });
+      assert.equal(outcome, "succeeded");
+      const after = (await pool.query<{ status: string; attempt_count: number; payload: unknown; last_error_message: string | null }>(`SELECT status, attempt_count, payload, last_error_message FROM background_jobs WHERE id=$1`, [j2.id])).rows[0];
+      assert.deepEqual(after, { status: "queued", attempt_count: 0, payload: { n: 1, waited: true }, last_error_message: null });
+    });
+
     console.log(`background-jobs regressions passed: ${cases} cases (idempotent enqueue, claim/SKIP LOCKED exclusivity, heartbeat lease extension, ` +
       `completion, bounded transient retry matching computeBackoffMs(), immediate non_retryable dead-letter, lease-expiry recovery & the zombie-worker ` +
       `ownership CAS, dead-letter-on-recovery once max_attempts is exhausted, immediate and cooperative cancellation, idempotent cancel-of-terminal, ` +
-      `structural audit trail, terminal-row resurrection for re-requested work, no PDF password kept on a finished job).`);
+      `structural audit trail, terminal-row resurrection for re-requested work, no PDF password kept on a finished job, deferral back to the queue).`);
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;

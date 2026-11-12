@@ -15,6 +15,7 @@ import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { WAIVER_RIDER_NOTE, namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
+import { NOT_CHECKED } from "@/lib/documents/layout-check";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
 type Page = { pageNumber: number; text: string; imageCurrency?: string };
@@ -604,15 +605,18 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   if (ok) {
     const span = locatePassage(text, evidence);
     const lines = text.split("\n");
+    const near = span ? null : closestLines(lines, evidence);
     const evidenceLines = span ? lines.filter((line, i) => { const start = lines.slice(0, i).join("\n").length + (i ? 1 : 0); return start <= span.end && start + line.length >= span.start; })
-      : lines.filter((line) => tokenShare(line, evidence) >= 0.7);
+      : near!.lines;
+    // Lines with different labels tied as the closest to the citation: each must print the figure (closestLines).
+    const onEvidence = (f: (line: string) => boolean) => near?.all ? evidenceLines.every(f) : evidenceLines.some(f);
     if (!evidenceLines.length) ok = false;
     else if (coverage.amount != null) {
-      ok = evidenceLines.some((line) => moneyPrinted(line, Number(coverage.amount)) && (!coverage.currency || currencyOk(line, coverage.currency)));
+      ok = onEvidence((line) => moneyPrinted(line, Number(coverage.amount)) && (!coverage.currency || currencyOk(line, coverage.currency)));
       // A page whose text layer prints no currency, confirmed against its image, which prints one (lib/documents/image-currency):
       // a money-shaped figure on the evidence line is confirmed only in exactly that currency (Critic #417 C1, C2).
       const code = coverage.sourcePage != null ? imageCurrency.get(coverage.sourcePage) : undefined;
-      if (!ok && code && (coverage.currency ?? "").toUpperCase() === code) ok = evidenceLines.some((line) => moneyShapedFigure(line, Number(coverage.amount)));
+      if (!ok && code && (coverage.currency ?? "").toUpperCase() === code) ok = onEvidence((line) => moneyShapedFigure(line, Number(coverage.amount)));
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
@@ -632,11 +636,70 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     return { ...coverage, amount: null, notes: [notes, NOTIONAL_SUM_NOTE].filter(Boolean).join(" · "), evidenceVerified: ok && coverage.evidenceVerified === true };
   return { ...coverage, notes, evidenceVerified: ok && coverage.evidenceVerified === true };
 }
+/** A label's own words, in order: no figures, and no "[amount not checked]" the page check left where it could not confirm
+ * a figure. */
+const labelWords = (t: string) => nameKey(String(t ?? "").split(NOT_CHECKED).join(" ")
+  // A dotted initialism is one word: "T.P.D." is "TPD" (TE #422 V24).
+  .replace(/(?<![A-Za-z])((?:[A-Za-z]\.){2,}[A-Za-z]?)(?![A-Za-z])/g, (m) => m.replace(/\./g, ""))).split(" ").filter((w) => w.length > 1 && !/\d/.test(w));
+const LINKING_WORDS = new Set(["and", "of", "the", "for", "on", "in", "or"]);
+/** How a citation's label words sit in a page line's label. A cited word matches a word the line prints, or is the
+ * initialism of a run of the line's words, case-insensitive and leaving out linking words ("TPD" for "Total and Permanent
+ * Disability", "CI" for "Critical Illness", TE #422 V11). `covered` counts the line's words the matches account for. */
+function labelMatch(want: string[], line: string) {
+  const words = labelWords(line), have = new Set(words), content = words.filter((w) => !LINKING_WORDS.has(w));
+  const runs = new Map<string, number>();
+  for (let i = 0; i < content.length; i++) for (let n = 2; n <= 6 && i + n <= content.length; n++) {
+    const key = content.slice(i, i + n).map((w) => w[0]).join("");
+    if (!runs.has(key)) runs.set(key, n);
+  }
+  let matched = 0, covered = 0;
+  for (const w of new Set(want)) {
+    if (have.has(w)) { matched++; covered++; }
+    else if (w.length >= 2 && w.length <= 6 && /^[a-z]+$/.test(w) && runs.has(w)) { matched++; covered += runs.get(w)!; }
+  }
+  return { matched, covered: Math.min(covered, have.size), size: have.size };
+}
+/** How much of a cited line a page line holds, when the citation is not found word for word (spacing, a tab read as a
+ * space, an abbreviated label). The figures count toward the share, but never alone: the line must also hold at least half
+ * of the citation's own words (its label). Else another line that prints the same figure stands in for the cited one
+ * ("Death S$250,000" confirmed from "Total Permanent Disability S$250,000" once the page check marked the Death line's
+ * figure as not checked, TE #417 N11m), and a wrong amount is confirmed. A citation with no words of its own is never
+ * matched this way. */
 function tokenShare(line: string, evidence: string) {
   const want = [...new Set(nameKey(evidence).split(" ").filter((t) => t.length > 1))];
   if (!want.length) return 0;
+  const words = [...new Set(labelWords(evidence))];
+  if (!words.length) return 0;
+  const { matched } = labelMatch(words, line);
+  if (matched * 2 < words.length) return 0;
   const have = new Set(nameKey(line).split(" "));
-  return want.filter((t) => have.has(t)).length / want.length;
+  const figures = want.filter((t) => /\d/.test(t));
+  return (matched + figures.filter((t) => have.has(t)).length) / (words.length + figures.length);
+}
+/** The page lines a citation not found word for word stands for: of the lines that name at least half of its words, only
+ * those whose label is closest to the citation's own words (word Jaccard, an initialism counting for the words it spells).
+ * Another cover whose label holds the same words or more ("Sum Assured (TPD)" for "Sum Assured Death", "Accidental Death
+ * Benefit" for "Death Benefit") never stands in for the cover's own line while that line is on the page (Critic #422 G1,
+ * G2). `all` is set when lines with different labels tie: then every one of them must print the figure, as which cover
+ * the citation meant is not known ("CI" for both "Critical Illness" and "Cancer Insurance"). */
+function closestLines(lines: string[], evidence: string): { lines: string[]; all: boolean } {
+  const want = [...new Set(labelWords(evidence))];
+  if (!want.length) return { lines: [], all: false };
+  // The closest label is chosen among the lines that hold the citation's figures and the lines whose figure the page check
+  // could not confirm: the cover's own line with "[amount not checked]" still wins over another cover's line, and then
+  // confirms nothing. A heading or plan line with no figure ("Plan: Heron Guard Death Cover") never competes, so it cannot
+  // hide the row below it (Critic #422 R1).
+  const scored = lines.flatMap((line) => {
+    if (!line.includes(NOT_CHECKED) && tokenShare(line, evidence) < 0.7) return [];
+    const m = labelMatch(want, line);
+    return m.matched * 2 < want.length ? [] : [{ line, score: m.matched / (want.length + m.size - m.covered || 1) }];
+  });
+  const best = Math.max(0, ...scored.map((x) => x.score));
+  const top = scored.filter((x) => x.score === best).map((x) => x.line);
+  // Then the closest lines must also hold the citation's figures (tokenShare); one that does not confirms nothing.
+  const all = new Set(top.map((l) => labelWords(l).join(" "))).size > 1;
+  const held = top.filter((line) => tokenShare(line, evidence) >= 0.7);
+  return { lines: all && held.length < top.length ? [] : held, all };
 }
 function currencyOk(line: string, currency: string) {
   const code = currency.toUpperCase();

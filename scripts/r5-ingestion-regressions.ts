@@ -373,6 +373,79 @@ async function partB() {
       assert.ok(coverReadingPending(message), "the card still shows the 'not fully read yet' state for it");
       await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [jobType]);
     });
+    await t("Baidu background reading: a scanned page Baidu has not finished keeps the SAME job waiting (no attempt used, no AI reader), and the next run reads Baidu's text", async () => {
+      const jobType = `r5_test_policy_processing_${randomUUID().slice(0, 8)}`;
+      const { PDFDocument } = await import("pdf-lib");
+      const { deflateSync } = await import("node:zlib");
+      const crc = (buf: Buffer) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+      const chunk = (type: string, data: Buffer) => { const tag = Buffer.from(type); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const c = Buffer.alloc(4); c.writeUInt32BE(crc(Buffer.concat([tag, data]))); return Buffer.concat([len, tag, data, c]); };
+      const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(16, 0); ihdr.writeUInt32BE(16, 4); ihdr[8] = 8; ihdr[9] = 0;
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr),
+        chunk("IDAT", deflateSync(Buffer.concat(Array.from({ length: 16 }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(16, 0x60)]))))), chunk("IEND", Buffer.alloc(0))]);
+      const pdf = await PDFDocument.load(fixture(SHIELD_PLAIN));
+      pdf.addPage([595, 842]).drawImage(await pdf.embedPng(png), { x: 0, y: 0, width: 595, height: 842 });
+      const scannedPage = pdf.getPageCount();
+      const bytes = Buffer.from(await pdf.save());
+      const BAIDU_TEXT = "SYNTHETIC-DPTEST Rider schedule\tHospital cash S$80 per day, up to 60 days a policy year";
+      // A stand-in for Baidu's jobs API: the job is running until `done` is set.
+      let done = false; const calls: string[] = [];
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
+        if (!url.startsWith("https://fake-baidu-r5.test")) return realFetch(input as RequestInfo, init);
+        calls.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
+        const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+        if (init?.method === "POST") return json({ code: 0, data: { jobId: "job-r5" } });
+        if (url.endsWith("/jobs/job-r5")) return json({ code: 0, data: { state: done ? "done" : "running", ...(done ? { model: "PaddleOCR-VL-1.6", resultUrl: { jsonUrl: "https://fake-baidu-r5.test/r.jsonl" } } : {}) } });
+        if (url.endsWith("/r.jsonl")) return new Response(JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: BAIDU_TEXT } }] } }) + "\n", { status: 200 });
+        return new Response("{}", { status: 404 });
+      }) as typeof fetch;
+      const env = { BAIDU_AISTUDIO_TOKEN: "test-token-NOT-REAL", BAIDU_OCR_BASE_URL: "https://fake-baidu-r5.test", BAIDU_OCR_POLL_INTERVAL_MS: "200", BAIDU_OCR_MAX_WAIT_MS: "5500", BAIDU_OCR_COOLDOWN_MS: "0", BAIDU_OCR_PROBE_STEP_MS: "0", BAIDU_OCR_CONNECT_RETRIES: "0" };
+      Object.assign(process.env, env);
+      const bd = await import("@/lib/documents/ocr-baidu");
+      bd.setBaiduTransportForTests("fetch");
+      const { livePolicyJob, UNCLAIMED_STALL_MINUTES } = await import("@/lib/rag/live-job");
+      try {
+        const startedAt = (await rows(`SELECT now() AS t`, []))[0].t;
+        const doc = await insert(meiLing, "ShieldCare_Premier_Schedule_2026_baidu_scan.pdf", bytes);
+        await enqueueJob(pool, { jobType, idempotencyKey: doc.policyId, accountId: a, maxAttempts: 1,
+          payload: { policyId: doc.policyId, familyMemberId: meiLing, storageKey: doc.storageKey, pdfPassword: null, linkUploadMember: true } });
+        const run = () => claimAndProcessOne({ jobType, workerId: "r5-test-worker", process: processPolicyProcessingJob });
+        assert.equal(await run(), "succeeded");
+        let [job] = await rows(`SELECT status,attempt_count,payload->'baiduWait' AS wait,available_at > now() + interval '10 seconds' AS later FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`, [jobType, doc.policyId]);
+        assert.equal(job.status, "queued", "the same job waits in the queue"); assert.equal(job.attempt_count, 0, "no attempt used");
+        assert.equal(job.later, true, "it looks again a little later (20 s)");
+        assert.deepEqual(job.wait.jobs.map((j: { pages: number[]; jobId: string }) => [j.pages, j.jobId]), [[[scannedPage], "job-r5"]]);
+        let [p] = await rows(`SELECT processing_status,processing_stage,processing_message FROM policies p WHERE id=$1`, [doc.policyId]);
+        // The live-job rule the Documents page, the chat and Coverage share (lib/rag/live-job.ts), on this same job row.
+        const [live] = await rows(`SELECT ${livePolicyJob("j", String(UNCLAIMED_STALL_MINUTES))} AS live FROM background_jobs j WHERE job_type=$1 AND idempotency_key=$2`, [jobType, doc.policyId]);
+        assert.equal(p.processing_status, "extracting"); assert.equal(p.processing_stage, "ocr");
+        assert.equal(p.processing_message, "Reading 1 scanned page… This can take a few minutes.");
+        assert.equal(live.live, true, "the document shows as being read, never stalled, while it waits");
+        assert.equal((await rows(`SELECT count(*)::int n FROM policy_pages WHERE policy_id=$1`, [doc.policyId]))[0].n, 0, "nothing saved yet");
+        const waiting = await rows(`SELECT failure_code,detail FROM processing_failure_diagnostics WHERE resource_id=$1 AND failure_code LIKE 'BAIDU%'`, [doc.policyId]);
+        assert.deepEqual(waiting.map((r) => r.failure_code), ["BAIDU_OCR_WAITING"]);
+        assert.match(String(waiting[0].detail), new RegExp(`^pages ${scannedPage}: timeout via=upload baidu=running; wait 1, \\d+s since the first try$`));
+        // Baidu finishes; the next run reads its text, with no second job submitted.
+        done = true; calls.length = 0;
+        await pool.query(`UPDATE background_jobs SET available_at=now() WHERE job_type=$1 AND idempotency_key=$2`, [jobType, doc.policyId]);
+        assert.equal(await run(), "succeeded");
+        assert.ok(!calls.some((c) => c.startsWith("POST")), "no second job: " + calls.join(", "));
+        [job] = await rows(`SELECT status FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`, [jobType, doc.policyId]);
+        assert.equal(job.status, "succeeded");
+        [p] = await rows(`SELECT processing_status FROM policies WHERE id=$1`, [doc.policyId]);
+        assert.equal(p.processing_status, "ready");
+        const [page] = await rows(`SELECT text,extraction_method FROM policy_pages WHERE policy_id=$1 AND page_number=$2`, [doc.policyId, scannedPage]);
+        assert.match(page.text, /Hospital cash S\$80 per day/); assert.equal(page.extraction_method, "ocr");
+        const ocr = await rows(`SELECT requested_provider,status FROM model_executions WHERE operation='hosted_ocr' AND created_at >= $1 ORDER BY created_at`, [startedAt]);
+        assert.deepEqual(ocr.map((r) => [r.requested_provider, r.status]), [["baidu", "succeeded"]], "Baidu read the page; the AI reader was never asked");
+      } finally {
+        globalThis.fetch = realFetch;
+        bd.setBaiduTransportForTests("https");
+        for (const k of Object.keys(env)) delete process.env[k];
+        await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [jobType]);
+      }
+    });
   } finally {
     await cleanup();
     await pool.end();
