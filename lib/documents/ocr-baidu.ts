@@ -512,9 +512,11 @@ export async function submitBaiduJob(pdf: Uint8Array, env: Env, end: number, opt
   try {
     submitted = await submitWith(fullPayload);
   } catch (error) {
-    // Should Baidu's service refuse the option (a 4xx "bad request": no job was made), the pages are still read, with
-    // its default Markdown, rather than handed to the AI reader.
-    if (!(docModel && error instanceof BaiduOcrError && error.kind === "bad_request")) throw error;
+    // Should Baidu's service refuse the option (400 or 422: no job was made), the pages are still read, with its
+    // default Markdown, rather than handed to the AI reader. A 413 (too large) is not retried: the same file would be
+    // refused again. The fallback is logged, so production shows whether footnotes are being read.
+    if (!(docModel && error instanceof BaiduOcrError && (error.status === 400 || error.status === 422))) throw error;
+    console.warn(`[baidu-ocr] option markdownIgnoreLabels refused (status ${error.status}); submitted again with Baidu's default Markdown (headers, footers, footnotes left out)`);
     submitted = await submitWith(basePayload);
   }
   const jobId = submitted.jobId;

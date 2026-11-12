@@ -443,6 +443,11 @@ async function main() {
     baidu = baiduJob([], { submit: { status: 401, json: { code: 401, msg: "Unauthorized" } } });
     await run();
     assert.equal(baiduCalls().filter((c) => c.method === "POST").length, 1, "an auth refusal is not submitted again");
+    await bd.resetBaiduCooldown();
+    seen = [];
+    baidu = baiduJob([], { submit: { status: 413, json: { code: 413, msg: "too large" } } });
+    await run();
+    assert.equal(baiduCalls().filter((c) => c.method === "POST").length, 1, "a too-large refusal is not uploaded again");
   }
   // 15. Link submit (fileUrl): the pages are staged in our storage, Baidu downloads them through a short-lived signed
   // link, and the staged copy is removed whatever happens. The local storage driver has no link (stage gives null), so
