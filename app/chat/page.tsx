@@ -27,10 +27,10 @@ import { sendFailure } from "@/components/chat-send-failure";
 const ANSWER_FAILED="DearPolicy could not finish this answer. Your message is saved.";
 /** The server refuses a question longer than this (app/api/chat/route.ts). */
 const MAX_QUESTION_LENGTH=2000;
-/** The chat was changed elsewhere (another tab or window) since this page
- * loaded it: the server refuses to append to a stale copy. */
 /** Shown when the server gave no words of its own for a household with nobody in it. */
 const NO_FAMILY_TEXT="Add a family member first, then ask again.";
+/** The chat was changed elsewhere (another tab or window) since this page
+ * loaded it: the server refuses to append to a stale copy. */
 const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
