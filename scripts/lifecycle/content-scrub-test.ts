@@ -326,6 +326,30 @@ async function main() {
       [accountId, home.id, JSON.stringify(homeRetry.payload), homeRetry.status]);
   });
 
+  await t("a staged copy of scanned pages left behind by ANY ending (Read again, a revived or dead job, a killed run) is queued for removal once it is 5 hours old; a fresh one and other files are not", async () => {
+    const { sweepStaleOcrHandoffs } = await import("@/lib/lifecycle/content-scrub");
+    // Supabase Storage's own object list, as the sweep reads it.
+    await q(`CREATE SCHEMA IF NOT EXISTS storage`);
+    await q(`CREATE TABLE IF NOT EXISTS storage.objects(bucket_id text, name text, created_at timestamptz DEFAULT now())`);
+    const old = `${accountId}/ocr-handoff/aaaaaaaa-2222-4333-8444-555555555555/pages.pdf`;
+    const fresh = `${accountId}/ocr-handoff/bbbbbbbb-2222-4333-8444-555555555555/pages.pdf`;
+    const otherBucket = `${accountId}/ocr-handoff/cccccccc-2222-4333-8444-555555555555/pages.pdf`;
+    const policyFile = `${accountId}/member/policy/Scan.pdf`;
+    await q(`INSERT INTO storage.objects(bucket_id,name,created_at) VALUES ('policy-files',$1,now()-interval '6 hours'),('policy-files',$2,now()-interval '1 hour'),
+      ('other-bucket',$3,now()-interval '9 hours'),('policy-files',$4,now()-interval '9 hours')`, [old, fresh, otherBucket, policyFile]);
+    assert.equal(await sweepStaleOcrHandoffs((await import("@/lib/db/client")).pool as never), 1);
+    // ...and the ordinary scrub pass runs it.
+    await q(`DELETE FROM storage_purge_queue WHERE storage_key=$1`, [old]);
+    await scrubDeletedDocuments({ pinecone: pineconeSpy([]) });
+    const queued = (await q<{ storage_key: string; reason: string }>(`SELECT storage_key, reason FROM storage_purge_queue WHERE reason='ocr_handoff_stale' OR storage_key = ANY($1::text[])`,
+      [[old, fresh, otherBucket, policyFile]])).rows;
+    assert.ok(queued.some((r) => (r.storage_key === old || r.storage_key.startsWith("purged/")) && r.reason === "ocr_handoff_stale"), JSON.stringify(queued));
+    for (const k of [fresh, otherBucket, policyFile]) assert.ok(!queued.some((r) => r.storage_key === k), k + " is not removed");
+    await q(`DROP SCHEMA storage CASCADE`);
+    // No storage schema (the local driver): nothing happens, nothing throws.
+    assert.equal(await sweepStaleOcrHandoffs((await import("@/lib/db/client")).pool as never), 0);
+  });
+
   await t("a reading that fails after its document was deleted schedules no re-read", async () => {
     const { scheduleDeferredReadForTest } = await import("@/lib/rag/ingest");
     const doc = await upload(haziq, { filename: "Cycle-Haziq.pdf", insurer: "Pedal Cover (fictitious)", product: "Pedal", policyNo: "PC-5", hash: "h-cycle", pages: ["Bike £1,200."], amount: 1200, currency: "GBP" });

@@ -214,11 +214,38 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
       }
     }
     await stopDeletedDocumentJobs(db);
+    if (!opts.policyIds?.length) await sweepStaleOcrHandoffs(db);
     result.forgottenKeys = await forgetPurgedKeys(db);
   } catch (error) {
     console.warn("deleted document content scrub pass failed:", error instanceof Error ? error.name : "unknown");
   }
   return result;
+}
+
+/** A staged copy (lib/documents/ocr-baidu.ts link submit) older than this is no longer needed by any reading: its link
+ * lasts at most 60 min (BAIDU_OCR_LINK_TTL_S) and a reading waits for Baidu at most 180 min (BAIDU_OCR_BACKGROUND_WINDOW_MIN),
+ * plus an hour's margin. */
+export const STALE_OCR_HANDOFF_HOURS = 5;
+/**
+ * Every pass: any staged copy of scanned pages still in storage after STALE_OCR_HANDOFF_HOURS is queued for removal,
+ * whatever happened to the reading that staged it. A reading normally removes its copies itself, and a deleted
+ * document's waiting reading has them purged above; this catches every other ending (Read again cancelling a waiting
+ * re-read, a revived or dead-lettered job, a lease lost or a function killed mid-run: Critic #428), so no copy of a
+ * household's pages outlives the deletion promise. Reads Supabase Storage's own object list (storage.objects); where
+ * there is none (the local driver, a test database) it does nothing. Never throws.
+ */
+export async function sweepStaleOcrHandoffs(db: Db, hours = STALE_OCR_HANDOFF_HOURS): Promise<number> {
+  try {
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "policy-files";
+    const r = await db.query<{ name: string }>(
+      `SELECT name FROM storage.objects WHERE bucket_id=$1 AND name LIKE '%/ocr-handoff/%/pages.pdf' AND created_at < now() - make_interval(hours => $2::int)
+        ORDER BY created_at LIMIT 500`, [bucket, hours]);
+    const keys = r.rows.map((x) => x.name).filter((k) => STAGED_COPY_KEY.test(k));
+    if (keys.length) await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff_stale", db);
+    return keys.length;
+  } catch {
+    return 0;
+  }
 }
 
 /** A staged copy's key as lib/storage/supabase.ts ocrHandoffObjectKey makes it (never ".."): only such a key is removed. */
