@@ -115,9 +115,9 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
       ] },
       { heading: "Riders: the April 2026 rules", blocks: [
         { kind: "fact", source: 1, text: "From 1 April 2026, new riders may no longer cover the minimum Integrated Shield Plan deductible set by the Ministry of Health." },
-        { kind: "fact", source: 1, text: "The minimum deductible ranges from S$1,500 to S$3,500 per policy year, depending on ward class (as published in November 2025; it may be updated)." },
+        { kind: "fact", source: 1, text: "The minimum deductible ranges from S$1,500 to S$3,500 per policy year and varies by ward class (MOH's table, November 2025; it may be updated)." },
         { kind: "fact", source: 1, text: "A rider must still leave you a co-payment of at least 5%. The yearly cap on that co-payment is now at least S$6,000, not counting the deductible, and applies to eligible claims such as panel or pre-authorised claims." },
-        { kind: "fact", source: 1, text: "Riders bought before 27 November 2025 are contracts between you and your insurer; each insurer decides its own approach for them." },
+        { kind: "fact", source: 1, text: "Insurers decide their own approach for riders people already hold. Anyone who bought a rider that does not meet the new rules on or after 27 November 2025 must be told it will move to one that does, no later than their next renewal after 1 April 2028." },
         { kind: "flow", caption: "Who pays what on a bill under a plan with a new rider, in the order the Ministry of Health describes.", items: [
           { icon: "fixed", title: "You pay the deductible", text: "A new rider cannot cover the minimum deductible." },
           { icon: "percent", title: "You pay a co-payment", text: "A minimum share of the bill, capped each year for eligible claims." },
@@ -211,7 +211,7 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Who is covered", blocks: [
-        { kind: "fact", source: 0, text: "Singapore Citizens and PRs aged 21 to 65 are covered automatically when a valid CPF working contribution is made, subject to good health. Those aged 16 to 65 who were not covered automatically can apply to Great Eastern Life directly." },
+        { kind: "fact", source: 0, text: "Singapore Citizens and PRs aged 21 to 65 are covered automatically when a valid CPF working contribution is made. Those aged 16 to 65 who were not covered automatically can apply to Great Eastern Life directly; eligibility then depends on good health." },
       ] },
       { heading: "How much cover, and what it costs", blocks: [
         { kind: "fact", source: 1, text: "Members up to age 60 are covered for a sum assured of up to S$70,000. Above 60 and up to 65, it is up to S$55,000." },
@@ -228,7 +228,7 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
       ] },
       { heading: "Check yourself", blocks: [
         { kind: "cards", prompt: "Tap each card.", cards: [
-          { front: "Do I have to sign up for DPS?", back: "If you are a Citizen or PR aged 21 to 65, cover starts automatically with a valid CPF working contribution, subject to good health." },
+          { front: "Do I have to sign up for DPS?", back: "If you are a Citizen or PR aged 21 to 65, cover starts automatically with a valid CPF working contribution." },
           { front: "Who makes a claim if the member dies?", back: "The member's next of kin. CPF Board points to Great Eastern Life's DPS pages for how to claim." },
           { front: "Is DPS my only life cover?", back: "Check your documents. Many people also hold private life or term policies; DearPolicy can list the ones you upload." },
         ] },

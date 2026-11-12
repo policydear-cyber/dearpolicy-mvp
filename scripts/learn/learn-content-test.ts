@@ -314,6 +314,9 @@ async function main() {
   });
 
   await t("singapore: every figure sits in a fact or table that cites one of the article's sources; money is S$, never a bare $", () => {
+    for (const g of SINGAPORE_GUIDES) for (const text of [g.title, g.summary, ...g.sections.map((x) => x.heading)]) {
+      assert.doesNotMatch(text.replace(/\b(19|20)\d{2}\b/g, ""), /\$\s?\d|\d\s?%|\d{3}/, `${g.slug}: a figure in a title, summary or heading: "${text}"`);
+    }
     for (const g of SINGAPORE_GUIDES) for (const s of g.sections) for (const b of s.blocks) {
       if (b.kind === "fact" || b.kind === "table") assert.ok(Number.isInteger(b.source) && b.source >= 0 && b.source < g.sources!.length, `${g.slug}: bad source index`);
       for (const text of blockTexts(b)) {
