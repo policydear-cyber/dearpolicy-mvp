@@ -135,9 +135,11 @@ async function main() {
   assert.equal(calls[0].url, "https://fake-baidu.test/api/v2/ocr/jobs");
   assert.equal(calls[0].auth, `Bearer ${TOKEN}`, "token sent as a Bearer header");
   assert.equal(calls[0].form?.model, "PaddleOCR-VL-1.6", "default model");
-  assert.deepEqual(JSON.parse(calls[0].form!.optionalPayload), { useDocOrientationClassify: true });
+  // Nothing is left out of the Markdown: a page's footnotes, header, footer and page number are read too.
+  assert.deepEqual(JSON.parse(calls[0].form!.optionalPayload), { useDocOrientationClassify: true, markdownIgnoreLabels: [] });
   assert.equal(calls[0].filePages, 2, "only the two scanned pages are uploaded, never the text-layer page");
   assert.equal(calls.filter((c) => c.method === "GET" && /\/jobs\/job-abc123$/.test(c.url)).length, 3, "polled until done");
+
   const result = calls.find((c) => c.url.startsWith("https://fake-baidu-bucket.test/"))!;
   assert.equal(result.auth, null, "the pre-signed result link is fetched WITHOUT the token");
   assert.equal(aiCalls().length, 0, "AI reader not called when Baidu read every page");
@@ -425,9 +427,27 @@ async function main() {
     assert.deepEqual(out.map((p) => p.notRead), [true, true]); assert.equal(aiCalls().length, 0);
   }
 
+  // 2a. Baidu refuses that option (a 400: no job made): the pages are submitted once more with its default Markdown and
+  //     still read by Baidu, not handed to the AI reader. Any other refusal is not retried this way.
+  {
+    seen = []; ai = aiReads;
+    const ok = baiduJob([vlLine(["Page two text read by Baidu here", "Page three text read by Baidu here"])]);
+    baidu = (q) => q.method === "POST" && JSON.parse(q.form!.optionalPayload).markdownIgnoreLabels ? { status: 400, json: { code: 400, msg: "bad option" } } : ok(q);
+    const again = await run();
+    const posts = baiduCalls().filter((c) => c.method === "POST");
+    assert.equal(posts.length, 2, "submitted again once");
+    assert.deepEqual(JSON.parse(posts[1].form!.optionalPayload), { useDocOrientationClassify: true });
+    assert.equal(again[1].text, "Page two text read by Baidu here"); assert.equal(aiCalls().length, 0);
+    await bd.resetBaiduCooldown();
+    seen = [];
+    baidu = baiduJob([], { submit: { status: 401, json: { code: 401, msg: "Unauthorized" } } });
+    await run();
+    assert.equal(baiduCalls().filter((c) => c.method === "POST").length, 1, "an auth refusal is not submitted again");
+  }
   // 15. Link submit (fileUrl): the pages are staged in our storage, Baidu downloads them through a short-lived signed
   // link, and the staged copy is removed whatever happens. The local storage driver has no link (stage gives null), so
   // every case above uploaded the file, exactly as before.
+
   {
     await bd.resetBaiduCooldown();
     const LINK = "https://storage.example/sign/k-1?token=SECRET-LINK";
@@ -452,7 +472,7 @@ async function main() {
     assert.equal(submits().length, 1);
     assert.equal(submits()[0].form, undefined, "link mode sends no multipart form");
     assert.equal(submits()[0].filePages, undefined, "link mode uploads no file");
-    assert.deepEqual(submits()[0].body, { fileUrl: LINK, model: "PaddleOCR-VL-1.6", optionalPayload: { useDocOrientationClassify: true } });
+    assert.deepEqual(submits()[0].body, { fileUrl: LINK, model: "PaddleOCR-VL-1.6", optionalPayload: { useDocOrientationClassify: true, markdownIgnoreLabels: [] } });
     assert.equal(submits()[0].auth, `Bearer ${TOKEN}`);
     assert.equal(out[1].text, PAGE_A); assert.equal(out[2].text, PAGE_B); assert.equal(aiCalls().length, 0);
     assert.deepEqual(staged, [{ accountId: ACCOUNT, ttlSeconds: 900, pages: 2 }], "only the two scanned pages are staged, with a 15-minute link");

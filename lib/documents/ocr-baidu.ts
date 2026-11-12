@@ -483,21 +483,40 @@ function jobContext(env: Env, end: number) {
 export async function submitBaiduJob(pdf: Uint8Array, env: Env, end: number, opts: { fileUrl?: string } = {}): Promise<{ jobId: string; submitted: Record<string, unknown> }> {
   const { s, auth, jobsUrl, timeout, retry } = jobContext(env, end);
   // Pages photographed sideways or upside down are turned upright by Baidu's own orientation step.
-  const optionalPayload = { useDocOrientationClassify: true };
-  let submitRequest: TransportRequest;
-  if (opts.fileUrl) {
-    // Baidu downloads the pages itself (the SDK's submit_url): a small JSON request instead of the whole file. The
-    // link is a secret for its short life: it goes only into this request body, never into a log or error.
-    submitRequest = { method: "POST", headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ fileUrl: opts.fileUrl, model: s.model, optionalPayload }) };
-  } else {
-    const form = new FormData();
-    form.append("file", new Blob([Uint8Array.from(pdf)], { type: "application/pdf" }), "pages.pdf");
-    form.append("model", s.model);
-    form.append("optionalPayload", JSON.stringify(optionalPayload));
-    submitRequest = { method: "POST", headers: auth, body: form };
+  const basePayload = { useDocOrientationClassify: true };
+  // The document models leave a page's header, footer, footnotes, page number and margin text out of their Markdown
+  // unless told otherwise (paddleocr 3.7.0 / PaddleX PaddleOCR-VL: markdown_ignore_labels defaults to number, footnote,
+  // header, header_image, footer, footer_image, aside_text). A footnote can hold a policy's conditions, and the page
+  // check then finds figures the text printed that the image reading left out (12 Nov 2026: a footnote year, a
+  // registration number and a print date on a schedule's last lines). So nothing is left out; images are dropped by
+  // baiduMarkdownToText anyway.
+  const docModel = DOC_MODELS.has(s.model);
+  const fullPayload = docModel ? { ...basePayload, markdownIgnoreLabels: [] as string[] } : basePayload;
+  const submitWith = async (optionalPayload: Record<string, unknown>) => {
+    let submitRequest: TransportRequest;
+    if (opts.fileUrl) {
+      // Baidu downloads the pages itself (the SDK's submit_url): a small JSON request instead of the whole file. The
+      // link is a secret for its short life: it goes only into this request body, never into a log or error.
+      submitRequest = { method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl: opts.fileUrl, model: s.model, optionalPayload }) };
+    } else {
+      const form = new FormData();
+      form.append("file", new Blob([Uint8Array.from(pdf)], { type: "application/pdf" }), "pages.pdf");
+      form.append("model", s.model);
+      form.append("optionalPayload", JSON.stringify(optionalPayload));
+      submitRequest = { method: "POST", headers: auth, body: form };
+    }
+    return apiData(await call(jobsUrl, submitRequest, timeout, "submit", retry));
+  };
+  let submitted: Record<string, unknown>;
+  try {
+    submitted = await submitWith(fullPayload);
+  } catch (error) {
+    // Should Baidu's service refuse the option (a 4xx "bad request": no job was made), the pages are still read, with
+    // its default Markdown, rather than handed to the AI reader.
+    if (!(docModel && error instanceof BaiduOcrError && error.kind === "bad_request")) throw error;
+    submitted = await submitWith(basePayload);
   }
-  const submitted = await apiData(await call(jobsUrl, submitRequest, timeout, "submit", retry));
   const jobId = submitted.jobId;
   if (typeof jobId !== "string" || !BAIDU_JOB_ID.test(jobId)) throw new BaiduOcrError("format");
   return { jobId, submitted };
