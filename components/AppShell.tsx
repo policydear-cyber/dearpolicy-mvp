@@ -139,7 +139,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     ?? (pathname === "/" && items.length ? items[0] : null);
   // Pages reached through another menu item still name themselves in the browser tab.
   const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password", "/privacy": "Privacy",
-    "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage" };
+    "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage", "/claims": "Past events" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";
   useEffect(() => { setMoreOpen(false); }, [pathname]);
