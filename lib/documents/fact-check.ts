@@ -13,6 +13,7 @@ import { moneyShapedFigure } from "@/lib/documents/image-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
+import { WAIVER_RIDER_NOTE, namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
@@ -615,6 +616,10 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
+  // A premium-waiver rider pays the premiums, never a sum: its figure (the premium it waives) is never a cover amount, and
+  // the line is kept with no amount (lib/documents/waiver-rider; Live tester, 12 Nov).
+  if (coverage.amount != null && namesWaiverRider(coverage.productName, coverage.evidenceText))
+    return { ...coverage, amount: null, notes: [notes, WAIVER_RIDER_NOTE].filter(Boolean).join(" · "), evidenceVerified: ok && coverage.evidenceVerified === true };
   // A figure its page prints only as what another scheme or plan pays, a total with another plan, an example, a projection
   // or a premium, or any figure on a sample page, is never this person's cover amount (lib/documents/own-figure).
   if (OWN_FIGURE_CHECKS.on && coverage.amount != null && text) {
