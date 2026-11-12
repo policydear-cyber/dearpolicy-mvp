@@ -18,7 +18,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
-import { claimNextJob, completeJob, failJob, recoverExpiredLeases, type BackgroundJobRow } from "./queue";
+import { claimNextJob, completeJob, deferJob, failJob, recoverExpiredLeases, type BackgroundJobRow } from "./queue";
+import { JobDeferral } from "./deferral";
 import { classifyPipelineError } from "./pipeline-worker";
 
 export type JobProcessor = (job: BackgroundJobRow) => Promise<void>;
@@ -51,6 +52,12 @@ export async function claimAndProcessOne(params: {
     await completeJob(pool, { jobId: claimed.id, workerId: params.workerId });
     return "succeeded";
   } catch (error) {
+    // The job's work waits on something outside (lib/jobs/deferral.ts): the same job goes back in the queue, due after
+    // the delay, without using up an attempt. It ran without failing, so it counts as a success here.
+    if (error instanceof JobDeferral) {
+      await deferJob(pool, { jobId: claimed.id, workerId: params.workerId, delayMs: error.delayMs, payloadPatch: error.payloadPatch });
+      return "succeeded";
+    }
     const message = error instanceof Error ? error.message : String(error);
     await failJob(pool, {
       jobId: claimed.id,

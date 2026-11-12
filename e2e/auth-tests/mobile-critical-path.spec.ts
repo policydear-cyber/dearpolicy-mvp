@@ -52,14 +52,15 @@ test.describe.serial("mobile critical path", () => {
     await expect(page.locator(".document-card").filter({ hasText: file.replace(/\.pdf$/, "") }).or(page.locator(".document-card").first())).toContainText("Ready");
     await expectNoHorizontalScroll(page, "documents with a card");
 
-    // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Claims and More;
-    // Payments and Account settings sit in the sheet that More opens, and Account settings opens on People.
+    // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Payments and More;
+    // Learn and Account settings sit in the sheet that More opens, and Account settings opens on People.
     const bar = page.locator(".sidebar .nav");
     await expect(bar.locator('a[href="/chat"]')).toBeVisible();
-    await expect(bar.locator('a[href="/records"]')).toBeHidden();
-    await bar.locator('a[href="/claims"]').tap();
-    await expect(page).toHaveURL(/\/claims$/);
+    await expect(bar.locator('a[href="/claims"]')).toHaveCount(0);
+    await bar.locator('a[href="/records"]').tap();
+    await expect(page).toHaveURL(/\/records$/);
     await bar.getByRole("button", { name: "More" }).tap();
+    await expect(page.locator("#nav-more-sheet").getByRole("menuitem", { name: "Learn" })).toBeVisible();
     await page.locator("#nav-more-sheet").getByRole("menuitem", { name: "Account settings" }).tap();
     await expect(page).toHaveURL(/\/family$/);
     await expect(page.locator("#nav-more-sheet")).toHaveCount(0);

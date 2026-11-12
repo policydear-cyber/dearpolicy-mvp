@@ -12,6 +12,8 @@ import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { aiPageReaderOn, crossCheckKeepingUnread } from "@/lib/documents/ai-reader-switch";
+import { BaiduReadingPending, baiduWaitDelayMs, type BaiduWaitState } from "@/lib/documents/baidu-wait";
+import { JobDeferral } from "@/lib/jobs/deferral";
 import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
@@ -57,6 +59,11 @@ export type ProcessPolicyArgs = {
   /** Round 10: this document is one policy split out of a file that held
    * several (the file's own id); a part is never split again. */
   bundleOf?: string;
+  /** Background Baidu reading: set by the job processor (lib/jobs/processors.ts), whose runner can put this reading back
+   * in the queue to wait for Baidu (JobDeferral). `baiduWait` is the state the previous run of this reading left. Any
+   * other caller (a script, a test, a bundle's part) reads the scanned pages within the one run, as before. */
+  deferrable?: boolean;
+  baiduWait?: BaiduWaitState | null;
 };
 
 /** Round 5: the MediSave and cash portions a renewal notice or receipt
@@ -512,8 +519,22 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           password: args.pdfPassword,
           pages,
           pageNumbers: ocrPageNumbers,
+          baiduWait: args.deferrable && !args.bundleOf ? args.baiduWait ?? "start" : undefined,
         });
       } catch (error) {
+        // Baidu is still reading the scanned pages (or was not reached): this same job waits in the queue and reads the
+        // document again a little later, picking up Baidu's reading then (lib/documents/ocr-baidu.ts background reading).
+        // The household sees the document still being read.
+        if (error instanceof BaiduReadingPending) {
+          const stopped = await progress(args, "ocr", 25, `Reading ${ocrPageNumbers.length} scanned page${ocrPageNumbers.length === 1 ? "" : "s"}… This can take a few minutes.`, "extracting")
+            .then(() => null, (e: unknown) => e);
+          // Deleted meanwhile: the reading does not wait, and no staged copy is kept for it.
+          if (stopped instanceof DocumentDeletedWhileReadingError) {
+            await (await import("@/lib/documents/ocr-baidu")).abandonBaiduWait(error.state).catch(() => undefined);
+            throw stopped;
+          }
+          throw new JobDeferral(baiduWaitDelayMs(error.state.runs), { baiduWait: error.state });
+        }
         // The OCR service failed, not the file. With attempts left the job
         // retries; on the last one a readable text layer is still used (the
         // scanned pages are reported missing), and with none the document is
@@ -1121,6 +1142,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     });
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
+    // Waiting for Baidu (background reading): not a failure. The job runner puts this job back in the queue.
+    if (error instanceof JobDeferral) throw error;
     // Deleted while being read: nothing is recorded on the deleted document and nothing is retried or scheduled.
     // A failure after the deletion (a reading service failing mid-step) counts the same.
     if (error instanceof DocumentDeletedWhileReadingError) throw error;
