@@ -25,6 +25,8 @@ export type HouseholdDocument = {
   uploadedAt: string | null;
   uploadedFor: string | null;
   linkedPeople: string[];
+  /** Linked people whose only link is DearPolicy's match by plan (scheme_reference_match), not the household's or the reading's. */
+  matchedOnly?: string[];
   supersededAt: string | null;
   /** The app's reading status, e.g. "ready" or "failed". */
   processingStatus?: string | null;
@@ -76,7 +78,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId]);
   const ids = docs.map((d) => String(d.id));
   const links = ids.length ? await run(
-    `SELECT pm.account_id, pm.policy_id, f.display_name FROM policy_members pm
+    `SELECT pm.account_id, pm.policy_id, f.display_name, pm.source FROM policy_members pm
        JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND f.lifecycle_state='active'
       WHERE pm.account_id=$1 AND pm.policy_id = ANY($2::uuid[])${notExcluded}`,
     [accountId, ids]) : [];
@@ -103,6 +105,8 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       failure: text(d.processing_status) === "failed" ? failedDocumentChatAdvice(text(d.processing_error), { hasPages: Number(d.page_count) > 0 }) : null,
       holdLabel: holdLabel(text(d.quarantine_status), text(d.scan_result_detail), prototype),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
+      matchedOnly: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))]
+        .filter((n) => links.every((l) => String(l.policy_id) !== String(d.id) || String(l.display_name) !== n || l.source === "scheme_reference_match")),
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
       unreadablePages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unreadable").map((p) => Number(p.page_number)),
