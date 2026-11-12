@@ -9,15 +9,93 @@
  * - Never contradicts a document: where policies differ, it says "many policies" or "check your policy", not "always".
  */
 
+import { SINGAPORE_GUIDES } from "./singapore";
+
+/** Pictograms drawn in components/learn/pictogram.tsx (self-made SVG, no external images). */
+export type LearnIcon =
+  | "schedule" | "wording" | "rider" | "endorsement" | "illustration" | "renewal"
+  | "life" | "illness" | "disability" | "hospital" | "accident" | "income" | "travel" | "home" | "motor" | "savings" | "investment" | "annuity"
+  | "fixed" | "percent" | "daily" | "receipt"
+  | "search" | "read" | "tell" | "approve" | "keep" | "decide"
+  | "printed" | "scenario" | "insurer" | "person" | "source" | "conditions" | "question"
+  | "shield" | "wash" | "dress" | "feed" | "toilet" | "walk" | "transfer" | "family";
+
+/** A picture with a short label, used by tiles, steps and flows. All words live here so the content tests read them. */
+export type LearnTile = { icon: LearnIcon; title: string; text: string };
+
+/** Diagrams drawn in components/learn/blocks.tsx. */
+export type LearnDiagram = "lowest-limit";
+
 export type LearnBlock =
   | { kind: "p"; text: string }
   | { kind: "list"; items: string[] }
-  | { kind: "example"; text: string };
+  | { kind: "example"; text: string }
+  /** A grid of pictures, each with a title and one line. */
+  | { kind: "tiles"; caption: string; tiles: LearnTile[] }
+  /** Numbered steps down a path. */
+  | { kind: "steps"; caption: string; steps: LearnTile[] }
+  /** A left-to-right (top-to-bottom on phones) chain, e.g. printed amount → illustration → decision. */
+  | { kind: "flow"; caption: string; items: LearnTile[] }
+  | { kind: "diagram"; diagram: LearnDiagram; caption: string }
+  /** Stacked layers of cover, top layer first (e.g. a rider on a private plan on a basic national scheme). */
+  | { kind: "layers"; caption: string; layers: LearnTile[] }
+  /** A sourced fact in a country article: `source` indexes the guide's `sources`. Figures in country articles live only here or in a table. */
+  | { kind: "fact"; text: string; source: number }
+  /** A small sourced table in a country article. */
+  | { kind: "table"; caption: string; head: string[]; rows: string[][]; source: number }
+  /** Tap-to-reveal cards: a question or myth on the front, the answer behind it. */
+  | { kind: "cards"; prompt: string; cards: Array<{ front: string; back: string }> }
+  /** One multiple-choice question with an explanation. */
+  | { kind: "quiz"; question: string; options: string[]; answer: number; explain: string }
+  /** Try-it sliders with made-up numbers: how a deductible, a co-payment and a limit split a bill. */
+  | { kind: "bill-split" }
+  /** Try-it slider with made-up numbers: a percentage of a sum assured. */
+  | { kind: "percent-of-sum" };
+
+/** Every word a block shows, for the content checks. */
+export function blockTexts(block: LearnBlock): string[] {
+  switch (block.kind) {
+    case "p": case "example": return [block.text];
+    case "list": return block.items;
+    case "tiles": return [block.caption, ...block.tiles.flatMap((t) => [t.title, t.text])];
+    case "steps": return [block.caption, ...block.steps.flatMap((t) => [t.title, t.text])];
+    case "flow": return [block.caption, ...block.items.flatMap((t) => [t.title, t.text])];
+    case "diagram": return [block.caption];
+    case "layers": return [block.caption, ...block.layers.flatMap((t) => [t.title, t.text])];
+    case "fact": return [block.text];
+    case "table": return [block.caption, ...block.head, ...block.rows.flat()];
+    case "cards": return [block.prompt, ...block.cards.flatMap((c) => [c.front, c.back])];
+    case "quiz": return [block.question, ...block.options, block.explain];
+    case "bill-split": case "percent-of-sum": return [];
+    default: { const unknown: never = block; throw new Error(`blockTexts: unknown block kind ${JSON.stringify(unknown)}`); }
+  }
+}
 
 export type LearnSection = { heading: string; blocks: LearnBlock[] };
 
+/** Library shelves, in the order the index shows them. */
+export const LEARN_GROUPS = [
+  { id: "start", title: "Start here", blurb: "What your documents are and the kinds of cover people hold." },
+  { id: "singapore", title: "Singapore schemes", blurb: "National schemes for Singapore Citizens and Permanent Residents, from official sources." },
+  { id: "amounts", title: "Amounts and claims", blurb: "How figures in a policy work, and the usual steps of a claim." },
+  { id: "dearpolicy", title: "Using DearPolicy", blurb: "How to read DearPolicy's answers, and the words policies use." },
+] as const;
+export type LearnGroupId = (typeof LEARN_GROUPS)[number]["id"];
+
+/** An official page a country article relies on. Only government sites, or the insurer that runs a scheme. */
+export type LearnSource = { label: string; url: string; published?: string };
+
 export type LearnGuide = {
   slug: string;
+  group: LearnGroupId;
+  /** Extra words people may search for, including common misspellings and short names. */
+  keywords?: string[];
+  /** Country articles only: the country, the official pages, and the day the facts were last checked against them (YYYY-MM-DD). */
+  region?: { code: "SG"; name: "Singapore" };
+  sources?: LearnSource[];
+  checkedOn?: string;
+  /** The picture on the guide's card in the library index. */
+  icon: LearnIcon;
   title: string;
   summary: string;
   sections: LearnSection[];
@@ -125,9 +203,12 @@ export const TERMS: LearnTerm[] = [
     match: ["in force", "lapsed", "lapse"] },
 ];
 
-export const GUIDES: LearnGuide[] = [
+/** The general, insurer-neutral guides. Country articles live in their own files and are added below. */
+export const GENERAL_GUIDES: LearnGuide[] = [
   {
     slug: "your-documents",
+    group: "start",
+    icon: "schedule",
     title: "Your insurance documents",
     summary: "What a schedule, a policy wording, a certificate and a rider are, and which one tells you what.",
     sections: [
@@ -135,6 +216,14 @@ export const GUIDES: LearnGuide[] = [
         { kind: "p", text: "Most policies come as a set. One part is personal to you; the rest explains the product. Knowing which is which helps you, and DearPolicy, read them correctly." },
       ] },
       { heading: "The common documents", blocks: [
+        { kind: "tiles", caption: "The documents most policies come with, and what each one is for.", tiles: [
+          { icon: "schedule", title: "Schedule", text: "Personal to you: who, which plan, amounts, dates." },
+          { icon: "wording", title: "Policy wording", text: "What each cover means, its conditions and exclusions." },
+          { icon: "rider", title: "Rider", text: "Extra cover added to the main policy." },
+          { icon: "endorsement", title: "Endorsement", text: "A later change that can update the schedule." },
+          { icon: "illustration", title: "Benefit illustration", text: "What it might be worth. Projections are not promises." },
+          { icon: "renewal", title: "Renewal notice", text: "What is due to keep the policy going." },
+        ] },
         { kind: "list", items: [
           "Schedule (or certificate, or policy data page): who is covered, which plan, the amounts, the premium and the dates. This is the proof of what you hold.",
           "Policy wording (or contract, or terms and conditions): what each cover means, its conditions and exclusions, and how to claim. Often the same for everyone with that product.",
@@ -151,6 +240,15 @@ export const GUIDES: LearnGuide[] = [
           "A document shows what was true on its date. A newer schedule or endorsement can replace it.",
           "Two policies with the same policy number can still cover different people or products. Check the names on each.",
         ] },
+        { kind: "cards", prompt: "Which document tells you…? Tap a card to check.", cards: [
+          { front: "Who is covered, and for how much?", back: "The schedule, or certificate. It is the page personal to your policy, as of its date." },
+          { front: "What a cover means, and what it excludes?", back: "The policy wording. It explains the cover, but on its own does not prove you have it." },
+          { front: "That something changed after you bought it?", back: "An endorsement. A later one can replace what an earlier schedule said." },
+          { front: "What the policy might be worth in future?", back: "A benefit illustration. Projected figures are not guaranteed unless it says so." },
+        ] },
+        { kind: "quiz", question: "You have the policy wording for a hospital plan, but no schedule or certificate with your name. Does the wording show that you have this cover?",
+          options: ["Yes, it describes the cover in full", "Not on its own: a schedule or certificate with your name is the usual proof", "Yes, if the wording is recent"],
+          answer: 1, explain: "A wording is often the same for everyone with that product. It explains the cover; the schedule or certificate shows who holds it, as of its date." },
       ] },
       { heading: "Getting the most from DearPolicy", blocks: [
         { kind: "list", items: [
@@ -163,10 +261,20 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "types-of-cover",
+    group: "start",
+    icon: "life",
     title: "Types of cover",
     summary: "Life, critical illness, disability, hospital, accident, travel, home, motor and savings policies in plain words.",
     sections: [
       { heading: "Protecting people", blocks: [
+        { kind: "tiles", caption: "Common kinds of cover for people. Names differ between insurers and countries.", tiles: [
+          { icon: "life", title: "Life", text: "Pays when the life insured dies." },
+          { icon: "illness", title: "Critical illness", text: "A lump sum on diagnosis of a listed illness." },
+          { icon: "disability", title: "Disability", text: "A lump sum or income if disabled as defined." },
+          { icon: "hospital", title: "Hospital and medical", text: "Towards treatment bills, up to limits." },
+          { icon: "accident", title: "Personal accident", text: "For injury or death caused by an accident." },
+          { icon: "income", title: "Income protection", text: "Part of your income if you cannot work." },
+        ] },
         { kind: "list", items: [
           "Life cover: pays when the life insured dies, and sometimes on terminal illness. Term cover lasts a set time; whole-life cover lasts for life and may build a cash value.",
           "Critical illness: pays a lump sum on diagnosis of a listed illness, as the policy defines it. Some pay at early stages too.",
@@ -177,6 +285,11 @@ export const GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Protecting things and trips", blocks: [
+        { kind: "tiles", caption: "Cover for trips and belongings.", tiles: [
+          { icon: "travel", title: "Travel", text: "Medical costs abroad, cancellation, luggage." },
+          { icon: "home", title: "Home", text: "The building, its contents, or both." },
+          { icon: "motor", title: "Motor", text: "Damage to others, and maybe your own vehicle." },
+        ] },
         { kind: "list", items: [
           "Travel: medical costs abroad, cancelled trips, lost luggage and similar, each with its own limit.",
           "Home: damage to the building, its contents, or both, and sometimes your liability to others.",
@@ -190,16 +303,33 @@ export const GUIDES: LearnGuide[] = [
           "Annuities: turn a sum of money into a regular income, often for retirement.",
           "For these, separate guaranteed amounts from projected ones. Only the guaranteed part is promised.",
         ] },
+        { kind: "cards", prompt: "Lump sum or pay-back? Tap each kind of cover to see how it usually pays.", cards: [
+          { front: "Critical illness", back: "Usually a lump sum on diagnosis, whatever the treatment costs. Check how your policy defines each illness." },
+          { front: "Hospital and medical", back: "Usually reimbursement: it pays back covered bills, up to its limits, after any deductible and co-payment." },
+          { front: "Personal accident", back: "Often both: a set amount or percentage for listed injuries, plus medical costs up to a limit." },
+          { front: "Daily hospital cash", back: "A set amount for each day in hospital, up to a maximum number of days. Some plans pay only after a minimum stay." },
+        ] },
+        { kind: "quiz", question: "A savings plan shows a guaranteed amount and a projected amount. Which one is promised?",
+          options: ["The projected amount", "The guaranteed amount", "Both"],
+          answer: 1, explain: "Projected figures depend on assumed returns and can be lower. Only the guaranteed part is promised, and only as the document states it." },
       ] },
     ],
   },
   {
     slug: "how-amounts-work",
+    group: "amounts",
+    icon: "percent",
     title: "How amounts work",
     summary: "Percentages of a sum assured, limits, deductibles, and why a figure in a policy is not a promise of payment.",
     sections: [
       { heading: "Where an amount comes from", blocks: [
         { kind: "p", text: "A policy can state an amount directly, or as a share of something else. Read what the percentage is of, and which limit applies." },
+        { kind: "tiles", caption: "Four common ways a policy states an amount.", tiles: [
+          { icon: "fixed", title: "Fixed amount", text: "A set figure for a covered event." },
+          { icon: "percent", title: "Percentage", text: "A share of the sum assured, or of another base." },
+          { icon: "daily", title: "Per day", text: "A set figure per day, up to a number of days." },
+          { icon: "receipt", title: "Reimbursement", text: "What you spent, up to a limit." },
+        ] },
         { kind: "list", items: [
           "A fixed amount: a set figure for a covered event.",
           "A percentage of the sum assured: for example, a stated share for losing the sight of one eye.",
@@ -207,6 +337,7 @@ export const GUIDES: LearnGuide[] = [
           "Reimbursement: what you actually spent, up to a limit, less any deductible and co-payment.",
         ] },
         { kind: "example", text: "Example only, not anyone's policy: if a cover pays 25% of a sum assured of 100,000, the illustrated amount is 25,000, in the policy's own currency." },
+        { kind: "percent-of-sum" },
       ] },
       { heading: "What can reduce it", blocks: [
         { kind: "list", items: [
@@ -217,19 +348,39 @@ export const GUIDES: LearnGuide[] = [
           "Rules that pay only one of several benefits for the same event.",
         ] },
         { kind: "example", text: "Example only: a covered hospital bill of 10,000, a deductible of 1,000 and a 10% co-payment. The policy would pay 9,000 less 900, so 8,100, if no lower limit applies. Policies differ in the order these apply." },
+        { kind: "bill-split" },
+        { kind: "diagram", diagram: "lowest-limit", caption: "A policy can have several limits at once. The lowest one that applies is the one that counts." },
       ] },
       { heading: "A figure is not a promise", blocks: [
         { kind: "p", text: "There are three different things: the amount the document prints, an illustration of what it could mean in a scenario, and what the insurer actually pays after checking the claim. DearPolicy shows the first two and says which is which. Only the insurer decides the third." },
+        { kind: "flow", caption: "Three different things, often confused.", items: [
+          { icon: "printed", title: "Printed amount", text: "What the document states. DearPolicy shows it with its page." },
+          { icon: "scenario", title: "Illustration", text: "What that could mean in your scenario. Labelled as an illustration." },
+          { icon: "insurer", title: "Insurer's decision", text: "What is actually paid, after the insurer checks the claim." },
+        ] },
         { kind: "p", text: "Amounts are shown in the currency your document states. When a document shows only a symbol such as \"$\" without saying which currency, DearPolicy leaves the currency unconfirmed rather than guessing." },
+        { kind: "quiz", question: "Example only: a cover pays 50% of a sum assured of 200,000. What is the illustrated amount?",
+          options: ["50,000", "100,000", "200,000"],
+          answer: 1, explain: "Half of 200,000 is 100,000, in the policy's own currency. It is an illustration; the insurer decides what is paid." },
       ] },
     ],
   },
   {
     slug: "making-a-claim",
+    group: "amounts",
+    icon: "tell",
     title: "Making a claim",
     summary: "General steps that apply to most claims, and where to find your own policy's rules.",
     sections: [
       { heading: "General steps", blocks: [
+        { kind: "steps", caption: "The usual path of a claim. Your policy's claims section has its own details.", steps: [
+          { icon: "search", title: "Find the policy", text: "Which policy may cover this, and whom it covers." },
+          { icon: "read", title: "Read the claims section", text: "What to send, how, and by when." },
+          { icon: "tell", title: "Tell the insurer early", text: "Many policies set time limits." },
+          { icon: "approve", title: "Check approval first", text: "For planned treatment, some policies need it." },
+          { icon: "keep", title: "Keep copies", text: "Bills, receipts and reports you already have." },
+          { icon: "decide", title: "The insurer decides", text: "They may ask for more information." },
+        ] },
         { kind: "list", items: [
           "Find the policy that may cover the event, and the person it covers.",
           "Read the claims section of the policy wording. It says what to send, how, and by when.",
@@ -245,6 +396,15 @@ export const GUIDES: LearnGuide[] = [
           "One event can be claimable under more than one policy, for example an accident policy and a hospital policy. Policies set their own rules on claiming from more than one.",
           "If you disagree with a decision, ask the insurer for the reason in writing and how to appeal. Many places also have an independent complaints or dispute service.",
         ] },
+        { kind: "cards", prompt: "Myth or fact? Tap each card.", cards: [
+          { front: "\"If my documents don't mention it, I'm not covered.\"", back: "Not necessarily. Missing information is not an exclusion. A policy you have not uploaded, or a page not yet read, may cover it." },
+          { front: "\"The amount in my policy is what I will receive.\"", back: "It is the amount the policy states. The insurer checks the claim against the terms and decides what it pays." },
+          { front: "\"I can only claim from one policy.\"", back: "Sometimes more than one policy can respond to the same event. Each policy sets its own rules on this." },
+          { front: "\"There's no rush to tell the insurer.\"", back: "Many policies set a time limit for telling them and for sending documents. The claims section says what yours needs." },
+        ] },
+        { kind: "quiz", question: "Planned surgery is booked for next month under a hospital policy. What is worth checking first?",
+          options: ["Whether the policy needs approval before treatment", "Nothing: claim after the surgery", "Whether the hospital is near your home"],
+          answer: 0, explain: "Some health policies need pre-authorisation for planned treatment and pay less, or not at all, without it. The policy wording says whether yours does." },
       ] },
       { heading: "How DearPolicy helps", blocks: [
         { kind: "p", text: "Ask DearPolicy about what happened. It finds the benefits your documents describe for that person, shows the amounts and conditions with the page they come from, asks only for facts that change the answer, and lists supported next steps. The insurer still decides the claim." },
@@ -253,10 +413,19 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "reading-answers",
+    group: "dearpolicy",
+    icon: "source",
     title: "Reading DearPolicy's answers",
     summary: "What the labels mean, why some amounts are not shown, and what to do about unread pages.",
     sections: [
       { heading: "What an answer contains", blocks: [
+        { kind: "tiles", caption: "The parts of a DearPolicy answer.", tiles: [
+          { icon: "person", title: "Whose cover", text: "The person and the policy it comes from." },
+          { icon: "printed", title: "Printed amount", text: "As the document states it, in its own currency." },
+          { icon: "source", title: "Source", text: "The document and page it comes from, so you can check it yourself." },
+          { icon: "conditions", title: "Conditions", text: "Waiting periods, limits and other terms for that benefit." },
+          { icon: "question", title: "A question", text: "Usually one at a time, only when your answer would change the result." },
+        ] },
         { kind: "list", items: [
           "The benefits your documents describe for that person, with the page they come from.",
           "The amount the document prints, in the currency it states.",
@@ -272,6 +441,15 @@ export const GUIDES: LearnGuide[] = [
           "If a page could not be read, DearPolicy names the document and page. Upload a clearer copy to include it.",
           "If two documents disagree, DearPolicy does not pick one: it says they differ, or shows no figure.",
         ] },
+        { kind: "cards", prompt: "What does it mean when…? Tap a card.", cards: [
+          { front: "No amount is shown", back: "DearPolicy could not tie a figure to a page, so it shows none. It still tells you what the document says about the benefit." },
+          { front: "A page is named as unread", back: "That page could not be read. Upload a clearer scan or the insurer's digital copy to include it." },
+          { front: "The currency is unconfirmed", back: "The document shows only a symbol, such as \"$\", without saying which currency. DearPolicy does not guess." },
+          { front: "It asks you a question", back: "Your answer would change which benefit applies or how an illustration works. It usually asks one question at a time." },
+        ] },
+        { kind: "quiz", question: "Your documents do not mention dental treatment at all. What does that tell you?",
+          options: ["You are not covered for dental treatment", "Dental treatment is excluded", "Nothing on its own: a policy or page not uploaded may cover it"],
+          answer: 2, explain: "Missing information is not an exclusion. Exclusions are things a policy says it does not cover. Check any other policies, and ask your insurer if it matters." },
       ] },
       { heading: "Before you rely on an answer", blocks: [
         { kind: "list", items: [
@@ -284,9 +462,12 @@ export const GUIDES: LearnGuide[] = [
   },
 ];
 
+export const GUIDES: LearnGuide[] = [...GENERAL_GUIDES, ...SINGAPORE_GUIDES];
+
 /** The glossary is a library page too, listed with the guides. */
 export const TERMS_PAGE = {
   slug: "terms",
+  group: "dearpolicy",
   title: "Key terms A to Z",
   summary: "Sum assured, deductible, co-payment, waiting period, exclusion and other words you will meet in a policy.",
 } as const;
@@ -301,4 +482,27 @@ export function termsSorted(): LearnTerm[] {
 
 export function termHref(term: LearnTerm): string {
   return `/learn/terms#${term.id}`;
+}
+
+/** Format a YYYY-MM-DD date as "12 Nov 2026", the same on server and phone. */
+export function learnDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${d} ${months[m - 1]} ${y}`;
+}
+
+/** What the library search looks through: titles, summaries, keywords, headings and the A to Z. Static. */
+export type LearnSearchEntry = { href: string; title: string; summary: string; group: string; text: string };
+export function learnSearchIndex(): LearnSearchEntry[] {
+  const groupTitle = (id: string) => LEARN_GROUPS.find((g) => g.id === id)?.title ?? "";
+  return [
+    ...GUIDES.map((g) => ({
+      href: `/learn/${g.slug}`, title: g.title, summary: g.summary, group: groupTitle(g.group),
+      text: [g.title, g.summary, ...(g.keywords ?? []), ...g.sections.map((s) => s.heading)].join(" "),
+    })),
+    ...TERMS.map((t) => ({
+      href: termHref(t), title: t.term, summary: t.definition, group: TERMS_PAGE.title,
+      text: [t.term, ...(t.alsoCalled ?? []), t.definition].join(" "),
+    })),
+  ];
 }
