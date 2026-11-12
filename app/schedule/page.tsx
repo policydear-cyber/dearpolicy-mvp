@@ -148,8 +148,7 @@ export default function BenefitsPage(){
   return <div className="page schedule-page">
     <header className="page-header compact"><div>
       <h1><span className="title-icon"><Icon name="benefits"/></span>What your policies pay</h1>
-      <p className="lead">Organised by policy: each benefit as the document states it, with the page it comes from, and the exclusions and limits that apply. Where a document does not make an amount clear, this page says so instead of guessing.</p>
-      <p className="muted">Want to see what one person is covered for across all their plans? <Link className="text-link" href="/ledger">See Coverage, by person →</Link></p>
+      <p className="lead">Each benefit as your policy prints it, with its page and conditions. Where a document doesn&rsquo;t make an amount clear, this page says so instead of guessing. <Link className="text-link" href="/ledger">See by person →</Link></p>
     </div></header>
 
     {error&&<div className="alert error" role="alert"><strong>Your benefits could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
