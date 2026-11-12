@@ -9,13 +9,16 @@
  * - Never contradicts a document: where policies differ, it says "many policies" or "check your policy", not "always".
  */
 
+import { SINGAPORE_GUIDES } from "./singapore";
+
 /** Pictograms drawn in components/learn/pictogram.tsx (self-made SVG, no external images). */
 export type LearnIcon =
   | "schedule" | "wording" | "rider" | "endorsement" | "illustration" | "renewal"
   | "life" | "illness" | "disability" | "hospital" | "accident" | "income" | "travel" | "home" | "motor" | "savings" | "investment" | "annuity"
   | "fixed" | "percent" | "daily" | "receipt"
   | "search" | "read" | "tell" | "approve" | "keep" | "decide"
-  | "printed" | "scenario" | "insurer" | "person" | "source" | "conditions" | "question";
+  | "printed" | "scenario" | "insurer" | "person" | "source" | "conditions" | "question"
+  | "shield" | "wash" | "dress" | "feed" | "toilet" | "walk" | "transfer" | "family";
 
 /** A picture with a short label, used by tiles, steps and flows. All words live here so the content tests read them. */
 export type LearnTile = { icon: LearnIcon; title: string; text: string };
@@ -34,6 +37,12 @@ export type LearnBlock =
   /** A left-to-right (top-to-bottom on phones) chain, e.g. printed amount → illustration → decision. */
   | { kind: "flow"; caption: string; items: LearnTile[] }
   | { kind: "diagram"; diagram: LearnDiagram; caption: string }
+  /** Stacked layers of cover, top layer first (e.g. a rider on a private plan on a basic national scheme). */
+  | { kind: "layers"; caption: string; layers: LearnTile[] }
+  /** A sourced fact in a country article: `source` indexes the guide's `sources`. Figures in country articles live only here or in a table. */
+  | { kind: "fact"; text: string; source: number }
+  /** A small sourced table in a country article. */
+  | { kind: "table"; caption: string; head: string[]; rows: string[][]; source: number }
   /** Tap-to-reveal cards: a question or myth on the front, the answer behind it. */
   | { kind: "cards"; prompt: string; cards: Array<{ front: string; back: string }> }
   /** One multiple-choice question with an explanation. */
@@ -52,6 +61,9 @@ export function blockTexts(block: LearnBlock): string[] {
     case "steps": return [block.caption, ...block.steps.flatMap((t) => [t.title, t.text])];
     case "flow": return [block.caption, ...block.items.flatMap((t) => [t.title, t.text])];
     case "diagram": return [block.caption];
+    case "layers": return [block.caption, ...block.layers.flatMap((t) => [t.title, t.text])];
+    case "fact": return [block.text];
+    case "table": return [block.caption, ...block.head, ...block.rows.flat()];
     case "cards": return [block.prompt, ...block.cards.flatMap((c) => [c.front, c.back])];
     case "quiz": return [block.question, ...block.options, block.explain];
     case "bill-split": case "percent-of-sum": return [];
@@ -60,8 +72,27 @@ export function blockTexts(block: LearnBlock): string[] {
 
 export type LearnSection = { heading: string; blocks: LearnBlock[] };
 
+/** Library shelves, in the order the index shows them. */
+export const LEARN_GROUPS = [
+  { id: "start", title: "Start here", blurb: "What your documents are and the kinds of cover people hold." },
+  { id: "singapore", title: "Singapore schemes", blurb: "National schemes for Singapore Citizens and Permanent Residents, from official sources." },
+  { id: "amounts", title: "Amounts and claims", blurb: "How figures in a policy work, and the usual steps of a claim." },
+  { id: "dearpolicy", title: "Using DearPolicy", blurb: "How to read DearPolicy's answers, and the words policies use." },
+] as const;
+export type LearnGroupId = (typeof LEARN_GROUPS)[number]["id"];
+
+/** An official page a country article relies on. Only government sites, or the insurer that runs a scheme. */
+export type LearnSource = { label: string; url: string; published?: string };
+
 export type LearnGuide = {
   slug: string;
+  group: LearnGroupId;
+  /** Extra words people may search for, including common misspellings and short names. */
+  keywords?: string[];
+  /** Country articles only: the country, the official pages, and the day the facts were last checked against them (YYYY-MM-DD). */
+  region?: { code: "SG"; name: "Singapore" };
+  sources?: LearnSource[];
+  checkedOn?: string;
   /** The picture on the guide's card in the library index. */
   icon: LearnIcon;
   title: string;
@@ -171,9 +202,11 @@ export const TERMS: LearnTerm[] = [
     match: ["in force", "lapsed", "lapse"] },
 ];
 
-export const GUIDES: LearnGuide[] = [
+/** The general, insurer-neutral guides. Country articles live in their own files and are added below. */
+export const GENERAL_GUIDES: LearnGuide[] = [
   {
     slug: "your-documents",
+    group: "start",
     icon: "schedule",
     title: "Your insurance documents",
     summary: "What a schedule, a policy wording, a certificate and a rider are, and which one tells you what.",
@@ -227,6 +260,7 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "types-of-cover",
+    group: "start",
     icon: "life",
     title: "Types of cover",
     summary: "Life, critical illness, disability, hospital, accident, travel, home, motor and savings policies in plain words.",
@@ -282,6 +316,7 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "how-amounts-work",
+    group: "amounts",
     icon: "percent",
     title: "How amounts work",
     summary: "Percentages of a sum assured, limits, deductibles, and why a figure in a policy is not a promise of payment.",
@@ -331,6 +366,7 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "making-a-claim",
+    group: "amounts",
     icon: "tell",
     title: "Making a claim",
     summary: "General steps that apply to most claims, and where to find your own policy's rules.",
@@ -376,6 +412,7 @@ export const GUIDES: LearnGuide[] = [
   },
   {
     slug: "reading-answers",
+    group: "dearpolicy",
     icon: "source",
     title: "Reading DearPolicy's answers",
     summary: "What the labels mean, why some amounts are not shown, and what to do about unread pages.",
@@ -424,9 +461,12 @@ export const GUIDES: LearnGuide[] = [
   },
 ];
 
+export const GUIDES: LearnGuide[] = [...GENERAL_GUIDES, ...SINGAPORE_GUIDES];
+
 /** The glossary is a library page too, listed with the guides. */
 export const TERMS_PAGE = {
   slug: "terms",
+  group: "dearpolicy",
   title: "Key terms A to Z",
   summary: "Sum assured, deductible, co-payment, waiting period, exclusion and other words you will meet in a policy.",
 } as const;
@@ -441,4 +481,27 @@ export function termsSorted(): LearnTerm[] {
 
 export function termHref(term: LearnTerm): string {
   return `/learn/terms#${term.id}`;
+}
+
+/** Format a YYYY-MM-DD date as "12 Nov 2026", the same on server and phone. */
+export function learnDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${d} ${months[m - 1]} ${y}`;
+}
+
+/** What the library search looks through: titles, summaries, keywords, headings and the A to Z. Static. */
+export type LearnSearchEntry = { href: string; title: string; summary: string; group: string; text: string };
+export function learnSearchIndex(): LearnSearchEntry[] {
+  const groupTitle = (id: string) => LEARN_GROUPS.find((g) => g.id === id)?.title ?? "";
+  return [
+    ...GUIDES.map((g) => ({
+      href: `/learn/${g.slug}`, title: g.title, summary: g.summary, group: groupTitle(g.group),
+      text: [g.title, g.summary, ...(g.keywords ?? []), ...g.sections.map((s) => s.heading)].join(" "),
+    })),
+    ...TERMS.map((t) => ({
+      href: termHref(t), title: t.term, summary: t.definition, group: TERMS_PAGE.title,
+      text: [t.term, ...(t.alsoCalled ?? []), t.definition].join(" "),
+    })),
+  ];
 }

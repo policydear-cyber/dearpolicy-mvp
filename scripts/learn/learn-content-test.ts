@@ -9,7 +9,9 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GUIDES, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, termHref } from "@/lib/learn/content";
+import { GENERAL_GUIDES, GUIDES, LEARN_GROUPS, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, learnDate, learnSearchIndex, termHref } from "@/lib/learn/content";
+import { SINGAPORE_GUIDES } from "@/lib/learn/singapore";
+import { searchLearn } from "@/components/learn/search";
 import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
 import { PICTOGRAMS } from "@/components/learn/pictogram";
 import { MAX_LEARN_LINKS, learnTermsIn } from "@/lib/learn/match";
@@ -24,8 +26,10 @@ const t = async (name: string, fn: () => void | Promise<void>) => { try { await 
 const allText = [
   LEARN_NOTICE, TERMS_PAGE.title, TERMS_PAGE.summary,
   ...TERMS.flatMap((term) => [term.term, term.definition, ...(term.alsoCalled ?? [])]),
-  ...GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]),
+  ...GENERAL_GUIDES.flatMap((g) => [g.title, g.summary, ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]),
 ];
+/** Country articles: they name schemes and state official figures, under their own, stricter sourcing rules (tested below). */
+const sgText = SINGAPORE_GUIDES.flatMap((g) => [g.title, g.summary, ...(g.keywords ?? []), ...g.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])]).join("\n");
 const joined = allText.join("\n");
 const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
 /** Picture and try-it components carry a few words of their own (labels, notes); the same word rules apply to them. */
@@ -45,7 +49,7 @@ async function main() {
   });
 
   await t("content: every figure-bearing passage is an example block that says it is an example", () => {
-    for (const g of GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+    for (const g of GENERAL_GUIDES) for (const s of g.sections) for (const b of s.blocks) {
       for (const text of blockTexts(b)) {
         if (!/\d{3}/.test(text)) continue;
         if (b.kind === "quiz") { assert.match(b.question, /^Example only/, `${g.slug}: a quiz with figures must say it is an example`); continue; }
@@ -66,7 +70,7 @@ async function main() {
 
   await t("content: never promises payment or states what a particular policy pays", () => {
     const promise = /\b(you will (?:be paid|receive|get)|is guaranteed to pay|will definitely|always pays|you are covered for|the policy pays \d|you get \d)\b/i;
-    const hit = joined.match(promise) ?? componentSources.match(promise);
+    const hit = joined.match(promise) ?? componentSources.match(promise) ?? sgText.match(promise);
     assert.equal(hit, null, `promise wording: ${hit?.[0]}`);
     assert.match(LEARN_NOTICE, /General education only/);
     assert.match(LEARN_NOTICE, /not advice about your own cover/);
@@ -181,13 +185,15 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it)|\.\/content)$/.test(i), `${f} imports ${i}`);
-      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b|https?:\/\//i, f);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore))$/.test(i), `${f} imports ${i}`);
+      assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b/i, f);
+      // Only the country articles' source lists carry web addresses; they are checked against the official allow-list below.
+      if (f !== "lib/learn/singapore.ts") assert.doesNotMatch(src, /https?:\/\//i, f);
     }
   });
 
@@ -262,6 +268,100 @@ async function main() {
     const docs = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "your-documents" }) }));
     assert.match(docs, /<details class="learn-flip"><summary>/, "tap cards work without JavaScript");
     assert.match(docs, /<svg class="lp"[^>]*aria-hidden="true"/, "pictures are decorative next to their words");
+  });
+
+  await t("singapore: every article is on the Singapore shelf, has official sources and a valid checked-on date", () => {
+    assert.ok(SINGAPORE_GUIDES.length >= 4);
+    const official = /^https:\/\/(www\.)?(cpf\.gov\.sg|moh\.gov\.sg|mas\.gov\.sg|[a-z0-9-]+\.gov\.sg)\//;
+    for (const g of SINGAPORE_GUIDES) {
+      assert.equal(g.group, "singapore", g.slug);
+      assert.match(g.slug, /^sg-/, g.slug);
+      assert.deepEqual(g.region, { code: "SG", name: "Singapore" });
+      assert.match(g.checkedOn ?? "", /^\d{4}-\d{2}-\d{2}$/, `${g.slug}: checkedOn`);
+      assert.ok(!Number.isNaN(Date.parse(g.checkedOn!)) && Date.parse(g.checkedOn!) <= Date.now() + 86400000, `${g.slug}: checkedOn not a real past date`);
+      assert.ok(g.sources?.length, `${g.slug}: no sources`);
+      for (const src of g.sources!) {
+        assert.match(src.url, official, `${g.slug}: not an official source: ${src.url}`);
+        assert.doesNotMatch(src.url, /moneysense/i, `${g.slug}: MoneySense is not used (DC, 12 Nov 2026)`);
+      }
+    }
+    for (const g of GENERAL_GUIDES) assert.ok(!g.region && !g.sources, `${g.slug}: general guides stay country-neutral`);
+  });
+
+  await t("singapore: every figure sits in a fact or table that cites one of the article's sources; money is S$, never a bare $", () => {
+    for (const g of SINGAPORE_GUIDES) for (const s of g.sections) for (const b of s.blocks) {
+      if (b.kind === "fact" || b.kind === "table") assert.ok(Number.isInteger(b.source) && b.source >= 0 && b.source < g.sources!.length, `${g.slug}: bad source index`);
+      for (const text of blockTexts(b)) {
+        assert.doesNotMatch(text, /(?<!S)\$\s?\d/, `${g.slug}: bare "$" in "${text.slice(0, 60)}"`);
+        if (b.kind === "fact" || b.kind === "table") continue;
+        // Outside sourced blocks: no money, no percentages, no large figures. A quiz may repeat a sourced figure in its options.
+        if (b.kind === "quiz") continue;
+        // Dates and years ("1 April 2026", "born 1980") are not amounts; every other number must be sourced.
+        const undated = text.replace(/\b\d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/g, "").replace(/\b(19|20)\d{2}\b/g, "");
+        assert.doesNotMatch(undated, /S\$\s?\d|\d\s?%|\d{3}/, `${g.slug} / ${s.heading}: unsourced figure in a ${b.kind} block: "${text.slice(0, 60)}"`);
+      }
+      if (b.kind === "quiz") for (const text of blockTexts(b)) for (const fig of text.match(/S\$[\d,]+|\d+%/g) ?? []) {
+        const sourced = g.sections.flatMap((x) => x.blocks).filter((x) => x.kind === "fact" || x.kind === "table").flatMap(blockTexts).join(" ");
+        assert.ok(sourced.includes(fig), `${g.slug}: quiz figure ${fig} is not in any sourced fact`);
+      }
+    }
+  });
+
+  await t("singapore: no plan or insurer is recommended or ranked", () => {
+    assert.doesNotMatch(sgText, /\b(best|cheapest|top-rated|we recommend|you should (buy|choose|switch))\b/i);
+    assert.match(sgText, /does not recommend or rank insurers or plans/);
+  });
+
+  await t("singapore: pages show the country notice, the checked-on date, numbered sources and working source tags", async () => {
+    for (const g of SINGAPORE_GUIDES) {
+      const html = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: g.slug }) }));
+      assert.ok(html.includes('data-testid="learn-notice"'), g.slug);
+      assert.match(html, new RegExp(`Singapore only\\.</strong> Facts are from official sources, checked on ${learnDate(g.checkedOn!)}`), g.slug);
+      g.sources!.forEach((src, i) => {
+        assert.ok(html.includes(`id="source-${i + 1}"`), `${g.slug}: source ${i + 1} anchor`);
+        assert.ok(html.includes(`href="${src.url.replace(/&/g, "&amp;")}" target="_blank" rel="noopener noreferrer"`), `${g.slug}: source link`);
+      });
+      for (const tag of html.match(/href="#source-(\d+)"/g) ?? []) assert.ok(html.includes(`id="${tag.slice(7, -1)}"`), `${g.slug}: dangling ${tag}`);
+      assert.ok((html.match(/class="lf-src"/g) ?? []).length >= 1, `${g.slug}: no cited facts`);
+    }
+    assert.equal(learnDate("2026-11-12"), "12 Nov 2026");
+    const general = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: "how-amounts-work" }) }));
+    assert.doesNotMatch(general, /data-testid="learn-region"|data-testid="learn-sources"/, "general guides carry no country notice");
+  });
+
+  await t("library: every page sits on one shelf, the index shows each shelf in order, and Next stays on the shelf", async () => {
+    const ids = LEARN_GROUPS.map((g) => g.id) as string[];
+    for (const g of GUIDES) assert.ok(ids.includes(g.group), g.slug);
+    assert.ok(ids.includes(TERMS_PAGE.group));
+    const html = renderToStaticMarkup(LearnIndex());
+    let at = -1;
+    for (const id of ids) { const i = html.indexOf(`data-testid="learn-shelf-${id}"`); assert.ok(i > at, `shelf ${id} missing or out of order`); at = i; }
+    const sgShelf = html.slice(html.indexOf('data-testid="learn-shelf-singapore"'));
+    for (const g of SINGAPORE_GUIDES) assert.ok(sgShelf.includes(`href="/learn/${g.slug}"`), g.slug);
+    const last = SINGAPORE_GUIDES[SINGAPORE_GUIDES.length - 1];
+    const lastHtml = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: last.slug }) }));
+    assert.doesNotMatch(lastHtml, /Next: /, "the last Singapore article does not lead into an unrelated shelf");
+    const firstSg = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: SINGAPORE_GUIDES[0].slug }) }));
+    assert.match(firstSg, new RegExp(`Next: <a class="text-link" href="/learn/${SINGAPORE_GUIDES[1].slug}"`));
+  });
+
+  await t("search: finds articles and terms by name, short name and a one-letter slip; nothing for unrelated words", () => {
+    const index = learnSearchIndex();
+    const first = (q: string) => searchLearn(index, q)[0]?.href;
+    assert.equal(first("careshield"), "/learn/sg-careshield-life");
+    assert.equal(first("What is MediShield Life"), "/learn/sg-medishield-life");
+    assert.equal(first("medisheld"), "/learn/sg-medishield-life", "a typing slip still finds it");
+    assert.equal(first("dependant protection scheme"), "/learn/sg-dependants-protection-scheme");
+    assert.equal(first("DPS"), "/learn/sg-dependants-protection-scheme");
+    assert.ok(searchLearn(index, "rider").some((r) => r.href === "/learn/sg-integrated-shield-plans"));
+    assert.ok(searchLearn(index, "deductible").some((r) => r.href === "/learn/terms#deductible"));
+    assert.deepEqual(searchLearn(index, ""), []);
+    assert.deepEqual(searchLearn(index, "zzzz qqqq"), []);
+    assert.deepEqual(searchLearn(index, "careshield xylophone"), [], "every word must match");
+    assert.ok(searchLearn(index, "insurance").length <= 8);
+    const html = renderToStaticMarkup(LearnIndex());
+    assert.match(html, /role="search"/);
+    assert.match(html, /<label for="[^"]+">Search the library<\/label><input id="[^"]+" type="search"/);
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);

@@ -1,4 +1,4 @@
-import type { LearnBlock, LearnDiagram, LearnTile } from "@/lib/learn/content";
+import type { LearnBlock, LearnDiagram, LearnSource, LearnTile } from "@/lib/learn/content";
 import { Pictogram } from "@/components/learn/pictogram";
 import { BillSplitTry, PercentOfSumTry, Quiz } from "@/components/learn/try-it";
 
@@ -37,7 +37,14 @@ function Diagram({ diagram }: { diagram: LearnDiagram }) {
   );
 }
 
-export function LearnBlockView({ block }: { block: LearnBlock }) {
+/** The small source tag after a fact: links to the article's numbered source list. */
+function SourceTag({ index, sources }: { index: number; sources?: LearnSource[] }) {
+  const source = sources?.[index];
+  if (!source) return null;
+  return <a className="lf-src" href={`#source-${index + 1}`} aria-label={`Source ${index + 1}: ${source.label}`}>[{index + 1}]</a>;
+}
+
+export function LearnBlockView({ block, sources }: { block: LearnBlock; sources?: LearnSource[] }) {
   switch (block.kind) {
     case "p": return <p>{block.text}</p>;
     case "example": return <p className="learn-example" data-testid="learn-example">{block.text}</p>;
@@ -86,6 +93,29 @@ export function LearnBlockView({ block }: { block: LearnBlock }) {
           ))}
         </div>
       </div>
+    );
+    case "layers": return (
+      <figure className="learn-figure" data-testid="learn-layers">
+        <ol className="learn-layers">
+          {block.layers.map((layer, i) => (
+            <li key={layer.title} style={{ marginInline: `${(block.layers.length - 1 - i) * 4}%` }}>
+              <Pictogram icon={layer.icon} size={40} />
+              <div><strong>{layer.title}</strong><span>{layer.text}</span></div>
+            </li>
+          ))}
+        </ol>
+        <figcaption>{block.caption}</figcaption>
+      </figure>
+    );
+    case "fact": return <p className="learn-fact" data-testid="learn-fact">{block.text} <SourceTag index={block.source} sources={sources} /></p>;
+    case "table": return (
+      <figure className="learn-figure" data-testid="learn-table">
+        <table className="learn-table">
+          <caption>{block.caption} <SourceTag index={block.source} sources={sources} /></caption>
+          <thead><tr>{block.head.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+          <tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => j === 0 ? <th key={j} scope="row">{cell}</th> : <td key={j}>{cell}</td>)}</tr>)}</tbody>
+        </table>
+      </figure>
     );
     case "quiz": return <Quiz question={block.question} options={block.options} answer={block.answer} explain={block.explain} />;
     case "bill-split": return <BillSplitTry />;

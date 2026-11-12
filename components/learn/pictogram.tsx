@@ -42,6 +42,14 @@ const drawings: Record<LearnIcon, ReactNode> = {
   source: <><rect className="lp-fill" x="7" y="5" width="26" height="34" rx="3" /><path d="M12 13h16M12 18h16M12 23h9" /><circle className="lp-accent" cx="31" cy="31" r="8" /><path d="M37 37l6 6" strokeWidth="3" /></>,
   conditions: <><rect className="lp-fill" x="8" y="6" width="32" height="36" rx="3" /><path d="M14 15l2 2 4-4M14 24l2 2 4-4M14 33l2 2 4-4" /><path d="M24 15h10M24 24h10M24 33h10" /></>,
   question: <><path className="lp-fill" d="M24 6c9.4 0 17 6.3 17 14s-7.6 14-17 14c-1.9 0-3.7-.3-5.4-.7L9 38l2.1-7.2C8.5 28.3 7 25.3 7 20 7 12.3 14.6 6 24 6z" /><path d="M20 16.5a4 4 0 1 1 5.5 3.7c-1 .4-1.5 1.3-1.5 2.3v1" /><path d="M24 28h.01" strokeWidth="3" /></>,
+  shield: <><path className="lp-fill" d="M24 5 9 11v10c0 9.5 6.4 16.5 15 20 8.6-3.5 15-10.5 15-20V11z" /><path d="m17 23 5 5 9-10" /></>,
+  wash: <><path d="M10 8h14a4 4 0 0 1 4 4v3" /><path className="lp-fill" d="M20 15h16l-2 5H22z" /><path d="M24 25v3M28 25v5M32 25v3M26 33v3M30 32v4" /><path className="lp-accent" d="M8 38h32v3H8z" /></>,
+  dress: <><path className="lp-fill" d="M17 7l-9 6 4 7 4-2v23h16V18l4 2 4-7-9-6c-1 3-3.5 5-7 5s-6-2-7-5z" /><path d="M24 20v6" /></>,
+  feed: <><path className="lp-fill" d="M6 24h30a15 15 0 0 1-30 0z" /><path d="M10 39h22" /><path d="M38 8v28M42 8v8a4 4 0 0 1-8 0V8" /></>,
+  toilet: <><rect className="lp-fill" x="10" y="6" width="14" height="14" rx="2" /><path className="lp-fill" d="M8 20h30c0 7-5 12-12 12h-6c-7 0-12-5-12-12z" /><path d="M16 32l-2 10h16l-2-10" /></>,
+  walk: <><circle className="lp-accent" cx="26" cy="8" r="4" /><path d="M24 14l-5 12 6 5 3 11M20 26l-6 16M24 16l7 7 6-1M22 18l-8 5-2 6" /></>,
+  transfer: <><path className="lp-fill" d="M4 28h18v8H4z" /><path d="M4 22v20M22 36v6M4 28c0-3 2-5 5-5h5" /><path className="lp-accent" d="M30 30h12v6H30z" /><path d="M30 18v24M42 36v6M30 30h12" /><path d="M14 14c5-5 12-5 16 0" /><path d="M27 10l3 4-4 2" /></>,
+  family: <><circle className="lp-fill" cx="16" cy="13" r="6" /><circle className="lp-accent" cx="33" cy="17" r="4.5" /><path className="lp-fill" d="M4 40a12 12 0 0 1 24 0z" /><path className="lp-accent" d="M24 40a9 9 0 0 1 18 0z" /></>,
 };
 
 /** A decorative picture: the words beside it carry the meaning, so it is hidden from screen readers. */
