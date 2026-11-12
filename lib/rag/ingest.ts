@@ -11,6 +11,7 @@ import { readPolicyFile, savePolicyFile } from "@/lib/storage";
 import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
+import { aiPageReaderOn } from "@/lib/documents/ai-reader-switch";
 import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
@@ -532,15 +533,27 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // (a household's new documents, 24 Oct: Prudential schedules).
     // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked, and
     // only its lines with no amount are kept as its text, for the database, search and every reader alike.
-    const crossCheck = async (numbers: number[]) => {
+    // keepUnread: a check that only tries to confirm figures not yet verified, where no image reader read the pages at all
+    // (Baidu gave no text and the AI reader is switched off, OCR_AI_READER=off) leaves the pages as they were: nothing
+    // gained, nothing lost, and the processing history says so. A check of a page whose table text looks scrambled never
+    // keeps it: unread, that page is unchecked as before.
+    const crossCheck = async (numbers: number[], keepUnread = false) => {
       if (!numbers.length || !ocrSourceBytes) return;
       await progress(args, "ocr", 26, `Checking ${numbers.length} table page${numbers.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
-      pages = await crossCheckPages(pages, numbers, (pageNumbers) => completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes!, password: args.pdfPassword,
+      let noImage = false;
+      const checked = await crossCheckPages(pages, numbers, (pageNumbers) => completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes!, password: args.pdfPassword,
         pages: pages.map((p) => (pageNumbers.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers })
+        .then((got) => { noImage = keepUnread && !aiPageReaderOn() && pageNumbers.every((n) => got.find((p) => p.pageNumber === n)?.notRead); return got; })
         .catch(async (error) => {
           await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
           return null;
         }));
+      if (noImage) {
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_NOT_READ",
+          error: `pages ${numbers.join(", ")}: no image reader read them (Baidu gave no text; the AI reader is switched off); kept as they were` }).catch(() => undefined);
+        return;
+      }
+      pages = checked;
       // Why each page failed goes to the server-only processing history, never into the page text (Critic plan step 3).
       // With it, what kind of difference it was, in counts and fixed words only, so one run shows the cause (Critic plan
       // step 1); a page whose every figure line was confirmed is recorded too when the image printed a line the text did not.
@@ -667,7 +680,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const failed = [...new Set(extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified && c.sourcePage).map((c) => Number(c.sourcePage)))]
         .filter((n) => pages.some((p) => p.pageNumber === n && p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && !p.partChecked && /\d/.test(p.text))).slice(0, 6);
       if (failed.length) {
-        await crossCheck(failed);
+        await crossCheck(failed, true);
         const now = pages.filter((p) => (p.unchecked || p.partChecked) && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
         // A page the image confirmed whose currency only the image prints is checked again in that currency (DC 11 Nov, b).
         if (now.length || pages.some((p) => failed.includes(p.pageNumber) && !p.unchecked && p.imageCurrency))

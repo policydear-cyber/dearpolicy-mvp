@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { aiPageReaderOn } from "@/lib/documents/ai-reader-switch";
 import type { PdfPage } from "@/lib/documents/pdf";
 import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { assertVerifiedForMonetaryUse, recordModelExecution } from "@/lib/ai/provenance";
@@ -611,7 +612,7 @@ export async function completePdfPagesWithBaidu(args: {
     void recordErrorEvent({ name: "documents.ocr_baidu.failed", correlationId, householdRef, error: new BaiduOcrError(failures[0].split(" ")[0] as BaiduFailureKind),
       extra: { pagesRequested: args.pageNumbers.length, pagesRead: texts.size, kind, durationMs: Date.now() - started } });
     if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId,
-      failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; read by the AI reader instead` }).catch(() => undefined);
+      failureCode: "BAIDU_OCR_FALLBACK", error: `pages ${unread.join(", ")}: ${kind}; ${aiPageReaderOn() ? "read by the AI reader instead" : "not read: the AI reader is switched off (OCR_AI_READER=off)"}` }).catch(() => undefined);
     // Which step of the path to Baidu fails, and from which region (no token is used). Only after a submit could not
     // be completed, and run by the caller only AFTER the AI reader has read the pages, so the upload is not held up
     // (Critic #411); it is skipped when the function no longer has time to spare for it.

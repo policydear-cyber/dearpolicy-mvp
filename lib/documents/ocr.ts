@@ -4,6 +4,7 @@ type BridgePage = { pageNumber: number; text: string };
 import { documentReaderFor } from "@/lib/ai/providers";
 import { PageCopyUnavailable, completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 import { baiduOcrConfigured, completePdfPagesWithBaidu } from "@/lib/documents/ocr-baidu";
+import { aiPageReaderOn } from "@/lib/documents/ai-reader-switch";
 
 export function usableCharacters(text: string) {
   return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
@@ -71,7 +72,7 @@ export async function completePdfPagesWithOcr(args: {
   // No reader looks at the scanned pages: they are marked as not read (never as read and empty), so the document is
   // not called "no readable text" for a reason that is not the file's (new-household audit, 3 Nov).
   const baidu = baiduOcrConfigured();
-  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || (!baidu && !documentReaderFor())) return notRead(args.pages, pageNumbers);
+  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "") || (!baidu && (!documentReaderFor() || !aiPageReaderOn()))) return notRead(args.pages, pageNumbers);
   // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
   // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
   let pages = args.pages, remaining = pageNumbers, probe: (() => Promise<void>) | undefined;
@@ -82,7 +83,8 @@ export async function completePdfPagesWithOcr(args: {
 
 async function readRemaining(args: Parameters<typeof completePdfPagesWithOcr>[0], pages: PdfPage[], remaining: number[]): Promise<PdfPage[]> {
   if (!remaining.length) return pages;
-  if (!documentReaderFor()) return notRead(pages, remaining);
+  // The AI reader switched off (OCR_AI_READER=off): what Baidu did not read stays not read, and is named.
+  if (!documentReaderFor() || !aiPageReaderOn()) return notRead(pages, remaining);
   // A page that cannot be copied out of the file for the reader (a locked file pdf-lib cannot open, and the page is not
   // one image PDF.js can rebuild) is marked not read and named, and the other pages are still read (TE #410).
   const uncopied = new Set<number>();
