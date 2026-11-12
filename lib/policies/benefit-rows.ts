@@ -40,7 +40,7 @@ const NUMBER=String.raw`\d[\d,]*(?:\.\d{1,2})?`;
 // figure at all -- never "S$5" or "S$2" (see lib/documents/messy.ts).
 // The figure is captured whole, separators and all, and read by printedNumber: "€50.000" is fifty thousand, never
 // fifty, and a figure grouped in no known way ("12,50") is no amount at all.
-const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|(?<![A-Za-z])Rp\.?|€|£|¥|₹|₱|฿)\s?(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}(?![,.]?[OoIl|])`;
+const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|(?<![A-Za-z])(?:SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|CHF|IDR|INR|PHP|THB|RM|Rp\.?)(?![A-Za-z])|€|£|¥|₹|₱|฿)\s?(${PRINTED_FIGURE})${FIGURE_END}${NO_SCALE_AFTER}(?![,.]?[OoIl|])`;
 function amount(raw:string|undefined,text?:string){return printedNumber(raw,null,{lakh:groupsInLakhs(text)});}
 /** A schedule of bare percentages states its basis once, in a heading:
  * "Schedule of Indemnities (% of Sum Insured)", "Compensation (% of S$5,000)".

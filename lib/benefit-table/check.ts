@@ -225,7 +225,7 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
-const SIGN_BEFORE = /(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
+const SIGN_BEFORE = /(?<![A-Za-z])(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£|¥|₹|₩|₱|฿|₫|Fr\.|kr\.?|zł|KD|BD)[ \u00a0\u202f]?$/u;
 const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|₫|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
 // A three-letter code counts only when it is a currency on this closed list: "TPD 1.500" is no money sign.
 const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|ARS|CLP|COP|PEN|PLN|CZK|HUF|RON|BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
@@ -376,7 +376,7 @@ function isoCodes(): Set<string> {
   return isoList;
 }
 function currencyBeside(before: string, afterScale: string): string | null {
-  const b = /(?:(?<![A-Za-z])([A-Z]{3})|((?<![A-Za-z])[A-Z]{1,3}\$|Rp\.?|RM|Rs\.?|Tk|zł|\p{Sc}))\s?$/u.exec(before);
+  const b = /(?:(?<![A-Za-z])([A-Z]{3})|((?<![A-Za-z])[A-Z]{1,3}\$|(?<![A-Za-z])(?:Rp\.?|RM|Rs\.?)|Tk|zł|\p{Sc}))\s?$/u.exec(before);
   const a = /^\.?\s?(?:([A-Z]{3})(?![A-Za-z])|([A-Z]{1,3}\$|Rp\.?(?![A-Za-z])|RM(?![A-Za-z])|Rs\.?(?![A-Za-z])|Tk(?![A-Za-z])|\p{Sc}|zł|đ(?![\p{L}])))/u.exec(afterScale);
   const code = b?.[1] ?? a?.[1];
   if (code) return isoCodes().has(code) ? code : null; // "TPD 2 mn" is no money

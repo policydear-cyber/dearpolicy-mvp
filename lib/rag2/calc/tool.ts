@@ -298,7 +298,7 @@ export function locateQuote(args: Parameters<typeof evidenceFor>[0]): EvidenceRe
   return trimmed !== args.passage && trimmed.length >= 20 ? evidenceFor({ ...args, passage: trimmed }) : null;
 }
 
-const MONEY_IN = /(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/g;
+const MONEY_IN = /(S\$|US\$|HK\$|(?:(?<![A-Za-z])|(?<=[a-z])(?=[A-Z]{2,3}\s?\d))(?:SGD|USD|RM|MYR|HKD))\s?(\d[\d,]*(?:\.\d+)?)/g;
 const CURRENCY_OF: Record<string, string> = { "S$": "SGD", SGD: "SGD", "US$": "USD", USD: "USD", RM: "MYR", MYR: "MYR", "HK$": "HKD", HKD: "HKD" };
 const SELECT_NEUTRAL = new Set(["benefit", "benefits", "each", "every", "with", "from", "that", "this", "which", "shall", "will", "payable", "paid", "insured", "person", "policy", "under", "their", "fracture", "the", "and", "for"]);
 const selectWords = (t: string) => [...new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !SELECT_NEUTRAL.has(w)))];
@@ -373,7 +373,7 @@ async function percentBaseOf(ctx: ToolContext, pct: DocValue): Promise<{ kind: "
   const amt = /^(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/.exec(of);
   if (amt) {
     const value = Number(amt[2].replace(/,/g, "")), currency = CURRENCY_OF[amt[1]];
-    const named = page.split(/\n/).map((l) => /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s+(sub-?limit|benefit limit|limit)\s*:\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(l))
+    const named = page.split(/\n/).map((l) => /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s+(sub-?limit|benefit limit|limit)\s*:\s*(S\$|US\$|HK\$|(?<![A-Za-z])(?:SGD|USD|RM|MYR|HKD))\s?(\d[\d,]*(?:\.\d+)?)/i.exec(l))
       .filter((m): m is RegExpExecArray => !!m && CURRENCY_OF[m[3]] === currency && Number(m[4].replace(/,/g, "")) === value);
     if (named.length === 1) return { kind: /sub/i.test(named[0][2]) ? "sublimit" : "benefit_limit", name: named[0][1].trim(), words, printed: { value, currency } };
     return { kind: "referenced_amount", name: of.replace(/\)+$/, ""), words, printed: { value, currency } };

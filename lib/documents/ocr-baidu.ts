@@ -79,6 +79,13 @@ export function baiduOcrSettings(env: Env = process.env) {
     // After such a failure, check each step of the path to Baidu (lib/documents/baidu-probe.ts), each within this limit.
     // 0 switches the check off.
     probeStepMs: intEnv(env.BAIDU_OCR_PROBE_STEP_MS, 6_000, 0, 15_000),
+    // A call whose connection did not open (nothing sent) is tried again this many times, 1 s then 2 s apart, within
+    // the job's time. 0 switches retrying off.
+    connectRetries: intEnv(env.BAIDU_OCR_CONNECT_RETRIES, 2, 0, 3),
+    // The connect limit for those retries. A healthy connection to Baidu opens in about 0.2 s (TCP) and 1.3 s (TLS
+    // done); a silently dropped one waits until the system gives up (15.4 s live, 11 Nov). So a retry gets a short limit,
+    // and dead connections cost at most ~36 s of the job's time (CONNECT_RETRY_CAP_MS), not 90 s.
+    retryConnectTimeoutMs: intEnv(env.BAIDU_OCR_RETRY_CONNECT_TIMEOUT_MS, 5_000, 1_000, 30_000),
     // "link" (default): the pages are staged in our own storage and Baidu downloads them through a short-lived signed
     // link (the official `fileUrl` submit), because pushing the file from Vercel to Baidu was measured at under
     // 20 KB/s (11 Nov 2026: 1.4 of 8.4 MB in 90 s). "upload": send the file in the request, as before. Without
@@ -141,13 +148,60 @@ let transport: Transport = httpsTransport;
 /** Tests only: "fetch" sends Baidu calls through globalThis.fetch; "https" (the default) through node:https. */
 export function setBaiduTransportForTests(kind: "fetch" | "https") { transport = kind === "fetch" ? fetchTransport : httpsTransport; }
 
-async function call(url: string, req: TransportRequest, limits: Limits, stage: NonNullable<BaiduOcrError["stage"]>): Promise<TransportResponse> {
-  try {
-    return await transport(url, req, limits);
-  } catch (error) {
-    if (error instanceof TransportError) throw new BaiduOcrError(error.kind, undefined, stage, error.code, (error as TransportError & { summary?: string }).summary);
-    throw new BaiduOcrError((error as Error)?.name === "TimeoutError" ? "timeout" : "network", undefined, stage, errorCode(error));
+/** Codes of a fetch failure that mean the connection never opened, so nothing of the request reached Baidu. */
+const FETCH_NOT_CONNECTED = new Set(["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
+/** True only when the call failed before ANY byte of the request was sent: DNS, TCP or the TLS handshake did not finish.
+ * Such a call never reached Baidu's service, so trying it again cannot submit (or pay for) a job twice. */
+export function failedBeforeSending(error: unknown): boolean {
+  if (error instanceof TransportError) return (error.trace.phase === "dns" || error.trace.phase === "connect" || error.trace.phase === "tls") && error.trace.sentBytes === 0;
+  const code = errorCode(error);
+  return code !== undefined && FETCH_NOT_CONNECTED.has(code);
+}
+/** Waits between connection attempts: the first retry after 1 s, the next after 2 s, then 4 s. */
+const CONNECT_BACKOFF_MS = [1_000, 2_000, 4_000];
+/** A retry is started only with at least this much of the job's time left after the wait. */
+const MIN_RETRY_MS = 5_000;
+/** All tries of one call together (the failed connections, the waits and the next try's connect limit) stay within this,
+ * so a connection that never opens hands the pages to the AI reader after at most ~36 s (30 + 1 + 5), not 90 s. */
+export const CONNECT_RETRY_CAP_MS = 40_000;
+
+/** One Baidu call. The connection to Baidu sometimes does not open at all from Vercel (11 Nov 2026: TCP timed out at
+ * 12:57 although the same path worked at 12:47), so a call that failed BEFORE sending anything is tried again, up to
+ * `connectRetries` times with a short wait and a short connect limit (retryConnectTimeoutMs), and only while the job's
+ * own time (limits()) allows. A call that sent any byte is never repeated. */
+/** Whether one more try fits: the job keeps 5 s after the wait, and all tries of the call stay within CONNECT_RETRY_CAP_MS. */
+export function retryFits(elapsedMs: number, jobLeftMs: number, waitMs: number, retryConnectMs: number): boolean {
+  return jobLeftMs > waitMs + MIN_RETRY_MS && elapsedMs + waitMs + retryConnectMs <= CONNECT_RETRY_CAP_MS;
+}
+
+/** The limits for one try: a retry gets the shorter connect limit (never longer than the first try's). */
+export function limitsForTry(l: Limits, attempt: number, retryConnectMs: number): Limits {
+  return attempt === 0 ? l : { ...l, connectMs: Math.min(l.connectMs, retryConnectMs) };
+}
+
+async function call(url: string, req: TransportRequest, limits: () => Limits, stage: NonNullable<BaiduOcrError["stage"]>,
+  retry: { retries: number; connectMs: number } = { retries: 0, connectMs: 0 }): Promise<TransportResponse> {
+  const retries = retry.retries;
+  const firstTry = Date.now();
+  for (let attempt = 0; ; attempt++) {
+    const l = limitsForTry(limits(), attempt, retry.connectMs);
+    try {
+      return await transport(url, req, l);
+    } catch (error) {
+      const wait = CONNECT_BACKOFF_MS[Math.min(attempt, CONNECT_BACKOFF_MS.length - 1)];
+      if (attempt < retries && failedBeforeSending(error) && retryFits(Date.now() - firstTry, limitsLeft(limits), wait, retry.connectMs)) { await sleep(wait); continue; }
+      const tries = attempt > 0 ? `tries=${attempt + 1}` : undefined;
+      if (error instanceof TransportError) {
+        const trace = [(error as TransportError & { summary?: string }).summary, tries].filter(Boolean).join(" ") || undefined;
+        throw new BaiduOcrError(error.kind, undefined, stage, error.code, trace);
+      }
+      throw new BaiduOcrError((error as Error)?.name === "TimeoutError" ? "timeout" : "network", undefined, stage, errorCode(error), tries);
+    }
   }
+}
+/** The job's time left, or 0 when it has run out. */
+function limitsLeft(limits: () => Limits): number {
+  try { return limits().totalMs; } catch { return 0; }
 }
 
 /** The `data` object of a Baidu reply; any non-2xx status, non-zero `code` or missing `data` is a typed failure. */
@@ -340,6 +394,7 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
   const jobsUrl = `${s.baseUrl}${JOBS_PATH}`;
   const end = Math.min(deadline ?? Infinity, Date.now() + s.maxWaitMs);
   // Each call: connect within connectTimeoutMs, never sit idle for requestTimeoutMs, and end by the job's deadline.
+  const retry = { retries: s.connectRetries, connectMs: s.retryConnectTimeoutMs };
   const timeout = (): Limits => {
     const left = end - Date.now();
     if (left <= 0) throw new BaiduOcrError("timeout");
@@ -361,13 +416,13 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
     form.append("optionalPayload", JSON.stringify(optionalPayload));
     submitRequest = { method: "POST", headers: auth, body: form };
   }
-  const submitted = await apiData(await call(jobsUrl, submitRequest, timeout(), "submit"));
+  const submitted = await apiData(await call(jobsUrl, submitRequest, timeout, "submit", retry));
   const jobId = submitted.jobId;
   if (typeof jobId !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(jobId)) throw new BaiduOcrError("format");
 
   let interval = s.pollIntervalMs;
   for (;;) {
-    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout(), "poll"));
+    const data = await apiData(await call(`${jobsUrl}/${encodeURIComponent(jobId)}`, { method: "GET", headers: auth }, timeout, "poll", retry));
     const state = data.state;
     if (state === "done") {
       const jsonUrl = (data.resultUrl as { jsonUrl?: unknown } | undefined)?.jsonUrl;
@@ -378,7 +433,7 @@ export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, 
       // (plain http only when the configured service itself is plain http, i.e. a local test double).
       if (url.protocol !== "https:" && !(url.protocol === "http:" && s.baseUrl.startsWith("http:"))) throw new BaiduOcrError("format");
       if (!resultHostAllowed(url.hostname, env)) throw new BaiduOcrError("format");
-      const res = await call(url.href, { method: "GET" }, timeout(), "result");
+      const res = await call(url.href, { method: "GET" }, timeout, "result", retry);
       if (!res.ok) throw new BaiduOcrError(kindForStatus(res.status), res.status);
       const jsonl = await res.text();
       let first: { model?: unknown; result?: { model?: unknown; dataInfo?: unknown } } | null = null;
