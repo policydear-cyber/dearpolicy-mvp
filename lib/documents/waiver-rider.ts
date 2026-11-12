@@ -21,7 +21,8 @@ const RIDER_FORMS = new RegExp([
   String.raw`\bwaiver\s+of\s+(?:future\s+)?premiums?\b`,
   String.raw`\bwop\b`,
   String.raw`\bpremium\s+waiver\s+(?:rider|benefit)\b`,
-  String.raw`\b${EVENT}\s+(?:premium\s+)?waiver\b`,
+  // Not a waiver of something else ("Disability Waiver of Deductible", "CI Waiver of Co-payment"): Critic #436.
+  String.raw`\b${EVENT}\s+(?:premium\s+)?waiver\b(?!\s+of\s+(?!(?:future\s+)?premiums?\b))`,
   String.raw`\bpay(?:o|e)r\s+(?:benefit|rider)\b`,
   String.raw`\bpremium\s+eraser\b`,
   String.raw`\bpengecualian\s+premi(?:um)?\b|\bpembebasan\s+premi(?:um)?\b`,
@@ -29,8 +30,13 @@ const RIDER_FORMS = new RegExp([
 ].join("|"), "iu");
 /** What follows "with" or "incl." is a feature the cover is sold with, not the cover's own name. */
 const SOLD_WITH = /\s+(?:with|incl\.?|including)\s.*$/iu;
-/** The first cell of an evidence line: its name, before a tab, a run of spaces, a bar or a colon. */
-const firstCell = (line: string) => line.split(/\t| {2,}|\||:/u).map((c) => c.trim()).find(Boolean) ?? "";
+/** A leading cell that names no cover: a row number or a generic label ("No.", "Rider", "Supplementary Benefit"). */
+const LABEL_CELL = /^(?:\d{1,3}[.)]?|no\.?|item|(?:supplementary\s+|additional\s+|optional\s+)?(?:riders?|benefits?|plans?|covers?|coverage)|supplementary|description|name)$/iu;
+/** The name cell of an evidence line: its first cell (cells end at a tab, a run of spaces, a bar or a colon) that is not
+ * a row number or a generic label. Exactly two spaces between words (an OCR line) are one space, so a name is not split;
+ * three or more still end a cell (a column gap). */
+const firstCell = (line: string) => line.replace(/(?<=[\p{L}(),&])[ \u00a0]{2}(?=[\p{L}(])/gu, " ")
+  .split(/\t| {2,}|\||:/u).map((c) => c.trim()).find((c) => !!c && !LABEL_CELL.test(c)) ?? "";
 
 /** Whether the cover's own name, or the first cell of its evidence line, names a premium-waiver rider (see the module note). */
 export function namesWaiverRider(productName: string | null | undefined, evidenceText?: string | null): boolean {

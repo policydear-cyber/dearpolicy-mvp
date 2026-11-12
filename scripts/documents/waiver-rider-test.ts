@@ -91,6 +91,19 @@ async function main() {
     assert.equal(namesWaiverRider(null, "WOP (Critical Illness)\t-\t12.60"), true);
     assert.equal(namesWaiverRider(null, "Whole Life Plan\t200,000\tWaiver of Premium: Yes"), false);
   });
+  // Critic #436 re-probe: a waiver of something else after an event word keeps its sum; a rider's name after a row number,
+  // a generic label, or with OCR double spaces is still found.
+  for (const [category, line, amount] of [["Disability", "Disability Waiver of Deductible\t50,000", 50000], ["Critical Illness", "CI Waiver of Co-payment\t20,000", 20000]] as [string, string, number][])
+    await test(`C keeps its sum: ${line.replace(/\t/g, " | ")}`, () => {
+      const p = [{ pageNumber: 2, text: `POLICY SCHEDULE (fictitious)\nLife Assured\t${PERSON}\n${line}` }];
+      const [c] = FC.factCheckExtraction(extraction([coverage(category, null, amount, line)]), p).extraction.insuredPeople[0].coverages;
+      assert.equal(c.amount, amount); assert.equal(namesWaiverRider(null, line), false);
+    });
+  await test("C an event waiver of premium is still a rider", () => assert.equal(namesWaiverRider("CI Waiver of Premium"), true));
+  for (const line of ["1\tWaiver of Premium Rider\t90.00", "Rider: Waiver of Premium\t90.00", "Supplementary Benefit | Premium Waiver Benefit | 90.00", "Waiver  of  Premium  (CI)   S$ 90.00", "No.  2   Crisis Waiver II   150.00"])
+    await test(`C rider found past a label or OCR spacing: ${line.replace(/\t/g, " | ")}`, () => assert.equal(namesWaiverRider(null, line), true));
+  await test("C a column gap still ends the name cell", () => assert.equal(namesWaiverRider(null, "Term Life   Waiver of Premium: Yes   200,000"), false));
+  await test("C a label cell alone names nothing", () => assert.equal(namesWaiverRider(null, "Rider\t90.00"), false));
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`waiver-rider: ${passed} passed, 0 failed`);
