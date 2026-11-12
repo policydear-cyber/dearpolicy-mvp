@@ -16,6 +16,7 @@
  * scripts/worker.ts and by regression suites, keeps it in exactly one
  * place.
  */
+import { parseBaiduWaitState } from "@/lib/documents/baidu-wait";
 import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { processClaimEvidence, type ProcessClaimEvidenceArgs } from "@/lib/claims/evidence/pipeline";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
@@ -84,6 +85,10 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
     },
     // attempt_count was incremented when this attempt claimed the job.
     attempt: { number: job.attempt_count, max: job.max_attempts },
+    // Background Baidu reading: this run may put the job back to wait for Baidu (lib/jobs/deferral.ts), carrying what it
+    // left in the payload for the next run.
+    deferrable: true,
+    baiduWait: parseBaiduWaitState(payload?.baiduWait),
   };
   await processPolicy(args);
   // A locked PDF still waiting for its malware scan is read later by the scan

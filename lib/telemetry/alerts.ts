@@ -155,16 +155,17 @@ export const ALERT_CONDITIONS: AlertCondition[] = [
     id: "processing_backlog",
     title: "Durable-job processing backlog",
     severity: "medium",
-    eventNames: ["job.claimed", "job.completed"],
+    eventNames: ["job.claimed", "job.completed", "job.deferred"],
     description:
-      "The count of job.claimed events without a matching job.completed/job.dead_letter/job.failed_retryable in a 30-minute window exceeds threshold -- jobs are being enqueued faster than they finish.",
+      "The count of job.claimed events without a matching job.completed/job.deferred/job.dead_letter/job.failed_retryable in a 30-minute window exceeds threshold -- jobs are being enqueued faster than they finish.",
     operationalResponse: "Check worker capacity/concurrency and whether a specific job_type is stuck (see per-jobType breakdown). Scale workers or investigate a slow downstream dependency (model provider, scanner).",
     evaluate: (events, context) => {
       const nowMs = context?.nowMs ?? Date.now();
       const windowMsValue = 30 * 60 * 1000;
       const threshold = thresholdFor("processing_backlog", 100, context);
       const claimed = countMatching(events, nowMs, windowMsValue, (e) => e.name === "job.claimed");
-      const completed = countMatching(events, nowMs, windowMsValue, (e) => e.name === "job.completed");
+      // A job put back to wait (lib/jobs/deferral.ts, e.g. a reading waiting for Baidu) has finished its run too.
+      const completed = countMatching(events, nowMs, windowMsValue, (e) => e.name === "job.completed" || e.name === "job.deferred");
       const backlog = Math.max(0, claimed - completed);
       return { fired: backlog >= threshold, detail: `${backlog} more jobs claimed than completed in the last 30 minutes (threshold ${threshold})`, matchedCount: backlog };
     },
