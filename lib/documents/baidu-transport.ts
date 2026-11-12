@@ -66,10 +66,14 @@ export type TransportOptions = {
   /** On a kept connection, the wait for the first reply byte (instead of idleTimeoutMs). A kept connection the path has
    * gone silent on answers nothing at all; a poll's small reply normally comes in well under a second. */
   reusedReplyMs?: number;
-  /** Open the connection to this host instead of the URL's own (DNS, TCP and TLS, the certificate checked against THIS
-   * name), and send the URL's host in the Host header. Baidu's front door (the address its other hosts, such as
-   * aistudio.baidu.com, resolve to) passes the request to the service named in the Host header. */
+  /** Open the connection to this host instead of the URL's own: DNS, TCP and TLS all go to `via`, the TLS name (SNI)
+   * is `via` and the certificate is checked against `via` (set explicitly: node would otherwise take the name from the
+   * Host header). The URL's host is sent in the Host header. Baidu's front door (aistudio.baidu.com, which resolves
+   * outside China to Baidu's edge) passes the request to the service named in the Host header; under the service's own
+   * name as SNI the edge presents a certificate that does not cover it (12 Nov 2026), so `via` must be the TLS name. */
   via?: string;
+  /** Tests only: a certificate authority to trust (a throwaway self-signed certificate). */
+  ca?: string;
 };
 export type BaiduConnection = { https: HttpsAgent; http: HttpAgent; close: () => void };
 
@@ -160,8 +164,10 @@ export async function transportRequest(url: string, req: TransportRequest, opts:
     };
 
     const request = (secure ? httpsRequest : httpRequest)({
-      // With `via`, node connects to that host and checks the certificate against it (servername defaults to hostname).
+      // With `via`, node connects to that host, and servername makes the TLS name and the certificate check `via` too
+      // (without it, node's agent derives the name from the Host header: the service's name).
       protocol: target.protocol, hostname: via ?? target.hostname, port: target.port || undefined,
+      ...(secure && via ? { servername: via } : {}), ...(opts.ca ? { ca: opts.ca } : {}),
       path: `${target.pathname}${target.search}`, method: req.method, headers,
       family: family || undefined, agent: agent ?? false,
     });

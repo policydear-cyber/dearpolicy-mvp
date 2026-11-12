@@ -7,6 +7,11 @@
  */
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo, Socket } from "node:net";
 import { TransportError, baiduConnection, traceSummary, transportRequest } from "@/lib/documents/baidu-transport";
 import { BAIDU_DEFAULT_VIA, baiduOcrSettings, baiduVia, readPdfWithBaidu, setBaiduTransportForTests, staleKeptConnection, viaHostFor } from "@/lib/documents/ocr-baidu";
@@ -273,7 +278,42 @@ async function main() {
     assert.equal(viaHostFor("not a url", v), undefined);
   }
 
-  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace, polls on one kept-open connection per job, the submit on its own, a dropped or silent kept connection replaced, Baidu's front door (via) for the service host only -- passed. TLS and Baidu's live service are NOT covered.");
+  // 12. TLS through the front door (https, throwaway self-signed certificates). The TLS name (SNI) is the front door's
+  //     name and the certificate is checked against it, NOT against the service's name in the Host header: a
+  //     certificate for the front door passes; a certificate only for the service's name fails at TLS, before the
+  //     request (and its token) is ever sent.
+  {
+    const dir = mkdtempSync(join(tmpdir(), "via-tls-"));
+    const make = (name: string) => {
+      execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, `${name}.key`), "-out", join(dir, `${name}.pem`), "-days", "1",
+        "-subj", `/CN=${name}`, "-addext", `subjectAltName=DNS:${name}`], { stdio: "ignore" });
+      return { key: readFileSync(join(dir, `${name}.key`), "utf8"), cert: readFileSync(join(dir, `${name}.pem`), "utf8") };
+    };
+    const door = make("localhost"), service = make("service.invalid");
+    rmSync(dir, { recursive: true, force: true });
+    for (const [label, pair, expectOk] of [["front door certificate", door, true], ["service-name-only certificate", service, false]] as const) {
+      let sni: string | false | undefined, host: string | undefined, auth: string | undefined, requests = 0;
+      // The name the client asked for, seen during the handshake (before the client checks the certificate).
+      const server = createHttpsServer({ key: pair.key, cert: pair.cert, SNICallback: (name, cb) => { sni = name; cb(null, undefined); } }, (req, res) => { requests++; host = req.headers.host; auth = req.headers.authorization; req.resume(); res.statusCode = 401; res.end("{}"); });
+      await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+      const port = (server.address() as AddressInfo).port;
+      const call = transportRequest(`https://service.invalid:${port}/api/v2/ocr/jobs`, { method: "POST", body: "{}", headers: { Authorization: `Bearer ${TOKEN}` } },
+        { ...limits, family: 4, via: "localhost", ca: pair.cert });
+      if (expectOk) {
+        assert.equal((await call).status, 401, label);
+        assert.equal(sni, "localhost", "the TLS name is the front door's");
+        assert.equal(host, `service.invalid:${port}`); assert.equal(auth, `Bearer ${TOKEN}`);
+      } else {
+        const e = await failure(call);
+        assert.equal(e.kind, "network", label); assert.equal(e.trace.phase, "tls");
+        assert.equal(requests, 0, "nothing (and no token) is sent when the certificate does not match the front door");
+        assert.equal(sni, "localhost");
+      }
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  }
+
+  console.log("DearPolicy Baidu transport (local servers): multipart submit, JSON submit, idle limit at reply, stalled upload, refused connection, total limit while trickling, IPv4 lookup, no path or token in the trace, polls on one kept-open connection per job, the submit on its own, a dropped or silent kept connection replaced, Baidu's front door (via) for the service host only, TLS name and certificate check on the front door's name -- passed. Baidu's live service is NOT covered.");
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });

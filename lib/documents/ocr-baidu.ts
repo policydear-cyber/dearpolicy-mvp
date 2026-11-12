@@ -65,8 +65,8 @@ export function baiduOcrConfigured(env: Env = process.env) {
  * drop (12 Nov 2026, from throwaway sin1 and hkg1 machines: 0 of 30 TCP connects there, while the front door answered
  * every request in about 0.3 s, the token-less submit with the service's own 401 reply and trace id). */
 export const BAIDU_DEFAULT_VIA = "aistudio.baidu.com";
-/** Only a Baidu host may carry the token: the front door must be one of Baidu's own domains (its certificate is checked
- * against that name). */
+/** Only a Baidu host may carry the token: the front door must be one of Baidu's own domains. The TLS name (SNI) of each
+ * call is the front door's name and its certificate is checked against that name (baidu-transport.ts `via`). */
 const BAIDU_VIA_DOMAINS = ["baidu.com", "baidubce.com", "aistudio-app.com"];
 
 /** The host to open connections to for the configured service, or undefined to connect to the service's own host.
