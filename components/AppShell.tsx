@@ -26,6 +26,7 @@ const nav: NavItem[] = [
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask" },
   { href: "/claims", label: "Claims", icon: "claims", tab: 4 },
   { href: "/records", label: "Payments", icon: "payments" },
+  { href: "/learn", label: "Learn", icon: "book" },
   { href: "/family", label: "Account settings", icon: "household", also: ["/household", "/usage"] },
 ];
 
