@@ -4,8 +4,8 @@
  * no sum of its own. So a cover whose own name, or the first cell of its evidence line, names a premium-waiver rider is
  * kept as a line with no amount: no tile, total, share or answer uses a figure from it, and its event is still listed as covered.
  *
- * A closed allow-list of rider-name forms (Critic #436), tested against the cover's own product or rider name and the
- * first cell of its evidence line only, never the whole line:
+ * A closed allow-list of rider-name forms (Critic #436), found anywhere in the cover's own product or rider name, or at
+ * the START of the name cell of its evidence line; never anywhere else on the line:
  * - "Waiver of Premium(s)", "WOP", "Premium Waiver Rider/Benefit";
  * - "(Early [Stage]) Crisis / CI / Critical Illness / Cancer / TPD / Disability [Premium] Waiver [Plus/Rider/Benefit/II]";
  * - "Payor/Payer Benefit/Rider", "Premium Eraser"; the Malay "Pengecualian Premium" and the Chinese/Japanese 豁免, 払込免除.
@@ -17,7 +17,7 @@
  *   "Term Life (Premium Waiver Option)"), or a person labelled payor ("Life Assured / Payor: ...").
  * Pure logic: no database, network or model. */
 const EVENT = String.raw`(?:(?:early(?:\s+stage)?\s+)?(?:crisis|ci|critical\s+illness(?:es)?|dread\s+disease)|cancer|tpd|total\s+(?:and\s+|&\s+)?permanent\s+disability|disability)`;
-const RIDER_FORMS = new RegExp([
+const FORMS = [
   String.raw`\bwaiver\s+of\s+(?:future\s+)?premiums?\b`,
   String.raw`\bwop\b`,
   String.raw`\bpremium\s+waiver\s+(?:rider|benefit)\b`,
@@ -26,8 +26,13 @@ const RIDER_FORMS = new RegExp([
   String.raw`\bpay(?:o|e)r\s+(?:benefit|rider)\b`,
   String.raw`\bpremium\s+eraser\b`,
   String.raw`\bpengecualian\s+premi(?:um)?\b|\bpembebasan\s+premi(?:um)?\b`,
-  String.raw`豁免|払込免除`,
-].join("|"), "iu");
+  String.raw`(?:保[费費])?豁免|(?:保険料)?払込免除`,
+];
+/** The cover's own name: a rider form anywhere in it (a brand may come first, "Lotus Crisis Waiver II"). */
+const RIDER_FORMS = new RegExp(FORMS.join("|"), "iu");
+/** The evidence line's name cell: a rider form must START it, so a cover name followed by a waiver column that two spaces
+ * joined to it ("Death Benefit  Waiver of Premium: Included", "Term Life  WOP") is not a rider (Critic #436). */
+const CELL_FORMS = new RegExp(`^(?:${FORMS.join("|")})`, "iu");
 /** What follows "with" or "incl." is a feature the cover is sold with, not the cover's own name. */
 const SOLD_WITH = /\s+(?:with|incl\.?|including)\s.*$/iu;
 /** A leading cell that names no cover: a row number or a generic label ("No.", "Rider", "Supplementary Benefit"). */
@@ -43,6 +48,6 @@ export function namesWaiverRider(productName: string | null | undefined, evidenc
   const clean = (t: string) => t.normalize("NFKC").replace(/[ \u00a0]+/g, " ").replace(SOLD_WITH, "");
   const name = clean(String(productName ?? "").replace(/\s+/g, " "));
   const cell = clean(firstCell(String(evidenceText ?? "").normalize("NFKC").replace(/\r/g, "")));
-  return [name, cell].some((t) => !!t && RIDER_FORMS.test(t));
+  return (!!name && RIDER_FORMS.test(name)) || (!!cell && CELL_FORMS.test(cell));
 }
 export const WAIVER_RIDER_NOTE = "This is a premium-waiver rider: it pays the policy's premiums, not a sum of its own, so DearPolicy does not use its figure as a cover amount.";

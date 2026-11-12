@@ -102,6 +102,11 @@ async function main() {
   await test("C an event waiver of premium is still a rider", () => assert.equal(namesWaiverRider("CI Waiver of Premium"), true));
   for (const line of ["1\tWaiver of Premium Rider\t90.00", "Rider: Waiver of Premium\t90.00", "Supplementary Benefit | Premium Waiver Benefit | 90.00", "Waiver  of  Premium  (CI)   S$ 90.00", "No.  2   Crisis Waiver II   150.00"])
     await test(`C rider found past a label or OCR spacing: ${line.replace(/\t/g, " | ")}`, () => assert.equal(namesWaiverRider(null, line), true));
+  for (const line of ["Death Benefit  Waiver of Premium: Included\t100,000", "Term Life  WOP  300,000", "Plan  Critical Illness  100,000", "Sum Assured  200,000  Payor Benefit: Yes", "Critical Illness\t100,000\tWaiver of Premium"])
+    await test(`C a cover name before a waiver column (two spaces) is no rider: ${line.replace(/\t/g, " | ")}`, () => assert.equal(namesWaiverRider(null, line), false));
+  await test("C the product name may carry a brand before the rider form; the evidence cell may not", () => {
+    assert.equal(namesWaiverRider("Lotus Crisis Waiver II", null), true); assert.equal(namesWaiverRider(null, "Lotus Crisis Waiver II\t-\t150.00"), false);
+  });
   await test("C a column gap still ends the name cell", () => assert.equal(namesWaiverRider(null, "Term Life   Waiver of Premium: Yes   200,000"), false));
   await test("C a label cell alone names nothing", () => assert.equal(namesWaiverRider(null, "Rider\t90.00"), false));
 
