@@ -80,7 +80,12 @@ export function scrambleSigns(text: string): string[] {
 export const looksScrambled = (text: string) => scrambleSigns(text).length > 0;
 
 const unglue = (text: string) => text.replace(UNGLUE, "$1 ");
-const figuresIn = (text: string) => (unglue(text).match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
+/** A word joined by underscores that holds a digit ("CC_1234_5678_9012", "FORM_B_2024") is a printed code (a print run,
+ * a form or batch reference), never an amount: no market writes an amount with "_". Image readers often leave such small
+ * print out, so its digits are not compared as figures; the code is one word ("code") in both readings. Before, a page
+ * whose footer printed one was "read in part" (live, 11 Nov). */
+const codesAsWords = (text: string) => text.replace(/\w*_\w*/g, (w) => (/\d/.test(w) ? " code " : w));
+const figuresIn = (text: string) => (unglue(codesAsWords(text)).match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
 
 /** Whether the page's image reading agrees with its text reading: every line of each that prints figures has a line in
  * the other with the same words and figures in the same order (a line printed twice must be printed twice), and the image
@@ -129,7 +134,7 @@ const isDate = (t: Token) => typeof t === "string" && t.startsWith("date ");
  * within one line, or "Plan A" and "Plan B" swapped, do not agree (TE U-F1). Currency marks and "%" are left out: the two
  * readings may print them differently. */
 function lineTokens(line: string): Token[] {
-  const tokens = unglue(line).replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?|[a-z]+`, "gi")) ?? [];
+  const tokens = unglue(codesAsWords(line)).replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?|[a-z]+`, "gi")) ?? [];
   return tokens.map((t): Token => (WHOLE_DATE.test(t) ? dateToken(t) : /^\d/.test(t) ? Number(t.replace(/,/g, "")) : t));
 }
 const figureLine = (l: Token[]) => l.some((t) => (typeof t === "number" ? t > 0 : isDate(t)));
@@ -174,7 +179,7 @@ function seenFigures(text: string): Seen[] {
   return lines.flatMap((line, i) => {
     const at = filled.indexOf(i);
     const where = at >= 0 && at < 3 ? "first lines" : at >= filled.length - 3 ? "last lines" : labelOf(lineTokens(line)) ? "labelled line" : "line with no label";
-    return (unglue(line).match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?%?`, "gi")) ?? [])
+    return (unglue(codesAsWords(line)).match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?%?`, "gi")) ?? [])
       .map((printed) => ({ printed, key: WHOLE_DATE.test(printed) ? dateToken(printed) : Number(printed.replace(/[,%]/g, "")).toFixed(2) }))
       .filter((f) => f.key.startsWith("date ") || Number(f.key) > 0)
       .map((f) => ({ key: f.key, shape: shapeOf(f.printed), where }));
@@ -493,13 +498,51 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     return null;
   };
+  // Rows of figures only, right under their table's column header ("Coverage amount (S$)\tMonthly premium (S$)\t..." over
+  // "50,000\t11.40\t100,000\t22.80"): a premium-rate table has no label in its rows, the header says what each column is.
+  // Such a run of rows is confirmed when the image reading prints the same rows, line for line, with the same figures in
+  // the same order and no label beside them. The run must start right under a words-only line with at least two cells,
+  // and no row may have more cells than it: values that a scrambled page printed apart from their labels sit under no
+  // such header (scrambleSigns' header rule). Before, every such row was held back, so a rate table both readings print
+  // identically made the document "read in part" (live, 10 Nov: 29 figures alike in both readings).
+  const tableRows = new Set<number>();
+  {
+    const cellsOf = (l: string) => l.split("\t").filter((c) => c.trim()).length;
+    const bare = (t: Token[]) => figureLine(t) && !labelOf(t);
+    const filledImage = imageLinesAll.map((l, j) => (l.trim() ? j : -1)).filter((j) => j >= 0);
+    for (let k = 0; k < filledText.length; k++) {
+      const h = filledText[k], head = lineTokens(lines[h]), width = cellsOf(lines[h]);
+      if (skipText.has(h) || width < 2 || !head.length || figureLine(head)) continue;
+      const run: number[] = [];
+      for (let m = k + 1; m < filledText.length; m++) {
+        const i = filledText[m], t = lineTokens(lines[i]), c = cellsOf(lines[i]);
+        if (skipText.has(i) || !bare(t) || c < 2 || c > width) break;
+        run.push(i);
+      }
+      if (!run.length) continue;
+      const rowsAt = (s0: number) => run.every((i, r) => {
+        const j = filledImage[s0 + r], t = j === undefined || skipImage.has(j) ? [] : lineTokens(imageLinesAll[j]);
+        return bare(t) && sameLine(lineTokens(lines[i]), t);
+      });
+      const starts = filledImage.map((_, s0) => s0).filter((s0) => rowsAt(s0));
+      if (!starts.length) continue;
+      // Each image line confirms one text line: take the run's image lines out of the pool.
+      const picked = run.map((_, r) => imageLinesAll[filledImage[starts[0] + r]]);
+      const taken: number[] = [];
+      for (const l of picked) taken.push(pool.findIndex((o, x) => o.l === l && !taken.includes(x)));
+      if (taken.some((x) => x < 0)) continue;
+      for (const x of [...taken].sort((p1, p2) => p2 - p1)) pool.splice(x, 1);
+      run.forEach((i) => tableRows.add(i));
+      k += run.length;
+    }
+  }
   let figureLines = 0, noLabel = -1, why = "";
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
-    if (pre?.confirmed.has(i)) return;
+    if (pre?.confirmed.has(i) || tableRows.has(i)) return;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
