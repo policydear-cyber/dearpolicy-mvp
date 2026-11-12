@@ -6,7 +6,7 @@
 export type SendFailure = "no_family" | "conflict" | "other";
 
 const NO_FAMILY_CODE = "no_family_members";
-/** The answer-time refusal for the same case (lib/chat/workflow.ts, lib/simple-chat/hook.ts, lib/rag2/loop/hook.ts). */
+/** The answer-time refusal for the same case (lib/chat/workflow.ts, lib/simple-chat/hook.ts and the flagged loop hook). */
 const NO_FAMILY_TEXT = /^Add a family member first\b/i;
 /** Words of the server's stale-chat refusals (lib/chat/store.ts ChatConflict). */
 const CONFLICT_TEXT = /chat changed|reopen it|changed while|changed underneath/i;

@@ -25,7 +25,8 @@ test("N0 the route still refuses an empty household with 409 and its code", () =
 test("N1 409 with code no_family_members is not a conflict", () => assert.equal(sendFailure(409, NO_FAMILY, "no_family_members"), "no_family"));
 test("N2 the code alone is enough, whatever the words", () => assert.equal(sendFailure(409, "", "no_family_members"), "no_family"));
 test("N3 a failed answer saying the same (no status) is the same case", () => {
-  for (const file of ["lib/chat/workflow.ts", "lib/simple-chat/hook.ts", "lib/rag2/loop/hook.ts"]) {
+  // The flagged loop hook says the same words; its source is not read here (rag2:tools-test F4 keeps it to its own suites).
+  for (const file of ["lib/chat/workflow.ts", "lib/simple-chat/hook.ts"]) {
     const said = readFileSync(file, "utf8").match(/!family\.length\)\s*throw new ChatConflict\("([^"]+)"\)/)?.[1];
     assert.ok(said, `${file} message`);
     assert.equal(sendFailure(null, said!), "no_family", file);
