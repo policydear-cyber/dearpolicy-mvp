@@ -4,6 +4,7 @@ type BridgePage = { pageNumber: number; text: string };
 import { documentReaderFor } from "@/lib/ai/providers";
 import { PageCopyUnavailable, completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 import { baiduOcrConfigured, completePdfPagesWithBaidu } from "@/lib/documents/ocr-baidu";
+import { BaiduReadingPending, type BaiduWaitState } from "@/lib/documents/baidu-wait";
 
 export function usableCharacters(text: string) {
   return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
@@ -65,6 +66,10 @@ export async function completePdfPagesWithOcr(args: {
   password?: string;
   pages: PdfPage[];
   pageNumbers?: number[];
+  /** Background Baidu reading (a document's own reading run by the job queue, lib/rag/ingest.ts): "start", or the state
+   * the previous run left. When Baidu has not finished, this throws BaiduReadingPending instead of reading the pages
+   * with the AI reader, and the caller puts the reading back to wait. */
+  baiduWait?: BaiduWaitState | "start";
 }) {
   const pageNumbers = args.pageNumbers ?? pagesNeedingOcr(args.pages);
   if (!pageNumbers.length) return args.pages;
@@ -75,9 +80,14 @@ export async function completePdfPagesWithOcr(args: {
   // Baidu's hosted PaddleOCR reads first (BAIDU_AISTUDIO_TOKEN set); every page it gives no text for -- it is down,
   // slow, over quota, or the page came back empty -- is read by the hosted AI reader, exactly as before.
   let pages = args.pages, remaining = pageNumbers, probe: (() => Promise<void>) | undefined;
-  if (baidu) ({ pages, unread: remaining, probe } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers }));
+  let wait: BaiduWaitState | undefined, waitingPages: number[] | undefined;
+  if (baidu) ({ pages, unread: remaining, probe, wait, waitingPages } = await completePdfPagesWithBaidu({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, password: args.password, pages, pageNumbers, wait: args.baiduWait }));
   // After Baidu could not be reached, the path probe runs once the AI reader is done, whatever it read.
-  try { return await readRemaining(args, pages, remaining); } finally { if (probe) await probe().catch(() => undefined); }
+  try {
+    // Baidu is still reading: nothing is handed to the AI reader in this run.
+    if (wait) throw new BaiduReadingPending(wait, waitingPages ?? []);
+    return await readRemaining(args, pages, remaining);
+  } finally { if (probe) await probe().catch(() => undefined); }
 }
 
 async function readRemaining(args: Parameters<typeof completePdfPagesWithOcr>[0], pages: PdfPage[], remaining: number[]): Promise<PdfPage[]> {

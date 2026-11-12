@@ -25,7 +25,9 @@
 import { pool } from "@/lib/db/client";
 import { withServiceTransaction } from "@/lib/db/authz-client";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
-import { enqueueStoragePurge } from "@/lib/storage/purge";
+import { activeStorageDriverName, enqueueStoragePurge } from "@/lib/storage/purge";
+import { recordErrorEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 
 type Db = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number | null }> };
 
@@ -214,6 +216,7 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
       }
     }
     await stopDeletedDocumentJobs(db);
+    if (!opts.policyIds?.length) await sweepStaleOcrHandoffs(db);
     result.forgottenKeys = await forgetPurgedKeys(db);
   } catch (error) {
     console.warn("deleted document content scrub pass failed:", error instanceof Error ? error.name : "unknown");
@@ -221,19 +224,68 @@ export async function scrubDeletedDocuments(opts: ScrubOptions = {}): Promise<Sc
   return result;
 }
 
+/** A staged copy (lib/documents/ocr-baidu.ts link submit) older than this is no longer needed by any reading: its link
+ * lasts at most 60 min (BAIDU_OCR_LINK_TTL_S) and a reading waits for Baidu at most 180 min (BAIDU_OCR_BACKGROUND_WINDOW_MIN),
+ * plus an hour's margin. */
+export const STALE_OCR_HANDOFF_HOURS = 5;
+/**
+ * Every pass: any staged copy of scanned pages still in storage after STALE_OCR_HANDOFF_HOURS is queued for removal,
+ * whatever happened to the reading that staged it. A reading normally removes its copies itself, and a deleted
+ * document's waiting reading has them purged above; this catches every other ending (Read again cancelling a waiting
+ * re-read, a revived or dead-lettered job, a lease lost or a function killed mid-run: Critic #428), so no copy of a
+ * household's pages outlives the deletion promise. Reads Supabase Storage's own object list (storage.objects); where
+ * there is none (the local driver, a test database) it does nothing. Never throws.
+ */
+export async function sweepStaleOcrHandoffs(db: Db, hours = STALE_OCR_HANDOFF_HOURS): Promise<number> {
+  try {
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "policy-files";
+    const r = await db.query<{ name: string }>(
+      `SELECT name FROM storage.objects WHERE bucket_id=$1 AND name LIKE '%/ocr-handoff/%/pages.pdf' AND created_at < now() - make_interval(hours => $2::int)
+        ORDER BY created_at LIMIT 500`, [bucket, hours]);
+    const keys = r.rows.map((x) => x.name).filter((k) => STAGED_COPY_KEY.test(k));
+    if (keys.length) {
+      await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff_stale", db);
+      console.warn(`ocr handoff sweep: ${keys.length} staged cop${keys.length === 1 ? "y" : "ies"} older than ${hours} h queued for removal`);
+    }
+    return keys.length;
+  } catch (error) {
+    // With Supabase Storage in use the object list should be readable: a failure (no permission, say) is reported once
+    // per pass, error class only, so a sweep that cannot run does not go unseen. Without it (local driver) it is expected.
+    if (activeStorageDriverName() === "supabase") {
+      const errorClass = error instanceof Error ? error.name : "unknown";
+      console.error(`ocr handoff sweep: OCR_HANDOFF_SWEEP_UNAVAILABLE (${errorClass})`);
+      await recordErrorEvent({ name: "lifecycle.ocr_handoff_sweep.unavailable", correlationId: resolveCorrelationId(undefined), error }).catch(() => undefined);
+    }
+    return 0;
+  }
+}
+
+/** A staged copy's key as lib/storage/supabase.ts ocrHandoffObjectKey makes it (never ".."): only such a key is removed. */
+const STAGED_COPY_KEY = /^(?!.*\.\.)[A-Za-z0-9._-]{1,80}\/ocr-handoff\/[A-Za-z0-9._-]{1,80}\/pages\.pdf$/;
+
 /**
  * Every pass: a deleted document's reading jobs (its own, keyed by its id, and its later re-read, "<id>:retry-read")
  * keep no PDF password, file key or error text, and stay stopped. The deletion strips them once; a reading that was
  * running can schedule its re-read again afterwards, which brings the job back with the password.
  */
 export async function stopDeletedDocumentJobs(db: Db): Promise<number> {
+  // A reading that was waiting for Baidu (lib/documents/ocr-baidu.ts background reading) may have left a staged copy of
+  // the scanned pages for Baidu to download: it is queued for removal, and the job forgets it.
+  const staged = await db.query<{ key: string | null }>(
+    `SELECT DISTINCT job->>'stagedKey' AS key
+       FROM background_jobs j JOIN policies p ON j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
+       CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(j.payload->'baiduWait'->'jobs')='array' THEN j.payload->'baiduWait'->'jobs' ELSE '[]'::jsonb END) job
+      WHERE j.job_type='policy_processing' AND p.lifecycle_state=ANY($1::text[]) AND j.status <> 'processing'`,
+    [DELETED_STATES]).catch(() => ({ rows: [] as { key: string | null }[] }));
+  const keys = staged.rows.map((r) => r.key).filter((k): k is string => typeof k === "string" && STAGED_COPY_KEY.test(k));
+  const queued = keys.length ? await enqueueStoragePurge(keys.map((storageKey) => ({ domain: "policy" as const, storageKey })), "ocr_handoff", db).then(() => true, () => false) : true;
   const r = await db.query(
-    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey', last_error_message=NULL, cancel_requested=true,
+    `UPDATE background_jobs j SET payload=j.payload-'pdfPassword'-'storageKey'${queued ? "-'baiduWait'" : ""}, last_error_message=NULL, cancel_requested=true,
             status=CASE WHEN j.status IN ('queued','failed_retryable') THEN 'cancelled' ELSE j.status END, updated_at=now()
        FROM policies p
       WHERE j.job_type='policy_processing' AND j.account_id=p.account_id AND p.id::text=split_part(j.idempotency_key, ':', 1)
         AND p.lifecycle_state=ANY($1::text[])
-        AND (j.payload ?| ARRAY['pdfPassword','storageKey'] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
+        AND (j.payload ?| ARRAY['pdfPassword','storageKey'${queued ? ",'baiduWait'" : ""}] OR NOT j.cancel_requested OR j.last_error_message IS NOT NULL
              OR j.status IN ('queued','failed_retryable'))`,
     [DELETED_STATES]).catch(() => ({ rowCount: 0 }));
   return r.rowCount ?? 0;
