@@ -31,9 +31,9 @@ function eventSummary(facts: ClaimFacts) {
   if (facts.eventType === "accident") return facts.accidentType ? `${facts.accidentType}` : "Accident";
   if (facts.eventType === "diagnosis") return facts.diagnosis ? `Diagnosis: ${facts.diagnosis}` : "Medical diagnosis";
   if (facts.eventType === "hospitalisation") return facts.diagnosis ? `Hospitalisation: ${facts.diagnosis}` : "Hospital admission";
-  if (facts.eventType === "death") return facts.accidentalDeath === true ? "Accidental death claim" : "Death claim";
-  if (facts.eventType === "disability") return "Disability claim";
-  return "Claim check";
+  if (facts.eventType === "death") return facts.accidentalDeath === true ? "Accidental death" : "Death";
+  if (facts.eventType === "disability") return "Disability";
+  return "What happened";
 }
 
 
@@ -80,7 +80,7 @@ async function currentnessNote(accountId:string,familyMemberId:string){
 }
 
 function noCoverageAnswer(sessionId:string, knownFacts:string[]):ChatAnswer{
-  return {mode:"claim_assessment",summary:"I can understand what happened, but I do not have confirmed personal policy evidence for this person yet, so I cannot tell you what can be claimed reliably.",details:["Upload the current Certificate of Insurance, policy schedule or endorsement first. Product summaries and brochures can explain benefits, but they cannot prove that this person owns them."],claimItems:[],nextSteps:["Upload the person's current certificate or policy schedule.","Then return to this claim check; DearPolicy will reuse the event facts you already provided."],confidence:null,citations:[],disclaimer:"DearPolicy will not infer ownership from generic policy documents.",claimSessionId:sessionId,questions:[],knownFacts,missingFacts:["Confirmed personal policy ownership"]};
+  return {mode:"claim_assessment",summary:"I can understand what happened, but I do not have confirmed personal policy evidence for this person yet, so I cannot tell you what can be claimed reliably.",details:["Upload the current Certificate of Insurance, policy schedule or endorsement first. Product summaries and brochures can explain benefits, but they cannot prove that this person owns them."],claimItems:[],nextSteps:["Upload the person's current certificate or policy schedule.","Then ask again; DearPolicy will reuse the event facts you already provided."],confidence:null,citations:[],disclaimer:"DearPolicy will not infer ownership from generic policy documents.",claimSessionId:sessionId,questions:[],knownFacts,missingFacts:["Confirmed personal policy ownership"]};
 }
 
 async function assessmentCitations(accountId:string,familyMemberId:string,assessments:ClaimAssessmentItem[],coverages:OwnedCoverage[]) {
