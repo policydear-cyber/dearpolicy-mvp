@@ -297,8 +297,13 @@ async function main() {
     assert.equal(matchMember(HOUSE, "Mei Mei"), "Lim Mei Mei");
     assert.equal(matchMember(HOUSE, "Lim"), null);
     assert.equal(matchMember(HOUSE, "Ravi"), null);
-    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "amount", text: "Recuperation S$250.", person: "Mei Mei", document: "D2", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250" })] });
+    // A plan summary naming no one, linked to another member: the figure is shown with a note that it is not linked to her.
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "amount", text: "Fracture limit S$5,000.", person: "Mei Mei", document: "D1", quote: "Simple Fracture Benefit Limit: S$5,000", amount: "S$5,000" })] });
     assert.match(answer.statements![0].source!.note!, /not linked to Lim Mei Mei/);
+    // Another member's own certificate, printing his name and linked only to him, gives her no figure (TE main journeys
+    // 11 Nov, defect 1; #424): the figure there is his.
+    const theirs = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "amount", text: "Recuperation S$250.", person: "Mei Mei", document: "D2", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250" })] });
+    assert.equal(theirs.answer.statements!.filter((x) => x.amount).length, 0);
   });
 
   await check("the model's JSON is read defensively: wrong shapes become no answer", () => {
