@@ -143,7 +143,9 @@ test("another person's cover on the other copy is never taken as this document's
     [{ product: "Family Personal Accident Policy", cover: "Family Personal Accident", policyNumber: "HPA-55120-K", person: "Daniel Okafor", sum: 80000, quote: "Daniel Okafor\tGBP 80,000" }],
     [{ section: "Benefits", benefit: "Fracture", percent: 2, quote: "Fracture\t2% of sum insured" }]);
   const t = assembleTable([oldR, other], fam("Ngozi Okafor", "Daniel Okafor"), linkTo(other, oldKey));
-  assert.ok(rows(t, "p1").some((x) => x.startsWith("Fracture") && x.endsWith(`@${oldKey}`)), JSON.stringify(rows(t, "p1")));
+  // The link is not moved onto Daniel's cover: he is never shown it worked out on his own cover by this rule. (Whether
+  // Ngozi is shown a row printed on Daniel's own document is decided elsewhere: #454 shows it for no one else.)
+  assert.ok(!rows(t, "p2").some((x) => x.startsWith("Fracture")), JSON.stringify(rows(t, "p2")));
 });
 
 // Critic #445 round 2: a one-word name is no evidence when the document prints several covers for the person; the person is
