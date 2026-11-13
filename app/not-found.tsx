@@ -7,7 +7,7 @@ export default function NotFound() {
     <h1>We couldn&rsquo;t find that page.</h1>
     <p className="lead">The link may be old, or the page may have moved.</p>
     <div className="not-found-actions">
-      <Link className="button primary" href="/">Back to your portfolio</Link>
+      <Link className="button primary" href="/">Back to Home</Link>
       <Link className="button secondary" href="/chat">Ask DearPolicy</Link>
     </div>
   </div>;
