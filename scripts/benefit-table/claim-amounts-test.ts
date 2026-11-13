@@ -417,6 +417,14 @@ test("main's reading stands for ages, IDs and day-month words that are not a dat
     assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
   }
 });
+test("dot leaders, tight commas and labels with no figure after the code keep main's reading (Critic #449 round 11)", () => {
+  for (const [line, want] of [["Hospital cash.........500 SGD", [500]], ["Cash...300 SGD per day", [300]], ["Plan A,500 SGD,Plan B,800 SGD", [500, 800]],
+    ["Pays 80%,1,000 SGD max", [1000]], ["1,000 SGD.2,000 SGD", [1000, 2000]], ["02.11.1982 GBP 80,000", [80000]], ["Number 500 SGD", [500]], ["IC 500 SGD", [500]],
+    ["No.500 SGD", [500]], ["Pre-Aged 50 SGD", [50]], ["Plan 3 NZD  100,000", []], ["Plan 3 NZD: 100,000", []], ["Plan 3 JPY (100,000)", []]] as [string, number[]][])
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+  for (const [line, want] of [["Number 500 SGD", [500]], ["IC 500 SGD", [500]], ["Pre-Aged 50 SGD", [50]]] as [string, number[]][])
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
+});
 test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #449 F3)", () => {
   for (const quote of ["Fractures\tUp to 50% of the Sum Insured according to the Scale of Fractures", "Permanent partial disablement\tUp to 100% of the Sum Insured as per the Scale of Benefits"]) {
     const [benefit, words] = quote.split("\t"), value = Number(/(\d+)%/.exec(words)![1]);
