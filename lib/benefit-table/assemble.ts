@@ -19,6 +19,7 @@ import { printedDay, singaporeDay } from "./dates";
 import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
+import { anyMoneyFigures } from "@/lib/format/currency";
 import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, marksIn, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
@@ -709,6 +710,12 @@ const NAMES_SUM = /\bsum\s+(?:insured|assured|covered)\b|%|\bper\s*cent\b/i;
  * the reader's own "each_named_insured" (reading.ts), all of these hold:
  * - the document is a personal schedule or certificate with two or more lives, each holding the one cover the row is
  *   linked to (no other cover, plan or product printed for any of them on it);
+ * - every line it prints outside its benefit rows and cover lines is one of the closed set of structural lines (check.ts
+ *   plainBlockers: title, insurer, policy number and period, insured persons lines, the premium, column headings, page
+ *   furniture, admin lines with no money, share, person, kind of life or amount-scope word, a row's own footnotes); the
+ *   row's label is no payment and its figure no premium-line figure; its cell, conditions and footnotes print nothing but
+ *   its label, its figures and the known shapes of a condition (onlyRowShapes); and whoseRows never gives a person more than
+ *   their own printed sum insured (TE gate round 2: an allow-list, after word lists leaked in round 1);
  * - no row of the document has a column (no plan, tier, life or person columns: one figure for everyone), and no section
  *   heading names a kind of life, a person, an age, a plan, tier or family;
  * - the document prints no line making a figure one limit shared by all the lives (sharedNotes: "Limits are per family",
@@ -727,6 +734,10 @@ function plainTable(r: CheckedReading, b: CheckedBenefit, coverKey: string): boo
   if (r.kind !== "personal_proof" || b.column != null && norm(b.column)) return false;
   // A line anywhere that makes a figure one limit for all the lives ("Limits are per family unless stated otherwise").
   if ((r.sharedNotes ?? []).length) return false;
+  // Every line outside the rows and cover lines is one of the closed set a plain schedule prints (check.ts plainBlockers).
+  if (!r.plainBlockers || r.plainBlockers.length) return false;
+  // A payment, never a benefit: a payment label, or a figure the premium line prints (TE gate round 2, R2-H3).
+  if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   const lives = new Set(r.covers.map((c) => norm(c.person)));
   if (lives.size < 2 || r.covers.some((c) => coverKeyOf(c) !== coverKey) || r.covers.length !== lives.size) return false;
   if (r.benefits.some((x) => norm(x.column))) return false;
@@ -743,8 +754,36 @@ function plainTable(r: CheckedReading, b: CheckedBenefit, coverKey: string): boo
   for (const mark of marksIn(b.rowText ?? b.source.excerpt)) {
     const notes = plainFootnotes(r, mark);
     if (!notes.length || notes.some((t) => KIND_OF_LIFE.test(t) || FIGURE_CHANGE.test(t) || SHARED_LIMIT.test(t) || NAMES_SUM.test(t) || ageBand(t) || namesALife(t, people))) return false;
+    // A note prints nothing beyond the shapes a row's own cell may print.
+    if (notes.some((t) => !onlyRowShapes(t.replace(/^\s*(?:notes?\s*)?(?:\(\s*\w{1,2}\s*\)|\w{1,2}[.):]|\*{1,3}|†|‡)\s*:?/i, " ")))) return false;
   }
+  // The row's own cell and its conditions print nothing but its label, its figure and the known shapes of a condition
+  // (per day, in hospital, from the third day, up to 30 days, per accident, after an excess of ...): any other words may make
+  // it a limit shared by all the lives or another life's figure (TE gate round 2, R2-H2). An allow-list, not words to refuse.
+  const line = (b.rowText ?? b.source.excerpt).replace(/^\s*(?:section\s+)?\d{1,3}[.)]?\s*\t/i, " ");
+  const label = b.benefit.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+  const cell = line.replace(new RegExp(String.raw`(?<![\p{L}\p{N}])${label}(?![\p{L}\p{N}])`, "iu"), " ");
+  if (!onlyRowShapes(cell, true) || b.conditions.some((c) => !onlyRowShapes(c))) return false;
   return true;
+}
+/** A row label that names a payment, never a benefit (TE gate round 2, R2-H3). */
+const PAYMENT_LABEL = /\b(?:price|fees?|premiums?|due|payable|total|quotes?|quotation|charges?|tax(?:es)?|contributions?|instal\w*|cost|debit|renewal)\b/i;
+/** The shapes a plain row's cell and conditions may print besides its money figures. */
+const ROW_SHAPES = [
+  /\bup\s+to\s+\d{1,3}\s+(?:consecutive\s+)?(?:days?|nights?|weeks?)\b/g,
+  /\b(?:payable\s+)?(?:from|after)\s+the\s+(?:\d{1,3}(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:consecutive\s+)?(?:day|night)\b/g,
+  /\b(?:after\s+)?an?\s+excess\s+of\b/g,
+  /\b(?:per|a|each)\s+(?:day|night|accident|claim|event|injury|fracture|week|month|year|period\s+of\s+insurance)\b/g,
+  /\bin\s+hospital\b/g, /\bup\s+to\b/g, /\b(?:a\s+)?maximum(?:\s+of)?\b/g,
+  /\b(?:and|or|the|of|a|an)\b/g,
+];
+function onlyRowShapes(text: string, own = false): boolean {
+  let t = text;
+  for (const f of [...anyMoneyFigures(t)].reverse()) t = t.slice(0, f.index) + " " + t.slice(f.index + f.length);
+  t = ` ${t.toLowerCase()} `;
+  if (own) t = t.replace(/\(\s*(?:note\s+)?[a-z0-9]{1,2}\s*\)|\*{1,3}|†|‡/g, " ");
+  for (const re of ROW_SHAPES) t = t.replace(re, " ");
+  return !/[a-z0-9]/.test(t);
 }
 /** The notes a footnote mark points to on the document. */
 const plainFootnotes = (r: CheckedReading, mark: string) => (r.footnotes ?? []).filter((f) => f.mark === mark).map((f) => f.text);
@@ -766,7 +805,7 @@ function anotherRowsNote(r: CheckedReading, b: CheckedBenefit, line: string | un
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
-  return (r: CheckedReading, b: CheckedBenefit, coverKey: string): boolean => {
+  return (r: CheckedReading, b: CheckedBenefit, coverKey: string): false | "column" | "plain" => {
     // The reader, which sees the whole document, says the row is each named insured person's and nothing limits it to some
     // (a child's, an adult's, a senior's row; "half for children"): words no layout rule can read (Critic and TE on this rule).
     if (b.forWhom !== "each_named_insured") return false;
@@ -819,7 +858,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       const more = [...b.conditions.filter((c) => !line.includes(norm(c))), ...marksIn(b.rowText ?? b.source.excerpt).flatMap((m) => plainFootnotes(r, m))];
       if (numbersIn(more.join("\n")).some((n) => !owned.has(n))) return false;
     }
-    return true;
+    return plain ? "plain" : "column";
   };
 }
 /** Why a section's rows are shown for no one when its document prints the cover for two or more people and the rows do
@@ -833,7 +872,7 @@ export const NOT_TOLD_WHY = "printed for more than one person on this document, 
  * only the one whose life the row's column or section heading is (headingIsLife; never its own line, which may name a payee);
  * when no one life is the heading, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
  * no figure of its own, or one worked out on each person's own sum insured, is every holder's. */
-function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[], perPerson = false): Set<string> | undefined {
+function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[], perPerson: false | "column" | "plain" = false): Set<string> | undefined {
   // A block or column heading that is a holder's life (Critic #406 X1, J1): only that holder, wherever the document prints
   // covers or none (a benefit summary with one column per person).
   const holders = [...new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId))];
@@ -861,7 +900,14 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   if (!bySum.size && perPerson) {
     const label = `${b.benefit} ${b.section ?? ""}`;
     const names = [...covers.filter(onDoc).map((c) => c.person), ...family.flatMap((m) => [m.display_name, m.preferred_name ?? ""])];
-    if (!names.some((n) => norm(n).split(" ").some((w) => w && ` ${norm(label)} `.includes(` ${w} `)))) return ids;
+    if (!names.some((n) => norm(n).split(" ").some((w) => w && ` ${norm(label)} `.includes(` ${w} `)))) {
+      // A family schedule's plain row never gives a person more than their own printed sum insured (TE gate round 2, R2-M2:
+      // a fixed GBP 40,000 row on a child insured for GBP 25,000): only those whose own sum on this document is printed and
+      // at least the row's figure, in the row's currency.
+      if (perPerson === "plain") return new Set([...ids].filter((id) => { const own = printed.filter((c) => c.personId === id).map((c) => ({ v: c.confirmation ? c.confirmation.printed : c.sumInsured, cur: c.currency }));
+        return own.length > 0 && own.every((x) => x.v != null && x.v >= b.value! && (!x.cur || !b.currency || x.cur === b.currency)); }));
+      return ids;
+    }
   }
   // Otherwise no one's own sum: no one, whatever the row says. A family schedule's shared table cannot show whose a figure is: an
   // age group's, a child's or another life's figure can sit in its section, its line or its name (#449, and the Critic on
@@ -1135,7 +1181,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       const named = sibling ? { b: { ...b, percentOf: "sum_insured" as const }, cover: sibling } : null;
       // A per-person limit given to every named insured (perPersonRow) is checked against each one's kind of life even on
       // their own certificate: it was not printed on their own line.
-      const everyNamed = who != null && r.documentId === c.source.documentId && perPersonRow(r, b, l.cover);
+      const everyNamed = who != null && r.documentId === c.source.documentId && !!perPersonRow(r, b, l.cover);
       const tier = r.documentId === c.source.documentId && !everyNamed ? null
         : tierProblem(everyNamed ? { benefit: `${b.benefit} ${b.section ?? ""}`, column: b.column } : b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), everyNamed || isAgeTier(r, b));
       // A row for another tier stays on the table with no amount and the reason, so nothing is lost without a word.

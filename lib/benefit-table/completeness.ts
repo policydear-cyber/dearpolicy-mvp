@@ -38,5 +38,6 @@ export function mergeReadings(base: CheckedReading, extra: CheckedReading): Chec
     dropped: [...base.dropped, ...extra.dropped],
     // A note is a line that is no row's own line: in both readings, each worked out with only its own rows.
     ...(base.lifeNotes && extra.lifeNotes ? { lifeNotes: base.lifeNotes.filter((l) => extra.lifeNotes!.includes(l)) } : {}),
+    ...(base.plainBlockers && extra.plainBlockers ? { plainBlockers: base.plainBlockers.filter((l) => extra.plainBlockers!.includes(l)) } : {}),
   };
 }

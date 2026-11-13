@@ -249,8 +249,14 @@ test("H2: a condition copied from elsewhere that prints another figure withholds
   const { table } = schedule({ rows: withRow("6", { conditions: ["after an excess of GBP 100 per claim", "GBP 1,000 for dental treatment"] }), post: ["GBP 1,000 for dental treatment"] });
   for (const id of NAMED) assert.deepEqual(shown(table, id, "Medical expenses"), [], id);
 });
-test("H2: a footnote that is found and clean ('* A day means a night spent in hospital.') keeps the row for each person", () => {
+// Changed in round 2 (intentional): a footnote must print nothing beyond the shapes a row's cell may print, so even a
+// harmless-looking definition withholds the row; a note that only repeats a known shape keeps it.
+test("H2: a footnote with words beyond a row's own shapes ('* A day means a night spent in hospital.') withholds the row (round 2 allow-list)", () => {
   const { table } = schedule({ rows: withRow("5", { cell: "GBP 50* per day in hospital, payable from the third consecutive day, up to 30 days per accident" }), post: ["* A day means a night spent in hospital."] });
+  for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), [], id);
+});
+test("H2: a footnote that only repeats a row's shapes ('* per day in hospital, up to 30 days') keeps the row for each person", () => {
+  const { table } = schedule({ rows: withRow("5", { cell: "GBP 50* per day in hospital, payable from the third consecutive day, up to 30 days per accident" }), post: ["* per day in hospital, up to 30 days"] });
   for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), ["Hospital cash | GBP 50 a day"], id);
 });
 // H3: premium-like rows.
@@ -293,6 +299,71 @@ for (const n of ["1", "4"]) {
 }
 for (const line of ["Those still in full-time education receive half the amounts shown.", "Second insured person", "Third insured person: reduced cover"]) {
   test(`a line with no kind-of-life word ("${line}") withholds the fixed rows`, () => noneFixed(schedule({ pre: [line] }).table, line));
+}
+
+// ---------------------------------------------------------------- round 2 of the TE gate (head 015beafa), each repro
+// R2-H1: a note giving children, an age group or a named person another figure.
+for (const line of ["Hospital cash rates: adults GBP 50 a day, children GBP 25 a day", "Children: GBP 25 a day hospital cash", "Medical expenses for children are covered to GBP 1,000",
+  "Grace Okafor: hospital cash GBP 25 a day", "Insured persons aged 70 and over: GBP 25 a day", "For minors the daily rate is GBP 25", "Children GBP 25"]) {
+  for (const where of ["pre", "post"] as const) test(`R2-H1: "${line}" (${where === "pre" ? "above the table" : "at the end"}) withholds every fixed row`, () => {
+    const { r, table } = schedule({ [where]: [line] });
+    noneFixed(table, line);
+    assert.ok(r.lifeNotes!.includes(line), `a note on the per-person path too: ${JSON.stringify(r.lifeNotes)}`);
+  });
+}
+// R2-H2: shared-limit wordings outside any word list.
+for (const line of ["The amounts shown are the most we will pay for you and your family for any one event.", "One limit applies to everyone named on this schedule.",
+  "Limits apply to the policy as a whole, not to each insured person.", "Medical expenses are payable once per accident regardless of the number of insured persons involved."]) {
+  test(`R2-H2: a document line "${line}" withholds every fixed row`, () => noneFixed(schedule({ post: [line] }).table, line));
+}
+for (const note of ["(b) This is the most we pay for everyone insured.", "(b) One limit for the schedule, not for each person.", "(b) Applies to you and your family.", "(b) Per household per period."]) {
+  test(`R2-H2: row 6's mark "(b)" with its note far from the row ("${note}") withholds medical expenses`, () => {
+    const { table } = schedule({ rows: withRow("6", { cell: "Up to GBP 2,500 per accident (b), after an excess of GBP 100 per claim" }), post: [note] });
+    for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, "Medical expenses"), [], id);
+  });
+}
+for (const words of ["Up to GBP 2,500 any one event, however many insured persons are hurt", "Up to GBP 2,500 per accident for everyone insured", "Up to GBP 2,500 per accident for all of you"]) {
+  test(`R2-H2: row 6's own words ("${words}") withhold medical expenses`, () => {
+    const { table } = schedule({ rows: withRow("6", { cell: words, conditions: [] }) });
+    for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, "Medical expenses"), [], id);
+  });
+}
+// R2-H3: payment rows under other labels.
+for (const [benefit, cell, value] of [["Total payable", "GBP 349.44", 349.44], ["Policy fee", "GBP 10.00", 10], ["Annual price", "GBP 312.00", 312], ["Amount due each month", "GBP 26.00", 26],
+  ["Renewal quote", "GBP 330.00", 330], ["Monthly amount", "GBP 26.00", 26]] as const) {
+  test(`R2-H3: "${benefit} ${cell}" is never each person's benefit`, () => {
+    const { table } = schedule({ rows: [...ROWS, { n: "7", benefit, cell, pays: "amount", value, forWhom: "each_named_insured" }] });
+    for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, benefit), [], id);
+  });
+}
+// R2-M1: ordinary lines on a per-person certificate keep its limits (as main does).
+for (const line of ["Benefits are paid to the policyholder.", "Only the policyholder may make changes to this policy.", "Children are covered free of charge up to age 18.",
+  "Cover for persons over 70 is limited to trips of 31 days."]) {
+  test(`R2-M1: "${line}" on a per-person certificate does not hide its limits`, () => assert.deepEqual(travel([line]), [2, 2, 2]));
+}
+test("R2-M1: 'Benefits are paid to the policyholder.' is an admin line: the plain schedule still gives its fixed rows", () => {
+  const { table } = schedule({ post: ["Benefits are paid to the policyholder."] });
+  for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);
+});
+// R2-M2: never more than a person's own printed sum.
+test("R2-M2: a fixed GBP 40,000 row goes to those insured for at least that, never to a child insured for GBP 25,000", () => {
+  const lives: [string, string, string, string][] = [["Ngozi Okafor", "Policyholder", "14/06/1984", "GBP 50,000"], ["Daniel Okafor", "Spouse", "02/11/1982", "GBP 50,000"], ["Grace Okafor", "Child", "09/04/2017", "GBP 25,000"]];
+  const sums = { ...SUMS };
+  Object.assign(SUMS, { "Ngozi Okafor": 50000, "Daniel Okafor": 50000, "Grace Okafor": 25000 });
+  try {
+    const { table } = schedule({ lives, rows: [...ROWS, { n: "7", benefit: "Loss of sight", cell: "GBP 40,000", pays: "amount", value: 40000, forWhom: "each_named_insured" }] });
+    assert.deepEqual(shown(table, "n", "Loss of sight"), ["Loss of sight | GBP 40,000"]);
+    assert.deepEqual(shown(table, "d", "Loss of sight"), ["Loss of sight | GBP 40,000"]);
+    assert.deepEqual(shown(table, "g", "Loss of sight"), []);
+  } finally { Object.assign(SUMS, sums); }
+});
+// Low: a bare-letter mark whose note gives another figure.
+test("a bare-letter note line ('a GBP 1,000 for the youngest.') is no structural line: the fixed rows are withheld", () => {
+  noneFixed(schedule({ rows: withRow("6", { cell: "Up to GBP 2,500 per accident a, after an excess of GBP 100 per claim", conditions: [] }), post: ["a GBP 1,000 for the youngest."] }).table, "bare letter");
+});
+// The allow-list itself: any line outside the closed set (a money figure, a person, an unknown sentence) withholds.
+for (const line of ["Dental treatment\tGBP 300", "Daniel Okafor is also insured under another policy", "Please read the policy wording for the full terms that apply to you."]) {
+  test(`allow-list: an unread line ("${line}") is no structural line, so the fixed rows are withheld`, () => noneFixed(schedule({ post: [line] }).table, line));
 }
 
 // ---------------------------------------------------------------- the chat: a withheld row's amount is printed, and where
