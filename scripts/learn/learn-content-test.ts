@@ -145,7 +145,7 @@ async function main() {
     const after = n(bill![1]) - n(bill![2]);
     assert.equal(n(bill![4]), after);
     assert.equal(n(bill![5]), after * n(bill![3]) / 100);
-    assert.equal(n(bill![6]), splitBill({ bill: n(bill![1]), deductible: n(bill![2]), coPaymentPercent: n(bill![3]), limit: Infinity }).policyShare || after - after * n(bill![3]) / 100);
+    assert.equal(n(bill![6]), splitBill({ bill: n(bill![1]), deductible: n(bill![2]), coPaymentPercent: n(bill![3]), limit: n(bill![1]) }).policyShare);
     const pct = joined.match(/lists (\d+)% of the sum assured for an injury and the sum assured is ([\d,]+), the illustrated amount is ([\d,]+)/);
     assert.ok(pct);
     assert.equal(percentOf(n(pct![1]), n(pct![2])), n(pct![3]));
