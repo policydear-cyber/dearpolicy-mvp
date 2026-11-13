@@ -5,8 +5,9 @@ It should feel calm, clear, trustworthy and warm: a knowledgeable friend
 sitting at the kitchen table, not a bank, not a salesperson.
 
 The tokens live at the top of `app/globals.css`. `npm run brand:tokens-test`
-(a CI step) fails if the stylesheet hard-codes a colour outside the token
-blocks, if a page or component sets a colour literal in a style, if any
+(a CI step) fails if `app/globals.css` hard-codes a colour outside the
+token blocks, if any other stylesheet under `app/` or `components/` or any
+page or component style uses a colour literal, if any
 `var(--token)` is undefined, if a role drops below WCAG AA in light or dark,
 or if a key meaning (failed read, to confirm, still reading…) changes role.
 
@@ -88,6 +89,10 @@ Figures are tabular wherever amounts line up.
   cream plate (`--logo-plate`) rather than being inverted.
 - Minimum height 24px on screen; keep clear space of at least the height
   of the "D" around it.
+- Where the wordmark can't be read (favicon, home-screen icon), use the
+  monogram: the wordmark's own "D" (brown) and "P" (orange) on the cream
+  ground, `app/icon.png` (rounded) and `app/apple-icon.png` (square; the
+  phone rounds it). Never set the full wordmark below 24px high.
 - In running text the name is written **DearPolicy**: one word, capital D
   and P.
 

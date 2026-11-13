@@ -75,7 +75,7 @@ test.describe.serial("synthetic household journey", () => {
       await page.locator(".profile-add-panel input[required]").fill(who);
       await page.locator(".profile-add-panel select").selectOption(relationship);
       await page.getByRole("button", { name: "+ Add person" }).click();
-      await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Profile added.");
+      await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.");
     }
     const family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family;
     for (const who of [parent, child]) {

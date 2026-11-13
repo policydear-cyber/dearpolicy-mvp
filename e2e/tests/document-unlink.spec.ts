@@ -75,7 +75,7 @@ test.describe.serial("removing a person from a document", () => {
       await page.locator("#fm-new-name").fill(who);
       await page.locator("#fm-new-relationship").selectOption(rel);
       await page.getByRole("button", { name: "+ Add person" }).click();
-      await expect(page.locator(".profile-add-panel [role=status]")).toContainText("Profile added");
+      await expect(page.locator(".profile-add-panel [role=status]")).toContainText("Family member added");
     }
     for (const m of (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family) if (m.display_name === owner || m.display_name === other) ids[m.display_name] = m.id;
     expect(Object.keys(ids)).toHaveLength(2);

@@ -90,7 +90,7 @@ function nextSteps(tone: ClaimDisplay["tone"]): string[] {
   if (tone === "waiting") return [
     "Upload each document still needed. A photo or a PDF is fine.",
     "DearPolicy reads each one and checks the name matches. Anything that must meet the policy’s own definition is checked by a DearPolicy reviewer.",
-    "An indicative estimate appears below once the evidence supports it. The insurer makes the final decision.",
+    "An indicative estimate appears below once your documents support it. The insurer makes the final decision.",
   ];
   return [
     "Check the indicative estimate below.",
@@ -124,7 +124,7 @@ export default function ClaimEvidencePage() {
 
   const load = useCallback(async () => {
     const claimRes = await fetch(`/api/claims/${claimSessionId}`).then((r) => r.json());
-    if (claimRes.error || !claimRes.claim) { setError(customerMessage(claimRes.error, "This claim could not be loaded.")); return; }
+    if (claimRes.error || !claimRes.claim) { setError(customerMessage(claimRes.error, "This claim couldn't be loaded. Refresh the page in a moment.")); return; }
     setClaim(claimRes.claim);
     setDocType((current) => current || defaultDocumentTypeFor(claimRes.claim.facts?.eventType));
     const familyMemberId = claimRes.claim.family_member_id;
@@ -158,7 +158,7 @@ export default function ClaimEvidencePage() {
     setBusy(true);
     const res = await fetch("/api/claims/evidence/upload", { method: "POST", body: built.form }).then((r) => r.json());
     setBusy(false);
-    if (res.error) { setUploadError(customerMessage(res.error, "The upload did not go through. Please try again.")); return; }
+    if (res.error) { setUploadError(customerMessage(res.error, "The upload didn't go through. Choose the file and try again.")); return; }
     fileInput.value = "";
     await load();
   }
@@ -178,12 +178,12 @@ export default function ClaimEvidencePage() {
       const query = new URLSearchParams({ familyMemberId: claim.family_member_id, claimSessionId });
       const res = await fetch(`/api/claims/evidence/${doc.id}?${query}`, { method: "DELETE", headers: { "Idempotency-Key": `delete:${doc.id}` } });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Could not delete this document. Please try again.");
+      if (!res.ok) throw new Error(payload.error || "This document couldn't be deleted. Try again.");
       setNotice(`${doc.original_filename} was deleted. Anything estimated from it has been removed.`);
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
-      setNotice(customerError(err, "Could not delete this document. Please try again."));
+      setNotice(customerError(err, "This document couldn't be deleted. Try again."));
     } finally {
       setDeletingId(null);
     }
@@ -194,7 +194,7 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Send the documents for this claim here and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
+      <header className="page-header"><div><div className="eyebrow">CLAIM DOCUMENTS</div><h1>{claim.event_summary ?? "Your claim"}</h1><p className="lead">Upload the documents for this claim here, and check what DearPolicy read from them. Nothing is used for an estimate until it has been reviewed. The insurer decides what is paid.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
         <div className="eyebrow">STATUS</div>
@@ -205,10 +205,10 @@ export default function ClaimEvidencePage() {
           const items = claim.display.requestedDocuments.map((d) => ({ text: d, sent: sentFor(d, documents) }));
           const left = items.filter((i) => !i.sent).length;
           return <div className="claim-needed" data-testid="claim-requested-documents">
-            <strong>What to send <span className="muted">{left ? `${left} of ${items.length} still needed` : "All sent"}</span></strong>
+            <strong>Documents to upload <span className="muted">{left ? `${left} of ${items.length} still needed` : "All uploaded"}</span></strong>
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
-              <span className="claim-needed-text">{text}{sent ? <small>Sent: {sent.original_filename}</small> : <small>Still needed</small>}</span>
+              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {sent.original_filename}</small> : <small>Still needed</small>}</span>
               {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
@@ -260,7 +260,7 @@ export default function ClaimEvidencePage() {
       <section className="section">
         <h2>Documents</h2>
         {notice && <p className="upload-status evidence-status" role="status">{notice}</p>}
-        {documents.length === 0 ? <div className="empty-card">No claim-evidence documents uploaded yet.</div> : documents.map((doc) => (
+        {documents.length === 0 ? <div className="empty-card">No documents uploaded for this claim yet. Upload the first one above.</div> : documents.map((doc) => (
           <div key={doc.id} className="action-card" style={{ gridTemplateColumns: "1fr", marginBottom: 12 }}>
             <div>
               {(() => {
@@ -268,7 +268,7 @@ export default function ClaimEvidencePage() {
                 return (<>
                   <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
-                  <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name does not match this person" : doc.identity_status === "needs_review" ? "Name could not be matched automatically" : "Name not checked yet"}</span>
+                  <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking by a DearPolicy reviewer" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
               })()}
@@ -310,7 +310,7 @@ export default function ClaimEvidencePage() {
               {doc.extraction && ["needs_review", "matched"].includes(doc.status) && isMedicalClaimEligibleDocumentType(doc.document_type as ClaimEvidenceDocumentType) && (
                 doc.identity_status === "confirmed"
                   ? <BillReview doc={doc} familyMemberId={claim.family_member_id} claimSessionId={claimSessionId} onSaved={load} />
-                  : <p className="muted">DearPolicy has not confirmed this document is about this family member, so its bill details cannot be reviewed yet.</p>
+                  : <p className="muted">DearPolicy has not confirmed this document is about this family member, so its bill details can't be checked yet.</p>
               )}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
@@ -326,7 +326,7 @@ export default function ClaimEvidencePage() {
                 )}
               </div>
               {confirmDeleteId === doc.id && !deletingId && (
-                <p className="muted" role="note">Deleting removes this document and anything DearPolicy read or estimated from it. This cannot be undone.</p>
+                <p className="muted" role="note">Deleting removes this document and anything DearPolicy read or estimated from it. This can&rsquo;t be undone.</p>
               )}
             </div>
           </div>
@@ -373,7 +373,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
     setSaving(true); setMessage(""); setFieldErrors({});
     const res = await fetch(`/api/claims/evidence/${doc.id}/medical-bill-review`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(built.body),
-    }).then((r) => r.json()).catch(() => ({ error: "Could not save the review. Please try again." }));
+    }).then((r) => r.json()).catch(() => ({ error: "Your check couldn't be saved. Try again." }));
     setSaving(false);
     if (res.error) { setFieldErrors(res.fieldErrors ?? {}); setMessage(res.error); return; }
     setConfirmed(false);
@@ -385,7 +385,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
       <h3 style={{ margin: 0 }}>Check the bill details</h3>
       <p className="muted">{BILL_REVIEW_NOTICE} Compare each detail with the{" "}
         <a href={`/api/claims/evidence/${doc.id}/file?familyMemberId=${familyMemberId}&claimSessionId=${claimSessionId}`} target="_blank" rel="noreferrer">original document</a>
-        {" "}and correct anything that does not match what is printed.</p>
+        {" "}and correct anything that doesn&rsquo;t match what is printed.</p>
       {SCALAR_FIELDS.map((f) => (
         <label key={f.key} style={{ display: "grid", gap: 2 }}>
           <span>{f.label}{pagesFor(f.key) && <small className="muted"> ({pagesFor(f.key)})</small>}</span>
@@ -401,18 +401,18 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
             <label>What for<input value={row.category} onChange={(e) => setLine(i, { category: e.target.value })} />{errorFor(`billLineItems.${i}.category`)}</label>
             <label>Description<input value={row.description} onChange={(e) => setLine(i, { description: e.target.value })} />{errorFor(`billLineItems.${i}.description`)}</label>
             <label>Amount as printed<input inputMode="decimal" value={row.amountText} onChange={(e) => setLine(i, { amountText: e.target.value })} />{errorFor(`billLineItems.${i}.amountText`)}</label>
-            <label>Currency<input value={row.currency} maxLength={3} onChange={(e) => setLine(i, { currency: e.target.value })} />{errorFor(`billLineItems.${i}.currency`)}</label>
+            <label>Currency code (for example USD or EUR)<input value={row.currency} maxLength={3} onChange={(e) => setLine(i, { currency: e.target.value })} />{errorFor(`billLineItems.${i}.currency`)}</label>
           </div>
         ))}
       </fieldset>
       <fieldset style={{ display: "grid", gap: 6 }}>
-        <legend>Already paid by others (insurers, MediShield, employer)</legend>
+        <legend>Already paid by others (for example another insurer, a government scheme or an employer)</legend>
         {draft.thirdPartyPayments.length === 0 && <p className="muted">None were read from this document.</p>}
         {draft.thirdPartyPayments.map((row, i) => (
           <div key={i} style={{ display: "grid", gap: 4, gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
             <label>Paid by<input value={row.source} onChange={(e) => setPayment(i, { source: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.source`)}</label>
             <label>Amount as printed<input inputMode="decimal" value={row.amountText} onChange={(e) => setPayment(i, { amountText: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.amountText`)}</label>
-            <label>Currency<input value={row.currency} maxLength={3} onChange={(e) => setPayment(i, { currency: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.currency`)}</label>
+            <label>Currency code (for example USD or EUR)<input value={row.currency} maxLength={3} onChange={(e) => setPayment(i, { currency: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.currency`)}</label>
           </div>
         ))}
       </fieldset>
@@ -422,7 +422,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
       </label>
       {message && <div className="alert error" role="alert">{message}</div>}
       <button className="button primary" type="button" disabled={saving || !confirmed} onClick={save}>{saving ? "Saving…" : doc.status === "matched" ? "Save corrected review" : "Confirm bill details"}</button>
-      <p className="muted">If the details were read wrongly and cannot be fixed here, reject the document below and upload a clearer copy.</p>
+      <p className="muted">If the details were read wrongly and can&rsquo;t be fixed here, reject the document below and upload a clearer copy.</p>
     </div>
   );
 }

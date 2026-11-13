@@ -39,7 +39,7 @@ test.describe.serial("mobile critical path", () => {
     await page.getByLabel("Full name").first().fill(person);
     await page.locator("#fm-new-relationship").selectOption("self");
     await page.getByRole("button", { name: "+ Add person" }).tap();
-    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.");
+    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
 
     await page.goto("/policies");
     await page.locator(".upload-form select").selectOption({ label: `${person} · self` });

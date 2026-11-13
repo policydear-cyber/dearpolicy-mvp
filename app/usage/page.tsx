@@ -28,7 +28,7 @@ export default function PlanUsagePage(){
     <header className="page-header compact"><div><h1>Account settings</h1></div></header>
     <AccountTabs />
     <div className="section-heading"><div><h2>Plan usage this month</h2><p>How much of your plan your household has used this month. Answers from documents DearPolicy has already read are always available.</p></div></div>
-    {error&&<div className="alert error" role="alert"><strong>Your plan usage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
+    {error&&<div className="alert error" role="alert"><strong>Your plan usage couldn&rsquo;t be loaded.</strong><span> Refresh the page in a moment.</span></div>}
     {usage&&plan&&<section className="section">
       <div className="section-heading"><div><div className="eyebrow">{monthLabel(usage.month)}</div><h3>{plan.name} plan</h3></div></div>
       <Meter label="Questions asked" used={usage.chatTurns} included={plan.includedChatTurns} testId="plan-questions" />

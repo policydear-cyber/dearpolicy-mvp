@@ -1114,6 +1114,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .covers-saved { font-size: var(--fs-xs); color: var(--good-text); font-weight: 600; }
 @media (pointer: coarse), (max-width: 760px) { .chip-toggle { min-height: 44px; } }
 .covers-plan-missing { color: var(--warn-text); }
+.covers-plan-note { color: var(--muted); }
 .password-field { display: flex; gap: 8px; align-items: stretch; }
 .password-field input { flex: 1 1 auto; min-width: 0; }
 .not-found { max-width: 560px; padding-top: 72px; }
