@@ -42,11 +42,18 @@ for (const [line, want] of [
   // Critic round 3: a rate after the second figure ("per day", "each", "x 30") is still money, so the plan number is the label.
   ["Plan 3 SGD 500 per day", [500]], ["Class 1 SGD 300 per day", [300]], ["Tier 2 SGD 1,000 per claim", [1000]],
   ["Plan 3 SGD 5,000 per policy year", [5000]], ["Plan 2 SGD 200 each", [200]], ["Option 1 SGD 100 x 30", [100]],
-  ["Class 80 SGD 150 per day", [150]],
+  ["Class 80 SGD 150 per day", [150]], ["class 80 SGD 150 per day", [80]],
   // TE round 2: after "per", "each", "this", "a higher" and the like the plan word is an ordinary noun, so main's reading stands.
   ["Per class 40 SGD 100", [40]], ["Each option 25 USD 100 max", [25]], ["Fee per level 15 SGD 60", [15]], ["Per type 20 SGD 80 cap", [20]],
   ["Excess for this plan 50 SGD 500 aggregate", [50]], ["Copay per tier 10 SGD 200 annual cap", [10]], ["Under this option 99 SGD 1,000", [99]],
   ["Co-pay per band 30 USD 400", [30]], ["Upgrade to a higher class 50 SGD 2,000", [50]],
+  // Critic round 4: a single digit after a plan word is always a label, even after "your" or "the"; a 2-digit number is a
+  // label only after a capitalised plan word that no "per", "each", "the" and the like comes before.
+  ["The Plan 3 SGD 100,000", [100000]], ["Your Plan 3 SGD 100,000", [100000]], ["Under the plan 3 SGD 100,000", [100000]],
+  ["Benefits under your Plan 2 SGD 5,000", [5000]], ["An Option 1 SGD 500", [500]], ["the class 1 SGD 300 per day", [300]],
+  ["For each Plan 3 SGD 500 per day", [500]], ["per ward class 40 SGD 100", [40]], ["per-class 40 SGD 100", [40]],
+  ["Cash per day: class 50 SGD 100 per day", [50]], ["Per Ward Class 40 SGD 100", [40]], ["Plan 12 SGD 3,000", [3000]],
+  ["Ward class 10 SGD 200 per night", [10]], ["Daily class 50 SGD 30 per year", [50]],
   // Known limit kept from main: a ":" or "(" between the code and its figure is not read past.
   ["Plan 3 SGD: 100,000", [3]], ["Plan 3 SGD (100,000)", [3]],
 ] as [string, number[]][]) both(line, want);
