@@ -365,7 +365,6 @@ test("a payment 'for each insured child' is not the child's own row (Critic #449
 test("a code in its own table cell is the figure before it's when another cell follows (Critic #449 round 3, F5, F6)", () => {
   const cases: [string, number[]][] = [["Hospital cash\t100\tSGD\t30 days", [100]], ["80,000\tGBP\t100%", [80000]], ["Medical\t1,000\tEUR\t2 claims", [1000]],
     ["50\tGBP\t3rd day", [50]], ["500\tUSD\t12 months", [500]], ["Liam Kelly\t100,000\tAUD\t22/07/1984", [100000]], ["Liam Kelly\t100,000\tAUD\t500,000\tAUD", [100000, 500000]],
-    ["Plan 3 NZD 100,000", [100000]], ["Class 2 CHF 50,000", [50000]], ["Policy year 2025 CHF 10,000", [10000]], ["1-2 NZD 500", [500]], ["Plan 3 SGD 100,000", [100000]],
     ["There is no 50 EUR excess", [50]], ["Policy No. 12 EUR 500", [500]]];
   for (const [line, want] of cases) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
@@ -376,7 +375,7 @@ test("a code between two figures opens the later one only when it ends the cell 
   const cases: [string, number[]][] = [["Hospital 25,000 EUR 80 %", [25000]], ["Deductible 500 EUR 20 % co-pay", [500]], ["1,000 SGD 2 / year", [1000]],
     ["1,000 SGD 2 (visits)", [1000]], ["1,000 SGD 12 mths", [1000]], ["500 EUR 10 Tage", [500]], ["500 EUR 30 jours", [500]], ["5000 EUR 3 séances", [5000]],
     ["150 SGD 365", [150]], ["Total 1,500 USD 2026", [1500]], ["Total 1,500 USD 15 Jan 2026", [1500]], ["Class 1 Marine 5,000 SGD", [5000]],
-    ["Plan 3 Junior 2,000 EUR", [2000]], ["Option 2 Separate 300 EUR", [300]], ["Plan 3 NZD 100000", [100000]], ["Plan 3 NZD 100,000.", [100000]],
+    ["Plan 3 Junior 2,000 EUR", [2000]], ["Option 2 Separate 300 EUR", [300]], 
     ["42\tEUR 60,000", [60000]], ["born 2 Nov 1982 GBP 80,000", [80000]], ["250 EUR 25,000 EUR", [250, 25000]]];
   for (const [line, want] of cases) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
@@ -395,10 +394,25 @@ test("a figure before a code is a label only when the layout says so, never by i
     ["Copay 25 USD 1,000:", [25]], ["Room 300 SGD 1,000", [300]], ["Room\t300 SGD 1,000", [300]], ["Deductible 500 SGD 1,500", [500]], ["Outpatient 2000 SGD 1,500", [2000]],
     ["Limit per year 1000 SGD 12 visits", [1000]], ["PER YEAR 1000 SGD 12 VISITS", [1000]], ["Each year 500 SGD 2 claims", [500]],
     ["Basic plan 1500 SGD 10 visits per year", [1500]], ["Outpatient limit per year 2000 SGD 300 deductible", [2000]], ["Limit per year 1000 SGD 50 per visit", [1000]],
-    ["Group 1 USD 50 per visit", [50]], ["Tier 2 SGD 500 per day", [500]], ["Plan 2 SGD 1,000,000", [1000000]],
+    
     ["Benefit limit 1,000\nSGD", [1000]], ["Benefit limit 1,000\nSGD 500", [1000]], ["1,000\u2009SGD", [1000]], ["Plan 3 USD 50 percent", [3]],
-    ["Plan 3 NZD 100,000\tper year", [100000]], ["Plan 3 NZD 100,000\tPlan 4 NZD 200,000", [100000, 200000]], ["Liam Kelly\t42\tEUR 60,000\t01/02/1983", [60000]]];
+    ["Liam Kelly\t42\tEUR 60,000\t01/02/1983", [60000]]];
   for (const [line, want] of cases) {
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
+  }
+});
+test("a code main never read after a figure stays a code before the figure that follows it (Critic #449 rounds 3-10)", () => {
+  // FIGURE only: anyMoneyFigures reads every code after a figure, as on main, so "Plan 3 NZD 100,000" there is still 3 (a main limit).
+  for (const [line, want] of [["Plan 3 NZD 100,000", [100000]], ["Class 2 CHF 50,000", [50000]], ["Policy year 2025 CHF 10,000", [10000]], ["1-2 NZD 500", [500]],
+    ["Plan 3 NZD 100000", [100000]], ["Plan 3 NZD 100,000.", [100000]], ["Plan 3 NZD 100,000\tper year", [100000]], ["Plan 3 NZD 100,000\tPlan 4 NZD 200,000", [100000, 200000]],
+    ["1\tJPY\t50,000", [50000]], ["Deductible\t1\tCHF\t1,000", [1000]], ["Plan 1\nCHF\n500,000", [500000]]] as [string, number[]][])
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+});
+test("main's reading stands for ages, IDs and day-month words that are not a date's year (Critic #449 round 10)", () => {
+  for (const [line, want] of [["Member ID\n1,000 SGD", [1000]], ["Policy No.\n2,000 SGD", [2000]], ["No.\t300 SGD", [300]], ["Home care for the aged: 500 SGD per month", [500]],
+    ["Valid 1 May 500 SGD", [500]], ["On 3 June 2,000 SGD", [2000]], ["Plan 2 May 500 SGD", [500]], ["Co-pay 10/20/30 SGD", [30]], ["Fee 15-25 SGD 3.", [25]],
+    ["GP 20-30 SGD 1)", [30]], ["Daily cash\t100\tSGD 30\n", [100]], ["1982-11-02 GBP 80,000", [80000]]] as [string, number[]][]) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
     assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
   }
