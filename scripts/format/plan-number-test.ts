@@ -38,7 +38,15 @@ for (const [line, want] of [
   // second figure means the first is the amount.
   ["Hospital cash benefit 50 SGD 365", [50]], ["Hospital Cash Benefit 50 SGD 30 days", [50]], ["Max benefit 90 SGD 1,000", [90]],
   ["Room 50 SGD 100", [50]], ["Ward 80 SGD 150", [80]], ["Cover 20 USD 5", [20]], ["Rider 20 SGD 5", [20]], ["Unit 10 SGD 25", [10]],
-  ["Items 5 USD 20", [5]], ["Class 30 SGD 300 per day", [30]], ["Level 50 SGD 30 days", [50]],
+  ["Items 5 USD 20", [5]], ["Class 30 SGD 300 per day", [300]], ["Level 50 SGD 30 days", [50]],
+  // Critic round 3: a rate after the second figure ("per day", "each", "x 30") is still money, so the plan number is the label.
+  ["Plan 3 SGD 500 per day", [500]], ["Class 1 SGD 300 per day", [300]], ["Tier 2 SGD 1,000 per claim", [1000]],
+  ["Plan 3 SGD 5,000 per policy year", [5000]], ["Plan 2 SGD 200 each", [200]], ["Option 1 SGD 100 x 30", [100]],
+  ["Class 80 SGD 150 per day", [150]],
+  // TE round 2: after "per", "each", "this", "a higher" and the like the plan word is an ordinary noun, so main's reading stands.
+  ["Per class 40 SGD 100", [40]], ["Each option 25 USD 100 max", [25]], ["Fee per level 15 SGD 60", [15]], ["Per type 20 SGD 80 cap", [20]],
+  ["Excess for this plan 50 SGD 500 aggregate", [50]], ["Copay per tier 10 SGD 200 annual cap", [10]], ["Under this option 99 SGD 1,000", [99]],
+  ["Co-pay per band 30 USD 400", [30]], ["Upgrade to a higher class 50 SGD 2,000", [50]],
   // Known limit kept from main: a ":" or "(" between the code and its figure is not read past.
   ["Plan 3 SGD: 100,000", [3]], ["Plan 3 SGD (100,000)", [3]],
 ] as [string, number[]][]) both(line, want);
