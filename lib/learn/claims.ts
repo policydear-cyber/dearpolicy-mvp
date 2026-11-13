@@ -192,7 +192,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         { kind: "p", text: "After a death, families are often unsure which policies exist. It is worth looking widely, without rushing: many policies give a reasonable time to claim." },
         { kind: "tiles", caption: "Places death cover is often found. Some are easy to miss.", tiles: [
           { icon: "life", title: "Life policies", text: "Term or whole-life cover, and any riders." },
-          { icon: "accident", title: "Accident policies", text: "Pay more if the death was caused by an accident." },
+          { icon: "accident", title: "Accident policies", text: "Pay if the death was caused by an accident, as the policy defines it." },
           { icon: "family", title: "Work", text: "Group cover through an employer." },
           { icon: "home", title: "Loans and mortgages", text: "Cover linked to a home loan or other borrowing." },
           { icon: "shield", title: "National schemes", text: "Some countries run schemes that pay on death." },
@@ -202,20 +202,20 @@ export const CLAIM_GUIDES: LearnGuide[] = [
       { heading: "Who receives the money", blocks: [
         { kind: "list", items: [
           "If a beneficiary or nominee was named, the insurer usually pays them, under the policy's terms and local law.",
-          "If no one was named, the money usually goes to the person's estate and is handled under local inheritance rules.",
+          "If no one was named, the money usually goes to the policy owner, or to the owner's estate if the person who died owned the policy, under local rules.",
           "The insurer tells the claimant what it needs. Its claim form and claims section are the guide.",
           "Policies the person owned on someone else's life, such as a child's policy, do not end with the owner's death. Ownership usually needs to pass to someone; ask the insurer how.",
         ] },
       ] },
       { heading: "Good to know", blocks: [
         { kind: "list", items: [
-          "Some life policies pay part of the sum assured early on diagnosis of a terminal illness. If that was paid, the death payment is usually reduced by it.",
+          "Some life policies pay part or all of the sum assured early on diagnosis of a terminal illness. If that was paid, the death payment is usually reduced by it.",
           "A dated certificate shows the cover on its date. The insurer confirms whether the policy was still in force at the time of death.",
           "Tell each insurer once you are ready. Until they know, premiums may keep being collected; they explain how that is handled.",
         ] },
         { kind: "cards", prompt: "Tap each card.", cards: [
           { front: "\"There was only one policy.\"", back: "Check widely: riders, accident policies, cover through work, loan-linked cover and savings policies often pay on death too." },
-          { front: "\"The money goes to the spouse automatically.\"", back: "It depends on who was named and on local law. With no named beneficiary, it usually goes to the estate." },
+          { front: "\"The money goes to the spouse automatically.\"", back: "It depends on who was named, who owned the policy, and local law. With no named beneficiary, it usually goes to the owner, or the owner's estate." },
           { front: "\"The claim must be made within days.\"", back: "Policies set their own time limits, usually giving a reasonable time. The claims section states yours." },
         ] },
         { kind: "quiz", question: "A parent owned a policy insuring their child, and the parent has died. What usually happens to the child's policy?",
@@ -234,7 +234,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
     sections: [
       { heading: "Three kinds of help", blocks: [
         { kind: "tiles", caption: "Different covers respond to disability in different ways.", tiles: [
-          { icon: "fixed", title: "Lump sum", text: "Total and permanent disability cover pays a set amount once." },
+          { icon: "fixed", title: "Lump sum", text: "Total and permanent disability cover usually pays a set amount, often in one go." },
           { icon: "income", title: "Income", text: "Income protection pays part of your income each month." },
           { icon: "shield", title: "Premium waiver", text: "Future premiums of a policy stop being collected." },
         ] },
@@ -280,7 +280,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         { kind: "tiles", caption: "Common sections of a travel policy. Each has its own limit.", tiles: [
           { icon: "hospital", title: "Medical abroad", text: "Treatment and, sometimes, bringing you home." },
           { icon: "renewal", title: "Cancellation", text: "Costs lost if the trip is called off for a listed reason." },
-          { icon: "daily", title: "Delay", text: "A set amount after a delay of a stated length." },
+          { icon: "daily", title: "Delay", text: "A set amount, or costs paid back, after a delay of a stated length." },
           { icon: "keep", title: "Belongings", text: "Lost, stolen or damaged luggage and items." },
           { icon: "person", title: "Liability", text: "If you are held responsible for harm to others." },
         ] },
@@ -334,7 +334,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
       { heading: "What can reduce the payment", blocks: [
         { kind: "list", items: [
           "An excess, or deductible, you pay on each claim.",
-          "Under-insurance: if the amount insured is less than the real value, some policies pay only a share of each claim.",
+          "Under-insurance: if the amount insured is less than the real value, some policies pay only a share of each claim; some allow a margin first.",
           "Limits for single valuable items, and items not listed when the policy needs them listed.",
           "Wear and tear, and gradual damage, which many policies exclude.",
         ] },

@@ -136,19 +136,36 @@ async function main() {
     assert.match(claimText, /Your policy says what it needs/);
   });
 
-  await t("claims: worked examples add up", () => {
-    assert.equal((20000 - 2000) * 0.9, 16200);
-    assert.match(joined, /a covered bill of 20,000 with a deductible of 2,000 and a 10% co-payment\. The policy would pay 18,000 less 1,800, so 16,200/);
-    assert.match(joined, /10% of the sum assured for an injury and the sum assured is 100,000, the illustrated amount is 10,000/);
-    assert.match(joined, /sum assured of 200,000 includes critical illness cover of 100,000 .* After a claim of 100,000, the death cover left would be 100,000/);
-    assert.match(joined, /insured for 50,000 but would cost 100,000 to rebuild\. .* a covered claim of 10,000 might be reduced to half, 5,000/);
+  await t("claims: worked examples add up (figures parsed from the text and recomputed)", () => {
+    const n = (x: string) => Number(x.replace(/,/g, ""));
+    const bill = joined.match(/a covered bill of ([\d,]+) with a deductible of ([\d,]+) and a (\d+)% co-payment\. The policy would pay ([\d,]+) less ([\d,]+), so ([\d,]+)/);
+    assert.ok(bill, "hospital example present");
+    const after = n(bill![1]) - n(bill![2]);
+    assert.equal(n(bill![4]), after);
+    assert.equal(n(bill![5]), after * n(bill![3]) / 100);
+    assert.equal(n(bill![6]), splitBill({ bill: n(bill![1]), deductible: n(bill![2]), coPaymentPercent: n(bill![3]), limit: Infinity }).policyShare || after - after * n(bill![3]) / 100);
+    const pct = joined.match(/lists (\d+)% of the sum assured for an injury and the sum assured is ([\d,]+), the illustrated amount is ([\d,]+)/);
+    assert.ok(pct);
+    assert.equal(percentOf(n(pct![1]), n(pct![2])), n(pct![3]));
+    const ci = joined.match(/sum assured of ([\d,]+) includes critical illness cover of ([\d,]+) .* After a claim of ([\d,]+), the death cover left would be ([\d,]+)/);
+    assert.ok(ci);
+    assert.equal(n(ci![2]), n(ci![3]));
+    assert.equal(n(ci![1]) - n(ci![3]), n(ci![4]));
+    const avg = joined.match(/insured for ([\d,]+) but would cost ([\d,]+) to rebuild\. .* a covered claim of ([\d,]+) might be reduced to half, ([\d,]+)/);
+    assert.ok(avg);
+    assert.equal(n(avg![1]) / n(avg![2]), 0.5, "the text says half");
+    assert.equal(n(avg![3]) * n(avg![1]) / n(avg![2]), n(avg![4]));
   });
 
   await t("match: new terms link (waiver, outpatient, pre-hospital, panel, ADLs) and ordinary words do not", () => {
-    assert.deepEqual(learnTermsIn(["Outpatient visits are listed, and a waiver of premium applies."]).map((x) => x.id), ["outpatient", "waiver-of-premium"]);
+    assert.deepEqual(learnTermsIn(["Outpatient visits are listed, and a waiver of premium applies to early-stage critical illness."]).map((x) => x.id), ["waiver-of-premium", "early-stage", "critical-illness"]);
     assert.deepEqual(learnTermsIn(["Post-hospitalisation treatment within 90 days."]).map((x) => x.id), ["pre-post-hospital"]);
     assert.deepEqual(learnTermsIn(["Use a panel hospital. Unable to do 3 of 6 activities of daily living."]).map((x) => x.id), ["panel-provider", "activities-of-daily-living"]);
     assert.deepEqual(learnTermsIn(["The panel reviewed the term of the loan for the whole family. A third party called."]), []);
+    // Critic #443: everyday phrases that contain a term's words must not link it.
+    assert.deepEqual(learnTermsIn(["This is a long-term plan. South African short-term insurance differs. Detected at an early stage, it was removed. Paid for the whole life of the loan."]), []);
+    // Inpatient and outpatient open most hospital answers; they stay in the A to Z but do not crowd out deductible and co-payment.
+    assert.deepEqual(learnTermsIn(["Inpatient and outpatient treatment: a deductible applies, then a co-payment."]).map((x) => x.id), ["deductible", "co-payment"]);
   });
 
   await t("match: finds terms an answer uses, in the order they appear, case-insensitive", () => {

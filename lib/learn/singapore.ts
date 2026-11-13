@@ -279,7 +279,7 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         { kind: "p", text: "MediSave is savings, not insurance: it pays from your own account, so what it pays reduces your balance. DearPolicy does not recommend or rank insurers or plans." },
         { kind: "cards", prompt: "Tap each card.", cards: [
           { front: "Can I use my MediSave for my parent's hospital bill?", back: "Yes, CPF Board lists parents as family members whose medical expenses MediSave can pay, within the limits." },
-          { front: "Can MediSave pay my insurance premiums?", back: "For MediShield Life, Integrated Shield Plans, ElderShield and CareShield Life, as CPF Board lists. Private plans have their own limits on how much MediSave can pay." },
+          { front: "Can MediSave pay my insurance premiums?", back: "For MediShield Life, Integrated Shield Plans, ElderShield and CareShield Life, as CPF Board lists. For an Integrated Shield Plan, MediSave pays the private part only up to a yearly limit for your age; the rest is paid in cash." },
           { front: "Is MediSave the same as MediShield Life?", back: "No. MediSave is a savings account; MediShield Life is insurance. MediShield Life premiums can be paid from MediSave." },
         ] },
         { kind: "quiz", question: "Which of these must be a Singapore Citizen or PR for your MediSave to pay their bills?",
@@ -361,7 +361,8 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
       ] },
       { heading: "How a claim is paid", blocks: [
         { kind: "fact", source: 0, text: "HPS settles the outstanding housing loan, up to the sum insured, with HDB or the mortgagee directly." },
-        { kind: "fact", source: 1, text: "Joint owners each choose a share of cover, which should at least match the share of the monthly instalment each pays. The total share of cover per household must add up to at least 100%." },
+        { kind: "fact", source: 1, text: "Joint owners each choose a share of cover, which should at least match the share of the monthly instalment each pays." },
+        { kind: "fact", source: 0, text: "The total share of cover per household must add up to at least 100%." },
         { kind: "fact", source: 0, text: "If a co-owner's share of cover is 50%, a claim for them pays only 50% of the outstanding housing loan, up to the sum insured." },
         { kind: "p", text: "Because the payment goes to the loan, not to the family, HPS is different from a life policy that pays a beneficiary. Families checking cover after a death or diagnosis can look at both. DearPolicy does not recommend or rank insurers or plans." },
         { kind: "cards", prompt: "Tap each card.", cards: [
