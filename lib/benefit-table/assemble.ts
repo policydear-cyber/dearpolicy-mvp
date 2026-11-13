@@ -607,6 +607,50 @@ export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<stri
 }
 /** A printed line's place: its page and words, spacing aside. */
 export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
+/** For a section of a personal document (schedule, certificate) linked by the model to a cover this document does not
+ * print, where that cover is printed by another personal document sharing a policy number with this one: the key of this
+ * document's own copy of that same cover. A renewal schedule's benefits were linked to the expired schedule's cover of the
+ * same policy (the two readings named the cover a little differently, so they were two covers), and its percentages were
+ * worked out on last year's sums insured (TE-ACC-20261113, Okafor: fracture GBP 1,200 for 1,500; PTD GBP 60,000 for 80,000).
+ * "Its own copy of that same cover" means, on this document: a cover for the same family member(s) as the linked cover
+ * (as each was matched, whatever name is printed), printing a sum insured, the same rider-of and plan, and a cover name
+ * that is the other's name with words added or left out ("Family Personal Accident" and "Family Personal Accident
+ * Policy"), by at least two words when this document prints more than one cover for them (never a basic plan for a
+ * rider, or a rider for the plan: Critic #445 F1, F2, round 2). Exactly one such cover moves the link; none or several leave it as it was (never guessed, and
+ * never refused, so nothing is hidden and nothing is asked again on every upload: Critic #445 F4). A link the household
+ * chose is never moved (Critic #445 F3). Policy numbers only say which documents are copies of one policy; nothing is
+ * merged or added across them. */
+function ownVersionOf(readings: CheckedReading[], covers: PersonCover[]) {
+  const byDoc = new Map(readings.map((r) => [r.documentId, r]));
+  const numbers = (r: CheckedReading) => r.covers.map((c) => c.policyNumber?.trim()).filter((n): n is string => !!n);
+  const nameWords = (c: { cover: string }) => new Set(norm(c.cover).split(" ").filter(Boolean));
+  const within = (a: Set<string>, b: Set<string>) => a.size > 0 && [...a].every((w) => b.has(w));
+  /** The words both names share, when one name is the other with words added or left out; 0 otherwise. */
+  const shared = (a: { cover: string }, b: { cover: string }) => {
+    const x = nameWords(a), y = nameWords(b);
+    return within(x, y) || within(y, x) ? Math.min(x.size, y.size) : 0;
+  };
+  return (docId: string | undefined, coverKey: string): string | null => {
+    const r = docId ? byDoc.get(docId) : undefined;
+    if (!r || r.kind !== "personal_proof" || r.covers.some((c) => coverKeyOf(c) === coverKey)) return null;
+    const mineNumbers = numbers(r);
+    if (!mineNumbers.length) return null;
+    // The linked cover as the other copies of this policy hold it, for the family members it was matched to.
+    const copies = new Set(readings.filter((o) => o !== r && o.kind === "personal_proof" && numbers(o).some((n) => mineNumbers.some((m) => samePolicyNumber(n, m)))).map((o) => o.documentId));
+    const linked = covers.filter((c) => c.coverKey === coverKey && copies.has(c.source.documentId));
+    if (!linked.length) return null;
+    const people = new Set(linked.map((c) => c.personId));
+    // This document's covers for the same family members (whatever name it prints for them), with a sum insured.
+    const theirs = covers.filter((c) => c.source.documentId === r.documentId && people.has(c.personId) && c.sumInsured != null);
+    // The same cover: same rider-of and plan, and a name that is the other's with words added or left out. Where this
+    // document prints more than one cover for them, a one-word match ("Plan", "Accident") is no evidence of which
+    // (Critic #445 round 2: a basic plan's benefits moved onto "Waiver Plan").
+    const need = new Set(theirs.map((c) => c.coverKey)).size > 1 ? 2 : 1;
+    const keys = [...new Set(theirs.filter((c) => linked.some((l) => norm(c.riderOf) === norm(l.riderOf) && (!c.plan || !l.plan || norm(c.plan) === norm(l.plan))
+      && shared(c, l) >= need)).map((c) => c.coverKey))];
+    return keys.length === 1 ? keys[0] : null;
+  };
+}
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
@@ -626,7 +670,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const docOf = new Map(readings.flatMap((r) => r.benefits.map((b) => [sectionKeyOf(r.documentId, b), r.documentId] as const)));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
-  for (const l of links) {
+  const ownVersion = ownVersionOf(readings, covers);
+  for (const linked of links) {
+    // A personal document's own sections are paid under its own copy of the cover, never another document's copy of the
+    // same policy (an earlier or later schedule of the same policy number), unless the household chose that link.
+    const chosenByHousehold = (linked as { chosenBy?: string }).chosenBy === "household";
+    const own = linked.cover && !chosenByHousehold ? ownVersion(docOf.get(linked.section), linked.cover) : null;
+    const l = own ? { ...linked, cover: own } : linked;
     const type = l.cover ? types.find((t) => t.key === l.cover) : null;
     const section = sections.find((s) => s.key === l.section);
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
