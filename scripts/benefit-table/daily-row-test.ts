@@ -136,6 +136,28 @@ async function main() {
       ["The benefit rate quoted below is paid from day 3.", "This benefit is paid from day 3."],
       ["The benefit amount quoted below is reduced by any earlier claim.", "This benefit is reduced by any earlier claim."],
       ["Hospital cash is paid at the benefit rate quoted below.", "Hospital cash is paid at a rate."],
+      // Gate round 4 on #473: "is/are" stays by default and goes only before a verb of its own.
+      ["The daily amount is quoted below and halved for a child.", "The daily benefit is halved for a child."],
+      ["The amount is quoted below and not paid for day surgery.", "This benefit is not paid for day surgery."],
+      ["The amount is quoted below and payable once per accident.", "This benefit is payable once per accident."],
+      ["The limit is quoted below and subject to the excess.", "This benefit is subject to the excess."],
+      ["The daily amount is quoted below and doubled in intensive care.", "The daily benefit is doubled in intensive care."],
+      ["The amounts are quoted below and capped at 30 days a year.", "These benefits are capped at 30 days a year."],
+      ["The figure is quoted below and applies from day 3.", "This benefit applies from day 3."],
+      ["The daily rate is quoted below and stops after 30 days.", "The daily benefit stops after 30 days."],
+      ["The amount is quoted below and can be claimed once a year.", "This benefit can be claimed once a year."],
+      ["The amount is quoted below and paid in GBP.", "This benefit is paid in GBP."],
+      ["The daily figure is quoted below and available from day 3.", "The daily benefit is available from day 3."],
+      ["The daily rate is quoted below and higher for children in ICU.", "The daily benefit is higher for children in ICU."],
+      ["The amount is quoted below and only for inpatient stays.", "This benefit is only for inpatient stays."],
+      ["The amount is quoted below and due once the stay ends.", "This benefit is due once the stay ends."],
+      ["The amount is quoted below and taxable in the UK.", "This benefit is taxable in the UK."],
+      ["The limit is quoted below and in GBP.", "This benefit is in GBP."],
+      ["The daily figure is quoted below and per day, not per stay.", "The daily benefit is per day, not per stay."],
+      ["The amount is quoted below and lower after age 65.", "This benefit is lower after age 65."],
+      ["The amounts are quoted below and the same for each child.", "These benefits are the same for each child."],
+      ["The amounts are quoted below and need a hospital receipt.", "These benefits need a hospital receipt."],
+      ["The limits are quoted below and exceed the medical expenses cap.", "These benefits exceed the medical expenses cap."],
     ];
     for (const [s, want] of said) assert.equal(withoutPointers(s), want, s);
     // Words said to be quoted are a point about words, and a premium or exchange rate is no benefit amount: kept whole.
