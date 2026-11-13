@@ -77,6 +77,8 @@ test("K7 ringgit: 'Term Life' declared in words", () => {
 });
 test("K8 a plan's name with no status cell keeps a sum printed as an amount", () => assert.deepEqual(
   ask(build([BASE, ["Harbour Flexi Plan", "100,000.00"]], { head: S, bare: true }), /^Harbour Flexi Plan/).cards.map((c) => c.text), ["S$100,000"]));
+test("K9 'Plan 3  100,000.00': the plan number is a label and the sum is the plan's (as #456 reads 'Plan 3 SGD 100,000')", () => assert.deepEqual(
+  ask(build([BASE, ["Plan 3", "100,000.00"]], { head: S, bare: true }), /^Plan 3/).cards.map((c) => c.text), ["S$100,000"]));
 // Held: the figure IS a plan number, a term, a count or a rate.
 test("H1 'Plan 3' is a plan number, never money", () => assert.deepEqual(shown([BASE, ["Plan", "3.00"]], /^Plan$/), []));
 test("H2 'Premium Term' figure is a term", () => assert.deepEqual(shown([BASE, ["Premium Term", "20.00"]], /^Premium Term/), []));
