@@ -332,7 +332,7 @@ async function main() {
   });
 
   await t("singapore: every article is on the Singapore shelf, has official sources and a valid checked-on date", () => {
-    assert.ok(SINGAPORE_GUIDES.length >= 4);
+    assert.ok(SINGAPORE_GUIDES.length >= 7);
     const official = /^https:\/\/(www\.)?(cpf\.gov\.sg|moh\.gov\.sg|mas\.gov\.sg|[a-z0-9-]+\.gov\.sg)\//;
     for (const g of SINGAPORE_GUIDES) {
       assert.equal(g.group, "singapore", g.slug);
@@ -419,6 +419,10 @@ async function main() {
     assert.equal(first("DPS"), "/learn/sg-dependants-protection-scheme");
     assert.ok(searchLearn(index, "rider").some((r) => r.href === "/learn/sg-integrated-shield-plans"));
     assert.ok(searchLearn(index, "deductible").some((r) => r.href === "/learn/terms#deductible"));
+    assert.equal(first("medisave"), "/learn/sg-medisave");
+    assert.equal(first("cpf nomination"), "/learn/sg-cpf-nominations");
+    assert.equal(first("HPS"), "/learn/sg-home-protection-scheme");
+    assert.equal(first("hdb mortgage insurance"), "/learn/sg-home-protection-scheme");
     assert.equal(first("broken arm"), "/learn/claims-accident");
     assert.equal(first("lost luggage"), "/learn/claims-travel");
     assert.equal(first("passed away"), "/learn/claims-death");

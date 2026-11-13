@@ -22,7 +22,12 @@ const SRC = {
   csl: { label: "CPF Board: CareShield Life", url: "https://www.cpf.gov.sg/member/healthcare-financing/careshield-life" },
   dps: { label: "CPF Board: Insuring to protect your dependants", url: "https://www.cpf.gov.sg/member/account-services/providing-for-your-loved-ones/insuring-to-protect-your-dependants" },
   dpsPremiums: { label: "CPF Board: Great Eastern Life's contract as DPS administrator extended to 2028 (premium table)", url: "https://www.cpf.gov.sg/member/infohub/news/news-releases/cpf-board-extends-great-eastern-lifes-contract-dependants-protection-scheme-administrator-to-2028" },
+  medisave: { label: "CPF Board: Using your MediSave savings", url: "https://www.cpf.gov.sg/member/healthcare-financing/using-your-medisave-savings" },
+  nomination: { label: "CPF Board: Making a CPF nomination", url: "https://www.cpf.gov.sg/member/account-services/providing-for-your-loved-ones/making-a-cpf-nomination" },
+  hps: { label: "CPF Board: Protect your home: insurance for your HDB flat", url: "https://www.cpf.gov.sg/member/infohub/educational-resources/protect-your-home-insurance-for-your-hdb-flat" },
+  hpsBenefits: { label: "CPF Board: 3 benefits of the Home Protection Scheme", url: "https://www.cpf.gov.sg/member/infohub/educational-resources/3-benefits-of-the-home-protection-scheme" },
 } satisfies Record<string, LearnSource>;
+const CHECKED_13NOV = "2026-11-13";
 
 export const SINGAPORE_GUIDES: LearnGuide[] = [
   {
@@ -235,6 +240,138 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         { kind: "quiz", question: "A member is 62. What is the most DPS covers them for?",
           options: ["S$70,000", "S$55,000", "Nothing: cover ends at 60"],
           answer: 1, explain: "Members above 60 and up to 65 are covered for up to S$55,000; up to 60 it is S$70,000." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-medisave",
+    group: "singapore",
+    icon: "savings",
+    region: SG,
+    checkedOn: CHECKED_13NOV,
+    sources: [SRC.medisave],
+    keywords: ["medisave", "medi save", "medisav", "cpf medisave", "basic healthcare sum", "bhs", "healthcare savings", "pay hospital bill with cpf", "medisave for family", "community hospital"],
+    title: "What is MediSave?",
+    summary: "Your CPF healthcare savings account: what it can pay for, whose bills it can pay, and how it works alongside insurance.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "MediSave is your personal healthcare savings account. When you are working, you save between 8% and 10.5% of your monthly salary in your MediSave." },
+        { kind: "fact", source: 0, text: "Your Basic Healthcare Sum (BHS) is the estimated amount of savings you need for basic subsidised healthcare expenses in old age. It is the most you can have in your MediSave." },
+      ] },
+      { heading: "What it can pay for", blocks: [
+        { kind: "tiles", caption: "The kinds of cost CPF Board lists. Each has its own withdrawal limits.", tiles: [
+          { icon: "hospital", title: "Hospital and day surgery", text: "Stays and procedures, within limits." },
+          { icon: "receipt", title: "Some outpatient care", text: "Such as chronic disease management, vaccinations, screenings and scans." },
+          { icon: "walk", title: "Rehabilitation and palliative care", text: "Including community hospitals and hospices, within limits." },
+          { icon: "shield", title: "Insurance premiums", text: "MediShield Life, Integrated Shield Plans, ElderShield and CareShield Life." },
+        ] },
+        { kind: "fact", source: 0, text: "Withdrawal limits apply. For example, an inpatient at an approved community hospital can use up to S$250 per day." },
+      ] },
+      { heading: "Whose bills it can pay", blocks: [
+        { kind: "fact", source: 0, text: "MediSave can pay for your own medical expenses and those of your spouse, children, parents, grandparents or siblings. Family members can be of any nationality, except grandparents and siblings, who must be Singapore Citizens or Permanent Residents." },
+      ] },
+      { heading: "MediSave and insurance", blocks: [
+        { kind: "flow", caption: "How MediSave fits with insurance on a hospital bill, in general. Your own plan sets the details.", items: [
+          { icon: "shield", title: "Insurance pays its share", text: "Such as MediShield Life or a private plan, after any deductible and co-payment." },
+          { icon: "savings", title: "MediSave can help", text: "With what is left, within the withdrawal limits." },
+          { icon: "receipt", title: "Cash for the rest", text: "Anything above the limits." },
+        ] },
+        { kind: "p", text: "MediSave is savings, not insurance: it pays from your own account, so what it pays reduces your balance. DearPolicy does not recommend or rank insurers or plans." },
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "Can I use my MediSave for my parent's hospital bill?", back: "Yes, CPF Board lists parents as family members whose medical expenses MediSave can pay, within the limits." },
+          { front: "Can MediSave pay my insurance premiums?", back: "For MediShield Life, Integrated Shield Plans, ElderShield and CareShield Life, as CPF Board lists. Private plans have their own limits on how much MediSave can pay." },
+          { front: "Is MediSave the same as MediShield Life?", back: "No. MediSave is a savings account; MediShield Life is insurance. MediShield Life premiums can be paid from MediSave." },
+        ] },
+        { kind: "quiz", question: "Which of these must be a Singapore Citizen or PR for your MediSave to pay their bills?",
+          options: ["Your spouse", "Your sibling", "Your child"],
+          answer: 1, explain: "CPF Board says family members can be of any nationality, except grandparents and siblings, who must be Singapore Citizens or Permanent Residents." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-cpf-nominations",
+    group: "singapore",
+    icon: "family",
+    region: SG,
+    checkedOn: CHECKED_13NOV,
+    sources: [SRC.nomination],
+    keywords: ["cpf nomination", "nomination", "nominate", "nominee", "cpf after death", "public trustee", "will", "who gets my cpf", "estate"],
+    title: "CPF nominations",
+    summary: "Who receives your CPF savings after you die, why a will does not cover them, and how a nomination differs from an insurance one.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "A CPF nomination lets you decide who receives your CPF savings, and how much each person gets, after your death. Making a CPF nomination is free." },
+        { kind: "fact", source: 0, text: "CPF savings cannot be included in your will because they do not form your estate." },
+      ] },
+      { heading: "With and without a nomination", blocks: [
+        { kind: "flow", caption: "What CPF Board says happens to CPF savings after a death.", items: [
+          { icon: "person", title: "With a nomination", text: "Savings go to the people you named, in the shares you chose." },
+          { icon: "insurer", title: "Without one", text: "Savings go to the Public Trustee's Office." },
+          { icon: "family", title: "Then to family", text: "The Public Trustee's Office distributes them to family members, less a fee." },
+        ] },
+        { kind: "fact", source: 0, text: "Without a CPF nomination, your CPF savings will be transferred to the Public Trustee's Office, which distributes them to your family members and deducts an administrative fee from your CPF savings." },
+      ] },
+      { heading: "Making one", blocks: [
+        { kind: "steps", caption: "The ways CPF Board describes. Its page has the current steps.", steps: [
+          { icon: "search", title: "Online", text: "Nominate online, or get help at a ServiceSG Centre." },
+          { icon: "person", title: "Two witnesses", text: "They confirm you made it willingly. They cannot be a nominee or an organisation." },
+          { icon: "renewal", title: "Review after marriage", text: "Marriage revokes an existing CPF nomination." },
+        ] },
+        { kind: "fact", source: 0, text: "You need two witnesses who can attest that you made your nomination willingly and consciously. Your witnesses cannot be your nominee or an organisation. Upon marriage, any existing CPF nomination will be revoked." },
+      ] },
+      { heading: "CPF and insurance nominations", blocks: [
+        { kind: "p", text: "A CPF nomination covers CPF savings. Insurance policies name their own beneficiaries or nominees with each insurer, so check each policy separately. DearPolicy does not recommend or rank insurers or plans." },
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "My will leaves everything to my spouse. Does that include my CPF?", back: "No. CPF Board says CPF savings cannot be included in a will because they do not form your estate. A CPF nomination decides it." },
+          { front: "I made a CPF nomination before I married. Is it still valid?", back: "No. CPF Board says marriage revokes any existing CPF nomination, so a new one is needed if you want one." },
+          { front: "Does my CPF nomination cover my life insurance?", back: "No. Insurance policies have their own nominations or beneficiaries, made with each insurer." },
+        ] },
+        { kind: "quiz", question: "Someone dies without a CPF nomination. Where do their CPF savings go first?",
+          options: ["Into their estate, under their will", "To the Public Trustee's Office", "They are lost"],
+          answer: 1, explain: "CPF Board says the savings are transferred to the Public Trustee's Office, which distributes them to family members and deducts an administrative fee." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-home-protection-scheme",
+    group: "singapore",
+    icon: "home",
+    region: SG,
+    checkedOn: CHECKED_13NOV,
+    sources: [SRC.hps, SRC.hpsBenefits],
+    keywords: ["hps", "home protection scheme", "home protection", "hdb", "hdb flat", "mortgage insurance", "mortgage-reducing insurance", "housing loan", "cpf housing", "home loan"],
+    title: "What is the Home Protection Scheme?",
+    summary: "Mortgage-reducing insurance for HDB flats bought with CPF: what it covers, who needs it, and how a claim is paid.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "The Home Protection Scheme (HPS) is a mortgage-reducing insurance that protects you and your loved ones from losing your HDB flat in the event of death, terminal illness or total permanent disability." },
+        { kind: "tiles", caption: "The three events HPS covers.", tiles: [
+          { icon: "life", title: "Death", text: "The outstanding loan is settled, up to the sum insured." },
+          { icon: "illness", title: "Terminal illness", text: "As for death." },
+          { icon: "disability", title: "Total permanent disability", text: "As for death." },
+        ] },
+      ] },
+      { heading: "Who needs it", blocks: [
+        { kind: "fact", source: 0, text: "You need to be insured under HPS if you own an HDB flat and use your CPF savings for the monthly housing instalments. Members who pay their mortgage in cash are strongly encouraged to be insured." },
+        { kind: "fact", source: 0, text: "Eligibility is subject to approval and to being in good health at the point of application. A medical examination may be required." },
+      ] },
+      { heading: "How long, and how it is paid", blocks: [
+        { kind: "fact", source: 0, text: "HPS insures members until they turn 65, or until the housing loans are paid up, whichever is earlier." },
+        { kind: "fact", source: 0, text: "The premium is deducted automatically each year from your Ordinary Account. You pay premiums for 90% of the cover period: for a 30-year cover period, premiums are paid for 27 years." },
+      ] },
+      { heading: "How a claim is paid", blocks: [
+        { kind: "fact", source: 0, text: "HPS settles the outstanding housing loan, up to the sum insured, with HDB or the mortgagee directly." },
+        { kind: "fact", source: 1, text: "Joint owners each choose a share of cover, which should at least match the share of the monthly instalment each pays. The total share of cover per household must add up to at least 100%." },
+        { kind: "fact", source: 0, text: "If a co-owner's share of cover is 50%, a claim for them pays only 50% of the outstanding housing loan, up to the sum insured." },
+        { kind: "p", text: "Because the payment goes to the loan, not to the family, HPS is different from a life policy that pays a beneficiary. Families checking cover after a death or diagnosis can look at both. DearPolicy does not recommend or rank insurers or plans." },
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "Who receives the money from an HPS claim?", back: "HDB or the mortgagee, directly, to settle the outstanding loan up to the sum insured. It is not paid to the family." },
+          { front: "Does HPS last for the whole loan?", back: "Until the member turns 65 or the loan is paid up, whichever is earlier." },
+          { front: "We co-own the flat. Are we each covered for the whole loan?", back: "Each owner is covered for their chosen share. Together, the owners' shares must cover at least the whole household loan, as CPF Board sets out." },
+        ] },
+        { kind: "quiz", question: "A co-owner's HPS share of cover is 50%. What does a claim for them settle?",
+          options: ["The whole loan", "50% of the outstanding loan, up to the sum insured", "Nothing, unless both owners claim"],
+          answer: 1, explain: "CPF Board's example: with a 50% share of cover, HPS pays 50% of the outstanding housing loan, up to the insured sum, to the mortgagee." },
       ] },
     ],
   },
