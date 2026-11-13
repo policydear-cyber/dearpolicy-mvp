@@ -281,9 +281,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
   const fromRows: { json: unknown; report: RowReport | null } = rows && !help ? amountsFromRows(reply.json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
-    !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows),
-    // The conversation's own member, if it has one: a row multiple's case said of no one is theirs (multiplier.ts).
-    context.family.find((f) => f.id === context.conversation.family_member_id)?.display_name ?? null) : { json: reply.json, report: null };
+    !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows)) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? []), fromRows.report?.figures ?? []) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
