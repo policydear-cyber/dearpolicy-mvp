@@ -11,6 +11,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GENERAL_GUIDES, GUIDES, LEARN_GROUPS, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, learnDate, learnSearchIndex, termHref } from "@/lib/learn/content";
 import { SINGAPORE_GUIDES } from "@/lib/learn/singapore";
+import { CLAIM_GUIDES } from "@/lib/learn/claims";
 import { searchLearn } from "@/components/learn/search";
 import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
 import { PICTOGRAMS } from "@/components/learn/pictogram";
@@ -115,6 +116,62 @@ async function main() {
     }
   });
 
+  await t("claims: one guide per common claim type, all on the Claims by type shelf, general and unsourced", () => {
+    const slugs = CLAIM_GUIDES.map((g) => g.slug);
+    assert.deepEqual(slugs, ["claims-hospital-stay", "claims-clinic-visits", "claims-accident", "claims-critical-illness", "claims-death", "claims-disability", "claims-travel", "claims-home-motor"]);
+    for (const g of CLAIM_GUIDES) {
+      assert.equal(g.group, "claims", g.slug);
+      assert.ok(GENERAL_GUIDES.includes(g), `${g.slug}: claim guides are general guides, so every general word rule applies`);
+      assert.ok(!g.region && !g.sources, `${g.slug}: country-neutral`);
+    }
+    assert.ok(LEARN_GROUPS.some((g) => g.id === "claims"));
+  });
+
+  await t("claims: never invents what an insurer will require (the policy and the insurer say what they need)", () => {
+    const invented = /\b(you must (?:send|provide|submit|get)|you(?: will|’ll|\x27ll) need (?:an?|the|your) |(?:the )?insurer (?:will |always )?(?:needs?|requires?|asks? for) (?:an?|the|your) |needs? an? (?:x-ray|police report|medical report)|(?:x-ray|medical report)s? (?:is|are) (?:needed|required))/i;
+    const hit = joined.match(invented);
+    assert.equal(hit, null, `invented requirement: ${hit?.[0]}`);
+    const claimText = CLAIM_GUIDES.flatMap((g) => g.sections.flatMap((s) => s.blocks.flatMap(blockTexts))).join("\n");
+    assert.match(claimText, /The insurer tells the claimant what it needs/);
+    assert.match(claimText, /Your policy says what it needs/);
+    // TE #443: the pattern must catch paraphrases too (a guard that cannot fail is no guard).
+    for (const bad of ["You must send an X-ray with the claim.", "The insurer needs a police report for every claim.", "You'll need a medical report from the specialist.", "An X-ray is required."]) assert.match(bad, invented, bad);
+  });
+
+  await t("claims: worked examples add up (figures parsed from the text and recomputed)", () => {
+    const n = (x: string) => Number(x.replace(/,/g, ""));
+    const bill = joined.match(/a covered bill of ([\d,]+) with a deductible of ([\d,]+) and a (\d+)% co-payment\. The policy would pay ([\d,]+) less ([\d,]+), so ([\d,]+)/);
+    assert.ok(bill, "hospital example present");
+    const after = n(bill![1]) - n(bill![2]);
+    assert.equal(n(bill![4]), after);
+    assert.equal(n(bill![5]), after * n(bill![3]) / 100);
+    assert.equal(n(bill![6]), splitBill({ bill: n(bill![1]), deductible: n(bill![2]), coPaymentPercent: n(bill![3]), limit: n(bill![1]) }).policyShare);
+    const pct = joined.match(/lists (\d+)% of the sum assured for an injury and the sum assured is ([\d,]+), the illustrated amount is ([\d,]+)/);
+    assert.ok(pct);
+    assert.equal(percentOf(n(pct![1]), n(pct![2])), n(pct![3]));
+    const ci = joined.match(/sum assured of ([\d,]+) includes critical illness cover of ([\d,]+) .* After a claim of ([\d,]+), the death cover left would be ([\d,]+)/);
+    assert.ok(ci);
+    assert.equal(n(ci![2]), n(ci![3]));
+    assert.equal(n(ci![1]) - n(ci![3]), n(ci![4]));
+    const avg = joined.match(/insured for ([\d,]+) but would cost ([\d,]+) to rebuild\. .* a covered claim of ([\d,]+) might be reduced to half, ([\d,]+)/);
+    assert.ok(avg);
+    assert.equal(n(avg![1]) / n(avg![2]), 0.5, "the text says half");
+    assert.equal(n(avg![3]) * n(avg![1]) / n(avg![2]), n(avg![4]));
+  });
+
+  await t("match: new terms link (waiver, outpatient, pre-hospital, panel, ADLs) and ordinary words do not", () => {
+    assert.deepEqual(learnTermsIn(["Outpatient visits are listed, and a waiver of premium applies to early-stage critical illness."]).map((x) => x.id), ["waiver-of-premium", "early-stage", "critical-illness"]);
+    assert.deepEqual(learnTermsIn(["Post-hospitalisation treatment within 90 days."]).map((x) => x.id), ["pre-post-hospital"]);
+    assert.deepEqual(learnTermsIn(["Use a panel hospital. Unable to do 3 of 6 activities of daily living."]).map((x) => x.id), ["panel-provider", "activities-of-daily-living"]);
+    assert.deepEqual(learnTermsIn(["The panel reviewed the term of the loan for the whole family. A third party called."]), []);
+    // Critic #443: everyday phrases that contain a term's words must not link it.
+    assert.deepEqual(learnTermsIn(["This is a long-term plan. South African short-term insurance differs. Detected at an early stage, it was removed. Paid for the whole life of the loan."]), []);
+    // Inpatient and outpatient open most hospital answers; they stay in the A to Z but do not crowd out deductible and co-payment.
+    assert.deepEqual(learnTermsIn(["Your son is listed under insurance cover from your employer, under insured persons."]), [], "TE #443");
+    assert.deepEqual(learnTermsIn(["The home is underinsured, so an average clause may apply."]).map((x) => x.id), ["under-insurance"]);
+    assert.deepEqual(learnTermsIn(["Inpatient and outpatient treatment: a deductible applies, then a co-payment."]).map((x) => x.id), ["deductible", "co-payment"]);
+  });
+
   await t("match: finds terms an answer uses, in the order they appear, case-insensitive", () => {
     const ids = learnTermsIn(["The Waiting Period is 90 days. A deductible applies, then a 10% co-payment."]).map((x) => x.id);
     assert.deepEqual(ids, ["waiting-period", "deductible", "co-payment"]);
@@ -185,12 +242,12 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "lib/learn/claims.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore))$/.test(i), `${f} imports ${i}`);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore|claims))$/.test(i), `${f} imports ${i}`);
       assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b/i, f);
       // Only the country articles' source lists carry web addresses; they are checked against the official allow-list below.
       if (f !== "lib/learn/singapore.ts") assert.doesNotMatch(src, /https?:\/\//i, f);
@@ -296,7 +353,7 @@ async function main() {
   });
 
   await t("singapore: every article is on the Singapore shelf, has official sources and a valid checked-on date", () => {
-    assert.ok(SINGAPORE_GUIDES.length >= 4);
+    assert.ok(SINGAPORE_GUIDES.length >= 7);
     const official = /^https:\/\/(www\.)?(cpf\.gov\.sg|moh\.gov\.sg|mas\.gov\.sg|[a-z0-9-]+\.gov\.sg)\//;
     for (const g of SINGAPORE_GUIDES) {
       assert.equal(g.group, "singapore", g.slug);
@@ -369,6 +426,9 @@ async function main() {
     const last = SINGAPORE_GUIDES[SINGAPORE_GUIDES.length - 1];
     const lastHtml = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: last.slug }) }));
     assert.doesNotMatch(lastHtml, /Next: /, "the last Singapore article does not lead into an unrelated shelf");
+    const claimsShelf = html.slice(html.indexOf('data-testid="learn-shelf-claims"'), html.indexOf('data-testid="learn-shelf-dearpolicy"'));
+    let pos = -1;
+    for (const g of CLAIM_GUIDES) { const i = claimsShelf.indexOf(`href="/learn/${g.slug}"`); assert.ok(i > pos, `claims shelf: ${g.slug} missing or out of order`); pos = i; }
     const firstSg = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: SINGAPORE_GUIDES[0].slug }) }));
     assert.match(firstSg, new RegExp(`Next: <a class="text-link" href="/learn/${SINGAPORE_GUIDES[1].slug}"`));
   });
@@ -383,6 +443,26 @@ async function main() {
     assert.equal(first("DPS"), "/learn/sg-dependants-protection-scheme");
     assert.ok(searchLearn(index, "rider").some((r) => r.href === "/learn/sg-integrated-shield-plans"));
     assert.ok(searchLearn(index, "deductible").some((r) => r.href === "/learn/terms#deductible"));
+    assert.equal(first("medisave"), "/learn/sg-medisave");
+    assert.equal(first("cpf nomination"), "/learn/sg-cpf-nominations");
+    assert.equal(first("HPS"), "/learn/sg-home-protection-scheme");
+    assert.equal(first("hdb mortgage insurance"), "/learn/sg-home-protection-scheme");
+    // TE #443: how households actually type.
+    assert.equal(first("my dad died"), "/learn/claims-death");
+    assert.equal(first("my father passed away"), "/learn/claims-death");
+    assert.equal(first("broke my leg"), "/learn/claims-accident");
+    assert.equal(first("water leak"), "/learn/claims-home-motor");
+    assert.equal(first("pipe burst"), "/learn/claims-home-motor");
+    assert.equal(first("medisave for parents"), "/learn/sg-medisave");
+    assert.equal(first("hospitalised"), "/learn/claims-hospital-stay");
+    assert.equal(first("hospital bill"), "/learn/claims-hospital-stay");
+    assert.equal(first("claim form"), "/learn/making-a-claim");
+    assert.equal(first("broken arm"), "/learn/claims-accident");
+    assert.equal(first("lost luggage"), "/learn/claims-travel");
+    assert.equal(first("passed away"), "/learn/claims-death");
+    assert.equal(first("clinic visit"), "/learn/claims-clinic-visits");
+    assert.equal(first("flood"), "/learn/claims-home-motor");
+    assert.equal(first("cancer diagnosis"), "/learn/claims-critical-illness");
     assert.deepEqual(searchLearn(index, ""), []);
     assert.deepEqual(searchLearn(index, "zzzz qqqq"), []);
     assert.deepEqual(searchLearn(index, "careshield xylophone"), [], "every word must match");
