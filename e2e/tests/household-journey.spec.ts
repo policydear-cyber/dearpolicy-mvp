@@ -97,8 +97,8 @@ test.describe.serial("synthetic household journey", () => {
     for (const [file, profile, buffer] of uploads) {
       await page.locator(".upload-form select").selectOption({ label: profile });
       await page.locator(".upload-form input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf", buffer });
-      await page.getByRole("button", { name: "Upload & analyse" }).click();
-      await expect(page.locator(".upload-panel .upload-status")).toContainText("Upload received");
+      await page.getByRole("button", { name: "Upload and read" }).click();
+      await expect(page.locator(".upload-panel .upload-status")).toContainText("DearPolicy is reading it now");
     }
 
     const seenA = new Set<string>(), seenB = new Set<string>(), seenBad = new Set<string>(), seenPending = new Set<string>();

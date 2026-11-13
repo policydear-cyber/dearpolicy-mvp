@@ -285,7 +285,7 @@ export default function PoliciesPage() {
         pdfPassword,
         onProgress: (fraction) => setStatus(`Uploading document… ${Math.round(fraction * 100)}%`),
       });
-      setStatus("Upload received. DearPolicy is reading it now — you can keep using the app.");
+      setStatus("Uploaded. DearPolicy is reading it now. You can keep using DearPolicy while it does.");
       setFile(null);
       setPdfPassword("");
       if (fileInput.current) fileInput.current.value = "";
@@ -418,8 +418,8 @@ export default function PoliciesPage() {
     <header className="page-header compact"><div><h1>Your documents</h1><p className="lead">Any policy, certificate, schedule, renewal notice or receipt your insurer sent you.</p></div></header>
 
 
-    {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
-    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This page updates on its own. You can keep using the app.</small></div></div>}
+    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after ten minutes. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
+    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This usually takes under a minute. This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
     <section className="upload-panel">
@@ -442,14 +442,14 @@ export default function PoliciesPage() {
         </div>
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
-        <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload &amp; analyse</>}</button>
+        <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload and read</>}</button>
         {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
       </form>}
     </section>
 
 
     <section className="section">
-      <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Library</h2></div></div>
+      <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Documents on file</h2></div></div>
       <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Your policies <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>General wording <b>{counts.reference}</b></button></div>
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
@@ -473,7 +473,7 @@ export default function PoliciesPage() {
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy)].join(" · ")}</span>}
-              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}${policy.processing_status === "ready" && /^Read in part\b/.test(policy.processing_message ?? "") ? " partial" : ""}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? <><Icon name="alert"/> Some amounts not checked</> : <><Icon name="check"/> Ready</>) : policy.processing_status === "failed" ? <><Icon name="fileOff"/> {stageLabel(policy.processing_stage, policy.processing_status)}</> : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
+              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}${policy.processing_status === "ready" && /^Read in part\b/.test(policy.processing_message ?? "") ? " partial" : ""}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? <><Icon name="alert"/> Some amounts not used</> : <><Icon name="check"/> Ready</>) : policy.processing_status === "failed" ? <><Icon name="fileOff"/> {stageLabel(policy.processing_stage, policy.processing_status)}</> : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}
@@ -482,7 +482,7 @@ export default function PoliciesPage() {
 
           {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>
             <b>{scanRejected ? "Rejected" : documentSafetyMode === "not_scanned_prototype" ? "Received" : "Scanning"}</b>
-            <span>{quarantineLabel(policy, documentSafetyMode)}{scanRejected ? " — this file will not be analysed or used to answer questions. Delete it and upload the document again." : ""}</span>
+            <span>{quarantineLabel(policy, documentSafetyMode)}{scanRejected ? ". DearPolicy won’t read this file or use it in answers. Delete it, then upload the document again, ideally the copy your insurer sent you." : ""}</span>
           </div>}
 
           {processing && <div className="document-progress" aria-live="polite">
@@ -495,7 +495,7 @@ export default function PoliciesPage() {
           </div>}
 
           {/* Read in part: which pages, and the next step that can work (lib/documents/failure-advice.ts). It already says
-              that those amounts are not used, so "Not fully confirmed" is not shown under it as well. */}
+              that those amounts are not used, so "Some details not used yet" is not shown under it as well. */}
           {(() => {
             const part = !processing && policy.processing_status === "ready" ? readInPartAdvice(policy.processing_message) : null;
             // Cover reading not finished: its own reason and next step, never "could not be matched to the page" (audit 3 Nov).
@@ -509,7 +509,7 @@ export default function PoliciesPage() {
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small></div>}
               {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next"><summary>What can I do?</summary><small>{part.next}</small></details></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{pending.next}</small></div>}
-              {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
+              {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Some details not used yet</b><span>DearPolicy couldn&rsquo;t find the page some details in this document came from, so it doesn&rsquo;t use those details in answers yet.</span></div>}
             </>;
           })()}
 
@@ -549,7 +549,7 @@ export default function PoliciesPage() {
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
-      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. Add the people your policies cover first, then upload a policy schedule, certificate, renewal notice or benefits booklet." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
+      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
     </section>
   </div>;
 }

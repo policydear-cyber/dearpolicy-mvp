@@ -78,8 +78,8 @@ async function uploadThroughPage(page: Page, file: { name: string; mimeType: str
   await page.goto("/policies");
   await page.getByLabel(/Insurance document/).setInputFiles(file);
   if (password !== undefined) await page.getByLabel(/^PDF password/).fill(password);
-  await page.getByRole("button", { name: /upload & analyse/i }).click();
-  await expect(page.locator(".upload-panel .upload-status")).toContainText(/Upload received/i, { timeout: 240_000 });
+  await page.getByRole("button", { name: /upload and read/i }).click();
+  await expect(page.locator(".upload-panel .upload-status")).toContainText(/DearPolicy is reading it now/i, { timeout: 240_000 });
 }
 
 test.describe("round 5: the exploratory findings, fixed", () => {
@@ -103,7 +103,7 @@ test.describe("round 5: the exploratory findings, fixed", () => {
 
     // Empty portfolio: the next step, not "everything looks current" / S$0.00.
     await expect(page.getByTestId("empty-portfolio")).toBeVisible({ timeout: 60_000 });
-    await expect(page.locator("main")).not.toContainText(/Everything looks current|S\$0\.00|Family member's protection/);
+    await expect(page.locator("main")).not.toContainText(/Nothing to do right now|S\$0\.00|Family member's protection/);
     await shot(page, "02-empty-portfolio");
     // PR #77 (first-run): with nothing uploaded, an empty chat says to upload first and offers no fixed questions.
     await page.goto("/chat");
@@ -289,11 +289,11 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     await page.getByRole("button", { name: "Permanently delete household" }).click();
     await page.waitForURL(/\/household\/deleted/, { timeout: 60_000 });
     await expect(page.getByTestId("household-deleted")).toContainText("Your household has been deleted.");
-    await expect(page.locator("main")).not.toContainText(/could not load|contact support/i);
+    await expect(page.locator("main")).not.toContainText(/could(?: not|n.t) load|contact support/i);
     await shot(page, "11-household-deleted");
     await page.getByRole("button", { name: "Start a new household" }).click();
     await page.waitForURL(/\/family/, { timeout: 60_000 });
-    await expect(page.locator("main")).not.toContainText(/could not load|contact support|No household/i);
+    await expect(page.locator("main")).not.toContainText(/could(?: not|n.t) load|contact support|No household/i);
     await shot(page, "12-new-household");
     void browser;
   });

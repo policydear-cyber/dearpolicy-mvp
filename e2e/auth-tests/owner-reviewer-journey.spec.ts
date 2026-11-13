@@ -210,8 +210,8 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     for (const [file, profile, buffer] of uploads) {
       await owner.locator(".upload-form select").selectOption({ label: profile });
       await owner.locator(".upload-form input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf", buffer });
-      await owner.getByRole("button", { name: "Upload & analyse" }).click();
-      await expect(owner.locator(".upload-panel .upload-status")).toContainText("Upload received");
+      await owner.getByRole("button", { name: "Upload and read" }).click();
+      await expect(owner.locator(".upload-panel .upload-status")).toContainText("DearPolicy is reading it now");
     }
     const clean = await waitForPolicy(owner, files.clean, (p) => p.processing_status === "ready");
     const flagged = await waitForPolicy(owner, files.flagged, (p) => p.quarantine_status === "scan_rejected");
