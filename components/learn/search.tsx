@@ -26,8 +26,14 @@ function oneSlip(a: string, b: string): boolean {
   return slips + (a.length - i) + (b.length - j) <= 1;
 }
 
+/** Small everyday words a household types ("my dad died", "medisave for parents") that carry no topic. */
+const STOPWORDS = new Set(["a", "an", "the", "my", "our", "his", "her", "their", "i", "me", "we", "is", "are", "was", "it", "of", "for", "to", "in", "on", "and", "or", "do", "does", "did", "how", "what", "can", "with", "at"]);
+
 export function searchLearn(entries: LearnSearchEntry[], query: string, max = 8): LearnSearchEntry[] {
-  const wanted = words(query);
+  const all = words(query);
+  const content = all.filter((w) => !STOPWORDS.has(w));
+  // A query made only of small words ("what is") still searches as typed.
+  const wanted = content.length ? content : all;
   if (!wanted.length) return [];
   const scored = entries.map((entry) => {
     const hay = entry.text.toLowerCase();

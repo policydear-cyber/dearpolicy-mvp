@@ -94,7 +94,7 @@ export function HouseholdAccess() {
   return (
     <>
       <section className="section">
-        <div className="section-heading"><div><h2>Who can sign in</h2><p>People with their own DearPolicy sign-in for this household. They see the same documents and family.</p></div></div>
+        <div className="section-heading"><div><h2>Who can sign in</h2><p>People who sign in to this household with their own email. Everyone here sees the same family, documents and answers. Owners can also invite and remove people, rename the household, download its data and delete it.</p></div></div>
         <div className="profile-list" data-testid="household-access">
           {members.map((member) => {
             const isSelf = member.userId === callerUserId;
@@ -122,7 +122,7 @@ export function HouseholdAccess() {
                     </button>
                   )}
                   {confirmMemberId === member.userId && <button className="mini-button" onClick={() => setConfirmMemberId(null)}>Cancel</button>}
-                  {soleOwner && <small className="muted">You are the only owner. To leave, make someone else an owner first, or delete the household on the Household tab.</small>}
+                  {soleOwner && <small className="muted">You are the only owner, so you can&apos;t leave yet. Invite someone as an owner first, or delete the household on the Household tab.</small>}
                 </div>
               </div>
             );
@@ -136,12 +136,12 @@ export function HouseholdAccess() {
           <form onSubmit={createInvitation} className="profile-add-grid">
             <div className="field"><label htmlFor="hh-invite-email">Email</label><input id="hh-invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@example.com" required /></div>
             <div className="field"><label htmlFor="hh-invite-role">Role</label><select id="hh-invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "owner")}><option value="member">Member</option><option value="owner">Owner</option></select></div>
-            <button className="button primary" type="submit" disabled={!inviteEmail.trim()}>Send invitation</button>
+            <button className="button primary" type="submit" disabled={!inviteEmail.trim()}>Create invitation link</button>
           </form>
           {inviteError && <div className="document-warning" style={{ marginTop: 12 }}>{inviteError}</div>}
           {inviteLink && (
             <div className="upload-status" style={{ marginTop: 12 }}>
-              Share this link with them -- it won&apos;t be shown again: <br />
+              DearPolicy doesn&apos;t email this link. Copy it now and send it to them yourself, because it won&apos;t be shown again: <br />
               <code style={{ wordBreak: "break-all" }}>{inviteLink}</code>
             </div>
           )}
@@ -153,7 +153,7 @@ export function HouseholdAccess() {
                   <div className="avatar profile-avatar">{invitation.email.slice(0, 1).toUpperCase()}</div>
                   <div className="profile-fields">
                     <div className="field"><label>Email</label><span>{invitation.email}</span></div>
-                    <div className="field"><label>Role</label><span>{invitation.role}</span></div>
+                    <div className="field"><label>Role</label><span>{invitation.role === "owner" ? "Owner" : "Member"}</span></div>
                     <div className="field"><label>Expires</label><span>{sgDate(invitation.expiresAt)}</span></div>
                   </div>
                   <div className="profile-actions">

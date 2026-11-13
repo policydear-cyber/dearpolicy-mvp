@@ -11,7 +11,7 @@ import { figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
@@ -41,7 +41,10 @@ export type RowReport = { dropped: { why: string; text: string; notFit?: boolean
   cards?: Record<string, { text: string; person: string | null }>;
   /** The labels given only for premium rows (ChatRow.premium): an answer whose every amount is one of these gives no benefit
    * amount (noteNarrowedPages). */
-  premiumLabels?: string[] };
+  premiumLabels?: string[];
+  /** The percentage rows worked out on a person's own sum insured, as pointers the chat's checks verify and work out again
+   * (verifyAnswer's serverFigures). */
+  figures?: ServerFigure[] };
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -950,6 +953,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (st) st.rowConditions = r.conditions;
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
+        const sf = serverFigureOf(r, st, household);
+        if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
         (r.premium ? charges : benefits).add(String(st.text));
@@ -1197,7 +1202,8 @@ function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[],
     const st = statementFromRow(r, { ...raw, conditions, alternativeGroup: null }, labels, names);
     if (!st) return false;
     const parsed = readModelAnswer({ bottomLine: "-", nextSteps: [], question: null, statements: [st] });
-    return !!parsed && (verifyAnswer(household, parsed, [], new Set([String(st.text)])).answer.statements ?? []).some((x) => x.amount && x.text === st.text);
+    const sf = serverFigureOf(r, st, household);
+    return !!parsed && (verifyAnswer(household, parsed, [], new Set([String(st.text)]), sf ? [sf] : []).answer.statements ?? []).some((x) => x.amount && x.text === st.text);
   };
   if (passes(row, raw.conditions)) return named;
   for (const o of twins) {
@@ -1321,7 +1327,8 @@ const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind ===
 /** Whether a daily row's printed words (its line, the lines that continue it, and its quote) hold no limit but its most
  * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked
  * out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
-const MAX_DAYS = /\b(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+)?days?\b/gi;
+// "Maximum 30 days", "up to a maximum of 30 days", or "up to 30 days": the most days the rate is paid, not a money cap.
+const MAX_DAYS = /\b(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b|up\s+to\s+\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi;
 function dailyRateAlone(row: ChatRow, household: Household): boolean {
   if (row.figure.kind !== "printed") return false;
   const found = locateQuote(household, row.source.excerpt, row.docIndex);
@@ -1463,6 +1470,37 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
   // An amount the answer itself says does not fit the event is not one the documents fail to print: no note for it.
   if (!report.dropped.some((d) => !d.notFit) || statements.some((s) => s.id === "left-out-amount")) return statements;
   return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
+}
+
+/** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
+const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && row.percentOf === "sum_insured" && row.percent != null && row.percent > 0
+  && row.base != null && !row.baseCorrected && !!row.baseSource && row.baseDocIndex != null && !!row.figure.currency;
+/** The pointers the chat's checks need to show a percentage row's amount (lib/simple-chat/verify.ts serverFigureChecked): the
+ * row's percentage, the person's own sum insured line and the row's printed maximum. The checks find each in the stored pages
+ * and work the amount out again; nothing here is shown as it is. Null for any other row, or when the row's maximum cannot
+ * be read as one figure. */
+export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
+  if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
+  const currency = row.figure.currency!;
+  let cap: ServerFigure["cap"] = null;
+  if (row.capSource) {
+    const capDoc = household.documents.findIndex((d) => d.policyId === row.capSource!.documentId);
+    const values = [...new Set(moneyFiguresIn(row.capSource.excerpt).filter((m) => m.currency === currency && Math.abs(m.value - row.base!) >= 0.005).map((m) => m.value))];
+    const value = row.figure.capped ? row.figure.amount : values.length === 1 ? values[0] : null;
+    if (capDoc < 0 || value == null) return null;
+    cap = { value, docIndex: capDoc, page: row.capSource.page, quote: row.capSource.excerpt };
+  }
+  // A row whose own conditions print money other than its own cap, or limit words with no figure ("No more than S$1,000 is
+  // paid for any one fracture"; "a reduced amount applies") is never given this way: the worked-out share could be more
+  // than it pays. A note that repeats the row's own cap ("still subject to the GBP 1,500 maximum") is the same limit.
+  for (const c of row.conditions) {
+    const figs = moneyFiguresIn(c);
+    if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
+    if (!figs.length && (statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit|reduc)/i.test(c))) return null;
+  }
+  return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
+    row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
+    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the

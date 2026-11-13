@@ -43,17 +43,17 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(customerMessage(data.error, "Could not create your account."));
+        setError(customerMessage(data.error, "We couldn't create your account. Please try again."));
         return;
       }
       if (data.needsEmailConfirmation) {
-        setNotice("Check your email for a confirmation link to finish creating your household.");
+        setNotice("Check your email. Open the link we sent to finish creating your account.");
         return;
       }
       // One full-page navigation (as on sign-in): the app loads with the new session.
       window.location.assign(inviteNext ?? "/");
     } catch {
-      setError("Could not create your account. Please try again.");
+      setError("We couldn't create your account. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -61,12 +61,13 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
 
   return (
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
-      <h1>Create your household</h1>
-      <p className="lead">Upload your family&apos;s insurance policies. DearPolicy shows what each person is covered for and answers your questions, with the page each answer comes from.</p>
+      <h1>Create your account</h1>
+      <p className="lead">Keep your family&apos;s insurance documents in one place. See who is covered for what, and ask questions in plain English. Each answer shows the page it comes from.</p>
       {/* Said before the form, so an invited person uses the right address and anyone else knows before typing a password. */}
       {inviteOnly ? <p className="alert" role="note" data-testid="signup-invite-only">{INVITE_ONLY_NOTE}</p> : null}
       <form onSubmit={submit} className="field">
         <label htmlFor="su-household">Household name (optional)</label>
+        <p className="field-hint" style={{ marginTop: 0 }}>Your family shares one household. For example, &ldquo;The Tan family&rdquo;. You can change it later.</p>
         <input id="su-household" suppressHydrationWarning type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
         <label htmlFor="su-email" style={{ marginTop: 12 }}>
           Email
@@ -96,7 +97,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
           </div>
         ) : null}
         <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8} style={{ marginTop: 10 }} aria-describedby="su-ready-hint">
-          {busy ? "Creating…" : "Create household"}
+          {busy ? "Creating…" : "Create account"}
         </button>
         {!busy && (!email.trim() || password.length < 8) ? <p id="su-ready-hint" className="field-hint">Enter your email and a password of at least 8 characters to continue.</p> : null}
       </form>

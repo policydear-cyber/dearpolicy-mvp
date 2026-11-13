@@ -769,6 +769,92 @@ function cappedAmount(st: ModelStatement, at: Found, household: Household, perso
   if (!cap) return null;
   return cap.amount.value < amount.value ? { keep: false, cap } : { keep: true };
 }
+/** A percentage figure the server worked out from a benefit-table row (lib/benefit-table/chat.ts serverFigureOf): pointers to
+ * the words it rests on, never a figure to take on trust. The row's percentage of the person's own sum insured, the line
+ * that prints that sum, and the row's printed maximum, if any. Built only by the server, never from the model's JSON. */
+export type ServerFigure = { text: string; person: string; quote: string; percent: number; currency: string;
+  /** The amount the benefit table shows for the row: the figure worked out again here must be the same, or none is given. */
+  value: number;
+  /** The row's own printed words (a capped row's statement quotes its cap instead). */
+  row: { docIndex: number; page: number; quote: string };
+  base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null };
+/** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
+ * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
+ * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
+ * own line). One general rule for any layout, insurer and currency. Shown only when all of these hold, else null and the
+ * usual checks decide:
+ * - the row's own printed line (with its continuation) prints the percentage;
+ * - the base line is in a document linked to the person, names the person, and prints exactly one money figure: the base,
+ *   in the row's currency (a bare "$" is no currency);
+ * - no other line prints a different sum in that currency on a line naming the person: two sums are doubt, so no figure.
+ *   When the row and the sum are in the same document, only that document's lines count; otherwise every live document
+ *   of the same policy does (a superseded document never counts);
+ * - a maximum is printed with its currency right after a cap word in its quoted words, in the same currency, and the row
+ *   prints no cap when none is given;
+ * - the amount is worked out here: the percentage of the base in cents, and the lesser of that and the maximum. */
+function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string): Checked | null {
+  if (!(sf.percent > 0) || !sf.currency || sf.currency === "$") return null;
+  const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
+  if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return null;
+  const rowText = rowWithContinuation(household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rf.offset);
+  const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
+  if (!pcts.has(sf.percent)) return null;
+  // One share only: a row whose line or what continues it prints another percentage ("10% ... For an insured child, 5%"),
+  // or names a kind of life, is for someone it cannot settle from the line (Critic #449 rounds 4-5).
+  if (pcts.size > 1) return null;
+  if (/\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(rowText)) return null;
+  // The base: the person's own line, in a document linked to them.
+  const bdoc = household.documents[sf.base.docIndex];
+  if (!bdoc || unreadable(bdoc) || !bdoc.linkedPeople.some((p) => baseName(p) === person)) return null;
+  const bf = locateQuote(household, sf.base.quote, sf.base.docIndex);
+  if (!bf || bf.docIndex !== sf.base.docIndex) return null;
+  const bpage = bdoc.pages.find((p) => p.page === bf.page)!;
+  const at = bpage.text.slice(0, bf.offset).split("\n").length - 1;
+  const line = bpage.text.split("\n")[at] ?? "";
+  const who = tokens(person), have = new Set(tokens(line));
+  // A line names the person only when it names no household member whose name holds theirs and more ("Wei Ling Tan" is
+  // not "Wei Tan"'s line, Critic #449 F8).
+  const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
+  const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
+  const onLine = moneyFiguresIn(line);
+  if (!namesPerson(have) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
+  // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
+  // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
+  // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const rowDoc = household.documents[rf.docIndex];
+  const samePolicy = (d: HouseholdDocument) => d === bdoc || d === rowDoc || (bdoc !== rowDoc && !!number(d) && (number(d) === number(bdoc) || number(d) === number(rowDoc)));
+  for (const d of household.documents) {
+    if (d.supersededAt || unreadable(d) || !samePolicy(d) || !d.linkedPeople.some((p) => baseName(p) === person)) continue;
+    for (const pg of d.pages) for (const l of pg.text.split("\n")) {
+      if (!namesPerson(new Set(tokens(l)))) continue;
+      const figs = moneyFiguresIn(l).filter((f) => f.currency === sf.currency);
+      if (figs.length === 1 && !sameValue(figs[0].value, sf.base.value)) return null;
+    }
+  }
+  // The maximum, from its own printed words; a row that prints a cap word but none was given is never worked out.
+  let cap: { value: number; found: Found } | null = null;
+  if (sf.cap) {
+    const cdoc = household.documents[sf.cap.docIndex];
+    const cf = cdoc ? locateQuote(household, sf.cap.quote, sf.cap.docIndex) : null;
+    if (!cf || cf.docIndex !== sf.cap.docIndex || cf.page !== sf.cap.page) return null;
+    const fig = moneyFiguresIn(cf.excerpt).find((f) => sameValue(f.value, sf.cap!.value));
+    if (!fig || fig.currency !== sf.currency) return null;
+    const i = cf.excerpt.indexOf(fig.raw);
+    if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return null;
+    cap = { value: fig.value, found: cf };
+  } else if (CAP_WORD.test(rowText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return null;
+  const worked = Math.round(sf.base.value * sf.percent) / 100;
+  const capped = !!cap && worked > cap.value;
+  const value = capped ? cap!.value : worked;
+  if (!sameValue(value, sf.value)) return null;
+  const cur = currencyOf(onLine[0].raw, line, bdoc, bf.page);
+  const money = (v: number) => formatMoney(cur.sign, v);
+  const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
+  const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${capped ? ` is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : cap ? `, within its maximum of ${money(cap.value)}` : ""}`;
+  return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis,
+    amount: { value, text: (capped ? "Up to " : "") + money(value), currencyResolved: cur.resolved, illustration: true } };
+}
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */
 function coverOfPercent(rowText: string): string[] {
@@ -1081,6 +1167,11 @@ const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|c
 /** A day cap printed as its own field under the row ("Maximum: 30 days", "Up to a maximum of 30 days"): read by the day
  * rules below (one cap only), never a limit word by itself (TE #392 D). */
 export const MAX_DAY_FIELD = /\b(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+)?days?\b/gi;
+/** Day ordinals in words, as schedules print a first paid day ("from the third consecutive day", TE-ACC-20261113). */
+export const ORDINAL_DAY: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12,
+  fourteenth: 14, fifteenth: 15, twentieth: 20, "twenty-first": 21, thirtieth: 30, "thirty-first": 31 };
+/** "the third" -> "the 3rd", so a day printed in words is read as one printed in figures. */
+const ordinalDays = (t: string) => t.replace(new RegExp(String.raw`\b(${Object.keys(ORDINAL_DAY).join("|")})(?=\s+(?:consecutive\s+|full\s+)?days?\b)`, "gi"), (w) => `${ORDINAL_DAY[w.toLowerCase()]}th`);
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
   // again" after "hospitalised for 15 days").
@@ -1094,7 +1185,7 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
   const tail = block.tail.replace(/\s+/g, " ").replace(MAX_DAY_FIELD, " ");
   if (STAY_BLOCK_WORDS.test(tail)) return null;
-  const rule = squash(row).text.includes(squash(quoted).text) ? row : `${quoted} ${block.tail.replace(/\s+/g, " ")}`;
+  const rule = ordinalDays(squash(row).text.includes(squash(quoted).text) ? row : `${quoted} ${block.tail.replace(/\s+/g, " ")}`);
   if (OTHER_DAY_RULE.test(rule)) return null;
   const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
   if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
@@ -1102,12 +1193,15 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   // S$3,000", TE #392 E): no total is worked out past it, as the benefit table already refuses (dailyRateAlone).
   if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
   if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
-  const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b/gi)];
-  const maxes = [...rule.matchAll(/\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/gi)];
+  const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?day\b/gi)];
+  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Only when it ends the
+  // clause or names what it limits ("per accident", "of hospitalisation", "in any one year"): "a stay that begins up to 30
+  // days after/post the accident" or "starting up to 30 days later" limits when, not how many days (Critic #449 F5).
+  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b|up\s+to\s+\(?(\d+)\)?\s*days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi)];
   if (starts.length !== 1 || maxes.length !== 1) return null;
-  const startDay = Number(starts[0][2]), most = Number(maxes[0][1]);
+  const startDay = Number(starts[0][2]), most = Number(maxes[0][1] ?? maxes[0][2]);
   // Every number of days printed is one of these two: "(30) days" and "10th day" only.
-  const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+days?\b/gi)].map((m) => Number(m[1]));
+  const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== startDay && d !== most)) return null;
   const unpaid = starts[0][1].toLowerCase() === "after" ? startDay : startDay - 1;
   const payable = Math.max(0, Math.min(stay - unpaid, most));
@@ -1319,13 +1413,17 @@ function billAgainst(st: ModelStatement, found: Found, household: Household, amo
 // ------------------------------------------------------------------ people
 const tokens = (s: string) => s.toLowerCase().replace(/\([^)]*\)/g, (m) => " " + m.slice(1, -1) + " ").split(/[^\p{L}]+/u).filter((t) => t.length > 1);
 const baseName = (member: string) => member.replace(/\s*\([^)]*\)\s*$/, "").trim();
-/** The household member a name means (all its words in the member's name), or null when none or several fit. */
+/** The household member a name means (all its words in the member's name, or when several fit, the one whose whole name
+ * it is), or null when none or several fit. */
 export function matchMember(household: Household, person: string | null): string | null {
   if (!person?.trim()) return null;
   const want = tokens(person);
   if (!want.length) return null;
   const hits = household.members.filter((m) => { const have = new Set(tokens(m.name)); return want.every((w) => have.has(w)); });
-  return hits.length === 1 ? baseName(hits[0].name) : null;
+  if (hits.length === 1) return baseName(hits[0].name);
+  // Several fit: the one whose whole name it is ("Wei Tan", with "Wei Ling Tan" in the household too: Critic #449 F8).
+  const whole = hits.filter((m) => { const have = tokens(baseName(m.name)); return have.length === want.length && have.every((w) => want.includes(w)); });
+  return whole.length === 1 ? baseName(whole[0].name) : null;
 }
 
 /** Whether the document a figure is quoted from is another member's own and not this person's (TE main journeys 11 Nov,
@@ -1901,10 +1999,14 @@ function basisOf(household: Household, c: Checked): string {
   return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
+/** Words that point at people without naming them: relationships and groups, in any household. */
+const PEOPLE_WORDS = /\b(?:husband|wife|spouse|partner|son|daughter|child|children|kids?|baby|babies|mother|mum|mom|father|dad|parents?|brother|sister|sibling|grand(?:mother|father|ma|pa|son|daughter|child|children|parents?)|in-laws?|family|we|us|our|both|everyone|everybody|all of us)\b/i;
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
 /** `serverWords`: statement texts the server wrote itself (the benefit table's row labels, lib/benefit-table/chat.ts). Only a
  * statement whose text is exactly one of them keeps its words without the money filter; everything else is filtered. */
-export function verifyAnswer(household: Household, model: ModelAnswer, written: string[] = [], serverWords: ReadonlySet<string> = new Set()): { answer: StructuredAnswer; report: VerifyReport } {
+/** `serverFigures`: percentage rows the server worked out from the benefit table (serverFigureChecked), for statements whose
+ * text is one of `serverWords`. */
+export function verifyAnswer(household: Household, model: ModelAnswer, written: string[] = [], serverWords: ReadonlySet<string> = new Set(), serverFigures: readonly ServerFigure[] = []): { answer: StructuredAnswer; report: VerifyReport } {
   const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [] };
   const checked: Checked[] = [];
   const read = proseRead(household);
@@ -1912,12 +2014,59 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const aboutFiles = new Set<number>();
   /** Texts written here from the library's own record: never held to that record again. */
   const fromRecord = new Set<string>();
+  /** A statement with no person whose quote is one member's own document: the cards it adds (those not in `had`) that have
+   * no person are labelled with that member once it is done. By the card itself, never by its place: a later card can
+   * remove an earlier one (Critic #444 F1). */
+  let ownerLabel: { had: Set<Checked>; who: string } | null = null;
+  const labelOwner = () => {
+    if (ownerLabel) for (const c of checked) if (!ownerLabel.had.has(c) && c.found && !c.person) c.person = ownerLabel.who;
+    ownerLabel = null;
+  };
+  /** Who the household is asking about: the members its latest message names, or, when it names no one and points at no one
+   * else either ("And the death benefit?"), the last earlier message that names someone (Critic #444 F3). A message that
+   * points at people without naming them ("my husband", "the kids", "our family", "both of us") is never read with an
+   * earlier one (Critic #444 re-review): no one is taken as asked about. */
+  const pointsAtPeople = (w: string) => PEOPLE_WORDS.test(w) || household.members.some((m) => {
+    const rel = (m.relationship ?? "").toLowerCase().trim();
+    return rel.length >= 3 && rel !== "self" && new RegExp(String.raw`\b${rel.replace(/[^a-z ]/g, "")}s?\b`, "i").test(w);
+  });
+  const askedAbout = (() => {
+    for (const w of written) {
+      const names = membersNamedIn(household, w);
+      if (names.length) return names;
+      if (pointsAtPeople(w)) return [];
+    }
+    return [];
+  })();
   for (const st of model.statements) {
+    labelOwner();
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
     let found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
+      // No person the household can be told (none given, "she", "the life assured"), yet the quote sits in a document that
+      // is some members' own and not others': the figure is theirs. It is dropped when the question names only other
+      // members, and otherwise its card names the one owner, never nobody (TE new-household walk 13 Nov, defect 1:
+      // Daniel's S$400,000 shown with no person when Grace's death benefit was asked). Only the label: what is worked out
+      // for a statement with no person stays as it was (no percentage of anyone's sum is worked out).
+      if (!person) {
+        const members = household.members.map((m) => baseName(m.name));
+        const owners = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+        if (owners.length && owners.length < members.length) {
+          let who: string | null = owners.length === 1 ? owners[0] : null;
+          if (askedAbout.length && !askedAbout.some((n) => owners.includes(n))) {
+            // As for a named person: the same line printed in an asked-about member's own document is shown from theirs.
+            const theirs = askedAbout.map((n) => ({ n, f: household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, n))
+              .map((di) => locateQuote(household, st.quote!, di)).find((f) => f && !someoneElsesDocument(household, f.docIndex, n)) ?? null })).find((x) => x.f);
+            if (!theirs) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
+            found = theirs.f!;
+            const ownersThere = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+            who = ownersThere.length === 1 ? ownersThere[0] : ownersThere.length < members.length && ownersThere.includes(theirs.n) && askedAbout.length === 1 ? theirs.n : null;
+          }
+          if (who) ownerLabel = { had: new Set(checked), who };
+        }
+      }
       // A quote placed in another member's own document stands only where the person's own documents print it too.
       if (person && someoneElsesDocument(household, found.docIndex, person)) {
         const own = household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, person))
@@ -1925,6 +2074,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         if (!own) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
         found = own;
       }
+      // A percentage row the server worked out on the person's own sum is checked from its own words and worked out again.
+      // Two such rows read the same and are worked on different sums (two policies of one cover): which one this is, is doubt.
+      const sfs = person && serverWords.has(st.text) ? serverFigures.filter((f) => f.text === st.text && f.person === person && f.quote === st.quote) : [];
+      const sf = new Set(sfs.map((f) => `${f.base.value}|${f.base.docIndex}|${f.cap?.value ?? ""}`)).size === 1 ? sfs[0] : undefined;
+      const served = sf ? serverFigureChecked(sf, st, found, household, person!) : null;
+      if (served) { checked.push(served); continue; }
       let r = checkAmount(st, found, household, person);
       // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
       // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it
@@ -2051,6 +2206,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
   }
+  labelOwner();
   // For a question about the documents, the points about single files become one list per set of people, wherever the
   // first of them stood (libraryGroups).
   const filePoints = checked.filter((c) => c.libraryDoc != null);

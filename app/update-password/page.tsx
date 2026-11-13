@@ -22,7 +22,7 @@ export default function UpdatePasswordPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(customerMessage(data.error, "Could not update your password. The link may have expired -- request a new one."));
+        setError(customerMessage(data.error, "We couldn't change your password. The link may have expired. Ask for a new one from “Forgot your password?” on the sign-in page."));
         return;
       }
       // An invited person setting their first password goes on to join (lib/auth/invite-return.ts); anyone else, home.
@@ -31,7 +31,7 @@ export default function UpdatePasswordPage() {
       router.push(next ?? "/");
       router.refresh();
     } catch {
-      setError("Could not update your password. Please try again.");
+      setError("We couldn't change your password. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -57,7 +57,7 @@ export default function UpdatePasswordPage() {
           </div>
         ) : null}
         <button className="button primary" type="submit" disabled={busy || password.length < 8} style={{ marginTop: 10 }}>
-          {busy ? "Updating…" : "Update password"}
+          {busy ? "Saving…" : "Save new password"}
         </button>
       </form>
     </div>

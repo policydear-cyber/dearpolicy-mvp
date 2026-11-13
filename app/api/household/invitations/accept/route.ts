@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       // "expired", "already used", and "wrong email" -- distinguishing
       // them would let an attacker probe which reason applies to a given
       // guessed token.
-      return NextResponse.json({ error: "This invitation link is invalid or has expired." }, { status: 400 });
+      return NextResponse.json({ error: "This invitation link is invalid or has expired. Ask the person who invited you for a new link." }, { status: 400 });
     }
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }

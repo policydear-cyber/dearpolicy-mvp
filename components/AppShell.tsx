@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 import { Icon, type IconName } from "@/components/icons";
+import PublicShell from "@/components/public/PublicShell";
 
 
 function NavIcon({ name }: { name: IconName }) {
@@ -18,11 +19,11 @@ function NavIcon({ name }: { name: IconName }) {
 type NavItem = { href: string; label: string; icon: IconName; tab?: number; short?: string; also?: string[] };
 /** Four places a household goes, plus Learn and Account settings. There is no Claims item: DearPolicy explains what a
  * household's documents say, and the insurer handles claims; a claim page opened from an answer counts as Ask. Coverage (/ledger) and Benefits (/schedule) are not in the
- * menu either: Portfolio answers "what is each of us covered for" and links to both ("Coverage, by person", "Benefits, by
- * policy"), as do its cover pages, so they count as Portfolio. Account settings opens on People (the family and who
+ * menu either: Home answers "what is each of us covered for" and links to both ("Coverage, by person", "Benefits, by
+ * policy"), as do its cover pages, so they count as Home. Account settings opens on People (the family and who
  * can sign in), which every member can use; Household and Plan usage are its other tabs. */
 const nav: NavItem[] = [
-  { href: "/", label: "Portfolio", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
+  { href: "/", label: "Home", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
   { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask", also: ["/claims"] },
   { href: "/records", label: "Payments", icon: "payments", tab: 4 },
@@ -78,8 +79,17 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+/** Pages a signed-out visitor may open (middleware.ts isPublicPage): the landing page ("/", served from /welcome)
+ * and the Learn library. Signed out, they get PublicShell's sign-in header instead of the household menu. */
+function isPublicView(pathname: string): boolean {
+  return pathname === "/" || pathname === "/welcome" || pathname === "/learn" || pathname.startsWith("/learn/");
+}
+
+/** `signedIn` comes from app/layout.tsx, which reads middleware.ts's per-request session hint. It only picks which
+ * frame to draw; it authorizes nothing. */
+export default function AppShell({ children, signedIn = true }: { children: React.ReactNode; signedIn?: boolean }) {
   const pathname = usePathname();
+  const publicView = !signedIn && isPublicView(pathname);
   // Light is the brand default. The person's choice is kept in this browser
   // and applied before first paint by the small script in layout.tsx.
   const [theme, setTheme] = useState<Theme>("light");
@@ -98,6 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [unreachable, setUnreachable] = useState(false);
   const [hosted, setHosted] = useState(true);
   useEffect(() => {
+    if (publicView) return;
     let cancelled = false;
     const check = async () => {
       try {
@@ -111,7 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     void check();
     const timer = setInterval(() => void check(), 60_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, []);
+  }, [publicView]);
   // The internal reviewer area is a DearPolicy staff tool, not part of any
   // household: it gets its own single-item navigation, never the household's.
   const reviewerArea = pathname.startsWith("/reviewer");
@@ -138,7 +149,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
     ?? (pathname === "/" && items.length ? items[0] : null);
   // Pages reached through another menu item still name themselves in the browser tab.
-  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password", "/privacy": "Privacy",
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your account", "/reset-password": "Reset password", "/privacy": "Privacy",
     "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage", "/claims": "Past events" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";
@@ -149,6 +160,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
+  // A public page names itself through its own metadata (title and description for search results), so no <title> here.
+  if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")}>{children}</PublicShell>;
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>
