@@ -22,7 +22,7 @@ type NavItem = { href: string; label: string; icon: IconName; tab?: number; shor
  * policy"), as do its cover pages, so they count as Portfolio. Account settings opens on People (the family and who
  * can sign in), which every member can use; Household and Plan usage are its other tabs. */
 const nav: NavItem[] = [
-  { href: "/", label: "Portfolio", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
+  { href: "/", label: "Home", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
   { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask", also: ["/claims"] },
   { href: "/records", label: "Payments", icon: "payments", tab: 4 },

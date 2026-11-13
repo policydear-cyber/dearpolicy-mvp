@@ -157,7 +157,7 @@ function ChatContent(){
   async function refreshHistory(cursor?:string|null){
     const response=await fetch("/api/chat/history?scope=all"+(cursor?"&cursor="+cursor:""));
     const data=await response.json();
-    if(!response.ok)throw new Error(data.error??"Could not load chat history");
+    if(!response.ok)throw new Error(data.error??"DearPolicy couldn't load this chat. Please try again.");
     setHistory(previous=>cursor?[...previous,...data.conversations]:data.conversations);
     setHistoryCursor(data.nextCursor??null);
   }
@@ -186,12 +186,12 @@ function ChatContent(){
       if(signal.aborted||version!==requestVersion.current)throw new DOMException("Cancelled","AbortError");
       const response=await fetch("/api/chat/jobs/"+id,{signal,cache:"no-store"});
       const data=await response.json();
-      if(!response.ok)throw new Error(data.error??"Could not read analysis progress");
+      if(!response.ok)throw new Error(data.error??"DearPolicy lost track of this answer. Please check again in a moment.");
       if(data.job.status==="complete"){jobId.current=null;return data.result.answer;}
       // A job this page did not cancel ends "cancelled" only when the chat
       // changed under it (lib/chat/jobs.ts: ChatConflict -> cancelled).
       if(data.job.status==="cancelled")throw new ConflictError();
-      if(data.job.status==="failed")throw new Error(data.job.error??"Analysis stopped");
+      if(data.job.status==="failed")throw new Error(data.job.error??"DearPolicy couldn't finish this answer");
       if(version===requestVersion.current){
         const p=data.job.progress;
         setQueued(data.job.status==="queued");
@@ -260,7 +260,7 @@ function ChatContent(){
           question:text,conversationId,conversationRevision:conversationId?revision:undefined,asynchronous:true,
           timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"Chat failed");}
+      if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"DearPolicy couldn't answer just now");}
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
@@ -315,7 +315,7 @@ function ChatContent(){
     fetch("/api/family").then(r=>r.json()).then(data=>{
       if(!live)return;const members=data.family??[];setFamily(members);
       const saved=params.get("conversation")??params.get("claim");if(saved)void restore(saved);
-    }).catch(e=>{if(live)setError(customerError(e,"Could not load your family profiles."));});
+    }).catch(e=>{if(live)setError(customerError(e,"DearPolicy couldn't load your family members. Please refresh the page."));});
     return()=>{live=false;controller.current?.abort();requestVersion.current++;};
   },[]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{
@@ -323,7 +323,7 @@ function ChatContent(){
     fetch("/api/chat/history?scope=all",{signal:abort.signal,cache:"no-store"}).then(async response=>{
       const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load history");
       if(!abort.signal.aborted){setHistory(data.conversations);setHistoryCursor(data.nextCursor??null);setHistoryError("");}
-    }).catch((e)=>{if(!abort.signal.aborted)setHistoryError(customerError(e,"Could not load your chat history."));});
+    }).catch((e)=>{if(!abort.signal.aborted)setHistoryError(customerError(e,"DearPolicy couldn't load your past chats. Please refresh the page."));});
     return()=>abort.abort();
   },[]);
   // A new answer scrolls to its FIRST line (a long answer read from the top,
@@ -352,7 +352,7 @@ function ChatContent(){
   return <div className="page chat-page">
     <header className="chat-header">
       <div><h1><span className="title-icon"><Icon name="ask"/></span>Ask DearPolicy</h1></div>
-      <div className="chat-head-actions"><div className="auto-context"><strong><Icon name="person"/> Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
+      <div className="chat-head-actions"><div className="auto-context"><strong><Icon name="person"/> Who it’s about</strong><span>{active?"Asking about "+active.display_name+". Mention someone else to switch.":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
     {history.length||historyCursor?<details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
@@ -419,7 +419,7 @@ function ChatContent(){
             {plan.missingDocuments.length?<p className="fact-finding-documents">Documents: {plan.missingDocuments.join("; ")}</p>:null}
             {plan.reportedAmountsIgnored.length?<p className="fact-finding-reported">Any amount you mentioned is recorded as you reported it. It is not used as your cover or to work out a claim.</p>:null}
           </div>)}</div>:null}
-          {message.answer?.knownFacts?.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{shown(f)}</span>)}</div></div>:null}
+          {message.answer?.knownFacts?.length?<div className="known-facts"><strong>What we know so far, and what isn&rsquo;t clear yet</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{shown(f)}</span>)}</div></div>:null}
           {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}
           {message.answer?.policyStatedLimits?.length?<div className="policy-stated-limits" data-testid="policy-stated-limits">{message.answer.policyStatedLimits.map((limit,i)=><div className="policy-stated-limit" key={i}>
             <small>{POLICY_STATED_LIMIT_LABEL}</small><strong>{limit.amountText}</strong><span>{limit.ownerName?limit.ownerName+" · ":""}{limit.benefitTitle}</span>

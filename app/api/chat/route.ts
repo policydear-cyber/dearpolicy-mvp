@@ -58,7 +58,7 @@ export async function POST(request:NextRequest){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Invalid request",issues:error.issues},{status:400});
     if(error instanceof ChatConflict)return NextResponse.json({error:error.message},{status:409});
     const authResponse=routeErrorResponse(error);
-    if(authResponse.status===500)return NextResponse.json({error:"Chat failed"},{status:500});
+    if(authResponse.status===500)return NextResponse.json({error:"DearPolicy couldn't answer just now. Please try again."},{status:500});
     return authResponse;
   }
 }

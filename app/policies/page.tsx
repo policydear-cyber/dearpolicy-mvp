@@ -260,7 +260,7 @@ export default function PoliciesPage() {
     if (previousActiveCount.current > 0 && activeCount === 0) {
       const failed = policies.filter((p) => p.processing_status === "failed").length;
       setStatusIsError(!!failed);
-      setStatus(failed ? `Finished. ${failed === 1 ? "One document" : `${failed} documents`} could not be read — see below.` : "Your documents are ready. Your portfolio has been updated.");
+      setStatus(failed ? `Finished. ${failed === 1 ? "One document" : `${failed} documents`} could not be read — see below.` : "Your documents are ready. Home has been updated.");
     }
     previousActiveCount.current = activeCount;
   }, [activeCount, policies]);
@@ -394,7 +394,7 @@ export default function PoliciesPage() {
       const response = await fetch(`/api/policies/${policy.id}`, { method: "DELETE" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not delete document");
-      setLibraryNotice(`Deleted ${label}. It is no longer used in answers, and your portfolio has been updated.`);
+      setLibraryNotice(`Deleted ${label}. It is no longer used in answers, and Home has been updated.`);
       await refresh();
     } catch (error) {
       setLibraryNotice(customerError(error, "Could not delete that document. Please try again in a moment."));
