@@ -11,6 +11,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GENERAL_GUIDES, GUIDES, LEARN_GROUPS, LEARN_NOTICE, TERMS, TERMS_PAGE, blockTexts, guideBySlug, learnDate, learnSearchIndex, termHref } from "@/lib/learn/content";
 import { SINGAPORE_GUIDES } from "@/lib/learn/singapore";
+import { CLAIM_GUIDES } from "@/lib/learn/claims";
 import { searchLearn } from "@/components/learn/search";
 import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
 import { PICTOGRAMS } from "@/components/learn/pictogram";
@@ -115,6 +116,41 @@ async function main() {
     }
   });
 
+  await t("claims: one guide per common claim type, all on the Claims by type shelf, general and unsourced", () => {
+    const slugs = CLAIM_GUIDES.map((g) => g.slug);
+    assert.deepEqual(slugs, ["claims-hospital-stay", "claims-clinic-visits", "claims-accident", "claims-critical-illness", "claims-death", "claims-disability", "claims-travel", "claims-home-motor"]);
+    for (const g of CLAIM_GUIDES) {
+      assert.equal(g.group, "claims", g.slug);
+      assert.ok(GENERAL_GUIDES.includes(g), `${g.slug}: claim guides are general guides, so every general word rule applies`);
+      assert.ok(!g.region && !g.sources, `${g.slug}: country-neutral`);
+    }
+    assert.ok(LEARN_GROUPS.some((g) => g.id === "claims"));
+  });
+
+  await t("claims: never invents what an insurer will require (the policy and the insurer say what they need)", () => {
+    const invented = /(you must (?:send|provide|submit|get)|you will need (?:an?|the|your) |the insurer (?:will|always) (?:need|require|ask for)|(?:x-ray|medical report)s? (?:is|are) (?:needed|required))/i;
+    const hit = joined.match(invented);
+    assert.equal(hit, null, `invented requirement: ${hit?.[0]}`);
+    const claimText = CLAIM_GUIDES.flatMap((g) => g.sections.flatMap((s) => s.blocks.flatMap(blockTexts))).join("\n");
+    assert.match(claimText, /The insurer tells the claimant what it needs/);
+    assert.match(claimText, /Your policy says what it needs/);
+  });
+
+  await t("claims: worked examples add up", () => {
+    assert.equal((20000 - 2000) * 0.9, 16200);
+    assert.match(joined, /a covered bill of 20,000 with a deductible of 2,000 and a 10% co-payment\. The policy would pay 18,000 less 1,800, so 16,200/);
+    assert.match(joined, /10% of the sum assured for an injury and the sum assured is 100,000, the illustrated amount is 10,000/);
+    assert.match(joined, /sum assured of 200,000 includes critical illness cover of 100,000 .* After a claim of 100,000, the death cover left would be 100,000/);
+    assert.match(joined, /insured for 50,000 but would cost 100,000 to rebuild\. .* a covered claim of 10,000 might be reduced to half, 5,000/);
+  });
+
+  await t("match: new terms link (waiver, outpatient, pre-hospital, panel, ADLs) and ordinary words do not", () => {
+    assert.deepEqual(learnTermsIn(["Outpatient visits are listed, and a waiver of premium applies."]).map((x) => x.id), ["outpatient", "waiver-of-premium"]);
+    assert.deepEqual(learnTermsIn(["Post-hospitalisation treatment within 90 days."]).map((x) => x.id), ["pre-post-hospital"]);
+    assert.deepEqual(learnTermsIn(["Use a panel hospital. Unable to do 3 of 6 activities of daily living."]).map((x) => x.id), ["panel-provider", "activities-of-daily-living"]);
+    assert.deepEqual(learnTermsIn(["The panel reviewed the term of the loan for the whole family. A third party called."]), []);
+  });
+
   await t("match: finds terms an answer uses, in the order they appear, case-insensitive", () => {
     const ids = learnTermsIn(["The Waiting Period is 90 days. A deductible applies, then a 10% co-payment."]).map((x) => x.id);
     assert.deepEqual(ids, ["waiting-period", "deductible", "co-payment"]);
@@ -185,12 +221,12 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "lib/learn/claims.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore))$/.test(i), `${f} imports ${i}`);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore|claims))$/.test(i), `${f} imports ${i}`);
       assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b/i, f);
       // Only the country articles' source lists carry web addresses; they are checked against the official allow-list below.
       if (f !== "lib/learn/singapore.ts") assert.doesNotMatch(src, /https?:\/\//i, f);
@@ -383,6 +419,12 @@ async function main() {
     assert.equal(first("DPS"), "/learn/sg-dependants-protection-scheme");
     assert.ok(searchLearn(index, "rider").some((r) => r.href === "/learn/sg-integrated-shield-plans"));
     assert.ok(searchLearn(index, "deductible").some((r) => r.href === "/learn/terms#deductible"));
+    assert.equal(first("broken arm"), "/learn/claims-accident");
+    assert.equal(first("lost luggage"), "/learn/claims-travel");
+    assert.equal(first("passed away"), "/learn/claims-death");
+    assert.equal(first("clinic visit"), "/learn/claims-clinic-visits");
+    assert.equal(first("flood"), "/learn/claims-home-motor");
+    assert.equal(first("cancer diagnosis"), "/learn/claims-critical-illness");
     assert.deepEqual(searchLearn(index, ""), []);
     assert.deepEqual(searchLearn(index, "zzzz qqqq"), []);
     assert.deepEqual(searchLearn(index, "careshield xylophone"), [], "every word must match");
