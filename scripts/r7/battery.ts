@@ -18,7 +18,8 @@ const Y = (person: string | null, mentions?: RegExp | RegExp[], notMentions?: Re
 const SGT = (d: Date) => new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
 /** Whole days from today (Singapore) to an ISO date. */
 export const daysUntil = (iso: string, now = new Date()) => Math.round((Date.parse(iso + "T00:00:00Z") - Date.parse(SGT(now) + "T00:00:00Z")) / 86400_000);
-const ahead = (iso: string, ended: RegExp, label: string): RegExp => { const n = daysUntil(iso); return n >= 0 ? new RegExp("\\b" + n + " days?\\b") : new RegExp(ended.source + "|" + label, "i"); };
+// On the day itself, "ends today" answers "how many days left" as well as "0 days" does (CI on 14 Nov 2026).
+const ahead = (iso: string, ended: RegExp, label: string): RegExp => { const n = daysUntil(iso); return n > 0 ? new RegExp("\\b" + n + " days?\\b") : n === 0 ? /\b0 days?\b|\btoday\b/i : new RegExp(ended.source + "|" + label, "i"); };
 const HOME_DAYS = ahead("2026-11-14", /ended|expired/, "14 November 2026");
 const SHIELD_DAYS = ahead("2027-01-31", /ended|expired/, "31 January 2027");
 const CAR_DAYS = ahead("2027-08-07", /ended|expired/, "7 August 2027");
