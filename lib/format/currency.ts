@@ -110,7 +110,7 @@ const ANY_SIGN = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|\p{Sc}|(?<![A-Za-z
 // A bare "R" (rand) is read before a figure with a thousands group, after "or", "and", "up to" or "max", and anywhere in a
 // text that already prints such an R amount ("up to R100,000 or R900"); "Rider R1" and "Class R 2" are labels (Critic
 // R229, TE P145-4).
-export const ANY_MONEY_FIGURE = String.raw`${ANY_SIGN}\s?(\d[\d,]*(?:\.\d+)?)|(?<![\d.,])(\d[\d,]*(?:\.\d+)?)\s?(?:\p{Sc}|(?:${ISO_CODES})(?![A-Za-z]))(?!\s?\d)|(?<![A-Za-z])R\s?(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?)(?![\d])|(?<=\b(?:or|and|to|max(?:imum)?)\s+)R\s?(\d[\d,]*(?:\.\d+)?)`;
+export const ANY_MONEY_FIGURE = String.raw`${ANY_SIGN}\s?(\d[\d,]*(?:\.\d+)?)|(?<![\d.,/])(?<!\d-)(?!(?:19|20)\d\d\s?(?:${ISO_CODES}|\p{Sc})\s?\d)(?!\d+[ \u00a0]?(?:${ISO_CODES}|\p{Sc})\s?\d{1,3}(?:,\d{3})+)(\d[\d,]*(?:\.\d+)?)[ \u00a0]?(?:\p{Sc}|(?:${ISO_CODES})(?![A-Za-z]))|(?<![A-Za-z])R\s?(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?)(?![\d])|(?<=\b(?:or|and|to|max(?:imum)?)\s+)R\s?(\d[\d,]*(?:\.\d+)?)`;
 /** Every money figure of a text in any currency, with where it starts and how long it is (see ANY_MONEY_FIGURE). */
 export function anyMoneyFigures(text: string): { value: number; index: number; length: number }[] {
   const found = [...(text ?? "").matchAll(new RegExp(ANY_MONEY_FIGURE, "gu"))];

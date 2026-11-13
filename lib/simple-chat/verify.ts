@@ -805,8 +805,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const at = bpage.text.slice(0, bf.offset).split("\n").length - 1;
   const line = bpage.text.split("\n")[at] ?? "";
   const who = tokens(person), have = new Set(tokens(line));
+  // A line names the person only when it names no household member whose name holds theirs and more ("Wei Ling Tan" is
+  // not "Wei Tan"'s line, Critic #449 F8).
+  const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
+  const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
   const onLine = moneyFiguresIn(line);
-  if (!who.every((w) => have.has(w)) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
+  if (!namesPerson(have) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
   // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).
@@ -816,8 +820,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   for (const d of household.documents) {
     if (d.supersededAt || unreadable(d) || !samePolicy(d) || !d.linkedPeople.some((p) => baseName(p) === person)) continue;
     for (const pg of d.pages) for (const l of pg.text.split("\n")) {
-      const lt = new Set(tokens(l));
-      if (!who.every((w) => lt.has(w))) continue;
+      if (!namesPerson(new Set(tokens(l)))) continue;
       const figs = moneyFiguresIn(l).filter((f) => f.currency === sf.currency);
       if (figs.length === 1 && !sameValue(figs[0].value, sf.base.value)) return null;
     }
@@ -1183,8 +1186,9 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
   if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
   const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?day\b/gi)];
-  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays).
-  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?|up\s+to\s+)\(?(\d+)\)?\s*days?\b/gi)];
+  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Never a time window: "a
+  // stay that begins up to 30 days after the accident" limits when, not how many days (Critic #449 F5).
+  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?|up\s+to\s+)\(?(\d+)\)?\s*days?\b(?!\s+(?:after|before|of|from|following|prior|since|once|beyond|within))/gi)];
   if (starts.length !== 1 || maxes.length !== 1) return null;
   const startDay = Number(starts[0][2]), most = Number(maxes[0][1]);
   // Every number of days printed is one of these two: "(30) days" and "10th day" only.
@@ -1400,13 +1404,17 @@ function billAgainst(st: ModelStatement, found: Found, household: Household, amo
 // ------------------------------------------------------------------ people
 const tokens = (s: string) => s.toLowerCase().replace(/\([^)]*\)/g, (m) => " " + m.slice(1, -1) + " ").split(/[^\p{L}]+/u).filter((t) => t.length > 1);
 const baseName = (member: string) => member.replace(/\s*\([^)]*\)\s*$/, "").trim();
-/** The household member a name means (all its words in the member's name), or null when none or several fit. */
+/** The household member a name means (all its words in the member's name, or when several fit, the one whose whole name
+ * it is), or null when none or several fit. */
 export function matchMember(household: Household, person: string | null): string | null {
   if (!person?.trim()) return null;
   const want = tokens(person);
   if (!want.length) return null;
   const hits = household.members.filter((m) => { const have = new Set(tokens(m.name)); return want.every((w) => have.has(w)); });
-  return hits.length === 1 ? baseName(hits[0].name) : null;
+  if (hits.length === 1) return baseName(hits[0].name);
+  // Several fit: the one whose whole name it is ("Wei Tan", with "Wei Ling Tan" in the household too: Critic #449 F8).
+  const whole = hits.filter((m) => { const have = tokens(baseName(m.name)); return have.length === want.length && have.every((w) => want.includes(w)); });
+  return whole.length === 1 ? baseName(whole[0].name) : null;
 }
 
 /** Whether the document a figure is quoted from is another member's own and not this person's (TE main journeys 11 Nov,

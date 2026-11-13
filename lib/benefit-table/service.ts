@@ -148,6 +148,13 @@ async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
       .map((r) => [String(r.id), String(r.date_of_birth)]));
     for (const p of people) p.date_of_birth = dob.get(p.id) ?? null;
   } catch { /* no dates of birth: age groups stay unsettled */ }
+  // The relationships the household entered: whether a family schedule's child or adult row is the person's
+  // (assemble.ts lifeKindProblem). A failure leaves those rows with no amount, never the table unbuilt.
+  try {
+    const rel = new Map((await db("SELECT id, relationship FROM family_members WHERE account_id=$1 AND lifecycle_state='active'", [accountId]))
+      .map((r) => [String(r.id), r.relationship == null ? null : String(r.relationship)]));
+    for (const p of people) p.relationship = rel.get(p.id) ?? null;
+  } catch { /* no relationships: child and adult rows stay unsettled */ }
   return people;
 }
 

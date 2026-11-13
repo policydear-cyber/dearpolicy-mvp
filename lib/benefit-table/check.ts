@@ -606,15 +606,16 @@ function percentBaseUnsettled(row: string, value: number): boolean {
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-/** The row's words without a cap word whose object is the row's own percentage: "For an insured child under 18, limited to
- * 25% of the Sum Insured", "up to 50% of the sum assured", "a maximum of 10%". Such words state the share itself, not a money
- * limit on it, so they never mark the row as capped (TE-ACC-20261113: "limited to 25%" left the child's accidental death
- * with "a maximum applies, but it was not captured"). Only the row's own percentage: "100% ..., up to 25% for a child" or a
- * cap word before any other figure still marks it. */
+/** The row's words without "limited to" whose object is the row's own percentage: "For an insured child under 18, limited
+ * to 25% of the Sum Insured" names the share itself, not a money limit on it, so it never marks the row as capped
+ * (TE-ACC-20261113: it left the child's accidental death with "a maximum applies, but it was not captured"). Only "limited
+ * to": "up to 50%" or "a maximum of 50% according to the Scale of Fractures" says the share varies up to that, so the row
+ * still counts as capped and no fixed amount is worked out (Critic #449 F3). Only the row's own percentage: "100% ...,
+ * limited to 25% for a child" or a cap word before any other figure still marks it. */
 export function withoutOwnShareCap(text: string, percent: number | null): string {
   if (percent == null || !(percent > 0)) return text;
   const own = String(percent).replace(".", "\\.");
-  return text.replace(new RegExp(String.raw`\b(?:up\s+to|(?:subject\s+to\s+)?(?:a\s+)?max(?:imum)?\.?(?:\s+of)?|limited\s+to|not\s+(?:to\s+)?exceed(?:ing)?|capped\s+at)\s+(?:a\s+maximum\s+of\s+)?(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)`, "gi"), " ");
+  return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)`, "gi"), " ");
 }
 /** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second

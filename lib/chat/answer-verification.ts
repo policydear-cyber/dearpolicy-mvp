@@ -62,10 +62,14 @@ export const PREMIUM_ROW = new RegExp(String.raw`\bpremiums?\b|` + PAY_NOT_OURS 
 export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t match to your documents.";
 export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 
-/** A figure with its currency before it ("GBP 80,000", "S$300") or after it ("80,000 GBP"). A code that opens the next
- * figure is never the one before it's: in a table line "02/11/1982\tGBP 80,000" the figure is GBP 80,000, not 1982 GBP
- * (TE-ACC-20261113: every sum insured printed after a date of birth was read as the year). */
-const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱₹฿₩])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(\d[\d,]*(?:\.\d+)?)\s?(SGD|USD|MYR|HKD|AUD|EUR|GBP)\b(?!\s?\d)/g;
+/** A figure with its currency before it ("GBP 80,000", "S$300") or after it ("80,000 GBP", "100 SGD\t30 days"). A date's
+ * year is never a figure with the code after it: in "02/11/1982\tGBP 80,000" or "2 Nov 1982 GBP 80,000" the figure is
+ * GBP 80,000, not 1982 GBP (TE-ACC-20261113: every sum insured printed after a date of birth was read as the year). Only a
+ * year, a number inside a date (after "/" or "d-") or a 19xx/20xx before a code and another figure, an ungrouped number
+ * (an age or an ID, "42 EUR 60,000") before a code and a grouped figure, or a number in another table cell ("42\tEUR 60,000") is
+ * never read with the code after it: "100 SGD\t30 days" and "50,000 EUR\t25,000 EUR" keep their suffix reading (Critic
+ * #449 F4). */
+const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱₹฿₩])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(?<![\d,./])(?<!\d-)(?!(?:19|20)\d\d\s?(?:SGD|USD|MYR|HKD|AUD|EUR|GBP)\s?\d)(?!\d+[ \u00a0]?(?:SGD|USD|MYR|HKD|AUD|EUR|GBP)\s?\d{1,3}(?:,\d{3})+)(\d[\d,]*(?:\.\d+)?)[ \u00a0]?(SGD|USD|MYR|HKD|AUD|EUR|GBP)\b/g;
 const SYMBOL: Record<string, string> = { S: "SGD", SG: "SGD", US: "USD", HK: "HKD", A: "AUD", AU: "AUD", NZ: "NZD", RM: "MYR", "€": "EUR", "£": "GBP", "¥": "JPY", "₱": "PHP", "₹": "INR", "฿": "THB", "₩": "KRW" };
 const MULT: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, bn: 1e9, billion: 1e9 };
 export type StatedFigure = { raw: string; value: number; currency: string };
