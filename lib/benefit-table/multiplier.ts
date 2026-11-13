@@ -11,10 +11,12 @@ import { moneyFiguresIn } from "@/lib/chat/answer-verification";
  * one of the row's own printed conditions, one plain multiple (no negation, "up to", "at most", another section's or
  * another row's case, or a trait). A note failing a check adds nothing; no note named gives main's card. Read by the row
  * step (lib/benefit-table/chat.ts) and again by the chat's checks (lib/simple-chat/verify.ts serverFigureChecked). */
-export type Multiplier = { times: number; condition: string; keepsCap: boolean };
-/** What a row brings to its note: its own words (benefit and quote), its section, its printed maximum, and the benefit
- * names of the person's other rows (a note with no section number naming one of them is that row's, not this one's). */
-export type RowFacts = { own: string; section: string | null; cap: number | null; others?: string };
+export type Multiplier = { times: number; condition: string; keepsCap: boolean; words: string };
+/** What a row brings to its note: its own words (benefit and quote), its section, its printed maximum, the benefit names
+ * of the person's other rows (a note with no section number naming one of them is that row's, not this one's), the
+ * benefit names of every other row read from the same document (`docNames`, one per line), and whether the row pays per
+ * day. */
+export type RowFacts = { own: string; section: string | null; cap: number | null; others?: string; docNames?: string; perDay?: boolean };
 
 const TIMES: Record<string, number> = { double: 2, doubled: 2, twice: 2, treble: 3, trebled: 3, triple: 3, tripled: 3, half: 0.5, halved: 0.5,
   two: 2, three: 3, four: 4, five: 5 };
@@ -59,42 +61,59 @@ const OWN_OBJECT = String.raw`(?:the|its|this|that)\s+((?:[\w-]+\s+){0,3}?)(?:am
 /** The multiple as a shape-A note prints it after "paid at": "double", "twice", "half", "3 times", "150% of". */
 const A_MULTIPLE = String.raw`(?:double|twice|treble|triple|half|(?:\d+(?:\.\d+)?|two|three|four|five)\s+times|\d+(?:\.\d+)?\s?(?:%|per\s?cent)\s+of)`;
 /** The row's maximum kept ("still subject to the GBP 1,500 maximum per accident", "subject to the same limit") and "per
- * accident": the only words a note may end with. */
-const TAIL = String.raw`(?:\s*[,;]?\s*(?:(?:(?:still|but|and|always)\s+)?subject\s+to\s+(?:the\s+|a\s+)?(?:(?:same|overall|(?:[A-Z]{3}|[£$€]|S\$|RM)\s?\d[\d,]*(?:\.\d+)?)\s+)*(?:maximum|limit|cap)(?:\s+(?:per|for\s+each|for\s+any\s+one)\s+(?:accident|claim|event|fracture|injury|person|insured\s+person|day))?|per\s+(?:accident|claim|event|fracture|injury|person|day)))*\s*[.;]?\s*`;
+ * accident": the only words a note may end with. A time unit ("per day") only on a row that itself pays per day (gate
+ * round 10: "double the amount per day" on a lump-sum row is not double the lump sum). */
+const tail = (perDay: boolean) => {
+  const unit = String.raw`(?:accident|claim|event|fracture|injury|person|insured\s+person${perDay ? "|day|night" : ""})`;
+  return String.raw`(?:\s*[,;]?\s*(?:(?:(?:still|but|and|always)\s+)?subject\s+to\s+(?:the\s+|a\s+)?(?:(?:same|overall|(?:[A-Z]{3}|[£$€]|S\$|RM)\s?\d[\d,]*(?:\.\d+)?)\s+)*(?:maximum|limit|cap)(?:\s+(?:per|for\s+each|for\s+any\s+one)\s+${unit})?|per\s+${unit}))*\s*[.;]?\s*`;
+};
 const CASE_TEXT = String.raw`([^,;:.]+?)`;
 /** The two shapes a note may have (gate round 9, an allow-list on the whole note, front included):
  * A) "[a/an/the] CASE is/are paid/payable at <multiple> [this row's own amount] [maximum kept] [per accident]"
  *    ("a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500 maximum per accident");
  * B) "[this row's own amount] is doubled/halved/trebled, or is paid at <multiple>, for/if/when/where/while CASE [maximum
- *    kept] [per accident]" ("the amount is halved for a fracture of a finger or toe"; "payable twice if both arms are
- *    fractured", where the row's own amount is understood). */
-const SHAPE_A = new RegExp(String.raw`^(?:(?:a|an|the)\s+)?${CASE_TEXT}\s+(?:is|are)\s+(?:paid|payable)\s+(?:at\s+)?${A_MULTIPLE}(?:\s+${OWN_OBJECT})?${TAIL}$`, "i");
-const SHAPE_B = new RegExp(String.raw`^(?:(?:${OWN_OBJECT}|(.+?))\s+(?:is|are)\s+)?(?:(?:paid|payable)\s+(?:at\s+)?(?:double|twice|treble|triple|half)|doubled|halved|trebled|tripled)\s+(?:for|if|when|where|while)\s+${CASE_TEXT}${TAIL}$`, "i");
+ *    kept] [per accident]" ("the amount is halved for a fracture of a finger or toe"). With no subject (the row's own
+ *    amount understood) only doubled/halved/trebled or "paid at double/treble/half", never "twice": "payable twice if the
+ *    fracture needs a second operation" is two payments, not one doubled (gate round 10). */
+const shapes = (perDay: boolean) => [
+  new RegExp(String.raw`^(?:(?:a|an|the)\s+)?${CASE_TEXT}\s+(?:is|are)\s+(?:paid|payable)\s+(?:at\s+)?${A_MULTIPLE}(?:\s+${OWN_OBJECT})?${tail(perDay)}$`, "i"),
+  new RegExp(String.raw`^(?:(?:${OWN_OBJECT}|(.+?))\s+(?:is|are)\s+)?((?:paid|payable)\s+(?:at\s+)?(?:double|twice|treble|triple|half)|doubled|halved|trebled|tripled)\s+(?:for|if|when|where|while)\s+${CASE_TEXT}${tail(perDay)}$`, "i"),
+] as const;
 /** Words a case never holds: money and benefit nouns, quantities and order words ("after any earlier payment", "the
- * remaining limit", "pro rata", "for all fractures", "in total"). A case holding one is a base, a deduction or a limit,
- * never only the event the multiple is paid in. */
+ * remaining limit", "pro rata", "for all fractures", "in total"), and kinds of benefit ("medical expenses", "hospital
+ * cash", "death cover", gate round 10). A case holding one is a base, a deduction, a limit or another benefit, never only
+ * the event the multiple is paid in. */
 const NOT_A_CASE = new Set(("benefit benefits amount amounts sum sums allowance allowances lump payment payments paid excess balance remaining limit limits " +
   "maximum total all any each pro rata proportion proportional share shared co-pay copay co-payment copayment insurance claim claims earlier previous prior " +
-  "already after before instead except unless").split(" "));
-/** A case: at most 6 words besides a/an/the, none of NOT_A_CASE. */
-const caseOk = (c: string) => { const w = c.toLowerCase().replace(/[<>"'’()]/g, " ").split(/\s+/).filter((x) => x && !["a", "an", "the"].includes(x));
-  return w.length > 0 && w.length <= 6 && w.every((x) => !NOT_A_CASE.has(x)); };
+  "already after before instead except unless expense expenses cost costs cash cover death treatment treatments hospital daily weekly physiotherapy").split(" "));
 /** Whether a note is one of the two shapes, its multiple of this row's own amount and its case plain, with nothing else:
- * no other base ("double the Sum Insured", "the death benefit is doubled"), no deduction or limit before or after it. */
+ * no other base ("double the Sum Insured", "the death benefit is doubled"), no deduction or limit before or after it, and
+ * a case naming no other benefit ("hospital cash for a compound fracture is paid at double"). */
 function plainShape(note: string, m: { at: RegExpMatchArray; count: number }, row: RowFacts): boolean {
   if (m.count !== 1 || ARITHMETIC.test(note) || OTHER_BASE.test(note)) return false;
   const ownSection = row.section ? sectionKey(row.section) : "";
   const name = (row.own.split("\n")[0] ?? "").trim().toLowerCase();
   const mine = new Set(tokens(name).map(stem));
   const ofMine = (mid: string | undefined) => tokens(mid ?? "").every((w) => (w === "section" && !!ownSection) || w === ownSection || ["benefit", "basic", "daily", "this", "that", "its"].includes(w) || mine.has(stem(w)));
+  // The other benefits read from the same document: a case sharing a word with one of their names (besides this row's own
+  // name's words and grammar) is about that benefit.
+  const theirs = new Set(tokens(row.docNames ?? "").map(stem).filter((w) => !NOT_CASE.has(w) && !mine.has(w)));
+  /** A case: at most 6 words besides a/an/the, in shape A no "for" ("<benefit> for <case>"), none of NOT_A_CASE, and no
+   * word of another benefit's name. */
+  const caseOk = (c: string, shapeA: boolean) => {
+    const w = c.toLowerCase().replace(/[<>"'’()]/g, " ").split(/\s+/).filter((x) => x && !["a", "an", "the"].includes(x));
+    return w.length > 0 && w.length <= 6 && !(shapeA && w.includes("for")) && w.every((x) => !NOT_A_CASE.has(x) && !theirs.has(stem(x)));
+  };
   const text = note.replace(/^\s*note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?\s*[:.-]\s*/i, "").trim();
-  const a = SHAPE_A.exec(text);
-  if (a) return caseOk(a[1]) && ofMine(a[2]);
-  const b = SHAPE_B.exec(text);
+  const [shapeA, shapeB] = shapes(!!row.perDay);
+  const a = shapeA.exec(text);
+  if (a) return caseOk(a[1], true) && ofMine(a[2]);
+  const b = shapeB.exec(text);
   if (!b) return false;
-  // Shape B's subject: this row's own amount ("the amount", "the Section 3 amount"), its own benefit name, or none.
-  const subjectOk = b[2] != null ? b[2].trim().toLowerCase().replace(/^the\s+/, "") === name : ofMine(b[1]);
-  return subjectOk && caseOk(b[3]);
+  // Shape B's subject: its own benefit name, this row's own amount ("the amount", "the Section 3 amount"), or none (then
+  // never "twice").
+  const subjectOk = b[2] != null ? b[2].trim().toLowerCase().replace(/^the\s+/, "") === name : b[1] != null ? ofMine(b[1]) : !/\btwice\b/i.test(b[3]);
+  return subjectOk && caseOk(b[4], false);
 }
 
 /** A condition that keeps the row's printed maximum on the multiplied amount: it prints only that maximum's figure, or says
@@ -195,8 +214,16 @@ export function noteMultiple(note: string, row: RowFacts): Multiplier | null {
     const theirs = new Set(tokens(row.others).map(stem).filter((w) => !NOT_CASE.has(w)));
     if (parts.some((p) => p.words.some((w) => theirs.has(w)))) return null;
   }
-  return { times: m.times, condition: note, keepsCap: keepsCapIn(note, row.cap) };
+  return { times: m.times, condition: note, keepsCap: keepsCapIn(note, row.cap), words: multipleWords(m.at[0], m.times) };
 }
+
+/** The multiple in the note's own kind of words: "3 times" for "3 times the amount", "150%" for "150% of", else "double",
+ * "treble", "half" ("twice" is "double"). */
+const multipleWords = (said: string, t: number) => {
+  const n = /\b(\d+(?:\.\d+)?|two|three|four|five)\s+times\b/i.exec(said);
+  if (n) return `${TIMES[n[1].toLowerCase()] ?? Number(n[1])} times`;
+  return /%|per\s?cent/i.test(said) ? `${Math.round(t * 1000) / 10}%` : timesWords(t);
+};
 
 /** "double", "3 times", "150%": the multiple as the card's working says it. */
 export const timesWords = (t: number) => t === 2 ? "double" : t === 3 ? "treble" : t === 0.5 ? "half" : Number.isInteger(t) ? `${t} times` : `${Math.round(t * 1000) / 10}%`;

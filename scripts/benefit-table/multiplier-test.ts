@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts, renderTable } from "@/lib/benefit-table/chat";
-import { caseWords, multipleIn, sameNote } from "@/lib/benefit-table/multiplier";
+import { caseWords, multipleIn, noteMultiple, sameNote } from "@/lib/benefit-table/multiplier";
 import type { Household } from "@/lib/simple-chat/library";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
@@ -102,6 +102,7 @@ const ifLine = (note: string, rest: string) => {
 
 const ABROAD = "Note (a): the amount is doubled if the accident occurs abroad.", FINGER = "Note (a): the amount is halved for a fracture of a finger or toe.";
 const AGE = "Note (a): the Section 3 amount is paid at half for an insured person aged 70 or over.", BOTH = "Note (a): payable twice if both arms are fractured.";
+const BOTH2 = "Note (a): the amount is doubled if both arms are fractured.";
 const WORK = "Note (a): the amount is doubled if the accident happens at work.", PENSION = "Note (a): the amount is halved for pensioners.";
 const KIDS = "Note (a): the Section 3 amount is doubled for insured children.";
 const UPTO = "Note (a): a compound fracture is paid up to double the Section 3 amount, still subject to the GBP 1,500 maximum per accident.";
@@ -284,7 +285,7 @@ test("round 9: the whole note is an allow-list (front included): a base, deducti
   const lined: [string, string][] = [
     [KEEPS, "this pays £800 (double)"], ["Note (a): a compound fracture is paid at double the Section 3 amount, subject to the same limit.", "this pays £800 (double)"],
     ["Note (a): a compound fracture is paid at double the Section 3 amount.", "this pays £800 (double)"], [FINGER, "this pays half: £200"],
-    [WORK, "this pays £800 (double)"], [BOTH, "this pays £800 (double)"], ["Note (a): the Section 3 amount is doubled while travelling on public transport.", "this pays £800 (double)"],
+    [WORK, "this pays £800 (double)"], [BOTH2, "this pays £800 (double)"], ["Note (a): the Section 3 amount is doubled while travelling on public transport.", "this pays £800 (double)"],
     ["Note (a): fracture of arm, wrist or leg is doubled if the accident occurs abroad.", "this pays £800 (double)"],
   ];
   for (const [note, rest] of lined) {
@@ -292,6 +293,61 @@ test("round 9: the whole note is an allow-list (front included): a base, deducti
     assert.deepEqual(a.amounts, ["£400"], note);
     assert.ok(a.basis.endsWith(ifLine(note, rest)), `${note}: ${a.basis}`);
   }
+});
+test("round 10: another benefit's case, a time unit on a lump sum, and a subjectless 'twice' get no line; main's card", () => {
+  const refused = [
+    "Note (a): payable twice if the fracture needs a second operation.",
+    "Note (a): payable twice if the same bone is fractured again within the year.",
+    "Note (a): payable twice if the accident happens on public transport.",
+    BOTH,
+    "Note (a): medical expenses for a compound fracture are paid at double.",
+    "Note (a): daily cash for a compound fracture is paid at double.",
+    "Note (a): physiotherapy for a compound fracture is paid at double.",
+    "Note (a): the death cover for a compound fracture is paid at double.",
+    "Note (a): hospital cash for a compound fracture is paid at double.",
+    "Note (a): treatment costs for a compound fracture are paid at double.",
+    "Note (a): a compound fracture is paid at double the amount per day.",
+    "Note (a): a compound fracture is paid at double per day.",
+    "Note (a): a compound fracture is paid at double the amount per week.",
+    "Note (a): a fracture of the skull of the head of the person is paid at double the amount.",
+    "Note (a): a compound fracture of the upper left arm bone is paid at double the amount.",
+    "Note (a): a compound fracture is paid at double the amount in total.",
+    "Note (a): the amount is doubled for the first claim.",
+  ];
+  for (const note of refused) for (const pct of [2, 5]) for (const [who, q] of [["Grace Okafor", "Grace has a compound fracture."], ["Daniel Okafor", "Daniel has a compound fracture."]]) {
+    const h = fractureSchedule(note, pct);
+    const a = ask(h, who, /Fracture/, q, note), main = ask(h, who, /Fracture/, q, "");
+    assert.equal(JSON.stringify(a.kept), JSON.stringify(main.kept), `${note} ${pct}% ${who}`);
+    assert.doesNotMatch(a.basis, IF, `${note} ${pct}% ${who}`);
+  }
+  const lined: [string, string][] = [
+    ["Note (a): a compound fracture of the upper arm is paid at double the amount.", "this pays £800 (double)"],
+    ["Note (a): a compound fracture is paid at double the amount per fracture.", "this pays £800 (double)"],
+    ["Note (a): fracture of arm, wrist or leg is doubled for a compound fracture.", "this pays £800 (double)"],
+    ["Note (a): a compound fracture is paid at 3 times the amount.", "this pays £1,200 (3 times)"],
+    ["Note (a): a compound fracture is paid at treble the amount.", "this pays £1,200 (treble)"],
+    ["Note (a): the amount is doubled if both arms are fractured.", "this pays £800 (double)"],
+  ];
+  for (const [note, rest] of lined) {
+    const a = G(note, "Grace has a compound fracture.", note);
+    assert.deepEqual(a.amounts, ["£400"], note);
+    assert.ok(a.basis.endsWith(ifLine(note, rest)), `${note}: ${a.basis}`);
+  }
+  // 3 times above the maximum keeps its words: "this pays £1,500 (3 times would be £3,000, ...)".
+  const three = "Note (a): a compound fracture is paid at 3 times the Section 3 amount, still subject to the GBP 1,500 maximum per accident.";
+  assert.ok(G(three, "Grace has a compound fracture.", three, [], 5).basis.endsWith(ifLine(three, "this pays £1,500 (3 times would be £3,000, more than the £1,500 maximum)")));
+});
+test("round 10: a case sharing a word with another benefit read from the same document is that benefit's; a time unit only on a per-day row", () => {
+  const row = { own: "Fracture of arm, wrist or leg\n" + FRACTURE, section: "3", cap: 1500 };
+  const joint = "Note (a): a joint fracture is paid at double the amount.";
+  assert.ok(noteMultiple(joint, row));
+  assert.equal(noteMultiple(joint, { ...row, docNames: "Dislocation of a joint\nBurns" }), null);
+  // The row's own name's words are not another benefit's ("Fracture of skull" beside this row).
+  assert.ok(noteMultiple("Note (a): a compound fracture is paid at double the amount.", { ...row, docNames: "Fracture of skull\nBurns" }));
+  const perDay = "Note (c): intensive care is paid at double the amount per day.";
+  const daily = { own: "Hospital income\n6\tHospital income\tRM 100 per day in hospital", section: "6", cap: null };
+  assert.equal(noteMultiple(perDay, daily), null);
+  assert.equal(noteMultiple(perDay, { ...daily, perDay: true })?.times, 2);
 });
 test("round 9: half of a share already above the maximum gets no line (of the share or of what is paid is not said)", () => {
   // Daniel: 2% of GBP 80,000 is GBP 1,600, above the GBP 1,500 maximum: his card is up to GBP 1,500.
@@ -421,7 +477,7 @@ test("W/X/Y/Z/T: with the note set on Grace's card, her card is her single amoun
     assert.ok(!a.kept.some((s) => s.amount?.text === "£800"), `${label}: a flat £800`);
     // The line is said for exactly the notes whose structure checks (a plain multiple of the row's own case, within the
     // maximum), whatever the household's words.
-    const lined = [KEEPS, ABROAD, FINGER, BOTH, WORK, PT].includes(note) && !o.row;
+    const lined = [KEEPS, ABROAD, FINGER, WORK, PT].includes(note) && !o.row;
     assert.equal(IF.test(a.basis), lined, `${label}: ${a.basis}`);
     if (lined) assert.ok(a.basis.includes(ifLine(note, "")), `${label}: the note's own words`);
     // Never the household's words in the line.
@@ -456,7 +512,7 @@ test("L1-L21: plain statements of the case for Grace show GBP 400 and the condit
     [KEEPS, "How much for that?", ["Grace has a compound fracture."]], [KEEPS, "The X-ray shows Grace has a compound fracture.", []],
     [KEEPS, "Grace broke her arm in a fall, a compound fracture.", []], [KEEPS, "Grace has a compound fracture, how much do we get?", []],
     [KEEPS, "Grace has a compound fracture. How much do we get?", []], [KEEPS, "Yes, it was compound.", T2], [KEEPS, "It was a compound fracture. Daniel is fine.", T2],
-    [KEEPS, "Grace broke her leg; it's a compound fracture.", []], [WORK, "Grace was hurt at work and broke her wrist.", []], [BOTH, "Grace fractured both arms.", []],
+    [KEEPS, "Grace broke her leg; it's a compound fracture.", []], [WORK, "Grace was hurt at work and broke her wrist.", []], [BOTH2, "Grace fractured both arms.", []],
   ];
   for (const [note, q, earlier] of cases) {
     const a = G(note, q, note, earlier);

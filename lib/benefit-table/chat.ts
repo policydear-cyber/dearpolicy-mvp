@@ -1492,7 +1492,11 @@ function multipleFacts(row: ChatRow, rows: readonly ChatRow[]): RowFacts {
   const cap = row.figure.kind === "worked_out" && row.figure.capped ? row.figure.amount
     : row.capSource ? (moneyFiguresIn(row.capSource.excerpt).find((m) => row.base == null || Math.abs(m.value - row.base) >= 0.005)?.value ?? null) : null;
   const others = [...new Set(rows.filter((o) => o.personId === row.personId && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
-  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, others };
+  // Every other benefit read from the same document, whoever's row (gate round 10: a note's case naming one is that
+  // benefit's, "hospital cash for a compound fracture is paid at double").
+  const docNames = [...new Set(rows.filter((o) => o.docIndex === row.docIndex && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
+  const perDay = row.figure.kind === "printed" && row.figure.unit === "per_day";
+  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, others, docNames, perDay };
 }
 
 /** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
@@ -1536,7 +1540,8 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     if (times.times < 1 && (row.figure.capped || (cap && row.base! * row.percent! / 100 > cap.value + 0.005))) return null;
     const at = locateQuote(household, times.condition, row.docIndex);
     if (!at || at.docIndex !== row.docIndex) return null;
-    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "" };
+    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "",
+      docNames: facts.docNames ?? "", perDay: !!facts.perDay };
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },

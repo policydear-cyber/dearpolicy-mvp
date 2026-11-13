@@ -819,7 +819,7 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with the row's
    * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
    * basis adds the multiple as a condition in the note's own words with its figure; the card's amount stays `value`. */
-  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string } | null };
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -908,7 +908,8 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
   if (!sf.times) return "";
   const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
   if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return "";
-  const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null, others: sf.times.others });
+  const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null, others: sf.times.others,
+    docNames: sf.times.docNames, perDay: sf.times.perDay });
   if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return "";
   const worked = Math.round(sf.base.value * sf.percent * d.times) / 100;
   if (cap && worked > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return "";
@@ -919,7 +920,7 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
   const label = /^\s*(note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?)\s*[:.-]\s*/i.exec(sf.times.quote);
   const words = sf.times.quote.slice(label ? label[0].length : 0).trim().replace(/[.;]+$/, "");
   const says = label ? `${label[1].replace(/^note/i, "Note")} on page ${tf.page} says` : `The policy (page ${tf.page}) says`;
-  const times = timesWords(d.times);
+  const times = d.words;
   // The answer first: "this pays £1,500 (double would be £2,000, more than the £1,500 maximum)", "this pays £800
   // (double)", "this pays half: £200".
   return `. ${says}: "${words}". If that applies, ${capped ? `this pays ${money(cap!.value)} (${times} would be ${money(worked)}, more than the ${money(cap!.value)} maximum)`
