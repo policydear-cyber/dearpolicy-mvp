@@ -232,7 +232,13 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   tierLines?: string;
   /** Every person the reading gave a cover to whose name the document prints, kept or dropped: the document's insured lives
    * (assemble.ts lifeLostCover). */
-  coverPeople?: string[] };
+  coverPeople?: string[];
+  /** The document's printed lines that name a kind of life or an age ("Benefits for children under 18 are halved", "Note:
+   * for insured children the limits are 50% of those shown"), or name an insured person and say something about an amount
+   * ("Benefits for Grace Okafor are halved"), and are neither a benefit row's own line nor a cover's own line: notes that
+   * may change any row for some of the lives (lifeNotesOf). Read by assemble.ts perPersonRows, where any
+   * such note keeps every fixed-amount row of the document from being shown for each named person. */
+  lifeNotes?: string[] };
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
@@ -632,6 +638,36 @@ function percentBaseUnsettled(row: string, value: number): boolean {
 }
 /** Words that name one kind of life among several ("an insured child", "adults", "seniors"). */
 export const KIND_OF_LIFE = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b/i;
+/** A line that names a kind of life or an age group: KIND_OF_LIFE, a few more words for one life among several, or a number
+ * read as an age ("under 18", "aged 65", "70 years old"; never "over 3 days" or "above 50%"). */
+const LIFE_NOTE = new RegExp(String.raw`${KIND_OF_LIFE.source}|\b(?:infants?|bab(?:y|ies)|juveniles?|students?|elderly|wi(?:fe|ves)|husbands?|partners?|policy\s*holders?|grand(?:children|child|parents?))\b`
+  + String.raw`|\b(?:under|below|over|above|aged?|age\s+of)\s+(?:the\s+age\s+of\s+)?(?:\d{1,3}|[a-z]+teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b(?!\s*(?:days?|hours?|weeks?|months?|%|per\s*cent|[,.]\d))|\b\d{1,3}\s*(?:years?|yrs?)\s+(?:old|of\s+age|and\s+(?:over|above|under|below)|or\s+(?:older|younger|over|above|under|below))\b`, "i");
+/** See CheckedReading.lifeNotes. A line counts as a row's own only when it is a line of that row's printed text (rowText):
+ * a note on the line after a row may be about the whole table, so it counts as a note. A cover's own line (an insured
+ * persons table's "Grace Okafor  Child  09/04/2017  GBP 20,000") is who is insured, not a note. */
+const CHANGES_A_FIGURE = /\b(?:benefits?|amounts?|pa(?:id|ys?|yable)|half|halved|double[ds]?|%|per\s*cent|limit(?:ed|s)?|reduc\w*|less|only|maximum|up\s+to|not\s+covered|exclud\w*|instead)\b|\d[\d,]*(?:\.\d+)?\s*%/i;
+export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedReading, "covers" | "benefits" | "namedPeople">): string[] {
+  const own = new Set<string>();
+  for (const b of reading.benefits) for (const l of (b.rowText ?? "").split("\n")) if (flat(l)) own.add(flat(l));
+  // A row kept as words, whose line was not read around it (a percentage quote holding two percentages): its own table
+  // line, a line of two or more cells, one of its first two the row's label, holding the row's quote.
+  const tableLine = (line: string) => { const cells = line.split("\t").map(flat);
+    return cells.length >= 2 && reading.benefits.some((b) => !b.rowText && flat(b.benefit).length >= 3 && cells.slice(0, 2).includes(flat(b.benefit)) && flat(line).includes(flat(b.source.excerpt))); };
+  const coverLines = reading.covers.map((c) => flat(c.source.excerpt)).filter((x) => x.length >= 6);
+  const people = [...new Set([...reading.namedPeople, ...reading.covers.map((c) => c.person)].map(flat).filter((n) => n.length >= 3 && n.includes(" ")))];
+  const out: string[] = [];
+  for (const p of pages) for (const line of p.text.split(/\r?\n/)) {
+    const l = flat(line);
+    if (!l || own.has(l) || tableLine(line)) continue;
+    if (coverLines.some((c) => l.includes(c) || (l.length >= 6 && c.includes(l)))) continue;
+    // A line naming an insured person is a note when it says anything about an amount ("Benefits for Grace Okafor are
+    // halved"); one that only says who they are ("Spouse: Daniel Okafor", "Policyholder: Ngozi Okafor") is not.
+    if (people.some((n) => ` ${l} `.includes(` ${n} `)) ? !CHANGES_A_FIGURE.test(line) : !LIFE_NOTE.test(line)) continue;
+    if (!out.includes(line.trim())) out.push(line.trim());
+    if (out.length >= 20) return out;
+  }
+  return out;
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -1129,5 +1165,6 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
+  out.lifeNotes = lifeNotesOf(doc.pages, out);
   return out;
 }

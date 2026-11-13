@@ -36,5 +36,7 @@ export function mergeReadings(base: CheckedReading, extra: CheckedReading): Chec
     covers: [...base.covers, ...extra.covers.filter((c) => !seen.has(key(c)))],
     benefits: [...base.benefits, ...extra.benefits.filter((b) => !seen.has(key(b)))],
     dropped: [...base.dropped, ...extra.dropped],
+    // A note is a line that is no row's own line: in both readings, each worked out with only its own rows.
+    ...(base.lifeNotes && extra.lifeNotes ? { lifeNotes: base.lifeNotes.filter((l) => extra.lifeNotes!.includes(l)) } : {}),
   };
 }

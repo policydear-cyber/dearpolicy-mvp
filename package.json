@@ -170,6 +170,7 @@
     "benefit-table:waiver-figure-test": "node --import tsx scripts/benefit-table/waiver-figure-test.ts",
     "benefit-table:no-currency-amounts-test": "node --import tsx scripts/benefit-table/no-currency-amounts-test.ts",
     "benefit-table:daily-row-test": "node --import tsx scripts/benefit-table/daily-row-test.ts",
+    "benefit-table:plain-table-test": "node --import tsx scripts/benefit-table/plain-table-test.ts",
     "policies:pack-label-route-test": "node --import tsx scripts/policies/pack-label-route-test.ts",
     "format:home-attention-todo-test": "node --import tsx scripts/format/home-attention-todo-test.ts",
     "format:printed-number-test": "node --import tsx scripts/format/printed-number-test.ts",
