@@ -20,14 +20,14 @@ export const metadata: Metadata = {
 };
 
 const STEPS: Array<{ icon: IconName; title: string; text: string }> = [
-  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries, from any insurer, in English, as PDFs (scanned copies too)." },
+  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries from any insurer, in English. PDFs, scans and phone photos all work." },
   { icon: "family", title: "Link each one to a person", text: "Say whose cover each document is. A policy for your daughter stays hers, even when it shares a policy number with someone else\u2019s." },
   { icon: "ask", title: "Ask in plain words", text: "“Is Mei covered if she breaks her arm?” DearPolicy answers from your own documents and shows the page each answer came from." },
 ];
 
 const HELPS: Array<{ icon: IconName; title: string; text: string }> = [
   { icon: "household", title: "Everyone’s cover in one place", text: "See what each person in the family holds, sorted by person and by kind of cover." },
-  { icon: "documents", title: "Answers you can check", text: "Answers name the document and page they came from, and amounts keep the currency the document states." },
+  { icon: "documents", title: "Answers you can check", text: "Each answer names the document and page it came from. Amounts keep the currency the document prints, and a bare \u201c$\u201d is never guessed." },
   { icon: "receipt", title: "What you might be able to claim", text: "For an event like a hospital stay or an accident, DearPolicy lists the benefits that may apply and the next steps the policy describes." },
   { icon: "fileOff", title: "Honest about what it couldn’t read", text: "If a page can’t be read, DearPolicy names it, so you know where to look yourself." },
 ];
@@ -35,7 +35,7 @@ const HELPS: Array<{ icon: IconName; title: string; text: string }> = [
 const LIMITS = [
   "It explains your documents. It doesn’t sell, compare or recommend insurance, and it isn’t financial advice.",
   "It doesn’t decide claims. Your insurer decides what is paid, after checking the claim.",
-  "A figure it works out for your situation is an illustration from the policy’s own terms, labelled as one, not a promise of payment.",
+  "An amount it works out for your situation is labelled as an illustration from the policy\u2019s own terms. It is not a promise of payment.",
   "If something isn’t in your documents, it says so instead of guessing.",
 ];
 
