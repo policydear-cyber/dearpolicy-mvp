@@ -53,7 +53,7 @@ function InviteForm() {
           <div className="field"><label>Invitation token</label><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste the token from your invitation link" required /></div>
           <button className="button primary" type="submit" disabled={!token.trim() || busy}>{busy ? "Joining…" : "Join household"}</button>
         </form>
-        {error && <div className="document-warning" style={{ marginTop: 12 }}>{error}</div>}
+        {error && <div className="alert error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
       </section>
     </div>
   );

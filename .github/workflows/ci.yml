@@ -31,6 +31,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Brand colour tokens and contrast
+        run: npm run brand:tokens-test
+
       - name: System + database regression suite (PGlite, no live DB needed)
         run: npm run system:test
 

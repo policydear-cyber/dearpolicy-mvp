@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "brand:tokens-test": "node --import tsx --test scripts/brand/tokens-test.ts",
     "privacy:notice-test": "node --import tsx scripts/privacy/notice-test.ts",
     "learn:content-test": "node --import tsx scripts/learn/learn-content-test.ts",
     "benefit-table:link-cut-test": "node --import tsx scripts/benefit-table/link-cut-test.ts",
