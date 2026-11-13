@@ -395,32 +395,50 @@ export function baiduMarkdownToText(markdown: string): string {
 /** Letters and digits only, lower case: how a block's text is looked for in the page's Markdown text. */
 const blockKey = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 /** Labels whose blocks are pictures, tables or formulas: never added as text from the layout list (a table is already in
- * the Markdown as a grid; a picture's block holds no reading of its own). */
-const NON_TEXT_BLOCK = /image|chart|table|seal|formula|figure$/i;
-/** The text blocks Baidu's layout list holds that its Markdown left out, top to bottom. The document models print some
- * blocks only in the layout list (13 Nov 2026: a schedule's last line, a registration number and print date, was in
- * neither the Markdown nor the reading, with every other footer line kept), so a page's figures went unchecked. A block
- * counts as present when its letters and digits stand, in order, anywhere in the page's Markdown text, so nothing the
- * Markdown already has is added twice. */
-export function blocksMissingFromText(list: unknown, text: string): { texts: string[]; labels: string[] } {
-  if (!Array.isArray(list)) return { texts: [], labels: [] };
-  const have = blockKey(text), seen = new Set<string>();
-  const found: { text: string; label: string; y: number; at: number }[] = [];
-  list.forEach((block, at) => {
-    if (!block || typeof block !== "object") return;
-    const b = block as { block_label?: unknown; block_content?: unknown; block_bbox?: unknown };
+ * the Markdown as a grid; a picture's block holds no reading of its own). Exact labels only: a title of any kind
+ * ("figure_title", "table_title", "chart_title") is text and is kept alike. */
+const NON_TEXT_BLOCK = /^(?:image|chart|table|seal|formula|figure|header_image|footer_image)$/i;
+/** The page's text with the text blocks Baidu's layout list holds but its Markdown left out put back, each at its own
+ * place in reading order. The document models print some blocks only in the layout list (13 Nov 2026: a schedule's last
+ * line, a registration number and print date, was in neither the Markdown nor the reading, with every other footer line
+ * kept), so a page's figures went unchecked. A block counts as present when its letters and digits stand, in order,
+ * anywhere in the page's Markdown text, so nothing the Markdown already has is added twice. A missing block goes right
+ * after the paragraph that holds the block before it in the list's reading order (block_order where given, else list
+ * order), or first when none does, so it stands under the same heading as on the page, never at the page's end by
+ * default. */
+export function blocksMissingFromText(list: unknown, text: string): { text: string; added: number; labels: string[] } {
+  const none = { text, added: 0, labels: [] as string[] };
+  if (!Array.isArray(list)) return none;
+  const have = blockKey(text);
+  const blocks = list.flatMap((block, at) => {
+    if (!block || typeof block !== "object") return [];
+    const b = block as { block_label?: unknown; block_content?: unknown; block_order?: unknown };
     const label = typeof b.block_label === "string" ? b.block_label : "";
-    if (typeof b.block_content !== "string" || NON_TEXT_BLOCK.test(label)) return;
-    const clean = baiduMarkdownToText(b.block_content);
-    const key = blockKey(clean);
-    if (key.length < 2 || have.includes(key) || seen.has(key)) return;
-    seen.add(key);
-    const box = Array.isArray(b.block_bbox) ? b.block_bbox : [];
-    const y = typeof box[1] === "number" && Number.isFinite(box[1]) ? box[1] : Number.POSITIVE_INFINITY;
-    found.push({ text: clean, label: /^[a-z_]{1,32}$/.test(label) ? label : "other", y, at });
+    if (typeof b.block_content !== "string" || NON_TEXT_BLOCK.test(label)) return [];
+    const clean = baiduMarkdownToText(b.block_content), key = blockKey(clean);
+    if (key.length < 2) return [];
+    const order = typeof b.block_order === "number" && Number.isFinite(b.block_order) ? b.block_order : null;
+    return [{ clean, key, label: /^[a-z_]{1,32}$/.test(label) ? label : "other", order, at }];
   });
-  found.sort((a, b) => a.y - b.y || a.at - b.at);
-  return { texts: found.map((f) => f.text), labels: found.map((f) => f.label) };
+  // Reading order: Baidu's block_order where every block has one, else the list's own order.
+  if (blocks.every((b) => b.order !== null)) blocks.sort((a, b) => a.order! - b.order! || a.at - b.at);
+  const paras = text ? text.split(/\n{2,}/) : [];
+  const keys = paras.map(blockKey);
+  const labels: string[] = [], seen = new Set<string>();
+  let cursor = -1;
+  for (const b of blocks) {
+    if (have.includes(b.key) || seen.has(b.key)) {
+      // Present: the place it stands in moves the cursor on (never back), so the next missing block follows it.
+      const k = keys.findIndex((x, i) => i > cursor && x.includes(b.key));
+      if (k >= 0) cursor = k;
+      continue;
+    }
+    seen.add(b.key);
+    paras.splice(cursor + 1, 0, b.clean); keys.splice(cursor + 1, 0, b.key);
+    cursor++;
+    labels.push(b.label);
+  }
+  return labels.length ? { text: paras.join("\n\n"), added: labels.length, labels } : none;
 }
 
 /** Each page's text, in page order, from the result JSONL. */
@@ -444,11 +462,11 @@ export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
         const md = item?.markdown?.text;
         const text = typeof md === "string" ? baiduMarkdownToText(md) : "";
         const missing = blocksMissingFromText(item?.prunedResult?.parsing_res_list, text);
-        if (missing.texts.length) {
+        if (missing.added) {
           // Fixed words and Baidu's own layout labels only: never a block's text.
-          console.warn(`[baidu-ocr] page ${pages.length + 1}: ${missing.texts.length} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
+          console.warn(`[baidu-ocr] page ${pages.length + 1}: ${missing.added} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
         }
-        pages.push(missing.texts.length ? [text, ...missing.texts].filter(Boolean).join("\n\n") : text);
+        pages.push(missing.text);
       }
     }
   }
