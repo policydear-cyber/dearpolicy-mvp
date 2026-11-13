@@ -126,11 +126,11 @@ export default function HouseholdPage() {
               </p>
               <div className="profile-add-grid">
                 <div className="field"><label htmlFor="hh-delete-confirm">Household name</label><input id="hh-delete-confirm" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={householdName ?? ""} /></div>
-                <button className="button secondary" style={{ borderColor: "var(--critical-line)", color: "var(--critical)" }} disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
+                <button className="button secondary danger" disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
                   {deleting ? "Deleting…" : "Permanently delete household"}
                 </button>
               </div>
-              {deleteError && <div className="document-warning" style={{ marginTop: 12 }}>{deleteError}</div>}
+              {deleteError && <div className="alert error" role="alert" style={{ marginTop: 12 }}>{deleteError}</div>}
               {needsReauth && (
                 <div className="document-warning" style={{ marginTop: 12 }}>
                   Please sign in again to confirm it&apos;s you before continuing. <Link href={`/login?next=${encodeURIComponent("/household")}`}>Sign in again</Link>
