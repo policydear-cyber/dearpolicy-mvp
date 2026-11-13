@@ -209,6 +209,11 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   combinedLimit?: boolean;
   /** The row is printed under a heading that names the limits of compensation (LIMITS_HEADING). */
   limitsHeading?: boolean;
+  /** Nothing printed with the row ties it to one life, kind of life or plan (rowSharable): its label, section, column,
+   * printed line with what continues it, and conditions name no kind of life, age group or plan and print one money figure
+   * at most, and its page prints no insured person's name and no heading for a kind of life or a plan. Only such a row of
+   * a family schedule's own table may be every holder's (assemble.ts whoseRows). */
+  sharable?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null };
@@ -603,6 +608,23 @@ function percentBaseUnsettled(row: string, value: number): boolean {
   }
   return false;
 }
+/** Words that name one kind of life or one life among several ("principal", "member"): a row with them is not for every
+ * holder alike. */
+const SHARE_KIND_WORDS = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|employees?|members?)\b/i;
+const AGE_WORDS = /\b(?:aged?|years?|yrs?)\b/i;
+const PLAN_WORDS = /\b(?:plans?|options?|tiers?|class(?:es)?|levels?|packages?)\b/i;
+/** A heading line (no tab, no figure, a few words) that names a kind of life or a plan ("ADULT BENEFITS", "Plan B"). */
+const kindHeading = (line: string) => !/\t|\d/.test(line) && line.trim().split(/\s+/).length <= 6 && (SHARE_KIND_WORDS.test(line) || PLAN_WORDS.test(line));
+/** Whether nothing printed with a row ties it to one life, kind of life or plan (CheckedBenefit.sharable). */
+export function rowSharable(o: { label: string; section: string | null; column: string | null; row: string; near: string; conditions: string[]; page: string; people: string[] }): boolean {
+  const words = [o.label, o.section ?? "", o.column ?? "", o.row, o.near, ...o.conditions].join(" \n ");
+  if (SHARE_KIND_WORDS.test(words) || AGE_WORDS.test(words) || PLAN_WORDS.test(`${o.label} ${o.section ?? ""} ${o.column ?? ""}`)) return false;
+  if (moneyIn(o.row).length > 1 || o.conditions.some((c) => moneyIn(c).length)) return false;
+  const lines = o.page.split("\n");
+  if (lines.some(kindHeading)) return false;
+  const tokens = (t: string) => t.toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length > 1);
+  return !o.people.some((name) => { const want = tokens(name); return want.length > 0 && lines.some((l) => { const have = new Set(tokens(l)); return want.every((w) => have.has(w)); }); });
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -993,7 +1015,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         cap = capInRow(row); capSource = source;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
-        const own = (t: string) => withoutOwnShareCap(t, value);
+        // "Limited to 25%" names the share only when the row prints no money beside it ("limited to 25% of the Sum Insured
+        // or AUD 15,000" is capped, whatever words join them: Critic #449 round 3).
+        const own = (t: string) => moneyIn(row).length || moneyIn(near).length || conditions.some((c) => moneyIn(c).length) ? t : withoutOwnShareCap(t, value);
         capUnread = claimed != null || CAP_WORDS.test(own(source.excerpt)) || conditions.some((c) => CAP_WORDS.test(own(c)))
           || CAPPED.test(own(row)) || NEAR_CAP.test(own(near));
       }
@@ -1019,7 +1043,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
-      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}) });
+      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
+      sharable: (() => { const seg = segmentOf(source); return rowSharable({ label: benefit, section: str(b.section), column: str(b.column), row: seg.text, near: seg.near, conditions,
+        page: pageText(source.page), people: [...out.namedPeople, ...out.covers.map((c) => c.person)] }); })() });
   }
   return out;
 }

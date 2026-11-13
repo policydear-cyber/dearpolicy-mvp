@@ -19,7 +19,7 @@ function test(name: string, fn: () => void) {
 }
 
 type Doc = Household["documents"][number];
-type P = { name: string; rel: string; line: string; sum: number };
+type P = { name: string; rel: string; line: string; sum: number; dob?: string };
 const ACCT = "99999999-1111-4222-8333-444444444444";
 let n = 0;
 const nid = () => `abcdef00-0000-4000-9000-${String(++n).padStart(12, "0")}`;
@@ -41,7 +41,7 @@ function schedule(o: { insurer: string; product: string; policyNumber: string | 
   const page2 = `SCHEDULE OF BENEFITS\nItem\tBenefit\tCompensation\n${o.benefitLines.join("\n")}${o.trailer ?? "\nGeneral conditions apply."}`;
   const d = mkdoc(id, `${o.product}.pdf`, o.product, o.insurer, o.policyNumber, o.people.map((p) => p.name), [page1, page2]);
   const house: Household = { accountId: ACCT, members: o.people.map((p) => ({ name: p.name, relationship: p.rel })), documents: [d] };
-  const fam: FamilyMember[] = o.people.map((p, i) => ({ id: `f${i}`, display_name: p.name, relationship: p.rel }));
+  const fam: FamilyMember[] = o.people.map((p, i) => ({ id: `f${i}`, display_name: p.name, relationship: p.rel, date_of_birth: p.dob ?? null }));
   const r = checkReading(src(d), { document: docMeta("personal_proof", o.product, o.insurer, o.people.map((p) => p.name)), covers: o.people.map((p) => coverOf(p, o.product, o.policyNumber, 1)), benefits: o.benefits });
   const key = coverKeyOf({ product: o.product, cover: o.product, plan: null, riderOf: null });
   const links = [...new Set(r.benefits.map((b) => sectionKeyOf(id, b)))].map((section) => ({ section, cover: key, why: "the schedule's benefits" }));
@@ -55,7 +55,7 @@ function split(o: { insurer: string; product: string; policyNumber: string; peop
   const wording = mkdoc(wid, "Policy wording.pdf", o.product, o.insurer, o.policyNumber, o.people.map((p) => p.name), ["POLICY WORDING\nDefinitions and general exclusions.", `SECTION A - SCALE OF COMPENSATION\n${o.wordingLines.join("\n")}`], "policy_wording");
   const sched = mkdoc(sid, "Policy schedule.pdf", o.product, o.insurer, o.policyNumber, o.people.map((p) => p.name), [`POLICY SCHEDULE\nPolicy number ${o.policyNumber}\n${o.people.map((p) => p.line).join("\n")}`]);
   const house: Household = { accountId: ACCT, members: o.people.map((p) => ({ name: p.name, relationship: p.rel })), documents: [wording, sched, ...(o.extraDocs ?? [])] };
-  const fam: FamilyMember[] = o.people.map((p, i) => ({ id: `f${i}`, display_name: p.name, relationship: p.rel }));
+  const fam: FamilyMember[] = o.people.map((p, i) => ({ id: `f${i}`, display_name: p.name, relationship: p.rel, date_of_birth: p.dob ?? null }));
   const rw = checkReading(src(wording), { document: docMeta("policy_wording", o.product, o.insurer, []), covers: [], benefits: o.benefits });
   const rs = checkReading(src(sched), { document: docMeta("personal_proof", o.product, o.insurer, o.people.map((p) => p.name)), benefits: [], covers: o.people.map((p) => coverOf(p, o.product, o.policyNumber, 1)) });
   const key = coverKeyOf({ product: o.product, cover: o.product, plan: null, riderOf: null });
@@ -106,7 +106,7 @@ const hkJoint = (people = HK) => schedule({ insurer: "Harbour Mutual Assurance L
 const AU: P[] = [
   { name: "Liam Kelly", rel: "self", line: "Liam Kelly\tPrincipal\t22/07/1984\tAUD 400,000", sum: 400000 },
   { name: "Grace Kelly", rel: "spouse", line: "Grace Kelly\tPartner\t03/02/1986\tAUD 250,000", sum: 250000 },
-  { name: "Noah Kelly", rel: "child", line: "Noah Kelly\tDependent child\t11/10/2015\tAUD 80,000", sum: 80000 }];
+  { name: "Noah Kelly", rel: "child", dob: "2015-10-11", line: "Noah Kelly\tDependent child\t11/10/2015\tAUD 80,000", sum: 80000 }];
 const CHILD_AU = "If the insured person is an insured child under 16, limited to 25% of the Sum Insured.";
 const HOSP_AU = "Hospital cash\tAUD 150 per day in hospital, payable from the fourth day, up to 90 days per accident";
 const BURN_AU = "Severe burns\t15% of the Sum Insured";

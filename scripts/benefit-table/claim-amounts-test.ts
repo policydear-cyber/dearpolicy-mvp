@@ -136,10 +136,10 @@ function family(o: { sign: string; currency: string; people: Person[]; insurer: 
 const MYR = { sign: "RM ", currency: "MYR", insurer: "Example Takaful Berhad", product: "Keluarga Accident Plan", people: [
   { name: "Ahmad Bin Ali", relationship: "self", line: "Ahmad Bin Ali\tPolicyholder\t01/01/1988\tRM 150,000", sum: 150000 },
   { name: "Siti Binti Omar", relationship: "spouse", line: "Siti Binti Omar\tSpouse\t15/05/1990\tRM 100,000", sum: 100000 },
-  { name: "Adam Bin Ahmad", relationship: "child", line: "Adam Bin Ahmad\tChild\t09/09/2016\tRM 40,000", sum: 40000 }] };
+  { name: "Adam Bin Ahmad", relationship: "child", dob: "2016-09-09", line: "Adam Bin Ahmad\tChild\t09/09/2016\tRM 40,000", sum: 40000 }] };
 const EUR = { sign: "€", currency: "EUR", insurer: "Exemple Assurances SA", product: "Famille Accident Cover", people: [
   { name: "Marie Dupont", relationship: "self", line: "Marie Dupont\tPolicyholder\t42\t€60,000", sum: 60000 },
-  { name: "Luc Dupont", relationship: "child", line: "Luc Dupont\tChild\t7\t€20,000", sum: 20000 }] };
+  { name: "Luc Dupont", relationship: "child", dob: "2019-05-01", line: "Luc Dupont\tChild\t7\t€20,000", sum: 20000 }] };
 
 // ---------- 2. Server-worked percentages reach the answer ----------
 test("MYR family schedule: the capped fracture benefit shows the cap the person's own share reaches", () => {
@@ -302,7 +302,7 @@ test("Adult and Child columns of a shared table: each life gets its own column o
   }
 });
 test("control: with no relationship or date of birth on the Family page, neither column is shown for anyone", () => {
-  const people = MYR.people.map((p) => ({ ...p, relationship: "other" }));
+  const people = MYR.people.map((p) => ({ ...p, relationship: "other", dob: undefined }));
   const h = schedule({ people, page2: ADULT_CHILD_PAGE, benefits: adultChildRows });
   for (const p of people) for (const c of ["Adult", "Child"]) assert.equal(rowOf(h, p.name, (r) => r.column === c)?.figure.kind ?? "none", "none", `${p.name} ${c}`);
 });
@@ -351,15 +351,74 @@ test("the date of birth decides an under-18 row before the relationship; an in-l
   assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Adult")?.figure.kind, "printed");
   assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Child")?.figure.kind ?? "none", "none");
 });
-test("an age-group row on a family schedule is settled by the date of birth, and is no one's without it", () => {
+test("control: a shared-table row printed for an age group is no one's (it cannot be told from the shared page)", () => {
   const benefit = "Hospital cash for insured persons aged 65 and above", quote = `${benefit}\tRM 50 per day`;
   const people: Person[] = [
     { name: "Ahmad Bin Ali", relationship: "self", dob: "1950-01-01", line: "Ahmad Bin Ali\tPolicyholder\t01/01/1950\tRM 150,000", sum: 150000 },
-    { name: "Siti Binti Omar", relationship: "spouse", dob: "1970-01-01", line: "Siti Binti Omar\tSpouse\t01/01/1970\tRM 100,000", sum: 100000 },
-    { name: "Adam Bin Ahmad", relationship: "child", line: "Adam Bin Ahmad\tChild\t09/09/2016\tRM 40,000", sum: 40000 }];
+    { name: "Siti Binti Omar", relationship: "spouse", dob: "1970-01-01", line: "Siti Binti Omar\tSpouse\t01/01/1970\tRM 100,000", sum: 100000 }];
   const h = schedule({ people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${quote}`, benefits: [ben({ benefit, pays: "per_day", value: 50, quote })] });
-  assert.equal(rowOf(h, "Ahmad Bin Ali", (x) => x.benefit === benefit)?.figure.kind, "printed");
-  for (const n of ["Siti Binti Omar", "Adam Bin Ahmad"]) assert.equal(rowOf(h, n, (x) => x.benefit === benefit)?.figure.kind ?? "none", "none", n);
+  for (const p of people) assert.equal(rowOf(h, p.name, (x) => x.benefit === benefit)?.figure.kind ?? "none", "none", p.name);
+});
+// ---------- 6. Critic #449 round 3 controls ----------
+const AU: Person[] = [
+  { name: "Liam Kelly", relationship: "self", line: "Liam Kelly\tPolicyholder\t22/07/1984\tAUD 300,000", sum: 300000 },
+  { name: "Grace Kelly", relationship: "spouse", line: "Grace Kelly\tSpouse\t03/03/1986\tAUD 200,000", sum: 200000 },
+  { name: "Noah Kelly", relationship: "son", line: "Noah Kelly\tSon\t11/10/2004\tAUD 200,000", sum: 200000 }];
+function auSchedule(page2: string, benefits: Record<string, unknown>[], people = AU) {
+  const page1 = `Example General Ltd\nFAMILY ACCIDENT PLAN - SCHEDULE\nInsured person\tRelationship\tDate of birth\tSum Insured\n${people.map((p) => p.line).join("\n")}`;
+  return build({ id: pid(9), insurer: "Example General Ltd", product: "Family Accident Plan", policyNumber: null, sign: "AUD ", currency: "AUD", people, page1, page2, benefits });
+}
+test("a shared table's rows tied to one life, kind or plan by its page or line are no one's (Critic #449 round 3, F1, F2)", () => {
+  const layouts: [string, string, Record<string, unknown>[]][] = [
+    ["per-person blocks", "SCHEDULE OF BENEFITS\nLiam Kelly\nMedical expenses\tAUD 5,000\nGrace Kelly\nMedical expenses\tAUD 3,000",
+      [ben({ section: "Schedule of benefits", benefit: "Medical expenses", value: 5000, quote: "Medical expenses\tAUD 5,000" })]],
+    ["adult and child sections", "ADULT BENEFITS\nHospital cash\tAUD 200 per day\nCHILD BENEFITS\nHospital cash\tAUD 100 per day",
+      [ben({ section: "Adult benefits", benefit: "Hospital cash", pays: "per_day", value: 200, quote: "Hospital cash\tAUD 200 per day" })]],
+    ["plan sections", "PLAN A\nMedical expenses\tAUD 5,000\nPLAN B\nMedical expenses\tAUD 1,000",
+      [ben({ section: "Plan A", benefit: "Medical expenses", value: 5000, quote: "Medical expenses\tAUD 5,000" })]],
+    ["child rate on the row's line", "TABLE OF BENEFITS\nHospital cash\tAUD 100 per day, AUD 50 per day for a child",
+      [ben({ benefit: "Hospital cash", pays: "per_day", value: 100, quote: "Hospital cash\tAUD 100 per day" })]],
+    ["child rate on the next line", "TABLE OF BENEFITS\nHospital cash\tAUD 100 per day.\nAUD 50 per day for a child",
+      [ben({ benefit: "Hospital cash", pays: "per_day", value: 100, quote: "Hospital cash\tAUD 100 per day" })]],
+    ["double for children", "TABLE OF BENEFITS\nHospital cash\tAUD 100 per day; double for children",
+      [ben({ benefit: "Hospital cash", pays: "per_day", value: 100, quote: "Hospital cash\tAUD 100 per day" })]]];
+  for (const [what, page2, benefits] of layouts) {
+    const h = auSchedule(page2, benefits);
+    for (const p of AU) assert.deepEqual(h.table.people.find((x) => x.name === p.name)!.rows.filter((r) => r.figure.kind !== "none").map((r) => r.benefit), [], `${what}: ${p.name}`);
+  }
+});
+test("control: a plain shared-table row is still every holder's", () => {
+  const h = auSchedule("TABLE OF BENEFITS\nBenefit\tAmount payable\nMedical expenses\tUp to AUD 2,500 per accident", [ben({ benefit: "Medical expenses", value: 2500, quote: "Medical expenses\tUp to AUD 2,500 per accident" })]);
+  for (const p of AU) assert.ok(h.table.people.find((x) => x.name === p.name)!.rows.some((r) => r.benefit === "Medical expenses" && r.figure.kind === "printed"), p.name);
+});
+test("a printed age group is settled only by a date of birth, never by the relationship alone (Critic #449 round 3, F3)", () => {
+  for (const column of ["Insured child under 16", "Child (under 16)"]) {
+    const quote = "For an insured child under 16, limited to 25% of the Sum Insured.";
+    const h = auSchedule(`TABLE OF BENEFITS\nAccidental death\t${quote}`, [ben({ benefit: "Accidental death", column, pays: "percent", value: 25, percentOf: "sum_insured", quote })]);
+    assert.equal(rowOf(h, "Noah Kelly", (x) => x.benefit === "Accidental death")?.figure.kind ?? "none", "none", column);
+  }
+});
+test("'limited to N%' with money beside it stays capped, whatever words join them (Critic #449 round 3, F4)", () => {
+  for (const tail of ["or AUD 15,000", "but not more than AUD 15,000", "and in no case more than AUD 15,000", "(AUD 15,000 being the most payable)"]) {
+    const quote = `For an insured child under 16, limited to 25% of the Sum Insured ${tail}.`;
+    const people = AU.map((p) => p.name === "Noah Kelly" ? { ...p, dob: "2014-01-01", line: "Noah Kelly\tSon\t01/01/2014\tAUD 200,000" } : p);
+    const h = auSchedule(`TABLE OF BENEFITS\nAccidental death\t${quote}`, [ben({ benefit: "Accidental death", column: "Insured child under 16", pays: "percent", value: 25, percentOf: "sum_insured", quote })], people);
+    assert.notEqual(rowOf(h, "Noah Kelly", (x) => x.benefit === "Accidental death")?.figure.kind, "worked_out", tail);
+  }
+});
+test("a payment 'for each insured child' is not the child's own row (Critic #449 round 3, F7)", () => {
+  const quote = "Education grant\tAUD 5,000 for each insured child if the Principal dies as a result of an accident";
+  const h = auSchedule(`TABLE OF BENEFITS\n${quote}`, [ben({ benefit: "Education grant", value: 5000, quote })]);
+  for (const p of AU) assert.equal(rowOf(h, p.name, (x) => x.benefit === "Education grant")?.figure.kind ?? "none", "none", p.name);
+});
+test("a code in its own table cell is the figure before it's when another cell follows (Critic #449 round 3, F5, F6)", () => {
+  const cases: [string, number[]][] = [["Hospital cash\t100\tSGD\t30 days", [100]], ["80,000\tGBP\t100%", [80000]], ["Medical\t1,000\tEUR\t2 claims", [1000]],
+    ["50\tGBP\t3rd day", [50]], ["500\tUSD\t12 months", [500]], ["Liam Kelly\t100,000\tAUD\t22/07/1984", [100000]], ["Liam Kelly\t100,000\tAUD\t500,000\tAUD", [100000, 500000]],
+    ["There is no 50 EUR excess", [50]], ["Policy No. 12 EUR 500", [500]]];
+  for (const [line, want] of cases) {
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
+  }
 });
 test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #449 F3)", () => {
   for (const quote of ["Fractures\tUp to 50% of the Sum Insured according to the Scale of Fractures", "Permanent partial disablement\tUp to 100% of the Sum Insured as per the Scale of Benefits"]) {
