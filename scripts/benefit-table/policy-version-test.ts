@@ -7,7 +7,7 @@
  * or added. Made-up households in GBP, S$, RM and a bare "$"; no model, database or network.
  *   npm run benefit-table:policy-version-test */
 import assert from "node:assert/strict";
-import { ANOTHER_VERSION_WHY, assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type CheckedReading, type SourceDoc } from "@/lib/benefit-table/check";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
@@ -19,12 +19,12 @@ function test(name: string, fn: () => void) {
   try { fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.stack ?? error.message : String(error)}`); }
 }
 
-type Cov = { product: string; cover: string; plan?: string | null; policyNumber: string | null; person: string; sum: number; quote: string };
+type Cov = { product: string; cover: string; plan?: string | null; riderOf?: string | null; policyNumber: string | null; person: string; sum: number | null; quote: string };
 type Row = { section: string; benefit: string; percent?: number; value?: number; quote: string };
 function read(id: string, kind: string, product: string, pages: string[], covers: Cov[], rows: Row[]): CheckedReading {
   const doc: SourceDoc = { id, name: `${id.slice(-2)}.pdf`, readable: true, pages: pages.map((text, i) => ({ page: i + 1, text })) };
   const r = checkReading(doc, { document: { kind, product, insurer: null, namedPeople: covers.map((c) => c.person), plan: null, periodFrom: null, periodTo: null },
-    covers: covers.map((c) => ({ person: c.person, product: c.product, cover: c.cover, plan: c.plan ?? null, riderOf: null, policyNumber: c.policyNumber, premium: null, premiumFrequency: null,
+    covers: covers.map((c) => ({ person: c.person, product: c.product, cover: c.cover, plan: c.plan ?? null, riderOf: c.riderOf ?? null, policyNumber: c.policyNumber, premium: null, premiumFrequency: null,
       asOf: null, startDate: null, endDate: null, page: 1, sumInsured: c.sum, quote: c.quote })),
     benefits: rows.map((b) => ({ section: b.section, column: null, benefit: b.benefit, pays: b.percent != null ? "percent" : "amount", value: b.percent ?? b.value ?? null, period: null, basis: null,
       asOf: null, percentOf: b.percent != null ? "sum_insured" : null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: b.quote })) } as never);
@@ -96,25 +96,54 @@ test("control: a schedule linked to its own cover is unchanged", () => {
   assert.deepEqual(t.refusedLinks, []);
   assert.ok(rows(t, "p1").some((x) => x.startsWith("Fracture") && x.includes("of 100000") && x.endsWith(`@${newKey}`)));
 });
-test("a schedule printing two covers of the same policy number, linked to another copy's cover: refused, never guessed", () => {
+test("a schedule printing two covers of the same name for the person: the link is left as it was, never guessed or refused", () => {
   const { oldR, oldKey } = versions(CASES[0]);
-  const two = read(id(6), "personal_proof", "Family Personal Accident Policy", ["RENEWAL\nPolicy number HPA-55120-K\nNgozi Okafor\tGBP 100,000\nDaniel Okafor\tGBP 80,000\nFracture\t2% of sum insured"],
-    [{ product: "Family Personal Accident Policy", cover: "Adult accident", policyNumber: "HPA-55120-K", person: "Ngozi Okafor", sum: 100000, quote: "Ngozi Okafor\tGBP 100,000" },
-      { product: "Family Personal Accident Policy", cover: "Spouse accident", policyNumber: "HPA-55120-K", person: "Daniel Okafor", sum: 80000, quote: "Daniel Okafor\tGBP 80,000" }],
+  const two = read(id(6), "personal_proof", "Family Personal Accident Policy", ["RENEWAL\nPolicy number HPA-55120-K\nNgozi Okafor\tGBP 100,000\nNgozi Okafor\tGBP 30,000\nFracture\t2% of sum insured"],
+    [{ product: "Family Personal Accident Policy", cover: "Family Personal Accident", plan: "Gold", policyNumber: "HPA-55120-K", person: "Ngozi Okafor", sum: 100000, quote: "Ngozi Okafor\tGBP 100,000" },
+      { product: "Family Personal Accident Policy", cover: "Personal Accident", plan: "Silver", policyNumber: "HPA-55120-K", person: "Ngozi Okafor", sum: 30000, quote: "Ngozi Okafor\tGBP 30,000" }],
     [{ section: "Benefits", benefit: "Fracture", percent: 2, quote: "Fracture\t2% of sum insured" }]);
-  const t = assembleTable([oldR, two], fam("Ngozi Okafor", "Daniel Okafor"), linkTo(two, oldKey));
-  assert.deepEqual(t.refusedLinks.map((x) => x.why), [ANOTHER_VERSION_WHY]);
-  assert.ok(!rows(t, "p1").some((x) => x.includes("of 75000") && x.startsWith("Fracture") && !x.endsWith(`@${oldKey}`)));
-});
-
-test("control: a certificate of the same policy that prints no sum insured keeps its link to the schedule that does", () => {
-  const { newR, newKey } = versions(CASES[0]);
-  const cert = read(id(7), "personal_proof", "Family Personal Accident Policy", ["CERTIFICATE OF INSURANCE\nPolicy number HPA-55120-K\nInsured: Ngozi Okafor\nFracture\t2% of sum insured"],
-    [{ product: "Family Personal Accident Policy", cover: "Certificate cover", policyNumber: "HPA-55120-K", person: "Ngozi Okafor", sum: null as unknown as number, quote: "Insured: Ngozi Okafor" }],
-    [{ section: "Cert", benefit: "Fracture", percent: 2, quote: "Fracture\t2% of sum insured" }]);
-  const t = assembleTable([newR, cert], fam("Ngozi Okafor"), [...linkTo(newR, newKey), ...linkTo(cert, newKey)]);
+  const t = assembleTable([oldR, two], fam("Ngozi Okafor"), linkTo(two, oldKey));
   assert.deepEqual(t.refusedLinks, []);
-  assert.ok(rows(t, "p1").filter((x) => x.startsWith("Fracture") && x.includes("of 100000") && x.endsWith(`@${newKey}`)).length >= 1, JSON.stringify(rows(t, "p1")));
+  assert.ok(rows(t, "p1").some((x) => x.startsWith("Fracture") && x.endsWith(`@${oldKey}`)), JSON.stringify(rows(t, "p1")));
+});
+// Critic #445: never a basic plan for a rider, never a rider for the plan, never over the household's own choice.
+const HL = "Harbour Life";
+test("F1 a rider printed with no policy number on the renewal moves to the renewal's own rider, not to its basic plan", () => {
+  const last = read(id(8), "personal_proof", HL, ["Schedule 2025\nPolicy number HL-100\nJane Doe\tS$400,000\nEarly CI Rider\tS$90,000"],
+    [{ product: HL, cover: "Basic plan", policyNumber: "HL-100", person: "Jane Doe", sum: 400000, quote: "Jane Doe\tS$400,000" },
+      { product: HL, cover: "Early CI Rider", policyNumber: "HL-100", person: "Jane Doe", sum: 90000, quote: "Early CI Rider\tS$90,000" }], []);
+  const now = read(id(9), "personal_proof", HL, ["Schedule 2026\nPolicy number HL-100\nJane Doe\tS$500,000\nEarly CI\tS$100,000\nEarly CI benefit\t25% of sum insured"],
+    [{ product: HL, cover: "Basic plan", policyNumber: "HL-100", person: "Jane Doe", sum: 500000, quote: "Jane Doe\tS$500,000" },
+      { product: HL, cover: "Early CI", policyNumber: null, person: "Jane Doe", sum: 100000, quote: "Early CI\tS$100,000" }],
+    [{ section: "Rider", benefit: "Early CI benefit", percent: 25, quote: "Early CI benefit\t25% of sum insured" }]);
+  const t = assembleTable([last, now], fam("Jane Doe"), linkTo(now, coverKeyOf({ product: HL, cover: "Early CI Rider", plan: null })));
+  const got = rows(t, "p1");
+  assert.ok(got.some((x) => x.startsWith("Early CI benefit") && x.includes("of 100000")), JSON.stringify(got));
+  assert.ok(!got.some((x) => x.includes("of 500000")), JSON.stringify(got));
+});
+test("F2 a certificate printing only a rider keeps its sections on the base schedule's cover they were linked to", () => {
+  const base = read(id(10), "personal_proof", HL, ["Schedule\nPolicy number HL-100\nJane Doe\tS$500,000"],
+    [{ product: HL, cover: HL, policyNumber: "HL-100", person: "Jane Doe", sum: 500000, quote: "Jane Doe\tS$500,000" }], []);
+  const cert = read(id(11), "personal_proof", HL, ["Certificate\nPolicy number HL-100\nInsured: Jane Doe\nHospital Cash Rider\tS$100\nAccidental death\t100% of sum insured"],
+    [{ product: HL, cover: "Hospital Cash Rider", policyNumber: "HL-100", person: "Jane Doe", sum: 100, quote: "Hospital Cash Rider\tS$100" }],
+    [{ section: "Benefits", benefit: "Accidental death", percent: 100, quote: "Accidental death\t100% of sum insured" }]);
+  const key = coverKeyOf({ product: HL, cover: HL, plan: null });
+  const got = rows(assembleTable([base, cert], fam("Jane Doe"), linkTo(cert, key)), "p1");
+  assert.ok(got.some((x) => x.startsWith("Accidental death") && x.includes("of 500000") && x.endsWith(`@${key}`)), JSON.stringify(got));
+});
+test("F3 a link the household chose is never moved", () => {
+  const { oldR, newR, oldKey } = versions(CASES[0]);
+  const chosen = linkTo(newR, oldKey).map((x) => ({ ...x, chosenBy: "household" }));
+  const got = rows(assembleTable([oldR, newR], fam("Ngozi Okafor"), chosen), "p1");
+  assert.ok(got.some((x) => x.startsWith("Fracture") && x.includes("of 75000") && x.endsWith(`@${oldKey}`)), JSON.stringify(got));
+});
+test("another person's cover on the other copy is never taken as this document's own", () => {
+  const { oldR, oldKey } = versions(CASES[0]);
+  const other = read(id(12), "personal_proof", "Family Personal Accident Policy", ["RENEWAL\nPolicy number HPA-55120-K\nDaniel Okafor\tGBP 80,000\nFracture\t2% of sum insured"],
+    [{ product: "Family Personal Accident Policy", cover: "Family Personal Accident", policyNumber: "HPA-55120-K", person: "Daniel Okafor", sum: 80000, quote: "Daniel Okafor\tGBP 80,000" }],
+    [{ section: "Benefits", benefit: "Fracture", percent: 2, quote: "Fracture\t2% of sum insured" }]);
+  const t = assembleTable([oldR, other], fam("Ngozi Okafor", "Daniel Okafor"), linkTo(other, oldKey));
+  assert.ok(rows(t, "p1").some((x) => x.startsWith("Fracture") && x.endsWith(`@${oldKey}`)), JSON.stringify(rows(t, "p1")));
 });
 
 console.log(`policy versions: ${passed} passed, ${failures.length} failed`);

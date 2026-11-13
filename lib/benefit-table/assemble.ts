@@ -607,29 +607,36 @@ export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<stri
 }
 /** A printed line's place: its page and words, spacing aside. */
 export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
-export const ANOTHER_VERSION_WHY = "linked to another document's copy of the same policy, and this document prints more than one cover of it";
-const REFUSED_VERSION = "\u0000refused";
-/** For a section of a personal document (schedule, certificate) linked to a cover this document does not print, where that
- * cover is printed by another personal document with the same policy number as one this document prints: the cover key
- * of this document's own version of that policy. A renewal schedule's benefits were linked to the expired schedule's
- * cover of the same policy (the two readings named the cover a little differently, so they were two covers), and its
- * percentages were worked out on last year's sums insured (TE-ACC-20261113, Okafor: fracture GBP 1,200 for 1,500; PTD
- * GBP 60,000 for 80,000). Only this document's own covers that print a sum insured are its version. REFUSED_VERSION when this document prints more than one cover with that policy number, so which
- * of its own covers is meant is not known; null when the link stands as it is. Policy numbers only decide which documents
- * are copies of one policy; nothing is merged or added across them. */
+/** For a section of a personal document (schedule, certificate) linked by the model to a cover this document does not
+ * print, where that cover is printed by another personal document sharing a policy number with this one: the key of this
+ * document's own copy of that same cover. A renewal schedule's benefits were linked to the expired schedule's cover of the
+ * same policy (the two readings named the cover a little differently, so they were two covers), and its percentages were
+ * worked out on last year's sums insured (TE-ACC-20261113, Okafor: fracture GBP 1,200 for 1,500; PTD GBP 60,000 for 80,000).
+ * "Its own copy of that same cover" means, on this document: a cover for the same insured person(s) as the linked cover,
+ * printing a sum insured, the same rider-of, and a cover name that is the other's name with words added or left out
+ * ("Family Personal Accident" and "Family Personal Accident Policy"; never a basic plan for a rider, or a rider for the
+ * plan: Critic #445 F1, F2). Exactly one such cover moves the link; none or several leave it as it was (never guessed, and
+ * never refused, so nothing is hidden and nothing is asked again on every upload: Critic #445 F4). A link the household
+ * chose is never moved (Critic #445 F3). Policy numbers only say which documents are copies of one policy; nothing is
+ * merged or added across them. */
 function ownVersionOf(readings: CheckedReading[]) {
   const byDoc = new Map(readings.map((r) => [r.documentId, r]));
-  const printed = (r: CheckedReading) => r.covers.filter((c) => c.policyNumber?.trim()).map((c) => ({ key: coverKeyOf(c), number: c.policyNumber! }));
+  const numbers = (r: CheckedReading) => r.covers.map((c) => c.policyNumber?.trim()).filter((n): n is string => !!n);
+  const nameWords = (c: CheckedCover) => new Set(norm(c.cover).split(" ").filter(Boolean));
+  const within = (a: Set<string>, b: Set<string>) => a.size > 0 && [...a].every((w) => b.has(w));
+  const sameCover = (a: CheckedCover, b: CheckedCover) => norm(a.person) === norm(b.person) && norm(a.riderOf) === norm(b.riderOf)
+    && (!a.plan || !b.plan || norm(a.plan) === norm(b.plan)) && (within(nameWords(a), nameWords(b)) || within(nameWords(b), nameWords(a)));
   return (docId: string | undefined, coverKey: string): string | null => {
     const r = docId ? byDoc.get(docId) : undefined;
     if (!r || r.kind !== "personal_proof" || r.covers.some((c) => coverKeyOf(c) === coverKey)) return null;
-    // Only this document's covers that print their own sum insured: a certificate that names the policy but prints no sum
-    // keeps its link to the copy that does, so no figure worked out on that sum is lost.
-    const mine = printed(r).filter((m) => r.covers.some((c) => coverKeyOf(c) === m.key && c.sumInsured != null));
-    const elsewhere = readings.filter((o) => o !== r && o.kind === "personal_proof").flatMap(printed).filter((c) => c.key === coverKey);
-    const versions = mine.filter((m) => elsewhere.some((e) => samePolicyNumber(e.number, m.number)));
-    const keys = [...new Set(versions.map((v) => v.key))];
-    return keys.length === 1 ? keys[0] : keys.length > 1 ? REFUSED_VERSION : null;
+    const mineNumbers = numbers(r);
+    if (!mineNumbers.length) return null;
+    // The linked cover as the other copies of this policy print it.
+    const linked = readings.filter((o) => o !== r && o.kind === "personal_proof" && numbers(o).some((n) => mineNumbers.some((m) => samePolicyNumber(n, m))))
+      .flatMap((o) => o.covers).filter((c) => coverKeyOf(c) === coverKey);
+    if (!linked.length) return null;
+    const keys = [...new Set(r.covers.filter((c) => c.sumInsured != null && linked.some((l) => sameCover(c, l))).map((c) => coverKeyOf(c)))];
+    return keys.length === 1 ? keys[0] : null;
   };
 }
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
@@ -653,10 +660,10 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings);
   for (const linked of links) {
-    // A personal document's own sections are paid under its own version of the policy, never another document's copy of
-    // the same policy (an earlier or later schedule of the same policy number), whatever the link says.
-    const own = linked.cover ? ownVersion(docOf.get(linked.section), linked.cover) : null;
-    if (own === REFUSED_VERSION) { refusedLinks.push({ link: linked, why: ANOTHER_VERSION_WHY }); continue; }
+    // A personal document's own sections are paid under its own copy of the cover, never another document's copy of the
+    // same policy (an earlier or later schedule of the same policy number), unless the household chose that link.
+    const chosenByHousehold = (linked as { chosenBy?: string }).chosenBy === "household";
+    const own = linked.cover && !chosenByHousehold ? ownVersion(docOf.get(linked.section), linked.cover) : null;
     const l = own ? { ...linked, cover: own } : linked;
     const type = l.cover ? types.find((t) => t.key === l.cover) : null;
     const section = sections.find((s) => s.key === l.section);
