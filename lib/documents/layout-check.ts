@@ -624,21 +624,57 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     if (code && (ISO_CURRENCIES.has(code) || LOCAL_CURRENCY_FORMS.has(code))) return true;
     return /^(?:\d|\p{Ll})/u.test(t) || t.replace(CURRENCY_MARK, "") !== t && /^\S{0,3}\p{Sc}/u.test(t);
   };
-  // `left` is where the row's lines so far start furthest left. A line that starts further left still is the row's label
-  // cell, when no line of the row has one yet (a label centred beside its value's second line): it joins, once.
-  // A line with a label cell of its own under a line that ends on a figure is a row of its own whatever its first letter
-  // ("Death\tRM 200,000" over "e-hailing accident\tRM 10,000"): a wrapped label continues a row whose value wraps too.
+  // Where a line stands, by column, not by its exact x (Critic #446 M1: indented, centred and right-aligned label columns).
+  // The value column starts at the second cell of the nearest line at or above that has two cells with geometry (the row
+  // itself, or its table's heading); a line whose first cell starts left of it has a label cell. Without geometry, a line
+  // with TAB slots has a label cell when its first slot is filled, a value part when it is blank; a line of one cell with
+  // no geometry is told by how it starts (partStart).
+  const valueStart = (i: number): number | undefined => {
+    for (let u = filledText.indexOf(i); u >= 0; u--) {
+      const j = filledText[u], xs = geometry?.[j];
+      if (xs && xs.length >= 2 && xs.length === lines[j].split("\t").length) return xs[1];
+    }
+    return undefined;
+  };
+  const place = (j: number, edge: number | undefined): "label" | "value" | "unknown" => {
+    const x = firstX(j);
+    if (x !== undefined && edge !== undefined) return x < edge - 1 ? "label" : "value";
+    if (!lines[j].includes("\t")) return "unknown";
+    return lines[j].split("\t")[0].trim() ? "label" : "value";
+  };
   const endsOnFigure = (j: number) => { const t = lineTokens(lines[j]).at(-1); return t !== undefined && (typeof t === "number" || isDate(t)); };
-  const ownRow = (j: number, left: number | undefined, prev: number) => {
+  // A line below that prints a figure joins the row only when it reads as a part of it, never as a row of its own (Critic
+  // #446 F3, R1, M1, M2: two complete rows an image reader ran together are never stored as one):
+  // - a value part (its first cell in a value column) joins, unless the next line is a row whose value starts lower case:
+  //   then the part may open that row's value (a label centred beside its value's second line) and which row it belongs
+  //   to is not known;
+  // - a line with a label cell and a figure, when the row has a label already, is a row of its own: by position it cannot
+  //   be told from a second row ("Hospital cash\tAUD 100 per day, up to" over "dental\tAUD 500"), so a label and an
+  //   amount that both wrap stay held, as before (TE #446 A1, A3; Critic R1, M1);
+  // - a single-cell line with no geometry and no TAB slots joins only when it starts lower case in a cased script, with
+  //   a figure or with a currency, and the line above does not end on a figure: a row marker ("(a)", "1."), a capital, or
+  //   a script with no case ("身故", "เสียชีวิต") starts a row;
+  // - a line with a label cell, when the row has none yet (its first line stands in the value column: a label centred
+  //   beside its value's second line), is that label, once, and only when the line above the row prints no figure (a
+  //   heading, a title): under a row with figures, the first line could as well be the end of that row's value, and the
+  //   image is not left to decide which (TE #446 F1: a cap printed at the start of the next row).
+  // Words-only lines below are wrapped label parts and always join.
+  const ownRow = (j: number, edge: number | undefined, prev: number, labelled: boolean, i: number) => {
+    // A sentence running on (the row and the line both one cell) is told by how the line starts, not by a table's columns.
+    const where = !lines[i].includes("\t") && !lines[j].includes("\t") ? "unknown" : place(j, edge);
     if (!figureLine(lineTokens(lines[j]))) return false;
-    const xj0 = firstX(j);
-    const labelCell = left !== undefined && xj0 !== undefined ? Math.abs(xj0 - left) <= 1 : !!lines[j].split("\t")[0].trim() && lines[j].includes("\t");
-    if (labelCell && endsOnFigure(prev)) return true;
-    const xj = firstX(j);
-    if (left !== undefined && xj !== undefined && (xj > left + 1 || xj < left - 1)) return false;
-    // A blank first slot: the line starts in a value column.
-    if (/^[ \t]*\t/.test(lines[j]) && !lines[j].split("\t")[0].trim()) return false;
-    return !partStart(lines[j]);
+    if (where === "value") {
+      const next = filledText[filledText.indexOf(j) + 1];
+      if (next === undefined || place(next, edge) !== "label") return false;
+      const value = lines[next].split("\t").slice(1).find((c) => c.trim())?.trim() ?? "";
+      return /^\p{Ll}/u.test(value);
+    }
+    if (where === "label" && !labelled) {
+      const p = filledText[filledText.indexOf(i) - 1];
+      return !(p === undefined || !figureLine(lineTokens(lines[p])));
+    }
+    if (where === "label") return true;
+    return endsOnFigure(prev) || !partStart(lines[j]);
   };
   // A word hyphenated across the wrap ("peri-" over "od") is tried whole and with its hyphen, as well as with a space.
   const variants = (text: string) => [text, text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1"), text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1-")];
@@ -651,14 +687,13 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       above.unshift(j);
     }
     const below: number[] = [];
-    const xsSoFar = [...above, i].map(firstX);
-    let left = xsSoFar.every((x) => x !== undefined) ? Math.min(...(xsSoFar as number[])) : undefined;
+    const edge = valueStart(i);
+    let labelled = [...above, i].some((j) => place(j, edge) !== "value");
     for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
       const j = filledText[u];
-      if (!free(j) || alone(j) || ownRow(j, left, below.at(-1) ?? i)) break;
+      if (!free(j) || alone(j) || ownRow(j, edge, below.at(-1) ?? i, labelled, i)) break;
       below.push(j);
-      const xj = firstX(j);
-      left = left === undefined || xj === undefined ? undefined : Math.min(left, xj);
+      if (place(j, edge) !== "value") labelled = true;
     }
     for (let size = 2; size <= above.length + 1 + below.length; size++) {
       let found: { group: number[]; text: string; at: number } | null = null, ways = 0;
