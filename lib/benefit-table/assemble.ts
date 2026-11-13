@@ -584,7 +584,7 @@ export const NOT_TOLD_WHY = "printed for more than one person on this document, 
  * only the one whose life the row's column or section heading is (headingIsLife; never its own line, which may name a payee);
  * when no one life is the heading, those whose own sum printed on that document is the row's figure; otherwise no one (an empty set). Never by page or position. A row that prints
  * no figure of its own, or one worked out on each person's own sum insured, is every holder's. */
-function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[], printedOnce = false): Set<string> | undefined {
+function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, covers: PersonCover[], family: FamilyMember[], shared: { once: boolean; rate: boolean } = { once: false, rate: false }): Set<string> | undefined {
   // A block or column heading that is a holder's life (Critic #406 X1, J1): only that holder, wherever the document prints
   // covers or none (a benefit summary with one column per person).
   const holders = [...new Set(covers.filter((c) => c.coverKey === coverKey).map((c) => c.personId))];
@@ -618,9 +618,9 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   const label = `${b.benefit} ${b.column ?? ""} ${b.section ?? ""}`;
   const people = [...covers.filter((c) => onDoc(c)).map((c) => c.person), ...family.flatMap((m) => [m.display_name, m.preferred_name ?? ""])];
   const namesSomeone = people.some((n) => norm(n).split(" ").some((w) => w.length >= 3 && ` ${norm(label)} `.includes(` ${w} `)));
-  if (!printedOnce || ROLE_WORDS.test(label) || namesSomeone) return bySum;
+  if (!shared.once || ROLE_WORDS.test(label) || namesSomeone) return bySum;
   if (EACH_INSURED.test(`${b.column ?? ""} ${b.benefit} ${b.source.excerpt}`)) return ids;
-  if (b.pays === "per_day" || b.pays === "per_period") return ids;
+  if ((b.pays === "per_day" || b.pays === "per_period") && shared.rate) return ids;
   return bySum;
 }
 /** A benefit's name before any ":", spacing and case aside (the same benefit's rows printed for several lives). */
@@ -800,9 +800,15 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const r of readings) for (const b of r.benefits) if ((b.pays === "per_day" || b.pays === "per_period") && b.value != null) {
     const k = `${r.documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`; rates.set(k, (rates.get(k) ?? new Set()).add(b.value));
   }
-  const printedOnceOn = (documentId: string, b: CheckedBenefit) => (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1
-    && (leadCount.get(`${documentId}\u0000${lead(b.benefit)}`) ?? 0) <= 1
-    && (b.pays !== "per_day" && b.pays !== "per_period" || (rates.get(`${documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`)?.size ?? 0) <= 1);
+  // The first-words and one-rate tests are for a rate given to everyone with no word saying so; a row the document itself
+  // says is for each insured person needs only its own name printed once ("Loss of baggage" and "Loss of passport" on a
+  // certificate's "Limit per insured person" column are two benefits, Critic O on #447).
+  const printedOnceOn = (documentId: string, b: CheckedBenefit) => {
+    const once = (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1;
+    const rate = once && (leadCount.get(`${documentId}\u0000${lead(b.benefit)}`) ?? 0) <= 1
+      && (rates.get(`${documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`)?.size ?? 0) <= 1;
+    return { once, rate };
+  };
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;

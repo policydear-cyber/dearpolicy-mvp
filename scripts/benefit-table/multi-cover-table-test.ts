@@ -326,6 +326,17 @@ test("Critic 5: a label followed by other words and a number ('Death TPD 50,000'
   assert.deepEqual(shown(assembleTable([r], asha, noLink(DOC))), []);
 });
 
+test("Critic O: a certificate's 'per insured person' list with shared first words ('Loss of baggage', 'Loss of passport') shows every row to both", () => {
+  const lines = [["Loss of baggage", 3000], ["Loss of passport", 500], ["Personal accident death", 100000], ["Personal accident disablement", 100000], ["Overseas medical expenses", 500000]] as const;
+  const text = `ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nBenefit\tLimit per insured person\n${lines.map(([l, v]) => `${l}\t$${v.toLocaleString("en-US")}`).join("\n")}\nEnd.`;
+  const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
+  const col = "Limit per insured person";
+  const r = checkReading(page(DOC, text), reading("Acme Travel", ["Asha Rao", "Ben Rao"], [c("Asha Rao"), c("Ben Rao")],
+    lines.map(([l, v]) => row({ column: col, benefit: l, pays: "up_to", value: v, quote: `${l}\t$${v.toLocaleString("en-US")}` })), "couple plan"));
+  const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: null, column: col }), cover: coverKeyOf({ product: "Acme Travel", cover: "Travel", plan: "couple plan" }), why: "x" }]);
+  for (const i of [0, 1]) assert.equal(t.people[i].rows.length, 5, shown(t, i).join("\n"));
+});
+
 test("Critic M (documented, fails closed): one figure column under two benefit headings is not the sole column, so the link is refused", () => {
   const text = "ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nMEDICAL\nOverseas medical expenses\t$500,000\nTRAVEL\nTrip cancellation\t$5,000\nEnd.";
   const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
