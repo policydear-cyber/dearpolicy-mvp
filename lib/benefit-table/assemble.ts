@@ -19,7 +19,7 @@ import { printedDay, singaporeDay } from "./dates";
 import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
-import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 
@@ -341,7 +341,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
-  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt))) {
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : b.source.excerpt))) {
     const of = shareWords(b);
     return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
       ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
