@@ -7,7 +7,7 @@ import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-f
 import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
-import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
+import { formatMoney,normalizeCurrencyCode,statedCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,namesOnlyAPlanCell,resolveStoredRules } from "@/lib/insurance/scale-limit";
@@ -1332,7 +1332,9 @@ export function reviewedBenefitFormula(input:{kind:string;value:number|null;curr
   if(kind==="none")return {ok:true,formula:{formulaKind:"none",formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null}};
   const value=input.value;
   if(value==null||!Number.isFinite(value)||value<=0)return {ok:false,error:"Enter an amount greater than zero."};
-  const currency=input.currency?normalizeCurrencyCode(input.currency)||null:null;
+  // The currency the household or operator stated: any ISO 4217 code, or a sign that names one ("S$", "RM"); a bare "$"
+  // names none and is never taken as any currency.
+  const currency=input.currency?statedCurrencyCode(input.currency):null;
   if(kind!=="sum_insured"&&!currency)return {ok:false,error:"Choose the currency your policy states for this amount."};
   if(kind==="sum_insured"){
     if(value>2)return {ok:false,error:"A percentage of the sum insured cannot be more than 200%."};

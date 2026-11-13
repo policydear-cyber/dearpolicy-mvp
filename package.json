@@ -45,6 +45,7 @@
     "benefit-table:family-ended-test": "node --import tsx scripts/benefit-table/family-ended-test.ts",
     "benefit-table:per-child-test": "node --import tsx scripts/benefit-table/per-child-test.ts",
     "benefit-table:claim-amounts-test": "node --import tsx scripts/benefit-table/claim-amounts-test.ts",
+    "format:any-currency-test": "node --import tsx scripts/format/any-currency-test.ts",
     "format:plan-number-test": "node --import tsx scripts/format/plan-number-test.ts",
     "benefit-table:claim-journeys-test": "node --import tsx scripts/benefit-table/claim-journeys-test.ts",
     "benefit-table:own-line-test": "node --import tsx scripts/benefit-table/own-line-test.ts",

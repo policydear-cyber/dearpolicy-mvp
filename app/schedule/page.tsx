@@ -10,6 +10,7 @@ import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
 import { sharedPolicyNote,sharedPolicyText } from "@/lib/policies/shared-policy";
 import { pointsToScheduleSum,SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
+import { CurrencyPicker } from "@/components/currency-picker";
 
 /** Benefits: what the household's documents say each policy pays.
  *
@@ -239,10 +240,7 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
   if(!open)return <button type="button" className="link-button" onClick={()=>setOpen(true)}>I can read the amount on my copy</button>;
   return <div className="clarify-amount">
     <div className="schedule-amount-row">
-      <select aria-label="Currency" value={currency} onChange={e=>setCurrency(e.target.value)}>
-        <option value="">Currency</option>
-        {["SGD","USD","MYR","HKD","AUD","GBP","EUR"].map(c=><option value={c} key={c}>{c}</option>)}
-      </select>
+      <CurrencyPicker value={currency} onChange={setCurrency} />
       <input aria-label="Amount as printed" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Amount as printed" />
       <button type="button" className="button primary compact" disabled={saving} onClick={()=>void save()}>{saving?"Saving…":"Save"}</button>
       <button type="button" className="button secondary compact" disabled={saving} onClick={()=>setOpen(false)}>Cancel</button>
