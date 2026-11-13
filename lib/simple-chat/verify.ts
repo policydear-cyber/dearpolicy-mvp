@@ -818,8 +818,9 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   /** The row's own printed condition the model said pays a multiple of its amount in this person's event ("a compound
    * fracture is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with
    * the row's own words (`own`) and `section`, and checked again against the household's own words. When it is set and the
-   * figure cannot be worked out again, the card is left out, never shown as the single amount. */
-  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null } | null };
+   * figure cannot be worked out again, the card is left out, never shown as the single amount. `others`: the benefit names
+   * of the person's other rows. */
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -893,8 +894,10 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
     if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return null;
     // Checked again from the condition's stored words and the household's own (written), never trusted from the row step:
-    // the same one plain multiple, of this row's section, with its case words in the household's messages.
-    const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null }, written);
+    // the same one plain multiple, of this row's case, and the same veto reading of the household's words (written: the
+    // current message first).
+    const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null, others: sf.times.others },
+      { current: written[0] ?? "", earlier: written.slice(1), person, namedIn: (t) => membersNamedIn(household, t) });
     if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return null;
     times = d.times; timesFound = tf;
     if (cap && Math.round(sf.base.value * sf.percent * times) / 100 > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return null;

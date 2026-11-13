@@ -4,11 +4,13 @@
  * The model judges, the server computes (PR #472 gates 1-2): the model names the note in an amount statement's
  * "multiplierNote" only when the household said its case applies to this person in this event; here the model's reply is
  * scripted. The server applies it only when the note is one of the row's own conditions, pays one plain multiple of this
- * row's own section, and its case words are in the household's messages; within the printed maximum; the chat's checks
- * work it out again. A named note failing any check gives no amount (never the single one, the note said as a condition,
- * "left out an amount"); no note named gives main's card, whatever the household's words.
- * The gate's who/when repros (another member, an earlier event, a pronoun, a quoted policy, a trait) are the model's to
- * judge: here each asserts that with no note named the card is main's GBP 400.
+ * row's own case, and the server's own reading of the household's words does not veto it (round 3: the case said plainly
+ * for this person in the current message, or an earlier one naming them; no negation, hedge, question, past event,
+ * quoted policy, pronoun or family word for someone else, trait note, or scattered words for a phrase); within the
+ * printed maximum; the chat's checks work it out again. A named note failing any check gives no amount (never the single
+ * one, the note said as a condition, "left out an amount"); no note named gives main's card, whatever the household's
+ * words. The gate's who/when repros: with no note named, main's GBP 400 (the model decides); with the note set wrongly
+ * (W1-W10), no amount, never a multiplied figure.
  * No model, database or network.
  *   npm run benefit-table:multiplier-test */
 import assert from "node:assert/strict";
@@ -95,8 +97,18 @@ test("the table schema asks for multiplierNote as a plain string and the table's
   assert.ok(items.required.includes("multiplierNote"));
   assert.equal(items.properties.multiplierNote.type, "string");
   const text = renderTable(fractureSchedule().rows);
-  assert.match(text, /Set "multiplierNote" to "" unless one of the row's own conditions pays a multiple/);
-  assert.match(text, /compound fracture is paid at double/);
+  const rule = text.split("\n").find((l) => l.startsWith("On an amount statement, set \"multiplierNote\" to \"\" unless one of the row's own conditions pays a multiple"));
+  assert.ok(rule, "the instruction");
+  // Its example is made up: never a household's own person or note.
+  assert.doesNotMatch(rule!, /Grace|Daniel|compound|Section 3/);
+  assert.match(text, /compound fracture is paid at double/, "the row's own note is in the table");
+});
+test("the prompt's own example is applied by the server when the household says it of that person", () => {
+  const TOMAS: Person = { name: "Tomas Rey", relationship: "self", line: "Tomas Rey\tPolicyholder\tEUR 50,000", sum: 50000 };
+  const line = "1\tLoss of sight\t10% of the Sum Insured", note = "Note: loss of sight in both eyes is paid at twice the amount";
+  const h = schedule([TOMAS], [line, note], [ben({ section: "1", benefit: "Loss of sight", pays: "percent", value: 10, percentOf: "sum_insured", quote: line, conditions: [note] })]);
+  assert.deepEqual(ask(h, "Tomas Rey", /Loss of sight/, "Tomas lost the sight in both eyes in the accident.", note).amounts, ["€10,000"]);
+  assert.deepEqual(ask(h, "Tomas Rey", /Loss of sight/, "Tomas lost the sight in both eyes in the accident.", "").amounts, ["€5,000"]);
 });
 
 // ---------- Reading the note ----------
@@ -242,6 +254,55 @@ test("a daily amount with an age note and no note named is as before", () => {
   const line = "6\tHospital income\tRM 100 per day in hospital", note = "Note (c): paid at half for an insured person aged 70 or over.";
   const h = schedule([SITI], [line, note], [ben({ section: "6", benefit: "Hospital income", pays: "per_day", value: 100, quote: line, conditions: [note] })], "Keluarga Accident Plan");
   assert.ok(ask(h, "Siti Binti Omar", /Hospital income/, "Siti fell over and was in hospital 3 days.", "").amounts.includes("RM100"));
+});
+
+// ---------- Round 3: the model sets the note wrongly; the server's reading vetoes it (no amount), never a wrong figure ----------
+test("a case stated earlier in the claim, naming this person, is carried", () => {
+  assert.deepEqual(G(KEEPS, "How much can we claim for it?", KEEPS, ["Grace broke her arm, it is a compound fracture."]).amounts, ["£800"]);
+});
+test("W1-W10 and round-2 repros with the note set wrongly: no amount, never a multiplied figure", () => {
+  const AGE = "Note (a): the Section 3 amount is paid at half for an insured person aged 70 or over.";
+  const KIDS = "Note (a): the Section 3 amount is doubled for insured children.";
+  const WORK = "Note (a): the amount is doubled if the accident happens at work.";
+  const cases: [string, string, string[]][] = [
+    [KEEPS, "The doctor ruled out a compound fracture.", TURNS],                                                    // W5
+    [KEEPS, "Grace broke her wrist.", ["Daniel had a compound fracture last year."]],                               // W6
+    [KEEPS, "Our policy says a compound fracture is paid at double. Grace broke her wrist.", []],                   // W7
+    [KIDS, "Grace broke her arm playing with the children.", []],                                                   // W8
+    [AGE, "Grace broke her wrist; her mum, aged 70 or over, was with her.", []],                                    // W9
+    [KEEPS, "What does a compound fracture pay?", []],                                                              // W10
+    [KEEPS, "Grace broke her wrist. Daniel was hurt too. He has a compound fracture.", []],                         // R2-H1
+    [KEEPS, "I have a compound fracture and Grace broke her wrist. What can we claim for her?", []],
+    [KEEPS, "Grace broke her wrist in the crash. My husband has a compound fracture.", []],
+    [KEEPS, "Grace broke her wrist today. How much?", ["Grace had a compound fracture in 2023, it healed."]],       // R2-H2
+    [KEEPS, "Last year Grace had a compound fracture. Today she broke her wrist again. How much?", []],
+    [WORK, "Grace broke her wrist on her way to work.", []],                                                        // R2-H5
+    [KEEPS, "They checked whether it was compound but it is a simple fracture.", TURNS],
+    [KEEPS, "Grace broke her wrist. Daniel has a compound fracture.", []],
+  ];
+  for (const [note, q, earlier] of cases) {
+    const a = G(note, q, note, earlier);
+    assert.deepEqual(a.amounts, [], q);
+    assert.ok(a.leftOut, q);
+  }
+});
+test("W1: the note set on Daniel's card for Grace's compound fracture gives Daniel no amount", () => {
+  const a = ask(fractureSchedule(KEEPS, 1), "Daniel Okafor", /Fracture/, "Grace has a compound fracture. Daniel broke his wrist too.", KEEPS);
+  assert.deepEqual(a.amounts, []);
+  assert.ok(a.leftOut);
+});
+test("W4: a note with no section number copied onto Burns names the fracture row's case: no amount for Burns; the fracture row applies", () => {
+  const note = "Note (a): a compound fracture is paid at double the amount.";
+  const h = fractureSchedule(note, 2, [DANIEL, GRACE], note);
+  assert.deepEqual(ask(h, "Grace Okafor", /Burns/, "Grace has a compound fracture and burns.", note).amounts, []);
+  assert.deepEqual(ask(h, "Grace Okafor", /Burns/, "Grace has a compound fracture and burns.", "").amounts, ["£2,000"]);
+  assert.deepEqual(ask(h, "Grace Okafor", /Fracture/, "Grace has a compound fracture and burns.", note).amounts, ["£800"]);
+});
+test("a note the table escapes or joins with ';' can still be copied", () => {
+  const angled = "Note (a): fractures <compound> are paid at double the Section 3 amount.";
+  assert.deepEqual(G(angled, "It was a compound fracture.", "Note (a): fractures &lt;compound&gt; are paid at double the Section 3 amount.").amounts, ["£800"]);
+  const joined = "Note (a): a compound fracture is paid at double the Section 3 amount; still subject to the GBP 1,500 maximum per accident.";
+  assert.deepEqual(G(joined, "It was a compound fracture.", "a compound fracture is paid at double the Section 3 amount").amounts, ["£800"]);
 });
 
 console.log(`multiplier-test: ${passed} passed, ${failures.length} failed`);
