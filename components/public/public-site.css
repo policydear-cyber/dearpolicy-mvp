@@ -70,3 +70,4 @@
   .public-nav .public-nav-link:first-child { display: none; }
   .public-header .button.compact { padding: 8px 12px; }
 }
+.public-main:focus { outline: none; }

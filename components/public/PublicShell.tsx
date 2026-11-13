@@ -25,7 +25,7 @@ export default function PublicShell({ children, onLearn }: { children: React.Rea
           <Link className="button primary compact" href="/signup" data-testid="public-sign-up">Create account</Link>
         </nav>
       </header>
-      <main id="public-main" className="public-main">{children}</main>
+      <main id="public-main" className="public-main" tabIndex={-1}>{children}</main>
       <footer className="public-footer">
         <p>{PUBLIC_FOOTER_LINE}</p>
         <p className="public-footer-links">

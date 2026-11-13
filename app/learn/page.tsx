@@ -10,6 +10,7 @@ export const metadata = {
   title: "Learn the basics of insurance · DearPolicy",
   description: "Short, plain-English guides to how insurance works: deductibles, co-insurance, riders, claims, and Singapore schemes such as MediShield Life. Facts cite official sources only.",
   alternates: { canonical: "/learn" },
+  openGraph: { title: "Learn the basics of insurance · DearPolicy", description: "Short, plain-English guides to how insurance works, with Singapore schemes explained from official sources.", url: "/learn", siteName: "DearPolicy", type: "website" },
 };
 
 export default function LearnPage() {
