@@ -321,6 +321,7 @@
     "documents:wrapped-row-check-test": "node --import tsx scripts/documents/wrapped-row-check-test.ts",
     "documents:layout-codes-tables-test": "node --import tsx scripts/documents/layout-codes-tables-test.ts",
     "documents:label-spelling-check-test": "node --import tsx scripts/documents/label-spelling-check-test.ts",
+    "documents:sentence-paragraph-check-test": "node --import tsx scripts/documents/sentence-paragraph-check-test.ts",
     "documents:turned-page-test": "node --import tsx scripts/documents/turned-page-test.ts",
     "documents:locked-pdf-test": "node --import tsx scripts/documents/locked-pdf-test.ts",
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",

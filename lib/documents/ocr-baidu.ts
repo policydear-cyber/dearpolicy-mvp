@@ -47,7 +47,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v4"; // v4: headers, footers and footnotes kept (#441)
+const TEXT_VERSION = "baidu-md-v5"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -392,6 +392,37 @@ export function baiduMarkdownToText(markdown: string): string {
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** Letters and digits only, lower case: how a block's text is looked for in the page's Markdown text. */
+const blockKey = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+/** Labels whose blocks are pictures, tables or formulas: never added as text from the layout list (a table is already in
+ * the Markdown as a grid; a picture's block holds no reading of its own). */
+const NON_TEXT_BLOCK = /image|chart|table|seal|formula|figure$/i;
+/** The text blocks Baidu's layout list holds that its Markdown left out, top to bottom. The document models print some
+ * blocks only in the layout list (13 Nov 2026: a schedule's last line, a registration number and print date, was in
+ * neither the Markdown nor the reading, with every other footer line kept), so a page's figures went unchecked. A block
+ * counts as present when its letters and digits stand, in order, anywhere in the page's Markdown text, so nothing the
+ * Markdown already has is added twice. */
+export function blocksMissingFromText(list: unknown, text: string): { texts: string[]; labels: string[] } {
+  if (!Array.isArray(list)) return { texts: [], labels: [] };
+  const have = blockKey(text), seen = new Set<string>();
+  const found: { text: string; label: string; y: number; at: number }[] = [];
+  list.forEach((block, at) => {
+    if (!block || typeof block !== "object") return;
+    const b = block as { block_label?: unknown; block_content?: unknown; block_bbox?: unknown };
+    const label = typeof b.block_label === "string" ? b.block_label : "";
+    if (typeof b.block_content !== "string" || NON_TEXT_BLOCK.test(label)) return;
+    const clean = baiduMarkdownToText(b.block_content);
+    const key = blockKey(clean);
+    if (key.length < 2 || have.includes(key) || seen.has(key)) return;
+    seen.add(key);
+    const box = Array.isArray(b.block_bbox) ? b.block_bbox : [];
+    const y = typeof box[1] === "number" && Number.isFinite(box[1]) ? box[1] : Number.POSITIVE_INFINITY;
+    found.push({ text: clean, label: /^[a-z_]{1,32}$/.test(label) ? label : "other", y, at });
+  });
+  found.sort((a, b) => a.y - b.y || a.at - b.at);
+  return { texts: found.map((f) => f.text), labels: found.map((f) => f.label) };
+}
+
 /** Each page's text, in page order, from the result JSONL. */
 export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
   const pages: string[] = [];
@@ -409,9 +440,15 @@ export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
       }
     } else {
       if (!Array.isArray(result.layoutParsingResults)) throw new BaiduOcrError("format");
-      for (const item of result.layoutParsingResults as { markdown?: { text?: unknown } }[]) {
+      for (const item of result.layoutParsingResults as { markdown?: { text?: unknown }; prunedResult?: { parsing_res_list?: unknown } }[]) {
         const md = item?.markdown?.text;
-        pages.push(typeof md === "string" ? baiduMarkdownToText(md) : "");
+        const text = typeof md === "string" ? baiduMarkdownToText(md) : "";
+        const missing = blocksMissingFromText(item?.prunedResult?.parsing_res_list, text);
+        if (missing.texts.length) {
+          // Fixed words and Baidu's own layout labels only: never a block's text.
+          console.warn(`[baidu-ocr] page ${pages.length + 1}: ${missing.texts.length} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
+        }
+        pages.push(missing.texts.length ? [text, ...missing.texts].filter(Boolean).join("\n\n") : text);
       }
     }
   }
