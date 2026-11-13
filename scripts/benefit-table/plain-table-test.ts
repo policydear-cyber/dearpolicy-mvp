@@ -63,7 +63,7 @@ const TAIL = ["Exclusions: injury while taking part in motor racing or professio
 
 /** The schedule, read by hand: page 1 the insured persons, page 2 the table. `rows` replace the table's rows; `header` its
  * header line; `notes` lines printed after the table (before note (a)); `covers` the cover each life holds. */
-function schedule(o: { rows?: Row[]; header?: string; notes?: string[]; pre?: string[]; post?: string[]; lives?: [string, string, string, string][]; coverOf?: (person: string) => string } = {}) {
+function schedule(o: { rows?: Row[]; header?: string; notes?: string[]; pre?: string[]; post?: string[]; extraBenefits?: Record<string, unknown>[]; lives?: [string, string, string, string][]; coverOf?: (person: string) => string } = {}) {
   const rows = o.rows ?? ROWS, lives = o.lives ?? LIVES;
   const lines = rows.map((r) => `${r.n}\t${r.benefit}\t${r.cell}`);
   const page2 = ["TABLE OF BENEFITS (all amounts in GBP)", ...(o.pre ?? []), o.header ?? "Section\tBenefit\tAmount payable", ...lines, ...(o.notes ?? []), ...NOTE_A, ...TAIL, ...(o.post ?? [])].join("\n");
@@ -75,10 +75,10 @@ function schedule(o: { rows?: Row[]; header?: string; notes?: string[]; pre?: st
       premium: null, premiumFrequency: null, asOf: null, startDate: "1 March 2026", endDate: "28 February 2027", page: 1, quote: l.join("\t") })),
     benefits: rows.map((r, i) => ({ section: r.section ?? r.n, column: r.column ?? null, benefit: r.benefit, pays: r.pays, value: r.value, period: null, basis: null, asOf: null,
       percentOf: r.percentOf ?? null, baseAmount: null, baseQuote: null, cap: r.cap ?? null, capQuote: r.capQuote ?? null, fromDay: r.fromDay ?? null, maxDays: r.maxDays ?? null,
-      conditions: r.conditions ?? [], page: 2, quote: lines[i], ...(r.forWhom ? { forWhom: r.forWhom } : {}) })),
+      conditions: r.conditions ?? [], page: 2, quote: lines[i], ...(r.forWhom ? { forWhom: r.forWhom } : {}) })).concat((o.extraBenefits ?? []) as never[]),
   };
   const r = checkReading(doc, reading);
-  assert.equal(r.benefits.length, rows.length, `rows check against the page: ${JSON.stringify(r.dropped)}`);
+  assert.equal(r.benefits.length, rows.length + (o.extraBenefits ?? []).length, `rows check against the page: ${JSON.stringify(r.dropped)}`);
   const keys = [...new Set(lives.map((l) => coverKeyOf({ product: PRODUCT, cover: coverOf(l[0]), plan: null })))];
   const links = [...new Set(r.benefits.map((b) => sectionKeyOf(DOC, b)))].map((section) => ({ section, cover: keys[0], why: "the schedule's table of benefits" }));
   return { r, table: assembleTable([r], FAMILY, links, [], NOW) };
@@ -364,6 +364,53 @@ test("a bare-letter note line ('a GBP 1,000 for the youngest.') is no structural
 // The allow-list itself: any line outside the closed set (a money figure, a person, an unknown sentence) withholds.
 for (const line of ["Dental treatment\tGBP 300", "Daniel Okafor is also insured under another policy", "Please read the policy wording for the full terms that apply to you."]) {
   test(`allow-list: an unread line ("${line}") is no structural line, so the fixed rows are withheld`, () => noneFixed(schedule({ post: [line] }).table, line));
+}
+
+// ---------------------------------------------------------------- round 3 of the TE gate (head 1acbc02d), each repro
+// R3-H1: a footnote marked on one row that changes other rows for some lives is a note on the document.
+for (const note of ["(b) Sections 5 and 6 pay half for the second and subsequent insured persons.", "(b) Halved for persons in full-time education; this applies to every section.",
+  "(b) Sections 5 and 6 are paid once per accident for everyone insured.", "(b) Also applies to Section 5: payable at 50% for the youngest life.",
+  "(b) Sections 5 and 6 are payable only to the first named insured.", "(b) Sections 5 and 6 do not apply to the last named life.", "(b) Sections 5-6 are not available for Grace.",
+  "(b) Not available for Grace.", "(b) Section 5 is paid at GBP 25 a day."]) {
+  test(`R3-H1: row 6's mark with "${note}" withholds every fixed row, hospital cash too`, () => {
+    noneFixed(schedule({ rows: withRow("6", { cell: "Up to GBP 2,500 per accident (b), after an excess of GBP 100 per claim" }), post: [note] }).table, note);
+  });
+}
+for (const note of ["(a) Sections 3 to 6 pay half for the youngest life.", "Note (a): sections 5 and 6 pay 50% for the youngest.",
+  "Note (a): this note applies to every section; GBP 25 a day hospital cash for the youngest.", "Note (a): every limit in this table is halved for the last named life."]) {
+  test(`R3-H1: a second note on row 3's mark ("${note}") withholds every fixed row`, () => noneFixed(schedule({ post: [note] }).table, note));
+}
+test("R3-H1: the TE's own Note (a) stays row 3's own: the fixed rows are still shown", () => {
+  const { r, table } = schedule();
+  assert.deepEqual(r.plainBlockers, []);
+  for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);
+});
+// R3 MEDIUM: on the TE reading's own shape, a row read from Note (a) under row 6 is row 3's note, not row 6's neighbour.
+const COMPOUND = { section: "3", column: null, benefit: "Compound fracture", pays: "words", value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null,
+  baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, quote: NOTE_A[0] };
+test("R3-MEDIUM: with a 'Compound fracture' row read from Note (a), medical expenses up to GBP 2,500 after a GBP 100 excess reaches all three", () => {
+  const { table } = schedule({ extraBenefits: [COMPOUND] });
+  for (const id of NAMED) {
+    assert.deepEqual(fixedShown(table, id), ["Hospital cash | GBP 50 a day", "Medical expenses | up to GBP 2,500"], id);
+    assert.deepEqual(table.people.find((p) => p.id === id)!.rows.find((x) => x.benefit === "Medical expenses")!.conditions, ["after an excess of GBP 100 per claim"], id);
+  }
+  assert.deepEqual(table.people.find((p) => p.id === "o")!.rows, []);
+});
+test("R3-MEDIUM: a note read as a row that is not its row's own ('(b) Sections 5 and 6 pay half for the youngest') still blocks", () => {
+  const note = "(b) Sections 5 and 6 pay half for the youngest.";
+  const { table } = schedule({ rows: withRow("6", { cell: "Up to GBP 2,500 per accident (b), after an excess of GBP 100 per claim" }), post: [note],
+    extraBenefits: [{ ...COMPOUND, section: "6", benefit: "Note (b)", quote: note }] });
+  noneFixed(table, note);
+});
+// R3 LOW: admin lines the allow-list now takes; lines it still refuses.
+for (const line of ["All limits are per insured person.", "Plan type: Family", "Cover level: Couple", "Exclusions apply."]) {
+  test(`R3-LOW: "${line}" is a structural line: the fixed rows are shown`, () => {
+    const { table } = schedule({ post: [line] });
+    for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);
+  });
+}
+for (const line of ["Cancellation: you may cancel within 14 days for a full refund.", "Data protection: see our privacy notice at www.example.com/privacy"]) {
+  test(`R3-LOW (kept): "${line}" still withholds the fixed rows (an allow-list's cost)`, () => noneFixed(schedule({ post: [line] }).table, line));
 }
 
 // ---------------------------------------------------------------- the chat: a withheld row's amount is printed, and where

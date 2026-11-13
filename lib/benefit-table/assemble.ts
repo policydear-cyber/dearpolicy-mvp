@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, marksIn, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -827,7 +827,11 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // The rows whose own printed line is the line right below or above this row's.
     const rowAt = (line: string | undefined) => line && norm(line) ? others.filter((x) => { const f = firstLine(x.rowText ?? x.source.excerpt), l = norm((x.rowText ?? x.source.excerpt).split("\n").at(-1) ?? "");
       return (f && norm(line).startsWith(f)) || l === norm(line); }) : [];
-    const below = rowAt(b.nextLine), above = rowAt(b.prevLine);
+    // A row read from another row's footnote ("Note (a): a compound fracture ..." under row 6, its mark printed on row 3) is
+    // that row's note, not this row's neighbour (TE gate round 3, MEDIUM); the note itself is held to check.ts ownNote.
+    const footnoteRow = (x: CheckedBenefit) => { const m = noteMarkOf((x.rowText ?? x.source.excerpt).split("\n")[0]);
+      return !!m && r.benefits.some((y) => y !== x && y !== b && marksIn(y.rowText ?? y.source.excerpt).includes(m)); };
+    const below = rowAt(b.nextLine).filter((x) => !footnoteRow(x)), above = rowAt(b.prevLine).filter((x) => !footnoteRow(x));
     // In a plain table, a neighbour that is a share of each person's own sum insured, unmarked and naming no kind of life,
     // is no other life's figure for this row (a family PA schedule's "4  Fracture of skull ...  5% of the Sum Insured").
     const shareOfOwnSum = (x: CheckedBenefit) => plain && x.forWhom == null && x.pays === "percent" && x.percentOf === "sum_insured"
