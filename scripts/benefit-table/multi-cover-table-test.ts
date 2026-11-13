@@ -339,7 +339,7 @@ for (const where of ["row", "column"] as const) test(`TE D1-labelled: per-life r
   }
 });
 
-test("Critic O: a certificate's 'per insured person' list with shared first words ('Loss of baggage', 'Loss of passport') shows every row to both", () => {
+test("Critic O (documented, fails closed): on a 'per insured person' list, rows whose names differ by one word are shown to both when they print the same figure, and to no one when they print different figures", () => {
   const lines = [["Loss of baggage", 3000], ["Loss of passport", 500], ["Personal accident death", 100000], ["Personal accident disablement", 100000], ["Overseas medical expenses", 500000]] as const;
   const text = `ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nBenefit\tLimit per insured person\n${lines.map(([l, v]) => `${l}\t$${v.toLocaleString("en-US")}`).join("\n")}\nEnd.`;
   const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
@@ -347,7 +347,20 @@ test("Critic O: a certificate's 'per insured person' list with shared first word
   const r = checkReading(page(DOC, text), reading("Acme Travel", ["Asha Rao", "Ben Rao"], [c("Asha Rao"), c("Ben Rao")],
     lines.map(([l, v]) => row({ column: col, benefit: l, pays: "up_to", value: v, quote: `${l}\t$${v.toLocaleString("en-US")}` })), "couple plan"));
   const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: null, column: col }), cover: coverKeyOf({ product: "Acme Travel", cover: "Travel", plan: "couple plan" }), why: "x" }]);
-  for (const i of [0, 1]) assert.equal(t.people[i].rows.length, 5, shown(t, i).join("\n"));
+  for (const i of [0, 1]) assert.deepEqual(t.people[i].rows.map((x) => x.benefit), ["Personal accident death", "Personal accident disablement", "Overseas medical expenses"], shown(t, i).join("\n"));
+  assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY, "the two loss rows are said to be withheld, never dropped silently");
+});
+
+test("Critic Q: a tag before or after a one-word or two-word benefit name ('Mum hospital cash', 'Accident Mum') is one benefit per life", () => {
+  for (const [a, b] of [["Mum hospital cash", "Dad hospital cash"], ["Insured A hospital cash", "Insured B hospital cash"], ["Accident Mum", "Accident Dad"], ["Hospitalisation Mum", "Hospitalisation Dad"]]) {
+    const lines = [[a, 80], [b, 120]].map(([x, v]) => `${x}\tGBP ${v} per day per insured person`);
+    const text = `FAMILY PA\nPolicy number: F-1\nAsha Rao\tGBP 100,000\nBen Rao\tGBP 80,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
+    const c = (person: string, sum: number) => cover({ person, product: "Family PA", cover: "Personal accident", policyNumber: "F-1", sumInsured: sum, quote: `${person}\tGBP ${sum.toLocaleString("en-US")}` });
+    const r = checkReading(page(DOC, text), reading("Family PA", ["Asha Rao", "Ben Rao"], [c("Asha Rao", 100000), c("Ben Rao", 80000)],
+      lines.map((l, i) => row({ section: "BENEFITS", benefit: l.split("\t")[0], pays: "per_day", value: i ? 120 : 80, quote: l }))));
+    const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: "BENEFITS", column: null }), cover: coverKeyOf({ product: "Family PA", cover: "Personal accident", plan: null }), why: "x" }]);
+    assert.deepEqual([...shown(t, 0), ...shown(t, 1)], [], `${a}/${b}`);
+  }
 });
 
 test("Critic M (documented, fails closed): one figure column under two benefit headings is not the sole column, so the link is refused", () => {

@@ -790,18 +790,25 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   // hospital income Mum" and "... Dad", "... Life Assured 1" and "... 2", "Hospital cash" and "Hospital cash (child)" are
   // one benefit printed for several lives, whatever word tells the lives apart (TE on #447, D1). The first two words (one
   // for a one-word name) are compared, so this needs no list of names or roles.
-  // A benefit is printed for several lives when another row of the document with a different figure starts with the same
-  // two words, linking words aside ("Daily hospital income Mum" and "... Dad", "... Life Assured 1" and "... 2", "Hospital
-  // cash" and "Hospital cash (child)"), whatever word tells the lives apart: no list of names or roles is needed (TE D1 on
-  // #447). "Loss of baggage" and "Loss of passport" lead with different words once "of" is set aside; rows that share their
-  // first words and print the same figure ("Personal accident death" and "... disablement", both $100,000) give no one a
-  // figure that is not theirs (Critic O on #447).
+  // A benefit is printed for several lives when another row of the document prints a different figure under a name that
+  // is the same but for one word in any place, or that holds all its words and more ("Daily hospital income Mum" and
+  // "... Dad", "Mum hospital cash" and "Dad hospital cash", "Accident Mum" and "Accident Dad", "Life Assured 1" and "2",
+  // "Hospital cash" and "Hospital cash (child)"), linking words such as "of" aside. Whatever word tells the lives apart, no
+  // list of names or roles is needed (TE D1 and Critic P, Q on #447). Two benefits whose names differ by one word and print
+  // different figures ("Loss of baggage" $3,000, "Loss of passport" $500) cannot be told from that, so they are given to no
+  // one: withheld with the reason, never another life's figure. The same figure under such names is no one else's amount,
+  // so it stays everyone's ("Personal accident death" and "... disablement", both $100,000).
   const LINK_WORDS = new Set(["of", "for", "the", "a", "an", "and", "or", "to", "in", "on", "by", "with", "per", "due"]);
-  const lead = (benefit: string) => headKey(benefit).split(" ").filter((w) => w && !LINK_WORDS.has(w)).slice(0, 2).join(" ");
-  const leadFigures = new Map<string, Set<string>>();
-  for (const r of readings) for (const b of r.benefits) if (b.value != null) {
-    const k = `${r.documentId}\u0000${lead(b.benefit)}`;
-    leadFigures.set(k, (leadFigures.get(k) ?? new Set()).add(`${b.pays}|${b.value}|${b.currency ?? ""}|${b.period ?? ""}`));
+  const wordsOf = (benefit: string) => new Set(headKey(benefit).split(" ").filter((w) => w && !LINK_WORDS.has(w)));
+  const figureKey = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
+  const related = (x: Set<string>, y: Set<string>) => {
+    const onlyX = [...x].filter((w) => !y.has(w)).length, onlyY = [...y].filter((w) => !x.has(w)).length;
+    return x.size > 0 && y.size > 0 && (onlyX === 0 || onlyY === 0 || (onlyX === 1 && onlyY === 1));
+  };
+  const perLife = new Set<CheckedBenefit>();
+  for (const r of readings) {
+    const rows = r.benefits.filter((x) => x.value != null).map((x) => ({ x, w: wordsOf(x.benefit), f: figureKey(x) }));
+    for (const one of rows) if (rows.some((o) => o !== one && o.f !== one.f && related(one.w, o.w))) perLife.add(one.x);
   }
   // And a rate given to everyone with no word saying so is the only rate of its kind under its heading: two daily (or
   // periodic) rates with different figures in one table whose rows do not say whose they are may be one per life
@@ -811,8 +818,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     const k = `${r.documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`; rates.set(k, (rates.get(k) ?? new Set()).add(b.value));
   }
   const printedOnceOn = (documentId: string, b: CheckedBenefit) => {
-    const once = (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1
-      && (leadFigures.get(`${documentId}\u0000${lead(b.benefit)}`)?.size ?? 0) <= 1;
+    const once = (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1 && !perLife.has(b);
     const rate = once && (rates.get(`${documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`)?.size ?? 0) <= 1;
     return { once, rate };
   };
