@@ -1912,12 +1912,30 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const aboutFiles = new Set<number>();
   /** Texts written here from the library's own record: never held to that record again. */
   const fromRecord = new Set<string>();
+  /** Cards of a statement with no person whose quote is one member's own document: from this index of `checked` until the
+   * next statement's, each card without a person is labelled with that member. */
+  const ownerLabels: { from: number; to?: number; who: string }[] = [];
   for (const st of model.statements) {
+    for (const o of ownerLabels) o.to ??= checked.length;
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
     let found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
+      // No person the household can be told (none given, "she", "the life assured"), yet the quote sits in a document that
+      // is some members' own and not others': the figure is theirs. It is dropped when the question names only other
+      // members, and otherwise its card names the one owner, never nobody (TE new-household walk 13 Nov, defect 1:
+      // Daniel's S$400,000 shown with no person when Grace's death benefit was asked). Only the label: what is worked out
+      // for a statement with no person stays as it was (no percentage of anyone's sum is worked out).
+      if (!person) {
+        const members = household.members.map((m) => baseName(m.name));
+        const owners = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+        if (owners.length && owners.length < members.length) {
+          const asked = membersNamedIn(household, written[0] ?? "");
+          if (asked.length && !asked.some((n) => owners.includes(n))) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
+          if (owners.length === 1) ownerLabels.push({ from: checked.length, who: owners[0] });
+        }
+      }
       // A quote placed in another member's own document stands only where the person's own documents print it too.
       if (person && someoneElsesDocument(household, found.docIndex, person)) {
         const own = household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, person))
@@ -2051,6 +2069,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
   }
+  for (const o of ownerLabels) for (let i = o.from; i < (o.to ?? checked.length); i++) if (checked[i].found && !checked[i].person) checked[i].person = o.who;
   // For a question about the documents, the points about single files become one list per set of people, wherever the
   // first of them stood (libraryGroups).
   const filePoints = checked.filter((c) => c.libraryDoc != null);

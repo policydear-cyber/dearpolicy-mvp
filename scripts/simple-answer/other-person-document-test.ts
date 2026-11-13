@@ -78,6 +78,40 @@ test("C7 the person's own schedule printing the same line: shown from theirs, no
   assert.doesNotMatch(JSON.stringify(s), /Grace schedule/);
 });
 
+// ---- U: the model gives no person the household can be told (TE new-household walk 13 Nov, defect 1: Daniel's S$400,000
+// was shown with no person when Grace's death benefit was asked).
+type Card = Shown & { personName?: string | null };
+const card = (...a: Parameters<typeof answer>) => (answer(...a) as Card[]).find((s) => s.amount);
+for (const p of [null, "", "she", "the life assured", "Mrs Tern"]) {
+  test(`U1 person ${JSON.stringify(p)}, the question asks about Grace, Daniel's own schedule quoted: no figure`, () =>
+    assert.deepEqual(shown(house([GRACE(), DANIEL()]), p, "D2", D, "What can Grace claim for her cancer?"), []));
+}
+test("U2 no person, the question names no one, Daniel's own schedule quoted: shown as Daniel's", () => {
+  const c = card(house([GRACE(), DANIEL()]), null, "D2", D, "What is the critical illness benefit?");
+  assert.equal(c?.amount?.text, "S$120,000"); assert.equal(c?.personName, "Daniel Tern");
+});
+test("U3 no person, the question names Daniel, Daniel's own schedule quoted: shown as Daniel's", () => {
+  const c = card(house([GRACE(), DANIEL()]), "he", "D2", D, "What can Daniel claim?");
+  assert.equal(c?.amount?.text, "S$120,000"); assert.equal(c?.personName, "Daniel Tern");
+});
+test("U4 no person, the question names both, Daniel's own schedule quoted: shown as Daniel's", () => {
+  const c = card(house([GRACE(), DANIEL()]), null, "D2", D, "What can Grace and Daniel claim?");
+  assert.equal(c?.amount?.text, "S$120,000"); assert.equal(c?.personName, "Daniel Tern");
+});
+test("U5 control: no person, a wording naming nobody linked to both: the figure stays, for no one in particular", () => {
+  const wording = doc("w", "Heron wording.pdf", ["Grace Tern", "Daniel Tern"], "HERON CARE PLUS - POLICY WORDING\nCritical Illness Benefit S$80,000", "policy_wording");
+  const c = card(house([wording]), null, "D1", G, "What can Grace claim?");
+  assert.equal(c?.amount?.text, "S$80,000"); assert.ok(!c?.personName);
+});
+test("U6 control: no person, a joint schedule naming both: the figure stays", () => {
+  const joint = doc("j", "Joint schedule.pdf", ["Grace Tern", "Daniel Tern"], ["HERON ASSURANCE - POLICY SCHEDULE", "Life assured: Grace Tern", "Joint life assured: Daniel Tern", "Critical Illness Benefit S$80,000"].join("\n"));
+  assert.deepEqual(shown(house([joint]), null, "D1", G, "What can Daniel claim?"), ["S$80,000"]);
+});
+test("U7 control: a one-person household, no person: the figure stays", () => {
+  const one = { ...house([GRACE()]), members: [{ name: "Grace Tern", relationship: "self" }] } as unknown as Household;
+  assert.deepEqual(shown(one, null, "D1", G, "What can I claim?"), ["S$80,000"]);
+});
+
 assert.deepEqual(outbound, []);
 console.log(`other-person document: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error(" - " + f); process.exit(1); }
