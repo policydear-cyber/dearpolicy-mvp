@@ -384,6 +384,11 @@ test("a code between two figures opens the later one only when it ends the cell 
   }
   assert.deepEqual(anyMoneyFigures("1000 € 80 %").map((x) => x.value), [1000]);
 });
+test("a code main never read after a figure keeps main's reading when a figure follows it (Critic #449 round 9)", () => {
+  for (const [line, want] of [["Benefit 4 NZD 2,000", 2000], ["Clause 7 CHF 5,000", 5000], ["Rider 2 JPY 100,000", 100000], ["Room 300 CHF 1,000", 1000], ["per year 2025 CHF 10,000", 10000]] as [string, number][])
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), [want], line);
+  assert.deepEqual(moneyFiguresIn("Funeral expenses\t10,000 NZD\t5,000 NZD").map((x) => x.value), [10000, 5000]);
+});
 test("a figure before a code is a label only when the layout says so, never by its size (Critic #449 rounds 7, 8)", () => {
   const cases: [string, number[]][] = [["Hospital cash 50 SGD 365\tdays", [50]], ["Per visit 15 SGD 100\tvisits", [15]], ["Accident 20 MYR 10,000\tper year", [20]],
     ["Renewal 30 EUR 2027.", [30]], ["Excess 50 SGD 100.", [50]], ["Hospital cash 50 SGD 365", [50]], ["Premium 15 USD 2026", [15]], ["Co-pay 20 EUR 100", [20]],
@@ -391,6 +396,7 @@ test("a figure before a code is a label only when the layout says so, never by i
     ["Limit per year 1000 SGD 12 visits", [1000]], ["PER YEAR 1000 SGD 12 VISITS", [1000]], ["Each year 500 SGD 2 claims", [500]],
     ["Basic plan 1500 SGD 10 visits per year", [1500]], ["Outpatient limit per year 2000 SGD 300 deductible", [2000]], ["Limit per year 1000 SGD 50 per visit", [1000]],
     ["Group 1 USD 50 per visit", [50]], ["Tier 2 SGD 500 per day", [500]], ["Plan 2 SGD 1,000,000", [1000000]],
+    ["Benefit limit 1,000\nSGD", [1000]], ["Benefit limit 1,000\nSGD 500", [1000]], ["1,000\u2009SGD", [1000]], ["Plan 3 USD 50 percent", [3]],
     ["Plan 3 NZD 100,000\tper year", [100000]], ["Plan 3 NZD 100,000\tPlan 4 NZD 200,000", [100000, 200000]], ["Liam Kelly\t42\tEUR 60,000\t01/02/1983", [60000]]];
   for (const [line, want] of cases) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
