@@ -1912,11 +1912,19 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const aboutFiles = new Set<number>();
   /** Texts written here from the library's own record: never held to that record again. */
   const fromRecord = new Set<string>();
-  /** Cards of a statement with no person whose quote is one member's own document: from this index of `checked` until the
-   * next statement's, each card without a person is labelled with that member. */
-  const ownerLabels: { from: number; to?: number; who: string }[] = [];
+  /** A statement with no person whose quote is one member's own document: the cards it adds (those not in `had`) that have
+   * no person are labelled with that member once it is done. By the card itself, never by its place: a later card can
+   * remove an earlier one (Critic #444 F1). */
+  let ownerLabel: { had: Set<Checked>; who: string } | null = null;
+  const labelOwner = () => {
+    if (ownerLabel) for (const c of checked) if (!ownerLabel.had.has(c) && c.found && !c.person) c.person = ownerLabel.who;
+    ownerLabel = null;
+  };
+  /** Who the household is asking about: the members its latest message names, or, when that names no one ("And the death
+   * benefit?"), the last earlier message that names someone (Critic #444 F3). */
+  const askedAbout = written.map((w) => membersNamedIn(household, w)).find((names) => names.length) ?? [];
   for (const st of model.statements) {
-    for (const o of ownerLabels) o.to ??= checked.length;
+    labelOwner();
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
     let found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
@@ -1931,9 +1939,17 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         const members = household.members.map((m) => baseName(m.name));
         const owners = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
         if (owners.length && owners.length < members.length) {
-          const asked = membersNamedIn(household, written[0] ?? "");
-          if (asked.length && !asked.some((n) => owners.includes(n))) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
-          if (owners.length === 1) ownerLabels.push({ from: checked.length, who: owners[0] });
+          let who: string | null = owners.length === 1 ? owners[0] : null;
+          if (askedAbout.length && !askedAbout.some((n) => owners.includes(n))) {
+            // As for a named person: the same line printed in an asked-about member's own document is shown from theirs.
+            const theirs = askedAbout.map((n) => ({ n, f: household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, n))
+              .map((di) => locateQuote(household, st.quote!, di)).find((f) => f && !someoneElsesDocument(household, f.docIndex, n)) ?? null })).find((x) => x.f);
+            if (!theirs) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
+            found = theirs.f!;
+            const ownersThere = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+            who = ownersThere.length === 1 ? ownersThere[0] : ownersThere.length < members.length && ownersThere.includes(theirs.n) && askedAbout.length === 1 ? theirs.n : null;
+          }
+          if (who) ownerLabel = { had: new Set(checked), who };
         }
       }
       // A quote placed in another member's own document stands only where the person's own documents print it too.
@@ -2069,7 +2085,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
   }
-  for (const o of ownerLabels) for (let i = o.from; i < (o.to ?? checked.length); i++) if (checked[i].found && !checked[i].person) checked[i].person = o.who;
+  labelOwner();
   // For a question about the documents, the points about single files become one list per set of people, wherever the
   // first of them stood (libraryGroups).
   const filePoints = checked.filter((c) => c.libraryDoc != null);
