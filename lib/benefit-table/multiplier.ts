@@ -89,7 +89,11 @@ const NOT_A_CASE = new Set(("benefit benefits amount amounts sum sums allowance 
  * stay", "a broken tooth", gate rounds 10-11): a case holding one is that benefit's, unless a word of its group is in this
  * row's own benefit name ("loss of sight in both eyes" on a "Loss of sight" row). */
 const BENEFIT_KINDS = ["expense expenses cost costs bill bills medical treatment treatments care surgery surgical physiotherapy",
-  "hospital in-patient inpatient stay nursing", "cash daily weekly nightly", "death", "cover", "dental teeth tooth", "sight eye eyes"].map((g) => g.split(" "));
+  "hospital in-patient inpatient stay nursing", "cash daily weekly nightly", "death", "cover", "dental teeth tooth", "sight eye eyes blind blindness",
+  // Gate round 12: kinds of benefit a case may name when the reader missed that row.
+  "disablement disability disabled permanent temporary paralysis paralysed paraplegia quadriplegia tetraplegia coma",
+  "loss limb limbs amputation", "hearing ear ears deaf deafness", "speech voice", "burn burns scar scars scarring disfigurement",
+  "income earnings wages salary", "repatriation evacuation funeral"].map((g) => g.split(" "));
 /** A word's stem for the case's anchor on the row's own name: "fracture" and "fractured", "bone" and "bones". */
 const anchorStem = (w: string) => w.toLowerCase().replace(/(?:ing|ed|es|s|e)$/, "");
 /** Whether a note is one of the two shapes, its multiple of this row's own amount and its case plain, with nothing else:
