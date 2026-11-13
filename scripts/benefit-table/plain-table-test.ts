@@ -12,6 +12,8 @@
  * from each page's own text.
  *   npm run benefit-table:plain-table-test */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { qualifierText } from "@/lib/benefit-table/headline";
 import { assembleTable, coverKeyOf, figureText, NOT_TOLD_WHY, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, noteLeftOutAmounts, renderTable, withheldNote, withheldRows } from "@/lib/benefit-table/chat";
@@ -454,7 +456,10 @@ for (const line of ["For Family Plan, the most we pay for the whole family is 10
   test(`gate PPS-4: '${line}' (a multiple of 1 or less, or turned round) withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
 }
 for (const line of ["For Family Plan, the most we pay for the whole family is 150% of the individual limit.", "For Family Plan, the most we pay for the whole family is 1.5 times the individual limit.",
-  "For Family Plan, the most we pay for all insured persons combined is 2 x the limit shown, up to S$600,000."]) {
+  "For Family Plan, the most we pay for all insured persons combined is 2 x the limit shown.", "For Family Plan, the most we pay for the whole family is 1.5x the individual limit.",
+  "Family plan maximum: 2 times the per insured person limit, in aggregate.", "For Family Plan, the most we pay for the whole family is x2 the individual limit.",
+  "For Family Plan, the most we pay for the whole family is six times the individual limit.", "For Family Plan, the most we pay for the whole family is treble the individual limit.",
+  "For Family Plan, the most we pay for all insured persons combined is twice the limit shown, whether or not you travel together.", "For Family Plan, the most we pay for the whole family is 200 per cent of the individual limit."]) {
   test(`gate PPS-4: '${line}' (a multiple above 1) keeps each person's rows with the note`, () => {
     const t = perPersonTable({ rows: SIX, extra: [line] });
     for (const id of ["a", "b", "k"]) {
@@ -464,6 +469,23 @@ for (const line of ["For Family Plan, the most we pay for the whole family is 15
     }
   });
 }
+// Per-person-shared gate round 5: a multiple joined to another number, unreadable, or printed with a money ceiling withholds.
+for (const line of ["For Family Plan, the most we pay for the whole family is 1/2 times the individual limit.", "For Family Plan, the most we pay for the whole family is 3/4 times the individual limit.",
+  "For Family Plan, the most we pay for the whole family is 0,5 times the individual limit.", "For Family Plan, the most we pay for the whole family is 1:2 times the individual limit.",
+  "For Family Plan, the most we pay for the whole family is 1–2 times the individual limit.", "For Family Plan, the most we pay for the whole family is 1 - 2 times the individual limit.",
+  "For Family Plan, the most we pay for the whole family is 2-times the individual limit.", "For Family Plan, the most we pay for the whole family is 1½ times the individual limit.",
+  "For Family Plan, the most we pay for the whole family is one and a half times the individual limit.", "For Family Plan, the most we pay for the whole family is two hundred per cent of the individual limit.",
+  "For Family Plan, the most we pay for the whole family is twice the individual limit or S$5,000, whichever is less.",
+  "For Family Plan, the most we pay for the whole family is 3 times the individual limit, subject to a maximum of S$100,000.",
+  "For Family Plan, the family limit is S$200,000 or twice the individual limit.", "For Family Plan, the most we pay for all insured persons combined is 2 x the limit shown, up to S$600,000."]) {
+  test(`gate PPS-5: '${line}' withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+test("gate PPS-5: the chat's sentence for a per-person row says 'per insured person only', never 'for per insured only'", () => {
+  const src = readFileSync(new URL("../../lib/benefit-table/chat.ts", import.meta.url), "utf8");
+  assert.ok(!src.includes("`, for ${row.qualifier} only`"));
+  assert.equal(qualifierText("per insured"), "per insured person");
+  assert.equal(qualifierText("child"), "for child");
+});
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

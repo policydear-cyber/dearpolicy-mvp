@@ -732,27 +732,47 @@ export function livesTogether(text: string): boolean {
 /** A cap for the lives together set as a multiple of each person's own limit ("twice the limit shown", "200% of the individual
  * limit", "2 times the per insured person limit"): it confirms each person's own limit is the column's figure (a family
  * plan's cap on top of it; per-person-shared gate round 3). */
-const CAP_MULTIPLE = new RegExp(String.raw`(?<![\w.])(twice|double|triple|treble|thrice|once|half|one|two|three|four|five|\d+(?:\.\d+)?)(\s*(?:times|x)\b|\s*%|\s+per\s*cent\b)?\s+(?:of\s+)?(?:the\s+|your\s+|each\s+)?`
+/** What a family cap's multiple is of: each person's own limit ("the limit shown", "the individual limit", "the per insured
+ * person limit"). */
+const OF_OWN_LIMIT = new RegExp(String.raw`\s+(?:of\s+)?(?:the\s+|your\s+|each\s+)?`
   + String.raw`(?:(?:individual|per[\s-]+(?:insured[\s-]+)?person|single|each\s+person'?s?|personal|own|shown|stated)\s+(?:\w+\s+)?limits?|limits?\s+(?:shown|stated|per\s+(?:insured\s+)?person|for\s+(?:one|each|an?)\s+(?:insured\s+)?(?:person|individual)))\b`, "gi");
-const MULTIPLE_WORD: Record<string, number> = { twice: 2, double: 2, triple: 3, treble: 3, thrice: 3, once: 1, half: 0.5, one: 1, two: 2, three: 3, four: 4, five: 5 };
+/** The multiples a family cap may print right before OF_OWN_LIMIT, as a closed list (per-person-shared gate round 5): a word,
+ * "N times" or "N x" (N in digits, decimals with a point), "xN", "N%" or "N per cent". The token starts the clause or
+ * follows a space or "(" only, so a number joined to another ("1/2", "0,5", "1:2", "1–2") is none of them. */
+const MULTIPLE_TOKEN = /(?:^|[\s(])(?:(twice|double|doubled|treble|triple|trebled|tripled|thrice|once|half)|(two|three|four|five|six)\s+times|(\d+(?:\.\d+)?)\s*(?:times|x)|x(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s?(?:%|per\s?cent))$/i;
+const MULTIPLE_WORD: Record<string, number> = { twice: 2, double: 2, doubled: 2, treble: 3, triple: 3, trebled: 3, tripled: 3, thrice: 3, once: 1, half: 0.5, two: 2, three: 3, four: 4, five: 5, six: 6 };
+/** Something before OF_OWN_LIMIT that looks like a multiple but is none of MULTIPLE_TOKEN ("1/2 times", "1–2 times", "2-times",
+ * "1½ times", "one and a half times", "two hundred per cent"): unreadable, so never kept. */
+const MULTIPLE_LIKE = /(?:[\d½¼¾⅓⅔]\s*[-–]?\s*(?:times|x|%|per\s?cent)|\b(?:times|per\s?cent)|%|\bx\s*\d[\d.,/:–-]*|\b\w+(?:ed|ble|ple|ce))$/i;
 /** Words that turn a multiple round ("not twice the limit shown", "instead of twice", "rather than double"). */
 const NOT_A_MULTIPLE = /\b(?:not|never|instead\s+of|rather\s+than|no\s+longer|nor)\b/i;
 /** The multiple of each person's own limit a clause prints, as a number (twice 2, "1.5 times" 1.5, "200%" 2, "0.5 times"
- * 0.5; the smallest when it prints more than one), with whether the clause turns it round; null when it prints none
- * (per-person-shared gate round 4, R4-H1). */
-function capMultiple(clause: string): { value: number; negated: boolean } | null {
-  let value: number | null = null;
-  for (const m of clause.matchAll(CAP_MULTIPLE)) {
-    const word = m[1].toLowerCase(), suffix = (m[2] ?? "").trim().toLowerCase();
-    const digits = /^\d/.test(word);
-    // A bare number, or a number word that is no multiple on its own ("one limit"), is not a multiple.
-    if ((digits || /^(?:one|two|three|four|five)$/.test(word)) && !suffix) continue;
-    const n = digits ? Number(word) / (/%|cent/.test(suffix) ? 100 : 1) : /%|cent/.test(suffix) ? NaN : MULTIPLE_WORD[word];
-    if (!Number.isFinite(n)) continue;
+ * 0.5; the smallest when it prints more than one, 0 when one is unreadable), with whether the part of the clause it sits in
+ * turns it round, and whether the clause prints a money figure too ("or S$5,000, whichever is less", "up to S$600,000"): a
+ * ceiling in money may keep any person below the figure shown. null when it prints none (per-person-shared gate rounds 4, 5). */
+function capMultiple(clause: string): { value: number; negated: boolean; money: boolean } | null {
+  let value: number | null = null, negated = false;
+  for (const m of clause.matchAll(OF_OWN_LIMIT)) {
+    const before = clause.slice(0, m.index).trimEnd();
+    const t = MULTIPLE_TOKEN.exec(before);
+    let n: number | null = null;
+    if (t) n = t[1] ? MULTIPLE_WORD[t[1].toLowerCase()] : t[2] ? MULTIPLE_WORD[t[2].toLowerCase()] : t[3] ? Number(t[3]) : t[4] ? Number(t[4]) : Number(t[5]) / 100;
+    // A number joined to another before it, or a multiple not on the list, cannot be read: never kept.
+    if (t && /\d\s*[.,/:–-]?$/.test(before.slice(0, t.index + (/^[\s(]/.test(t[0]) ? 1 : 0)).trimEnd())) n = 0;
+    else if (!t && MULTIPLE_LIKE.test(before)) n = 0;
+    if (n == null || !Number.isFinite(n)) continue;
     value = value == null ? n : Math.min(value, n);
+    // Only the part of the clause the multiple sits in can turn it round ("twice the limit shown, whether or not you travel
+    // together" is still twice).
+    const from = Math.max(...[",", " but ", " whether ", " — ", " - "].map((sep) => before.lastIndexOf(sep)));
+    const rest = clause.slice(m.index);
+    const to = Math.min(...[",", " but ", " whether ", " — ", " - "].map((sep) => { const i = rest.indexOf(sep); return i < 0 ? rest.length : i; }));
+    if (NOT_A_MULTIPLE.test(clause.slice(from < 0 ? 0 : from, m.index + to))) negated = true;
   }
-  return value == null ? null : { value, negated: NOT_A_MULTIPLE.test(clause) };
+  return value == null ? null : { value, negated, money: anyMoneyFigures(clause).length > 0 };
 }
+/** A family cap above each person's own limit, read whole: a multiple above one, not turned round, with no money ceiling. */
+const keepsOwnLimit = (m: { value: number; negated: boolean; money: boolean }) => m.value > 1 && !m.negated && !m.money;
 /** A clause about the lives together: an owner phrase, the lives with a together word, or a family, couple or group plan. */
 const aboutLivesTogether = (clause: string) => wordAt(clause, OWNER_TIE).length > 0 || livesTogether(clause) || /\b(?:famil(?:y|ies)|couples?|group)\b/i.test(clause);
 /** Whether a note line (one off every row) sets a cap for the lives together as a multiple of each person's own limit greater
@@ -761,7 +781,7 @@ const aboutLivesTogether = (clause: string) => wordAt(clause, OWNER_TIE).length 
  * is one limit, or less, for all of them: a tie (tiesLimitToLives). */
 export function capsAsMultiple(line: string): boolean {
   return line.split(/[.;!?](?=\s|$)/).some((clause) => { const m = capMultiple(clause);
-    return !!m && m.value > 1 && !m.negated && !NOT_A_TIE_CLAUSE.test(clause) && aboutLivesTogether(clause); });
+    return !!m && keepsOwnLimit(m) && !NOT_A_TIE_CLAUSE.test(clause) && aboutLivesTogether(clause); });
 }
 /** Whether a note line (one off every row) ties a limit to the lives together (per-person-shared gate round 2): in one clause,
  * a tie (OWNER_TIE, or the lives with a together word) within eight words of a limit word, in a clause that is about no
@@ -775,7 +795,7 @@ export function tiesLimitToLives(line: string): boolean {
     if (multiple) {
       // A family plan's cap above each person's own limit leaves that limit standing; one of one or less, or turned round,
       // is a limit for all of them together (per-person-shared gate round 4).
-      if (multiple.value > 1 && !multiple.negated) continue;
+      if (keepsOwnLimit(multiple)) continue;
       if (aboutLivesTogether(clause)) return true;
     }
     const limits = wordAt(clause, LIMIT_WORD);

@@ -1474,7 +1474,7 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
   // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
   const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
 }
 
 /** A row whose printed figure is paid per child ("S$5,000 per child (up to 2 children)"). */
